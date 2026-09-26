@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/embed_converter'
+require_relative '../../support/swift_compiler'
 
 RSpec.describe SjuiTools::SwiftUI::Views::EmbedConverter do
   before(:all) do
@@ -153,6 +154,63 @@ RSpec.describe SjuiTools::SwiftUI::Views::EmbedConverter do
       it 'omits eventBridge when events dict is empty' do
         code = convert('type' => 'Embed', 'id' => 'p', 'screen' => 'foo')
         expect(code).not_to include('eventBridge:')
+      end
+
+      # `@{name}` is the binding spelling, and an event names its method as
+      # it is: it is not called, and a comment keeps its place. It was
+      # written into code as it stood — `viewModel.@{name}(payload)` (ticket
+      # rjui-embed-event-bridge-calls-an-undeclared-view-model).
+      it 'calls no value that names no handler, and writes nothing of it into code' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+          'events' => { 'onOrderUpdated' => 'handleOrderUpdated', 'onClose' => '@{closePane}', 'onOpen' => 'a b' }
+        )
+        expect(code).to include('if name == "onOrderUpdated" { viewModel.handleOrderUpdated(payload) }')
+        expect(code).to include('// ERROR: Embed event onClose names no handler, and is not called')
+        expect(code).to include('// ERROR: Embed event onOpen names no handler, and is not called')
+        expect(code).not_to include('@{')
+        expect(code).not_to include('closePane')
+      end
+
+      # The emit in the view it is written into, under swiftc -typecheck:
+      # EmbedContainer and EmbeddedEvent as SwiftJsonUI declares them
+      # (Classes/SwiftUI/Embed/EmbedContainer.swift, the delegate-mode init,
+      # read 2026-09-26 at SwiftJsonUI 0b724b7), and a ViewModel holding the
+      # method a consumer writes for an event, `func <name>(_ payload:
+      # [String: Any])`. A value that names no handler leaves a comment,
+      # which compiles; `viewModel.@{name}(payload)` did not.
+      it 'writes a bridge that type-checks against the ViewModel method it calls' do
+        code = convert(
+          'type' => 'Embed', 'id' => 'p', 'screen' => 'order_detail',
+          'events' => { 'onOrderUpdated' => 'handleOrderUpdated', 'onClose' => '@{closePane}' }
+        )
+        expect(<<~SWIFT).to compile_as_swift
+          public enum EmbeddedEvent {
+              case named(name: String, payload: [String: Any])
+          }
+          public enum EmbedNavigationMode { case delegate, isolated }
+          public struct EmbedContainer<Content: View>: View {
+              public init(
+                  embedId: String,
+                  screen: String,
+                  params: [String: Any] = [:],
+                  navigationMode: EmbedNavigationMode = .delegate,
+                  eventBridge: ((EmbeddedEvent) -> Void)? = nil,
+                  @ViewBuilder content: @escaping () -> Content
+              ) {}
+              public var body: some View { EmptyView() }
+          }
+          struct OrderDetailView: View { var body: some View { EmptyView() } }
+          final class HomeViewModel: ObservableObject {
+              func handleOrderUpdated(_ payload: [String: Any]) {}
+          }
+          struct HomeView: View {
+              @StateObject var viewModel = HomeViewModel()
+              var body: some View {
+          #{code}
+              }
+          }
+        SWIFT
       end
     end
 

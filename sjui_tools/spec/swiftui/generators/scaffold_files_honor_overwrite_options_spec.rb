@@ -11,7 +11,8 @@ require 'uikit/xcode_project/generators/converter_generator'
 # Every file a `sjui g converter` run scaffolds follows the same overwrite
 # rules as the converter itself: JUI_SKIP_EXISTING / --skip-existing keep it
 # without asking, --force replaces it without asking, and otherwise the
-# prompt decides — with a closed stdin read as "n".
+# prompt decides on a terminal — closed there, it is "n"; a stdin that is not
+# a terminal is never read and keeps the file.
 #
 # Until 1.8.112 these sub-generators asked with `gets.chomp` on their own, so
 # `jui g converter --skip-existing` still stopped at each existing component
@@ -23,7 +24,15 @@ require 'uikit/xcode_project/generators/converter_generator'
 RSpec.describe 'sjui scaffold files honor the overwrite options' do
   let(:dir) { File.realpath(Dir.mktmpdir('sjui_scaffold_overwrite')) }
   let(:untouchable_stdin) do
-    Object.new.tap { |o| o.define_singleton_method(:gets) { raise 'stdin was read' } }
+    Object.new.tap do |o|
+      o.define_singleton_method(:gets) { raise 'stdin was read' }
+      o.define_singleton_method(:tty?) { false }
+    end
+  end
+
+  # A terminal a person types `input` into (then end-of-file).
+  def terminal(input)
+    StringIO.new(input).tap { |io| io.define_singleton_method(:tty?) { true } }
   end
 
   around do |example|
@@ -82,8 +91,15 @@ RSpec.describe 'sjui scaffold files honor the overwrite options' do
   generators.each do |name, build|
     describe name do
       it 'keeps the file on a closed stdin, without raising' do
-        guarded, kept = second_run(build, stdin: StringIO.new(''))
+        guarded, kept = second_run(build, stdin: terminal(''))
         expect(guarded).not_to be_empty
+        expect(kept).to all(be true)
+      end
+
+      # Until 1.8.121 the prompt read any stdin, and a pipe held open and
+      # never written (an MCP server's child) waited forever.
+      it 'keeps it without reading a stdin that is not a terminal' do
+        _, kept = second_run(build, stdin: untouchable_stdin)
         expect(kept).to all(be true)
       end
 
@@ -103,11 +119,11 @@ RSpec.describe 'sjui scaffold files honor the overwrite options' do
       end
 
       it 'replaces it on "y" and keeps it on "n"' do
-        _, replaced = second_run(build, stdin: StringIO.new("y\n" * 4))
+        _, replaced = second_run(build, stdin: terminal("y\n" * 4))
         expect(replaced).to all(be false)
         FileUtils.rm_rf(Dir.glob(File.join(dir, '*')))
         FileUtils.mkdir_p(File.join(dir, 'sjui_tools'))
-        _, kept = second_run(build, stdin: StringIO.new("n\n" * 4))
+        _, kept = second_run(build, stdin: terminal("n\n" * 4))
         expect(kept).to all(be true)
       end
     end

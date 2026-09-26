@@ -3,6 +3,7 @@
 require_relative 'base_view_converter'
 require_relative 'responsive_helper'
 require_relative '../../core/responsive_resolver'
+require_relative '../../core/binding_validator_core'
 
 # Generates SwiftUI code for the `Embed` view type. Embeds another screen as
 # a region of the parent layout; the embedded screen owns its own ViewModel.
@@ -73,8 +74,19 @@ module SjuiTools
               indent do
                 add_line 'if case .named(let name, let payload) = event {'
                 indent do
+                  # Each event calls the parent ViewModel's method it names,
+                  # with the payload — the method the consumer writes. A value
+                  # that names no method (`@{name}`, the binding spelling, was
+                  # written into code as it stood: `viewModel.@{name}(payload)`)
+                  # is not called: the build names it
+                  # (BindingValidatorCore.embed_event_handler_problem) and a
+                  # comment keeps its place.
                   events.each do |event_name, handler|
-                    add_line "if name == \"#{event_name}\" { viewModel.#{handler}(payload) }"
+                    if JsonUIShared::BindingValidatorCore.embed_event_handler_problem(handler)
+                      add_line "// ERROR: Embed event #{event_name.to_s.gsub(/[\r\n]/, ' ')} names no handler, and is not called"
+                    else
+                      add_line "if name == #{JsonUIShared::StringLiterals.swift(event_name.to_s)} { viewModel.#{handler}(payload) }"
+                    end
                   end
                 end
                 add_line '}'

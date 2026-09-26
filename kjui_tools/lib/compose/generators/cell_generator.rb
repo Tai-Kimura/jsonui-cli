@@ -4,6 +4,8 @@ require 'json'
 require 'fileutils'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 
 module KjuiTools
   module Compose
@@ -23,10 +25,25 @@ module KjuiTools
           # Convert subdirectory to snake_case for JSON layouts
           snake_subdirectory = parts[0...-1].map { |p| to_snake_case(p) }.join('/') if parts.length > 1
 
-          # Keep original PascalCase if provided, otherwise convert
-          # If the name is already in PascalCase (e.g., ProductCell), keep it
-          cell_class_name = cell_name
+          # The names `kjui build` gives this layout (ComposeBuilder#build_file,
+          # #view_subdir_for): the class from the layout's snake_case name in
+          # PascalCase, the view folder snake_case under the layout's snake_case
+          # subdirectory. Until 1.8.121 the class was the name as typed
+          # (`g collection item_cell` wrote item_cellView.kt / item_cellViewModel.kt)
+          # and the folder kept the subdirectory's casing (views/MyProducts/…):
+          # the build did not find either, scaffolded a second set of files
+          # beside them, and a PascalCase name in a PascalCase folder left two
+          # files declaring the same Composable in one package (measured on
+          # 32785ce8, ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
           json_file_name = to_snake_case(cell_name)
+          cell_class_name = to_pascal_case(json_file_name)
+          # The layout's name in Dynamic mode: its path under Layouts/, as
+          # `kjui build` writes into the GeneratedView (`layoutName =
+          # "my_products/product_cell"`) and `g view` into the ViewModel.
+          # Until 1.8.121 the scaffold said "product_cell" until the first
+          # build rewrote it, and the ViewModel kept saying it (ticket
+          # dynamic-layout-name-drops-the-subdirectory-of-a-nested-cell).
+          layout_reference = snake_subdirectory ? "#{snake_subdirectory}/#{json_file_name}" : json_file_name
 
           # Get directories from config
           source_dir = @config['source_directory'] || 'src/main'
@@ -44,7 +61,7 @@ module KjuiTools
             # JSON uses snake_case subdirectory
             # Views use subdirectory structure, but data and viewmodels are flat
             json_path = File.join(source_dir, layouts_dir, snake_subdirectory)
-            swift_path = File.join(source_dir, view_dir, subdirectory, cell_folder_name)
+            swift_path = File.join(source_dir, view_dir, snake_subdirectory, cell_folder_name)
             viewmodel_path = File.join(source_dir, viewmodel_dir)
             data_path = File.join(source_dir, data_dir)
           else
@@ -60,32 +77,34 @@ module KjuiTools
           FileUtils.mkdir_p(viewmodel_path)
           FileUtils.mkdir_p(data_path)
           
-          # Each file is written only when it is not there, and said as it
-          # went: created or kept.
+          # Each file through the one overwrite decision the generate
+          # commands share: an existing one is the app's — kept unless
+          # --force (or "y" at the prompt); a closed stdin and --skip-existing
+          # keep it. Until 1.8.121 --force / --skip-existing were not read.
           json_file = File.join(json_path, "#{json_file_name}.json")
           main_kotlin_file = File.join(swift_path, "#{cell_class_name}View.kt")
           generated_kotlin_file = File.join(swift_path, "#{cell_class_name}GeneratedView.kt")
           data_file = File.join(data_path, "#{cell_class_name}Data.kt")
           viewmodel_file = File.join(viewmodel_path, "#{cell_class_name}ViewModel.kt")
-          files = [['JSON:          ', json_file], ['Main View:     ', main_kotlin_file],
-                   ['Generated View:', generated_kotlin_file], ['Data:          ', data_file],
-                   ['ViewModel:     ', viewmodel_file]]
-          existed = files.map { |_, path| File.exist?(path) }
-
-          create_json_template(json_file, cell_class_name)
-          create_main_cell_template(main_kotlin_file, cell_class_name, json_file_name, subdirectory, package_name)
-          create_generated_cell_template(generated_kotlin_file, cell_class_name, json_file_name, subdirectory, package_name)
-          create_cell_data_template(data_file, cell_class_name, package_name)
-          create_cell_viewmodel_template(viewmodel_file, cell_class_name, json_file_name, subdirectory, package_name)
-
-          # Until 1.8.121 this said "Generated Collection Cell view:" and
-          # listed the five files after a run that wrote none of them (ticket
-          # kjui-g-view-reports-what-it-did-not-do).
-          puts(existed.all? ? "Collection cell #{cell_class_name}: every file exists and was kept" :
-                              "Generated Collection Cell view #{cell_class_name}:")
-          files.zip(existed).each do |(label, path), was|
-            puts "  #{label} #{path} (#{was ? 'kept: it exists' : 'created'})"
+          core = JsonUIShared::ConverterGeneratorCore
+          record = core.scaffold_record
+          options = @options.merge(scaffold_files: record)
+          scaffold = lambda do |path, noun, &content|
+            core.write_scaffold(path, options, Core::Logger,
+                                noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase), &content)
           end
+
+          scaffold.call(json_file, 'JSON layout') { json_content }
+          scaffold.call(main_kotlin_file, 'cell view') { main_cell_content(cell_class_name, subdirectory, package_name) }
+          scaffold.call(generated_kotlin_file, 'generated cell view') do
+            generated_cell_content(cell_class_name, layout_reference, subdirectory, package_name)
+          end
+          scaffold.call(data_file, 'data file') { cell_data_content(cell_class_name, package_name) }
+          scaffold.call(viewmodel_file, 'ViewModel') { cell_viewmodel_content(cell_class_name, layout_reference, package_name) }
+
+          # The counts, from the record (until 1.8.121 a list whatever the run
+          # had done — ticket kjui-g-view-reports-what-it-did-not-do).
+          core.report_scaffold_record("collection cell #{cell_class_name}", record, Core::Logger)
           puts ""
           puts "Next steps:"
           puts "  1. Edit the JSON layout in #{json_file}"
@@ -95,9 +114,7 @@ module KjuiTools
 
         private
 
-        def create_json_template(file_path, class_name)
-          return if File.exist?(file_path)
-          
+        def json_content
           json_content = {
             "type" => "View",
             "orientation" => "horizontal",
@@ -124,12 +141,10 @@ module KjuiTools
             ]
           }
           
-          File.write(file_path, JSON.pretty_generate(json_content))
+          JSON.pretty_generate(json_content)
         end
 
-        def create_main_cell_template(file_path, class_name, json_name, subdirectory, package_name)
-          return if File.exist?(file_path)
-
+        def main_cell_content(class_name, subdirectory, package_name)
           # Calculate relative package path (must use snake_case for subdirectory in package names)
           snake_subdir = subdirectory&.split('/')&.map { |p| to_snake_case(p) }&.join('.')
           view_package = if snake_subdir
@@ -163,13 +178,10 @@ module KjuiTools
                 )
             }
           KOTLIN
-
-          File.write(file_path, content)
+          content
         end
 
-        def create_generated_cell_template(file_path, class_name, json_name, subdirectory, package_name)
-          return if File.exist?(file_path)
-
+        def generated_cell_content(class_name, json_name, subdirectory, package_name)
           # Calculate relative package path (must use snake_case for subdirectory in package names)
           snake_subdir = subdirectory&.split('/')&.map { |p| to_snake_case(p) }&.join('.')
           view_package = if snake_subdir
@@ -258,13 +270,10 @@ module KjuiTools
                 // >>> GENERATED_CODE_END
             }
           KOTLIN
-
-          File.write(file_path, content)
+          content
         end
 
-        def create_cell_data_template(file_path, class_name, package_name)
-          return if File.exist?(file_path)
-
+        def cell_data_content(class_name, package_name)
           content = <<~KOTLIN
             package #{package_name}.data
 
@@ -292,13 +301,10 @@ module KjuiTools
                 }
             }
           KOTLIN
-
-          File.write(file_path, content)
+          content
         end
 
-        def create_cell_viewmodel_template(file_path, class_name, json_name, subdirectory, package_name)
-          return if File.exist?(file_path)
-
+        def cell_viewmodel_content(class_name, json_name, package_name)
           content = <<~KOTLIN
             package #{package_name}.viewmodels
 
@@ -339,8 +345,7 @@ module KjuiTools
                 // >>> GENERATED_CODE_END
             }
           KOTLIN
-
-          File.write(file_path, content)
+          content
         end
 
         def to_pascal_case(str)

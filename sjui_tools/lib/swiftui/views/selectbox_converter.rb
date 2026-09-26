@@ -15,6 +15,13 @@ module SjuiTools
           selectItemType = @component['selectItemType'] || 'Normal'
           items = @component['items'] || []
 
+          # The declared onClick, called from the user's pick — after the
+          # selection is written and onValueChange — through the closure
+          # SelectBoxView calls for a pick and nothing else
+          # (operation_click_call); no tap around the box, whose own tap opens
+          # the picker. It was called from nothing.
+          click = operation_click_call
+
           # SelectBoxViewを使用
           add_line "SelectBoxView("
           indent do
@@ -159,7 +166,7 @@ module SjuiTools
                                    end
               has_handler = @component['onValueChange'] && is_binding?(@component['onValueChange'])
 
-              if selected_date_prop || has_handler
+              if selected_date_prop || has_handler || click
                 add_line "onValueChange: { newValue in"
                 indent do
                   if selected_date_prop
@@ -169,6 +176,7 @@ module SjuiTools
                     handler_call = get_event_handler_invocation(@component['onValueChange'], id, 'newValue')
                     add_line handler_call
                   end
+                  add_line click if click
                 end
                 add_line "},"
               end
@@ -260,6 +268,28 @@ module SjuiTools
               right = @component['paddingRight'] || 0
               add_line "padding: EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
             end
+
+            # A normal picker reports the pick through the same closure, after
+            # SelectBoxView has written the selection: onValueChange, with the
+            # value of what is bound — the index for a bound selectedIndex, the
+            # item otherwise — then the declared onClick. Last, as the
+            # parameter is. The bound selection was observed with
+            # `.onChange(of:)` instead, which ran after the click and for the
+            # view model's writes too, and an unbound one was reported by
+            # nothing.
+            if selectItemType != 'Date'
+              calls = []
+              handler = @component['onValueChange']
+              if handler && is_binding?(handler)
+                index_prop = extract_binding_property(@component['selectedIndex']) if is_binding?(@component['selectedIndex'])
+                calls << get_event_handler_invocation(handler, id, index_prop ? "data.#{index_prop}" : 'newValue')
+              end
+              calls << click if click
+              if calls.any?
+                @generated_code[-1] = "#{@generated_code[-1]}," unless @generated_code[-1].rstrip.end_with?(',', '(')
+                add_line "onValueChange: { newValue in #{calls.join('; ')} }"
+              end
+            end
           end
           add_line ")"
 
@@ -267,29 +297,10 @@ module SjuiTools
           # Only apply frame, border, and margins here
           # Corresponding to Dynamic mode: SelectBoxConverter.swift
 
-          # onValueChange handler - called when selection changes
-          # onValueChange (camelCase) -> binding format only (@{functionName})
-          if @component['onValueChange'] && is_binding?(@component['onValueChange'])
-            # Get the binding variable name for onChange
-            binding_prop = if @component['selectedDate'] && is_binding?(@component['selectedDate'])
-                            extract_binding_property(@component['selectedDate'])
-                          elsif @component['selectedIndex'] && is_binding?(@component['selectedIndex'])
-                            extract_binding_property(@component['selectedIndex'])
-                          elsif @component['selectedItem'] && is_binding?(@component['selectedItem'])
-                            extract_binding_property(@component['selectedItem'])
-                          elsif @component['selectedValue'] && is_binding?(@component['selectedValue'])
-                            # cross-platform spelling of the same two-way
-                            # selection binding (selectedItem wins)
-                            extract_binding_property(@component['selectedValue'])
-                          else
-                            nil
-                          end
-            if binding_prop
-              handler_call = get_event_handler_invocation(@component['onValueChange'], id, 'newValue')
-              indent_str = "    " * (@indent_level + 1)
-              @modifier_bag.append(:on_value_change, ".onChange(of: data.#{binding_prop}) { _, newValue in\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}")
-            end
-          end
+          # onValueChange is the pick's (the closure above), not an
+          # `.onChange(of:)` on the bound value: that one ran after the click,
+          # for the view model's writes too, and — for a date, whose closure
+          # already reported the pick — a second time.
 
           # Apply frame modifiers
           apply_frame_constraints
@@ -321,8 +332,11 @@ module SjuiTools
             @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
-          # userInteractionEnabled / touchDisabledState
-          register_hit_test_gate
+          # enabled (`.disabled`, outermost), userInteractionEnabled and
+          # touchDisabledState. Only the last two were registered: SelectBoxView
+          # takes no `enabled`, so `enabled: false` still opened the picker and
+          # took a pick (SwiftJsonUI ConformanceHost OnClickProbeUITests).
+          register_interaction_gates
 
           generated_code
         end

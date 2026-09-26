@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../spec_helper'
+require_relative '../../support/typescript_compiler'
 require 'react/react_generator'
 require 'react/converters/view_converter'
 require 'react/converters/button_converter'
@@ -98,5 +99,27 @@ RSpec.describe 'attributes that were defined but never emitted' do
       expect(jsx).not_to include('<img')
       expect(jsx).not_to include('inline-flex')
     end
+  end
+
+  # Every emit above, as a component returns it, under --strict: the wrap
+  # classes, the icon inside the button box, the masked icon's inline style
+  # and the bound image path.
+  it 'writes TSX that compiles', :typescript_compile do
+    elements = [
+      view('type' => 'View', 'orientation' => 'horizontal', 'flexWrap' => 'wrap'),
+      view('type' => 'View', 'flexWrap' => 'nowrap'),
+      view('type' => 'View', 'flexWrap' => 'wrap-reverse'),
+      view('type' => 'View', 'orientation' => 'horizontal', 'flexWrap' => 'nowrap',
+           'responsive' => { 'compact' => { 'flexWrap' => 'wrap' } }),
+      button('image' => 'menu', 'width' => 40, 'height' => 40),
+      button('image' => 'menu_open'),
+      button('image' => 'menu', 'text' => 'Menu'),
+      button('image' => 'menu', 'fontColor' => '#FFFFFF'),
+      button('image' => '@{iconName}'),
+      button('text' => 'Save')
+    ]
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+      declare const data: { iconName?: string };
+    TS
   end
 end

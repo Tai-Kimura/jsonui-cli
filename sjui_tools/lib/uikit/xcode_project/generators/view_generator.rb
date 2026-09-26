@@ -7,6 +7,9 @@ require_relative '../../../core/project_finder'
 require_relative '../../../core/pbxproj_manager'
 require_relative '../../../core/config_manager'
 require_relative '../../../core/generated_marker'
+require_relative '../../../core/logger'
+require_relative '../../../core/converter_generator_core'
+require_relative 'scaffold_transaction'
 
 module SjuiTools
   module UIKit
@@ -59,13 +62,18 @@ module SjuiTools
               puts "Setting as root view controller"
             end
 
-            # What each file was before this run: the ViewController and the
-            # JSON are written either way (an existing one is overwritten),
-            # the ViewModel only when it is not there.
-            planned = { vc: "#{@view_path}/#{camel_name}/#{camel_name}ViewController.swift",
-                        json: "#{@layout_path}/#{snake_name}.json",
-                        vm: "#{@viewmodel_path}/#{camel_name}ViewModel.swift" }
-            existed = planned.transform_values { |path| File.exist?(path) }
+            # Every file through the one overwrite decision the generate
+            # commands share: an existing one is the app's — kept unless
+            # --force (or "y" at the prompt); a closed stdin and
+            # --skip-existing keep it. Until 1.8.121 the ViewController and
+            # the layout were rewritten on every run, edits and all (ticket
+            # generate-commands-overwrite-edited-files-and-ignore-their-flags).
+            # The transaction's record also says what this run created: the only
+            # files a failed Xcode step may delete (with the folders the run
+            # made, and project.pbxproj put back as it was).
+            @txn = ScaffoldTransaction.new(@project_file_path)
+            @record = @txn.record
+            @write_options = @options.merge(scaffold_files: @record)
 
             # 1. Viewフォルダの作成
             view_folder_path = create_view_folder(camel_name)
@@ -77,7 +85,7 @@ module SjuiTools
             json_path = create_json_file(snake_name, camel_name)
 
             # 4. ViewModelディレクトリとファイルの作成
-            FileUtils.mkdir_p(@viewmodel_path)
+            @txn.mkdir_p(@viewmodel_path)
             viewmodel_path = create_viewmodel_file(camel_name, snake_name)
 
             # 5. Xcodeプロジェクトに追加
@@ -86,14 +94,10 @@ module SjuiTools
             # 7. rootオプションが指定された場合、AppDelegateを修正
             root_updated = is_root && update_app_delegate(camel_name)
 
-            # Each file as what happened to it. Until 1.8.121 this said
-            # "Successfully generated:" with every file — a kept ViewModel
-            # too — and the AppDelegate line whether or not it was updated
-            # (ticket kjui-g-view-reports-what-it-did-not-do).
-            puts "Generated view #{camel_name}:"
-            puts "  - ViewController: #{view_controller_path} (#{existed[:vc] ? 'overwritten' : 'created'})"
-            puts "  - JSON layout: #{json_path} (#{existed[:json] ? 'overwritten' : 'created'})"
-            puts "  - ViewModel: #{viewmodel_path} (#{existed[:vm] ? 'kept: it exists' : 'created'})"
+            # The counts, from the record — each file has been said as it was
+            # decided (until 1.8.121 "Successfully generated:" with every file
+            # — ticket kjui-g-view-reports-what-it-did-not-do).
+            JsonUIShared::ConverterGeneratorCore.report_scaffold_record("view #{camel_name}", @record, Core::Logger)
             if root_updated
               puts "  - Updated SceneDelegate to use #{camel_name}ViewController as root"
             end
@@ -139,42 +143,40 @@ module SjuiTools
 
         def create_view_folder(camel_name)
           folder_path = "#{@view_path}/#{camel_name}"
-          unless Dir.exist?(folder_path)
-            FileUtils.mkdir_p(folder_path)
-            puts "Created folder: #{folder_path}"
-          end
+          puts "Created folder: #{folder_path}" if @txn.mkdir_p(folder_path)
           folder_path
         end
 
         def create_view_controller(folder_path, camel_name)
           file_path = "#{folder_path}/#{camel_name}ViewController.swift"
-          existed = File.exist?(file_path)
-
-          content = generate_view_controller_content(camel_name)
-          
-          File.write(file_path, content)
-          puts "#{existed ? 'Overwrote' : 'Created'} ViewController: #{file_path}"
+          scaffold(file_path, 'ViewController') { generate_view_controller_content(camel_name) }
           file_path
         end
 
         def create_json_file(snake_name, camel_name)
           file_path = "#{@layout_path}/#{snake_name}.json"
-          existed = File.exist?(file_path)
-
-          content = generate_json_content
-
-          File.write(file_path, content)
-          puts "#{existed ? 'Overwrote' : 'Created'} JSON layout: #{file_path}"
+          scaffold(file_path, 'JSON layout') { generate_json_content }
           file_path
+        end
+
+        def scaffold(file_path, noun, &content)
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            file_path, @write_options, Core::Logger, noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase), &content
+          )
         end
 
         def generate_view_controller_content(camel_name)
           snake_name = snake_name_from_camel(camel_name)
-          marker_header = Core::GeneratedMarker.comment_header(
+          # The scaffold header, not the DO-NOT-EDIT banner: the layout's
+          # handlers are methods on this controller (it is the target
+          # UIViewCreator binds them to), so the app writes code here, and
+          # `g view` keeps the file. Until 1.8.121 it carried the banner that
+          # says edits are overwritten on the next generation — which they
+          # were, by the next `g view`.
+          marker_header = Core::GeneratedMarker.scaffold_header(
             source: "#{snake_name}.json",
             generator: @command
           )
-          marker_footer = Core::GeneratedMarker.comment_footer
           <<~SWIFT
       #{marker_header}
 
@@ -217,23 +219,12 @@ module SjuiTools
               binding.bindView()
           }
       }
-
-      #{marker_footer}
           SWIFT
         end
 
         def create_viewmodel_file(camel_name, snake_name)
           file_path = "#{@viewmodel_path}/#{camel_name}ViewModel.swift"
-
-          if File.exist?(file_path)
-            puts "Kept existing ViewModel: #{file_path}"
-            return file_path
-          end
-
-          content = generate_viewmodel_content(camel_name, snake_name)
-
-          File.write(file_path, content)
-          puts "Created ViewModel: #{file_path}"
+          scaffold(file_path, 'ViewModel') { generate_viewmodel_content(camel_name, snake_name) }
           file_path
         end
 
@@ -297,7 +288,7 @@ module SjuiTools
                 view_controller_path = file_path
                 folder_name = File.basename(File.dirname(file_path))
                 # View/フォルダ名 のグループ構造で追加
-                results << @xcode_manager.add_file(file_path, "View/#{folder_name}")
+                results << [file_path, @xcode_manager.add_file(file_path, "View/#{folder_name}")]
               elsif file_name.include?("ViewModel.swift")
                 viewmodel_path = file_path
               elsif file_name.end_with?(".json")
@@ -307,28 +298,32 @@ module SjuiTools
 
             # JSONファイルをLayoutsグループに追加
             if json_path
-              results << @xcode_manager.add_file(json_path, "Layouts")
+              results << [json_path, @xcode_manager.add_file(json_path, "Layouts")]
             end
 
             # ViewModelファイルをViewModelグループに追加
             if viewmodel_path
               viewmodel_dir = @config['viewmodel_directory'] || 'ViewModel'
-              results << @xcode_manager.add_file(viewmodel_path, viewmodel_dir)
+              results << [viewmodel_path, @xcode_manager.add_file(viewmodel_path, viewmodel_dir)]
             end
+
+            # A file add_file could not add (it answers :failed after logging
+            # why) fails the run like a raise: until 1.8.121 it went on to
+            # "Xcode project: no file added" and exit 0, the new files on disk
+            # and out of the project.
+            @txn.check!(results)
 
             # What add_file did, counted: until 1.8.121 "Added files to Xcode
             # project" followed "File already in project" for every file.
-            added = results.count(:added)
+            added = results.count { |_, answer| answer == :added }
             puts(added.zero? ? 'Xcode project: no file added' : "Added #{added} file(s) to Xcode project")
           rescue => e
             puts "Error adding files to Xcode project: #{e.message}"
-            # ファイルを削除してロールバック
-            file_paths.each do |file_path|
-              if File.exist?(file_path)
-                File.delete(file_path)
-                puts "Deleted: #{file_path}"
-              end
-            end
+            # Roll back what this run created, and only that: until 1.8.121
+            # every listed file was deleted — a ViewModel the run had kept, a
+            # layout and a controller it had just overwritten — so a failure
+            # here lost the app's files.
+            @txn.roll_back
             raise e
           end
         end

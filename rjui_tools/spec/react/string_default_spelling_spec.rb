@@ -6,6 +6,7 @@ require 'tmpdir'
 require 'core/type_converter'
 require 'core/string_literals'
 require_relative '../spec_helper'
+require_relative '../support/typescript_compiler'
 require 'react/data_model_generator'
 
 # What a String defaultValue's spelling means, on every path rjui writes one
@@ -131,6 +132,20 @@ RSpec.describe 'a String defaultValue reads the same on every rjui path' do
         expect(got[i]).to eq(want), "#{row['name']}: #{row['spelling'].inspect} was written #{emitted[i]}"
       end
     end
+  end
+
+  # tsc over every default written, under --strict, as the types the data
+  # model declares them with: a String's is a `string`, a String?'s a
+  # `string | undefined`. node reads the values back above; this is what a
+  # consumer's compiler makes of the same text.
+  it 'writes defaults that compile as the types the data model declares', :typescript_compile do
+    strings = rows.map { |_, spelling, _| generator.send(:format_default_value, spelling, 'string', 'String') }
+    optionals = vectors['optionalStrings'].map do |row|
+      generator.send(:format_default_value, row['spelling'], 'string | undefined', 'String?')
+    end
+    source = strings.each_with_index.map { |e, i| "export const s#{i}: string = #{e};\n" }.join +
+             optionals.each_with_index.map { |e, i| "export const o#{i}: string | undefined = #{e};\n" }.join
+    expect(source).to compile_as_typescript
   end
 
   # A value written per platform ({ "swift": …, "kotlin": … }): the one

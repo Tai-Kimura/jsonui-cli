@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
+require_relative '../support/typescript_compiler'
 require 'react/converters/label_converter'
 
 # Label `linkable` canon (rjui-label-linkable-binding-renders-raw):
@@ -50,6 +51,25 @@ RSpec.describe 'Label linkable' do
       expect(jsx).to include('<LinkifyText')
       expect(jsx).not_to include('@{')
     end
+  end
+
+  # Every shape above, as a component returns it, under --strict, against
+  # the props the LinkifyText template declares (its own interface, read from
+  # the template; `React.forwardRef<HTMLSpanElement, …>`, so a ref to a span
+  # too): the text handed over is a string whichever shape it came from.
+  it 'writes TSX that compiles against LinkifyTextProps', :typescript_compile do
+    elements = [
+      convert({ 'type' => 'Label', 'linkable' => true, 'text' => '@{notesText}' }),
+      convert({ 'type' => 'Label', 'linkable' => true, 'text' => 'お問い合わせ: @{contactPhone}' }),
+      convert({ 'type' => 'Label', 'linkable' => true, 'text' => 'See https://example.com or call 03-1234-5678' }),
+      convert({ 'type' => 'Label', 'linkable' => '@{isLinkable}', 'text' => '@{notesText}' })
+    ]
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
+      #{TypeScriptCompiler.template_declarations('linkify_text.tsx', 'LinkifyTextProps')}
+      declare const LinkifyText: (props: LinkifyTextProps & { ref?: { current: HTMLSpanElement | null } }) => JSX.Element;
+      declare const data: { notesText?: string; contactPhone?: string; isLinkable?: boolean };
+    TS
   end
 
   describe 'LinkifyText template (runtime canon pins)' do

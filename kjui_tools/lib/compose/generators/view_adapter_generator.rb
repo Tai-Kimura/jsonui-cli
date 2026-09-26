@@ -241,7 +241,10 @@ REGISTRATION
           debug_file = File.join(debug_dir, 'DynamicComponentInitializer.kt')
 
           # Only create if it doesn't exist yet
-          unless File.exist?(debug_file)
+          if File.exist?(debug_file)
+            # Said too (until 1.8.121 a run that found it said nothing of it).
+            @logger.info "Unchanged DynamicComponentInitializer (debug): #{debug_file} exists"
+          else
             File.write(debug_file, generate_debug_initializer_content)
             @logger.info "Created DynamicComponentInitializer (debug): #{debug_file}"
           end
@@ -258,7 +261,10 @@ REGISTRATION
           release_file = File.join(release_dir, 'DynamicComponentInitializer.kt')
 
           # Only create if it doesn't exist yet
-          unless File.exist?(release_file)
+          if File.exist?(release_file)
+            # Said too (until 1.8.121 a run that found it said nothing of it).
+            @logger.info "Unchanged DynamicComponentInitializer (release): #{release_file} exists"
+          else
             File.write(release_file, generate_release_initializer_content)
             @logger.info "Created DynamicComponentInitializer (release): #{release_file}"
           end

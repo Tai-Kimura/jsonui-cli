@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative '../../spec_helper'
+require_relative '../../support/typescript_compiler'
 require_relative '../../../lib/react/converters/base_converter'
 require_relative '../../../lib/react/converters/button_converter'
 require_relative '../../../lib/react/converters/slider_converter'
@@ -154,5 +155,39 @@ RSpec.describe 'L1-normalized layout consumption' do
         expect(jsx).to include('data.onTab')
       end
     end
+  end
+
+  # Both paths' emits, as a component returns them, under --strict: what the
+  # alias fallback writes on L0 and what the canonical-only path writes on
+  # L1 are both code a consumer compiles. `data` is typed as the data model
+  # declares these bindings; the range input's handler is typed by lib.dom.
+  it 'writes TSX that compiles on both paths', :typescript_compile do
+    c = RjuiTools::React::Converters
+    tab = { 'type' => 'TabView', 'tabs' => [{ 'title' => 'One' }, { 'title' => 'Two' }],
+            'selectedTabIndex' => '@{tabIndex}', 'onPageChanged' => '@{onTab}' }
+    nodes = [
+      [c::ViewConverter, { 'type' => 'View', 'alpha' => 0.5 }],
+      [c::ViewConverter, { 'type' => 'View', 'opacity' => 0.3, 'alpha' => 0.5 }],
+      [c::ButtonConverter, { 'type' => 'Button', 'text' => 'Tap', 'tapBackground' => '#0000FF',
+                             'highlightBackground' => '#FF0000', 'hilightColor' => '#00FF00' }],
+      [c::SliderConverter, { 'type' => 'Slider', 'minimumValue' => 5, 'maximumValue' => 50 }],
+      [c::SliderConverter, { 'type' => 'Slider', 'minValue' => 5, 'maxValue' => 50, 'onValueChanged' => '@{onSlide}' }],
+      [c::TabViewConverter, tab],
+      [c::TabViewConverter, tab.merge('selectedIndex' => '@{tabIndex}', 'onValueChange' => '@{onTab}')]
+    ]
+    elements = [l0_config, l1_config].flat_map { |config| nodes.map { |klass, json| klass.new(json, config).convert } }
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace JSX {
+        interface IntrinsicElements {
+          input: { [attr: string]: unknown; onChange?: (e: { target: HTMLInputElement }) => void };
+        }
+      }
+      declare const data: {
+        onSlide?: (value: number) => void; tabIndex?: number; onTab?: (index: number) => void;
+        selectedTabIndex?: number; setSelectedTabIndex?: (index: number) => void;
+      };
+      declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;
+      declare const Circle: (props: { className?: string }) => JSX.Element;
+    TS
   end
 end

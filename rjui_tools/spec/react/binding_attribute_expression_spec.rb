@@ -4,6 +4,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require_relative '../spec_helper'
+require_relative '../support/typescript_compiler'
 require 'react/converters/image_converter'
 require 'react/converters/icon_label_converter'
 require 'react/converters/network_image_converter'
@@ -13,6 +14,7 @@ require 'react/converters/view_converter'
 require 'react/converters/web_converter'
 require 'react/converters/button_converter'
 require 'react/converters/tab_view_converter'
+require 'core/binding_validator'
 
 # An attribute holding a binding is written as ONE JavaScript expression
 # (BaseConverter#attribute_expression). Until 1.8.121 these sites took
@@ -79,10 +81,10 @@ module BindingAttributeExpressionSpec
           ->(v) { C::TextViewConverter.new({ 'type' => 'TextView', 'id' => 'f', 'text' => v }, CONFIG.dup).convert }),
     site.('TextView hint', '<textarea', 'placeholder', 'placeholder',
           ->(v) { C::TextViewConverter.new({ 'type' => 'TextView', 'id' => 'f', 'hint' => v }, CONFIG.dup).convert }),
-    # A JSX child, `{badge && <span …>{badge}</span>}`: its condition.
+    # A JSX child: the text the badge's span shows.
     site.('TabView badge', nil, nil, nil,
           ->(v) { C::TabViewConverter.new({ 'type' => 'TabView', 'tabs' => [{ 'title' => 'a', 'badge' => v }] }, CONFIG.dup).convert },
-          bound_only: true, locate: ->(emitted) { (m = emitted[/\{(.+?) && <span /, 1]) && "{#{m}}" })
+          bound_only: true, locate: ->(emitted) { emitted[/<span className="absolute[^"]*">(\{.*?\})<\/span>/, 1] })
   ].freeze
 
   NODE_PROGRAM = <<~JS
@@ -240,6 +242,61 @@ RSpec.describe 'an attribute holding a binding is one expression' do
       { 'type' => 'View', 'borderWidth' => '@{w}', 'borderColor' => '#000000' }, spec::CONFIG.dup
     ).convert
     expect(emitted).to include('borderWidth: `${data.w}px`')
+  end
+
+  # Every element a build can ship, as a component returns it, under
+  # --strict. `data` is typed as the build's data model declares it for these
+  # nodes (a bound text field writes back through on<Name>Change and reports
+  # its focus through on<Id>IsFocusedChange; `fRef` is the component's own
+  # ref), and the inputs' handlers are typed by lib.dom — so a binding left as
+  # text (`src={@img}`, what IconLabel's icon came out as) or a misspelt
+  # member fails here.
+  #
+  # A two-way text that is not one flat name is refused by the build
+  # (binding-two-way-complex, an error: the build exits 1), so those rows are
+  # not shipped — and their handler, named from the whole expression
+  # (`data.onMissing ?? 'D'Change?.(…)`), does not parse. Which rows those are
+  # is the build's validator's answer, asked per row, not a list kept here.
+  it 'writes TSX that compiles for every row a build can ship', :typescript_compile do
+    refused, shipped = @rows.reject { |r| r[:error] }.partition do |r|
+      type, attr = r[:site].split(' ', 2)
+      validator = RjuiTools::Core::BindingValidator.new
+      validator.validate({ 'type' => type, 'id' => 'f', attr => r[:value] })
+      validator.errors.any?
+    end
+    expect(refused.map { |r| r[:site] }.uniq).to contain_exactly('TextField text', 'TextView text'),
+                                                  refused.map { |r| "#{r[:site]}: #{r[:value]}" }.join("\n")
+    expect(shipped.map { |r| r[:site] }.uniq.size).to eq(spec::SITES.size)
+    expect(TypeScriptCompiler.component(*shipped.map { |r| r[:emitted] }.uniq)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace JSX {
+        interface IntrinsicElements {
+          input: { [attr: string]: unknown; onChange?: (e: { target: HTMLInputElement }) => void };
+          textarea: { [attr: string]: unknown; onChange?: (e: { target: HTMLTextAreaElement }) => void };
+        }
+      }
+      declare const data: {
+        img?: string; id?: string; w?: number; missing?: string;
+        onImgChange?: (value: string) => void; onFIsFocusedChange?: (value: boolean) => void;
+        selectedTabIndex?: number; setSelectedTabIndex?: (index: number) => void;
+      };
+      declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;
+      declare const Circle: (props: { className?: string }) => JSX.Element;
+      declare const fRef: { current: HTMLInputElement | HTMLTextAreaElement | null };
+      declare const NetworkImage: (props: { src?: string; placeholder?: string; [attr: string]: unknown }) => JSX.Element;
+    TS
+  end
+
+  # The badge is drawn while a binding alone has a value; a default's `??` is
+  # parenthesised under the `&&` (JavaScript refuses to parse the two mixed),
+  # and text around a binding always has text, so it takes no condition.
+  it 'writes the TabView badge condition JavaScript can parse' do
+    badge = lambda do |value|
+      spec::C::TabViewConverter.new({ 'type' => 'TabView', 'tabs' => [{ 'title' => 'a', 'badge' => value }] }, spec::CONFIG.dup)
+                               .convert.lines.grep(/<span className="absolute/).first.strip
+    end
+    expect(badge.('@{img}')).to start_with('{data.img && <span ')
+    expect(badge.("@{missing ?? 'D'}")).to start_with("{(data.missing ?? 'D') && <span ")
+    expect(badge.('a/@{missing}/b')).to start_with('<span ')
   end
 
   # The locator reads what it claims to: a template literal's `${…}` and a
