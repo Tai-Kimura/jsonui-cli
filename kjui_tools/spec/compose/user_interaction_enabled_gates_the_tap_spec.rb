@@ -93,6 +93,36 @@ RSpec.describe 'kjui userInteractionEnabled gates the click as canTap does' do
     end
   end
 
+  # A long press, a pan and a pinch inside a node with the flag: their
+  # detectors take the first down in the Initial pass without requiring it
+  # unconsumed, so the blocker around them did not stop them. `false` around
+  # attaches none; a binding around gates each where it fires.
+  { 'onLongPress' => 'longPressed', 'onPan' => 'detectDragGestures', 'onPinch' => 'calculateZoom' }.each do |event, marker|
+    describe event do
+      gesture = ->(more = {}) { { 'type' => 'View', 'id' => 'g', event => '@{onG}' }.merge(more) }
+
+      it 'is attached with no flag around it' do
+        expect(emit.call(inside.call(true, gesture.call))).to include(marker)
+      end
+
+      it 'inside a View with userInteractionEnabled: false is not attached: what the node emits with no handler' do
+        code = emit.call(inside.call(false, gesture.call))
+        expect(code).not_to include(marker)
+        expect(code).to eq(emit.call(inside.call(false, { 'type' => 'View', 'id' => 'g' })))
+      end
+
+      # The gated call, as the node's own binding gates it (interaction_gates_spec).
+      gated_call = /^\s*(if \((?:longPressed && )?\(data\.u \?: false\)\)(?: \{| data\.onG\?\.invoke\(\)))$/
+
+      it 'inside a View with a bound userInteractionEnabled is gated on it, as under its own' do
+        around = emit.call(inside.call('@{u}', gesture.call))[gated_call, 1]
+        own = emit.call(gesture.call('userInteractionEnabled' => '@{u}'))[gated_call, 1]
+        expect(own).to be_a(String)
+        expect(around).to eq(own)
+      end
+    end
+  end
+
   it 'a click beside a View with userInteractionEnabled: false keeps its click and its role' do
     code = emit.call({ 'type' => 'View', 'id' => 'r', 'child' => [
                        inside.call(false, node.call('Label', 'id' => 'a', 'onClick' => '@{onA}')),
