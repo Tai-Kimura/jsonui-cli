@@ -258,13 +258,14 @@ rb_suite rjui_tools "bundle exec rspec"
 
 # --- Ruby floor ------------------------------------------------------------
 # The three suites above run on RBENV_VERSION (3.2.2 unless the caller set
-# one): the floor from jsonui-cli 1.9.0 is Ruby 3.2, and CI runs 3.3 — so this
-# runner is where the floor is measured. Refuse a run that is not on it: a
-# suite on some other ruby would report green for the wrong interpreter.
+# one): the floor from jsonui-cli 1.9.0 is Ruby 3.2, and the suites are
+# measured on it — here, and on 3.2 in CI's ruby-suites legs. Refuse a run
+# that is not on it: a suite on a newer ruby reports green for an API the
+# floor does not have.
 # (Until 1.9.0 this section ran the three suites again on the macOS system
 # Ruby 2.6; that support ended by ruling on 2026-09-26.)
 _rb=$(cd "$C/sjui_tools" && ruby -e 'print RUBY_VERSION' 2>/dev/null)
-say "== ruby floor: the Ruby suites ran on ${_rb:-?} (floor 3.2, CI 3.3)"
+say "== ruby floor: the Ruby suites ran on ${_rb:-?} (floor 3.2)"
 case "$_rb" in
   3.2.*) ;;
   *) bad "ruby floor: the Ruby suites ran on ${_rb:-no ruby}, not on the 3.2 floor (set RBENV_VERSION to a 3.2.x)";;
