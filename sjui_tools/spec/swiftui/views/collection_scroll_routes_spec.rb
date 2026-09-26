@@ -14,7 +14,12 @@ require_relative '../../support/emitted_swift'
 #   shares that emit, had `.id(cellIndex)` in every data section;
 # - the pager: its TabView turns to the page the value names — the bound
 #   currentPage, else a page state of its own;
-# - a String with no cellIdProperty: a cell's cellId is its key.
+# - a String with no cellIdProperty: a cell's cellId is its key;
+# - an Int with cellIdProperty (round 14): the value's declared class says
+#   what it names, cellIdProperty only what a key is — an Int is a cell's
+#   place on every route. Until jsonui-cli 1.9.0 cellIdProperty made every
+#   value a key: the class-list List and the pager did not compile
+#   (`String? == Int`), the other routes scrolled nowhere.
 RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   include EmittedSwift
 
@@ -99,6 +104,78 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       code, = emit({ 'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }, INT)
       expect(code).to include('.id(cellIndex)')
       expect(code).not_to include('AnyHashable')
+    end
+  end
+
+  describe 'an Int with cellIdProperty: the declared class decides' do
+    SECTIONED = { 'sections' => [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell' }] }.freeze
+    KEYED = { 'cellIdProperty' => 'key' }.freeze
+
+    it 'the class-list List and the pager look the Int up as a place, as with no cellIdProperty' do
+      list, = emit(CLASS_LIST.merge(KEYED), INT)
+      expect(list).to include('.onChange(of: data.target) { _, index in')
+      expect(list).to include('if place == index { found = IndexPath(item: cellIndex, section: sectionIndex); break search }')
+      expect(list).not_to include('as? String)) == index')
+      pager, = emit(PAGER.merge(KEYED), INT)
+      expect(pager).to include('.onChange(of: data.target) { _, index in')
+      expect(pager).to include('if page == index { found = page; break search }')
+      expect(pager).not_to include('as? String)) == index')
+    end
+
+    # The cells' loop ids are their keys, else their places
+    # (collection_section_scroll_ids_spec): the Int is looked up by the
+    # loops' own rule — the drawn sections in order, the key when no cell
+    # before it has it — and the scroll goes to that id.
+    it "a keyed loop looks the Int up and scrolls to the cell's own loop id" do
+      code, = emit(SECTIONED.merge(KEYED), INT)
+      secs = '(data.rows?.sections ?? [])'
+      expect(code).to include('.onChange(of: data.target) { _, index in')
+      expect(code).to include("search: for (sectionIndex, cells) in [(0, (#{secs}.count > 0 ? (#{secs}[0].cells?.data ?? []) : [])), " \
+                              "(2, (#{secs}.count > 2 ? (#{secs}[2].cells?.data ?? []) : []))] {")
+      expect(code).to include('let first = key.map { seen.insert($0).inserted } ?? false')
+      expect(code).to include('if let key, first { found = AnyHashable(key) } else { found = AnyHashable(IndexPath(item: cellIndex, section: sectionIndex)) }')
+      expect(code).to include('scrollProxy.scrollTo(found, anchor: .bottom)')
+      expect(code).not_to include('scrollProxy.scrollTo(index')
+      auto, = emit(SECTIONED.merge(KEYED).merge('autoChangeTrackingId' => true), INT)
+      expect(auto).to include('[0].cells?.data ?? []) : []).reconfigured(cellIdProperty: "key", autoChangeTrackingId: true))')
+    end
+
+    it 'control: a String with cellIdProperty scrolls to the value; a value of no declared class is a String with cellIdProperty' do
+      code, = emit(SECTIONED.merge(KEYED), STR)
+      expect(code).to include('.onChange(of: data.target) { _, cellId in')
+      expect(code).to include('scrollProxy.scrollTo(cellId, anchor: .bottom)')
+      expect(code).not_to include('search:')
+      undeclared, = emit(SECTIONED.merge(KEYED), [])
+      expect(undeclared).to include('scrollProxy.scrollTo(cellId, anchor: .bottom)')
+    end
+
+    it 'type-checks on every route with an Int and cellIdProperty, with and without autoChangeTrackingId', :swift_compile do
+      routes = [SECTIONED, SECTIONED.merge('lazy' => 'none'), SECTIONED.merge('columns' => 2), SECTIONED.merge('layout' => 'flow'),
+                SECTIONED.merge('listStyle' => 'plain'), SECTIONED.merge('layout' => 'horizontal'), PAGER, PAGER.merge('currentPage' => '@{page}'),
+                CLASS_LIST, CLASS_LIST.merge('columns' => 2), { 'sections' => [{ 'cell' => 'ACell' }] }]
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB +
+              cell_view_stub('ACellView', 'BCellView', 'HCellView') +
+              "struct FlowLayout<Content: View>: View { let content: () -> Content\n" \
+              "  init(alignment: HorizontalAlignment, horizontalSpacing: CGFloat, verticalSpacing: CGFloat, @ViewBuilder content: @escaping () -> Content) { self.content = content }\n" \
+              "  var body: some View { VStack { content() } } }\n" \
+              "extension Array where Element == [String: Any] {\n" \
+              "  func reconfigured(cellIdProperty: String?, autoChangeTrackingId: Bool) -> [[String: Any]] { self } }\n"
+      views = routes.product([{}, { 'autoChangeTrackingId' => true }]).each_with_index.map do |(node, auto), i|
+        code, state = emit(node.merge(KEYED).merge(auto).merge('id' => "keyed#{i}"), INT)
+        code = code.lines.reject { |l| l.include?('.tabViewStyle(.page(') }.join
+        <<~SWIFT
+          struct Keyed#{i}Data { var rows: CollectionDataSource? = nil; var target: Int = 0; var page: Int = 0 }
+          struct Keyed#{i}: View {
+              @State var data = Keyed#{i}Data()
+          #{state.map { |l| "    #{l}" }.join("\n")}
+              var body: some View {
+          #{code.lines.map { |l| "        #{l}" }.join}
+              }
+          }
+        SWIFT
+      end
+      expect(views.size).to eq(22)
+      expect("#{EmittedSwift::LIBRARY_STUBS}\n#{stubs}\n#{views.join("\n")}").to compile_as_swift
     end
   end
 
