@@ -105,9 +105,21 @@ cd test_tools && pip install -e . && jsonui-test --help
 
 ## Requirements
 
-CI-verified versions (older ones may work but are not tested):
+- **Ruby 3.2 or later** for sjui_tools, kjui_tools and rjui_tools, from
+  jsonui-cli 1.9.0 (earlier releases also ran on the macOS system Ruby, 2.6;
+  that support ended on 2026-09-26). Below 3.2 each tool stops before it does
+  anything, with one line that names the ruby it ran on and how to pick
+  another — e.g. a `.ruby-version` naming 3.2 or later in the directory the
+  tool runs from (a platform root, when `jui build` runs it), for rbenv, asdf
+  or mise. `jui build` passes `<tool>_tools/.ruby-version` to the tool as
+  `RBENV_VERSION` when rbenv has that version installed; otherwise the tool
+  runs on whatever `ruby` the environment resolves in the platform root.
 
-- **Ruby** 3.3 (sjui_tools, kjui_tools, rjui_tools)
+Measured versions: the release gate runs the Ruby suites on 3.2.2
+(dev-guide/release/run-suites.sh), CI on 3.3, and CI compares kjui's generated
+bytes on 3.2 and 3.3 (ruby-generation-parity). Other tools, CI-verified (older
+ones may work but are not tested):
+
 - **Python** 3.11+ (jui_tools, test_tools, document_tools)
 - **Node.js** 24 (web conformance host needs ≥ 23 for native TS type stripping;
   also used by the MCP server and the hotloader clients)

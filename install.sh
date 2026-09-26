@@ -28,9 +28,16 @@ error() {
 # Check Ruby
 if command -v ruby &> /dev/null; then
     RUBY_VERSION=$(ruby -v | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    success "Ruby $RUBY_VERSION found"
+    # From jsonui-cli 1.9.0 the tools need Ruby 3.2 or later (they stop below
+    # it with one line). This is this shell's ruby; the tools use the ruby of
+    # the directory they run in, so a lower one here is a warning.
+    if echo "$RUBY_VERSION" | awk -F. '{ exit !($1 > 3 || ($1 == 3 && $2 >= 2)) }'; then
+        success "Ruby $RUBY_VERSION found"
+    else
+        warning "Ruby $RUBY_VERSION found here — the tools need Ruby 3.2 or later (jsonui-cli 1.9.0); give each project a .ruby-version naming one"
+    fi
 else
-    error "Ruby not found. Please install Ruby 2.7.4 or later."
+    error "Ruby not found. Please install Ruby 3.2 or later."
     exit 1
 fi
 

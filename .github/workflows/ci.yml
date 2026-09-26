@@ -494,7 +494,12 @@ jobs:
 
   # ------------------------------------------------------------------ #
   # Ruby codegen unit suites. sjui_tools has no Gemfile (plain rspec);
-  # kjui/rjui use their committed Gemfile.lock via bundler-cache.
+  # kjui/rjui use their committed Gemfile.lock via bundler-cache. They run on
+  # 3.3 here. The floor — Ruby 3.2 from jsonui-cli 1.9.0, which each
+  # bin/<tool> enforces on its first line — is run by
+  # dev-guide/release/run-suites.sh (3.2.2) and compared byte for byte with
+  # 3.3 by ruby-generation-parity below. The Ruby 2.6 legs that stood here
+  # went with the 2.6 support (ruling 2026-09-26).
   # ------------------------------------------------------------------ #
   ruby-suites:
     name: rspec (${{ matrix.tool }})
@@ -520,50 +525,11 @@ jobs:
             platform: web
             bundler: true
             os: ubuntu-latest
-          # Ruby 2.6 legs. The vendored tools run under the CONSUMER's ruby —
-          # 2.6 on every face measured — while every suite above runs 3.3, so
-          # a 2.7+ API (`filter_map`, `File.absolute_path?`) ships green and
-          # raises NoMethodError on the consumer's `jui build`. Twice in one
-          # day the only guard was a comment. These legs run the same specs
-          # under 2.6 with no bundler (the lockfiles pin gems that do not
-          # exist for 2.6 — consumers never use them either). `rspec_args`
-          # excludes what cannot run on 2.6 for reasons that are not the
-          # lib's: the `watch` command (its `listen` gem needs ffi ≥ Ruby
-          # 3.0 — a separate, real consumer finding), kjui's frozen XML mode
-          # (nokogiri). sjui's Swift-compiling specs are NOT excluded here:
-          # this image has swiftc but no SwiftUI SDK, and the
-          # `compile_as_swift` matcher skips itself (visibly, in the count)
-          # where `import SwiftUI` does not type-check. A `--tag '~swift'`
-          # used to stand here; the tag is `:swift_compile` and is derived
-          # onto all of spec/swiftui, so the exclusion matched nothing and
-          # the four compile examples ran and failed on the first line.
-          # 2.6 builds exist for ubuntu-22.04 only.
-          - tool: sjui_tools
-            platform: ios
-            bundler: false
-            os: ubuntu-22.04
-            ruby: "2.6"
-            gems: "rspec simplecov:0.22.0 xcodeproj"
-            rspec_args: "--exclude-pattern 'spec/**/*{watch,file_watcher}*_spec.rb'"
-          - tool: kjui_tools
-            platform: android
-            bundler: false
-            os: ubuntu-22.04
-            ruby: "2.6"
-            gems: "rspec simplecov:0.22.0"
-            rspec_args: "--exclude-pattern 'spec/xml/**/*_spec.rb,spec/cli/commands/generate_xml_spec.rb'"
-          - tool: rjui_tools
-            platform: web
-            bundler: false
-            os: ubuntu-22.04
-            ruby: "2.6"
-            gems: "rspec simplecov:0.22.0"
-            rspec_args: ""
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ matrix.ruby || '3.3' }}
+          ruby-version: "3.3"
           bundler-cache: ${{ matrix.bundler }}
           working-directory: ${{ matrix.bundler && matrix.tool || '' }}
       - uses: actions/setup-python@v5
@@ -572,13 +538,8 @@ jobs:
       - name: Install gems (no Gemfile)
         # sjui_tools has no Gemfile; its specs need rspec + simplecov and the
         # non-default gems its lib requires (xcodeproj, listen).
-        if: ${{ !matrix.bundler && !matrix.ruby }}
+        if: ${{ !matrix.bundler }}
         run: gem install rspec simplecov xcodeproj listen --no-document
-      - name: Install gems (ruby 2.6)
-        # No bundler and no `listen` (ffi needs Ruby ≥ 3.0); simplecov pinned
-        # to the last line that supports 2.6.
-        if: ${{ matrix.ruby == '2.6' }}
-        run: gem install ${{ matrix.gems }} --no-document
       - name: Install the rjui spec toolchain (tsc, esbuild, @babel/parser)
         # The rjui specs type-check emitted TSX with a tsc pinned in
         # rjui_tools/spec/support/package.json, run the generated
@@ -593,13 +554,14 @@ jobs:
         # gates nothing, so CI installs it.
         #
         # ⚠️ This step used to carry `&& !matrix.ruby`, so the ruby-pinned leg
-        # ran without the toolchain and reported ten pendings beside its
-        # `0 failures`. Eight of those were defensible — that leg's question
-        # is whether the vendored tools emit the same bytes under the
-        # consumer's older ruby, which a TypeScript type-check does not
-        # answer — but the ninth, the @babel/parser arm, was pending in
-        # every environment that ran it: this leg, the default leg, the
-        # release gate and triage's worktree, four for four on 2026-09-10.
+        # (Ruby 2.6, gone from jsonui-cli 1.9.0) ran without the toolchain
+        # and reported ten pendings beside its `0 failures`. Eight of those
+        # were defensible — that leg's question was whether the vendored tools
+        # emit the same bytes under the consumer's older ruby, which a
+        # TypeScript type-check does not answer — but the ninth, the
+        # @babel/parser arm, was pending in every environment that ran it:
+        # that leg, the default leg, the release gate and triage's worktree,
+        # four for four on 2026-09-10.
         # A gate that has never once observed its subject is not a gate. The
         # arm raises instead of skipping when CI is set now, so the
         # toolchain has to be here on every rjui leg. It is node, not ruby:
@@ -613,7 +575,7 @@ jobs:
       - name: rspec
         if: ${{ !matrix.bundler }}
         working-directory: ${{ matrix.tool }}
-        run: rspec ${{ matrix.rspec_args }}
+        run: rspec
       # Codegen differential (plan 41 measured it, plan 49-H gates it). Drives
       # this tool's production converter over layout hashes and judges the
       # emitted TEXT — no device, no fixture, no renders — so it is seconds
@@ -622,14 +584,9 @@ jobs:
       # owner and a reason; entries the measurement no longer supports fail
       # too, so a fix takes its row with it.
       - name: Install jui_tools (codegen differential)
-        if: ${{ !matrix.ruby }}
         working-directory: jui_tools
         run: python -m pip install --upgrade pip && python -m pip install -e .
       - name: Codegen differential (${{ matrix.platform }})
-        # Rides the 3.3 legs only — the 2.6 legs exist to load the lib under
-        # the consumer's ruby, and the differential already runs once per
-        # platform above.
-        if: ${{ !matrix.ruby }}
         run: |
           python3 -c "import sys; from jui_cli.cli import main; sys.exit(main([
             'conformance','codegen-effect','--paired','--platform','${{ matrix.platform }}']))"
@@ -836,30 +793,28 @@ jobs:
   # ------------------------------------------------------------------ #
   # Ruby generation parity.
   #
-  # `kjui` runs under the HOST'S system Ruby in consumer projects, which on
-  # macOS is 2.6 (kjui_tools/lib/compose/helpers/section_extractor.rb:625
-  # states the contract). CI runs 3.3. Those are different interpreters
-  # generating the code a consumer ships, and nothing was comparing them.
+  # The tools run under the CONSUMER's ruby, anything from the floor up: Ruby
+  # 3.2 from jsonui-cli 1.9.0 (each bin/<tool> stops below it with one line).
+  # The suites above run 3.3, so this generates the kjui conformance host on
+  # both the floor and 3.3 and compares the bytes. Until 1.9.0 the floor was
+  # the macOS system Ruby, 2.6, and this job compared 2.6 with 3.3; the 2.6
+  # support ended by ruling (2026-09-26), and the floor moved to 3.2 — the
+  # ruby the release gate measures on (3.2.2).
   #
-  # rjui_tools/spec/react/ruby_baseline_spec.rb already forbids 2.7+ APIs, so
-  # the "wrote filter_map" family is covered. This job covers the other one:
-  # the SAME source behaving differently between interpreters — Ruby 3.0's
-  # keyword-argument separation above all, plus Hash ordering and String
+  # It covers what a unit test does not: the SAME source behaving
+  # differently between interpreters — Hash ordering, String and keyword
   # changes. Those produce no syntax error and no failing unit test; they
-  # produce a different file.
-  #
-  # It is worth wiring even though the current diff is empty. A consumer's
-  # system Ruby does not move, but CI's does — so the day a difference
-  # appears is a day nobody is looking at this.
+  # produce a different file. It is worth wiring even while the diff is
+  # empty: CI's 3.3 moves, the floor does not.
   #
   # ubuntu-24.04 is PINNED, not ubuntu-latest. ruby/ruby-builder publishes no
   # ubuntu-26.04 assets at all (measured: 94 for 24.04, 94 for 22.04, 0 for
-  # 26.04), so the day the `latest` label moves this job would stop being able
-  # to fetch 2.6 — and would leave behind a green record claiming 2.6 parity
-  # is checked.
+  # 26.04), so the day the `latest` label moves this job could stop being able
+  # to fetch the floor's ruby — and would leave behind a green record claiming
+  # parity is checked.
   # ------------------------------------------------------------------ #
   ruby-generation-parity:
-    name: kjui generates the same bytes on Ruby 2.6 and 3.3
+    name: kjui generates the same bytes on Ruby 3.2 and 3.3
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -872,15 +827,15 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "2.6.10"
-      - name: Generate with Ruby 2.6
+          ruby-version: "3.2"
+      - name: Generate with Ruby 3.2
         env:
           CONFORMANCE_DIR: ${{ github.workspace }}/conformance
           KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
         run: |
           ruby -v
           ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
-          mv KotlinJsonUI/conformance-host/src/codegen/kotlin "$RUNNER_TEMP/out26"
+          mv KotlinJsonUI/conformance-host/src/codegen/kotlin "$RUNNER_TEMP/out32"
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -901,7 +856,7 @@ jobs:
         # Same shape as the fixture lane's `assert len(names) > 400`.
         run: |
           MIN_KT=2000   # 2557 at the time of writing; a floor fixture growth cannot trip
-          for t in out26 out33; do
+          for t in out32 out33; do
             n=$(find "$RUNNER_TEMP/$t" -name '*.kt' | wc -l)
             echo "$t: $n .kt files"
             if [ "$n" -lt "$MIN_KT" ]; then
@@ -909,7 +864,7 @@ jobs:
               exit 1
             fi
           done
-          diff -r "$RUNNER_TEMP/out26" "$RUNNER_TEMP/out33"
+          diff -r "$RUNNER_TEMP/out32" "$RUNNER_TEMP/out33"
           echo "identical on both interpreters"
 
   # ------------------------------------------------------------------ #
