@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'pty'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -56,11 +57,34 @@ RSpec.describe 'what kjui g converter says it wrote, against the disk' do
   end
 
   def run_tool(dir, tool, flags, stdin)
-    said, status = Open3.capture2e('ruby', File.join(tool, 'bin', 'kjui'), 'g', 'converter', 'Probe',
-                                   '--attr', 'title:String', *flags, chdir: dir, stdin_data: stdin)
+    cmd = ['ruby', File.join(tool, 'bin', 'kjui'), 'g', 'converter', 'Probe', '--attr', 'title:String', *flags]
+    said, status = stdin.empty? ? Open3.capture2e(*cmd, chdir: dir, stdin_data: stdin) : on_terminal(cmd, dir, stdin)
     raise "kjui g converter failed:\n#{said}" unless status.success?
 
     said.gsub(/\e\[[0-9;]*m/, '')
+  end
+
+  # The answers typed on a pseudo-terminal, then end-of-file: since 1.8.121
+  # the prompt is shown only on a terminal (a "y" on a pipe is not read).
+  def on_terminal(cmd, dir, answers)
+    said = +''
+    status = nil
+    PTY.spawn(*cmd, chdir: dir) do |r, w, pid|
+      w.write(answers + "\x04" * 4)
+      begin
+        loop do
+          unless IO.select([r], nil, nil, 60)
+            Process.kill('KILL', pid)
+            break
+          end
+          said << r.readpartial(4096)
+        end
+      rescue EOFError, Errno::EIO
+        nil
+      end
+      _, status = Process.wait2(pid)
+    end
+    [said.force_encoding(Encoding::UTF_8).delete("\r"), status]
   end
 
   def snapshot(dir)

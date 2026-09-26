@@ -68,17 +68,20 @@ RSpec.describe 'rjui g converter: a literal the layout gives a prop, against its
     @rows = self.class.values.each_with_index.flat_map do |(type, (valid, wrong)), i|
       [[:valid, valid], [:false, false], [:wrong, wrong]].map do |kase, value|
         name = "LiteralType#{kase.to_s.capitalize}#{i}"
+        # Printed through rjui's warning logger ("[WARN] ", stdout; not
+        # stubbed in before(:all)): the sentence is the text after the prefix.
         said = StringIO.new
-        saved = $stderr
+        saved = $stdout
         call = begin
-          $stderr = said
+          $stdout = said
           converter_for(name, type).new({ 'type' => name, 'v' => value }, {}).convert(0)
         ensure
-          $stderr = saved
+          $stdout = saved
         end
         component = RjuiTools::React::Generators::ReactComponentGenerator
                     .new(name, { is_container: false, attributes: { 'v' => type } }, {}).send(:component_template)
-        [type, kase, value, call, said.string.lines.grep(/\A\[rjui\] /).join, component]
+        sentences = said.string.lines.grep(/\[rjui\] /).map { |l| l.sub(/\A.*?(?=\[rjui\] )/, '') }
+        [type, kase, value, call, sentences.join, component]
       end
     end
   end

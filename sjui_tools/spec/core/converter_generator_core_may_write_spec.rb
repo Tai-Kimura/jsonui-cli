@@ -27,17 +27,28 @@ RSpec.describe JsonUIShared::ConverterGeneratorCore do
     FileUtils.rm_rf(dir)
   end
 
+  # A terminal a person types `input` into (then end-of-file).
+  def terminal(input)
+    StringIO.new(input).tap { |io| io.define_singleton_method(:tty?) { true } }
+  end
+
+  # A String is typed on a terminal; anything else is the stdin as given.
   def decide(options = {}, stdin: '')
-    $stdin = stdin.is_a?(String) ? StringIO.new(stdin) : stdin
+    $stdin = stdin.is_a?(String) ? terminal(stdin) : stdin
+    asks = options.empty? && !ENV['JUI_SKIP_EXISTING'] && $stdin.respond_to?(:tty?) && $stdin.tty?
     out = nil
     expect { out = described_class.may_write?(path, options, logger, noun: 'swift file') }
-      .to output(options.empty? && !ENV['JUI_SKIP_EXISTING'] ? /Overwrite\? \(y\/n\)/ : '').to_stdout
+      .to output(asks ? /Overwrite\? \(y\/n\)/ : '').to_stdout
     out
   end
 
-  # A stdin that fails the example if anything reads it.
+  # A stdin that fails the example if anything reads it — not a terminal,
+  # like a pipe held open and never written.
   let(:untouchable_stdin) do
-    Object.new.tap { |o| o.define_singleton_method(:gets) { raise 'stdin was read' } }
+    Object.new.tap do |o|
+      o.define_singleton_method(:gets) { raise 'stdin was read' }
+      o.define_singleton_method(:tty?) { false }
+    end
   end
 
   it 'writes a file that does not exist, without asking' do
@@ -48,8 +59,17 @@ RSpec.describe JsonUIShared::ConverterGeneratorCore do
   context 'when the file exists' do
     before { File.write(path, '// hand-maintained') }
 
-    it 'treats a closed stdin as "n" instead of raising' do
+    it 'treats a terminal closed without an answer as "n" instead of raising' do
       expect(decide({}, stdin: '')).to be false
+    end
+
+    # Until 1.8.121 the prompt read any stdin: a pipe held open and never
+    # written (an MCP server's child, an agent's shell) waited forever.
+    it 'keeps it without asking or reading when stdin is not a terminal, and says so with --force' do
+      expect(decide({}, stdin: untouchable_stdin)).to be false
+      expect(decide({}, stdin: StringIO.new("y\n"))).to be false # "y" on a pipe is not an answer
+      expect(logger).to have_received(:info)
+        .with("Kept existing swift file: #{path} (stdin is not a terminal; --force replaces it)").twice
     end
 
     it 'overwrites on "y" and keeps on "n"' do
