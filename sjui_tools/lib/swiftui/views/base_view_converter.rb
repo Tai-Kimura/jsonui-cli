@@ -595,6 +595,60 @@ module SjuiTools
         end
 
         # 共通のモディファイア適用メソッド
+        # The decoration stages a node draws from its common attributes —
+        # opacity (alpha), shadow, clipToBounds, the post-layout offset and
+        # `hidden` — in one place. apply_modifiers calls it, and so do the
+        # converters that assemble their own chain (Button, Label, TextView,
+        # SelectBox): Button drew none of the five, and Label / TextView /
+        # SelectBox no shadow, clip or offset, while every other type and
+        # the other paths draw them. A stage the converter registered itself
+        # is kept (register_unless_exists).
+        def apply_common_decorations
+          alpha_value = attr_with_alias('opacity', 'alpha')
+          if alpha_value
+            if is_binding?(alpha_value)
+              @modifier_bag.register_unless_exists(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
+            else
+              @modifier_bag.register_unless_exists(:opacity, ".opacity(#{alpha_value})")
+            end
+          end
+
+          # 影
+          if @component['shadow']
+            shadow_code = build_shadow_modifier(@component['shadow'])
+            @modifier_bag.register_unless_exists(:shadow, shadow_code) if shadow_code
+          end
+
+          # クリップ
+          # A binding is truthy in Ruby, so this used to clip every
+          # declaration that used one regardless of the property's value. The
+          # bound form is ViewBindingHandler's now — SwiftJsonUI's
+          # `clipToBounds(_:)` takes the flag as a PARAMETER, so it resolves
+          # at render time instead of freezing at whatever the generator saw.
+          # A literal keeps emitting `.clipped()`: same view, same bytes.
+          if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
+            @modifier_bag.register_unless_exists(:clip_to_bounds, ".clipped()")
+          end
+
+          # オフセット（offsetX, offsetY）
+          register_offset_modifier
+
+          # 表示/非表示 — hidden は visibility:"invisible" のブールショートハンド:
+          # レイアウトスペースは保持したまま描画とアクセシビリティのみ消す
+          # (.hidden() や条件付き削除でスペースを潰さない)
+          hidden_value = @component['hidden']
+          if hidden_value == true
+            @modifier_bag.register_unless_exists(:hidden, ".opacity(0).accessibilityHidden(true)")
+          elsif is_binding?(hidden_value)
+            # Binding: "@{isErrorHidden}" ->
+            #   .opacity(data.isErrorHidden ? 0 : 1).accessibilityHidden(data.isErrorHidden)
+            # Binding: "@{!isVisible}" ->
+            #   .opacity(!data.isVisible ? 0 : 1).accessibilityHidden(!data.isVisible)
+            hidden_expr = binding_data_expr(hidden_value)
+            @modifier_bag.register_unless_exists(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
+          end
+        end
+
         def apply_modifiers(skip_padding: false, skip_insets: false)
           # アライメント処理を先に適用
           apply_center_alignment
@@ -655,15 +709,10 @@ module SjuiTools
           # マージン（外側のスペース - SwiftUIではpaddingで実装）
           apply_margins
 
-          # 透明度 (alphaとopacityの両方をサポート)
-          alpha_value = attr_with_alias('opacity', 'alpha')
-          if alpha_value
-            if is_binding?(alpha_value)
-              @modifier_bag.register(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
-            else
-              @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
-            end
-          end
+          # opacity / shadow / clipToBounds / offset / hidden — one home
+          # (apply_common_decorations), which the converters that assemble
+          # their own chain call too.
+          apply_common_decorations
 
           # Liquid Glass (iOS 26+). Emits ONE call to the library helper, never
           # an `if #available` here: an availability check in generated code
@@ -681,40 +730,6 @@ module SjuiTools
           # visibility属性はVisibilityWrapperで処理するので、ここでは何もしない
           # The actual wrapping happens in the parent view converter
 
-          # 影
-          if @component['shadow']
-            shadow_code = build_shadow_modifier(@component['shadow'])
-            @modifier_bag.register(:shadow, shadow_code) if shadow_code
-          end
-
-          # クリップ
-          # A binding is truthy in Ruby, so this used to clip every
-          # declaration that used one regardless of the property's value. The
-          # bound form is ViewBindingHandler's now — SwiftJsonUI's
-          # `clipToBounds(_:)` takes the flag as a PARAMETER, so it resolves
-          # at render time instead of freezing at whatever the generator saw.
-          # A literal keeps emitting `.clipped()`: same view, same bytes.
-          if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
-            @modifier_bag.register(:clip_to_bounds, ".clipped()")
-          end
-
-          # オフセット（offsetX, offsetY）
-          register_offset_modifier
-
-          # 表示/非表示 — hidden は visibility:"invisible" のブールショートハンド:
-          # レイアウトスペースは保持したまま描画とアクセシビリティのみ消す
-          # (.hidden() や条件付き削除でスペースを潰さない)
-          hidden_value = @component['hidden']
-          if hidden_value == true
-            @modifier_bag.register(:hidden, ".opacity(0).accessibilityHidden(true)")
-          elsif is_binding?(hidden_value)
-            # Binding: "@{isErrorHidden}" ->
-            #   .opacity(data.isErrorHidden ? 0 : 1).accessibilityHidden(data.isErrorHidden)
-            # Binding: "@{!isVisible}" ->
-            #   .opacity(!data.isVisible ? 0 : 1).accessibilityHidden(!data.isVisible)
-            hidden_expr = binding_data_expr(hidden_value)
-            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
-          end
 
           # safeAreaInsetPositions
           apply_safe_area_insets_to_bag
