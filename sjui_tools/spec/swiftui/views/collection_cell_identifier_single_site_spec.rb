@@ -77,7 +77,11 @@ RSpec.describe 'Collection cell identifier emit sites' do
     # (`generate_fallback_foreach`): it renders a real cell view now instead
     # of printing the runtime view name, and every path that renders a cell
     # owes the address.
-    expect(callers).to eq(14)
+    #
+    # Now 14 + 1. The added site is the class-list cell loop over a declared
+    # list (`generate_legacy_array_cells`, jsonui-cli 1.9.0: Collection.items
+    # is a CollectionDataSource or an array) — a path that renders a cell.
+    expect(callers).to eq(15)
   end
 
   it 'still emits the address for an id-bearing Collection' do

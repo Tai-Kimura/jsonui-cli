@@ -58,7 +58,7 @@ module JsonUI
         { name: 'itemSpacing', kind: :number }.freeze,
         # Item sizing weight
         { name: 'itemWeight', kind: :number }.freeze,
-        # Data source binding (@{…}). A binding only: the array form was declared and drawn by no platform (codegen or Dynamic) and used by no face, so it was taken out on 2026-09-26; a literal array is named by the validator.
+        # Data source binding (@{…}). A binding only: the array form was declared and drawn by no platform (codegen or Dynamic) and used by no face, so it was taken out on 2026-09-26; a literal array is named by the validator. The bound value is a CollectionDataSource or an array; an array is one section, every element drawn with cellClasses[0] (a Collection without `sections`; the layout's data declaration decides on the codegen paths, the value's shape on the Dynamic ones).
         { name: 'items', kind: :binding }.freeze,
         # Enable keyboard avoidance
         { name: 'keyboardAvoidance', kind: :boolean }.freeze,

@@ -4,6 +4,7 @@ require_relative '../helpers/content_inset_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../../core/normalization'
 require_relative '../../core/string_literals'
+require_relative '../../core/attribute_types'
 
 module KjuiTools
   module Compose
@@ -650,6 +651,42 @@ module KjuiTools
           items.is_a?(String) ? items[/\A@\{([^}]+)\}\z/, 1] : nil
         end
 
+        # Collection.items is a CollectionDataSource or an array (4f ruling,
+        # 2026-09-26). An items property the layout DECLARES a list —
+        # `Array`, `[T]` (AttributeTypes.list_element) — is one section:
+        # every element with cellClasses[0], on the routes a one-section data
+        # source draws. Any other declaration, or none, is the canonical
+        # CollectionDataSource. The list as a Kotlin `List<Map<String, Any>>`
+        # expression — what the cell's ViewModel reads (updateData takes a
+        # map) — or nil when items is not a declared list: a list of the
+        # cell's own Data (`[<Cell>Data]` = List<<Cell>Data>) becomes its
+        # maps (`toMap()`); an untyped list (`Array` = List<Any?>) is read
+        # element by element as maps. A list of any other type is named: its
+        # elements are no map, so its cells draw with no data. Until
+        # jsonui-cli 1.9.0 every class-list route read `.sections`, which a
+        # List does not have.
+        def self.class_list_array_expr(json_data, cell_name)
+          property_name = class_list_items_property(json_data)
+          return nil unless property_name
+
+          element = JsonUIShared::AttributeTypes.list_element(Helpers::ResourceResolver.get_property_class(property_name))
+          return nil unless element
+
+          own_data = cell_name && "#{cell_class_name(cell_name)}Data"
+          conversion =
+            if !element.any? && element.name == own_data
+              '.map { it.toMap() }'
+            else
+              unless element.any?
+                Core::Logger.warn("Collection #{json_data['id'] || '(unnamed)'}: items '#{property_name}' is a list of " \
+                                  "#{element.name}; a cell reads its own #{own_data || 'Data'} or a map, so its cells draw with no data.")
+              end
+              '.mapNotNull { it as? Map<String, Any> }'
+            end
+          receiver = Helpers::ResourceResolver.generated_property_nullable?(property_name) ? "data.#{property_name}.orEmpty()" : "data.#{property_name}"
+          "#{receiver}#{conversion}"
+        end
+
         # One cell, with `sectionIndex`, `cellIndex` and `currentCellData` in
         # scope: its own ViewModel fed the cell's data — the scaffold's
         # `XView(viewModel, modifier)`, as the sections path calls it.
@@ -706,19 +743,24 @@ module KjuiTools
             code += "\n" + indent("}", depth)
           end
           if cell_name && property_name
-            # `cellData` in scope, at depth `d`.
-            cells = lambda do |d|
-              out = "\n" + indent("items(cellData.data.size) { cellIndex ->", d)
+            # The cells of the list `list` names, at depth `d`.
+            cells = lambda do |d, list = 'cellData.data'|
+              out = "\n" + indent("items(#{list}.size) { cellIndex ->", d)
               out += "\n" + indent("Box(", d + 1)
               out += "\n" + indent("modifier = Modifier.fillMaxSize(),", d + 2)
               out += "\n" + indent("contentAlignment = #{gravity_alignment}", d + 2)
               out += "\n" + indent(") {", d + 1)
-              out += "\n" + indent("val currentCellData = cellData.data[cellIndex]", d + 2)
+              out += "\n" + indent("val currentCellData = #{list}[cellIndex]", d + 2)
               out += class_list_cell(json_data, cell_name, d + 2, required_imports)
               out += "\n" + indent("}", d + 1)
               out + "\n" + indent("}", d)
             end
-            if is_horizontal
+            if (array = class_list_array_expr(json_data, cell_name))
+              code += "\n" + indent("// #{cell_name}: the declared list, one section", depth)
+              code += "\n" + indent("#{array}.let { cellItems ->", depth)
+              code += "\n" + indent("val sectionIndex = 0", depth + 1)
+              code += cells.call(depth + 1, 'cellItems')
+            elsif is_horizontal
               code += "\n" + indent("// #{cell_name}: the first data section", depth)
               code += "\n" + indent("#{sections_access(property_name)}.firstOrNull()?.cells?.let { cellData ->", depth)
               code += "\n" + indent("val sectionIndex = 0", depth + 1)
@@ -753,7 +795,14 @@ module KjuiTools
           grid = columns_info && (columns_info[:is_binding] || columns_info[:literal] > 1)
           code = ''
           code += class_list_edge_call(cell_class_name(header_name), 'header', depth) if header_name
-          if cell_name && property_name
+          array = cell_name && property_name && class_list_array_expr(json_data, cell_name)
+          if array && !grid
+            code += "\n" + indent("// #{cell_name}: the declared list, one section", depth)
+            code += "\n" + indent("#{array}.forEachIndexed { cellIndex, currentCellData ->", depth)
+            code += "\n" + indent("val sectionIndex = 0", depth + 1)
+            code += class_list_cell(json_data, cell_name, depth + 1, required_imports)
+            code += "\n" + indent("}", depth)
+          elsif cell_name && property_name
             if first_only
               code += "\n" + indent("// #{cell_name}: the first data section", depth)
               code += "\n" + indent("#{sections_access(property_name)}.firstOrNull()?.cells?.data?.forEachIndexed { cellIndex, currentCellData ->", depth)
@@ -762,10 +811,15 @@ module KjuiTools
               code += "\n" + indent("}", depth)
             elsif grid
               count = columns_info[:expr]
-              code += "\n" + indent("// #{cell_name}: every data section, in rows of #{count}", depth)
-              code += "\n" + indent("val classListCells = #{sections_access(property_name)}.flatMapIndexed { sectionIndex, section ->", depth)
-              code += "\n" + indent("section.cells?.data.orEmpty().mapIndexed { cellIndex, cellData -> Triple(sectionIndex, cellIndex, cellData) }", depth + 1)
-              code += "\n" + indent("}.orEmpty()", depth)
+              if array
+                code += "\n" + indent("// #{cell_name}: the declared list, one section, in rows of #{count}", depth)
+                code += "\n" + indent("val classListCells = #{array}.mapIndexed { cellIndex, cellData -> Triple(0, cellIndex, cellData) }", depth)
+              else
+                code += "\n" + indent("// #{cell_name}: every data section, in rows of #{count}", depth)
+                code += "\n" + indent("val classListCells = #{sections_access(property_name)}.flatMapIndexed { sectionIndex, section ->", depth)
+                code += "\n" + indent("section.cells?.data.orEmpty().mapIndexed { cellIndex, cellData -> Triple(sectionIndex, cellIndex, cellData) }", depth + 1)
+                code += "\n" + indent("}.orEmpty()", depth)
+              end
               spacing = json_data['columnSpacing'] || json_data['itemSpacing']
               required_imports&.add(:arrangement) if spacing
               row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)})" : 'modifier = Modifier.fillMaxWidth()'
@@ -1384,11 +1438,16 @@ module KjuiTools
               end
 
               cell_class = cell_class_name(cell_view_name)
+              # The key carries the section (#{index}), as the sectioned
+              # grid's `<cell>_cell_<section>_<cellIndex>` does: without it
+              # two sections of the same cell class shared their cells'
+              # ViewModels, and the later section's data drew in both
+              # (measured on 137468b2; collection_flow_sections_spec.rb).
               if cell_id_property
                 code += "\n" + indent("val flowCellId = (item[\"cellId\"] as? String) ?: (item[\"#{cell_id_property}\"] as? String) ?: \"$cellIndex\"", inner_depth)
-                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_\${flowCellId}_\${viewModel.hashCode()}\")", inner_depth)
+                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_#{index}_\${flowCellId}_\${viewModel.hashCode()}\")", inner_depth)
               else
-                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_\${cellIndex}_\${viewModel.hashCode()}\")", inner_depth)
+                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", inner_depth)
               end
               code += "\n" + indent("LaunchedEffect(item) {", inner_depth)
               code += "\n" + indent("cellViewModel.updateData(item)", inner_depth + 1)

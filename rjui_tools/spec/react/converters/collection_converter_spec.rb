@@ -113,12 +113,17 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
     end
 
     context 'with items binding' do
-      it 'generates map rendering with TypeScript index type' do
+      # The cells come from the data's sections (a CollectionDataSource), as
+      # on sjui and kjui — this mapped `items` itself as an array until
+      # jsonui-cli 1.9.0 (collection_classes_and_page_change_spec.rb has the
+      # route table and the typed tsc arm).
+      it 'maps every data section, keyed by section and cell' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
         result = converter.convert
-        expect(result).to include('{data.listItems?.map((item, index: number) =>')
-        expect(result).to include('key={index}')
-        expect(result).to include('data={item}')
+        expect(result).to include('{(data.listItems?.sections ?? []).map((section, sectionIndex) =>')
+        expect(result).to include('(section.cells?.data ?? []).map((cellData, cellIndex) => (')
+        expect(result).to include('key={`${sectionIndex}_${cellIndex}`}')
+        expect(result).to include('data={cellData}')
       end
 
       # Regression: rjui-collection-cells-missing-item-index-id — kjui
@@ -128,7 +133,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         converter = create_converter({ 'class' => 'Collection', 'id' => 'gallery_thumbnail_row',
                                        'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
         result = converter.convert
-        expect(result).to include('key={index} id={`gallery_thumbnail_row_item_${index}`} data={item} />')
+        expect(result).to include('id={`gallery_thumbnail_row_item_${cellIndex}`} data={cellData} />')
       end
 
       it 'omits the item identifier when the collection has no literal id' do
