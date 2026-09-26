@@ -37,20 +37,27 @@ module SjuiTools
           
           # Create directories
           create_directories
-          
+
+          files = [['JSON:          ', json_path], ['Main View:     ', view_path],
+                   ['Generated View:', generated_view_path], ['Data:          ', data_path],
+                   ['ViewModel:     ', view_model_path]]
+          existed = files.map { |_, path| File.exist?(path) }
+
           # Generate files
           generate_json_layout
           generate_view_file
           generate_generated_view_file
           generate_data_file
           generate_view_model_file
-          
+
+          # This generator writes every file, existing or not; each is said as
+          # what happened to it — until 1.8.121 an overwritten file read as
+          # generated like a new one (ticket
+          # kjui-g-view-reports-what-it-did-not-do).
           puts "\nGenerated SwiftUI collection cell:"
-          puts "  JSON:          #{json_path}"
-          puts "  Main View:     #{view_path}"
-          puts "  Generated View: #{generated_view_path}"
-          puts "  Data:          #{data_path}"
-          puts "  ViewModel:     #{view_model_path}"
+          files.zip(existed).each do |(label, path), was|
+            puts "  #{label} #{path} (#{was ? 'overwritten' : 'created'})"
+          end
           puts "\nNext steps:"
           puts "  1. Edit the JSON layout in #{json_path}"
           puts "  2. Run 'sjui build' to generate the SwiftUI code"

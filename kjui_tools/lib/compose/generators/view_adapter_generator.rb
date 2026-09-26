@@ -36,7 +36,7 @@ module KjuiTools
           @source_directory = source_directory
 
           # Create adapter file in debug source set
-          create_adapter_file
+          written = create_adapter_file
 
           # Update DynamicComponentRegistry
           update_registry_file
@@ -44,7 +44,10 @@ module KjuiTools
           # Create DynamicComponentInitializer (debug/release versions)
           create_dynamic_initializers
 
-          @logger.success "Successfully generated adapter: #{@adapter_class_name}"
+          # Only when it wrote the adapter: a kept one has said "Skipped
+          # existing" / "Kept existing". Until 1.8.121 this line followed
+          # either way (ticket kjui-g-view-reports-what-it-did-not-do).
+          @logger.success "Successfully generated adapter: #{@adapter_class_name}" if written
           @logger.info "Don't forget to call DynamicComponentInitializer.initialize() in your app initialization."
           true
         end
@@ -67,11 +70,10 @@ module KjuiTools
           # Through the converter core's one overwrite decision, so
           # --force / --skip-existing / JUI_SKIP_EXISTING reach this
           # file too, and a closed stdin reads as "n" instead of raising.
-          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
-            adapter_file, @options, @logger, noun: 'adapter file', exists_label: 'Adapter file')
-
-          File.write(adapter_file, adapter_template)
-          @logger.info "Created adapter file: #{adapter_file}"
+          # It says Created or Overwrote; returns whether it wrote.
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            adapter_file, @options, @logger, noun: 'adapter file', label: 'adapter file', exists_label: 'Adapter file'
+          ) { adapter_template }
         end
 
         def update_registry_file
@@ -93,7 +95,7 @@ module KjuiTools
 
           # Check if adapter already registered
           if content.include?("\"#{@name.downcase}\"") || content.include?("\"#{to_snake_case(@name)}\"")
-            @logger.warn "View '#{@name}' already registered in DynamicComponentRegistry"
+            @logger.info "Unchanged #{registry_file}: it already registers '#{@name}'"
             return
           end
 
@@ -108,10 +110,17 @@ module KjuiTools
 REGISTRATION
 
           # Insert before the else statement in when block
-          content.sub!(/(when \(type\) \{.*?)(\n            else)/m) do
+          added = content.sub!(/(when \(type\) \{.*?)(\n            else)/m) do
             existing = $1
             else_clause = $2
             "#{existing}\n#{new_registration}#{else_clause}"
+          end
+          # Said: until 1.8.121 a registry without this `when` was written
+          # back unchanged and reported as updated (the sub! went unchecked).
+          unless added
+            @logger.warn "Could not register '#{@name}' in #{registry_file}: it has no " \
+                         '`when (type) { … else …` to add it to — add it by hand'
+            return
           end
 
           # Add import if not present
@@ -124,7 +133,7 @@ REGISTRATION
           end
 
           File.write(registry_file, content)
-          @logger.info "Updated DynamicComponentRegistry with #{@adapter_class_name}"
+          @logger.info "Updated #{registry_file}: registered #{@adapter_class_name}"
         end
 
         def create_initial_registry
@@ -171,7 +180,7 @@ REGISTRATION
           KOTLIN
 
           File.write(registry_file, content)
-          @logger.info "Created DynamicComponentRegistry with #{@adapter_class_name}"
+          @logger.info "Created #{registry_file} registering #{@adapter_class_name}"
         end
 
         def adapter_template
@@ -234,7 +243,7 @@ REGISTRATION
           # Only create if it doesn't exist yet
           unless File.exist?(debug_file)
             File.write(debug_file, generate_debug_initializer_content)
-            @logger.info "Created DynamicComponentInitializer (debug)"
+            @logger.info "Created DynamicComponentInitializer (debug): #{debug_file}"
           end
 
           # Create release version
@@ -251,7 +260,7 @@ REGISTRATION
           # Only create if it doesn't exist yet
           unless File.exist?(release_file)
             File.write(release_file, generate_release_initializer_content)
-            @logger.info "Created DynamicComponentInitializer (release)"
+            @logger.info "Created DynamicComponentInitializer (release): #{release_file}"
           end
         end
 

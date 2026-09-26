@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/binding_expression'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
@@ -257,16 +259,34 @@ module KjuiTools
           # the authority on this item's selected state; the group variable is
           # the fallback for the (usual) case where it is not.
           selected_expr = radio_selected_expr(json_data, selected_var, id)
-          # The item's own operation: select it, then the declared onClick
-          # (ModifierBuilder.with_operation_click) — RadioButton, Checkbox or
-          # IconButton alike.
+          on_select = "viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal}))"
+
+          # A group the layout does not bind — no `selectedValue` on the item —
+          # keeps its selection in the view's own map, seeded by the checked
+          # item while nothing is chosen (ticket
+          # static-valued-controls-do-not-change-on-a-users-tap: the generated
+          # updateData had no branch for `selected<Group>`, so a tap did
+          # nothing). The map spans every item of the group, whichever section
+          # an item lands in (ComposeBuilder#provide_radio_groups).
+          local_group = !json_data.key?('selectedValue')
+          if local_group
+            required_imports&.add(:radio_group_selections)
+            group_literal = JsonUIShared::StringLiterals.kotlin(group)
+            token = Helpers::BoundValue.text(json_data['value'] || id)
+            selected_expr = radio_selected_expr(json_data, selected_var, id,
+                                                chosen: "radioGroups[#{group_literal}]")
+            on_select = "radioGroups[#{group_literal}] = #{token}"
+          end
+
+          # The item's own operation: select it (on_select — the group's Data
+          # property, or the view's own map for a group the layout does not
+          # bind), then the declared onClick (ModifierBuilder.with_operation_click)
+          # — RadioButton, Checkbox or IconButton alike.
           # `enabled` is the item's own control's parameter: a disabled item
           # neither selects nor calls the declared onClick.
           enabled = Helpers::ModifierBuilder.enabled_expression(json_data)
-          select_lambda = Helpers::ModifierBuilder.with_operation_click(
-            "{ viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", json_data
-          )
-          
+          select_lambda = Helpers::ModifierBuilder.with_operation_click("{ #{on_select} }", json_data)
+
           code = indent("Row(", depth)
           code += "\n" + indent("    verticalAlignment = Alignment.CenterVertically,", depth)
           
@@ -283,7 +303,8 @@ module KjuiTools
           end
           
           code += "\n" + indent(") {", depth)
-          
+          code += "\n" + indent("    val radioGroups = LocalRadioGroupSelections.current", depth) if local_group
+
           # Handle custom icons or default components
           # If icon is "circle" or selectedIcon is "checkmark.circle.fill", use default RadioButton
           if (json_data['icon'] == 'circle' || !json_data['icon']) && 
@@ -378,16 +399,26 @@ module KjuiTools
         end
         
         def self.generate_radio_group_with_items(json_data, depth, required_imports, parent_type)
+          # `items` is declared ["array", "binding"]: an array is the options,
+          # written out one by one; a binding is a list the data holds, drawn
+          # with forEach — what DynamicRadioComponent.itemsOf does with it.
+          # Until 1.8.121 a bound `items` raised NoMethodError (`each` on a
+          # String) and took the build down (ticket
+          # kjui-codegen-table-crashes-on-an-items-array).
           items = json_data['items']
+          bound_items = if items.is_a?(String) && items.match?(/@\{[^}]+\}/)
+                          Helpers::BindingExpression.value_access(items[/@\{([^}]+)\}/, 1])
+                        end
+          # [the option as Kotlin, its text]
+          options = if bound_items
+                      [['item', 'item.toString()']]
+                    else
+                      Array(items).map { |item| [JsonUIShared::StringLiterals.kotlin(item)] * 2 }
+                    end
           selected_value = json_data['selectedValue']
           
           # Add required import for clickable
           required_imports&.add(:clickable)
-          # `enabled` is the Radio's own controls' parameter — each RadioButton,
-          # and the row that selects it: a disabled Radio neither selects nor calls
-          # the declared onClick (operation_click_call).
-          enabled = Helpers::ModifierBuilder.enabled_expression(json_data)
-          row_enabled = enabled ? "(enabled = #{enabled})" : ''
           
           # Extract binding variable. A STATIC `selectedValue` used to fall
           # through to the empty string, so no value of it could reach the
@@ -400,7 +431,35 @@ module KjuiTools
           else
             '""'
           end
-          
+
+          # A static selection (or none) is the seed of the group's own state
+          # (Helpers::StaticSeed); a bound one is the view model's.
+          unless selected_var.start_with?('data.')
+            return Helpers::StaticSeed.wrap(selected_var, depth, required_imports) do |d, state|
+              radio_group_with_items_body(json_data, d, required_imports, parent_type, state, state,
+                                          options: options, bound_items: bound_items)
+            end
+          end
+          radio_group_with_items_body(json_data, depth, required_imports, parent_type, selected_var, nil,
+                                      options: options, bound_items: bound_items)
+        end
+
+        # The group, reading `selected_var`; a tap writes `seeded` (the state a
+        # static selection seeded) or the bound value. `options` / `bound_items`
+        # are the items as the caller read them — an array written out one by
+        # one, or a bound list drawn with forEach. The body was extracted from
+        # the caller (static seeding) while the caller gained those two
+        # (the array / binding forms); the two merged without a conflict and
+        # every Radio with `items` raised NameError on `options`. `parent_type`
+        # is for the common stages (stage_modifiers).
+        def self.radio_group_with_items_body(json_data, depth, required_imports, parent_type, selected_var, seeded,
+                                             options:, bound_items:)
+          selected_value = json_data['selectedValue']
+          # `enabled` is the Radio's own controls' parameter — each RadioButton,
+          # and the row that selects it: a disabled Radio neither selects nor calls
+          # the declared onClick (operation_click_call).
+          enabled = Helpers::ModifierBuilder.enabled_expression(json_data)
+          row_enabled = enabled ? "(enabled = #{enabled})" : ''
           code = indent("Column(", depth)
           
           # Build modifiers — every common stage, not the margins alone
@@ -431,15 +490,17 @@ module KjuiTools
           end
           
           # Generate radio items
-          items.each do |item|
-            item_literal = JsonUIShared::StringLiterals.kotlin(item)
+          rows_from = code.length
+          options.each do |item_literal, item_text|
             code += "\n" + indent("    Row(", depth)
             code += "\n" + indent("        verticalAlignment = Alignment.CenterVertically,", depth)
             code += "\n" + indent("        modifier = Modifier", depth)
             code += "\n" + indent("            .fillMaxWidth()", depth)
             code += "\n" + indent("            .clickable#{row_enabled} {", depth)
             
-            if selected_value && selected_value.match(/@\{([^}]+)\}/)
+            if seeded
+              code += "\n" + indent("                #{seeded} = #{item_literal}", depth)
+            elsif selected_value && selected_value.match(/@\{([^}]+)\}/)
               variable = $1
               code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
@@ -454,7 +515,9 @@ module KjuiTools
             code += "\n" + indent("            enabled = #{enabled},", depth) if enabled
             code += "\n" + indent("            onClick = {", depth)
             
-            if selected_value && selected_value.match(/@\{([^}]+)\}/)
+            if seeded
+              code += "\n" + indent("                #{seeded} = #{item_literal}", depth)
+            elsif selected_value && selected_value.match(/@\{([^}]+)\}/)
               variable = $1
               code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
@@ -469,12 +532,18 @@ module KjuiTools
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("        Text(#{item_literal}, color = #{color_resolved})", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = #{color_resolved})", depth)
             else
               # Default to black color
-              code += "\n" + indent("        Text(#{item_literal}, color = Color.Black)", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = Color.Black)", depth)
             end
             code += "\n" + indent("    }", depth)
+          end
+          if bound_items
+            # The one row, drawn for each item the data holds.
+            rows = code.slice!(rows_from..)
+            code += "\n" + indent("    #{bound_items}.forEach { item ->", depth) +
+                    rows.gsub("\n", "\n    ") + "\n" + indent("    }", depth)
           end
           
           code += "\n" + indent("}", depth)
@@ -572,7 +641,10 @@ module KjuiTools
         # This item's selected state. A declared `checked` wins; otherwise the
         # group's selection variable decides, which is what every branch used
         # to hard-code.
-        def self.radio_selected_expr(json_data, selected_var, id)
+        # `chosen` is where the group's choice is read: the Data property by
+        # default, the view's own map for a group the layout does not bind
+        # (nil there until something is chosen).
+        def self.radio_selected_expr(json_data, selected_var, id, chosen: nil)
           # Precedence: `selectedValue` > group > `checked`.
           #
           # `value` is this item's identity — the token the selection is
@@ -617,7 +689,7 @@ module KjuiTools
             return "data.#{Helpers::ModifierBuilder.extract_binding_property(selected_value)} == #{token}"
           end
 
-          group_test = "data.#{selected_var} == #{token}"
+          group_test = "#{chosen || "data.#{selected_var}"} == #{token}"
           return group_test unless json_data.key?('checked')
 
           seed = case Helpers::BoundValue.bool(json_data['checked'])
@@ -628,7 +700,7 @@ module KjuiTools
           # A seed that is statically off adds nothing to the group state.
           return group_test if seed == 'false'
 
-          unset = "data.#{selected_var}.isEmpty()"
+          unset = chosen ? "#{chosen} == null" : "data.#{selected_var}.isEmpty()"
           return "#{group_test} || #{unset}" if seed == 'true'
 
           "#{group_test} || (#{seed} && #{unset})"

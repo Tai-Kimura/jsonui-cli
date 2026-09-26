@@ -159,7 +159,7 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
   path('SelectBox items — written back for a bound selectedIndex', around: 'listOf(%s).indexOf(newValue)') do |t|
     selectbox('items' => [t], 'selectedIndex' => '@{i}', 'onValueChange' => '@{onPick}')
   end
-  path('SelectBox items — a static selectedIndex', around: 'value = %s,') { |t| selectbox('items' => [t], 'selectedIndex' => 0) }
+  path('SelectBox items — a static selectedIndex (the seed)', around: 'mutableStateOf(%s)') { |t| selectbox('items' => [t], 'selectedIndex' => 0) }
   path('SelectBox options', around: 'options = listOf(%s),') { |t| selectbox('options' => [t]) }
   path('SelectBox options — a Hash label', around: 'options = listOf(%s),') { |t| selectbox('options' => [{ 'label' => t }]) }
   path('SelectBox dateFormat', around: 'dateFormat = %s,') { |t| selectbox('selectItemType' => 'Date', 'dateFormat' => t) }
@@ -181,7 +181,7 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
   path('Radio items value — compared for selected', around: '== %s,') { |t| radio('items' => [t], 'selectedValue' => '@{sel}') }
   path('Radio items label', around: 'Text(%s, color') { |t| radio('items' => [t], 'selectedValue' => '@{sel}') }
   path('Radio group text (items form)', around: 'Text(%s, color') { |t| radio('items' => ['a'], 'text' => t) }
-  path('Radio item id — written to the group', around: 'mapOf("selectedRadiogroup" to %s))') { |t| radio('id' => t, 'text' => 'a') }
+  path('Radio item id — written to the group', around: 'radioGroups["default"] = %s }') { |t| radio('id' => t, 'text' => 'a') }
   path('Embed params value', around: '"k" to %s') do |t|
     components::EmbedComponent.generate({ 'type' => 'Embed', 'screen' => 'child', 'params' => { 'k' => t } }, 0, Set.new)
   end

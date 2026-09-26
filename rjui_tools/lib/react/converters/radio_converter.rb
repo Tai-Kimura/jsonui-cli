@@ -15,17 +15,16 @@ module RjuiTools
           # the Fx0375 shape SliderConverter documents. The group shape puts
           # the gap on inner labels the root's style cannot reach, and those
           # carry their own (see item_gap_parts).
-          @root_gap_class = root_item_gap_class if (attributes['items'] || []).empty?
+          @root_gap_class = root_item_gap_class unless radio_group?
           style_attr = build_style_attr
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          items = attributes['items'] || []
           text = attributes['text'] || attributes['label'] || ''
           group = attributes['group'] || extract_id || 'radioGroup'
 
-          jsx = if items.any?
-            generate_radio_group(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, items, group, text)
+          jsx = if radio_group?
+            generate_radio_group(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, literal_items, group, text)
           else
             generate_single_radio(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, group, text)
           end
@@ -38,7 +37,7 @@ module RjuiTools
         def build_class_name
           classes = [super]
 
-          classes << 'flex flex-col gap-2' if (attributes['items'] || []).any?
+          classes << 'flex flex-col gap-2' if radio_group?
           classes << 'cursor-pointer'
 
           # Disabled state
@@ -54,6 +53,25 @@ module RjuiTools
 
         private
 
+        # `items` is declared ["array", "binding"]: an array is the options,
+        # written out one by one; a binding is a list the data holds, mapped
+        # at render time — what KotlinJsonUI's dynamic renderer does with it.
+        # Until 1.8.121 a bound `items` raised NoMethodError (`any?` on a
+        # String) and took the build down (ticket
+        # kjui-codegen-table-crashes-on-an-items-array).
+        def bound_items
+          items = attributes['items']
+          items.is_a?(String) && has_binding?(items) ? extract_binding_property(items) : nil
+        end
+
+        def literal_items
+          attributes['items'].is_a?(Array) ? attributes['items'] : []
+        end
+
+        def radio_group?
+          !bound_items.nil? || literal_items.any?
+        end
+
         def generate_radio_group(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, items, group, label_text)
           selected_binding = build_selected_binding
           on_change = build_on_change
@@ -61,8 +79,8 @@ module RjuiTools
           tint_color = attributes['tintColor']
 
           gap, gap_style = item_gap_parts
+          input_style = tint_color ? " style={{ accentColor: #{color_style_expr(tint_color)} }}" : ''
           items_jsx = items.map do |item|
-            input_style = tint_color ? " style={{ accentColor: #{color_style_expr(tint_color)} }}" : ''
             state_attrs = build_state_attrs(selected_binding, on_change, item)
             <<~JSX.chomp
               #{indent_str(indent + 2)}<label className="flex items-center #{gap} cursor-pointer"#{gap_style}>
@@ -71,6 +89,18 @@ module RjuiTools
               #{indent_str(indent + 2)}</label>
             JSX
           end.join("\n")
+          if bound_items
+            # The one option, for each item the data holds.
+            state_attrs = build_state_attrs(selected_binding, on_change, nil, expr: 'item')
+            items_jsx = <<~JSX.chomp
+              #{indent_str(indent + 2)}{#{bound_items}.map((item) => (
+              #{indent_str(indent + 4)}<label key={item} className="flex items-center #{gap} cursor-pointer"#{gap_style}>
+              #{indent_str(indent + 6)}<input type="radio" name="#{group}" value={item}#{state_attrs}#{disabled_attr}#{input_style} />
+              #{indent_str(indent + 6)}<span>{item}</span>
+              #{indent_str(indent + 4)}</label>
+              #{indent_str(indent + 2)}))}
+            JSX
+          end
 
           label_jsx = if label_text && !label_text.empty?
                         "#{indent_str(indent + 2)}<span className=\"font-medium\">#{convert_text_binding(label_text)}</span>\n"
@@ -210,8 +240,10 @@ module RjuiTools
           selected_binding[/\A"(.*)"\z/m, 1]
         end
 
-        def build_state_attrs(selected_binding, on_change, value)
-          value_literal = JsonUIShared::StringLiterals.ts(value)
+        # `expr`: the option is a runtime value (a bound `items`), so there is
+        # no literal to answer the comparison with at codegen time.
+        def build_state_attrs(selected_binding, on_change, value, expr: nil)
+          value_literal = expr || JsonUIShared::StringLiterals.ts(value)
           if selected_binding
             # A STATIC `selectedValue` puts a string literal on both sides of
             # the comparison, and TypeScript narrows each to its own literal
@@ -224,8 +256,17 @@ module RjuiTools
             # compares, and there the left side is a runtime value with no
             # literal type to narrow.
             static_selected = static_selected_value(selected_binding)
+            if static_selected
+              # A static selection is where the group starts, and the user
+              # changes it (ticket static-valued-controls-do-not-change-on-a-
+              # users-tap): an uncontrolled `defaultChecked` on the item it
+              # names — `checked` + readOnly held the group still.
+              chosen = static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)
+              seed = chosen ? ' defaultChecked' : ''
+              return on_change ? "#{seed} onChange={() => #{on_change}?.(#{value_literal})}" : seed
+            end
             checked =
-              if static_selected
+              if static_selected && expr.nil?
                 # A string value compares as the literal it is written as; any
                 # other value (a JSON number) as it always has — escaping does
                 # not decide whether "1" and 1 are the same item.

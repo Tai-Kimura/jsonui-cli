@@ -266,6 +266,9 @@ module ComposeStubUniverse
       operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
       fun <T> remember(calculation: () -> T): T = calculation()
       fun <T> mutableStateOf(value: T) = MutableState(value)
+      // The view's map of unbound single-Radio groups (ComposeBuilder
+      // RADIO_GROUP_SELECTIONS_DECLARATION, declared once per view file).
+      object LocalRadioGroupSelections { val current: MutableMap<String, String> = mutableMapOf() }
       enum class EmbedNavigationMode { Delegate, Isolated }
       class EmbedScope { val viewModelStoreOwner = Any() }
       fun EmbedContainer(modifier: Modifier = Modifier, embedId: String, navigationMode: EmbedNavigationMode,

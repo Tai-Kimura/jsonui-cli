@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
@@ -34,6 +35,20 @@ module KjuiTools
             'false'
           end
 
+          # A static value (or none) is the seed of the checkbox's own state
+          # (Helpers::StaticSeed); a bound one is the view model's.
+          unless checked.start_with?('data.')
+            return Helpers::StaticSeed.wrap(checked, depth, required_imports) do |d, state|
+              generate_control(json_data, d, required_imports, parent_type, state, state)
+            end
+          end
+          generate_control(json_data, depth, required_imports, parent_type, checked, nil)
+        end
+
+        # The checkbox itself, reading `checked`; `seeded` names the state a
+        # static value seeded (nil when the value is bound), which every change
+        # writes.
+        def self.generate_control(json_data, depth, required_imports, parent_type, checked, seeded)
           has_label = json_data['label'] || json_data['text']
           # 'src' is the common spelling of the unchecked icon (33).
           has_custom_icon = json_data['src'] || json_data['icon'] ||
@@ -41,7 +56,7 @@ module KjuiTools
 
           # If custom icons are specified, use IconToggleButton instead of Checkbox
           if has_custom_icon
-            return generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked)
+            return generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded)
           end
 
           if has_label
@@ -79,7 +94,7 @@ module KjuiTools
               binding_variable = $1
             end
 
-            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false)}", depth + 2)
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false, seeded: seeded)}", depth + 2)
 
             # iconSize on the labeled default checkbox sizes the box itself —
             # the dynamic labeled path does the same (it was only emitted on
@@ -149,7 +164,7 @@ module KjuiTools
               binding_variable = $1
             end
 
-            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false)},", depth + 1)
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false, seeded: seeded)},", depth + 1)
 
             # Build modifiers
             modifiers = []
@@ -246,7 +261,7 @@ module KjuiTools
         private
 
         # Generate checkbox with custom icon/selectedIcon
-        def self.generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked)
+        def self.generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded = nil)
           required_imports&.add(:icon_toggle_button)
           required_imports&.add(:icon)
 
@@ -277,7 +292,7 @@ module KjuiTools
             binding_variable = $1
           end
 
-          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: true)},", depth + 1)
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: true, seeded: seeded)},", depth + 1)
 
           # Build modifiers — declared width/height must reach the control
           # (the dynamic renderer's buildModifier applies size in the same
@@ -341,7 +356,10 @@ module KjuiTools
         # onValueChange, then the declared onClick
         # (ModifierBuilder.with_operation_click) — the one lambda all three
         # branches emit. The first four forms are the ones they always emitted.
-        def self.checked_change_lambda(json_data, binding_variable, block_comment: false)
+        # The checkbox's own operation, in order: its own update — the bound
+        # write, or the seeded state's (Helpers::StaticSeed, `seeded`) — then
+        # onValueChange, then the declared onClick (with_operation_click).
+        def self.checked_change_lambda(json_data, binding_variable, block_comment: false, seeded: nil)
           view_id = json_data['id'] || 'checkbox'
           on_change = json_data['onValueChange']
           lambda = if on_change && !Helpers::ModifierBuilder.is_binding?(on_change)
@@ -351,9 +369,10 @@ module KjuiTools
                      handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_change, view_id, 'it') if on_change
                      update = "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))" if binding_variable
                      if update && handler_call then "{ newValue -> #{update}; #{handler_call} }"
-                     elsif handler_call then "{ #{handler_call} }"
                      elsif update then "{ newValue -> #{update} }"
-                     else '{ }'
+                     else
+                       body = [("#{seeded} = it" if seeded), handler_call].compact
+                       body.empty? ? '{ }' : "{ #{body.join('; ')} }"
                      end
                    end
           Helpers::ModifierBuilder.with_operation_click(lambda, json_data)

@@ -2,10 +2,14 @@
 
 require 'json'
 require_relative '../core/config_manager'
+require_relative '../core/stage_failures'
 
 module RjuiTools
   module React
     class StyleLoader
+      # What load_style_file returns for a file that exists and does not parse.
+      UNPARSED = :unparsed
+
       def self.load_and_merge(component, styles_dir = nil)
         return component unless component.is_a?(Hash)
 
@@ -14,7 +18,7 @@ module RjuiTools
           style_name = component['style']
           style_data = load_style_file(style_name, styles_dir)
 
-          if style_data
+          if style_data && style_data != UNPARSED
             # Merge style data as base, then override with component data
             # Remove style attribute (to prevent infinite loop)
             component_without_style = component.dup
@@ -30,8 +34,14 @@ module RjuiTools
             # Merge: style as base, component properties override
             merged = deep_merge(style_data_for_merge, component_without_style)
             component = merged
-          else
+          elsif style_data.nil?
+            # Only a file that is not there. One that is there and did not
+            # parse was named with its parse error where it was read; until
+            # 1.8.121 this line followed it and said it was not found
+            # (ticket uikit-build-reports-success-after-a-binding-error).
             puts "Warning: Style file '#{style_name}' not found"
+            component.delete('style')
+          else
             # Remove style attribute and continue
             component.delete('style')
           end
@@ -56,6 +66,18 @@ module RjuiTools
         end
 
         component
+      end
+
+      # A style that could not be parsed: the layouts using it are drawn
+      # without it, which the build names at its end, once. Until 1.8.121
+      # this path printed an "Error parsing" line above "Build completed!",
+      # and the converters' own loader (BaseConverter#load_style) said
+      # nothing at all (ticket uikit-build-reports-success-after-a-binding-error).
+      def self.unparsed_style(style_file, error)
+        JsonUI::StageFailures.record_once(
+          'styles', "#{File.expand_path(style_file)} could not be parsed (#{error.message}); " \
+                    'the layouts using it were drawn without it'
+        )
       end
 
       class << self
@@ -100,7 +122,8 @@ module RjuiTools
           JSON.parse(File.read(style_file))
         rescue JSON::ParserError => e
           puts "Error parsing style file '#{style_file}': #{e.message}"
-          nil
+          StyleLoader.unparsed_style(style_file, e)
+          UNPARSED
         end
 
         def deep_merge(hash1, hash2)

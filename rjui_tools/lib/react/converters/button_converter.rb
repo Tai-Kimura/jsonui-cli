@@ -187,7 +187,7 @@ module RjuiTools
         # `/images/<name>.<ext>` for a bare name, the binding for a bound one.
         def build_image_src(image)
           if has_binding?(image)
-            "/images/${#{extract_binding_property(image)}}"
+            "/images/${#{attribute_expression(image)}}"
           else
             "/images/#{JsonUIShared::StringLiterals.ts_template_body(resolve_image_extension(image.to_s))}"
           end

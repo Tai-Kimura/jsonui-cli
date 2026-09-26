@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/binding_expression'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
@@ -63,6 +64,18 @@ module KjuiTools
             '""'
           end
           
+          # A static selection (a Kotlin string literal here — none is "") is the
+          # seed of the box's own state (Helpers::StaticSeed); a bound one is the
+          # view model's.
+          if selected.start_with?('"')
+            return Helpers::StaticSeed.wrap(selected, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, is_date_picker, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, seeded)
           # Use DateSelectBox for date type
           if is_date_picker
             required_imports&.add(:date_selectbox_component)
@@ -131,7 +144,7 @@ module KjuiTools
                 code += "\n" + indent(click, depth + 2) if click
                 code += "\n" + indent("},", depth + 1)
               else
-                code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{handler_call} }", json_data)},", depth + 1)
+                code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} }", json_data)},", depth + 1)
               end
             else
               code += "\n" + indent("onValueChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -142,7 +155,7 @@ module KjuiTools
             code += "\n" + indent(click, depth + 2) if click
             code += "\n" + indent("},", depth + 1)
           else
-            code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click('{ }', json_data)},", depth + 1)
+            code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click(seeded ? "{ #{seeded} = it }" : '{ }', json_data)},", depth + 1)
           end
           
           # For date picker, add date-specific parameters

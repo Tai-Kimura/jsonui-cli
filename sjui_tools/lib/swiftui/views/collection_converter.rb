@@ -1614,8 +1614,12 @@ module SjuiTools
           add_line "}"
         end
 
+        # `items` is declared ["array", "binding"]; the data source is the
+        # binding. An array names no data and is set aside, as kjui and rjui
+        # set it aside — until 1.8.121 it reached `start_with?` and raised
+        # NoMethodError (ticket kjui-codegen-table-crashes-on-an-items-array).
         def extract_property_name(items_property)
-          return nil unless items_property
+          return nil unless items_property.is_a?(String)
           
           if items_property.start_with?('@{') && items_property.end_with?('}')
             # Data-source reference: parsed path only ('??'/'!' are not

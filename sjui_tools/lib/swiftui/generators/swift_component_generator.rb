@@ -181,17 +181,31 @@ module SjuiTools
               # Binding property
               clean_key = key[1..-1]
               swift_type = map_to_swift_type(type)
-              "#{clean_key}: SwiftUI.Binding<#{swift_type}>, "
+              default = init_default(type)
+              "#{clean_key}: SwiftUI.Binding<#{swift_type}>#{default ? " = .constant(#{default})" : ''}, "
             else
               swift_type = map_to_swift_type(type)
-              # Add default value for optional model types
-              if swift_type.end_with?('?')
-                "#{key}: #{swift_type} = nil, "
-              else
-                "#{key}: #{swift_type}, "
-              end
+              default = init_default(type)
+              "#{key}: #{swift_type}#{default ? " = #{default}" : ''}, "
             end
           end.join("")
+        end
+
+        # The default each parameter declares, so a call the converter writes
+        # without it — the layout left the prop out, gave it null, or gave a
+        # value that is not of its type — compiles and the prop keeps it, as
+        # it does on kjui (the composable's defaults) and rjui (optional
+        # props): nil for an optional type, the vocabulary's value for any
+        # other (the one the Dynamic adapter falls back to). A `T!!` model has
+        # none — the converter says so. Until 1.8.121 only optional
+        # parameters had one, and every other call without the prop failed
+        # with "missing argument for parameter" (ticket
+        # sjui-unwritten-non-optional-prop-does-not-compile).
+        def init_default(type)
+          t = JsonUIShared::AttributeTypes.parse(type)
+          return 'nil' if map_to_swift_type(type).end_with?('?')
+
+          JsonUIShared::AttributeTypes.swift_default(t)
         end
 
         def generate_swift_init_assignments

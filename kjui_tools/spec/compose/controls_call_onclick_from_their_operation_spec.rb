@@ -106,7 +106,11 @@ RSpec.describe 'kjui controls call onClick from their own operation' do
       "#{call} }"
     )
     radio = emit.call('type' => 'Radio', 'text' => 'r', 'onClick' => '@{onTap}')
-    expect(radio).to include(%(onClick = { viewModel.updateData(mapOf("selectedRadiogroup" to "radio_0")); #{call} }))
+    # An unbound group of single Radios writes the view's own map
+    # (LocalRadioGroupSelections); a bound one its Data property.
+    expect(radio).to include(%(onClick = { radioGroups["default"] = "radio_0"; #{call} }))
+    bound_radio = emit.call('type' => 'Radio', 'text' => 'r', 'selectedValue' => '@{pick}', 'onClick' => '@{onTap}')
+    expect(bound_radio).to include(%(onClick = { viewModel.updateData(mapOf("selectedRadiogroup" to "radio_0")); #{call} }))
     segment = emit.call('type' => 'Segment', 'items' => %w[a], 'bind' => '@{idx}', 'onClick' => '@{onTap}')
     expect(segment).to match(/viewModel\.updateData\(mapOf\("idx" to 0\)\)\n\s*#{Regexp.escape(call)}\n/)
   end

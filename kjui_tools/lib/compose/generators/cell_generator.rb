@@ -60,32 +60,32 @@ module KjuiTools
           FileUtils.mkdir_p(viewmodel_path)
           FileUtils.mkdir_p(data_path)
           
-          # Create JSON file
+          # Each file is written only when it is not there, and said as it
+          # went: created or kept.
           json_file = File.join(json_path, "#{json_file_name}.json")
-          create_json_template(json_file, cell_class_name)
-          
-          # Create Main Cell View file (add View suffix to class name)
           main_kotlin_file = File.join(swift_path, "#{cell_class_name}View.kt")
-          create_main_cell_template(main_kotlin_file, cell_class_name, json_file_name, subdirectory, package_name)
-          
-          # Create Generated View file
           generated_kotlin_file = File.join(swift_path, "#{cell_class_name}GeneratedView.kt")
-          create_generated_cell_template(generated_kotlin_file, cell_class_name, json_file_name, subdirectory, package_name)
-          
-          # Create Data file with item property
           data_file = File.join(data_path, "#{cell_class_name}Data.kt")
-          create_cell_data_template(data_file, cell_class_name, package_name)
-          
-          # Create ViewModel file
           viewmodel_file = File.join(viewmodel_path, "#{cell_class_name}ViewModel.kt")
+          files = [['JSON:          ', json_file], ['Main View:     ', main_kotlin_file],
+                   ['Generated View:', generated_kotlin_file], ['Data:          ', data_file],
+                   ['ViewModel:     ', viewmodel_file]]
+          existed = files.map { |_, path| File.exist?(path) }
+
+          create_json_template(json_file, cell_class_name)
+          create_main_cell_template(main_kotlin_file, cell_class_name, json_file_name, subdirectory, package_name)
+          create_generated_cell_template(generated_kotlin_file, cell_class_name, json_file_name, subdirectory, package_name)
+          create_cell_data_template(data_file, cell_class_name, package_name)
           create_cell_viewmodel_template(viewmodel_file, cell_class_name, json_file_name, subdirectory, package_name)
-          
-          puts "Generated Collection Cell view:"
-          puts "  JSON:           #{json_file}"
-          puts "  Main View:      #{main_kotlin_file}"
-          puts "  Generated View: #{generated_kotlin_file}"
-          puts "  Data:           #{data_file}"
-          puts "  ViewModel:      #{viewmodel_file}"
+
+          # Until 1.8.121 this said "Generated Collection Cell view:" and
+          # listed the five files after a run that wrote none of them (ticket
+          # kjui-g-view-reports-what-it-did-not-do).
+          puts(existed.all? ? "Collection cell #{cell_class_name}: every file exists and was kept" :
+                              "Generated Collection Cell view #{cell_class_name}:")
+          files.zip(existed).each do |(label, path), was|
+            puts "  #{label} #{path} (#{was ? 'kept: it exists' : 'created'})"
+          end
           puts ""
           puts "Next steps:"
           puts "  1. Edit the JSON layout in #{json_file}"

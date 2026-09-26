@@ -448,10 +448,12 @@ module KjuiTools
           Components::TextViewComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'IconLabel'
           Components::IconLabelComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Collection'
+        # `Table` is a Collection — the type-synonym canon's reading, which
+        # sjui and rjui already draw. kjui drew it with TableComponent, whose
+        # `items` could not take an array (NoMethodError: `.match` on an
+        # Array, the build down) — ticket kjui-codegen-table-crashes-on-an-items-array.
+        when 'Collection', 'Table'
           Components::CollectionComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Table'
-          Components::TableComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Web'
           Components::WebComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'WebView'
@@ -1261,6 +1263,15 @@ module KjuiTools
             end
           end
 
+          # A group of single Radios the layout does not bind keeps its
+          # selection in this view's own map (RadioComponent); every section
+          # the extractor lifted runs inside the provider, so an item reads the
+          # same map wherever it landed.
+          if @required_imports.include?(:radio_group_selections)
+            static_content = provide_radio_groups(static_content)
+            @responsive_functions << RADIO_GROUP_SELECTIONS_DECLARATION
+          end
+
           # Variant-file dispatch: replace the static tree with a window
           # width `when` that selects the matching variant composable.
           # Whole-tree replacement — the same data/viewModel/modifier feed
@@ -1664,6 +1675,23 @@ module KjuiTools
         else
           "value as? #{kotlin_type} ?: updated.#{name}"
         end
+      end
+
+      # The view's map of group name → chosen item, for the groups of single
+      # Radios its layout does not bind (unset until something is chosen, so
+      # each item's `checked` seeds it). File-private: every generated view
+      # file that needs it declares its own.
+      RADIO_GROUP_SELECTIONS_DECLARATION = <<~KOTLIN.chomp
+        // Each unbound group of single Radios in this view: group name -> the chosen item
+        // (absent until the user chooses — the checked item shows until then).
+        private val LocalRadioGroupSelections = compositionLocalOf<MutableMap<String, String>> { mutableStateMapOf() }
+      KOTLIN
+
+      def provide_radio_groups(static_content)
+        trailing = static_content.end_with?("\n") ? "\n" : ''
+        body = static_content.chomp.lines.map { |line| line.strip.empty? ? line : "    #{line}" }.join
+        "    CompositionLocalProvider(LocalRadioGroupSelections provides remember { mutableStateMapOf<String, String>() }) {\n" \
+          "#{body}\n    }#{trailing}"
       end
 
       def generate_mode_aware_content(layout_name, static_content, dynamic_content, depth, screen_id: nil)

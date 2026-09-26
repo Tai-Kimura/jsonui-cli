@@ -92,7 +92,12 @@ RSpec.describe 'kjui Radio default id is its position in the layout' do
     builder.instance_variable_set(:@responsive_functions, [])
     builder.send(:generate_component, comp, 0).to_s
   end
-  values = ->(code) { code.scan(/"selectedRadiogroup" to "(radio_[\d_]+)"/).flatten.uniq }
+  # The name an item writes on selection: to the group's Data property, or —
+  # for a group the layout does not bind — to the view's own map
+  # (RadioComponent, LocalRadioGroupSelections).
+  values = lambda do |code|
+    code.scan(/(?:"selectedRadiogroup" to |radioGroups\["default"\] = )"(radio_[\d_]+)"/).flatten.uniq
+  end
 
   group = {
     'type' => 'View', 'orientation' => 'vertical',
@@ -107,7 +112,7 @@ RSpec.describe 'kjui Radio default id is its position in the layout' do
   it 'names each id-less item by its position, and an explicit id wins' do
     code = emit.call(group)
     expect(values.call(code)).to eq(%w[radio_0_0 radio_0_1_0 radio_0_2])
-    expect(code).to include('"selectedRadiogroup" to "named"')
+    expect(code).to include('radioGroups["default"] = "named"')
   end
 
   it 'emits the same bytes for the same layout, every time' do

@@ -36,8 +36,9 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
       it 'uses handler for onClick' do
         converter = create_converter({ 'class' => 'Segment', 'items' => ['A', 'B'], 'onValueChange' => '@{handleTabChange}' })
         result = converter.convert
-        expect(result).to include('onClick={() => data.handleTabChange?.(0)}')
-        expect(result).to include('onClick={() => data.handleTabChange?.(1)}')
+        # A static segment holds its own state; a tap writes it and the handler hears it.
+        expect(result).to include('onClick={() => { setSeeded(0); data.handleTabChange?.(0); }}')
+        expect(result).to include('onClick={() => { setSeeded(1); data.handleTabChange?.(1); }}')
       end
     end
 

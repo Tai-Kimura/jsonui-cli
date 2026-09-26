@@ -3,6 +3,7 @@
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/bound_value'
+require_relative '../helpers/static_seed'
 
 module KjuiTools
   module Compose
@@ -36,6 +37,18 @@ module KjuiTools
           # with a plain `label` drew the control and dropped the text.
           has_label = json_data['labelAttributes'] || label_text_of(json_data)
 
+          # A static value (or none) is the seed of the switch's own state
+          # (Helpers::StaticSeed); a bound one is the view model's.
+          unless checked.start_with?('data.')
+            return Helpers::StaticSeed.wrap(checked, depth, required_imports) do |d, state|
+              if has_label
+                generate_with_label(json_data, d, required_imports, parent_type, state, seeded: state)
+              else
+                generate_switch_only(json_data, d, required_imports, parent_type, state, seeded: state)
+              end
+            end
+          end
+
           if has_label
             generate_with_label(json_data, depth, required_imports, parent_type, checked)
           else
@@ -43,7 +56,7 @@ module KjuiTools
           end
         end
 
-        def self.generate_switch_only(json_data, depth, required_imports, parent_type, checked)
+        def self.generate_switch_only(json_data, depth, required_imports, parent_type, checked, seeded: nil)
           code = indent("Switch(", depth)
           code += "\n" + indent("checked = #{checked},", depth + 1)
 
@@ -56,7 +69,7 @@ module KjuiTools
             binding_variable = $1
           end
 
-          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable)},", depth + 1)
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)},", depth + 1)
 
           # Build modifiers
           modifiers = []
@@ -127,7 +140,7 @@ module KjuiTools
           code
         end
 
-        def self.generate_with_label(json_data, depth, required_imports, parent_type, checked)
+        def self.generate_with_label(json_data, depth, required_imports, parent_type, checked, seeded: nil)
           # Row container for label + switch
           code = indent("Row(", depth)
           code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 1)
@@ -173,7 +186,7 @@ module KjuiTools
             binding_variable = $1
           end
 
-          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable)}", depth + 2)
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)}", depth + 2)
 
           # Switch colors — same canonical/legacy pair as the block above.
           track_color = json_data['onTintColor'] || json_data['tint'] || json_data['tintColor']
@@ -251,16 +264,26 @@ module KjuiTools
         # / onToggle, then the declared onClick
         # (ModifierBuilder.with_operation_click). The first three forms are the
         # ones this component always emitted.
-        def self.checked_change_lambda(json_data, binding_variable)
+        # The switch's own operation, in order: its own update — the bound
+        # write, or the seeded state's (Helpers::StaticSeed, `seeded`) — then
+        # onValueChange, then the declared onClick (with_operation_click).
+        def self.checked_change_lambda(json_data, binding_variable, seeded: nil)
           handler = json_data['onValueChange'] || json_data['onToggle']
           view_id = json_data['id'] || 'switch'
-          update = "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))" if binding_variable
+          update = if binding_variable
+                     "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))"
+                   elsif seeded
+                     "#{seeded} = newValue"
+                   end
           lambda = if handler && !Helpers::ModifierBuilder.is_binding?(handler)
                      "{ // ERROR: #{handler} - camelCase events require binding format @{functionName} }"
                    else
                      handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'newValue') if handler
                      body = [update, handler_call].compact
-                     body.empty? ? '{ }' : "{ newValue -> #{body.join('; ')} }"
+                     if body.empty? then '{ }'
+                     elsif seeded && !binding_variable && !handler_call then "{ #{seeded} = it }"
+                     else "{ newValue -> #{body.join('; ')} }"
+                     end
                    end
           Helpers::ModifierBuilder.with_operation_click(lambda, json_data)
         end

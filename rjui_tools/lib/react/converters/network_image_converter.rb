@@ -79,7 +79,7 @@ module RjuiTools
           return '' unless src
 
           if has_binding?(src)
-            " src={#{convert_binding(src).gsub(/^\{|\}$/, '')}}"
+            " src={#{attribute_expression(src)}}"
           else
             jsx_attr_text('src', src)
           end
@@ -131,7 +131,7 @@ module RjuiTools
           if placeholder
             attr +=
               if has_binding?(placeholder)
-                " placeholder={#{convert_binding(placeholder).gsub(/^\{|\}$/, '')}}"
+                " placeholder={#{attribute_expression(placeholder)}}"
               else
                 jsx_attr_text('placeholder', placeholder)
               end

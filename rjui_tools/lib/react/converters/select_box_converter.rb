@@ -630,7 +630,11 @@ module RjuiTools
                            " value={#{prop} || ''}"
                          end
                        elsif date_value
-                         jsx_attr_text('value', date_value)
+                         # A static date is where the input starts, and the
+                         # user changes it (ticket static-valued-controls-do-not-
+                         # change-on-a-users-tap): `value` with no onChange held
+                         # it still.
+                         jsx_attr_text('defaultValue', date_value)
                        else
                          ''
                        end

@@ -64,39 +64,38 @@ module SjuiTools
           FileUtils.mkdir_p(viewmodel_path)
           FileUtils.mkdir_p(data_path)
           
-          # Create JSON file
+          # Each file is written only when it is not there (an existing one
+          # is the app's), and said as it went: created or kept.
           json_file = File.join(json_path, "#{json_file_name}.json")
-          create_json_template(json_file, view_class_name)
-          
-          # Create Main View file (wrapper)
           main_swift_file = File.join(swift_path, "#{view_class_name}View.swift")
-          create_main_view_template(main_swift_file, view_class_name, json_file_name, subdirectory)
-          
-          # Create Generated View file (for JSON generation)
           generated_swift_file = File.join(swift_path, "#{view_class_name}GeneratedView.swift")
-          create_generated_view_template(generated_swift_file, view_class_name, json_file_name, subdirectory)
-          
-          # Create Data file
           data_file = File.join(data_path, "#{view_class_name}Data.swift")
-          create_data_template(data_file, view_class_name)
-          
-          # Create ViewModel file
           viewmodel_file = File.join(viewmodel_path, "#{view_class_name}ViewModel.swift")
+          files = [['JSON:          ', json_file], ['Main View:     ', main_swift_file],
+                   ['Generated View:', generated_swift_file], ['Data:          ', data_file],
+                   ['ViewModel:     ', viewmodel_file]]
+          existed = files.map { |_, path| File.exist?(path) }
+
+          create_json_template(json_file, view_class_name)
+          create_main_view_template(main_swift_file, view_class_name, json_file_name, subdirectory)
+          create_generated_view_template(generated_swift_file, view_class_name, json_file_name, subdirectory)
+          create_data_template(data_file, view_class_name)
           create_viewmodel_template(viewmodel_file, view_class_name, json_file_name, subdirectory)
-          
+
           # Update App.swift if --root option is specified
-          if @options[:root]
-            update_app_file(view_class_name)
+          app_updated = update_app_file(view_class_name) if @options[:root]
+
+          # Until 1.8.121 this said "Generated SwiftUI view:" and listed the
+          # five files whatever it had done — after a run that wrote none of
+          # them too (ticket kjui-g-view-reports-what-it-did-not-do).
+          created = existed.count(false)
+          Core::Logger.info(created.zero? ? "SwiftUI view #{view_class_name}: every file exists and was kept" :
+                                            "Generated SwiftUI view #{view_class_name}:")
+          files.zip(existed).each do |(label, path), was|
+            Core::Logger.info "  #{label} #{path} (#{was ? 'kept: it exists' : 'created'})"
           end
-          
-          Core::Logger.info "Generated SwiftUI view:"
-          Core::Logger.info "  JSON:          #{json_file}"
-          Core::Logger.info "  Main View:     #{main_swift_file}"
-          Core::Logger.info "  Generated View: #{generated_swift_file}"
-          Core::Logger.info "  Data:          #{data_file}"
-          Core::Logger.info "  ViewModel:     #{viewmodel_file}"
-          
-          if @options[:root]
+
+          if app_updated
             Core::Logger.info "  Updated App.swift to use #{view_class_name}View as root"
           end
           
@@ -167,7 +166,7 @@ module SjuiTools
           app_files = Dir.glob(File.join(source_path, '**/*App.swift'))
           if app_files.empty?
             Core::Logger.warn "Could not find App.swift file to update"
-            return
+            return false
           end
           
           app_file = app_files.first
@@ -198,6 +197,7 @@ module SjuiTools
             Core::Logger.warn "Could not update App.swift automatically"
             Core::Logger.info "Please manually update your App.swift to use #{view_name}View()"
           end
+          updated
         end
         
         def create_main_view_template(file_path, view_name, json_name, subdirectory)

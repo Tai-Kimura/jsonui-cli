@@ -283,10 +283,15 @@ module SjuiTools
                         end
                       end
 
+                      # What becomes of a prop this converter does not
+                      # write, in the sentence the three tools share
+                      # (lib/core/attribute_types.rb).
                       def unwritten(key, value, type)
-                        warn "[sjui] \#{component_name}.\#{key}: the layout's \#{value.inspect} is not a \#{type} " \\
-                             "literal this converter can write — the prop keeps its default. Give a \#{type} value, " \\
-                             "or bind it (@{…})."
+                        warn JsonUIShared::AttributeTypes.unwritten_warning('sjui', component_name, key, value, type)
+                      end
+
+                      def absent(key, type)
+                        warn JsonUIShared::AttributeTypes.absent_warning('sjui', component_name, key, type)
                       end
 
                       def format_color_value(value)
@@ -354,16 +359,30 @@ module SjuiTools
             data_prefix = is_binding ? "$data" : "data"
             # Check if we need to handle the key existing vs nil differently
             if is_binding
-              # Binding property - always expect @{} format, use $data. (Binding)
-              lines << "            if @component['#{actual_key}']"
+              # A binding property: `@{name}` binds `$data.name`; any other
+              # value is a literal of its type, held in a constant binding —
+              # what the Dynamic adapter does with it (`.constant(…)`), and
+              # what kjui and rjui write for the same prop — or, when it is
+              # not one this converter can write, named and left to the
+              # parameter's default. By key: a `false` is a value too.
+              # Until 1.8.121 every other value was read as a property name,
+              # `$data.<value>` (`$data.Hi`, `$data.{"a"=>1}`), which swiftc
+              # refuses, and a `false` or null was dropped without a word
+              # (ticket binding-prop-with-a-non-binding-value-does-not-compile).
+              lines << "            if @component.key?('#{actual_key}')"
               lines << "              value = @component['#{actual_key}']"
               lines << "              if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')"
               lines << "                property_name = value[2..-2]"
               lines << '                params << "' + "#{actual_key}: #{data_prefix}." + '#{property_name}"'
               lines << "              else"
-              lines << "                # For binding properties, assume direct property binding if not @{} format"
-              lines << '                params << "' + "#{actual_key}: #{data_prefix}." + '#{value}"'
+              lines << "                formatted_value = format_value(value, '#{type}')"
+              lines << "                if formatted_value"
+              lines << '                  params << "' + "#{actual_key}: .constant(" + '#{formatted_value})"'
+              lines << "                else"
+              lines << "                  unwritten('#{actual_key}', value, '#{type}')"
+              lines << "                end"
               lines << "              end"
+              lines.concat(absent_lines(actual_key, type))
               lines << "            end"
             else
               # By key, not by value: a `false` the layout gives is a value too.
@@ -382,10 +401,22 @@ module SjuiTools
               lines << "                  unwritten('#{actual_key}', value, '#{type}')"
               lines << "                end"
               lines << "              end"
+              lines.concat(absent_lines(actual_key, type))
               lines << "            end"
             end
           end
           lines.join("\n")
+        end
+
+        # A prop whose Swift parameter has no default (a `T!!` model — every
+        # other declares one, SwiftComponentGenerator#init_default) is said
+        # when the layout leaves it out: the call does not compile without
+        # it. Other props left out keep their default, and nothing is said,
+        # as on kjui and rjui.
+        def absent_lines(key, type)
+          return [] unless JsonUIShared::AttributeTypes.swift_required?(type)
+
+          ["            else", "              absent('#{key}', '#{type}')"]
         end
 
         def generate_modifiers_code
