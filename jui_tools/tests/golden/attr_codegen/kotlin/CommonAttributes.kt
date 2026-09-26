@@ -6,6 +6,8 @@ package com.kotlinjsonui.dynamic.generated
 
 /** Attributes shared across all components (emitted once). */
 data class CommonAttributes(
+    /** One value or a list of them (element vocabulary). [accepts: string | array] */
+    val gravity: Any? = null,
     /** Hide view */
     val hidden: AttrValue<Boolean>? = null,
     /** Unique identifier for the component */
@@ -40,12 +42,18 @@ data class CommonAttributes(
         }
     }
 
+    object Gravity {
+        /** The spellings each value of `gravity` is declared as — it holds one or a list of them, so it has no enum type of its own — case-sensitive. */
+        val declaredSpellings: List<String> = listOf("top", "bottom", "left", "right", "center")
+    }
+
     companion object {
         /**
          * Canonical attribute names declared for this component
          * (public metadata contract).
          */
         val declaredAttributes: Set<String> = setOf(
+            "gravity",
             "hidden",
             "id",
             "onClick",
@@ -73,6 +81,7 @@ data class CommonAttributes(
          * alias fallback is then disabled.
          */
         fun parse(json: Map<String, Any?>, canonicalOnly: Boolean = false): CommonAttributes = CommonAttributes(
+            gravity = AttrCoerce.lookup(json, "gravity"),
             hidden = AttrCoerce.attrValue(AttrCoerce.lookup(json, "hidden")) { AttrCoerce.boolean(it) },
             id = AttrCoerce.string(AttrCoerce.lookup(json, "id")),
             onClick = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "onClick")),

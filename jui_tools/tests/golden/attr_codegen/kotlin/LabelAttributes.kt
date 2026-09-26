@@ -17,6 +17,8 @@ data class LabelAttributes(
     val edgeInset: Double? = null,
     /** Highlight color - hex string or color name from colors.json [aliases: hilightColor] */
     val highlightColor: String? = null,
+    /** A list of declared edges (item vocabulary). */
+    val insetEdges: List<Any?>? = null,
     /** Partial text styling */
     val partialAttributes: List<Any?>? = null,
     /** Label-specific shadow override (object only) */
@@ -47,6 +49,11 @@ data class LabelAttributes(
         }
     }
 
+    object InsetEdges {
+        /** The spellings each value of `insetEdges` is declared as — it holds one or a list of them, so it has no enum type of its own — case-sensitive. */
+        val declaredSpellings: List<String> = listOf("top", "bottom", "leading", "trailing")
+    }
+
     companion object {
         /**
          * Canonical attribute names declared for this component, including
@@ -56,6 +63,7 @@ data class LabelAttributes(
             "bind",
             "edgeInset",
             "highlightColor",
+            "insetEdges",
             "partialAttributes",
             "shadow",
             "text",
@@ -86,6 +94,7 @@ data class LabelAttributes(
             bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind")),
             edgeInset = AttrCoerce.number(AttrCoerce.lookup(json, "edgeInset")),
             highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", listOf("hilightColor"), canonicalOnly)),
+            insetEdges = AttrCoerce.array(AttrCoerce.lookup(json, "insetEdges")),
             partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes")),
             shadow = AttrCoerce.obj(AttrCoerce.lookup(json, "shadow")),
             text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text")) { AttrCoerce.string(it) },

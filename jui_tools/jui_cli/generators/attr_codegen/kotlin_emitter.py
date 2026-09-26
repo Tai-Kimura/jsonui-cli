@@ -310,6 +310,9 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
     for attr in enums:
         parts.extend(_enum_decl(attr))
         parts.append("")
+    for attr in (a for a in comp.attrs if a.element_spellings):
+        parts.extend(_element_spellings_decl(attr))
+        parts.append("")
 
     parts.append("    companion object {")
     parts.extend(_metadata_decls(comp, model))
@@ -425,6 +428,18 @@ def _enum_decl(attr: Attribute) -> list[str]:
         "    }",
     ]
     return lines
+
+
+def _element_spellings_decl(attr: Attribute) -> list[str]:
+    """The declared spellings of the values an attribute with no enum type
+    of its own holds (one value or a list of them)."""
+    return [
+        f"    object {_pascal(attr.name)} {{",
+        f"        /** The spellings each value of `{attr.name}` is declared as — it holds one or a list of them, so it has no enum type of its own — case-sensitive. */",
+        "        val declaredSpellings: List<String> = listOf("
+        + ", ".join(_kotlin_str(v) for v in attr.element_spellings) + ")",
+        "    }",
+    ]
 
 
 def _enum_parse_func(attr: Attribute) -> list[str]:

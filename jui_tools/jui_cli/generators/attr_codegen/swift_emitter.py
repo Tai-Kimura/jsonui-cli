@@ -294,6 +294,9 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
     for attr in enums:
         body.extend(_enum_decl(attr))
         body.append("")
+    for attr in (a for a in comp.attrs if a.element_spellings):
+        body.extend(_element_spellings_decl(attr))
+        body.append("")
 
     body.extend(_metadata_decls(comp, model))
     body.append("")
@@ -454,6 +457,20 @@ def _enum_decl(attr: Attribute) -> list[str]:
     lines.append(f"        public static let declaredSpellings: [String] = [{spellings}]")
     lines.append("    }")
     return lines
+
+
+def _element_spellings_decl(attr: Attribute) -> list[str]:
+    """The declared spellings of the values an attribute with no enum type
+    of its own holds (one value or a list of them)."""
+    spellings = ", ".join(_swift_str(v) for v in attr.element_spellings)
+    return [
+        f"    public enum {_pascal(attr.name)} {{",
+        f"        /// The spellings each value of `{attr.name}` is declared as — it holds",
+        "        /// one or a list of them, so it has no enum type of its own —",
+        "        /// case-sensitive.",
+        f"        public static let declaredSpellings: [String] = [{spellings}]",
+        "    }",
+    ]
 
 
 def _enum_parse_func(attr: Attribute) -> list[str]:

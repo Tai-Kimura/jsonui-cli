@@ -17,11 +17,19 @@ public struct LabelAttributes {
         public static let declaredSpellings: [String] = ["none", "wrap-reverse", "Flow", "flow"]
     }
 
+    public enum InsetEdges {
+        /// The spellings each value of `insetEdges` is declared as — it holds
+        /// one or a list of them, so it has no enum type of its own —
+        /// case-sensitive.
+        public static let declaredSpellings: [String] = ["top", "bottom", "leading", "trailing"]
+    }
+
     /// Canonical attribute names declared for this component, including the shared `common` set (public metadata contract).
     public static let declaredAttributes: Set<String> = CommonAttributes.declaredAttributes.union([
         "bind",
         "edgeInset",
         "highlightColor",
+        "insetEdges",
         "partialAttributes",
         "shadow",
         "text",
@@ -54,6 +62,9 @@ public struct LabelAttributes {
     /// Highlight color - hex string or color name from colors.json [aliases: hilightColor]
     public let highlightColor: String?
 
+    /// A list of declared edges (item vocabulary).
+    public let insetEdges: [Any]?
+
     /// Partial text styling
     public let partialAttributes: [Any]?
 
@@ -76,6 +87,7 @@ public struct LabelAttributes {
         self.bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind"))
         self.edgeInset = AttrCoerce.number(AttrCoerce.lookup(json, "edgeInset"))
         self.highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", ["hilightColor"], canonicalOnly: canonicalOnly))
+        self.insetEdges = AttrCoerce.array(AttrCoerce.lookup(json, "insetEdges"))
         self.partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes"))
         self.shadow = AttrCoerce.object(AttrCoerce.lookup(json, "shadow"))
         self.text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text"), AttrCoerce.string)

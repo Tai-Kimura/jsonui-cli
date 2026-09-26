@@ -13,6 +13,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # One value or a list of them (element vocabulary). [accepts: string | array]
+        { name: 'gravity', kind: :raw }.freeze,
         # Hide view
         { name: 'hidden', kind: :boolean, bindable: true }.freeze,
         # Unique identifier for the component

@@ -22,6 +22,8 @@ module JsonUI
         { name: 'edgeInset', kind: :number }.freeze,
         # Highlight color - hex string or color name from colors.json
         { name: 'highlightColor', kind: :string, aliases: ['hilightColor'].freeze }.freeze,
+        # A list of declared edges (item vocabulary).
+        { name: 'insetEdges', kind: :array }.freeze,
         # Partial text styling
         { name: 'partialAttributes', kind: :array }.freeze,
         # Label-specific shadow override (object only)

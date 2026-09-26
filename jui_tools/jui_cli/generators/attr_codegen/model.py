@@ -71,6 +71,13 @@ class Attribute:
     #: Collection.layout ``LeftAligned`` → ``flow``).
     value_aliases: tuple[tuple[str, str], ...] = ()
     dimension_keywords: tuple[str, ...] = ()
+    #: The declared spellings of the values an attribute HOLDS when it has no
+    #: enum type of its own: a ``string | array`` union with an ``enum``
+    #: (``gravity`` — one value or a list of them) or an ``array`` whose
+    #: ``items`` declare one (``safeAreaInsetPositions``). Emitters publish
+    #: them as ``<Name>.declaredSpellings`` beside the enums, so the
+    #: hand-written comparisons read the declaration, case and all.
+    element_spellings: tuple[str, ...] = ()
     raw_kinds: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()
     required: bool = False
@@ -277,6 +284,7 @@ def classify_attr(
     value_aliases = _resolve_value_aliases(entry, enum_values, f"{component}.{name}")
 
     return Attribute(
+        element_spellings=_resolve_element_spellings(entry, kind),
         name=name,
         component=component,
         kind=kind,
@@ -293,6 +301,19 @@ def classify_attr(
         binding_direction=str(entry.get("binding_direction") or ""),
         description=_clean_text(entry.get("description")),
     )
+
+
+def _resolve_element_spellings(entry: dict, kind: AttrKind) -> tuple[str, ...]:
+    """The element vocabulary of an attribute with no enum type of its own."""
+    if kind not in (AttrKind.RAW, AttrKind.ARRAY):
+        return ()
+    values = entry.get("enum")
+    if not isinstance(values, list):
+        items = entry.get("items")
+        values = items.get("enum") if isinstance(items, dict) else None
+    if isinstance(values, list) and values and all(isinstance(v, str) for v in values):
+        return tuple(values)
+    return ()
 
 
 def _resolve_value_aliases(
