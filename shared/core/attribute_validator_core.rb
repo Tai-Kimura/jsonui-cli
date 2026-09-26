@@ -673,14 +673,23 @@ module JsonUIShared
         # For array values, check each element
         invalid_values = value.reject { |v| enum_values.include?(v) }
         unless invalid_values.empty?
-          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value(s) '#{invalid_values.inspect}'. Valid values: #{enum_values.join(', ')}")
+          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value(s) '#{invalid_values.inspect}'. Valid values: #{enum_values.join(', ')}#{near_miss(invalid_values, enum_values)}")
         end
       else
         # For single values
         unless enum_values.include?(value)
-          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value '#{value}'. Valid values: #{enum_values.join(', ')}")
+          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value '#{value}'. Valid values: #{enum_values.join(', ')}#{near_miss([value], enum_values)}")
         end
       end
+    end
+
+    # " — did you mean 'x'?" for a value that differs from a declared
+    # spelling only in case: a value is its declared spelling, case and all
+    # (1.9.0), and the near miss is named as the generated parsers name it.
+    def near_miss(values, enum_values)
+      near = values.map { |v| v.is_a?(String) && enum_values.find { |e| e.is_a?(String) && e.casecmp?(v) } }
+      near = near.select { |n| n }.uniq
+      near.empty? ? '' : " — did you mean #{near.map { |n| "'#{n}'" }.join(', ')}?"
     end
 
     # Format expected types for error messages
