@@ -155,7 +155,8 @@ module JsonUIShared
         type = node['type']
         return [] unless type.is_a?(String)
 
-        # (map + compact, not filter_map: the tools run on Ruby 2.6)
+        # (map + compact, not filter_map: the tools ran on Ruby 2.6 until
+        # jsonui-cli 1.9.0; the floor is 3.2 since)
         implied(type, path).map do |key, meant|
           next unless node.key?(key) && node[key] != meant
 
