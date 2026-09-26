@@ -75,7 +75,7 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           else
             size = json_data['size'] || 48
-            modifiers << ".size(#{size}.dp)"
+            modifiers << ".size(#{Helpers::BoundValue.dp(size)})"
           end
 
           # offset → alpha: the View slots after the size and before the

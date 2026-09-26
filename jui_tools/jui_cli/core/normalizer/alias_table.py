@@ -242,6 +242,17 @@ class AliasTable:
         self._deprecated_cache[key] = merged
         return merged
 
+    def bind_value_attributes(self, component_type: str | None) -> list[str]:
+        """The attributes `bind` is an alternative spelling of on
+        *component_type*'s section (``common.bind.primaryValue``): the one a
+        lone `bind` is rewritten to first, then the other spellings of the
+        same value. ``[]`` for a section `bind` names no value of."""
+        key = self.definition_key_for(component_type)
+        spec = self._section("common").get("bind")
+        table = spec.get("primaryValue") if isinstance(spec, dict) else None
+        values = table.get(key) if isinstance(table, dict) and key else None
+        return [v for v in values if isinstance(v, str)] if isinstance(values, list) else []
+
     def enum_for(self, component_type: str | None, attr: str) -> list[str]:
         """The declared ``enum`` of *attr* on *component_type*'s section
         (falling back to ``common``), or ``[]`` when it declares none."""

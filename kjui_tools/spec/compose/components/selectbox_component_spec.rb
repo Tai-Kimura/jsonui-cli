@@ -517,7 +517,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       expect(result).to include('data.onSelectionChange?.invoke("countrySelect", newValue)')
     end
 
-    it 'uses default selectbox id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Event) -> Unit)?' }
       }
@@ -530,7 +530,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onSelectionChange?.invoke("selectbox", newValue)')
+      expect(result).to include('data.onSelectionChange?.invoke("selectBox_0", newValue)')
     end
 
     # The payload is the new value of the SELECTION BINDING, as on sjui

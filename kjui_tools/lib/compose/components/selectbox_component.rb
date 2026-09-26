@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/binding_expression'
+require_relative '../../core/binding_validator_core'
 require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
@@ -102,7 +103,7 @@ module KjuiTools
             binding_variable = $1
           end
 
-          view_id = json_data['id'] || 'selectbox'
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
           # The declared onClick is called from the selection, after it —
           # the SelectBox's own operation, not an outer `.clickable`, whose
           # action would replace the box's own open action for TalkBack
@@ -119,20 +120,20 @@ module KjuiTools
               # index meant no argument-taking handler type compiled on both
               # platforms; only `(() -> Unit)?` did
               # (jui-selectbox-onvaluechange-argument-differs-between-sjui-and-kjui).
-              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(
-                json_data['onValueChange'], view_id, is_index_binding ? 'index' : 'newValue'
-              )
+              index_line, handler_call = value_change_call(json_data, view_id, is_index_binding, is_date_picker)
               if binding_variable
                 code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
                 code += write_back_lines(json_data, binding_variable, is_index_binding, depth + 2)
+                code += "\n" + indent(index_line, depth + 2) if index_line
                 code += "\n" + indent("#{handler_call}", depth + 2)
                 code += "\n" + indent(click, depth + 2) if click
                 code += "\n" + indent("},", depth + 1)
               else
-                code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} }", json_data)},", depth + 1)
+                body = [("#{seeded} = newValue" if seeded), index_line, handler_call].compact.join('; ')
+                code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{body} }", json_data)},", depth + 1)
               end
             else
-              code += "\n" + indent("onValueChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
+              code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.error_lambda("ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}")},", depth + 1)
             end
           elsif binding_variable
             code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
@@ -163,7 +164,7 @@ module KjuiTools
             
             # Minute interval for time pickers
             if json_data['minuteInterval']
-              code += "\n" + indent("minuteInterval = #{json_data['minuteInterval']},", depth + 1)
+              code += "\n" + indent("minuteInterval = #{Helpers::BoundValue.int_arg(json_data['minuteInterval'], fallback: 1)},", depth + 1)
             end
             
             # Minimum date
@@ -259,7 +260,7 @@ module KjuiTools
           # Font styling
           label_font_size = label_attrs['fontSize'] || json_data['fontSize']
           if label_font_size
-            code += "\n" + indent("fontSize = #{label_font_size},", depth + 1)
+            code += "\n" + indent("fontSize = #{Helpers::BoundValue.int_arg(label_font_size, fallback: 16)},", depth + 1)
           end
 
           if json_data['font']
@@ -338,13 +339,13 @@ module KjuiTools
             if paddings.is_a?(Array) && paddings.length == 4
               # JSON 4-element order is [top, right, bottom, left] (same as
               # ModifierBuilder padding): right -> end, left -> start.
-              code += ",\n" + indent("contentPadding = PaddingValues(top = #{paddings[0]}.dp, end = #{paddings[1]}.dp, bottom = #{paddings[2]}.dp, start = #{paddings[3]}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(paddings[0])}, end = #{Helpers::BoundValue.dp(paddings[1])}, bottom = #{Helpers::BoundValue.dp(paddings[2])}, start = #{Helpers::BoundValue.dp(paddings[3])})", depth + 1)
             elsif paddings.is_a?(Array) && paddings.length == 2
-              code += ",\n" + indent("contentPadding = PaddingValues(horizontal = #{paddings[1]}.dp, vertical = #{paddings[0]}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(paddings[1])}, vertical = #{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
             elsif paddings.is_a?(Array) && paddings.length == 1
-              code += ",\n" + indent("contentPadding = PaddingValues(#{paddings[0]}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
             elsif paddings.is_a?(Numeric)
-              code += ",\n" + indent("contentPadding = PaddingValues(#{paddings}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings)})", depth + 1)
             end
           end
 
@@ -364,19 +365,60 @@ module KjuiTools
         # item String went into the Int, the generated updateData read it back
         # `as? Number` and dropped it, and the box stayed where it was (ticket
         # selectbox-selected-item-binding-is-read-once, measured on an emulator).
+        # onValueChange's call, by the handler's declared type (ruling ③):
+        # a lone `(String)` receives the selected ITEM, whatever the binding —
+        # it was handed the viewId and the index, two arguments to a
+        # one-argument function, which did not compile; `(String, Int)` is the
+        # viewId and the index; `(String, String)` the viewId and the item;
+        # `(Int)` the index. The index without an index binding is the item's
+        # first index (`indexOf`: a repeated item gives its first, the prompt
+        # -1). A date has no index: a date SelectBox declared `(String, Int)` or
+        # `(Int)` is not called — a comment names it, as the shared validator
+        # does. Any other type keeps the shared reading
+        # (get_event_handler_invocation: the new value of the selection
+        # binding). Returns [index_line, call], index_line the `val index` a
+        # call needs where no index binding computed it.
+        def self.value_change_call(json_data, view_id, is_index_binding, is_date_picker = false)
+          handler = json_data['onValueChange']
+          method = Helpers::ModifierBuilder.extract_binding_property(handler)
+          klass = Helpers::ResourceResolver.data_definitions.dig(method, 'class').to_s
+          # The shared reading of a closure type and the shared date check
+          # (JsonUIShared::BindingValidatorCore, the validator's own).
+          params = JsonUIShared::BindingValidatorCore.closure_parameters(klass)&.map { |t| t.delete_suffix('?') }
+          id = JsonUIShared::StringLiterals.kotlin(view_id)
+          if is_date_picker && (problem = JsonUIShared::BindingValidatorCore.date_pick_handler_problem(klass))
+            # Not called; the same sentence sjui writes, in a block comment
+            # (parse-safe in any position of the lambda).
+            return [nil, "/* #{Helpers::ModifierBuilder.comment_text(
+              "ERROR: SelectBox.onValueChange #{method} is not called: #{problem}"
+            )} */"]
+          end
+          case params
+          when ['String'] then [nil, "data.#{method}?.invoke(newValue)"]
+          when ['Int'] then [(index_expression_line(json_data) unless is_index_binding), "data.#{method}?.invoke(index)"]
+          when %w[String Int] then [(index_expression_line(json_data) unless is_index_binding), "data.#{method}?.invoke(#{id}, index)"]
+          when %w[String String] then [nil, "data.#{method}?.invoke(#{id}, newValue)"]
+          else [nil, Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, is_index_binding ? 'index' : 'newValue')]
+          end
+        end
+
+        # `val index = <the items>.indexOf(newValue)`.
+        def self.index_expression_line(json_data)
+          items = json_data['items']
+          if items.is_a?(String) && items.match(/@\{([^}]+)\}/)
+            "val index = data.#{$1}.indexOf(newValue)"
+          elsif items.is_a?(Array)
+            "val index = listOf(#{items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(', ')}).indexOf(newValue)"
+          else
+            'val index = 0'
+          end
+        end
+
         def self.write_back_lines(json_data, binding_variable, is_index_binding, depth)
           key = Helpers::BindingExpression.path_only(binding_variable)
           return "\n" + indent("viewModel.updateData(mapOf(\"#{key}\" to newValue))", depth) unless is_index_binding
 
-          items = json_data['items']
-          index_line = if items.is_a?(String) && items.match(/@\{([^}]+)\}/)
-                         "val index = data.#{$1}.indexOf(newValue)"
-                       elsif items.is_a?(Array)
-                         "val index = listOf(#{items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(', ')}).indexOf(newValue)"
-                       else
-                         'val index = 0'
-                       end
-          "\n" + indent(index_line, depth) + "\n" + indent("viewModel.updateData(mapOf(\"#{key}\" to index))", depth)
+          "\n" + indent(index_expression_line(json_data), depth) + "\n" + indent("viewModel.updateData(mapOf(\"#{key}\" to index))", depth)
         end
 
         def self.caret_expression(caret, required_imports)

@@ -70,17 +70,17 @@ module KjuiTools
               modifiers << ".fillMaxSize()"
             elsif w == 'matchParent'
               modifiers << ".fillMaxWidth()"
-              modifiers << ".height(#{h}.dp)" unless h == 'wrapContent'
+              modifiers << ".height(#{Helpers::BoundValue.dp(h)})" unless h == 'wrapContent'
             elsif h == 'matchParent'
-              modifiers << ".width(#{w}.dp)" unless w == 'wrapContent'
+              modifiers << ".width(#{Helpers::BoundValue.dp(w)})" unless w == 'wrapContent'
               modifiers << ".fillMaxHeight()"
             elsif w.is_a?(Numeric) && h.is_a?(Numeric)
-              modifiers << ".size(#{w}.dp, #{h}.dp)"
+              modifiers << ".size(#{Helpers::BoundValue.dp(w)}, #{Helpers::BoundValue.dp(h)})"
             else
               modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             end
           elsif json_data['size']
-            modifiers << ".size(#{json_data['size']}.dp)"
+            modifiers << ".size(#{Helpers::BoundValue.dp(json_data['size'])})"
           else
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end

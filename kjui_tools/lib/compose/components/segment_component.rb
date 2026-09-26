@@ -82,12 +82,11 @@ module KjuiTools
           
           # Add enabled state if specified
           if json_data.key?('enabled')
-            enabled_value = json_data['enabled']
-            if enabled_value.is_a?(String) && (enabled_inner = Helpers::BindingExpression.extract_inner(enabled_value))
-              code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(enabled_inner, negatable: true)},", depth + 1)
-            else
-              code += "\n" + indent("enabled = #{enabled_value},", depth + 1)
-            end
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code += "\n" + indent("enabled = #{enabled},", depth + 1)
           end
           
           # Tab colors - only add if specified, otherwise use defaults from Configuration
@@ -188,12 +187,11 @@ module KjuiTools
               
               # Add enabled state to Tab if segment is disabled
               if json_data.key?('enabled')
-                enabled_value = json_data['enabled']
-                if enabled_value.is_a?(String) && (enabled_inner = Helpers::BindingExpression.extract_inner(enabled_value))
-                  code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(enabled_inner, negatable: true)},", depth + 2)
-                else
-                  code += "\n" + indent("enabled = #{enabled_value},", depth + 2)
-                end
+                # `enabled` as every other stage reads it (enabled_expression): a
+                # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+                # was did not type-check against the Boolean parameter.
+                enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+                code += "\n" + indent("enabled = #{enabled},", depth + 2)
               end
               
               code += "\n" + indent("onClick = {", depth + 2)
@@ -213,7 +211,7 @@ module KjuiTools
               
               # Generate onClick handler
               # onValueChange (camelCase) -> binding format only (@{functionName})
-              view_id = json_data['id'] || 'segment'
+              view_id = Helpers::ModifierBuilder.view_id(json_data)
               if json_data['onValueChange']
                 if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                   handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, index.to_s)
@@ -224,7 +222,7 @@ module KjuiTools
                     code += "\n" + indent("#{handler_call}", depth + 3)
                   end
                 else
-                  code += "\n" + indent("// ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 3)
+                  code += "\n" + indent("// ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 3)
                 end
               elsif json_data['valueChange'].is_a?(String) && !json_data['valueChange'].empty?
                 # `valueChange` is the legacy SELECTOR spelling (a bare
@@ -306,12 +304,11 @@ module KjuiTools
             
             # Add enabled state to Tab if segment is disabled
             if json_data.key?('enabled')
-              enabled_value = json_data['enabled']
-              if enabled_value.is_a?(String) && (enabled_inner = Helpers::BindingExpression.extract_inner(enabled_value))
-                code += "\n" + indent("enabled = #{Helpers::BindingExpression.value_access(enabled_inner, negatable: true)},", depth + 3)
-              else
-                code += "\n" + indent("enabled = #{enabled_value},", depth + 3)
-              end
+              # `enabled` as every other stage reads it (enabled_expression): a
+              # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+              # was did not type-check against the Boolean parameter.
+              enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+              code += "\n" + indent("enabled = #{enabled},", depth + 3)
             end
             
             code += "\n" + indent("onClick = {", depth + 3)
@@ -331,7 +328,7 @@ module KjuiTools
             
             # Generate onClick handler
             # onValueChange (camelCase) -> binding format only (@{functionName})
-            view_id = json_data['id'] || 'segment'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             if json_data['onValueChange']
               if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                 handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'index')
@@ -342,7 +339,7 @@ module KjuiTools
                   code += "\n" + indent("#{handler_call}", depth + 4)
                 end
               else
-                code += "\n" + indent("// ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 4)
+                code += "\n" + indent("// ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 4)
               end
             elsif json_data['valueChange'].is_a?(String) && !json_data['valueChange'].empty?
               # `valueChange` is the legacy SELECTOR spelling (a bare method

@@ -31,9 +31,9 @@ module KjuiTools
           if json_data['contentPadding']
             padding = json_data['contentPadding']
             if padding.is_a?(Array) && padding.length == 4
-              code += "\n" + indent("contentPadding = PaddingValues(top = #{padding[0]}.dp, end = #{padding[1]}.dp, bottom = #{padding[2]}.dp, start = #{padding[3]}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(padding[0])}, end = #{Helpers::BoundValue.dp(padding[1])}, bottom = #{Helpers::BoundValue.dp(padding[2])}, start = #{Helpers::BoundValue.dp(padding[3])}),", depth + 1)
             elsif padding.is_a?(Numeric)
-              code += "\n" + indent("contentPadding = PaddingValues(#{padding}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(padding)}),", depth + 1)
             end
           end
           
@@ -41,7 +41,7 @@ module KjuiTools
           if json_data['rowSpacing'] || json_data['spacing']
             required_imports&.add(:arrangement)
             spacing = json_data['rowSpacing'] || json_data['spacing'] || 0
-            code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{spacing}.dp),", depth + 1)
+            code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)}),", depth + 1)
           end
           
           # Build modifiers
@@ -99,7 +99,7 @@ module KjuiTools
               inset = json_data['separatorInset']
               if inset.is_a?(Hash)
                 start_padding = inset['left'] || inset['start'] || 0
-                code += "\n" + indent("modifier = Modifier.padding(start = #{start_padding}.dp),", depth + 3)
+                code += "\n" + indent("modifier = Modifier.padding(start = #{Helpers::BoundValue.dp(start_padding)}),", depth + 3)
               end
             end
             
@@ -162,7 +162,7 @@ module KjuiTools
           code = "\n" + indent("Row(", depth)
           code += "\n" + indent("modifier = Modifier", depth + 1)
           code += "\n" + indent("    .fillMaxWidth()", depth + 1)
-          code += "\n" + indent("    .height(#{row_height}.dp)", depth + 1)
+          code += "\n" + indent("    .height(#{Helpers::BoundValue.dp(row_height)})", depth + 1)
           code += "\n" + indent("    .clickable { /* Handle row click */ }", depth + 1)
           code += "\n" + indent("    .padding(horizontal = 16.dp),", depth + 1)
           code += "\n" + indent("verticalAlignment = Alignment.CenterVertically", depth + 1)

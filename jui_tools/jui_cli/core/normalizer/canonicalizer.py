@@ -19,6 +19,7 @@ The transform is idempotent: ``canonicalize(canonicalize(x)) == canonicalize(x)`
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 from .alias_table import AliasTable
@@ -159,6 +160,8 @@ class Canonicalizer:
                     )
                 )
 
+        self._fold_bind(rebuilt, node_type, warnings, source=source, label=label)
+
         if self._table.definition_key_for(node_type) == "Indicator":
             self._fold_indicator_legacy(rebuilt, node_type, warnings, source=source, label=label)
 
@@ -192,6 +195,32 @@ class Canonicalizer:
             ]
 
         return rebuilt
+
+    def _fold_bind(
+        self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str
+    ) -> None:
+        """`bind`, an alternative spelling of the component's own value
+        attribute (SSoT common.bind, ``primaryValue``), which "takes precedence
+        when both are set". A lone `bind` becomes the first of the section's
+        value attributes, silently, as any alias spelling does. Beside any of
+        them, `bind` is dropped and named — the converters disagreed on which
+        one was the value (rjui and sjui's Switch the own attribute, sjui's
+        CheckBox the binding, kjui showed one and wrote the other).
+        """
+        if "bind" not in node:
+            return
+        values = self._table.bind_value_attributes(node_type)
+        if not values:
+            return
+        own = next((key for key in values if key in node), None)
+        bind = node.pop("bind")
+        if own is None:
+            node[values[0]] = bind
+            return
+        section = self._table.definition_key_for(node_type) or node_type
+        warnings.append(self._fmt(source, label,
+            f"'bind: {bind}' is ignored: '{own}: {json.dumps(node[own]) if not isinstance(node[own], str) else node[own]}' "
+            f"is the {section}'s value"))
 
     def _fold_indicator_legacy(
         self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str

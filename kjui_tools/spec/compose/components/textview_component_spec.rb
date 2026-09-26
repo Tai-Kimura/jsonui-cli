@@ -477,7 +477,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       expect(result).to include('data.onTextChange?.invoke("commentField", newValue)')
     end
 
-    it 'uses default textview id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onTextChange' => { 'name' => 'onTextChange', 'class' => '((Event) -> Unit)?' }
       }
@@ -489,7 +489,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onTextChange?.invoke("textview", newValue)')
+      expect(result).to include('data.onTextChange?.invoke("textView_0", newValue)')
     end
   end
   # Focus-state binding — same contract as TextFieldComponent

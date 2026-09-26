@@ -15,6 +15,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::CheckboxConverter do
     described_class.new(component, 0, nil).convert
   end
 
+  # `bind` is an alternative spelling of the CheckBox's own state attribute,
+  # which "takes precedence when both are set" (SSoT common.bind). A static
+  # isOn / checked beside it is the value; `bind` alone is.
+  describe 'bind beside the own state' do
+    it 'takes the static isOn and not the binding' do
+      code = generated({ 'type' => 'CheckBox', 'isOn' => true, 'bind' => '@{on}' })
+      expect(code).not_to include('$data.on')
+    end
+
+    it 'takes a lone bind' do
+      expect(generated({ 'type' => 'CheckBox', 'bind' => '@{on}' })).to include('$data.on')
+    end
+  end
+
   describe 'iconColor' do
     it 'passes the tint through to CheckBoxView' do
       code = generated({ 'type' => 'CheckBox', 'iconColor' => '#FF0000' })

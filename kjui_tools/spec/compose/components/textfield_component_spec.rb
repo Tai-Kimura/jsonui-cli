@@ -887,7 +887,7 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('data.onTextChange?.invoke("emailField", newValue)')
     end
 
-    it 'uses default textfield id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onTextChange' => { 'name' => 'onTextChange', 'class' => '((Event) -> Unit)?' }
       }
@@ -899,7 +899,7 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onTextChange?.invoke("textfield", newValue)')
+      expect(result).to include('data.onTextChange?.invoke("textField_0", newValue)')
     end
   end
 
@@ -1005,7 +1005,7 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent, 'nextFocus' d
   # state the input didn't have (typing stayed possible).
   describe 'enabled' do
     it 'forwards a bound enabled to the composable' do
-      expect(field('enabled' => '@{isInputEnabled}')).to include('enabled = data.isInputEnabled')
+      expect(field('enabled' => '@{isInputEnabled}')).to include('enabled = (data.isInputEnabled ?: false)')
     end
 
     it 'forwards a literal enabled' do

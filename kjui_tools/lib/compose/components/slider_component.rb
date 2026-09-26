@@ -12,17 +12,19 @@ module KjuiTools
       class SliderComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Slider uses 'value' or 'bind' for binding
-          value = if json_data['value']
-            if json_data['value'].is_a?(String) && json_data['value'].match(/@\{([^}]+)\}/)
-              variable = $1
-              "data.#{variable}.toFloat()"
-            else
-              # Direct value
-              "#{json_data['value']}f"
-            end
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}.toFloat()"
+          # A bound value reads through BoundValue.float: `data.v.toFloat()` did
+          # not compile on a nullable property (`(data.v?.toFloat() ?: 0f)`
+          # does), and spliced a `?? default` in as it stood. A static value
+          # is `<value>f` as before.
+          # The slider's own `value` is the value when it is set — bound or
+          # static — and `bind` only when it is not (SSoT common.bind: the
+          # component's own attribute "takes precedence when both are set"),
+          # as on Switch / CheckBox (ModifierBuilder.control_state).
+          bind_bound = json_data['value'].nil? && Helpers::BoundValue.bound?(json_data['bind'])
+          value = if !json_data['value'].nil?
+            Helpers::BoundValue.float(json_data['value'], fallback: 0)
+          elsif bind_bound
+            Helpers::BoundValue.float(json_data['bind'], fallback: 0)
           else
             '0f'
           end
@@ -41,7 +43,10 @@ module KjuiTools
           # A static value is the seed of the slider's own state
           # (Helpers::StaticSeed); with no value the thumb starts at the
           # minimum, as on the other faces. A bound value is the view model's.
-          unless value.start_with?('data.')
+          # Bound is decided on the layout, not on the emitted text: a nullable
+          # binding's expression starts `(data.…`, not `data.`.
+          bound = Helpers::BoundValue.bound?(json_data['value']) || bind_bound
+          unless bound
             seed = json_data['value'].nil? ? Helpers::BoundValue.float(min_value, fallback: 0) : value
             return Helpers::StaticSeed.wrap(seed, depth, required_imports) do |d, state|
               generate_body(json_data, d, required_imports, parent_type, state, min_value, max_value, state)
@@ -55,14 +60,16 @@ module KjuiTools
           code += "\n" + indent("value = #{value},", depth + 1)
           
           # onValueChange handler
+          # The attribute written is the one shown: the own `value` when it is
+          # set (a static one writes the seeded state, not `bind`), else `bind`.
           binding_variable = nil
           if json_data['value'] && json_data['value'].is_a?(String) && json_data['value'].match(/@\{([^}]+)\}/)
             binding_variable = $1
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+          elsif json_data['value'].nil? && json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
             binding_variable = $1
           end
           
-          view_id = json_data['id'] || 'slider'
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
           on_value_change = Core::Normalization.attr_lookup(json_data, 'onValueChange', 'onValueChanged')
           if on_value_change
             # onValueChange (camelCase) -> binding format only (@{functionName})
@@ -79,7 +86,7 @@ module KjuiTools
                 code += "\n" + indent("onValueChange = { #{seeded ? "#{seeded} = it; " : ''}#{handler_call} },", depth + 1)
               end
             else
-              code += "\n" + indent("onValueChange = { // ERROR: #{on_value_change} - camelCase events require binding format @{functionName} },", depth + 1)
+              code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.error_lambda("ERROR: #{on_value_change} - camelCase events require binding format @{functionName}")},", depth + 1)
             end
           elsif binding_variable
             # Update the bound variable only
@@ -106,8 +113,16 @@ module KjuiTools
           code += "\n" + indent("valueRange = #{Helpers::BoundValue.float(min_value, fallback: 0)}..#{Helpers::BoundValue.float(max_value, fallback: 1)},", depth + 1)
           
           # Steps
-          if json_data['step'] && json_data['step'] > 0
-            steps = ((max_value - min_value) / json_data['step'].to_f).to_i - 1
+          step = json_data['step']
+          if step && [step, min_value, max_value].any? { |v| Helpers::BoundValue.bound?(v) }
+            # A bound step or range is decided at run time — `step > 0` on the
+            # layout's `@{v}` raised ArgumentError, and `max - min` on a bound
+            # end did too.
+            range = "(#{Helpers::BoundValue.float(max_value, fallback: 1)} - #{Helpers::BoundValue.float(min_value, fallback: 0)})"
+            per = Helpers::BoundValue.float(step, fallback: 0)
+            code += "\n" + indent("steps = (if (#{per} > 0f) (#{range} / #{per}).toInt() - 1 else 0).coerceAtLeast(0),", depth + 1)
+          elsif step && step > 0
+            steps = ((max_value - min_value) / step.to_f).to_i - 1
             code += "\n" + indent("steps = #{steps},", depth + 1) if steps > 0
           end
           
@@ -168,12 +183,11 @@ module KjuiTools
           
           # Handle enabled attribute
           if json_data.key?('enabled')
-            if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1))
-            else
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1))
-            end
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{enabled}", depth + 1))
           end
           
           code += "\n" + indent(")", depth)

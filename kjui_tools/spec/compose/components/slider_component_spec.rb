@@ -44,14 +44,14 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
     it 'generates Slider with value data binding' do
       json_data = { 'type' => 'Slider', 'value' => '@{sliderValue}' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('value = data.sliderValue.toFloat()')
+      expect(result).to include('value = (data.sliderValue?.toFloat() ?: 0.0f)')
       expect(result).to include('onValueChange = { newValue -> viewModel.updateData(mapOf("sliderValue" to newValue.toDouble()))')
     end
 
     it 'generates Slider with bind attribute' do
       json_data = { 'type' => 'Slider', 'bind' => '@{volume}' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('value = data.volume.toFloat()')
+      expect(result).to include('value = (data.volume?.toFloat() ?: 0.0f)')
       expect(result).to include('updateData(mapOf("volume"')
     end
 
@@ -162,7 +162,7 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
     it 'generates Slider with enabled data binding' do
       json_data = { 'type' => 'Slider', 'enabled' => '@{isEnabled}' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('enabled = data.isEnabled')
+      expect(result).to include('enabled = (data.isEnabled ?: false)')
     end
 
     it 'generates Slider with padding' do
@@ -270,7 +270,7 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
       expect(result).not_to include('invoke("volumeSlider", it)')
     end
 
-    it 'uses default slider id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onSliderChange' => { 'name' => 'onSliderChange', 'class' => '((Event) -> Unit)?' }
       }
@@ -282,7 +282,7 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onSliderChange?.invoke("slider", it)')
+      expect(result).to include('data.onSliderChange?.invoke("slider_0", it)')
     end
   end
 end

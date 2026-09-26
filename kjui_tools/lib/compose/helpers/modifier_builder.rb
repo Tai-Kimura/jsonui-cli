@@ -4,6 +4,7 @@ require_relative 'effect_style_helper'
 require_relative 'binding_expression'
 require_relative 'bound_value'
 require_relative 'resource_resolver'
+require_relative '../../core/layout_path'
 require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
 require_relative '../../core/string_literals'
@@ -894,13 +895,13 @@ module KjuiTools
           can_tap = tap_gate(json_data)
           return nil if handler.nil? || can_tap == 'false'
 
-          view_id = json_data['id']
+          view_id = view_id(json_data)
           call = if tap.handler?(json_data['onClick']) && is_binding?(json_data['onClick'])
                    get_event_handler_invocation(json_data['onClick'], view_id, nil)
                  elsif tap.handler?(json_data['onClick'])
-                   get_event_handler_call(json_data['onClick'], is_camel_case: true)
+                   get_event_handler_call(json_data['onClick'], is_camel_case: true, view_id: view_id)
                  else
-                   get_event_handler_call(json_data['onclick'], is_camel_case: false)
+                   get_event_handler_call(json_data['onclick'], is_camel_case: false, view_id: view_id)
                  end
           [call, can_tap]
         end
@@ -945,6 +946,51 @@ module KjuiTools
         # no call, and for an `// ERROR` lambda (its comment runs to the end of
         # the line). An empty lambda takes the call on `it`, so no unused
         # parameter is named.
+        # Text for a comment the emit writes: one line, and no `*/` that would
+        # close a block comment early. The layout's own spelling goes in here
+        # (a handler name that is not a binding), so a newline in it would
+        # end a `//` comment and put the rest in code position.
+        def self.comment_text(text)
+          text.to_s.gsub(/[\r\n]+/, ' ').gsub('*/', '* /')
+        end
+
+        # A handler lambda that calls nothing and says why — in a BLOCK
+        # comment. The line comment it was (`{ // ERROR: … }`) ran to the end
+        # of the line and swallowed the lambda's closing brace and the
+        # argument's comma, so the file did not compile at all.
+        def self.error_lambda(message)
+          "{ /* #{comment_text(message)} */ }"
+        end
+
+        # A two-state control's value and its binding: `[checked, variable]`.
+        # Its state attributes are read in their order (Switch: isOn, value,
+        # checked; CheckBox: isOn, checked, value). The control's own state
+        # attribute is the value — bound, or static (the seed of its own
+        # state) — and `bind` is the value only when there is none: SSoT
+        # common.bind, "an alternative spelling to each component's own value
+        # attribute, which takes precedence when both are set". The shown
+        # value and the written one come from the same attribute. It showed a
+        # static isOn (seeded, never written) while the operation wrote `bind`,
+        # so the control never moved; and a CheckBox bound through `value`
+        # showed the binding and wrote nothing.
+        #
+        # `states` are the state attributes' VALUES, in order, read by the
+        # caller with literal keys — the attribute coverage scan counts
+        # literal reads (`json_data['isOn']`), not keys passed by name.
+        def self.control_state(json_data, states)
+          bound = ->(v) { v.is_a?(String) && v =~ /@\{([^}]+)\}/ ? Regexp.last_match(1) : nil }
+          state = states.compact.first
+          if (var = bound.call(state))
+            ["data.#{var}", var]
+          elsif !state.nil?
+            [state.to_s, nil]
+          elsif (var = bound.call(json_data['bind']))
+            ["data.#{var}", var]
+          else
+            ['false', nil]
+          end
+        end
+
         def self.with_operation_click(lambda_text, json_data)
           call = operation_click_call(json_data)
           return lambda_text if call.nil? || lambda_text.include?('ERROR')
@@ -1215,11 +1261,11 @@ module KjuiTools
           return [] if interaction == 'false'
 
           required_imports&.add(:long_press_gesture)
-          view_id = json_data['id']
+          view_id = view_id(json_data)
           handler_call = if is_binding?(handler)
                            get_event_handler_invocation(handler, view_id, nil)
                          else
-                           get_event_handler_call(handler, is_camel_case: true)
+                           get_event_handler_call(handler, is_camel_case: true, view_id: view_id)
                          end
 
           gesture = <<~KOTLIN.rstrip
@@ -1271,7 +1317,7 @@ module KjuiTools
           return [] if interaction == 'false'
 
           required_imports&.add(:pan_gesture)
-          handler_call = get_event_handler_invocation(handler, json_data['id'], 'total')
+          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'total')
           handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
           gesture = <<~KOTLIN.rstrip
@@ -1310,7 +1356,7 @@ module KjuiTools
           return [] if interaction == 'false'
 
           required_imports&.add(:pinch_gesture)
-          handler_call = get_event_handler_invocation(handler, json_data['id'], 'scale')
+          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'scale')
           handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
           gesture = <<~KOTLIN.rstrip
@@ -1652,7 +1698,9 @@ module KjuiTools
 
             result[:before] += indent("// onAppear lifecycle event", depth)
             result[:before] += "\n" + indent("LaunchedEffect(Unit) {", depth)
-            result[:before] += "\n" + indent("data.#{property}?.invoke()", depth + 1)
+            # As its closure is declared: `()` with nothing, `(String)` with the
+            # viewId (it was always `invoke()`).
+            result[:before] += "\n" + indent(get_event_handler_invocation(property, view_id(json_data), nil), depth + 1)
             result[:before] += "\n" + indent("}", depth)
             result[:before] += "\n"
           end
@@ -1668,7 +1716,7 @@ module KjuiTools
             result[:before] += indent("// onDisappear lifecycle event", depth)
             result[:before] += "\n" + indent("DisposableEffect(Unit) {", depth)
             result[:before] += "\n" + indent("onDispose {", depth + 1)
-            result[:before] += "\n" + indent("data.#{property}?.invoke()", depth + 2)
+            result[:before] += "\n" + indent(get_event_handler_invocation(property, view_id(json_data), nil), depth + 2)
             result[:before] += "\n" + indent("}", depth + 1)
             result[:before] += "\n" + indent("}", depth)
             result[:before] += "\n"
@@ -1684,7 +1732,12 @@ module KjuiTools
 
         # Convert event handler to method call
         # onClick -> binding format only: @{functionName} -> data.functionName?.invoke()
-        def self.get_event_handler_call(handler, is_camel_case: false)
+        #
+        # With `view_id:` each name is called as its closure is declared
+        # (get_event_handler_invocation: `()` with nothing, `(String)` with
+        # the viewId); it was always `invoke()`, so a handler declared
+        # `(String)` on this path did not compile.
+        def self.get_event_handler_call(handler, is_camel_case: false, view_id: nil)
           # `onclick` is declared `["string", "array"]`, and the array names
           # several handlers to call in the order written. This called
           # `match?` straight on the value, so an array did not produce wrong
@@ -1699,8 +1752,9 @@ module KjuiTools
           # A blank element names no method and is dropped
           # (TapAccessibility.handler_values), so `["", "onOpen"]` calls onOpen
           # only.
-          JsonUIShared::TapAccessibility.handler_values(handler)
-                                        .map { |name| single_event_handler_call(name) }.join('; ')
+          JsonUIShared::TapAccessibility.handler_values(handler).map do |name|
+            view_id ? get_event_handler_invocation(name, view_id, nil) : single_event_handler_call(name)
+          end.join('; ')
         end
 
         def self.single_event_handler_call(handler)
@@ -1720,6 +1774,16 @@ module KjuiTools
         #   - If data section has `() -> Unit`: returns "data.onToggle?.invoke()"
         #   - If data section has `(Event) -> Unit` or `(String, Boolean) -> Unit`:
         #     returns "data.onToggle?.invoke(\"viewId\", it)"
+        # The viewId a handler is passed: the node's id, else its drawn type
+        # with the first letter lowercased and its position in the layout —
+        # JsonUIShared::LayoutPath.view_id (switch_0_1, selectBox_0_3; the
+        # Radio item's `radio_<path>` is the same form). It was a kind word
+        # (`switch`, `selectbox`, …) or nothing, so two id-less controls
+        # handed their handlers the same viewId.
+        def self.view_id(json_data)
+          JsonUIShared::LayoutPath.view_id(json_data)
+        end
+
         def self.get_event_handler_invocation(handler, view_id, value_expr)
           method_name = extract_binding_property(handler) || handler
 
@@ -1782,11 +1846,11 @@ module KjuiTools
             # `??` and nullability. BoundValue is the canonical Dp emitter.
             BoundValue.dp(value)
           elsif value.is_a?(Numeric) && value > 0
-            "#{value}.dp"
+            "#{BoundValue.dp(value)}"
           elsif value.is_a?(String)
             # Try to parse as number
             num = value.to_i
-            num > 0 ? "#{num}.dp" : nil
+            num > 0 ? "#{BoundValue.dp(num)}" : nil
           else
             nil
           end
