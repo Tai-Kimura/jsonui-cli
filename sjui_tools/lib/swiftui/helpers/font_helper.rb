@@ -3,6 +3,7 @@
 require 'json'
 require_relative '../views/value_expression_helper'
 require_relative '../../core/string_literals'
+require_relative '../../core/logger'
 
 module SjuiTools
   module SwiftUI
@@ -349,7 +350,10 @@ module SjuiTools
           end
 
           fallback_key = mapping['default_on_unknown'] || 'regular'
-          warn "[FontHelper] unknown font weight '#{weight}', falling back to '#{fallback_key}'"
+          # Through the warning logger ("WARNING: "), so a build's warning
+          # count finds it — a bare `warn` went to stderr with no warning
+          # spelling.
+          SjuiTools::Core::Logger.warn "[FontHelper] unknown font weight '#{weight}', falling back to '#{fallback_key}'"
           (weights[fallback_key.to_s.downcase] && weights[fallback_key.to_s.downcase]['swift']) || '.regular'
         end
 

@@ -51,9 +51,9 @@ RSpec.describe 'sjui: an id-less node hands its handlers its position as the vie
     'EditText (an alias of TextField)' => [{ 'type' => 'EditText', 'text' => '@{text}', 'onTextChange' => '@{typed}' }, 'data.typed?("textField_0_1", newValue)'],
     'TextView' => [{ 'type' => 'TextView', 'text' => '@{text}', 'onTextChange' => '@{typed}' }, 'data.typed?("textView_0_1", newValue)'],
     'Button' => [{ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{tap}' }, 'data.tap?("button_0_1")']
-    # Not here: a View's or an Image's plain tap, which calls its handler with
-    # no argument whatever the handler takes (build_on_click_lines) — it hands
-    # no viewId to change. Reported, not changed.
+    # A View's, an Image's and a Label's plain tap, the onclick selector, a
+    # long press and onAppear / onDisappear: no_value_handlers_are_called_as_
+    # declared_spec.
   }.each do |kind, (node, call)|
     it "#{kind}: its position, and an explicit id as it is" do
       # Second child: position 0_1 (a Label first, at 0_0).

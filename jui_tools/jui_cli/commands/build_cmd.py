@@ -260,6 +260,12 @@ def cmd_build(args: argparse.Namespace) -> int:
         print("ERROR: jui.config.json not found. Run 'jui init' first.")
         return 1
 
+    from ..core.spec_kind import missing_table_error
+    missing = missing_table_error("jui build")
+    if missing:
+        print(missing)
+        return 1
+
     config = config_mgr.load()
     platforms = config.get("platforms", {})
     clean = ["--clean"] if args.clean else []
@@ -2080,7 +2086,11 @@ def _binding_roots(tree) -> set[str]:
 def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
     """Layouts-relative stems (posix, no extension) referenced as
     Collection cell/header/footer layouts by any spec — either an explicit
-    ``layoutFile`` (legacy ``layout``) or the ``<rootId>_cell`` default."""
+    ``layoutFile`` (legacy ``layout``) or the ``<rootId>_cell`` default — and,
+    for an entry with ``generateCellLayout``, the ``<collection id>_<kind>``
+    file `jui g project` writes for it (spec_extractor.slot_layout_ref; until
+    jsonui-cli 1.9.0 that name was missing here, so a generated cell layout without a
+    layoutFile was read as a screen root)."""
     stems: set[str] = set()
     spec_dir = config_mgr.spec_directory
     if not spec_dir.exists():
@@ -2099,6 +2109,8 @@ def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
                         root_id = root.get("id") if isinstance(root, dict) else None
                         if root_id:
                             stems.add(f"{root_id}_cell")
+                        if entry.get("generateCellLayout"):
+                            stems.add(f"{node.get('id', 'collection')}_{key}")
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):

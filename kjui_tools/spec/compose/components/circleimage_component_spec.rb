@@ -101,12 +101,28 @@ RSpec.describe KjuiTools::Compose::Components::CircleImageComponent do
       end
     end
 
+    # CircleImage is an Image spelling (type_synonyms.json render_as) and
+    # follows its contentMode, default fit (attribute_semantics.json#image;
+    # 4f ruling, 2026-09-26). It emitted ContentScale.Crop for every mode.
     context 'content scale' do
-      it 'uses ContentScale.Crop' do
-        json_data = { 'type' => 'CircleImage' }
-        result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('contentScale = ContentScale.Crop')
-        expect(required_imports).to include(:content_scale)
+      it 'follows contentMode as Image does' do
+        { 'AspectFill' => 'ContentScale.Crop', 'fit' => 'ContentScale.Fit',
+          'fill' => 'ContentScale.FillBounds', 'center' => 'ContentScale.None' }.each do |mode, scale|
+          result = described_class.generate({ 'type' => 'CircleImage', 'contentMode' => mode }, 0, Set.new)
+          expect(result).to include("contentScale = #{scale}"), mode
+        end
+      end
+
+      it 'aligns a positional contentMode as Image does' do
+        result = described_class.generate({ 'type' => 'CircleImage', 'contentMode' => 'top' }, 0, required_imports)
+        expect(result).to include('alignment = Alignment.TopCenter')
+      end
+
+      it 'emits no contentScale without a contentMode, so Compose draws its default (Fit)' do
+        result = described_class.generate({ 'type' => 'CircleImage' }, 0, required_imports)
+        expect(result).not_to include('contentScale')
+        network = described_class.generate({ 'type' => 'CircleImage', 'url' => 'https://example.invalid/a.png' }, 0, Set.new)
+        expect(network).not_to include('contentScale')
       end
     end
 

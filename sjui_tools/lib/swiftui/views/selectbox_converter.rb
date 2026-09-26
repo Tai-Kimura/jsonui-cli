@@ -2,6 +2,7 @@
 
 require_relative 'base_view_converter'
 require_relative '../helpers/string_manager_helper'
+require_relative '../../core/binding_validator_core'
 
 module SjuiTools
   module SwiftUI
@@ -176,7 +177,8 @@ module SjuiTools
                   end
                   if has_handler
                     # The date's string; by the handler's declared parameters
-                    # (pick_invocation) — no index for a date.
+                    # (pick_invocation) — no index for a date, and a handler
+                    # declared to take one is not called.
                     add_line pick_invocation(@component['onValueChange'], id, nil)
                   end
                   add_line click if click
@@ -354,7 +356,11 @@ module SjuiTools
         # item's index; a String then an Int — the viewId and the index; two
         # Strings — the viewId and the item; none — no argument. The index is
         # the bound selectedIndex, else the item's place in `items`; a date has
-        # none. Any other declaration (an Event type, none at all) keeps the
+        # none, and a handler declared to take one — `(Int)`, `(String, Int)` —
+        # is not called: an `// ERROR:` comment keeps its place, and the build
+        # says it (BindingValidatorCore.date_pick_handler_problem; 4f's ruling,
+        # 1.9.0). It was handed the date string for its Int, which does not
+        # compile. Any other declaration (an Event type, none at all) keeps the
         # generic reading: the viewId where it takes one, and the index where
         # selectedIndex is bound, else the item. It was the generic reading
         # for every type, whose `(String` pattern also caught a lone String: a
@@ -363,13 +369,15 @@ module SjuiTools
         def pick_invocation(handler, id, index_expr, index_bound: false)
           name = extract_binding_property(handler) || handler
           klass = ColorHelper.data_definitions.dig(name, 'class').to_s
-          params = klass[/\(\s*([^()]*?)\s*\)\s*(?:throws\s*)?->/, 1]
-          params = params&.split(',')&.map(&:strip)
+          if index_expr.nil? && (problem = JsonUIShared::BindingValidatorCore.date_pick_handler_problem(klass))
+            return "// ERROR: SelectBox.onValueChange #{name} is not called: #{problem}"
+          end
+
           viewid = swift_string_literal(id.to_s)
-          case params
+          case JsonUIShared::BindingValidatorCore.closure_parameters(klass)
           when ['String'] then "data.#{name}?(newValue)"
-          when ['Int'] then index_expr ? "data.#{name}?(#{index_expr})" : generic_pick(handler, id, index_expr, index_bound)
-          when %w[String Int] then index_expr ? "data.#{name}?(#{viewid}, #{index_expr})" : generic_pick(handler, id, index_expr, index_bound)
+          when ['Int'] then "data.#{name}?(#{index_expr})"
+          when %w[String Int] then "data.#{name}?(#{viewid}, #{index_expr})"
           when %w[String String] then "data.#{name}?(#{viewid}, newValue)"
           when [] then "data.#{name}?()"
           else generic_pick(handler, id, index_expr, index_bound)
