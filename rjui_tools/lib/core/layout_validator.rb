@@ -120,7 +120,9 @@ module JsonUIShared
     #: declaration governs an attribute.
     def attribute_definition(component_type, name)
       defs = definitions
-      component_defs = defs[component_type]
+      # the section the spelling is validated against (a synonym's canonical,
+      # an alias's target — type_synonyms.rb), as the attribute validator reads it
+      component_defs = defs[JsonUIShared::TypeSynonyms.section(component_type)]
       found = component_defs.is_a?(Hash) ? component_defs[name] : nil
       return found if found.is_a?(Hash)
 
@@ -193,7 +195,7 @@ module JsonUIShared
         next unless node.is_a?(Hash)
 
         warnings.concat(check_undeclared_bindings(node, source_path: source_path))
-        warnings.concat(check_collection(node, source_path: source_path)) if node['type'] == 'Collection'
+        warnings.concat(check_collection(node, source_path: source_path)) if JsonUIShared::TypeSynonyms.section(node['type']) == 'Collection'
         warnings.concat(check_leaf_children(node, source_path: source_path,
                                                   extension_definitions: extension_definitions, path: path))
       end

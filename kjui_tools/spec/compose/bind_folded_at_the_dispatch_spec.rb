@@ -148,13 +148,21 @@ RSpec.describe 'kjui codegen: bind folded at the dispatch' do
     KOTLIN
   end
 
+  # The dispatch takes an app's component by its spelling as written before
+  # the fold, so the component is handed its node as written. A spelling the
+  # app did not register is drawn and folded by the built-in — also when the
+  # built-in's type is one the app registered (Toggle, drawn as Switch).
   it 'hands an app component (component_mappings) its node as written' do
-    builder = KjuiTools::Compose::ComposeBuilder.new
-    allow(builder).to receive(:app_component?).with('Switch').and_return(true)
-    node = { 'type' => 'Switch', 'bind' => '@{b}' }
-    expect(builder.send(:fold_bind, node, 'Switch')).to equal(node)
-    allow(builder).to receive(:app_component?).with('Switch').and_return(false)
-    expect(builder.send(:fold_bind, node, 'Switch')).to eq('type' => 'Switch', 'isOn' => '@{b}')
+    seen = []
+    app = Class.new { define_singleton_method(:generate) { |json, *| seen << json.dup; '// the app draws Switch' } }
+    allow(KjuiTools::Compose::ComposeBuilder).to receive(:custom_component_class) { |type| type == 'Switch' ? app : nil }
+    expect(emit.call('type' => 'Switch', 'bind' => '@{b}')).to include('// the app draws Switch')
+    # as written: its `bind` kept, no `isOn` (the dispatch's own marks, `_…`, aside)
+    expect(seen.map { |json| json.reject { |key, _| key.start_with?('_') } }).to eq([{ 'type' => 'Switch', 'bind' => '@{b}' }])
+    toggle = emit.call('type' => 'Toggle', 'bind' => '@{b}')
+    expect(toggle).to include('data.b')
+    expect(toggle).not_to include('// the app draws Switch')
+    expect(seen.size).to eq(1)
   end
 
   # No component reads `bind`. Code only — a comment naming it does not count.

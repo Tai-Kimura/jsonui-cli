@@ -6,6 +6,8 @@ package com.kotlinjsonui.dynamic.generated
 
 /** Attributes shared across all components (emitted once). */
 data class CommonAttributes(
+    /** Two-way binding for the component's primary value (mini fixture of common.bind.primaryValue). */
+    val bind: AttrValue<Any>? = null,
     /** Hide view */
     val hidden: AttrValue<Boolean>? = null,
     /** Unique identifier for the component */
@@ -43,6 +45,7 @@ data class CommonAttributes(
          * (public metadata contract).
          */
         val declaredAttributes: Set<String> = setOf(
+            "bind",
             "hidden",
             "id",
             "onClick",
@@ -70,6 +73,7 @@ data class CommonAttributes(
          * alias fallback is then disabled.
          */
         fun parse(json: Map<String, Any?>, canonicalOnly: Boolean = false): CommonAttributes = CommonAttributes(
+            bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind")),
             hidden = AttrCoerce.attrValue(AttrCoerce.lookup(json, "hidden")) { AttrCoerce.boolean(it) },
             id = AttrCoerce.string(AttrCoerce.lookup(json, "id")),
             onClick = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "onClick")),

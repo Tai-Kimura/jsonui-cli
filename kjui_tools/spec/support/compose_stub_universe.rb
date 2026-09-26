@@ -279,9 +279,9 @@ module ComposeStubUniverse
           fun loadUrl(url: String) {}
       }
       fun <T> AndroidView(factory: (Context) -> T, modifier: Modifier = Modifier, update: (T) -> Unit = {}) {}
-      fun Box(modifier: Modifier = Modifier, content: BoxScope.() -> Unit = {}) {}
+      fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment(), content: BoxScope.() -> Unit = {}) {}
       class Arrangement { companion object { fun spacedBy(space: Dp) = Arrangement() } }
-      class Alignment { companion object { val CenterVertically = Alignment() } }
+      class Alignment { companion object { val CenterVertically = Alignment(); val Center = Alignment() } }
       fun Row(modifier: Modifier = Modifier, horizontalArrangement: Arrangement = Arrangement(),
               verticalAlignment: Alignment = Alignment(), content: RowScope.() -> Unit) {}
       class ImageVector

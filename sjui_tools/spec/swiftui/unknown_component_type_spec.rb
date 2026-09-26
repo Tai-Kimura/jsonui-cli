@@ -6,24 +6,56 @@ require_relative '../support/emitted_swift'
 
 # The one sentence for a type a tool cannot draw (JsonUIShared::
 # AttributeValidatorCore.unknown_component_type_message; kjui's
-# spec/core/unknown_component_type_spec.rb holds the rule): sjui draws its red
-# placeholder with it and says it in the build. The placeholder said
-# "Unsupported component: <type>".
+# spec/core/unknown_component_type_spec.rb holds the rule): sjui says it in
+# the build and writes it in a comment where the node would be, drawing
+# nothing — not the node, not its children (4f's ruling, jsonui-cli 1.9.0: a
+# red Text holding it put a build's words on a release screen). A type the
+# validator knows that no converter draws is another sentence, drawn as a View.
 RSpec.describe 'sjui: unknown component type' do
   include EmittedSwift
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
   after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
 
-  it 'draws and says the sentence' do
+  it 'says the sentence and draws nothing, at the root and as a child, and the Swift compiles' do
     said = []
     allow(SjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
-    code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter({ 'type' => 'switch', 'id' => 'x' }).convert
     sentence = "Unknown component type 'switch' — did you mean 'Switch'? Type names are case-sensitive."
-    expect(code).to include("Text(#{sentence.to_json})")
-    expect(code).not_to include('Unsupported component')
-    expect(said).to include(sentence)
-    # the sentence is written into the Swift as a string literal a compiler reads
-    expect(compilable_view(code)).to compile_as_swift
+    kid = { 'type' => 'Label', 'id' => 'kid', 'text' => 'innerText' }
+    root = SjuiTools::SwiftUI::ConverterFactory.new.create_converter({ 'type' => 'switch', 'id' => 'x', 'child' => [kid] }).convert
+    expect(root).to include("// #{sentence}")
+    expect(root).not_to include('innerText') # not its children
+    expect(root).not_to include('Text(')
+    expect(root).not_to include('Unsupported component')
+    factory = SjuiTools::SwiftUI::ConverterFactory.new
+    child = factory.create_converter({ 'type' => 'View', 'id' => 'p', 'child' => [{ 'type' => 'switch', 'id' => 'x', 'child' => [kid] }] },
+                                     0, nil, factory).convert
+    expect(child).to include("// #{sentence}")
+    expect(child).not_to include('innerText')
+    expect(said.count(sentence)).to eq(2)
+    expect(compilable_view(root)).to compile_as_swift
+    expect(compilable_view(child)).to compile_as_swift
+  end
+
+  # A type the validator knows — here by the project's extension definitions
+  # — that no converter draws: its own sentence, and a View with its
+  # children in it, as rjui and kjui draw it.
+  it 'names a type the project declares but no converter draws in its own sentence, and draws it as a View' do
+    said = []
+    allow(SjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
+    Dir.mktmpdir do |dir|
+      defs = File.join(dir, 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions')
+      FileUtils.mkdir_p(defs)
+      File.write(File.join(defs, 'ProbeDeclared.json'), JSON.generate('ProbeDeclared' => { 'text' => { 'type' => 'string' } }))
+      Dir.chdir(dir) do
+        factory = SjuiTools::SwiftUI::ConverterFactory.new
+        node = { 'type' => 'ProbeDeclared', 'id' => 'd', 'child' => [{ 'type' => 'Label', 'id' => 'kid', 'text' => 'innerText' }] }
+        converter = factory.create_converter(node, 0, nil, factory)
+        expect(converter).to be_a(SjuiTools::SwiftUI::Views::ViewConverter)
+        expect(converter.convert).to include('innerText')
+      end
+    end
+    expect(said).to eq(["'ProbeDeclared' is declared but has no SwiftUI converter — drawn as a View"])
+    expect(said.grep(/Unknown component type/)).to eq([]) # the control: the other sentence is not said
   end
 
   # The profile reads the registry the SwiftUI dispatch reads

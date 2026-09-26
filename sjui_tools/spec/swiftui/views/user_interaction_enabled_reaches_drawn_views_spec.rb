@@ -68,6 +68,35 @@ RSpec.describe 'sjui userInteractionEnabled reaches what is drawn in a view of i
       end
     end
 
+    # A node is read as the type it is drawn as (type_synonyms.rb): every
+    # spelling the table draws as a Collection draws its cells elsewhere, as
+    # a Collection does. Read by the spelling, a TableView, a List, a
+    # ListView or a RecyclerView drew nothing elsewhere, and a stop around it
+    # did not reach its cells. Given a table without TableView's entry, a
+    # TableView draws nothing elsewhere: the answer follows the table.
+    it 'every spelling the table draws as a Collection draws its cells elsewhere' do
+      spellings = JsonUIShared::TypeSynonyms.entries.select { |_, e| (e['render_as'] || e['canonical']) == 'Collection' }.keys
+      expect(spellings).to include('TableView', 'List', 'ListView', 'RecyclerView') # (control)
+      spellings.each do |spelling|
+        expect(tap.drawn_elsewhere({ 'type' => spelling, 'cellClasses' => ['h'] })).to eq(%w[h]), spelling
+      end
+      table = JsonUIShared::TypeSynonyms.entries.reject { |spelling, _| spelling == 'TableView' }
+      allow(JsonUIShared::TypeSynonyms).to receive(:entries).and_return(table)
+      expect(tap.drawn_elsewhere({ 'type' => 'TableView', 'cellClasses' => ['h'] })).to eq([])
+    end
+
+    # Type names are case-sensitive, as the codegen dispatches them (4f's
+    # ruling, 1.9.0): a lowercase spelling of a declared type is drawn as
+    # nothing, so it draws nothing elsewhere. Round 2 of the tap rule read
+    # `collection`, `table`, `embed` and `tabview` too.
+    it 'reads the spelling as the codegen does: a lowercase one draws nothing elsewhere' do
+      node = { 'cellClasses' => ['h'], 'screen' => 's', 'tabs' => [{ 'view' => 'v' }] }
+      expect(tap.drawn_elsewhere(node.merge('type' => 'Collection'))).to eq(%w[h]) # (control)
+      %w[collection table embed tabview].each do |spelling|
+        expect(tap.drawn_elsewhere(node.merge('type' => spelling))).to eq([]), spelling
+      end
+    end
+
     it 'hands the stop down only where the flag is false or bound and something below draws elsewhere' do
       expect(tap.hands_stop_down?(stopping.call(false, collection))).to be(true)
       expect(tap.hands_stop_down?(stopping.call('@{u}', { 'type' => 'View', 'child' => [collection] }))).to be(true)

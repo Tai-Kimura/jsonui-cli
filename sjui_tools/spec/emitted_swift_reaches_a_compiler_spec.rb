@@ -65,7 +65,8 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'swiftui/scrolling_cell_index' => 'which layouts render in a scrolling collection (an index of JSON)',
     'swiftui/binding/binding_handler_registry' => 'picks a handler; emits nothing itself',
     'swiftui/views/attribute_vocabulary' => 'reads the SSoT vocabulary',
-    'uikit/json_loader_config' => 'reads ignore sets from config'
+    'uikit/json_loader_config' => 'reads ignore sets from config',
+    'swiftui/app_component_dynamic_check' => "reads the app's Dynamic adapters and names what differs from its converters; writes nothing"
   }.freeze
   # Until 1.8.121 this list also held uikit/json_loader and uikit/json_analyzer
   # as "loads and validates layout JSON" — both write the Binding's Swift (the
@@ -76,7 +77,8 @@ RSpec.describe 'emitted Swift reaches a compiler' do
                  .map { |f| f.sub("#{LIB}/", '').sub(/\.rb\z/, '') }
                  .reject { |f| NOT_SWIFT.key?(f) || NOT_SWIFT_DIRS.any? { |d| f.start_with?(d) } }.freeze
   NOT_SWIFT_CONSTANTS = %w[BuildCacheManager IncludeExpander StyleLoader ViewRegistry CollectionCellIndex
-                           ScrollingCellIndex BindingHandlerRegistry AttributeVocabulary JsonLoaderConfig].freeze
+                           ScrollingCellIndex BindingHandlerRegistry AttributeVocabulary JsonLoaderConfig
+                           AppComponentDynamicCheck].freeze
 
   def self.emits_swift?(body)
     requires = body.scan(/^\s*require(?:_relative)?\s+['"]([^'"]+)['"]/).flatten

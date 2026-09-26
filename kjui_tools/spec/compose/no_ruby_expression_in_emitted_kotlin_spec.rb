@@ -78,21 +78,25 @@ RSpec.describe 'kjui codegen writes no Ruby expression into the Kotlin it emits'
   }
 
   # The population is what the codegen DRAWS, not what the SSoT declares:
-  # CircleImage and WebView are dispatched and not declared, so a declared-
-  # type sweep never emits them — the first run of this arm, on 24f7fad0,
-  # found Web and missed CircleImage for exactly that reason. The dispatch is
-  # read off generate_component's own `when` list; the declared types join it
-  # so a declared type that is not drawn is still emitted (its TODO comment).
+  # CircleImage is dispatched and not declared, so a declared-type sweep
+  # never emits it — the first run of this arm, on 24f7fad0, found Web and
+  # missed CircleImage for exactly that reason. The dispatch is read off
+  # draw_declared_component's own `when` list (canonical types since 1.9.0);
+  # every type-synonym spelling (WebView, HStack, …) is drawn from the table,
+  # so the table's spellings join it; the declared types join it so a
+  # declared type that is not drawn is still emitted (its TODO comment).
   it 'no type the codegen draws or the SSoT declares emits a Ruby expression, with every common stage declared' do
     builder = File.read(File.join(lib, 'compose', 'compose_builder.rb'))
-    dispatch = builder[/def generate_component\(.*?\n      end\n/m]
+    dispatch = builder[/def draw_declared_component\(.*?\n      end\n/m]
                       .scan(/^\s*when ((?:'[A-Z]\w*'(?:,\s*)?)+)/).flatten.flat_map { |w| w.scan(/'(\w+)'/).flatten }
     defs = JSON.parse(File.read(File.expand_path('../../../shared/core/attribute_definitions.json', __dir__)))
     declared = (defs.keys - %w[common]).select { |k| defs[k].is_a?(Hash) && !k.start_with?('_', '$') }
-    types = (dispatch | declared).sort
-    expect(dispatch.size).to be >= 30
+    spellings = JSON.parse(File.read(File.expand_path('../../../shared/core/type_synonyms.json', __dir__)))['synonyms'].keys
+    types = (dispatch | declared | spellings).sort
+    expect(dispatch.size).to be >= 25
     expect(declared.size).to be >= 29
-    expect(types).to include('CircleImage', 'WebView', 'Web')
+    expect(spellings.size).to be >= 50
+    expect(types).to include('CircleImage', 'WebView', 'Web', 'CircleView')
     leaked = types.map do |type|
       code = emit.call({ 'type' => type }.merge(every_stage))
       "#{type}: #{code[ruby_only]}" if code.match?(ruby_only)

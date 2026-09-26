@@ -1663,6 +1663,24 @@ RSpec.describe SjuiTools::Core::BindingValidator do
       warnings = validator.validate(embed_layout({ 'navigationMode' => 'isolated' }))
       expect(warnings.select { |w| w.include?('navigationMode') }).to be_empty, warnings.inspect
     end
+
+    # Every Embed rule reads the type the node is drawn as, as the structural
+    # rules do (resolve_component_alias). No spelling in type_synonyms.json is
+    # drawn as Embed today, so the table is given one. Read by the spelling,
+    # its params leaves were checked twice (the negation named twice) and
+    # its `events` were read as bindings (a handler named as `@{…}` counted
+    # as a use).
+    it 'reads a spelling drawn as Embed as an Embed' do
+      table = JsonUIShared::TypeSynonyms.entries.merge('EmbedPane' => { 'canonical' => 'Embed' })
+      allow(JsonUIShared::TypeSynonyms).to receive(:entries).and_return(table)
+      data = [{ 'name' => 'userName', 'class' => 'String' }, { 'name' => 'onClosed', 'class' => '(() -> Void)?' }]
+      attrs = { 'params' => { 'name' => '@{userName ?? "x"}', 'hidden' => '@{!userName}' },
+                'events' => { 'closed' => 'onClosed', 'opened' => '@{onClosed}' } }
+      canonical = described_class.new.validate(embed_layout(attrs, data: data))
+      spelled = described_class.new.validate(embed_layout(attrs.merge('type' => 'EmbedPane'), data: data))
+      expect(canonical).to include(a_string_matching(/binding-negation-context.*Embed\.params\.hidden/)) # (control)
+      expect(spelled.map { |w| w.gsub('EmbedPane', 'Embed') }).to eq(canonical)
+    end
   end
 
 end

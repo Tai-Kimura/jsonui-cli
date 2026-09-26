@@ -124,8 +124,10 @@ RSpec.describe 'kjui image contentDescription from alt' do
   LEGACY = { 'Image' => ->(node) { node['id'] }, 'NetworkImage' => ->(_) { 'Image' },
              'CircleImage' => ->(_) { 'Profile Image' } }.freeze
 
+  # The component the codegen draws the node with — by the type it is drawn
+  # as, so a vector's AsyncImage is a NetworkImage here as in the dispatch.
   def emit(node)
-    component = case node['type']
+    component = case JsonUIShared::TypeSynonyms.drawn_type(node['type'])
                 when 'NetworkImage' then KjuiTools::Compose::Components::NetworkImageComponent
                 when 'CircleImage' then KjuiTools::Compose::Components::CircleImageComponent
                 else KjuiTools::Compose::Components::ImageComponent
@@ -154,7 +156,9 @@ RSpec.describe 'kjui image contentDescription from alt' do
           said = spoken(emit(node))
           case vector['roles'][node['id']]
           when 'decorative' then expect(said).to eq('null'), node['id']
-          when 'control' then expect(said).to eq("\"#{LEGACY.fetch(node['type']).call(node)}\""), node['id']
+          when 'control'
+            legacy = LEGACY.fetch(JsonUIShared::TypeSynonyms.drawn_type(node['type']))
+            expect(said).to eq("\"#{legacy.call(node)}\""), node['id']
           when 'label'
             alt = rule.alt(node)
             if alt.start_with?('@{')

@@ -951,36 +951,6 @@
       }
     },
     {
-      "name": "a Label with links inside a node with userInteractionEnabled: false does not count: its links stop with it",
-      "layout": {
-        "type": "View",
-        "id": "t",
-        "onClick": "@{onOpen}",
-        "child": [
-          {
-            "type": "Label",
-            "id": "l",
-            "text": "x"
-          },
-          {
-            "type": "View",
-            "userInteractionEnabled": false,
-            "child": [
-              {
-                "type": "Label",
-                "id": "k",
-                "text": "see https://example.com",
-                "linkable": true
-              }
-            ]
-          }
-        ]
-      },
-      "shapes": {
-        "t": "combine"
-      }
-    },
-    {
       "name": "a bound userInteractionEnabled keeps the shape: the emitters gate the tap and its trait on the binding",
       "layout": {
         "type": "View",
@@ -1113,6 +1083,83 @@
       "shapes": {
         "t": "none",
         "h": null
+      }
+    },
+    {
+      "name": "a tappable View holding an HStack of text is combined: an HStack is drawn as a View (type_synonyms.json)",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "HStack",
+            "child": [
+              {
+                "type": "Label",
+                "text": "a"
+              },
+              {
+                "type": "Label",
+                "text": "b"
+              }
+            ]
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine"
+      }
+    },
+    {
+      "name": "a tappable View holding a Label and an AsyncImage is combined: an AsyncImage is drawn as a NetworkImage",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "text": "a"
+          },
+          {
+            "type": "AsyncImage",
+            "url": "https://example.invalid/x.png"
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine"
+      }
+    },
+    {
+      "name": "a Label with links inside a node with userInteractionEnabled: false does not count: its links stop with it",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "View",
+            "userInteractionEnabled": false,
+            "child": [
+              {
+                "type": "Label",
+                "id": "k",
+                "text": "see https://example.com",
+                "linkable": true
+              }
+            ]
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine"
       }
     },
     {

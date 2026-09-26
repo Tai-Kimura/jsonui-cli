@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'template_helper'
+require_relative '../../core/type_synonyms'
 require_relative '../binding/binding_expression'
 require_relative 'alignment_helper'
 require_relative 'frame_helper'
@@ -295,9 +296,12 @@ module SjuiTools
         # container (HStack/VStack/ZStack/ScrollView wrapper) that does not
         # become an accessibility element on its own. Keep in sync with
         # SwiftJsonUI DynamicModifierHelper.accessibilityContainerTypes.
+        # Drawn types only (downcased): a node is looked up by the type it is
+        # drawn as (TypeSynonyms.drawn_type), so an HStack is a view and a
+        # Scroll a scrollview without a spelling of their own here.
         ACCESSIBILITY_CONTAINER_TYPES = %w[
-          view safeareaview scrollview scroll
-          blur blurview gradientview gradient
+          view safeareaview scrollview
+          blur gradientview
           embed
         ].freeze
         # `embed` is here because EmbedContainer is a plain wrapper view: a
@@ -316,11 +320,12 @@ module SjuiTools
         # Table, Web, TabView, Include, Embed, DynamicComponent, bare
         # decorative Views…) may yield zero elements at runtime, so they are
         # conservatively not counted.
+        # Drawn types only (downcased), as ACCESSIBILITY_CONTAINER_TYPES.
         CERTAIN_ACCESSIBILITY_ELEMENT_TYPES = %w[
-          label text iconlabel button
-          textfield edittext input textview
+          label iconlabel button
+          textfield textview
           image circleimage networkimage
-          switch toggle checkbox check radio
+          switch checkbox radio
           segment progress slider indicator selectbox
         ].freeze
 
@@ -540,7 +545,8 @@ module SjuiTools
         # ("types whose SwiftUI representation is a plain layout container")
         # would become false for the shapes that do not match.
         def accessibility_container?
-          ACCESSIBILITY_CONTAINER_TYPES.include?((@component['type'] || '').downcase) || custom_container?
+          ACCESSIBILITY_CONTAINER_TYPES.include?(JsonUIShared::TypeSynonyms.drawn_type(@component['type'] || '').downcase) ||
+            custom_container?
         end
 
         # A project's own component (a converter `sjui g converter` scaffolded
@@ -601,7 +607,9 @@ module SjuiTools
           visibility = child['visibility']
           return 0 if visibility && visibility != 'visible'
 
-          type = (child['type'] || '').downcase
+          # the child as it is drawn — its type as written would count an
+          # Img as nothing and a Text as a label (type_synonyms.rb)
+          type = JsonUIShared::TypeSynonyms.drawn_type(child['type'] || '').downcase
           if ACCESSIBILITY_CONTAINER_TYPES.include?(type)
             # id-bearing container: becomes an explicit accessibility
             # container (a single element) under apply_accessibility_identifier

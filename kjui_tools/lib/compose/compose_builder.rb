@@ -18,6 +18,7 @@ require_relative '../core/normalization'
 require_relative '../core/layout_variant'
 require_relative '../core/screen_index'
 require_relative '../core/string_literals'
+require_relative '../core/type_synonyms'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'interaction_stop_index'
@@ -35,6 +36,7 @@ require_relative 'components/iconlabel_component'
 require_relative 'components/button_component'
 require_relative 'components/textfield_component'
 require_relative 'components/container_component'
+require_relative 'components/circleview_component'
 require_relative 'components/image_component'
 require_relative 'components/scrollview_component'
 require_relative 'components/switch_component'
@@ -97,6 +99,19 @@ module KjuiTools
         @package_name = @config['package_name'] || Core::ProjectFinder.get_package_name || 'com.example.app'
 
         FileUtils.mkdir_p(@view_dir) unless File.exist?(@view_dir)
+        JsonUIShared::TypeSynonyms.app_types = self.class.custom_component_types
+      end
+
+      # The spellings this project registers components of its own for: the
+      # keys of components/extensions/component_mappings.rb. A node spelled so
+      # is the app's, whatever the spelling — its component is asked first,
+      # and what classifies it reads it as written (TypeSynonyms.app_types).
+      def self.custom_component_types
+        mappings_file = File.join(__dir__, 'components', 'extensions', 'component_mappings.rb')
+        return [] unless File.exist?(mappings_file)
+
+        require_relative 'components/extensions/component_mappings'
+        defined?(Components::Extensions::COMPONENT_MAPPINGS) ? Components::Extensions::COMPONENT_MAPPINGS.keys : []
       end
 
       # Where a layout's GeneratedView (and its variants') is written, relative
@@ -383,8 +398,8 @@ module KjuiTools
         # private function INSIDE the GENERATED_CODE_START..END marker pair
         # (see update_generated_file responsive_functions append). Inline
         # avoids both.
-        if json_data['type'] == 'Embed' && Helpers::ResponsiveHelper.responsive?(json_data)
-          code = generate_embed_responsive_inline(json_data, depth, parent_type)
+        if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Embed' && Helpers::ResponsiveHelper.responsive?(json_data)
+          code = generate_embed_responsive_inline(JsonUIShared::TypeSynonyms.drawn(json_data), depth, parent_type)
           # The inline path returns early, BEFORE the top-level
           # wrap_with_visibility at the bottom of this method. Embed does not
           # self-wrap (it relies on that bottom wrap for the non-responsive
@@ -401,8 +416,8 @@ module KjuiTools
         # `data` / `viewModel` parameters. A file-scope private helper has
         # neither in scope, so we inline the if/else at the call site.
         # Mirrors sjui's collection_converter.rb Group { if/else } shape.
-        if json_data['type'] == 'Collection' && Helpers::ResponsiveHelper.responsive?(json_data)
-          code = generate_collection_responsive_inline(json_data, depth, parent_type)
+        if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Collection' && Helpers::ResponsiveHelper.responsive?(json_data)
+          code = generate_collection_responsive_inline(JsonUIShared::TypeSynonyms.drawn(json_data), depth, parent_type)
           # Same early-return-before-visibility-wrap bug as the Embed path
           # above. Collection does not self-wrap, so a responsive Collection
           # carrying `visibility: "@{...}"` (e.g. a grid/list display toggle)
@@ -424,11 +439,50 @@ module KjuiTools
           raise "Include should have been expanded by IncludeExpander.process_includes. This is a bug."
         end
 
-        json_data = fold_bind(json_data, component_type)
+        # The dispatch order the three codegens share: an app's component
+        # registered under the spelling as written; else the node as it is
+        # drawn — a type synonym's target with the attributes it means
+        # (shared/core/type_synonyms.json), then a declared alias section's
+        # canonical one (`_alias_of`). The cases are canonical types only.
+        code = custom_component_code(component_type, json_data, depth, parent_type)
+        unless code
+          json_data = JsonUIShared::TypeSynonyms.drawn(json_data)
+          component_type = json_data['type'] || 'View'
+          json_data = fold_bind(json_data, component_type)
+          code = draw_declared_component(component_type, json_data, depth, parent_type, is_root)
+          # No case draws it: a type the validator knows (an extension
+          # definition with no component, say) is named in its own sentence
+          # and drawn as a View, its children in it; an unknown type is named
+          # and drawn as nothing (4f's ruling, jsonui-cli 1.9.0).
+          if code.nil?
+            if unknown_type_validator.known_component_type?(component_type)
+              Core::Logger.warn(Core::AttributeValidator.declared_without_drawer_message(component_type, 'Compose'))
+              component_type = 'View'
+              code = draw_declared_component(component_type, json_data, depth, parent_type, is_root)
+            else
+              code = undeclared_component(component_type)
+            end
+          end
+        end
 
-        # Generate component based on type
-        code = case component_type
-        when 'ScrollView', 'Scroll'
+        # Wrap with VisibilityWrapper for all components
+        # Container types already handle this in handle_container_result, so skip them.
+        # `Embed` is NOT actually a container (EmbedComponent.generate returns a
+        # plain String, not a Hash) so handle_container_result falls through
+        # without wrapping — exclude it from the skip list so this fallback
+        # path applies and `visibility: "@{...}"` on an Embed node actually
+        # gates rendering.
+        unless %w[View ScrollView GradientView CircleView Blur TabView].include?(component_type)
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
+        end
+
+        provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
+      end
+
+      # A declared type, drawn: `component_type` is the canonical one.
+      def draw_declared_component(component_type, json_data, depth, parent_type, is_root)
+        case component_type
+        when 'ScrollView'
           result = Components::ScrollViewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'SafeAreaView'
@@ -436,7 +490,7 @@ module KjuiTools
         when 'View'
           result = Components::ContainerComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
-        when 'Text', 'Label'
+        when 'Label'
           Components::TextComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Button'
           Components::ButtonComponent.generate(json_data, depth, @required_imports, parent_type)
@@ -444,7 +498,7 @@ module KjuiTools
           Components::ImageComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'TextField'
           Components::TextFieldComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Switch', 'Toggle'
+        when 'Switch'
           Components::SwitchComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Slider'
           Components::SliderComponent.generate(json_data, depth, @required_imports, parent_type)
@@ -452,7 +506,7 @@ module KjuiTools
           Components::ProgressComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'SelectBox'
           Components::SelectBoxComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Check', 'Checkbox', 'CheckBox'
+        when 'CheckBox'
           Components::CheckboxComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Radio'
           Components::RadioComponent.generate(json_data, depth, @required_imports, parent_type)
@@ -468,23 +522,24 @@ module KjuiTools
           Components::TextViewComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'IconLabel'
           Components::IconLabelComponent.generate(json_data, depth, @required_imports, parent_type)
-        # `Table` is a Collection — the type-synonym canon's reading, which
-        # sjui and rjui already draw. kjui drew it with TableComponent, whose
-        # `items` could not take an array (NoMethodError: `.match` on an
-        # Array, the build down) — ticket kjui-codegen-table-crashes-on-an-items-array.
-        when 'Collection', 'Table'
+        # `Table` (and TableView, RecyclerView, List, ListView, …) is a
+        # Collection by the table — kjui drew Table with TableComponent,
+        # whose `items` could not take an array (ticket
+        # kjui-codegen-table-crashes-on-an-items-array).
+        when 'Collection'
           Components::CollectionComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Web'
           Components::WebComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'WebView'
-          Components::WebviewComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'GradientView'
           result = Components::GradientviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
-        when 'Blur', 'BlurView'
-          # 'Blur' is the canonical SSoT type; 'BlurView' is its alias. Only
-          # the alias was dispatched, so canonical (L1-normalized) layouts
-          # rendered nothing (parity family kjui-codegen-blur-missing).
+        when 'CircleView'
+          result = Components::CircleviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
+          handle_container_result(result, depth, parent_type)
+        when 'Blur'
+          # BlurView is Blur's type synonym (only BlurView was dispatched once,
+          # so canonical layouts drew nothing: parity family
+          # kjui-codegen-blur-missing).
           result = Components::BlurviewComponent.generate(json_data, depth, @required_imports, parent_type, is_root: is_root)
           handle_container_result(result, depth, parent_type)
         when 'TabView'
@@ -493,25 +548,13 @@ module KjuiTools
         when 'Embed'
           result = Components::EmbedComponent.generate(json_data, depth, @required_imports, parent_type)
           handle_container_result(result, depth, parent_type)
-        when 'Spacer'
-          "Spacer(modifier = Modifier.height(#{json_data['height'] || 8}.dp))"
         else
-          # Check for custom components
-          check_custom_component(component_type, json_data, depth, parent_type)
+          # No case: nil, and generate_component names it (Spacer, Divider,
+          # Triangle, … are neither declared nor a synonym: undeclared, as
+          # sjui and rjui name them). kjui drew a Spacer of its own (a fixed
+          # 8dp height) until 1.8.121.
+          nil
         end
-
-        # Wrap with VisibilityWrapper for all components
-        # Container types already handle this in handle_container_result, so skip them.
-        # `Embed` is NOT actually a container (EmbedComponent.generate returns a
-        # plain String, not a Hash) so handle_container_result falls through
-        # without wrapping — exclude it from the skip list so this fallback
-        # path applies and `visibility: "@{...}"` on an Embed node actually
-        # gates rendering.
-        unless %w[View ScrollView Scroll GradientView Blur BlurView TabView].include?(component_type)
-          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
-        end
-
-        provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
       end
 
       # A control a stop holds (TapAccessibility.control?, which annotate!
@@ -803,9 +846,17 @@ module KjuiTools
       # counts these exits against the calls that hand the stop down.
       def generate_non_responsive_component(json_data, depth, parent_type, is_root: false)
         component_type = json_data['type'] || 'View'
+        # an app's component first (generate_component draws it), then the
+        # node as it is drawn — the same order as generate_component
+        if self.class.custom_component_types.include?(component_type)
+          return generate_component(json_data, depth, parent_type, is_root: is_root)
+        end
+
+        json_data = JsonUIShared::TypeSynonyms.drawn(json_data)
+        component_type = json_data['type'] || 'View'
 
         code = case component_type
-        when 'Text', 'Label'
+        when 'Label'
           Components::TextComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Button'
           Components::ButtonComponent.generate(json_data, depth, @required_imports, parent_type)
@@ -844,66 +895,97 @@ module KjuiTools
       # (StyleLoader, before the builder) and its responsive branch resolved
       # (each branch, merged, reaches generate_component through
       # generate_non_responsive_component, which draws no type the table
-      # names itself). An app's own component (component_mappings) is
-      # handed its node as written. The layout normalizer leaves a node with a
+      # names itself). An app's own component (component_mappings) is handed
+      # its node as written: generate_component takes it, by its spelling as
+      # written, before this fold. The layout normalizer leaves a node with a
       # style or responsive overrides to this fold: folded before the style
       # merge, a layout `bind` beside a style's own value was drawn bound.
       def fold_bind(json_data, component_type)
-        return json_data if app_component?(component_type)
-
         JsonUIShared::BindFold.fold(json_data, component_type)
       end
 
-      def app_component?(component_type)
-        mappings_file = File.join(File.dirname(__FILE__), 'components', 'extensions', 'component_mappings.rb')
-        return false unless File.exist?(mappings_file)
+      # The app's component class registered under `component_type` as
+      # written — the project's components/extensions/component_mappings.rb
+      # and the component file it names — or nil.
+      def self.custom_component_class(component_type)
+        mappings_file = File.join(__dir__, 'components', 'extensions', 'component_mappings.rb')
+        return nil unless File.exist?(mappings_file)
 
         require_relative 'components/extensions/component_mappings'
-        defined?(Components::Extensions::COMPONENT_MAPPINGS) &&
-          Components::Extensions::COMPONENT_MAPPINGS.key?(component_type)
+        return nil unless defined?(Components::Extensions::COMPONENT_MAPPINGS)
+
+        component_class = Components::Extensions::COMPONENT_MAPPINGS[component_type]
+        return nil unless component_class
+
+        snake_case_name = component_type.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                                        .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                                        .downcase
+        component_file = File.join(__dir__, 'components', 'extensions', "#{snake_case_name}_component.rb")
+        return nil unless File.exist?(component_file)
+
+        require_relative "components/extensions/#{snake_case_name}_component"
+        component_class
       end
 
-      def check_custom_component(component_type, json_data, depth, parent_type)
-        # Try to load custom component mappings if they exist
-        mappings_file = File.join(File.dirname(__FILE__), 'components', 'extensions', 'component_mappings.rb')
+      # The app's component registered under `component_type` as written, drawn;
+      # nil when there is none (the dispatch then draws the node as declared).
+      def custom_component_code(component_type, json_data, depth, parent_type)
+        component_class = self.class.custom_component_class(component_type)
+        return nil unless component_class
 
-        if File.exist?(mappings_file)
-          require_relative 'components/extensions/component_mappings'
+        # Add import for the custom component
+        @custom_components&.add(component_type)
 
-          if defined?(Components::Extensions::COMPONENT_MAPPINGS)
-            component_class = Components::Extensions::COMPONENT_MAPPINGS[component_type]
+        result = component_class.generate(json_data, depth, @required_imports, parent_type)
+        # The component's own code, not its children's: what app_component_stages reads.
+        own_code = result.is_a?(Hash) ? result[:code].to_s : result.to_s
 
-            if component_class
-              # Load the custom component file
-              snake_case_name = component_type.gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2')
-                                            .gsub(/([a-z\d])([A-Z])/,'\1_\2')
-                                            .downcase
-              component_file = File.join(File.dirname(__FILE__), 'components', 'extensions', "#{snake_case_name}_component.rb")
+        # Handle container components that return metadata
+        code = result.is_a?(Hash) && result[:children] ? handle_container_result(result, depth, parent_type) : result
+        app_component_stages(json_data, own_code, code, depth)
+      end
 
-              if File.exist?(component_file)
-                require_relative "components/extensions/#{snake_case_name}_component"
+      # The handlers an app's component may call itself, and the common stage
+      # that calls each around a built-in one (build_clickable).
+      APP_COMPONENT_HANDLER_KEYS = %w[onClick onclick onLongPress onPan onPinch].freeze
 
-                # Add import for the custom component
-                @custom_components&.add(component_type)
+      # The common stages an app's component does not apply itself — its tap,
+      # long press, pan and pinch (with the gates around them), and its alpha —
+      # applied around it in a Box, as the built-in components apply them. The
+      # `kjui g converter` scaffold applies none of them, so an app's own
+      # component tapped, faded and called onLongPress in Debug (KotlinJsonUI
+      # Dynamic applies them to it) and did none of it in release.
+      #
+      # A component that does apply one keeps it and gets no second: a handler
+      # whose data name its own code already calls (`data.<name>`, in the code
+      # it emitted for this node, not in its children's), or `.alpha(` in that
+      # code. The scaffold says so to whoever writes a converter.
+      def app_component_stages(json_data, own_code, code, depth)
+        return code unless code.is_a?(String) && !code.empty?
 
-                result = component_class.generate(json_data, depth, @required_imports, parent_type)
-
-                # Handle container components that return metadata
-                if result.is_a?(Hash) && result[:children]
-                  return handle_container_result(result, depth, parent_type)
-                else
-                  return result
-                end
-              end
-            end
-          end
+        node = json_data.dup
+        APP_COMPONENT_HANDLER_KEYS.each do |key|
+          names = JsonUIShared::TapAccessibility.handler_values(node[key]).map { |v| (v[/\A@\{(.*)\}\z/m, 1] || v).strip }
+          node.delete(key) if names.any? { |name| own_code.include?("data.#{name}") }
         end
+        node.delete('alpha') if own_code.include?('.alpha(')
+        modifiers = Helpers::ModifierBuilder.build_alpha(node, @required_imports) +
+                    Helpers::ModifierBuilder.build_clickable(node, @required_imports)
+        return code if modifiers.empty?
 
-        # A type this tool draws nothing for: named in the build, in the
-        # validator's sentence (JsonUIShared::AttributeValidatorCore
-        # .unknown_component_type_message), and in the emitted comment where
-        # the node would be. It was a `// TODO: Implement component type`
-        # comment and nothing more.
+        @required_imports&.add(:box)
+        Helpers::TintHelper.pad('Box(', depth) + Helpers::ModifierBuilder.format(modifiers, depth) + "\n" +
+          Helpers::TintHelper.pad(') {', depth) + "\n" +
+          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
+          Helpers::TintHelper.pad('}', depth)
+      end
+
+      # What a type no case takes emits. A type this tool draws nothing for:
+      # named in the build, in the validator's sentence
+      # (JsonUIShared::AttributeValidatorCore.unknown_component_type_message),
+      # and in the emitted comment where the node would be. It was a
+      # `// TODO: Implement component type` comment and nothing more.
+      def undeclared_component(component_type)
         sentence = unknown_type_validator.unknown_component_type_message(component_type)
         Core::Logger.warn(sentence)
         "// #{sentence}"
@@ -1184,12 +1266,16 @@ module KjuiTools
         # Build constraints for this child
         constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data)
 
-        # Generate the component based on type
-        case component_type
-        when 'ScrollView', 'Scroll'
-          generate_scroll_with_constraints(child_data, ref_name, constraints, depth)
+        # Generate the component based on the type it is drawn as (an app's
+        # component as written; an HStack is a View with orientation
+        # horizontal) — anything else through generate_component
+        custom = self.class.custom_component_types.include?(component_type)
+        drawn = custom ? child_data : JsonUIShared::TypeSynonyms.drawn(child_data)
+        case custom ? nil : (drawn['type'] || 'View')
+        when 'ScrollView'
+          generate_scroll_with_constraints(drawn, ref_name, constraints, depth)
         when 'View'
-          generate_view_with_constraints(child_data, ref_name, constraints, depth)
+          generate_view_with_constraints(drawn, ref_name, constraints, depth)
         else
           # For other types, generate normally but wrap with constraint modifier
           generate_component_with_constraints(child_data, ref_name, constraints, depth)
@@ -1707,7 +1793,7 @@ module KjuiTools
           # viewModel.updateData(mapOf("<id>IsFocused" to it.isFocused)) focus
           # writebacks, so updateData's when-block must carry a matching branch
           # or the key silently falls through to `else -> updated`.
-          if %w[TextField EditText Input TextView].include?(json_data['type']) && json_data['id']
+          if %w[TextField TextView].include?(JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])) && json_data['id']
             focus_prop_name = to_camel_case(json_data['id']) + 'IsFocused'
             unless properties.any? { |p| p['name'] == focus_prop_name }
               properties << { 'name' => focus_prop_name, 'class' => 'Boolean', 'defaultValue' => false }

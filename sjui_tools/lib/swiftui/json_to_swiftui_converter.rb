@@ -15,6 +15,7 @@ require_relative 'style_loader'
 require_relative 'helpers/string_manager_helper'
 require_relative 'include_expander'
 require_relative '../core/attribute_validator'
+require_relative '../core/type_synonyms'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
@@ -31,6 +32,12 @@ module SjuiTools
         @converter_factory = ConverterFactory.new(@binding_registry)
         @action_manager = ActionManager.new
         @state_variables = []
+      end
+
+      # The build's validator, for the sentence a type drawn as nothing says
+      # (ConverterFactory#unknown_type_validator).
+      def unknown_type_validator=(validator)
+        @converter_factory.unknown_type_validator = validator
       end
 
       def convert_file(json_file_path, output_path = nil)
@@ -595,7 +602,7 @@ module SjuiTools
         end
 
         # Warn if Collection has items binding but no sections defined
-        if component['type']&.downcase == 'collection' && component['items'] && (!component['sections'] || component['sections'].empty?)
+        if JsonUIShared::TypeSynonyms.section(component['type']) == 'Collection' && component['items'] && (!component['sections'] || component['sections'].empty?)
           loc = hierarchy || 'root'
           puts "\e[33m⚠️  [SJUI Warning] [#{@current_validation_file} #{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering.\e[0m"
         end

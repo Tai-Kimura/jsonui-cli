@@ -217,7 +217,7 @@ module JsonUI
         { name: 'offsetY', kind: :number, bindable: true }.freeze,
         # Lifecycle callback when view appears (SwiftUI/Compose only). The handler's name (e.g. "screenAppeared"); written as a binding (`@{screenAppeared}`) or with UIKit's sender mark (`screenAppeared:`, which means nothing in SwiftUI or Compose) it is read as the same name, as the other event handlers are. Called as its declared closure type asks: `()` with nothing, `(String)` with the viewId.
         { name: 'onAppear', kind: :string }.freeze,
-        # Click handler (camelCase) - binding only (@{functionName})
+        # Click handler (camelCase) - binding only (@{functionName}). On a type the SSoT does not declare (an app's own component) JsonUI gives the tap no screen-reader role; the component carries its own.
         { name: 'onClick', kind: :binding }.freeze,
         # Lifecycle callback when view disappears (SwiftUI/Compose only). The handler's name (e.g. "screenDisappeared"); written as a binding (`@{screenDisappeared}`) or with UIKit's sender mark (`screenDisappeared:`, which means nothing in SwiftUI or Compose) it is read as the same name, as the other event handlers are. Called as its declared closure type asks: `()` with nothing, `(String)` with the viewId.
         { name: 'onDisappear', kind: :string }.freeze,
