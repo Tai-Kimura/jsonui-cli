@@ -48,6 +48,33 @@ RSpec.describe 'unknown component type' do
     expect(got).to eq(cases.map { |c| [c['name'], c['expect']] })
   end
 
+  # The candidate comes from TypeSynonyms.case_only_match, the one search
+  # every caller asks (4f's ruling: the validator had a search of its own).
+  # Byte for byte the sentence its own search made, over what it is asked:
+  # spellings the validator does not know — each known type in four cases,
+  # and the vectors'. The app's types are in `known` in a build (the
+  # registry the dispatch reads), so the arm keeps TypeSynonyms.app_types
+  # empty rather than whatever an earlier example left in it.
+  it "says, with the shared search, byte for byte what the validator's own search said" do
+    saved = JsonUIShared::TypeSynonyms.app_types
+    JsonUIShared::TypeSynonyms.app_types = []
+    validator = KjuiTools::Core::AttributeValidator.new(:compose)
+    known = validator.send(:known_component_types)
+    own = lambda do |written| # the search this replaced, as it was
+      message = format(core::UNKNOWN_COMPONENT_TYPE, written: written)
+      canonical = known.find { |k| k != written && k.casecmp?(written) }
+      canonical ? message + format(core::UNKNOWN_COMPONENT_TYPE_HINT, canonical: canonical) : message
+    end
+    vectors = File.expand_path('../../../shared/core/unknown_component_type_vectors.json', __dir__)
+    written = File.exist?(vectors) ? JSON.parse(File.read(vectors))['cases'].map { |c| c['written'] } : []
+    inputs = (known.flat_map { |t| [t.downcase, t.upcase, t.swapcase, t.capitalize] } + written).uniq - known
+    offered = inputs.count { |w| own.call(w).include?('did you mean') }
+    expect([inputs.size, offered]).to all(be > 100) # the corpus reaches the hint (control)
+    inputs.each { |w| expect(validator.unknown_component_type_message(w)).to eq(own.call(w)), w }
+  ensure
+    JsonUIShared::TypeSynonyms.app_types = saved
+  end
+
   it 'names a type in another case with the declared one, and a type no path draws alone' do
     expect(type_warnings({ 'type' => 'switch' })).to eq(["Unknown component type 'switch' — did you mean 'Switch'? Type names are case-sensitive."])
     expect(type_warnings({ 'type' => 'SELECTBOX' })).to eq(["Unknown component type 'SELECTBOX' — did you mean 'SelectBox'? Type names are case-sensitive."])
