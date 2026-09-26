@@ -4,6 +4,8 @@ require 'compose/compose_builder'
 require 'core/tap_accessibility'
 require 'json'
 require 'set'
+require_relative '../support/kotlin_compiler'
+require_relative '../support/compose_stub_universe'
 
 # A partialAttributes range's handler in both declared spellings: `onClick`
 # (a binding) is canonical, `onclick` (a selector) its alias. Every path reads
@@ -26,5 +28,34 @@ RSpec.describe 'kjui: a range\'s handler in either spelling' do
     'none' => [{ 'range' => 'Terms' }, 'null']
   }.each do |name, (range, want)|
     it(name) { expect(call.call(emit.call([range]))).to eq(want) }
+  end
+
+  # PartialAttribute.fromJsonRange mirrors the library's signature (its
+  # onClick is `(() -> Unit)?`): each spelling's call is a lambda it takes.
+  it 'emits Kotlin that compiles, each spelling' do
+    emits = [[{ 'range' => 'Terms', 'onClick' => '@{onTerms}' }], [{ 'range' => 'Terms', 'onclick' => %w[onA onB] }]]
+            .map { |r| emit.call(r) }
+    body = emits.each_with_index.map { |e, i| "fun emitted#{i}(data: RangeData) {\n#{e}\n}" }.join("\n")
+    expect(<<~KOTLIN).to compile_as_kotlin
+      #{ComposeStubUniverse.common_stages(emits.join("\n"))}
+      class RangeData(val onTerms: (() -> Unit)? = null, val onA: (() -> Unit)? = null, val onB: (() -> Unit)? = null)
+      object LocalTextStyle { val current: TextStyle = TextStyle() }
+      val TextStyle.fontFamily: FontFamily? get() = null
+      val TextStyle.fontWeight: FontWeight? get() = null
+      val TextStyle.fontStyle: FontStyle? get() = null
+      fun TextStyle.copy(color: Color = this.color, fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
+                         fontSize: TextUnit = this.fontSize, fontStyle: FontStyle? = null): TextStyle = this
+      class PartialAttribute {
+          companion object {
+              fun fromJsonRange(range: Any, text: String, fontColor: String? = null, fontSize: Int? = null,
+                                fontWeight: String? = null, background: String? = null, underline: Boolean = false,
+                                strikethrough: Boolean = false, onClick: (() -> Unit)? = null): PartialAttribute? = null
+          }
+      }
+      fun PartialAttributesText(text: String, partialAttributes: List<PartialAttribute> = emptyList(),
+                                linkable: Boolean = false, modifier: Modifier = Modifier,
+                                style: TextStyle = TextStyle(), linksEnabled: Boolean = true) {}
+      #{body}
+    KOTLIN
   end
 end
