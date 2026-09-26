@@ -641,7 +641,7 @@ module RjuiTools
         # `jsonuiPath` (an included one, IncludePaths), the position above the
         # layout's own root comes in at run time: `selectBox_${jsonuiPath}_1`.
         def view_id_expr
-          return JsonUIShared::StringLiterals.ts(JsonUIShared::LayoutPath.view_id(json)) if json['id'] || !config['_path_prop']
+          return JsonUIShared::StringLiterals.ts(JsonUIShared::LayoutPath.view_id(json)) if attributes['id'] || !config['_path_prop']
 
           path = json[JsonUIShared::LayoutPath::KEY] || '0'
           stem = JsonUIShared::LayoutPath.view_id(json, '').chomp('_')
