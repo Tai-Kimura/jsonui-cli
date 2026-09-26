@@ -319,14 +319,16 @@ def test_a_layout_the_spec_generates_unchanged_is_not_rewritten(project):
     assert "probe.json" not in said, said
 
 
-def test_a_specs_cell_classes_and_sections_reach_a_new_collection(project):
+def test_a_specs_cell_classes_sections_and_insets_reach_a_new_collection(project):
     _g_project(project, {"components": C, "layout": {"root": "root_view", "children": ["title"]},
                          "collection": {"id": "messages", "cellClasses": ["chat/message_cell", "chat/typing_cell"],
+                                        "insets": [12, 0, 0, 0],
                                         "sections": [{"index": 0, "cell": "chat/message_cell",
                                                       "header": "chat/day_header", "description": "d"},
                                                      {"cell": "chat/typing_cell", "header": None, "columns": 2}]}})
     screen = json.loads((project / "docs/screens/layouts/probe.json").read_text())
     coll = _nodes(screen, lambda n: n.get("type") == "Collection")[0]
     assert coll["cellClasses"] == ["chat/message_cell", "chat/typing_cell"]
+    assert coll["insets"] == [12, 0, 0, 0]
     assert coll["sections"] == [{"cell": "chat/message_cell", "header": "chat/day_header"},
                                 {"cell": "chat/typing_cell", "columns": 2}]

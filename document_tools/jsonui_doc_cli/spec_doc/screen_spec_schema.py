@@ -488,6 +488,23 @@ SCREEN_SPEC_SCHEMA = {
                         {"type": "null"}
                     ]
                 },
+                "insets": {
+                    "type": ["array", "string"],
+                    "items": {"type": "number"},
+                    "description": (
+                        "The Layout Collection's insets (content insets), "
+                        "written onto the Collection `jui g project` "
+                        "generates (from jsonui-cli 1.9.0)."
+                    )
+                },
+                "description": {
+                    "type": "string",
+                    "description": "What the Collection shows. Documentation only: no generator or check reads it."
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Additional notes. Documentation only: no generator or check reads it."
+                },
                 "cellClasses": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -507,7 +524,13 @@ SCREEN_SPEC_SCHEMA = {
                             "cell": {"type": "string", "description": "Cell layout ref"},
                             "header": {"type": ["string", "null"], "description": "Header layout ref"},
                             "footer": {"type": ["string", "null"], "description": "Footer layout ref"},
-                            "columns": {"type": "number", "description": "Section columns"}
+                            "columns": {"type": "number", "description": "Section columns"},
+                            "index": {
+                                "type": "integer",
+                                "description": "The section's position, for the reader (the order is the array's). Documentation only: no generator or check reads it."
+                            },
+                            "description": {"type": "string", "description": "What the section shows. Documentation only: no generator or check reads it."},
+                            "notes": {"type": "string", "description": "Additional notes. Documentation only: no generator or check reads it."}
                         }
                     },
                     "description": (

@@ -219,6 +219,8 @@ class CollectionDef:
     # structure.collection.cellClasses: the Layout refs of the cells the
     # Collection may use (the multi-cell form), written onto the Collection.
     cell_classes: list[str] = field(default_factory=list)
+    # structure.collection.insets: the Layout Collection's insets, as given.
+    insets: Any = None
 
 
 @dataclass
@@ -388,6 +390,7 @@ def _parse_collection(coll_data: dict) -> CollectionDef:
         slots=slots,
         cell_classes=[c for c in cell_classes if isinstance(c, str) and c]
         if isinstance(cell_classes, list) else [],
+        insets=coll_data.get("insets") if isinstance(coll_data.get("insets"), (list, str)) else None,
     )
 
 

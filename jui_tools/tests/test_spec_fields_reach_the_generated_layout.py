@@ -157,6 +157,9 @@ NOT_READ = [
      r"|^stateManagement\.states\.values\.description$|^structure\.customComponents\.description$"
      r"|^transitions\.condition$", "documentation: jsonui-doc renders it"),
     (r"^metadata\.(createdAt|updatedAt)$", "documentation: jsonui-doc renders it; the validator checks the date"),
+    (r"^structure\.collections?\.(description|sections\.(description|index))$",
+     "documentation: the faces write them to describe a Collection and its sections (declared so in jsonui-cli "
+     "1.9.0; before, undeclared)"),
     (r"^metadata\.group$", "read by jsonui-doc generate mermaid (the flow diagram's groups)"),
     (r"^metadata\.platforms$", "read by jsonui-test (branch-tests, contracts coverage); g project writes "
                                "every platform's files"),

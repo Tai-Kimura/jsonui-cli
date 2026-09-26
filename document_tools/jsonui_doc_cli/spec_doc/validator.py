@@ -112,6 +112,65 @@ LAYOUT_ID_GATE_FROM: str | None = "1.8.121"
 LAYOUT_ID_NOTICE = ("from jsonui-cli {version}, spec element ids not in the layout "
                     "become WARNING")
 
+#: The release from which a uiVariable's initial value that does not read as
+#: a value of its declared type is a WARNING; below it an INFO and one line
+#: naming the release (the faces held three, all prose as an Array's
+#: initial value, measured 2026-09-26). The same release as jui verify's
+#: INITIAL_VALUE_GATE_FROM. A literal read by shared/core/gate_versions like
+#: every `*_GATE_FROM`.
+INITIAL_VALUE_TYPE_GATE_FROM: str | None = "1.9.1"
+
+INITIAL_VALUE_TYPE_NOTICE = ("from jsonui-cli {version}, an initial value that does not read "
+                             "as its type becomes WARNING")
+
+#: What an undeclared Collection / section key most likely meant.
+_UNREAD_COLLECTION_KEY_HINTS = {
+    "cells": "cellClasses is the list of cell layouts the tools read",
+    "headerData": "a header's data comes from the Collection's data source, not from the spec",
+}
+
+
+def _initial_value_kind(type_name) -> str | None:
+    """The kind of value a uiVariable's declared type holds — int, number,
+    bool, array or object — or None for String and every type this does
+    not judge (a custom type, a callback)."""
+    base = type_name.strip().rstrip("?").strip() if isinstance(type_name, str) else ""
+    if base in ("Int", "Int64", "Long"):
+        return "int"
+    if base in ("Double", "Float", "CGFloat"):
+        return "number"
+    if base in ("Bool", "Boolean"):
+        return "bool"
+    if base.startswith("[") or base.startswith("Array") or base.startswith("List"):
+        return "array"
+    if base.startswith("Dictionary") or base.startswith("Map") or base == "Object":
+        return "object"
+    return None
+
+
+def _initial_value_unreadable(var: dict) -> str | None:
+    """Why *var*'s initial value does not read as a value of its type, or
+    None. `default` wins over `defaultValue`, as `jui g project` reads them;
+    null declares nothing; a string holding a JSON literal ("0", "false",
+    "[]") is that literal — the platform tools read it so."""
+    value = var["default"] if "default" in var else var.get("defaultValue")
+    kind = _initial_value_kind(var.get("type"))
+    if value is None or kind is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            pass
+    ok = {
+        "int": isinstance(value, int) and not isinstance(value, bool),
+        "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+        "bool": isinstance(value, bool),
+        "array": isinstance(value, list),
+        "object": isinstance(value, dict),
+    }[kind]
+    return None if ok else f"not a value of {var.get('type')} ({kind})"
+
 
 def _running_version() -> str:
     from .. import __version__
@@ -1021,6 +1080,63 @@ class SpecValidator:
                         child["children"], f"{path}[{i}].children", component_ids, result
                     )
 
+    def _check_initial_values(self, variables, path: str, result: SpecValidationResult) -> None:
+        """A uiVariable whose initial value does not read as a value of its
+        declared type (Int / Double / Bool / Array / Object) is named: INFO
+        below INITIAL_VALUE_TYPE_GATE_FROM and one line naming that release,
+        WARNING from it. Until jsonui-cli 1.9.0 nothing looked: prose written
+        as an Array's defaultValue reached the layout as nothing (jui verify
+        compares the two from jsonui-cli 1.9.0)."""
+        if not isinstance(variables, list):
+            return
+        gates = shared_core.load("gate_versions")
+        gating = bool(gates) and gates.gate_is_on(_running_version(), INITIAL_VALUE_TYPE_GATE_FROM)
+        found = 0
+        for i, var in enumerate(variables):
+            if not isinstance(var, dict):
+                continue
+            why = _initial_value_unreadable(var)
+            if why is None:
+                continue
+            found += 1
+            value = var["default"] if "default" in var else var.get("defaultValue")
+            message = SpecValidationMessage(
+                path=f"{path}[{i}].{'default' if 'default' in var else 'defaultValue'}",
+                message=(f"'{var.get('name', '?')}' initial value {json.dumps(value, ensure_ascii=False)} "
+                         f"is {why} — write the value itself, or describe it in description"),
+                level="warning" if gating else "info")
+            (result.warnings if gating else result.infos).append(message)
+        if found and gates and gates.gate_state(INITIAL_VALUE_TYPE_GATE_FROM) == "release" and not gating:
+            result.infos.append(SpecValidationMessage(
+                path=path, level="info",
+                message=INITIAL_VALUE_TYPE_NOTICE.format(version=INITIAL_VALUE_TYPE_GATE_FROM)))
+
+    def _check_undeclared_collection_keys(self, collection: dict, path: str,
+                                          result: SpecValidationResult) -> None:
+        """A key a Collection (or one of its sections) does not declare is
+        named, as a WARNING: no tool reads it, so what it asks for does not
+        happen. Measured 2026-09-26 on the faces: cells, parent, headerData
+        and five keys of their own name (section2, image_grid, ...), each
+        holding a cell's description."""
+        coll_def = SCREEN_SPEC_SCHEMA["$defs"]["collectionStructure"]["properties"]
+        section_keys = set(coll_def["sections"]["items"]["properties"])
+
+        def name(key, where):
+            hint = _UNREAD_COLLECTION_KEY_HINTS.get(key)
+            result.warnings.append(SpecValidationMessage(
+                path=f"{where}.{key}", level="warning",
+                message=(f"'{key}' is not a key {'a section' if '.sections[' in where else 'a Collection'} "
+                         "declares — no tool reads it" + (f" ({hint})" if hint else ""))))
+        for key in collection:
+            if key not in coll_def:
+                name(key, path)
+        sections = collection.get("sections")
+        for i, section in enumerate(sections if isinstance(sections, list) else []):
+            if isinstance(section, dict):
+                for key in section:
+                    if key not in section_keys:
+                        name(key, f"{path}.sections[{i}]")
+
     def _validate_collection(self, collection: dict, component_ids: set, result: SpecValidationResult, path: str = "structure.collection"):
         """Validate collection structure.
 
@@ -1034,6 +1150,11 @@ class SpecValidator:
         Layout JSON / runtime level.
         """
         self._validate_required_fields(collection, ["id"], path, result)
+        self._check_undeclared_collection_keys(collection, path, result)
+        for kind in ("cell", "header", "footer"):
+            entry = collection.get(kind)
+            if isinstance(entry, dict):
+                self._check_initial_values(entry.get("uiVariables"), f"{path}.{kind}.uiVariables", result)
 
         # Each entry names a cell Layout JSON. The shape check below only
         # asks that the array is non-empty, so a name that resolves to
@@ -1568,6 +1689,7 @@ class SpecValidator:
 
         # Validate UI variables
         variables = state_mgmt.get("uiVariables", [])
+        self._check_initial_values(variables, "stateManagement.uiVariables", result)
         for i, var in enumerate(variables):
             if not self._validate_required_fields(
                 var, ["name", "type", "description"],

@@ -470,6 +470,10 @@ class LayoutGenerator:
 
         if coll.cell_classes:
             node["cellClasses"] = list(coll.cell_classes)
+        # structure.collection.insets: the Layout's insets, as the spec gives
+        # them (read by nothing until jsonui-cli 1.9.0).
+        if coll.insets is not None:
+            node["insets"] = copy.deepcopy(coll.insets)
 
         if coll.sections:
             node["sections"] = []
