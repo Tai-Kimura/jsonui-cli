@@ -73,7 +73,9 @@ module KjuiTools
 
         handles = source[/handles\s*=\s*setOf\(([^)]*)\)/, 1].to_s.scan(/"([^"]+)"/).flatten
         passed = converter_parameters(type, converter_class)
-        STAGE_KEYS.reject { |key| handles.include?(key) }.filter_map do |key|
+        # `map { }.compact`, not `filter_map`: the tools run on Ruby 2.6 too
+        # (the consumer floor), where Array#filter_map does not exist.
+        STAGE_KEYS.reject { |key| handles.include?(key) }.map do |key|
           if source.match?(/"#{key}"/)
             "Dynamic component '#{type}' reads the node's #{key} itself, and ModifierBuilder.buildModifier applies it too — " \
               "Debug may #{key == 'alpha' ? 'apply' : 'call'} it twice. Pass handles = setOf(\"#{key}\") to buildModifier."
@@ -81,7 +83,7 @@ module KjuiTools
             "'#{type}': its converter passes #{key} to the component's own composable, and its Dynamic component leaves it to " \
               "ModifierBuilder.buildModifier — Debug applies it on the component's modifier, release where the component puts it."
           end
-        end
+        end.compact
       end
 
       # The handlers the converter of `type` passes to the component's own
