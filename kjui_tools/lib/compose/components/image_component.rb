@@ -25,25 +25,7 @@ module KjuiTools
 
           code = indent("Image(", depth)
 
-          # Check if src is a binding expression
-          if Helpers::ModifierBuilder.is_binding?(raw_src)
-            # @{termsCheckboxIcon} -> data.termsCheckboxIcon (String = drawable resource name)
-            # Use runtime resource lookup to convert String -> Painter via painterResource
-            property_name = Helpers::ModifierBuilder.extract_binding_property(raw_src)
-            camel_case_name = to_camel_case(property_name)
-            required_imports&.add(:painter_resource)
-            required_imports&.add(:r_class)
-            required_imports&.add(:local_context)
-            code += "\n" + indent("painter = LocalContext.current.let { ctx ->", depth + 1)
-            code += "\n" + indent("val resId = ctx.resources.getIdentifier(data.#{camel_case_name}, \"drawable\", ctx.packageName)", depth + 2)
-            code += "\n" + indent("if (resId != 0) painterResource(id = resId) else painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder')})", depth + 2)
-            code += "\n" + indent("},", depth + 1)
-          else
-            # Static resource name needs painterResource
-            required_imports&.add(:painter_resource)
-            required_imports&.add(:r_class)
-            code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(raw_src)}),", depth + 1)
-          end
+          code += painter_argument(json_data, raw_src, depth, required_imports)
           
           # What TalkBack reads: the alt, or nothing for a decorative image
           # (ImageAccessibilityHelper). Tests find the image by its testTag,
@@ -159,6 +141,31 @@ module KjuiTools
         end
         
         private
+
+        # The `painter = …,` argument for a drawable source, its leading
+        # newline included. A binding (`@{avatar}`, the name held in data) is
+        # looked up at run time — defaultImage, else loadingImage, else
+        # `placeholder` when the name is no drawable — and a literal is
+        # R.drawable. CircleImage's local image takes the same (a binding was
+        # frozen into a drawable name there: `R.drawable.img___avatar_`).
+        def self.painter_argument(json_data, raw_src, depth, required_imports)
+          required_imports&.add(:painter_resource)
+          required_imports&.add(:r_class)
+          unless Helpers::ModifierBuilder.is_binding?(raw_src)
+            return "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(raw_src)}),", depth + 1)
+          end
+
+          # @{termsCheckboxIcon} -> data.termsCheckboxIcon (String = drawable resource name)
+          # Use runtime resource lookup to convert String -> Painter via painterResource
+          property_name = Helpers::ModifierBuilder.extract_binding_property(raw_src)
+          camel_case_name = to_camel_case(property_name)
+          required_imports&.add(:local_context)
+          fallback = Helpers::ResourceResolver.drawable_name(json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder')
+          "\n" + indent("painter = LocalContext.current.let { ctx ->", depth + 1) +
+            "\n" + indent("val resId = ctx.resources.getIdentifier(data.#{camel_case_name}, \"drawable\", ctx.packageName)", depth + 2) +
+            "\n" + indent("if (resId != 0) painterResource(id = resId) else painterResource(id = R.drawable.#{fallback})", depth + 2) +
+            "\n" + indent("},", depth + 1)
+        end
 
         def self.to_camel_case(snake_case_string)
           return snake_case_string unless snake_case_string.include?('_')

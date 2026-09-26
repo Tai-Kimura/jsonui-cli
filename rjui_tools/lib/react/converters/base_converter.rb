@@ -2457,19 +2457,22 @@ module RjuiTools
             klass = build_partial_class(partial)
             parts << "className: '#{klass}'" unless klass.empty?
 
-            if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
-              # Same contract as every other handler site: a handler is a
-              # selector (string|array), not a binding. The error marker is
+            # The range's handler (TapAccessibility.range_handler): onClick
+            # first, then onclick, its alias — each holding a binding or a
+            # method name (jsonui-cli 1.9.0; the normalizer folds onclick into
+            # onClick, so a built layout carries onClick only).
+            kind, value = JsonUIShared::TapAccessibility.range_handler(partial)
+            if kind == :binding
+              parts << "onClick: #{extract_binding_property(value)}"
+            elsif kind == :selector
+              expr = onclick_selector_expr(value)
+              parts << (value.is_a?(Array) ? "onClick: #{expr}" : "onClick: #{add_viewmodel_data_prefix(value)}")
+            elsif JsonUIShared::TapAccessibility::TAP_KEYS.any? { |key| JsonUIShared::TapAccessibility.handler?(partial[key]) }
+              # A handler that is neither a binding nor a name (`"@{a} b"`):
               # kept as an inline comment so it survives into the emitted
-              # object literal instead of vanishing.
-              expr = onclick_selector_expr(partial['onclick'])
-              parts << if expr.nil?
-                         '/* ERROR: onclick requires selector format (string) */'
-                       elsif partial['onclick'].is_a?(Array)
-                         "onClick: #{expr}"
-                       else
-                         "onClick: #{add_viewmodel_data_prefix(partial['onclick'])}"
-                       end
+              # object literal instead of vanishing. Either spelling: the fold
+              # moves an onclick's value into onClick.
+              parts << '/* ERROR: a range onClick is a binding (@{name}) or a method name */'
             end
 
             "{ #{parts.join(', ')} }"

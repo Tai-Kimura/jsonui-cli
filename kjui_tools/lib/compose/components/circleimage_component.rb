@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/content_scale_helper'
+require_relative 'image_component'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/image_accessibility_helper'
@@ -33,10 +34,12 @@ module KjuiTools
             # CircleImage, compiled against Compose and KotlinJsonUI;
             # jsonui-cli 1.9.0).
             required_imports&.add(:image)
-            required_imports&.add(:painter_resource)
-            required_imports&.add(:r_class)
             code = indent("Image(", depth)
-            code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(resource_name)}),", depth + 1)
+            # A bound source is the drawable's name held in data, looked up at
+            # run time as Image looks it up (ImageComponent.painter_argument);
+            # it was frozen into a drawable name (`R.drawable.img___avatar_`).
+            source = Helpers::ModifierBuilder.is_binding?(image_name) ? image_name : resource_name
+            code += ImageComponent.painter_argument(json_data, source, depth, required_imports)
           end
           
           # The alt, or null when decorative (ImageAccessibilityHelper); the

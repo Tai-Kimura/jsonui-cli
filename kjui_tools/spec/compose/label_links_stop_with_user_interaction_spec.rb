@@ -76,6 +76,36 @@ RSpec.describe 'kjui: a Label\'s links stop with userInteractionEnabled' do
     end
   end
 
+  # A linkable Label takes the Label's tap stage as the partialAttributes
+  # branch does (4f ruling, jsonui-cli 1.9.0): its onClick applies as on any
+  # Label, canTap gates it, enabled disables it, the tap rule gives it its
+  # role, userInteractionEnabled blocks it. A tap on a link calls the link
+  # only (measured on an API 35 emulator: the two do not compete). It took
+  # none: the onClick was dropped.
+  describe 'a linkable Label\'s tap stage' do
+    # The trailing comma is where the branch's argument list goes on, not the stage.
+    stage = ->(code) { code.lines.map { |l| l.strip.sub(/,\z/, '') }.grep(/clickable|disabled\(\)|pointerInput|PointerEventPass|role = /) }
+    {
+      'onClick' => { 'onClick' => '@{onTap}' },
+      'onclick selector' => { 'onclick' => 'onTap' },
+      'canTap false' => { 'onClick' => '@{onTap}', 'canTap' => false },
+      'canTap bound' => { 'onClick' => '@{onTap}', 'canTap' => '@{c}' },
+      'enabled false' => { 'onClick' => '@{onTap}', 'enabled' => false },
+      'userInteractionEnabled bound' => { 'onClick' => '@{onTap}', 'userInteractionEnabled' => '@{u}' }
+    }.each do |name, flags|
+      it "#{name}: is the partialAttributes branch's, line for line" do
+        linked = stage.call(emit.call(linkable.call(flags)))
+        expect(linked).to eq(stage.call(emit.call(ranged.call(flags)))), name
+        expect(linked).not_to be_empty unless name == 'canTap false'
+      end
+    end
+
+    it 'calls the Label\'s onClick, with a button role' do
+      code = emit.call(linkable.call('onClick' => '@{onTap}'))
+      expect(code).to include('.clickable(role = Role.Button) { data.onTap?.invoke() }')
+    end
+  end
+
   # What the arms above read, handed to a compiler: PartialAttributesText and
   # PartialAttribute.fromJsonRange mirror the library's signatures
   # (KotlinJsonUI library/.../components/PartialAttributesText.kt), so
@@ -86,7 +116,8 @@ RSpec.describe 'kjui: a Label\'s links stop with userInteractionEnabled' do
       linkable.call('userInteractionEnabled' => false), linkable.call('userInteractionEnabled' => '@{u}'),
       inside.call('@{a}', linkable.call('userInteractionEnabled' => '@{u}')),
       ranged.call('userInteractionEnabled' => false), ranged.call('userInteractionEnabled' => '@{u}', 'onClick' => '@{onTap}'),
-      inside.call(false, ranged.call), linkable.call, ranged.call
+      inside.call(false, ranged.call), linkable.call, ranged.call,
+      linkable.call('onClick' => '@{onTap}', 'canTap' => '@{u}'), linkable.call('onClick' => '@{onTap}', 'enabled' => false)
     ]
     emits = trees.map { |t| emit.call(t) }
     expect(emits.count { |e| e.include?('linksEnabled = ') }).to eq(6)

@@ -94,6 +94,7 @@ class Canonicalizer:
         alias_map = self._table.aliases_for(node_type)
         deprecated_map = self._table.deprecated_for(node_type)
         value_alias_map = self._table.value_aliases_for(node_type)
+        item_alias_map = self._table.item_aliases_for(node_type)
         label = self._node_label(node, node_type, path)
 
         rebuilt: dict[str, Any] = {}
@@ -148,6 +149,19 @@ class Canonicalizer:
                     )
                 )
                 rebuilt[target] = canonical_value
+
+            # Declared aliases of the properties of an array attribute's
+            # objects (`aliases` on `items.properties.X`): a partialAttributes
+            # range's `onclick` → `onClick`. Same rule as a node's own:
+            # canonical wins when both are set, with a warning.
+            item_aliases = item_alias_map.get(target)
+            if item_aliases and isinstance(rebuilt[target], list):
+                rebuilt[target] = [
+                    self._canonicalize_item(
+                        item, item_aliases, warnings, source=source, label=f"{label}.{target}[{i}]"
+                    )
+                    for i, item in enumerate(rebuilt[target])
+                ]
 
             dep = deprecated_map.get(target)
             if dep is not None:
@@ -232,6 +246,30 @@ class Canonicalizer:
         warnings.append(self._fmt(source, label,
             f"'bind: {bind}' is ignored: '{own}: {json.dumps(node[own]) if not isinstance(node[own], str) else node[own]}' "
             f"is the {section}'s value"))
+
+    def _canonicalize_item(
+        self, item: Any, aliases: dict[str, str], warnings: list[str], *, source: str, label: str
+    ) -> Any:
+        """One object of an array attribute, its alias keys rewritten."""
+        if not isinstance(item, dict):
+            return item
+        out: dict[str, Any] = {}
+        for key, value in item.items():
+            canonical = aliases.get(key)
+            if canonical is None:
+                out[key] = value
+            elif canonical in item or canonical in out:
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{key}' is an alias of '{canonical}' and both are "
+                        f"set — keeping '{canonical}', dropping '{key}'",
+                    )
+                )
+            else:
+                out[canonical] = value
+        return out
 
     def _fold_indicator_legacy(
         self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str

@@ -28,7 +28,8 @@ RSpec.describe 'kjui CircleImage imports what it emits' do
   providers = Hash.new { |h, k| h[k] = Set.new }
   map.each { |key, lines| Array(lines).each { |l| (s = l[/\.(\w+)\z/, 1]) && providers[s] << key } }
   watched = { 'Image' => /(?<![\w.])Image\(/, 'painterResource' => /(?<![\w.])painterResource\(/,
-              'AsyncImage' => /(?<![\w.])AsyncImage\(/, 'R' => /(?<![\w.])R\.drawable\./ }
+              'AsyncImage' => /(?<![\w.])AsyncImage\(/, 'R' => /(?<![\w.])R\.drawable\./,
+              'LocalContext' => /(?<![\w.])LocalContext\./ }
 
   missing = lambda do |klass, node|
     imports = Set.new
@@ -38,6 +39,7 @@ RSpec.describe 'kjui CircleImage imports what it emits' do
 
   shapes = {
     'local' => { 'type' => 'CircleImage', 'id' => 'a', 'src' => 'avatar' },
+    'local, bound' => { 'type' => 'CircleImage', 'id' => 'a', 'src' => '@{avatarName}' },
     'local, contentMode' => { 'type' => 'CircleImage', 'id' => 'a', 'src' => 'avatar', 'contentMode' => 'top' },
     'network' => { 'type' => 'CircleImage', 'id' => 'a', 'url' => 'https://example.invalid/a.png' },
     'network, errorImage' => { 'type' => 'CircleImage', 'id' => 'a', 'url' => 'https://example.invalid/a.png',
@@ -55,7 +57,7 @@ RSpec.describe 'kjui CircleImage imports what it emits' do
   # above read; the whole-file compile was the measurement).
   it 'emits Kotlin that compiles, every shape' do
     body = shapes.values.each_with_index.map do |node, i|
-      "fun emitted#{i}() {\n#{KjuiTools::Compose::Components::CircleImageComponent.generate(node, 0, Set.new)}\n}"
+      "fun emitted#{i}(data: CircleData) {\n#{KjuiTools::Compose::Components::CircleImageComponent.generate(node, 0, Set.new)}\n}"
     end.join("\n")
     drawables = body.scan(/R\.drawable\.(\w+)/).flatten.uniq
     expect(<<~KOTLIN).to compile_as_kotlin
@@ -74,7 +76,11 @@ RSpec.describe 'kjui CircleImage imports what it emits' do
       fun Modifier.clip(shape: Shape): Modifier = this
       class Painter
       fun painterResource(id: Int): Painter = Painter()
-      object R { object drawable { #{drawables.map { |d| "const val #{d}: Int = 0" }.join('; ')} } }
+      class Resources { fun getIdentifier(name: String?, defType: String, defPackage: String): Int = 0 }
+      class Context { val resources = Resources(); val packageName = "" }
+      object LocalContext { val current: Context = Context() }
+      class CircleData(val avatarName: String? = null)
+      object R { object drawable { #{(drawables + ['placeholder']).uniq.map { |d| "const val #{d}: Int = 0" }.join('; ')} } }
       interface ContentScale { companion object { val Fit = object : ContentScale {}; val None = object : ContentScale {} } }
       interface Alignment { companion object { val Center = object : Alignment {}; val TopCenter = object : Alignment {} } }
       fun Image(painter: Painter, contentDescription: String?, modifier: Modifier = Modifier,
@@ -84,6 +90,27 @@ RSpec.describe 'kjui CircleImage imports what it emits' do
                      contentScale: ContentScale = ContentScale.Fit) {}
       #{body}
     KOTLIN
+  end
+
+  # A bound src is the drawable's name held in data (Image.src is a name,
+  # string|binding): looked up at run time as Image looks it up, with the same
+  # fallback. It was frozen into a drawable name (`R.drawable.img___avatar_`),
+  # which is no resource. 5 paths, before: sjui `Image(data.avatar)`, rjui
+  # `src={data.avatar}` and both Dynamic runtimes resolve the binding; kjui
+  # alone froze it.
+  it 'a bound src is looked up at run time, as Image looks it up' do
+    painter = ->(code) { code[/painter = .*?\n    \},?/m] }
+    { 'no fallback' => {}, 'defaultImage' => { 'defaultImage' => 'fallback' } }.each do |name, more|
+      circle = KjuiTools::Compose::Components::CircleImageComponent.generate(
+        { 'type' => 'CircleImage', 'id' => 'a', 'src' => '@{avatarName}' }.merge(more), 0, Set.new)
+      image = KjuiTools::Compose::Components::ImageComponent.generate(
+        { 'type' => 'Image', 'id' => 'a', 'src' => '@{avatarName}' }.merge(more), 0, Set.new)
+      expect(painter.call(circle)).to eq(painter.call(image)), name
+      # The property as written: a literal's resource name is lower-cased,
+      # a binding's property is not.
+      expect(circle).to include('getIdentifier(data.avatarName, "drawable"')
+      expect(circle).not_to include('R.drawable.img___')
+    end
   end
 
   it 'the check reads the emit: it sees what each shape calls, and Image passes it' do

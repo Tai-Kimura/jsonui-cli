@@ -746,10 +746,14 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
-          # userInteractionEnabled on the Label: the pointer blocker every other
-          # Label branch takes (build_clickable). This branch took none, so a
-          # touch on a detected link went through `false`.
-          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+          # The Label's tap stage, as every other Label branch takes it
+          # (build_clickable: onClick / onclick, canTap, enabled, the tap rule's
+          # role, and the userInteractionEnabled pointer blocker). This branch
+          # took none — the Label's onClick was dropped, and a touch on a
+          # detected link went through `false`. A tap on a link calls the link
+          # only; a tap elsewhere calls the Label's onClick (measured on an API
+          # 35 emulator: the two do not compete; 4f ruling, jsonui-cli 1.9.0).
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
 
           # Handle edgeInset for text-specific padding
           if json_data['edgeInset']
@@ -861,15 +865,11 @@ module KjuiTools
             if decoration_on?(attr['strikethrough'])
               code += "\n" + indent("strikethrough = true,", depth + 3)
             end
-            # Handle click events for partial attributes
-            # onclick (lowercase) -> selector format (string only)
-            # onClick (camelCase) -> binding format only (@{functionName})
-            # An empty or blank handler is no handler (TapAccessibility.handler?).
-            if JsonUIShared::TapAccessibility.handler?(attr['onclick'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onclick'], is_camel_case: false, view_id: Helpers::ModifierBuilder.view_id(json_data))
-              code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
-            elsif JsonUIShared::TapAccessibility.handler?(attr['onClick'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onClick'], is_camel_case: true, view_id: Helpers::ModifierBuilder.view_id(json_data))
+            # The range's handler (TapAccessibility.range_handler): onClick, the
+            # canonical binding, first, then onclick, its selector alias. This
+            # took onclick first.
+            if (kind, value = JsonUIShared::TapAccessibility.range_handler(attr))
+              handler_call = Helpers::ModifierBuilder.get_event_handler_call(value, is_camel_case: kind == :binding, view_id: Helpers::ModifierBuilder.view_id(json_data))
               code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
             else
               code += "\n" + indent("onClick = null", depth + 3)

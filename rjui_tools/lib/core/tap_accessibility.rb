@@ -167,6 +167,27 @@ module JsonUIShared
       !value.nil? && !(value.respond_to?(:empty?) && value.empty?)
     end
 
+    # A partialAttributes range's handler, as [:binding, value] or
+    # [:selector, value], or nil. `onClick` is the canonical spelling and
+    # `onclick` its alias (attribute_definitions.json, the range's `onClick`
+    # `aliases`): the normalizer folds `onclick` into `onClick`, so onClick
+    # holds either a binding or — folded — a method name, a selector. A raw
+    # layout's `onclick` is read too, onClick first (4f ruling, jsonui-cli
+    # 1.9.0; the Dynamic runtimes read the same).
+    def range_handler(range)
+      return nil unless range.is_a?(Hash)
+
+      %w[onClick onclick].each do |key|
+        value = range[key]
+        next unless handler?(value)
+
+        names = handler_values(value)
+        return [:binding, value] if value.is_a?(String) && value.match?(/\A@\{.*\}\z/m)
+        return [:selector, value] if names.none? { |v| v.start_with?('@{') }
+      end
+      nil
+    end
+
     def linked_text?(node)
       return false unless TEXT_TYPES.include?(node['type'])
 

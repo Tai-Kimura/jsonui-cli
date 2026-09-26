@@ -725,6 +725,12 @@ module JsonUIShared
     def validate_nested_object(obj, properties, component_type, path)
       return unless obj.is_a?(Hash)
 
+      # A property's declared `aliases` (a partialAttributes range's `onClick`
+      # declares `onclick`) are accepted as it on an L0 layout, as a node's
+      # own are (expand_aliases); the normalizer folds them, so a normalized
+      # layout carries the canonical name only.
+      properties = expand_aliases(properties) unless @normalized
+
       obj.each do |key, value|
         if properties.key?(key)
           validate_attribute(key, value, properties[key], component_type, path)
