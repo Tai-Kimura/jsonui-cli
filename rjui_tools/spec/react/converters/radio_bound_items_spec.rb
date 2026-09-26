@@ -26,14 +26,26 @@ RSpec.describe 'rjui Radio: each declared shape of `items`' do
     expect(array.scan('<input').size).to eq(2)
   end
 
-  it 'a static selection still answers at codegen time for an array, and compares at run time for a binding' do
-    static_array = convert('type' => 'Radio', 'id' => 'r', 'items' => %w[a b], 'selectedValue' => 'a')
-    static_bound = convert('type' => 'Radio', 'id' => 'r', 'items' => '@{rows}', 'selectedValue' => 'a')
-    expect(static_array).to include('checked={true}').and include('checked={false}')
-    expect(static_bound).to include('checked={"a" === item}')
+  # A static selection is where the group starts and the user changes it
+  # (6750135d, ticket static-valued-controls-do-not-change-on-a-users-tap): it
+  # seeds an uncontrolled `defaultChecked`. For an array the converter knows
+  # which option that is; for a binding the option is a runtime value, so the
+  # seed compares at run time.
+  let(:static_array) { convert('type' => 'Radio', 'id' => 'r', 'items' => %w[a b], 'selectedValue' => 'a') }
+  let(:static_bound) { convert('type' => 'Radio', 'id' => 'r', 'items' => '@{rows}', 'selectedValue' => 'a') }
+
+  it 'a static selection seeds the option it names for an array, and compares at run time for a binding' do
+    inputs = static_array.scan(/<input [^>]*>/)
+    expect(inputs.size).to eq(2)
+    expect(inputs[0]).to include('value="a"').and include('defaultChecked')
+    expect(inputs[1]).to include('value="b"')
+    expect(inputs[1]).not_to include('defaultChecked')
+    expect(static_array).not_to match(/\bchecked=|readOnly/)
+    expect(static_bound).to include('defaultChecked={"a" === item}')
+    expect(static_bound).not_to match(/\bchecked=|readOnly/)
   end
 
-  it 'typechecks both shapes under --strict' do
+  it 'typechecks both shapes, bound and seeded, under --strict' do
     ambient = <<~TS
       declare const data: { rows: string[]; sel: string; setSel?: (value: string) => void };
     TS
@@ -43,6 +55,12 @@ RSpec.describe 'rjui Radio: each declared shape of `items`' do
       );
       export const FromBinding = (): JSX.Element => (
       #{bound}
+      );
+      export const SeededArray = (): JSX.Element => (
+      #{static_array}
+      );
+      export const SeededBinding = (): JSX.Element => (
+      #{static_bound}
       );
     TSX
   end

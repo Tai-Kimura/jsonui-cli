@@ -455,21 +455,48 @@ module JsonUIShared
     end
 
     # spelling -> { 'canonical' => section, 'render_as' => type (optional) }.
-    # Read once per validator. A missing or malformed file raises, naming
-    # it: a table that read as empty would validate every synonym spelling
-    # against common attributes only, and say nothing.
+    # Read once per validator. A malformed file raises, naming it: a table
+    # that read as empty would validate every synonym spelling against
+    # common attributes only, and say nothing.
+    #
+    # A missing file is what a plain copy of a tool leaves (the file is a link
+    # into shared/core, as attribute_definitions.json is), and it is met the
+    # way load_definitions meets that one: named where it is met, a
+    # validation stage that did not complete — in the ledger once, however
+    # many validators meet it — and the synonym spellings checked against
+    # the common attributes only. Until 1.8.121 it raised, and each tool
+    # carried the raise its own way: sjui stopped with exit 1 and kjui failed
+    # every layout with exit 1, neither with anything in the ledger; rjui put
+    # one "was not generated" entry per layout there (measured on d084cfb2,
+    # 2026-09-26).
     def type_synonyms
       @type_synonyms ||= begin
         path = @type_synonyms_path || File.join(File.dirname(__FILE__), 'type_synonyms.json')
-        raise "type_synonyms.json not found at #{path}" unless File.exist?(path)
+        if File.exist?(path)
+          entries = JSON.parse(File.read(path))['synonyms']
+          unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
+            raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
+          end
 
-        entries = JSON.parse(File.read(path))['synonyms']
-        unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
-          raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
+          entries
+        else
+          missing_type_synonyms(path)
         end
-
-        entries
       end
+    end
+
+    # {} after naming the missing table (see type_synonyms).
+    def missing_type_synonyms(path)
+      puts "\e[31m[#{log_tag} Error] type_synonyms.json not found at #{path}\e[0m"
+      begin
+        require_relative 'stage_failures'
+        JsonUI::StageFailures.record_once(
+          'validation', "#{path} was not found; the type synonyms were checked against the common attributes only"
+        )
+      rescue LoadError
+        nil
+      end
+      {}
     end
 
     # Follow a component-alias section (an `_alias_of` pointer such as
