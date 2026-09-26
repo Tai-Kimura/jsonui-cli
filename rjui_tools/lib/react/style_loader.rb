@@ -80,6 +80,16 @@ module RjuiTools
         )
       end
 
+      # A style a layout names that is not there: the layouts using it are drawn
+      # without it — a stage that did not complete, named once at the end of the
+      # build. Ruled so on 2026-09-26 after counting the faces' references: 2167
+      # `style` references in the config-declared layout dirs of the four
+      # consumer layout trees, 0 to no file (ticket
+      # uikit-build-reports-success-after-a-binding-error).
+      def self.missing_style(where)
+        JsonUI::StageFailures.record_once('styles', "#{where} was not found; the layouts using it were drawn without it")
+      end
+
       class << self
         private
 
@@ -107,6 +117,7 @@ module RjuiTools
               styles_dir = fallback_dirs.find { |dir| Dir.exist?(dir) }
 
               unless styles_dir
+                StyleLoader.missing_style("style '#{style_name}' (no styles directory: #{File.join(source_path, styles_directory)}, #{fallback_dirs.join(', ')})")
                 return nil
               end
             end
@@ -115,8 +126,10 @@ module RjuiTools
           # Style file path
           style_file = File.join(styles_dir, "#{style_name}.json")
 
-          # Return nil if file doesn't exist
-          return nil unless File.exist?(style_file)
+          unless File.exist?(style_file)
+            StyleLoader.missing_style(File.expand_path(style_file))
+            return nil
+          end
 
           # Parse and return JSON
           JSON.parse(File.read(style_file))

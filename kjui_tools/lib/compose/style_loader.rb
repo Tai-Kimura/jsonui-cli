@@ -56,7 +56,17 @@ module KjuiTools
             # Said, as sjui and rjui say it: until 1.8.121 a layout naming a
             # style that is not there was drawn without it and nothing was
             # printed (ticket uikit-build-reports-success-after-a-binding-error).
+            # A style a layout names that is not there: the layouts using it are drawn
+            # without it — a stage that did not complete, named once at the end of the
+            # build. Ruled so on 2026-09-26 after counting the faces' references: 2167
+            # `style` references in the config-declared layout dirs of the four
+            # consumer layout trees, 0 to no file (ticket
+            # uikit-build-reports-success-after-a-binding-error).
             puts "Warning: Style file '#{style_name}' not found: #{style_file}"
+            require_relative '../core/stage_failures'
+            JsonUI::StageFailures.record_once(
+              'styles', "#{style_file} was not found; the layouts using it were drawn without it"
+            )
             return nil
           end
           

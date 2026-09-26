@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "17fc1ac6fd8ec320ade36b6bc9fae11fdd0dc7578e2a5cde57bd92c1ec1a1848",
+  "generatedFrom": "fa8c4a541aa122247ff761a391cb60377e430418b15cd20f6aee47c1ef38bc60",
   "counts": {
     "fixtures": 1120,
     "assertable": 49,
@@ -27995,7 +27995,7 @@
     {
       "component": "Collection",
       "attribute": "items",
-      "reason": "requires runtime data / cell template (v1 static fixtures only)"
+      "reason": "binding-only"
     },
     {
       "component": "Collection",
