@@ -99,6 +99,24 @@ module JsonUIShared
     CHILDREN_DECLARATION = '_children'
     NO_CHILDREN = 'none'
 
+    # The sentence a node of a type the tool cannot draw is named with (4f's
+    # ruling, jsonui-cli 1.9.0): the type as written, and — when it matches a
+    # type the tool draws but for its case — that type. Type names are
+    # matched as written, as the SSoT spells them. One sentence: the kjui /
+    # sjui / rjui codegen write it where they draw nothing, and KotlinJsonUI
+    # Dynamic holds the same one in its library.
+    UNKNOWN_COMPONENT_TYPE = "Unknown component type '%<written>s'"
+    UNKNOWN_COMPONENT_TYPE_HINT = " — did you mean '%<canonical>s'? Type names are case-sensitive."
+
+    # The sentence for `written`, given the types the tool draws.
+    def self.unknown_component_type_message(written, known_types)
+      message = format(UNKNOWN_COMPONENT_TYPE, written: written)
+      # (not the type itself: a type the validator knows by its definition
+      # that the codegen has no component for reaches the codegen's fallback)
+      canonical = known_types.find { |known| known != written && known.casecmp?(written) }
+      canonical ? message + format(UNKNOWN_COMPONENT_TYPE_HINT, canonical: canonical) : message
+    end
+
     # The project's extension definitions alone, read the way a validator in
     # `mode` reads them (the paths are the platform profile's). For the
     # shared LayoutValidator, which knows the SSoT but not the project.
@@ -150,6 +168,9 @@ module JsonUIShared
       type = component_type || merged_component['type']
 
       return @warnings unless type
+
+      # A type the tool cannot draw
+      check_component_type(type)
 
       # Get valid attributes for this component type
       valid_attrs = get_valid_attributes(type)
@@ -214,6 +235,9 @@ module JsonUIShared
 
       # `bind` beside the component's own value attribute
       check_bind_beside_own_value(merged_component, type)
+
+      # A value attribute of the other kind (a Date SelectBox's selectedValue)
+      check_value_attribute_of_another_kind(merged_component, type)
 
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
@@ -284,6 +308,12 @@ module JsonUIShared
 
     def structural_errors?
       !@structural_errors.empty?
+    end
+
+    # The sentence for a node of `written`, with the types this tool draws —
+    # the codegen says the validator's sentence where it draws nothing.
+    def unknown_component_type_message(written)
+      self.class.unknown_component_type_message(written, known_component_types)
     end
 
     private
@@ -786,6 +816,37 @@ module JsonUIShared
       end
     end
 
+    # The types this tool draws: the SSoT's sections and the project's
+    # extension definitions (@definitions holds both), the type-synonym
+    # spellings, and the extension components the tool's own registry
+    # draws (registered_component_types, the profile's). A registered type
+    # with no attribute definition (a converter and no definition file) is
+    # known: its attributes are checked against the common ones, as before.
+    def known_component_types
+      @known_component_types ||= (
+        @definitions.select { |key, body| body.is_a?(Hash) && key != 'common' && !key.start_with?('_') }.keys +
+        type_synonyms.keys + registered_component_types
+      ).uniq
+    end
+
+    # The extension component types the tool's registry draws — a platform
+    # fact, read by the profile where it reads the registry the tool's
+    # dispatch reads. None by default.
+    def registered_component_types
+      []
+    end
+
+    # A node whose type the tool cannot draw, named by the type (4f's ruling:
+    # "Unknown attribute 'isOn' for component type 'switch'" did not say
+    # that the type was the cause). Nothing is said when there are no SSoT
+    # definitions to know types by (load_definitions names that).
+    def check_component_type(type)
+      return unless @definitions.key?('common')
+      return if known_component_types.include?(type)
+
+      add_warning(self.class.unknown_component_type_message(type, known_component_types))
+    end
+
     # A text field — a section whose `text` the user writes, so its binding
     # is two-way (read from the definitions, not a list of types: TextField
     # and TextView, and every spelling that maps to them) — does not call a
@@ -816,8 +877,7 @@ module JsonUIShared
       return unless component.key?('bind')
 
       section = map_type_to_definition(type)
-      table = @definitions.dig('common', 'bind', 'primaryValue')
-      values = table.is_a?(Hash) ? table[section] : nil
+      values = bind_value_attributes(section, component)
       return unless values.is_a?(Array)
 
       own = values.find { |key| component.key?(key) }
@@ -826,6 +886,45 @@ module JsonUIShared
       value = component[own]
       shown = value.is_a?(String) ? value : JSON.generate(value)
       add_warning("'bind: #{component['bind']}' is ignored: '#{own}: #{shown}' is the #{section}'s value")
+    end
+
+    # A section whose value depends on another attribute (a `primaryValue`
+    # object — SelectBox by selectItemType): the attributes of the
+    # `whenAbsent` kind that are not this node's value are read by no path. A
+    # Date SelectBox's value is selectedDate (4f's ruling, jsonui-cli 1.9.0);
+    # sjui read it alone, while the kjui codegen, rjui and KotlinJsonUI
+    # Dynamic fell back to selectedItem / selectedValue / selectedIndex, each
+    # to a different few.
+    def check_value_attribute_of_another_kind(component, type)
+      section = map_type_to_definition(type)
+      entry = @definitions.dig('common', 'bind', 'primaryValue', section)
+      return unless entry.is_a?(Hash) && entry['lists'].is_a?(Hash)
+
+      own = bind_value_attributes(section, component) || []
+      kind = component[entry['by']]
+      return unless kind.is_a?(String) && entry['lists'].key?(kind) && kind != entry['whenAbsent']
+
+      Array(entry['lists'][entry['whenAbsent']]).each do |attr|
+        next if own.include?(attr) || !component.key?(attr)
+
+        add_warning("'#{attr}' has no effect on a #{kind} #{section} — its value is #{own.first}")
+      end
+    end
+
+    # The attributes `bind` stands for on a section (common.bind
+    # primaryValue): a list, or — for a section whose value depends on
+    # another attribute — the object's list for the node's value of it
+    # (`lists[node[by]]`, else `lists[whenAbsent]`). nil for a section the
+    # table does not map.
+    def bind_value_attributes(section, component)
+      entry = @definitions.dig('common', 'bind', 'primaryValue', section)
+      return entry if entry.is_a?(Array)
+      return nil unless entry.is_a?(Hash) && entry['lists'].is_a?(Hash)
+
+      kind = component[entry['by']]
+      kind = entry['whenAbsent'] unless kind.is_a?(String) && entry['lists'].key?(kind)
+      list = entry['lists'][kind]
+      list.is_a?(Array) ? list : nil
     end
 
     # A flow Collection: `layout` (or `orientation`) flow or one of its alias

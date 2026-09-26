@@ -40,6 +40,17 @@ class BindFoldVectorsTest(unittest.TestCase):
                     self.assertEqual(len(folded), 1)
                     self.assertTrue(folded[0].endswith(case["warning"]), folded[0])
 
+    def test_every_attributes_for_case(self):
+        # The one function every reader of primaryValue answers the same
+        # (the generated JsonUIBindPrimaryValue on Kotlin / Swift, the shared
+        # validator): here, AliasTable.bind_value_attributes.
+        cases = json.loads(VECTORS.read_text())["attributes_for_cases"]
+        self.assertGreaterEqual(len(cases), 9)
+        table = AliasTable.from_file()
+        for case in cases:
+            with self.subTest(case["name"]):
+                self.assertEqual(table.bind_value_attributes(case["type"], case["node"]), case["expect"])
+
     def test_the_table_is_the_declaration(self):
         # Swap the authority: a section the declaration maps elsewhere folds
         # there, and one it does not map keeps its bind (a list hard-coded in
@@ -53,6 +64,57 @@ class BindFoldVectorsTest(unittest.TestCase):
         tree, warnings = canon.canonicalize({"type": "Slider", "bind": "@{v}"}, add_marker=False)
         self.assertEqual(tree, {"type": "Slider", "bind": "@{v}"})
         self.assertEqual(warnings, [])
+
+    def test_a_list_by_another_attribute_follows_the_declaration(self):
+        # A section whose value depends on another attribute (SelectBox by
+        # selectItemType): the list is picked by the node's value of it, else
+        # whenAbsent. Swapping the declared lists moves the fold with them.
+        entry = {"by": "kind", "whenAbsent": "A", "lists": {"A": ["first"], "B": ["second"]}}
+        defs = {"common": {"bind": {"type": "binding", "primaryValue": {"Box": entry}}},
+                "Box": {"kind": {"type": "string", "enum": ["A", "B"]},
+                        "first": {"type": "string"}, "second": {"type": "string"}}}
+        canon = Canonicalizer(AliasTable(defs))
+        for node, folded in [
+            ({"type": "Box", "bind": "@{v}"}, {"type": "Box", "first": "@{v}"}),
+            ({"type": "Box", "kind": "A", "bind": "@{v}"}, {"type": "Box", "kind": "A", "first": "@{v}"}),
+            ({"type": "Box", "kind": "B", "bind": "@{v}"}, {"type": "Box", "kind": "B", "second": "@{v}"}),
+            # a value the lists do not name is the whenAbsent one
+            ({"type": "Box", "kind": "b", "bind": "@{v}"}, {"type": "Box", "kind": "b", "first": "@{v}"}),
+            # the other kind's attribute is not this kind's value: bind still folds
+            ({"type": "Box", "kind": "B", "first": "x", "bind": "@{v}"},
+             {"type": "Box", "kind": "B", "first": "x", "second": "@{v}"}),
+        ]:
+            with self.subTest(node=node):
+                tree, _ = canon.canonicalize(node, add_marker=False)
+                self.assertEqual(tree, folded)
+        swapped = dict(entry, lists={"A": ["second"], "B": ["first"]})
+        defs["common"]["bind"]["primaryValue"]["Box"] = swapped
+        tree, _ = Canonicalizer(AliasTable(defs)).canonicalize({"type": "Box", "kind": "B", "bind": "@{v}"}, add_marker=False)
+        self.assertEqual(tree, {"type": "Box", "kind": "B", "first": "@{v}"})
+
+    def test_a_node_whose_style_or_responsive_branch_changes_it_is_left_for_the_renderer(self):
+        # The fold is on the node a renderer draws, after its style is merged
+        # and its responsive branch resolved (shared/core/bind_fold.rb). The
+        # normalizer cannot see either, so it leaves such a node as written;
+        # folded here, a layout bind beside a style's isOn: true was drawn
+        # bound. The style cases of the shared table: as written here, and the
+        # merged node folds to what the table draws.
+        table = json.loads(VECTORS.read_text())
+        self.assertGreaterEqual(len(table["style_cases"]), 2)
+        for case in table["style_cases"]:
+            with self.subTest(case["name"]):
+                node = json.loads(json.dumps(case["node"]))
+                tree, warnings = self.canon.canonicalize(node, add_marker=False)
+                self.assertEqual(tree, case["node"])
+                self.assertEqual([w for w in warnings if "'bind" in w], [])
+                merged = {**case["styles"][node["style"]], **node}
+                merged.pop("style")
+                drawn, _ = self.canon.canonicalize(merged, add_marker=False)
+                self.assertEqual(drawn, case["drawn"])
+        responsive = {"type": "Switch", "bind": "@{on}", "responsive": {"compact": {"isOn": True}}}
+        tree, _ = self.canon.canonicalize(json.loads(json.dumps(responsive)), add_marker=False)
+        self.assertEqual(tree["bind"], "@{on}")
+        self.assertNotIn("isOn", tree)
 
     def test_nested_and_idempotent(self):
         layout = {"type": "View", "child": [{"type": "Switch", "isOn": True, "bind": "@{on}"},

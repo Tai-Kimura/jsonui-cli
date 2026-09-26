@@ -209,7 +209,18 @@ class Canonicalizer:
         """
         if "bind" not in node:
             return
-        values = self._table.bind_value_attributes(node_type)
+        # The fold is on the node a renderer draws: after its style is merged
+        # and its responsive branch resolved (shared/core/bind_fold.rb). A
+        # node naming a style or carrying responsive overrides is not drawn
+        # as written — a style may give it its own value (then `bind` is
+        # ignored) or a `bind` — so it is left for the renderer's fold. Folded
+        # here, a layout `bind` beside a style's `isOn: true` became
+        # `isOn: @{…}` and the style's value lost (measured on the kjui, sjui
+        # and rjui codegen: the binding won on a normalized layout, the
+        # style's value on the layout as written).
+        if "style" in node or "responsive" in node:
+            return
+        values = self._table.bind_value_attributes(node_type, node)
         if not values:
             return
         own = next((key for key in values if key in node), None)

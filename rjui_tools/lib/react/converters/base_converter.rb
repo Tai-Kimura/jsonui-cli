@@ -9,6 +9,7 @@ require_relative '../../core/attribute_validator_core'
 require_relative '../../core/tap_accessibility'
 # The one escaper for an author's text in the generated TS/TSX.
 require_relative '../../core/string_literals'
+require_relative '../../core/bind_fold'
 require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
@@ -1413,7 +1414,17 @@ module RjuiTools
           # Apply style if specified
           resolved_child = apply_style(child)
 
-          converter_class = get_converter_class(resolved_child['type'])
+          # `bind` folded into the attribute it stands for
+          # (JsonUIShared::BindFold) on the node a built-in converter draws —
+          # its style merged — after the app's extension converters were
+          # asked; an extension gets its node as written. The layout
+          # normalizer leaves a node with a style or responsive overrides to
+          # this fold.
+          type = resolved_child['type']
+          extension = (config['_extension_converters'] || {})[type]
+          resolved_child = JsonUIShared::BindFold.fold(resolved_child, type) unless extension
+
+          converter_class = get_converter_class(type)
           converter_class.new(resolved_child, config)
         end
 
@@ -1753,19 +1764,12 @@ module RjuiTools
           attrs
         end
 
-        # `bind` — the alternative spelling for a component's primary value
-        # binding. Declared on `common`, honoured by eight Compose components and
-        # by the iOS checkbox/text-field paths, and read nowhere on web until
-        # now. The component's own value attribute wins; this is the last
-        # fallback, so an explicit `isOn` / `value` / `items` still decides.
-        #
-        # Kept as one helper rather than added to each chain so the fallback
-        # cannot drift between components — and so the truthiness of the
-        # existing chains is preserved exactly (a literal `isOn: false` still
-        # falls through, as it always did).
-        def with_bind_fallback(value)
-          value || attributes['bind']
-        end
+        # `bind` is not read here: the node a converter gets has it folded into
+        # the attribute it stands for (JsonUIShared::BindFold, at the dispatch —
+        # create_converter_for_child / ReactGenerator#convert_component). The
+        # `with_bind_fallback` this replaced read it last in each chain, so a
+        # literal `isOn: false` beside `bind` drew the binding; the SSoT says the
+        # component's own value wins.
 
         # A single call stays an expression body so the common case emits exactly
         # what it always did; several calls need a block.

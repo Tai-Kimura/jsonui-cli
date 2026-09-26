@@ -50,6 +50,26 @@ module KjuiTools
         ]
       end
 
+      # The extension components the compose dispatch draws: the registry it
+      # reads (ComposeBuilder#check_custom_component — components/extensions/
+      # component_mappings.rb, COMPONENT_MAPPINGS), so a registered type is a
+      # type this tool draws even without an attribute definition file.
+      def registered_component_types
+        mappings = component_registry_path
+        return [] unless mappings && File.exist?(mappings)
+
+        require mappings
+        table = defined?(KjuiTools::Compose::Components::Extensions::COMPONENT_MAPPINGS) &&
+                KjuiTools::Compose::Components::Extensions::COMPONENT_MAPPINGS
+        table.is_a?(Hash) ? table.keys.map(&:to_s) : []
+      rescue StandardError, LoadError, SyntaxError
+        []
+      end
+
+      def component_registry_path
+        File.expand_path('../compose/components/extensions/component_mappings.rb', __dir__)
+      end
+
       def config_file_name
         'kjui.config.json'
       end

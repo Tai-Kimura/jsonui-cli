@@ -984,8 +984,6 @@ module KjuiTools
             ["data.#{var}", var]
           elsif !state.nil?
             [state.to_s, nil]
-          elsif (var = bound.call(json_data['bind']))
-            ["data.#{var}", var]
           else
             ['false', nil]
           end

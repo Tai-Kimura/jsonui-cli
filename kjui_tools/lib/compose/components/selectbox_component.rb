@@ -18,15 +18,16 @@ module KjuiTools
           # Check if this is a date picker
           is_date_picker = json_data['selectItemType'] == 'Date'
           
-          # SelectBox uses 'selectedItem', 'selectedDate', or 'bind' for selected value
-          # For date pickers, selectedDate takes priority
-          selected = if is_date_picker && json_data['selectedDate'] && json_data['selectedDate'].match(/@\{([^}]+)\}/)
-            # `data.#{$1}` spliced the inner expression in verbatim, so a
-            # `?? default` reached the emit as `data.x ?? y`, which is not
-            # Kotlin. No validator rule covers this attribute (only
-            # `binding_direction: "two-way"` ones are checked for a complex
-            # expression) — plan 49 lane C.
-            Helpers::BindingExpression.value_access($1)
+          # A Date SelectBox's value is selectedDate alone (4f's ruling,
+          # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by selectItemType):
+          # it fell back to selectedItem / selectedValue / selectedIndex / bind,
+          # which sjui never read — the shared validator now
+          # names each of them on a Date box. A lone `bind` reaches here as
+          # selectedDate: the layout normalizer (on by default) folds it.
+          selected = if is_date_picker
+            date_value(json_data)
+          # A list box: selectedItem, selectedValue, selectedIndex (a lone
+          # `bind` arrives as selectedValue: JsonUIShared::BindFold at the dispatch)
           elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
             Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
@@ -45,8 +46,6 @@ module KjuiTools
             else
               "\"\""
             end
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedIndex'].is_a?(Integer) && json_data['items'].is_a?(Array)
             # Static selectedIndex: display the addressed item, as dynamic
             # mode does. (An Integer here used to crash the converter —
@@ -58,7 +57,8 @@ module KjuiTools
             # STATIC selections were dropped: every branch above tests for a
             # `@{...}`, so a plain `selectedValue: "Two"` fell through to the
             # empty string (plan 49 lane C, handed over from D). Same priority
-            # as the bound branches.
+            # as the bound branches. (A list box's selectedDate is left as it
+            # was: the ruling names the Date box's value only.)
             static_selected = json_data['selectedDate'] || json_data['selectedItem'] || json_data['selectedValue']
             Helpers::BoundValue.text(static_selected)
           else
@@ -76,6 +76,21 @@ module KjuiTools
           generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, nil)
         end
 
+        # A Date SelectBox's value: its selectedDate, bound (`data.x`; the
+        # inner expression through value_access — `data.#{$1}` spliced a
+        # `?? default` in verbatim, `data.x ?? y`, not Kotlin: plan 49 lane C)
+        # or static (the seed of the box's own state), else "".
+        def self.date_value(json_data)
+          date = json_data['selectedDate']
+          if date.is_a?(String) && date.match(/@\{([^}]+)\}/)
+            Helpers::BindingExpression.value_access($1)
+          elsif date.nil?
+            '""'
+          else
+            Helpers::BoundValue.text(date)
+          end
+        end
+
         def self.generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, seeded)
           # Use DateSelectBox for date type
           if is_date_picker
@@ -87,11 +102,13 @@ module KjuiTools
           code += "\n" + indent("value = #{selected},", depth + 1)
           
           # Handle onValueChange callback
-          # For date pickers, check selectedDate first
+          # A Date box: its selectedDate alone; a list box: selectedItem, selectedValue, selectedIndex
+          # (`bind` arrives folded into one of them: JsonUIShared::BindFold at the dispatch)
           binding_variable = nil
           is_index_binding = false
-          if is_date_picker && json_data['selectedDate'] && json_data['selectedDate'].match(/@\{([^}]+)\}/)
-            binding_variable = $1
+          if is_date_picker
+            # a Date box writes back to its selectedDate alone (date_value)
+            binding_variable = $1 if json_data['selectedDate'].is_a?(String) && json_data['selectedDate'].match(/@\{([^}]+)\}/)
           elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
             binding_variable = $1
           elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
@@ -99,8 +116,6 @@ module KjuiTools
           elsif json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
             binding_variable = $1
             is_index_binding = true
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            binding_variable = $1
           end
 
           view_id = Helpers::ModifierBuilder.view_id(json_data)

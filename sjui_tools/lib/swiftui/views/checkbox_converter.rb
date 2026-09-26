@@ -160,17 +160,10 @@ module SjuiTools
             return "$data.#{extract_binding_property(@component['checked'])}"
           end
 
-          # `bind` is the value only when the CheckBox's own state attribute is
-          # not set: SSoT common.bind — an alternative spelling of the own value
-          # attribute, "which takes precedence when both are set". A static
-          # isOn / checked beside it is the value (the local state below), and
-          # the validator / normalizer say `bind` is ignored. It was the value
-          # here even then, where the Switch and every other face took the own
-          # attribute.
-          own_state_set = @component.key?('isOn') || @component.key?('checked')
-          if !own_state_set && @component['bind'] && is_binding?(@component['bind'])
-            return "$data.#{extract_binding_property(@component['bind'])}"
-          end
+          # `bind` is not read: ConverterFactory#create_converter folds it
+          # into isOn when neither isOn nor checked is set, and drops it beside
+          # either (JsonUIShared::BindFold; SSoT common.bind, the own value
+          # attribute "takes precedence when both are set").
 
           # `value` is the cross-platform alias of the on/off state.
           if @component['value'] && is_binding?(@component['value'])

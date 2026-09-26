@@ -34,10 +34,6 @@ module KjuiTools
               # Direct integer value - keep as integer for proper comparison
               json_data['selectedIndex'].to_i
             end
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            variable = $1
-            is_dynamic_index = true
-            "data.#{variable}"
           else
             0  # Default to 0 as integer
           end
@@ -204,9 +200,6 @@ module KjuiTools
               if json_data['selectedIndex'] && json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
                 has_binding = true
                 binding_variable = $1
-              elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-                has_binding = true
-                binding_variable = $1
               end
               
               # Generate onClick handler
@@ -319,9 +312,6 @@ module KjuiTools
             binding_variable = nil
             
             if json_data['selectedIndex'] && json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
-              has_binding = true
-              binding_variable = $1
-            elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
               has_binding = true
               binding_variable = $1
             end
