@@ -297,6 +297,9 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
     for attr in (a for a in comp.attrs if a.element_spellings):
         body.extend(_element_spellings_decl(attr))
         body.append("")
+    for attr in (a for a in comp.attrs if a.nested_spellings):
+        body.extend(_nested_spellings_decl(attr))
+        body.append("")
 
     body.extend(_metadata_decls(comp, model))
     body.append("")
@@ -471,6 +474,36 @@ def _element_spellings_decl(attr: Attribute) -> list[str]:
         f"        public static let declaredSpellings: [String] = [{spellings}]",
         "    }",
     ]
+
+
+
+
+def _nested_tree(attr: Attribute) -> dict:
+    tree: dict = {}
+    for path, spellings in attr.nested_spellings:
+        node = tree
+        for part in path[:-1]:
+            node = node.setdefault(part, {})
+        node.setdefault(path[-1], {})["__spellings__"] = (".".join((attr.name,) + path), spellings)
+    return tree
+
+
+def _nested_spellings_decl(attr: Attribute) -> list[str]:
+    """The enums declared inside an object-typed attribute, as nested
+    namespaces: `Underline.LineStyle.declaredSpellings`."""
+    def emit(name: str, node: dict, indent: str) -> list[str]:
+        lines = [f"{indent}public enum {_pascal(name)} {{"]
+        if "__spellings__" in node:
+            where, spellings = node["__spellings__"]
+            lines.append(f"{indent}    /// The spellings `{where}` is declared as — case-sensitive.")
+            lines.append(f"{indent}    public static let declaredSpellings: [String] = [{', '.join(_swift_str(v) for v in spellings)}]")
+        for key, child in node.items():
+            if key != "__spellings__":
+                lines.extend(emit(key, child, indent + "    "))
+        lines.append(f"{indent}}}")
+        return lines
+
+    return emit(attr.name, _nested_tree(attr), "    ")
 
 
 def _enum_parse_func(attr: Attribute) -> list[str]:

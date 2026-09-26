@@ -28,6 +28,7 @@ from ...core.comment_safety import sanitize_block_comment
 from ...core.type_mapper import TypeMapper
 from .model import Attribute, AttrKind, AttrModel, Component, format_default, merged_alias_map
 from .swift_emitter import (
+    _nested_tree,
     _pascal,
     _split_words,
     dimension_type_name,
@@ -313,6 +314,9 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
     for attr in (a for a in comp.attrs if a.element_spellings):
         parts.extend(_element_spellings_decl(attr))
         parts.append("")
+    for attr in (a for a in comp.attrs if a.nested_spellings):
+        parts.extend(_nested_spellings_decl(attr))
+        parts.append("")
 
     parts.append("    companion object {")
     parts.extend(_metadata_decls(comp, model))
@@ -440,6 +444,24 @@ def _element_spellings_decl(attr: Attribute) -> list[str]:
         + ", ".join(_kotlin_str(v) for v in attr.element_spellings) + ")",
         "    }",
     ]
+
+
+def _nested_spellings_decl(attr: Attribute) -> list[str]:
+    """The enums declared inside an object-typed attribute, as nested
+    objects: `Underline.LineStyle.declaredSpellings`."""
+    def emit(name: str, node: dict, indent: str) -> list[str]:
+        lines = [f"{indent}object {_pascal(name)} {{"]
+        if "__spellings__" in node:
+            where, spellings = node["__spellings__"]
+            lines.append(f"{indent}    /** The spellings `{where}` is declared as — case-sensitive. */")
+            lines.append(f"{indent}    val declaredSpellings: List<String> = listOf({', '.join(_kotlin_str(v) for v in spellings)})")
+        for key, child in node.items():
+            if key != "__spellings__":
+                lines.extend(emit(key, child, indent + "    "))
+        lines.append(f"{indent}}}")
+        return lines
+
+    return emit(attr.name, _nested_tree(attr), "    ")
 
 
 def _enum_parse_func(attr: Attribute) -> list[str]:

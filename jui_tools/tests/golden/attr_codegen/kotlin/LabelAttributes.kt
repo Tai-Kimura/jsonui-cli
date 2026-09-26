@@ -21,12 +21,16 @@ data class LabelAttributes(
     val insetEdges: List<Any?>? = null,
     /** Partial text styling */
     val partialAttributes: List<Any?>? = null,
+    /** A list of objects with enums inside (nested vocabulary through items). */
+    val runs: List<Any?>? = null,
     /** Label-specific shadow override (object only) */
     val shadow: Map<String, Any?>? = null,
     /** Text content (supports data binding) */
     val text: AttrValue<String>? = null,
     /** Text transformation (legacy spellings kept for compat) [default: none] */
     val textTransform: AttrEnum<TextTransform>? = null,
+    /** An object with an enum inside (nested vocabulary). [accepts: boolean | object] */
+    val underline: Any? = null,
     /** Associated value */
     val value: Any? = null,
 ) {
@@ -54,6 +58,26 @@ data class LabelAttributes(
         val declaredSpellings: List<String> = listOf("top", "bottom", "leading", "trailing")
     }
 
+    object Runs {
+        object TextAlign {
+            /** The spellings `runs.textAlign` is declared as — case-sensitive. */
+            val declaredSpellings: List<String> = listOf("Left", "Right")
+        }
+        object Underline {
+            object LineStyle {
+                /** The spellings `runs.underline.lineStyle` is declared as — case-sensitive. */
+                val declaredSpellings: List<String> = listOf("Single", "None")
+            }
+        }
+    }
+
+    object Underline {
+        object LineStyle {
+            /** The spellings `underline.lineStyle` is declared as — case-sensitive. */
+            val declaredSpellings: List<String> = listOf("Single", "Double", "None")
+        }
+    }
+
     companion object {
         /**
          * Canonical attribute names declared for this component, including
@@ -65,9 +89,11 @@ data class LabelAttributes(
             "highlightColor",
             "insetEdges",
             "partialAttributes",
+            "runs",
             "shadow",
             "text",
             "textTransform",
+            "underline",
             "value",
         )
 
@@ -96,9 +122,11 @@ data class LabelAttributes(
             highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", listOf("hilightColor"), canonicalOnly)),
             insetEdges = AttrCoerce.array(AttrCoerce.lookup(json, "insetEdges")),
             partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes")),
+            runs = AttrCoerce.array(AttrCoerce.lookup(json, "runs")),
             shadow = AttrCoerce.obj(AttrCoerce.lookup(json, "shadow")),
             text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text")) { AttrCoerce.string(it) },
             textTransform = parseTextTransform(AttrCoerce.lookup(json, "textTransform")),
+            underline = AttrCoerce.lookup(json, "underline"),
             value = AttrCoerce.lookup(json, "value"),
         )
 

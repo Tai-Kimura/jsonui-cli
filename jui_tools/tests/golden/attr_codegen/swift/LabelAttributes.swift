@@ -24,6 +24,26 @@ public struct LabelAttributes {
         public static let declaredSpellings: [String] = ["top", "bottom", "leading", "trailing"]
     }
 
+    public enum Runs {
+        public enum TextAlign {
+            /// The spellings `runs.textAlign` is declared as — case-sensitive.
+            public static let declaredSpellings: [String] = ["Left", "Right"]
+        }
+        public enum Underline {
+            public enum LineStyle {
+                /// The spellings `runs.underline.lineStyle` is declared as — case-sensitive.
+                public static let declaredSpellings: [String] = ["Single", "None"]
+            }
+        }
+    }
+
+    public enum Underline {
+        public enum LineStyle {
+            /// The spellings `underline.lineStyle` is declared as — case-sensitive.
+            public static let declaredSpellings: [String] = ["Single", "Double", "None"]
+        }
+    }
+
     /// Canonical attribute names declared for this component, including the shared `common` set (public metadata contract).
     public static let declaredAttributes: Set<String> = CommonAttributes.declaredAttributes.union([
         "bind",
@@ -31,9 +51,11 @@ public struct LabelAttributes {
         "highlightColor",
         "insetEdges",
         "partialAttributes",
+        "runs",
         "shadow",
         "text",
         "textTransform",
+        "underline",
         "value",
     ])
 
@@ -68,6 +90,9 @@ public struct LabelAttributes {
     /// Partial text styling
     public let partialAttributes: [Any]?
 
+    /// A list of objects with enums inside (nested vocabulary through items).
+    public let runs: [Any]?
+
     /// Label-specific shadow override (object only)
     public let shadow: [String: Any]?
 
@@ -76,6 +101,9 @@ public struct LabelAttributes {
 
     /// Text transformation (legacy spellings kept for compat) [default: none]
     public let textTransform: AttrEnum<TextTransform>?
+
+    /// An object with an enum inside (nested vocabulary). [accepts: boolean | object]
+    public let underline: Any?
 
     /// Associated value
     public let value: Any?
@@ -89,9 +117,11 @@ public struct LabelAttributes {
         self.highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", ["hilightColor"], canonicalOnly: canonicalOnly))
         self.insetEdges = AttrCoerce.array(AttrCoerce.lookup(json, "insetEdges"))
         self.partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes"))
+        self.runs = AttrCoerce.array(AttrCoerce.lookup(json, "runs"))
         self.shadow = AttrCoerce.object(AttrCoerce.lookup(json, "shadow"))
         self.text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text"), AttrCoerce.string)
         self.textTransform = Self.parseTextTransform(AttrCoerce.lookup(json, "textTransform"))
+        self.underline = AttrCoerce.any(AttrCoerce.lookup(json, "underline"))
         self.value = AttrCoerce.any(AttrCoerce.lookup(json, "value"))
     }
 
