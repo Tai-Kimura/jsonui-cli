@@ -401,6 +401,11 @@ class LayoutGenerator:
             node["columnSpacing"] = coll.column_spacing
         if coll.paging:
             node["paging"] = True
+        # structure.collection.lazy false: "a plain VStack/Column/div with
+        # ForEach and NO scroll container" (the spec schema) — the Layout's
+        # lazy "none". true is the Layout default and is not written.
+        if coll.lazy is False:
+            node["lazy"] = "none"
 
         return node
 
