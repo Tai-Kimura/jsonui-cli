@@ -1,6 +1,26 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# ---- Ruby floor: the same block in bin/sjui, bin/kjui and bin/rjui ----
+# From jsonui-cli 1.9.0 these tools need Ruby 3.2 or later. This is the first
+# thing that runs, before anything is loaded, so an older ruby stops on one
+# line that names it rather than on a NoMethodError from inside a build. It is
+# written in syntax every ruby parses: it has to run where it refuses.
+if (RUBY_VERSION.split('.').map(&:to_i) <=> [3, 2, 0]) < 0
+  require 'rbconfig'
+  jsonui_rbenv = ENV['RBENV_VERSION']
+  jsonui_rbenv = if jsonui_rbenv.nil? then ''
+                 elsif jsonui_rbenv == 'system' || jsonui_rbenv.start_with?(RUBY_VERSION) then " (rbenv chose #{jsonui_rbenv})"
+                 else " (RBENV_VERSION=#{jsonui_rbenv}, but rbenv did not start this ruby)"
+                 end
+  $stderr.puts "ERROR: #{File.basename(__FILE__)} needs Ruby 3.2 or later (jsonui-cli 1.9.0), and this is " \
+               "Ruby #{RUBY_VERSION} at #{RbConfig.ruby}#{jsonui_rbenv}. Put a .ruby-version naming Ruby 3.2 " \
+               "or later in #{Dir.pwd} or a directory above it (rbenv, asdf and mise read it), or put a " \
+               "Ruby 3.2 or later first on PATH."
+  exit 1
+end
+# ---- end of the Ruby floor ----
+
 # Read files as UTF-8 whatever the locale, as sjui and kjui do. Until 1.8.113
 # rjui did not, so with LANG unset (US-ASCII) on Ruby 3.3.1 / json 2.16.0
 # `rjui build` stopped at start-up with Encoding::InvalidByteSequenceError
