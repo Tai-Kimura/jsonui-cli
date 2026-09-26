@@ -261,21 +261,6 @@ module KjuiTools
           required_imports&.add(:grid_item_span)
           required_imports&.add(:launched_effect)
           
-          # Legacy: Extract cellClasses, headerClasses, footerClasses (string arrays)
-          cell_classes = json_data['cellClasses'] || []
-          header_classes = json_data['headerClasses'] || []
-          footer_classes = json_data['footerClasses'] || []
-          
-          # Use the class names directly
-          cell_class_name = cell_classes.first if cell_classes.any?
-          # The header / footer composables: drawn once, full width, before
-          # and after the cells — sjui's reading (the view with its own
-          # ViewModel, no item data). Until 1.8.121 both names were read here
-          # and never used, so the declared attributes drew nothing on Android
-          # (ticket collection-attributes-declared-but-not-drawn-on-some-paths).
-          header_class_name = cell_class_name(header_classes.first) if header_classes.any?
-          footer_class_name = cell_class_name(footer_classes.first) if footer_classes.any?
-          
           # Resolve the grid column count. The top-level `columns` attribute
           # accepts either a literal Int or a `@{prop}` binding (see
           # attribute_definitions.json#columns). For a binding we forfeit
@@ -560,10 +545,8 @@ module KjuiTools
           if sections.any?
             # Generate section-based collection
             code += generate_sections_content(json_data, sections, columns, depth, required_imports, gravity_alignment)
-          elsif cell_class_name || header_class_name || footer_class_name
-            code += class_list_edge_item(header_class_name, 'header', depth + 1) if header_class_name
-            code += class_list_cells(json_data, cell_class_name, columns, depth, required_imports) if cell_class_name
-            code += class_list_edge_item(footer_class_name, 'footer', depth + 1) if footer_class_name
+          elsif (names = class_list(json_data))
+            code += class_list_lazy_body(json_data, names, is_horizontal, depth + 1, required_imports, gravity_alignment)
           else
             # Declaration-faithful (2026-08-02 ruling): no cell class
             # declared → nothing rendered (was a 10-item placeholder Card).
@@ -574,97 +557,187 @@ module KjuiTools
           code
         end
 
-        # A `headerClasses` / `footerClasses` view in the class-list grid: one
-        # full-width item holding the composable, which reads its own
-        # ViewModel (the scaffold's `XView(viewModel, modifier)` shape — the
-        # one the section header/footer path already calls).
-        def self.class_list_edge_item(class_name, role, depth)
-          code = "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth)
-          code += "\n" + indent("val #{role}ViewModel: #{class_name}ViewModel = viewModel(key = \"#{class_name}_#{role}_\${viewModel.hashCode()}\")", depth + 1)
-          code += "\n" + indent("#{class_name}View(", depth + 1)
-          code += "\n" + indent("viewModel = #{role}ViewModel,", depth + 2)
-          code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 2)
-          code += "\n" + indent(")", depth + 1)
-          code + "\n" + indent("}", depth)
+        # The class-list shape: `cellClasses` (with `headerClasses` /
+        # `footerClasses`), `items` and no `sections`. Drawn as sjui codegen
+        # draws it, from the data's own sections (CollectionDataSource, the
+        # type kjui gives the property — data_model_updater.rb):
+        #
+        #   lazy vertical, 1 column or a grid   every data section; header before, footer after
+        #   lazy horizontal, flow               the first data section; no header / footer
+        #   lazy:none or wrapContent, vertical  every data section; header before, footer after
+        #   lazy:none horizontal                the first data section; no header / footer
+        #   paging                              nothing
+        #
+        # A header / footer is its view with its own ViewModel and no item
+        # data, and is drawn whether or not there are items. Until 1.8.121
+        # only the lazy routes drew this shape at all, reading the cells as
+        # `data.<items>?.get("<cellClass>")` — a map keyed by cell class, which
+        # CollectionDataSource is not, so it did not compile — through a
+        # `<cellClass>View(data = …)` the cell scaffold does not have, with a
+        # no-items branch that used an undeclared `item`; the lazy horizontal
+        # grid drew a header and footer sjui does not; every other route drew
+        # nothing (measured on 8e4ea3ea, 2026-09-26; ticket
+        # collection-attributes-declared-but-not-drawn-on-some-paths).
+        #
+        # [cell, header, footer] as declared (the first of each; several
+        # cells are the validator's to refuse), or nil when none is.
+        def self.class_list(json_data)
+          names = %w[cellClasses headerClasses footerClasses].map do |key|
+            first = json_data[key].is_a?(Array) ? json_data[key].first : nil
+            first = first['className'] if first.is_a?(Hash)
+            first.is_a?(String) && !first.empty? ? first : nil
+          end
+          names.any? ? names : nil
         end
 
-        # The cells of a class-list Collection (`cellClasses`, no sections).
-        def self.class_list_cells(json_data, cell_class_name, columns, depth, required_imports)
-          code = ''
-          # Check if items property is specified (e.g., "@{items}")
-          items_property = json_data['items']
-          
-          if items_property && items_property.match(/@\{([^}]+)\}/)
-            # Extract property name from @{propertyName}
-            property_name = $1
-            
-            # Items should be a Map<String, List<Any>> where key is cell class name
-            # Get the items for this specific cell class
-            code += "\n" + indent("// Collection with data source: #{property_name}[\"#{cell_class_name}\"]", depth + 1)
-            code += "\n" + indent("val cellItems = data.#{property_name}?.get(\"#{cell_class_name}\") ?: emptyList()", depth + 1)
-            code += "\n" + indent("items(cellItems.size) { index ->", depth + 1)
-            code += "\n" + indent("val item = cellItems[index]", depth + 2)
-          else
-            # Default to empty list
-            code += "\n" + indent("// Collection with no data source", depth + 1)
-            code += "\n" + indent("items(0) { index ->", depth + 1)
-            code += "\n" + indent("// No items", depth + 2)
-          end
-          
-          # Create cell view with data
-          if (nonsection_chrome = chrome_open(json_data, required_imports))
-            code += "\n" + indent(nonsection_chrome, depth + 2)
-          end
-          code += "\n" + indent("when (val itemData = item) {", depth + 2)
-          code += "\n" + indent("is #{cell_class_name}Data -> {", depth + 3)
-          code += "\n" + indent("#{cell_class_name}View(", depth + 4)
-          code += "\n" + indent("data = itemData,", depth + 5)
-          code += "\n" + indent("viewModel = viewModel(),", depth + 5)
-          code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
+        # The `data.<items>` property the cells come from, or nil.
+        def self.class_list_items_property(json_data)
+          items = json_data['items']
+          items.is_a?(String) ? items[/\A@\{([^}]+)\}\z/, 1] : nil
+        end
 
-          # Cell-specific modifiers
-          if json_data['cellHeight']
-            code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 5)
+        # One cell, with `sectionIndex`, `cellIndex` and `currentCellData` in
+        # scope: its own ViewModel fed the cell's data — the scaffold's
+        # `XView(viewModel, modifier)`, as the sections path calls it.
+        def self.class_list_cell(json_data, cell_name, depth, required_imports)
+          cell_class = cell_class_name(cell_name)
+          code = "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_class}_cell_\${sectionIndex}_\${cellIndex}_\${viewModel.hashCode()}\")", depth)
+          code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth)
+          on_item_appear = json_data['onItemAppear']
+          if on_item_appear.is_a?(String) && on_item_appear.match(/@\{([^}]+)\}/)
+            code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth)
           end
-
-          # For grid layouts, ensure cells expand to fill width
-          if columns > 1
-            code += "\n" + indent("    .fillMaxWidth()", depth + 5)
+          closers = 0
+          if (chrome = chrome_open(json_data, required_imports))
+            code += "\n" + indent(chrome, depth)
+            closers += 1
           end
-
-          code += "\n" + indent(")", depth + 4)
-          code += "\n" + indent("}", depth + 3)
-          code += "\n" + indent("is Map<*, *> -> {", depth + 3)
-          code += "\n" + indent("// Convert map to data class", depth + 4)
-          code += "\n" + indent("val data = #{cell_class_name}Data.fromMap(itemData as Map<String, Any>)", depth + 4)
-          code += "\n" + indent("#{cell_class_name}View(", depth + 4)
-          code += "\n" + indent("data = data,", depth + 5)
-          code += "\n" + indent("viewModel = viewModel(),", depth + 5)
-          code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
-
-          # Cell-specific modifiers
-          if json_data['cellHeight']
-            code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 5)
+          if (cell_box = cell_size_box_open(json_data, required_imports))
+            code += "\n" + indent(cell_box, depth)
+            closers += 1
           end
-
-          # For grid layouts, ensure cells expand to fill width
-          if columns > 1
-            code += "\n" + indent("    .fillMaxWidth()", depth + 5)
-          end
-
-          code += "\n" + indent(")", depth + 4)
-          code += "\n" + indent("}", depth + 3)
-          code += "\n" + indent("else -> {", depth + 3)
-          code += "\n" + indent("// Unsupported item type", depth + 4)
-          code += "\n" + indent("}", depth + 3)
-          code += "\n" + indent("}", depth + 2)
-          if chrome_open(json_data, nil)
-            code += "\n" + indent("}", depth + 2)
-          end
-          code += "\n" + indent("}", depth + 1)
+          code += "\n" + indent("#{cell_class}View(", depth)
+          code += "\n" + indent("viewModel = cellViewModel,", depth + 1)
+          code += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', depth + 1)
+          code += "\n" + indent(")", depth)
+          closers.times { code += "\n" + indent("}", depth) }
           code
         end
-        
+
+        # A header / footer view: its own ViewModel, no item data.
+        def self.class_list_edge_call(class_name, role, depth)
+          code = "\n" + indent("val #{role}ViewModel: #{class_name}ViewModel = viewModel(key = \"#{class_name}_#{role}_\${viewModel.hashCode()}\")", depth)
+          code += "\n" + indent("#{class_name}View(", depth)
+          code += "\n" + indent("viewModel = #{role}ViewModel,", depth + 1)
+          code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 1)
+          code + "\n" + indent(")", depth)
+        end
+
+        def self.register_class_list_imports(names, required_imports)
+          required_imports&.add(:launched_effect)
+          names.compact.each { |name| required_imports&.add("cell:#{name}") }
+        end
+
+        # The body of the lazy grid (a LazyGridScope): cells as `items`, a
+        # header / footer as a full-width item.
+        def self.class_list_lazy_body(json_data, names, is_horizontal, depth, required_imports, gravity_alignment)
+          cell_name, header_name, footer_name = names
+          header_name = footer_name = nil if is_horizontal
+          register_class_list_imports([cell_name, header_name, footer_name], required_imports)
+          property_name = class_list_items_property(json_data)
+          code = ''
+          if header_name
+            code += "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth)
+            code += class_list_edge_call(cell_class_name(header_name), 'header', depth + 1)
+            code += "\n" + indent("}", depth)
+          end
+          if cell_name && property_name
+            # `cellData` in scope, at depth `d`.
+            cells = lambda do |d|
+              out = "\n" + indent("items(cellData.data.size) { cellIndex ->", d)
+              out += "\n" + indent("Box(", d + 1)
+              out += "\n" + indent("modifier = Modifier.fillMaxSize(),", d + 2)
+              out += "\n" + indent("contentAlignment = #{gravity_alignment}", d + 2)
+              out += "\n" + indent(") {", d + 1)
+              out += "\n" + indent("val currentCellData = cellData.data[cellIndex]", d + 2)
+              out += class_list_cell(json_data, cell_name, d + 2, required_imports)
+              out += "\n" + indent("}", d + 1)
+              out + "\n" + indent("}", d)
+            end
+            if is_horizontal
+              code += "\n" + indent("// #{cell_name}: the first data section", depth)
+              code += "\n" + indent("#{sections_access(property_name)}.firstOrNull()?.cells?.let { cellData ->", depth)
+              code += "\n" + indent("val sectionIndex = 0", depth + 1)
+              code += cells.call(depth + 1)
+            else
+              code += "\n" + indent("// #{cell_name}: every data section", depth)
+              code += "\n" + indent("#{sections_access(property_name)}.forEachIndexed { sectionIndex, section ->", depth)
+              code += "\n" + indent("section.cells?.let { cellData ->", depth + 1)
+              code += cells.call(depth + 2)
+              code += "\n" + indent("}", depth + 1)
+            end
+            code += "\n" + indent("}", depth)
+          end
+          if footer_name
+            code += "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth)
+            code += class_list_edge_call(cell_class_name(footer_name), 'footer', depth + 1)
+            code += "\n" + indent("}", depth)
+          end
+          code
+        end
+
+        # The body of a composable container (Column / Row / FlowRow): cells
+        # and a header / footer as calls. `first_only` draws the first data
+        # section and no header / footer (the horizontal and flow routes);
+        # `columns` > 1 (or a binding) lays the cells out in rows of that
+        # many.
+        def self.class_list_eager_body(json_data, names, depth, required_imports, first_only:, columns_info: nil)
+          cell_name, header_name, footer_name = names
+          header_name = footer_name = nil if first_only
+          register_class_list_imports([cell_name, header_name, footer_name], required_imports)
+          property_name = class_list_items_property(json_data)
+          grid = columns_info && (columns_info[:is_binding] || columns_info[:literal] > 1)
+          code = ''
+          code += class_list_edge_call(cell_class_name(header_name), 'header', depth) if header_name
+          if cell_name && property_name
+            if first_only
+              code += "\n" + indent("// #{cell_name}: the first data section", depth)
+              code += "\n" + indent("#{sections_access(property_name)}.firstOrNull()?.cells?.data?.forEachIndexed { cellIndex, currentCellData ->", depth)
+              code += "\n" + indent("val sectionIndex = 0", depth + 1)
+              code += class_list_cell(json_data, cell_name, depth + 1, required_imports)
+              code += "\n" + indent("}", depth)
+            elsif grid
+              count = columns_info[:expr]
+              code += "\n" + indent("// #{cell_name}: every data section, in rows of #{count}", depth)
+              code += "\n" + indent("val classListCells = #{sections_access(property_name)}.flatMapIndexed { sectionIndex, section ->", depth)
+              code += "\n" + indent("section.cells?.data.orEmpty().mapIndexed { cellIndex, cellData -> Triple(sectionIndex, cellIndex, cellData) }", depth + 1)
+              code += "\n" + indent("}.orEmpty()", depth)
+              spacing = json_data['columnSpacing'] || json_data['itemSpacing']
+              required_imports&.add(:arrangement) if spacing
+              row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{spacing}.dp)" : 'modifier = Modifier.fillMaxWidth()'
+              code += "\n" + indent("classListCells.chunked(#{count}).forEach { rowCells ->", depth)
+              code += "\n" + indent("Row(#{row_args}) {", depth + 1)
+              code += "\n" + indent("rowCells.forEach { (sectionIndex, cellIndex, currentCellData) ->", depth + 2)
+              code += "\n" + indent("Box(modifier = Modifier.weight(1f)) {", depth + 3)
+              code += class_list_cell(json_data, cell_name, depth + 4, required_imports)
+              code += "\n" + indent("}", depth + 3)
+              code += "\n" + indent("}", depth + 2)
+              code += "\n" + indent("repeat(#{count} - rowCells.size) { Spacer(modifier = Modifier.weight(1f)) }", depth + 2)
+              code += "\n" + indent("}", depth + 1)
+              code += "\n" + indent("}", depth)
+            else
+              code += "\n" + indent("// #{cell_name}: every data section", depth)
+              code += "\n" + indent("#{sections_access(property_name)}.forEachIndexed { sectionIndex, section ->", depth)
+              code += "\n" + indent("section.cells?.data?.forEachIndexed { cellIndex, currentCellData ->", depth + 1)
+              code += class_list_cell(json_data, cell_name, depth + 2, required_imports)
+              code += "\n" + indent("}", depth + 1)
+              code += "\n" + indent("}", depth)
+            end
+          end
+          code += class_list_edge_call(cell_class_name(footer_name), 'footer', depth) if footer_name
+          code
+        end
+
         def self.generate_sections_content(json_data, sections, grid_columns, depth, required_imports, gravity_alignment)
           code = ""
           items_property = json_data['items']
@@ -1223,6 +1296,8 @@ module KjuiTools
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
             end
+          elsif sections.empty? && (names = class_list(json_data))
+            code += class_list_eager_body(json_data, names, depth + 1, required_imports, first_only: true)
           end
 
           code += "\n" + indent("}", depth)
@@ -1345,6 +1420,9 @@ module KjuiTools
 
               code += "\n" + indent("}", depth + 1)
             end
+          elsif sections.empty? && (names = class_list(json_data))
+            code += class_list_eager_body(json_data, names, depth + 1, required_imports, first_only: false,
+                                          columns_info: columns_emit_info(json_data))
           end
 
           code += "\n" + indent("}", depth)
@@ -1413,6 +1491,8 @@ module KjuiTools
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
             end
+          elsif sections.empty? && (names = class_list(json_data))
+            code += class_list_eager_body(json_data, names, depth + 1, required_imports, first_only: true)
           end
 
           code += "\n" + indent("}", depth)
