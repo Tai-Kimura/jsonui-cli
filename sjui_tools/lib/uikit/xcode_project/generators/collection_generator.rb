@@ -6,6 +6,7 @@ require_relative '../../../core/project_finder'
 require_relative '../../../core/pbxproj_manager'
 require_relative '../../../core/logger'
 require_relative '../../../core/converter_generator_core'
+require_relative 'scaffold_transaction'
 
 module SjuiTools
   module UIKit
@@ -54,14 +55,19 @@ module SjuiTools
 
             puts "Generating collection cell: #{camel_cell_name} in #{camel_view_folders.join('/')}"
 
-            # 1. Viewフォルダ/Collectionフォルダの確認/作成
-            collection_folder_path = ensure_view_folder(camel_view_folders)
-
             # Both files through the one overwrite decision the generate
             # commands share (until 1.8.121 --force and --skip-existing were
-            # not read here). The record also says what this run created: the
-            # only files the rollbacks below may delete.
-            @record = JsonUIShared::ConverterGeneratorCore.scaffold_record
+            # not read here). The transaction's record also says what this run
+            # created: what a failed Xcode step deletes — both files, not only
+            # the one whose step failed (until 1.8.121 a failure adding the
+            # layout left the cell this run had created, and its entry in the
+            # project), with the folders the run made and project.pbxproj put
+            # back as it was.
+            @txn = ScaffoldTransaction.new(@project_file_path)
+            @record = @txn.record
+
+            # 1. Viewフォルダ/Collectionフォルダの確認/作成
+            collection_folder_path = ensure_view_folder(camel_view_folders)
 
             # 2. Collection cellファイルの作成
             cell_file_path = create_collection_cell(collection_folder_path, camel_cell_name)
@@ -99,18 +105,12 @@ module SjuiTools
             # Create nested view folders
             folder_path = File.join(@view_path, *folders)
 
-            unless Dir.exist?(folder_path)
-              FileUtils.mkdir_p(folder_path)
-              puts "Created view folder: #{folder_path}"
-            end
+            puts "Created view folder: #{folder_path}" if @txn.mkdir_p(folder_path)
 
             # Create Collection subfolder
             collection_folder_path = File.join(folder_path, "Collection")
 
-            unless Dir.exist?(collection_folder_path)
-              FileUtils.mkdir_p(collection_folder_path)
-              puts "Created collection folder: #{collection_folder_path}"
-            end
+            puts "Created collection folder: #{collection_folder_path}" if @txn.mkdir_p(collection_folder_path)
 
             collection_folder_path  # Return the Collection folder path
           end
@@ -126,18 +126,6 @@ module SjuiTools
               file_path, @options.merge(scaffold_files: @record), Core::Logger,
               noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase), &content
             )
-          end
-
-          # Deletes `file_path` only when this run created it: until 1.8.121
-          # a failed Xcode step deleted the cell / the layout whatever they
-          # were, one the app had written too.
-          def roll_back(file_path)
-            if JsonUIShared::ConverterGeneratorCore.created_scaffold_files(@record).include?(file_path)
-              File.delete(file_path) if File.exist?(file_path)
-              puts "Deleted: #{file_path} (this run created it)"
-            elsif File.exist?(file_path)
-              puts "Not deleted: #{file_path} (it was there before this run)"
-            end
           end
 
           def generate_collection_cell_content(cell_name)
@@ -199,10 +187,11 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               # Said as add_file did it (until 1.8.121 "Added …" followed
               # "File already in project").
               result = @xcode_manager.add_file(file_path, group_path)
+              @txn.check!([[file_path, result]])
               puts "Added collection cell to Xcode project" if result == :added
             rescue => e
               puts "Error adding file to Xcode project: #{e.message}"
-              roll_back(file_path)
+              @txn.roll_back
               raise e
             end
           end
@@ -212,10 +201,11 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               folders = view_folder_names.is_a?(Array) ? view_folder_names : [view_folder_names]
               group_path = "Layouts/#{folders.join('/')}"
               result = @xcode_manager.add_file(json_file_path, group_path)
+              @txn.check!([[json_file_path, result]])
               puts "Added JSON layout to Xcode project" if result == :added
             rescue => e
               puts "Error adding JSON to Xcode project: #{e.message}"
-              roll_back(json_file_path)
+              @txn.roll_back
               raise e
             end
           end
@@ -224,7 +214,7 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
             snake_name = cell_name.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, '')
             folders = view_folder_names.is_a?(Array) ? view_folder_names : [view_folder_names]
             layouts_dir = File.join(@layouts_path, *folders)
-            FileUtils.mkdir_p(layouts_dir) unless Dir.exist?(layouts_dir)
+            @txn.mkdir_p(layouts_dir)
             file_path = File.join(layouts_dir, "#{snake_name}_cell.json")
             scaffold(file_path, 'JSON layout') { generate_cell_json_content(cell_name) }
             file_path

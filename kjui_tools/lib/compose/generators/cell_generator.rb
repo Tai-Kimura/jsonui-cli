@@ -37,6 +37,13 @@ module KjuiTools
           # 32785ce8, ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
           json_file_name = to_snake_case(cell_name)
           cell_class_name = to_pascal_case(json_file_name)
+          # The layout's name in Dynamic mode: its path under Layouts/, as
+          # `kjui build` writes into the GeneratedView (`layoutName =
+          # "my_products/product_cell"`) and `g view` into the ViewModel.
+          # Until 1.8.121 the scaffold said "product_cell" until the first
+          # build rewrote it, and the ViewModel kept saying it (ticket
+          # dynamic-layout-name-drops-the-subdirectory-of-a-nested-cell).
+          layout_reference = snake_subdirectory ? "#{snake_subdirectory}/#{json_file_name}" : json_file_name
 
           # Get directories from config
           source_dir = @config['source_directory'] || 'src/main'
@@ -90,10 +97,10 @@ module KjuiTools
           scaffold.call(json_file, 'JSON layout') { json_content }
           scaffold.call(main_kotlin_file, 'cell view') { main_cell_content(cell_class_name, subdirectory, package_name) }
           scaffold.call(generated_kotlin_file, 'generated cell view') do
-            generated_cell_content(cell_class_name, json_file_name, subdirectory, package_name)
+            generated_cell_content(cell_class_name, layout_reference, subdirectory, package_name)
           end
           scaffold.call(data_file, 'data file') { cell_data_content(cell_class_name, package_name) }
-          scaffold.call(viewmodel_file, 'ViewModel') { cell_viewmodel_content(cell_class_name, json_file_name, package_name) }
+          scaffold.call(viewmodel_file, 'ViewModel') { cell_viewmodel_content(cell_class_name, layout_reference, package_name) }
 
           # The counts, from the record (until 1.8.121 a list whatever the run
           # had done — ticket kjui-g-view-reports-what-it-did-not-do).

@@ -369,9 +369,9 @@ module SjuiTools
           puts "  sjui g partial Header          # Generate a partial"
           puts "  sjui g collection Post/Cell    # Generate collection cell"
           puts
-          puts "  # Every command above keeps a file that exists: it asks first (a"
-          puts "  # closed stdin is \"n\"); --skip-existing keeps it without asking,"
-          puts "  # --force replaces it."
+          puts "  # Every command above keeps a file that exists: on a terminal it"
+          puts "  # asks first; any other stdin is not read and the file is kept."
+          puts "  # --skip-existing keeps it without asking, --force replaces it."
           puts
           puts "  # SwiftUI converter"
           puts "  sjui g converter MyConverter   # Generate custom converter"

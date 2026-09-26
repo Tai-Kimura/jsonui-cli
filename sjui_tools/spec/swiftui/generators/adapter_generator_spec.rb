@@ -98,6 +98,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::AdapterGenerator do
       it 'prompts for overwrite' do
         generator = described_class.new('Existing')
         allow($stdin).to receive(:gets).and_return('n')
+        allow($stdin).to receive(:tty?).and_return(true) # asked only on a terminal since 1.8.121
         expect { generator.generate }.to output(/already exists/).to_stdout
       end
     end

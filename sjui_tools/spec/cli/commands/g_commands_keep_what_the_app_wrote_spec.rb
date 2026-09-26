@@ -5,20 +5,26 @@ require 'tmpdir'
 require 'json'
 require 'fileutils'
 require 'digest'
+require 'pty'
 
 # `sjui g view / partial / collection / adapter` (SwiftUI, and UIKit on a real
 # empty Xcode project) against the disk: each command runs on a new project,
 # every file it made is then EDITED (a layout re-serialised, any other file
 # given an extra line), and the command runs again over those edits — with a
-# closed stdin, answering "n", answering "y", with --skip-existing (stdin
-# ready to say "y") and with --force (stdin ready to say "n"). The authority
-# is the md5 of each file on disk, not anything the generator says or
-# records.
+# closed stdin, with a pipe held open and never written (what an MCP server's
+# child and an agent's shell get), answering "n" and "y" on a pseudo-terminal,
+# with --skip-existing (the terminal ready to say "y") and with --force (ready
+# to say "n"). The authority is the md5 of each file on disk, not anything the
+# generator says or records. Every run is killed after RUN_LIMIT_KEEP seconds
+# and fails its example as "timeout" instead of hanging the suite.
 #
 # The one rule (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags):
-# a file that is there is the app's — a closed stdin, "n" and --skip-existing
-# keep it, --force and "y" replace it; both flags are accepted by every
-# command; a rollback deletes only what the run created.
+# a file that is there is the app's — --force and a "y" typed on a terminal
+# replace it; "n", --skip-existing and a stdin that is not a terminal keep it,
+# and a stdin that is not a terminal is never read (one line names the file and
+# --force); both flags are accepted by every command; a UIKit run whose Xcode
+# step fails (a raise, or add_file answering :failed) leaves the tree as it was
+# and exits non-zero.
 #
 # Until 1.8.121 (measured on 32785ce8, 2026-09-26): SwiftUI `g collection`
 # overwrote all five files on every run (closed stdin and --skip-existing
@@ -42,14 +48,25 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
     ['uikit collection', 'uikit', %w[collection Item/Cell]]
   ].freeze
 
+  # Answers typed on the pseudo-terminal, then end-of-file (^D) for any
+  # prompt beyond them.
+  def self.typed(answer)
+    [:terminal, "#{answer}\n" * 8 + "\x04" * 4]
+  end
+
   # [path, extra arguments, stdin]
   PATHS_KEEP = {
     closed: [[], ''],
-    answered_n: [[], "n\n" * 8],
-    answered_y: [[], "y\n" * 8],
-    skip_existing: [['--skip-existing'], "y\n" * 8],
-    force: [['--force'], "n\n" * 8]
+    open_pipe: [[], :open_pipe],
+    answered_n: [[], typed('n')],
+    answered_y: [[], typed('y')],
+    skip_existing: [['--skip-existing'], typed('y')],
+    force: [['--force'], typed('n')]
   }.freeze
+
+  # A normal run takes a few seconds (UIKit runs the build); a run waiting on
+  # stdin is killed here.
+  RUN_LIMIT_KEEP = 30
 
   # Files a command patches or creates once and shares with other
   # components; --force is about the command's own scaffold files.
@@ -92,10 +109,55 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
     end
   end
 
+  # stdin: a String (written, then closed), :open_pipe (held open and never
+  # written), or [:terminal, typed] (a pseudo-terminal). Returns [output, rc],
+  # rc :timeout when the run was killed after RUN_LIMIT_KEEP seconds.
   def self.run_g(dir, args, stdin:, env: {})
-    out, status = Open3.capture2e(env, 'ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'g', *args,
-                                  chdir: dir, stdin_data: stdin)
-    [out.gsub(/\e\[[0-9;]*m/, ''), status.exitstatus]
+    cmd = ['ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'g', *args]
+    out = +''
+    rc = nil
+    if stdin.is_a?(Array)
+      PTY.spawn(env, *cmd, chdir: dir) do |r, w, pid|
+        w.write(stdin[1])
+        rc = drain(r, pid, out) { Process.wait2(pid)[1] }
+      end
+    else
+      Open3.popen2e(env, *cmd, chdir: dir) do |i, o, t|
+        unless stdin == :open_pipe
+          i.write(stdin)
+          i.close
+        end
+        rc = drain(o, t.pid, out) { t.value }
+      end
+    end
+    [out.force_encoding(Encoding::UTF_8).delete("\r").gsub(/\e\[[0-9;]*m/, ''), rc]
+  end
+
+  def self.drain(io, pid, out)
+    deadline = Time.now + RUN_LIMIT_KEEP
+    loop do
+      left = deadline - Time.now
+      unless left.positive? && IO.select([io], nil, nil, left)
+        Process.kill('KILL', pid)
+        yield
+        return :timeout
+      end
+      out << io.readpartial(4096)
+    rescue EOFError, Errno::EIO
+      break
+    end
+    yield.exitstatus
+  end
+
+  # The whole tree the app owns, for "as it was": every file's md5 (the Xcode
+  # project and the binding files included) and every directory.
+  def self.tree(dir)
+    all = Dir.glob(File.join(dir, '**', '*'), File::FNM_DOTMATCH)
+             .reject { |f| f.end_with?('/.', '/..') }.map { |f| f.sub("#{dir}/", '') }
+             .reject { |f| f.start_with?('sjui_tools/') || f == 'sjui_tools' }
+    { files: all.select { |f| File.file?(File.join(dir, f)) }
+                .to_h { |f| [f, Digest::MD5.file(File.join(dir, f)).hexdigest] },
+      dirs: all.select { |f| File.directory?(File.join(dir, f)) }.sort }
   end
 
   # Every XcodeProjectManager#add_file raises: the step the UIKit generators
@@ -107,6 +169,24 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
         def add_file(*) = raise('injected: add_file failed')
       end
       module SjuiTools; module Core; class XcodeProjectManager; prepend FaultAddFile; end; end; end
+    RUBY
+    path
+  end
+
+  # The FIRST add_file adds its file (and saves project.pbxproj), the second
+  # raises: a failure after the run has changed the project.
+  def self.second_fault_file(root)
+    path = File.join(root, 'fault_second_add_file.rb')
+    File.write(path, <<~RUBY)
+      module FaultSecondAddFile
+        def add_file(*args)
+          $add_file_calls = ($add_file_calls || 0) + 1
+          raise('injected: the second add_file failed') if $add_file_calls == 2
+
+          super
+        end
+      end
+      module SjuiTools; module Core; class XcodeProjectManager; prepend FaultSecondAddFile; end; end; end
     RUBY
     path
   end
@@ -134,12 +214,29 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
         fault = { 'RUBYOPT' => "-r#{self.class.fault_file(root)}" }
         dir = File.join(root, 'fault_again')
         FileUtils.cp_r(base, dir)
+        was = self.class.tree(dir)
         out, rc = self.class.run_g(dir, args, stdin: '', env: fault)
-        paths[:fault_again] = { out: out, rc: rc, disk: self.class.disk_files(dir) }
+        paths[:fault_again] = { out: out, rc: rc, disk: self.class.disk_files(dir), was: was, is: self.class.tree(dir) }
         dir = File.join(root, 'fault_new')
         self.class.make_project(dir, mode)
+        was = self.class.tree(dir)
         out, rc = self.class.run_g(dir, args, stdin: '', env: fault)
-        paths[:fault_new] = { out: out, rc: rc, disk: self.class.disk_files(dir) }
+        paths[:fault_new] = { out: out, rc: rc, disk: self.class.disk_files(dir), was: was, is: self.class.tree(dir) }
+        dir = File.join(root, 'fault_second')
+        self.class.make_project(dir, mode)
+        was = self.class.tree(dir)
+        out, rc = self.class.run_g(dir, args, stdin: '', env: { 'RUBYOPT' => "-r#{self.class.second_fault_file(root)}" })
+        paths[:fault_second] = { out: out, rc: rc, was: was, is: self.class.tree(dir) }
+        # Not injected: the .xcodeproj directory read-only, so Xcodeproj
+        # cannot rename its temp file over project.pbxproj and add_file
+        # answers :failed (it rescues its own error).
+        dir = File.join(root, 'readonly_project')
+        self.class.make_project(dir, mode)
+        was = self.class.tree(dir)
+        File.chmod(0o555, File.join(dir, 'P.xcodeproj'))
+        out, rc = self.class.run_g(dir, args, stdin: '')
+        File.chmod(0o755, File.join(dir, 'P.xcodeproj'))
+        paths[:readonly_project] = { out: out, rc: rc, disk: self.class.disk_files(dir), was: was, is: self.class.tree(dir) }
       end
       [label, { new_out: new_out, new_rc: new_rc, made: made, edited: edited, paths: paths }]
     end
@@ -170,6 +267,26 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
           expect(run[:paths][path][:rc]).to eq(0), "#{path}: #{run[:paths][path][:out]}"
         end
       end
+    end
+
+    it "#{label}: a stdin that is not a terminal is not read — closed, or a pipe held open and never written" do
+      run = @runs[label]
+      aggregate_failures do
+        %i[closed open_pipe].each do |path|
+          said = run[:paths][path][:out]
+          expect(run[:paths][path][:rc]).to eq(0), "#{path} (rc #{run[:paths][path][:rc]}): #{said}"
+          expect(changed(run, path)).to eq([]), "#{path}: #{said}"
+          expect(said).not_to include('Overwrite? (y/n)'), path.to_s
+          scaffold(run).each do |f|
+            expect(said).to match(/Kept existing .*#{Regexp.escape(File.basename(f))} \(stdin is not a terminal; --force replaces it\)/),
+                            "#{path}: no line keeps #{f}: #{said}"
+          end
+        end
+      end
+    end
+
+    it "#{label}: on a terminal it asks" do
+      expect(@runs[label][:paths][:answered_n][:out]).to include('Overwrite? (y/n)')
     end
 
     it "#{label}: --skip-existing keeps them without asking" do
@@ -209,17 +326,33 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
       expect(path[:rc]).not_to eq(0), path[:out]
       expect(path[:out]).to include('injected: add_file failed')
       expect(run[:made].reject { |f| path[:disk][f] == run[:edited][f] }).to eq([]), path[:out]
+      expect(path[:is]).to eq(path[:was]), path[:out]
     end
 
-    next if label == 'uikit partial' # no rollback: it keeps what it wrote
-
-    it "#{label}: a failed Xcode step deletes the files the run created" do
+    it "#{label}: a raising Xcode step on a new project leaves the tree as it was, exit non-zero" do
       path = @runs[label][:paths][:fault_new]
       expect(path[:rc]).not_to eq(0), path[:out]
       expect(path[:out]).to include('injected: add_file failed')
-      created_before_the_step = path[:out].scan(/^Created (?:ViewController|collection cell): (\S+)$/).flatten
-      expect(created_before_the_step).not_to be_empty, path[:out]
-      expect(created_before_the_step.select { |f| File.exist?(f) }).to eq([]), path[:out]
+      expect(path[:out]).to match(/^Created /), path[:out] # the run wrote before the step (the precondition)
+      expect(path[:is]).to eq(path[:was]), path[:out]
+    end
+
+    unless label == 'uikit partial' # one add_file: no second step to fail
+      it "#{label}: a step failing after the project was saved leaves the tree as it was — project.pbxproj too" do
+        path = @runs[label][:paths][:fault_second]
+        expect(path[:out]).to include('Added to Xcode project'), path[:out] # the first add saved (the precondition)
+        expect(path[:rc]).not_to eq(0), path[:out]
+        expect(path[:out]).to include('injected: the second add_file failed')
+        expect(path[:is]).to eq(path[:was]), path[:out]
+      end
+    end
+
+    it "#{label}: add_file answering :failed (a read-only .xcodeproj) leaves the tree as it was, exit non-zero" do
+      path = @runs[label][:paths][:readonly_project]
+      expect(path[:out]).to include('ERROR: Error adding file to Xcode project'), path[:out] # the precondition
+      expect(path[:rc]).not_to eq(0), path[:out]
+      expect(path[:out]).to include('to the Xcode project'), path[:out]
+      expect(path[:is]).to eq(path[:was]), path[:out]
     end
   end
 
@@ -246,6 +379,26 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
         cell_dirs = (self.class.disk_files(dir).keys - before).map { |f| f.split('/')[1] }.uniq.sort
         expect(view_dirs).to eq(%w[Models Screens ViewModels Views])
         expect(cell_dirs).to eq(view_dirs), said
+      end
+    end
+  end
+
+  # The Dynamic-mode layout name a nested cell's scaffold carries is the one
+  # `sjui build` writes when it rewrites the GeneratedView — the bare name,
+  # which SwiftJsonUI finds in the layouts' subdirectories (measured
+  # 2026-09-26; ticket dynamic-layout-name-drops-the-subdirectory-of-a-nested-cell).
+  describe 'g collection home/item_cell: the Dynamic layout name' do
+    it 'is the one sjui build writes' do
+      Dir.mktmpdir('sjui_g_dynamic_name') do |dir|
+        self.class.make_project(dir, 'swiftui')
+        said, rc = self.class.run_g(dir, %w[collection home/item_cell], stdin: '')
+        expect(rc).to eq(0), said
+        view = File.join(dir, 'P', 'View', 'Home', 'ItemCell', 'ItemCellGeneratedView.swift')
+        hook = ->{ File.read(view)[/DynamicView\(jsonName: "([^"]*)"/, 1] }
+        scaffolded = hook.call
+        built, = Open3.capture2e('ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir, stdin_data: '')
+        expect(File.read(view)).to include('Generator: sjui build'), built # the build rewrote it (the precondition)
+        expect(scaffolded).to eq(hook.call)
       end
     end
   end

@@ -60,8 +60,10 @@ module JsonUIShared
     # `jui g converter --skip-existing` exports) and `--force` stopped at the
     # converter: a re-scaffold still waited on stdin for each existing
     # component and adapter, and with stdin closed `gets` returned nil and
-    # `nil.chomp` raised (reported 2026-09-24). Here stdin EOF is "n" — the
-    # safe side, since those files are the ones people maintain by hand.
+    # `nil.chomp` raised (reported 2026-09-24). Here an existing file is kept
+    # unless a person on a terminal answers "y" — the safe side, since those
+    # files are the ones people maintain by hand; stdin that is not a terminal
+    # is not read at all (see overwrite_decision).
     #
     # `noun` / `exists_label` name the file in the two log lines, so the
     # converter's lines read as they always have.
@@ -95,6 +97,19 @@ module JsonUIShared
       end
       return true if options[:force]
 
+      # Asked only on a terminal. Anything else — a closed stdin, /dev/null,
+      # or a pipe that is open and never written (an MCP server's child, an
+      # agent's shell) — keeps the file without reading stdin. Until 1.8.121
+      # the prompt read whatever stdin was: on an open pipe `gets` waited for
+      # a line that never came, and the caller hung until its own timeout
+      # (`jui g converter` under the MCP server; after 1.8.121's first round,
+      # `g view / partial / collection` too — ticket
+      # generate-commands-overwrite-edited-files-and-ignore-their-flags).
+      unless interactive_stdin?
+        logger.info "Kept existing #{noun}: #{file_path} (stdin is not a terminal; --force replaces it)"
+        return false
+      end
+
       logger.warn "#{exists_label || noun.capitalize} already exists: #{file_path}"
       print "Overwrite? (y/n): "
       answer = $stdin.gets
@@ -105,6 +120,14 @@ module JsonUIShared
       false
     end
     private_class_method :overwrite_decision
+
+    # Whether a person can answer the prompt: stdin is a terminal.
+    def self.interactive_stdin?
+      $stdin.respond_to?(:tty?) && $stdin.tty?
+    rescue IOError
+      false
+    end
+    private_class_method :interactive_stdin?
 
     # Writes one scaffold file through the overwrite decision above, and says
     # what it did with the path it wrote: "Created" when there was no file,
@@ -129,8 +152,8 @@ module JsonUIShared
     # `g view / partial / collection / adapter / component` (sjui SwiftUI and
     # UIKit, kjui, rjui) write their scaffold files through write_scaffold too:
     # a file that is there is the app's, and is replaced only with --force (or
-    # "y" at the prompt); --skip-existing, JUI_SKIP_EXISTING, "n" and a closed
-    # stdin keep it. Until 1.8.121 each command decided for itself: sjui
+    # "y" at the prompt, which is shown only on a terminal); --skip-existing,
+    # JUI_SKIP_EXISTING, "n" and a stdin that is not a terminal keep it. Until 1.8.121 each command decided for itself: sjui
     # SwiftUI `g collection` and UIKit `g view` rewrote a ViewModel / a
     # ViewController / a layout the app had edited on every run, and the flags
     # were ignored, refused ("invalid option") or a stack trace, command by

@@ -5,19 +5,24 @@ require 'tmpdir'
 require 'json'
 require 'fileutils'
 require 'digest'
+require 'pty'
 
 # `rjui g view / component / collection` against the disk: each command runs
 # on a new project, every file it made is then EDITED (a layout re-serialised,
 # any other file given an extra line), and the command runs again over those
-# edits — with a closed stdin, answering "n", answering "y", with
-# --skip-existing (stdin ready to say "y") and with --force (stdin ready to
-# say "n"). The authority is the md5 of each file on disk.
+# edits — with a closed stdin, with a pipe held open and never written (what
+# an MCP server's child and an agent's shell get), answering "n" and "y" on a
+# pseudo-terminal, with --skip-existing (the terminal ready to say "y") and
+# with --force (ready to say "n"). The authority is the md5 of each file on
+# disk. Every run is killed after run_limit seconds and fails its example as
+# "timeout" instead of hanging the suite.
 #
 # The one rule (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags):
-# a file that is there is the app's — a closed stdin, "n" and --skip-existing
-# keep it, --force and "y" replace it; both flags are accepted by every
-# command; an option a command does not declare, and a missing name, are one
-# line and exit 1.
+# a file that is there is the app's — --force and a "y" typed on a terminal
+# replace it; "n", --skip-existing and a stdin that is not a terminal keep it,
+# and a stdin that is not a terminal is never read (one line names the file and
+# --force); both flags are accepted by every command; an option a command does
+# not declare, and a missing name, are one line and exit 1.
 #
 # Until 1.8.121 (measured on 32785ce8, 2026-09-26): `g view` and `g component`
 # ended in an OptionParser::InvalidOption stack trace on --force and on
@@ -37,15 +42,27 @@ RSpec.describe 'rjui g view / component / collection keep the files the app wrot
     ]
   end
 
+  # Answers typed on the pseudo-terminal, then end-of-file (^D).
+  def self.typed(answer)
+    [:terminal, "#{answer}\n" * 8 + "\x04" * 4]
+  end
+
   # {path => [extra arguments, stdin]}
   def self.paths
     {
       closed: [[], ''],
-      answered_n: [[], "n\n" * 8],
-      answered_y: [[], "y\n" * 8],
-      skip_existing: [['--skip-existing'], "y\n" * 8],
-      force: [['--force'], "n\n" * 8]
+      open_pipe: [[], :open_pipe],
+      answered_n: [[], typed('n')],
+      answered_y: [[], typed('y')],
+      skip_existing: [['--skip-existing'], typed('y')],
+      force: [['--force'], typed('n')]
     }
+  end
+
+  # A normal run takes well under a second; a run waiting on stdin is killed
+  # here.
+  def self.run_limit
+    30
   end
 
   # No rjui.config.json: rjui writes its defaults, as the other CLI specs.
@@ -73,10 +90,44 @@ RSpec.describe 'rjui g view / component / collection keep the files the app wrot
     end
   end
 
+  # stdin: a String (written, then closed), :open_pipe (held open and never
+  # written), or [:terminal, typed] (a pseudo-terminal). Returns [output, rc],
+  # rc :timeout when the run was killed after run_limit seconds.
   def self.run_rjui(dir, args, stdin: '')
-    out, status = Open3.capture2e('ruby', File.join(dir, 'rjui_tools', 'bin', 'rjui'), *args,
-                                  chdir: dir, stdin_data: stdin)
-    [out.gsub(/\e\[[0-9;]*m/, ''), status.exitstatus]
+    cmd = ['ruby', File.join(dir, 'rjui_tools', 'bin', 'rjui'), *args]
+    out = +''
+    rc = nil
+    if stdin.is_a?(Array)
+      PTY.spawn(*cmd, chdir: dir) do |r, w, pid|
+        w.write(stdin[1])
+        rc = drain(r, pid, out) { Process.wait2(pid)[1] }
+      end
+    else
+      Open3.popen2e(*cmd, chdir: dir) do |i, o, t|
+        unless stdin == :open_pipe
+          i.write(stdin)
+          i.close
+        end
+        rc = drain(o, t.pid, out) { t.value }
+      end
+    end
+    [out.force_encoding(Encoding::UTF_8).delete("\r").gsub(/\e\[[0-9;]*m/, ''), rc]
+  end
+
+  def self.drain(io, pid, out)
+    deadline = Time.now + run_limit
+    loop do
+      left = deadline - Time.now
+      unless left.positive? && IO.select([io], nil, nil, left)
+        Process.kill('KILL', pid)
+        yield
+        return :timeout
+      end
+      out << io.readpartial(4096)
+    rescue EOFError, Errno::EIO
+      break
+    end
+    yield.exitstatus
   end
 
   before(:all) do
@@ -123,6 +174,26 @@ RSpec.describe 'rjui g view / component / collection keep the files the app wrot
           expect(run[:paths][path][:rc]).to eq(0), "#{path}: #{run[:paths][path][:out]}"
         end
       end
+    end
+
+    it "#{label}: a stdin that is not a terminal is not read — closed, or a pipe held open and never written" do
+      run = @runs[label]
+      aggregate_failures do
+        %i[closed open_pipe].each do |path|
+          said = run[:paths][path][:out]
+          expect(run[:paths][path][:rc]).to eq(0), "#{path} (rc #{run[:paths][path][:rc]}): #{said}"
+          expect(changed(run, path)).to eq([]), "#{path}: #{said}"
+          expect(said).not_to include('Overwrite? (y/n)'), path.to_s
+          run[:made].each do |f|
+            expect(said).to match(/Kept existing .*#{Regexp.escape(File.basename(f))} \(stdin is not a terminal; --force replaces it\)/),
+                            "#{path}: no line keeps #{f}: #{said}"
+          end
+        end
+      end
+    end
+
+    it "#{label}: on a terminal it asks" do
+      expect(@runs[label][:paths][:answered_n][:out]).to include('Overwrite? (y/n)')
     end
 
     it "#{label}: --skip-existing keeps them without asking" do

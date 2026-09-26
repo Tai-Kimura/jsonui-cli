@@ -7,6 +7,7 @@ require_relative '../../../core/xcode_project_manager'
 require_relative '../../../core/project_finder'
 require_relative '../../../core/logger'
 require_relative '../../../core/converter_generator_core'
+require_relative 'scaffold_transaction'
 
 module SjuiTools
   module UIKit
@@ -41,12 +42,23 @@ module SjuiTools
             # 1. Partial JSONファイルの作成 — through the one overwrite
             # decision the generate commands share (until 1.8.121 --force and
             # --skip-existing were not read here).
-            record = JsonUIShared::ConverterGeneratorCore.scaffold_record
+            # The transaction's record says what this run created: what a
+            # failed Xcode step deletes (until 1.8.121 this generator had no
+            # rollback: the new layout stayed, out of the project).
+            @txn = ScaffoldTransaction.new(@project_file_path)
+            record = @txn.record
             json_file_path = create_partial_json(partial_name, record)
             puts "Debug: partial file path: '#{json_file_path}'"
             
-            # 2. Xcodeプロジェクトに追加
-            add_to_xcode_project(json_file_path)
+            # 2. Xcodeプロジェクトに追加 — a raise or a :failed answer rolls
+            # the run back and fails it.
+            begin
+              @txn.check!([[json_file_path, add_to_xcode_project(json_file_path)]])
+            rescue => e
+              puts "Error adding the partial to the Xcode project: #{e.message}"
+              @txn.roll_back
+              raise e
+            end
             
             # 3. Bindingファイルの生成
             generate_binding_file
@@ -68,10 +80,7 @@ module SjuiTools
             
             # Ensure parent directory exists
             parent_dir = File.dirname(file_path)
-            unless Dir.exist?(parent_dir)
-              FileUtils.mkdir_p(parent_dir)
-              puts "Created directory: #{parent_dir}"
-            end
+            puts "Created directory: #{parent_dir}" if @txn.mkdir_p(parent_dir)
             
             JsonUIShared::ConverterGeneratorCore.write_scaffold(
               file_path, @options.merge(scaffold_files: record), Core::Logger,

@@ -450,7 +450,7 @@ module KjuiTools
           puts "  --type TYPE            Specify type (activity/fragment)"
           puts
           puts "Overwrite options (Compose mode: view, partial, collection, adapter, converter):"
-          puts "  An existing file is kept: the command asks first (a closed stdin is \"n\")."
+          puts "  An existing file is kept: on a terminal the command asks first; any other stdin is not read."
           puts "  -f, --force            Overwrite existing scaffold files without asking"
           puts "  --skip-existing        Keep existing scaffold files without asking"
           puts

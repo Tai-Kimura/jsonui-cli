@@ -9,6 +9,7 @@ require_relative '../../../core/config_manager'
 require_relative '../../../core/generated_marker'
 require_relative '../../../core/logger'
 require_relative '../../../core/converter_generator_core'
+require_relative 'scaffold_transaction'
 
 module SjuiTools
   module UIKit
@@ -67,9 +68,11 @@ module SjuiTools
             # --skip-existing keep it. Until 1.8.121 the ViewController and
             # the layout were rewritten on every run, edits and all (ticket
             # generate-commands-overwrite-edited-files-and-ignore-their-flags).
-            # The record also says what this run created: the only files the
-            # rollback below may delete.
-            @record = JsonUIShared::ConverterGeneratorCore.scaffold_record
+            # The transaction's record also says what this run created: the only
+            # files a failed Xcode step may delete (with the folders the run
+            # made, and project.pbxproj put back as it was).
+            @txn = ScaffoldTransaction.new(@project_file_path)
+            @record = @txn.record
             @write_options = @options.merge(scaffold_files: @record)
 
             # 1. Viewフォルダの作成
@@ -82,7 +85,7 @@ module SjuiTools
             json_path = create_json_file(snake_name, camel_name)
 
             # 4. ViewModelディレクトリとファイルの作成
-            FileUtils.mkdir_p(@viewmodel_path)
+            @txn.mkdir_p(@viewmodel_path)
             viewmodel_path = create_viewmodel_file(camel_name, snake_name)
 
             # 5. Xcodeプロジェクトに追加
@@ -140,10 +143,7 @@ module SjuiTools
 
         def create_view_folder(camel_name)
           folder_path = "#{@view_path}/#{camel_name}"
-          unless Dir.exist?(folder_path)
-            FileUtils.mkdir_p(folder_path)
-            puts "Created folder: #{folder_path}"
-          end
+          puts "Created folder: #{folder_path}" if @txn.mkdir_p(folder_path)
           folder_path
         end
 
@@ -288,7 +288,7 @@ module SjuiTools
                 view_controller_path = file_path
                 folder_name = File.basename(File.dirname(file_path))
                 # View/フォルダ名 のグループ構造で追加
-                results << @xcode_manager.add_file(file_path, "View/#{folder_name}")
+                results << [file_path, @xcode_manager.add_file(file_path, "View/#{folder_name}")]
               elsif file_name.include?("ViewModel.swift")
                 viewmodel_path = file_path
               elsif file_name.end_with?(".json")
@@ -298,18 +298,24 @@ module SjuiTools
 
             # JSONファイルをLayoutsグループに追加
             if json_path
-              results << @xcode_manager.add_file(json_path, "Layouts")
+              results << [json_path, @xcode_manager.add_file(json_path, "Layouts")]
             end
 
             # ViewModelファイルをViewModelグループに追加
             if viewmodel_path
               viewmodel_dir = @config['viewmodel_directory'] || 'ViewModel'
-              results << @xcode_manager.add_file(viewmodel_path, viewmodel_dir)
+              results << [viewmodel_path, @xcode_manager.add_file(viewmodel_path, viewmodel_dir)]
             end
+
+            # A file add_file could not add (it answers :failed after logging
+            # why) fails the run like a raise: until 1.8.121 it went on to
+            # "Xcode project: no file added" and exit 0, the new files on disk
+            # and out of the project.
+            @txn.check!(results)
 
             # What add_file did, counted: until 1.8.121 "Added files to Xcode
             # project" followed "File already in project" for every file.
-            added = results.count(:added)
+            added = results.count { |_, answer| answer == :added }
             puts(added.zero? ? 'Xcode project: no file added' : "Added #{added} file(s) to Xcode project")
           rescue => e
             puts "Error adding files to Xcode project: #{e.message}"
@@ -317,20 +323,8 @@ module SjuiTools
             # every listed file was deleted — a ViewModel the run had kept, a
             # layout and a controller it had just overwritten — so a failure
             # here lost the app's files.
-            rollback(file_paths)
+            @txn.roll_back
             raise e
-          end
-        end
-
-        def rollback(file_paths)
-          created = JsonUIShared::ConverterGeneratorCore.created_scaffold_files(@record)
-          file_paths.each do |file_path|
-            if created.include?(file_path) && File.exist?(file_path)
-              File.delete(file_path)
-              puts "Deleted: #{file_path} (this run created it)"
-            elsif File.exist?(file_path)
-              puts "Not deleted: #{file_path} (it was there before this run)"
-            end
           end
         end
 
