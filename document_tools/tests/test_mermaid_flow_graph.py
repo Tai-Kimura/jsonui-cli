@@ -142,14 +142,14 @@ class FlowEdgeTests(unittest.TestCase):
         """Third shape from the same face: two-pane `regular` vs `compact`."""
         resolver = ScreenResolver()
         steps = [
-            _step("following_bar_list", action="tap", id="row"),
+            _step("saved_list", action="tap", id="row"),
             _step("tablet_detail", when={"responsive": "regular"}),
             _step("tablet_detail", id="sort", when={"responsive": "regular"}),
             _step("detail", when={"responsive": "compact"}),
         ]
         _nodes, edges = flow_edges(steps, resolver)
-        self.assertIn(("following_bar_list", "tablet_detail", EDGE_FORWARD), edges)
-        self.assertIn(("following_bar_list", "detail", EDGE_FORWARD), edges)
+        self.assertIn(("saved_list", "tablet_detail", EDGE_FORWARD), edges)
+        self.assertIn(("saved_list", "detail", EDGE_FORWARD), edges)
         self.assertNotIn(("tablet_detail", "detail", EDGE_FORWARD), edges)
 
     def test_two_when_keys_combine(self):

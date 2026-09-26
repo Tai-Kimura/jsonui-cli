@@ -227,7 +227,7 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
 
       it 'emits width/height when set to literal Int or matchParent' do
         result = described_class.generate(
-          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'bar_list', 'width' => 360, 'height' => 'matchParent' },
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'item_list', 'width' => 360, 'height' => 'matchParent' },
           0,
           required_imports,
           'Row'
