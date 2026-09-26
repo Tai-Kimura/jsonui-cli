@@ -50,9 +50,14 @@ module SjuiTools
                              end
           
           # onValueChange handler - called when the user chooses a segment
-          # onValueChange (camelCase) -> binding format only (@{functionName})
+          # onValueChange (camelCase) -> binding format only (@{functionName});
+          # without one, `valueChange` (value_change_call).
           on_value_change = @component['onValueChange']
-          value_call = (get_event_handler_invocation(on_value_change, id, 'newValue') if on_value_change && is_binding?(on_value_change))
+          value_call = if on_value_change && is_binding?(on_value_change)
+                         get_event_handler_invocation(on_value_change, id, 'newValue')
+                       else
+                         value_change_call(id)
+                       end
 
           # Picker（SwiftUIのSegmented Control）. The user's choice writes the
           # selection, then calls onValueChange, then the declared onClick
@@ -68,7 +73,6 @@ module SjuiTools
           add_line "}"
           add_modifier_line ".pickerStyle(.segmented)"
           apply_segment_appearance
-          apply_value_change
 
           # (appearance emitted above; see apply_segment_appearance)
 
@@ -79,31 +83,25 @@ module SjuiTools
         end
         private
 
-        # valueChange — the selector-based handler, string only.
-        #
-        # UIKit wires it with `addTarget(_:action:for:.valueChanged)`
-        # (SJUISegmentedControl:62). It is the lowercase sibling of
-        # `onValueChange`, which takes a binding; this one names a method
-        # directly, so it emits an `.onChange` that calls that method on the data
-        # object. Nothing read it on the SwiftUI path.
-        def apply_value_change
+        # valueChange — the selector-based handler, string only: its own
+        # attribute in the definitions (Segment.valueChange, "Value change
+        # event"), no platform named. UIKit wires it with
+        # `addTarget(_:action:for:.valueChanged)` (SJUISegmentedControl:62) —
+        # the user's change only — and kjui and rjui call it where
+        # onValueChange is not declared, from the tab's own operation. So it is
+        # onValueChange's rule here too: called from the user's choice, after
+        # the selection is written and before onClick (operation_binding),
+        # as the data declares it (get_event_handler_invocation). It was an
+        # `.onChange(of:)` on a bound selectedIndex — the view model's writes
+        # called it as well — which called the optional closure without `?`,
+        # and an unbound segment's was not read at all (4f's ruling).
+        def value_change_call(id)
           handler = @component['valueChange']
-          return if handler.nil? || handler.to_s.empty?
+          return nil unless handler.is_a?(String) && !handler.strip.empty?
           # A binding here is `onValueChange`'s job, not this attribute's.
-          return if is_binding?(handler)
+          return nil if is_binding?(handler)
 
-          binding_prop = if @component['selectedIndex'] && is_binding?(@component['selectedIndex'])
-                           extract_binding_property(@component['selectedIndex'])
-                         elsif @component['selectedTabIndex'] && is_binding?(@component['selectedTabIndex'])
-                           extract_binding_property(@component['selectedTabIndex'])
-                         end
-          return if binding_prop.nil?
-
-          add_modifier_line ".onChange(of: data.#{binding_prop}) { _, newValue in"
-          indent do
-            add_line "data.#{to_camel_case(handler.to_s)}(newValue)"
-          end
-          add_line "}"
+          get_event_handler_invocation(to_camel_case(handler), id, 'newValue')
         end
 
         # fontColor / selectedFontColor — unselected and selected title colours.

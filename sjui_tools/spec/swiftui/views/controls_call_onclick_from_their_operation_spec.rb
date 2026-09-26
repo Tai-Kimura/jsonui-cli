@@ -181,6 +181,34 @@ RSpec.describe 'sjui: a control calls its declared onClick from its own operatio
     end
   end
 
+  # Segment.valueChange — the selector spelling, its own attribute — is
+  # reported by the same rule (4f's ruling): from the user's choice, after the
+  # write and before onClick, where no onValueChange is declared, as kjui and
+  # rjui call it. It was an `.onChange(of:)` on a bound selectedIndex only.
+  describe 'Segment valueChange' do
+    after { Thread.current[:sjui_data_definitions] = nil }
+
+    [{}, { 'selectedIndex' => '@{index}' }].each do |more|
+      it "is called from the choice#{more.empty? ? '' : ', bound'} — nothing observes the value" do
+        code = emit.call({ 'type' => 'Segment', 'items' => %w[a b], 'valueChange' => 'seg_changed' }.merge(more))
+        expect(code).to include("if changed { data.segChanged?() }; #{call} })"), code
+        expect(code).not_to include('.onChange(of:'), code
+      end
+    end
+
+    it 'carries the value the data declares it takes' do
+      Thread.current[:sjui_data_definitions] = { 'segChanged' => { 'class' => '((Int) -> Void)?' } }
+      code = emit.call({ 'type' => 'Segment', 'items' => %w[a b], 'valueChange' => 'seg_changed' })
+      expect(code).to include('if changed { data.segChanged?(newValue) }'), code
+    end
+
+    it 'stands down for a declared onValueChange' do
+      code = emit.call({ 'type' => 'Segment', 'items' => %w[a b], 'valueChange' => 'seg_changed', 'onValueChange' => '@{changed}' })
+      expect(code).to include('if changed { data.changed?() }'), code
+      expect(code).not_to include('segChanged'), code
+    end
+  end
+
   describe 'onValueChange carries the value' do
     after { Thread.current[:sjui_data_definitions] = nil }
 
