@@ -143,13 +143,27 @@ module JsonUIShared
     # VoiceOver switched a Switch inside `userInteractionEnabled: false`,
     # jsonui-cli 1.9.0). So annotate! marks it as it marks a tap, and the
     # codegen stops its operation and its reading as a control.
+    #
+    # Asked of the type the node is drawn as (TypeSynonyms.drawn_type), as
+    # interactive_type? is (4f's ruling, jsonui-cli 1.9.0): a Picker is drawn
+    # as a SelectBox and a SegmentedControl as a Segment — controls — and a
+    # Table, a List or a RecyclerView as a Collection, a container. As
+    # written, a synonym spelling was no control inside a stop while the
+    # Dynamic runtimes, which ask the drawn type, stopped it. An app's own
+    # component is none, whatever its spelling (TypeSynonyms.app_types): it
+    # carries its own role — a spelling INTERACTIVE_TYPES lists as written
+    # (Toggle, Table) is drawn as written when the app registers it.
     def control?(node)
-      node.is_a?(Hash) && INTERACTIVE_TYPES.include?(node['type']) && !STOP_CONTAINER_TYPES.include?(node['type'])
+      return false unless node.is_a?(Hash)
+      return false if JsonUIShared::TypeSynonyms.app_types.include?(node['type'])
+
+      drawn = JsonUIShared::TypeSynonyms.drawn_type(node['type'])
+      INTERACTIVE_TYPES.include?(drawn) && !STOP_CONTAINER_TYPES.include?(drawn)
     end
 
-    # The interactive types that hold the operated things rather than being
-    # one: a stop on them reaches what they hold.
-    STOP_CONTAINER_TYPES = %w[TabView ScrollView Collection Table TableView RecyclerView Web Embed].freeze
+    # The interactive types, as drawn, that hold the operated things rather
+    # than being one: a stop on them reaches what they hold.
+    STOP_CONTAINER_TYPES = %w[TabView ScrollView Collection Web Embed].freeze
 
     # `userInteractionEnabled: false`: the node and everything in it take no
     # interaction.

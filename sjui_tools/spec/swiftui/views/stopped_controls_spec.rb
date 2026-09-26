@@ -75,6 +75,32 @@ RSpec.describe 'sjui a control a stop holds' do
     end
   end
 
+  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, 4f's
+  # ruling, jsonui-cli 1.9.0): a Picker is drawn as a SelectBox and a
+  # SegmentedControl as a Segment — controls, as the Dynamic runtime already
+  # read them — and a TableView or a List as a Collection, a container. An
+  # app's own spelling is drawn as written, and is no control.
+  it 'a synonym spelling is the control or the container it is drawn as; an app\'s own spelling is neither' do
+    picker = { 'type' => 'Picker', 'id' => 'p', 'items' => %w[a b], 'selectedIndex' => '@{idx}' }
+    expect(convert.call(stopping.call(false, picker)).scan('.jsonuiStoppedControl(true)').size).to eq(1)
+    segmented = { 'type' => 'SegmentedControl', 'id' => 'g', 'items' => %w[a b], 'selectedIndex' => '@{idx}' }
+    expect(convert.call(stopping.call(false, segmented))).to include('.jsonuiStoppedControl(true, items: true)')
+    tree = JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(stopping.call(false, { 'type' => 'View', 'child' => [
+      { 'type' => 'TableView', 'id' => 't' }, { 'type' => 'List', 'id' => 'l' }, picker
+    ] }))))
+    marked = []
+    JsonUIShared::TapAccessibility.walk(tree) { |n, _| marked << n['type'] if n[JsonUIShared::TapAccessibility::STOPPED_KEY] }
+    expect(marked).to eq(['Picker'])
+    # An app registering `Toggle` or `Table` draws them as written; the rule
+    # lists those spellings as written too, and they are still no control.
+    JsonUIShared::TypeSynonyms.app_types = %w[Picker Toggle Table]
+    expect(JsonUIShared::TapAccessibility.control?(picker)).to be(false)
+    expect(JsonUIShared::TapAccessibility.control?({ 'type' => 'Toggle' })).to be(false)
+    expect(JsonUIShared::TapAccessibility.control?({ 'type' => 'Table' })).to be(false)
+  ensure
+    JsonUIShared::TypeSynonyms.app_types = []
+  end
+
   it 'not on what is not a control: a Label, a View, a container' do
     code = convert.call(stopping.call(false, { 'type' => 'View', 'child' => [
       { 'type' => 'Label', 'text' => 'x', 'onClick' => '@{onTap}' },

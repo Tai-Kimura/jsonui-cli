@@ -137,6 +137,18 @@ RSpec.describe 'kjui a control a stop holds' do
     expect(call.scan('modifier =').size).to eq(1), code
   end
 
+  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, 4f's
+  # ruling, jsonui-cli 1.9.0): a Picker is drawn as a SelectBox — a control —
+  # and a TableView as a Collection, a container.
+  it 'a synonym spelling is the control or the container it is drawn as' do
+    code, = emit.call(stopping.call(false, node.call('Picker', 'items' => %w[a b], 'selectedIndex' => '@{idx}')))
+    expect(code.scan('viewModel.updateData(').size).to be >= 1
+    expect(code.scan('if (false) viewModel.updateData(').size).to eq(code.scan('viewModel.updateData(').size), code
+    expect(code).to include(static_semantics)
+    code, = emit.call(stopping.call(false, { 'type' => 'TableView', 'id' => 't' }))
+    expect(code).not_to include('disabled()')
+  end
+
   it 'a Button inside false reads disabled (its onClick is shut already)' do
     code, = emit.call(stopping.call(false, node.call('Button', 'text' => 't', 'onClick' => '@{onTap}')))
     expect(code).to include('onClick = { }')
