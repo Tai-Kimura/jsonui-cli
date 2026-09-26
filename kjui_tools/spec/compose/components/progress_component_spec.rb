@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'core/bind_fold'
 require 'compose/components/progress_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
@@ -48,7 +49,9 @@ RSpec.describe KjuiTools::Compose::Components::ProgressComponent do
       end
 
       it 'generates progress with bind attribute' do
-        json_data = { 'type' => 'Progress', 'bind' => '@{progressValue}' }
+        # `bind` reaches the component folded (JsonUIShared::BindFold at the
+        # dispatch, ComposeBuilder#generate_component); the component reads no bind.
+        json_data = JsonUIShared::BindFold.fold({ 'type' => 'Progress', 'bind' => '@{progressValue}' })
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('progress = { data.progressValue.toFloat() }')
       end

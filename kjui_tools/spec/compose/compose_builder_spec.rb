@@ -666,9 +666,11 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(result).to include('8.dp')
       end
 
-      it 'generates TODO for unknown component' do
+      # the unknown-type sentence (JsonUIShared::AttributeValidatorCore
+      # .unknown_component_type_message); it was a `// TODO: Implement component type` comment
+      it 'names an unknown component in a comment' do
         result = builder.send(:generate_component, { 'type' => 'UnknownWidget' })
-        expect(result).to include('TODO')
+        expect(result).to include("// Unknown component type 'UnknownWidget'")
       end
 
       it 'generates View as container' do

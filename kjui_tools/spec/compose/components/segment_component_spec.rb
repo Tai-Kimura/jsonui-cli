@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'core/bind_fold'
 require 'compose/components/segment_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
@@ -92,11 +93,13 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
     end
 
     it 'generates Segment with bind attribute' do
-      json_data = {
+    # `bind` reaches the component folded (JsonUIShared::BindFold at the
+    # dispatch, ComposeBuilder#generate_component); the component reads no bind.
+      json_data = JsonUIShared::BindFold.fold({
         'type' => 'Segment',
         'bind' => '@{tabIndex}',
         'items' => ['A', 'B']
-      }
+      })
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('selectedTabIndex = data.tabIndex')
     end
