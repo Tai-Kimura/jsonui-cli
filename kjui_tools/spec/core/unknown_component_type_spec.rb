@@ -42,7 +42,7 @@ RSpec.describe 'unknown component type' do
     skip 'shared vectors not present in this layout' unless File.exist?(vectors)
 
     cases = JSON.parse(File.read(vectors))['cases']
-    expect(cases.size).to be >= 4
+    expect(cases.size).to be >= 5
     got = cases.map { |c| [c['name'], core.unknown_component_type_message(c['written'], c['known'])] }
     expect(got).to eq(cases.map { |c| [c['name'], c['expect']] })
   end

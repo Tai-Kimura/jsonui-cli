@@ -111,7 +111,9 @@ module JsonUIShared
     # The sentence for `written`, given the types the tool draws.
     def self.unknown_component_type_message(written, known_types)
       message = format(UNKNOWN_COMPONENT_TYPE, written: written)
-      canonical = known_types.find { |known| known.casecmp?(written) }
+      # (not the type itself: a type the validator knows by its definition
+      # that the codegen has no component for reaches the codegen's fallback)
+      canonical = known_types.find { |known| known != written && known.casecmp?(written) }
       canonical ? message + format(UNKNOWN_COMPONENT_TYPE_HINT, canonical: canonical) : message
     end
 

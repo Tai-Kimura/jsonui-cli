@@ -12,6 +12,9 @@
       "expect": "Unknown component type 'Nope'" },
     { "name": "a registered type is offered like a declared one",
       "written": "headerMenu", "known": ["Label", "HeaderMenu"],
-      "expect": "Unknown component type 'headerMenu' — did you mean 'HeaderMenu'? Type names are case-sensitive." }
+      "expect": "Unknown component type 'headerMenu' — did you mean 'HeaderMenu'? Type names are case-sensitive." },
+    { "name": "a type known by its definition but drawn by nothing is not offered itself",
+      "written": "DrawerContent", "known": ["Label", "DrawerContent"],
+      "expect": "Unknown component type 'DrawerContent'" }
   ]
 }
