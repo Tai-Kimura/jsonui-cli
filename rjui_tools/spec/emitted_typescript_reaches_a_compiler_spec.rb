@@ -94,7 +94,6 @@ RSpec.describe 'emitted TypeScript reaches a compiler' do
     'react/converters/collection_key_expr_spec.rb' => UNCONVERTED,
     'react/converters/color_style_resolution_spec.rb' => UNCONVERTED,
     'react/converters/content_mode_vocabulary_spec.rb' => UNCONVERTED,
-    'react/converters/embed_converter_spec.rb' => UNCONVERTED,
     'react/converters/extension_visibility_spec.rb' => UNCONVERTED,
     'react/converters/font_weight_numeric_face_spec.rb' => UNCONVERTED,
     'react/converters/gradient_view_converter_spec.rb' => UNCONVERTED,
@@ -236,7 +235,9 @@ RSpec.describe 'emitted TypeScript reaches a compiler' do
     # each one a spec that came in with the loads-and-describes rule. Not
     # 56 + 3: 56 had one entry of slack since 5a6cbb45 (2026-09-14) took
     # select_box_converter_spec out of the list and left the number where
-    # it was. From here it only goes down.
-    expect(ALLOWLIST_TS.size).to be <= 58
+    # it was. 57 the same day: embed_converter_spec compiles its events
+    # (ticket rjui-embed-event-bridge-calls-an-undeclared-view-model), and
+    # the number went down with it. From here it only goes down.
+    expect(ALLOWLIST_TS.size).to be <= 57
   end
 end

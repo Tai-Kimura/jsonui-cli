@@ -40,12 +40,15 @@ RSpec.describe 'built-in props contract' do
 
   # The data a generated component reads these from: the handlers as the
   # data model declares them once the layout declares them (the build's
-  # binding warning says to: `{ "class": "(() -> Void)?" }`).
+  # binding warning says to: `{ "class": "(() -> Void)?" }`), and an Embed
+  # event's handler as the data model declares it by itself, taking the
+  # event's payload.
   BUILTIN_AMBIENT = <<~TS
     declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
     declare const data: {
       imageUrl?: string; onImageLoaded?: () => void; onImageFailed?: () => void; onImageTapped?: () => void;
       notesText?: string; onNotesTapped?: () => void; selectedId?: string;
+      onEmbedClosed?: (value: Record<string, unknown>) => void;
     };
   TS
 
@@ -191,14 +194,12 @@ RSpec.describe 'built-in props contract' do
         "converter can emit #{undeclared.join(', ')} but EmbedContainerProps does not declare them"
     end
 
-    # The handler as the SSoT declares it (a parent VM method's name, which
-    # sjui and kjui call as `viewModel.<name>` too). PENDING, so it turns red
-    # the day it compiles: the bridge calls `viewModel.onEmbedClosed(…)`, and
-    # a generated web component has `data`, no `viewModel` — TS2304, and a
-    # ReferenceError when the event fires in a JavaScript project. Ticket
-    # rjui-embed-event-bridge-calls-an-undeclared-view-model.
+    # The handler as the SSoT declares it (a parent VM method's name). Until
+    # 1.8.121 the bridge called `viewModel.onEmbedClosed(…)`, and a generated
+    # web component has `data`, no `viewModel` — TS2304 (ticket
+    # rjui-embed-event-bridge-calls-an-undeclared-view-model); this arm was
+    # pending under that id until the bridge called `data`.
     it 'compiles against EmbedContainerProps', :typescript_compile do
-      pending 'rjui-embed-event-bridge-calls-an-undeclared-view-model'
       node = maximal_node.merge('events' => { 'onClose' => 'onEmbedClosed' })
       emitted = RjuiTools::React::Converters::EmbedConverter.new(node, { 'use_tailwind' => true }).convert
       expect(TypeScriptCompiler.component(emitted)).to compile_as_typescript.with_ambient(<<~TS)
