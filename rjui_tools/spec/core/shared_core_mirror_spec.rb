@@ -1,21 +1,17 @@
 # frozen_string_literal: true
 
-# Every file of lib/core that shared/core also holds is a mirror of the
-# canon, byte for byte — the guard sjui_tools and kjui_tools carry with a
-# list; here the list is what the two directories share, so a copy added
-# later is held too.
-RSpec.describe 'shared/core mirrors (rjui)' do
-  shared_dir = File.expand_path('../../../shared/core', __dir__)
-  copies = Dir[File.expand_path('../../lib/core/*.rb', __dir__)].select { |f| File.exist?(File.join(shared_dir, File.basename(f))) }
-
-  it 'finds the mirrors (enum_spelling.rb among them)' do
-    skip 'shared/core not present in this layout' unless Dir.exist?(shared_dir)
-    expect(copies.map { |f| File.basename(f) }).to include('enum_spelling.rb', 'attribute_validator_core.rb')
-  end
-
-  copies.each do |copy|
-    it "keeps lib/core/#{File.basename(copy)} byte-identical to shared/core" do
-      expect(File.read(copy)).to eq(File.read(File.join(shared_dir, File.basename(copy))))
+# responsive_resolver.rb and layout_validator.rb are maintained in
+# shared/core/ and mirrored into each tool's lib/core/. A drifted mirror
+# silently forks behavior per toolchain, so each copy is pinned
+# byte-for-byte to the canon — the same guard plural_validator and
+# screen_index already carry.
+RSpec.describe 'shared/core mirrors' do
+  %w[responsive_resolver.rb layout_validator.rb layout_variant.rb attribute_validator_core.rb converter_generator_core.rb string_manager_core.rb binding_validator_core.rb color_manager_core.rb type_converter_core.rb generated_orphans.rb tap_accessibility.rb attribute_types.rb string_literals.rb enum_spelling.rb].each do |file|
+    it "keeps lib/core/#{file} byte-identical to the canonical shared/core copy" do
+      tool_copy = File.expand_path("../../lib/core/#{file}", __dir__)
+      shared_copy = File.expand_path("../../../shared/core/#{file}", __dir__)
+      skip 'shared/core copy not present in this layout' unless File.exist?(shared_copy)
+      expect(File.read(tool_copy)).to eq(File.read(shared_copy))
     end
   end
 end
