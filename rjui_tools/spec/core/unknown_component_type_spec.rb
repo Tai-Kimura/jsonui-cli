@@ -12,14 +12,16 @@ require 'react/react_generator'
 # registry draws — the converter_mappings.rb the generator reads, the
 # project's first (Dir.pwd/rjui_tools/...), as the generator finds it.
 RSpec.describe 'rjui: unknown component type' do
-  it 'says the sentence where it draws a plain View' do
+  it 'says the sentence where it draws a plain View, and the View type-checks' do
     said = []
     allow(RjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
     generator = RjuiTools::React::ReactGenerator.allocate
     generator.instance_variable_set(:@config, { 'use_tailwind' => true })
     generator.instance_variable_set(:@extension_converters, {})
-    generator.send(:convert_component, { 'type' => 'switch', 'id' => 'x' })
+    out = generator.send(:convert_component, { 'type' => 'switch', 'id' => 'x' })
     expect(said).to include("Unknown component type 'switch' — did you mean 'Switch'? Type names are case-sensitive.")
+    expect(out).to include('<div id="x"')
+    expect("export const Emitted = (): JSX.Element => (\n#{out}\n);\n").to compile_as_typescript
   end
 
   # A project's registered converter with no attribute definition file (a
