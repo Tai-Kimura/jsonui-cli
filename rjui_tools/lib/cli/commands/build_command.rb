@@ -2130,6 +2130,7 @@ module RjuiTools
           cleanup_ret = is_ts ? ': () => void' : ''
           element_param = is_ts ? ': Element' : ''
           id_param = is_ts ? ': string' : ''
+          key_prop_param = is_ts ? ': string | null' : ''
           target_param = is_ts ? ': unknown' : ''
           keys_param = is_ts ? ': unknown[] | null' : ''
           lists_param = is_ts ? ': unknown[][]' : ''
@@ -2173,13 +2174,18 @@ module RjuiTools
             // cells of every drawn section, in section order — a section's
             // header or footer, and a section's block, is not a cell; a
             // string is the first cell, in section order, whose key it is
-            // (`keys`, the drawn cells' keys in that order — null when the
-            // Collection has no cellIdProperty). The cells are the elements
+            // (`keys`, the drawn cells' keys in that order: a cell's cellId,
+            // else its cellIdProperty value). Anything else — a string no
+            // cell has as its key included — scrolls nowhere; a string of
+            // digits is a key like any other, not an index (only Kotlin reads
+            // the legacy `<digits>` form). The cells are the elements
             // addressed `<collectionId>_item_<n>`, in document order; a
             // Collection whose cells carry no address falls back to its
             // children. Until jsonui-cli 1.9.0 this was the container's
             // child at the index, which counts a header, a footer and a
-            // section's block, and a string was read as a number.
+            // section's block; a string was read as a number, and — with no
+            // cellIdProperty — a string of digits as an index while a cellId
+            // was never matched.
             export function scrollCollectionToCell(
               container#{el_param},
               collectionId#{id_param},
@@ -2189,14 +2195,12 @@ module RjuiTools
               animated#{animated_param},
               horizontal#{horizontal_param}
             ) {
-              if (!container || target === undefined || target === null || target === '') return;
+              if (!container) return;
               let n = -1;
-              if (keys) {
-                n = keys.findIndex((key) => key !== null && key !== undefined && String(key) === String(target));
-              } else if (typeof target === 'number') {
+              if (typeof target === 'number') {
                 n = target;
-              } else if (/^[0-9]+$/.test(String(target))) {
-                n = Number(target);
+              } else if (typeof target === 'string' && target !== '' && keys) {
+                n = keys.findIndex((key) => key !== null && key !== undefined && String(key) === target);
               }
               if (!Number.isInteger(n) || n < 0) return;
               const prefix = collectionId + '_item_';
@@ -2209,14 +2213,15 @@ module RjuiTools
             }
 
             // The keys of the drawn cells, in section order (`lists`, each drawn
-            // section's cells): a cell's `cellId`, else its cellIdProperty
-            // value, else null — a cell with neither has no key.
-            export function collectionCellKeys(lists#{lists_param}, cellIdProperty#{id_param})#{keys_ret} {
+            // section's cells): a cell's `cellId`, else — only when the
+            // Collection has one — its cellIdProperty value, else null; a cell
+            // with neither has no key.
+            export function collectionCellKeys(lists#{lists_param}, cellIdProperty#{key_prop_param})#{keys_ret} {
               const keys#{keys_decl} = [];
               for (const cells of lists) {
                 for (const cell of cells ?? []) {
                   const record = (cell ?? {})#{record_cast};
-                  keys.push(record['cellId'] ?? record[cellIdProperty] ?? null);
+                  keys.push(record['cellId'] ?? (cellIdProperty ? record[cellIdProperty] : null) ?? null);
                 }
               }
               return keys;

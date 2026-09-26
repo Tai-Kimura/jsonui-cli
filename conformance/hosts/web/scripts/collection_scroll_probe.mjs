@@ -21,6 +21,8 @@
 //   listSections  1 column, two sections with a header (the control route)
 //   listKeyed     1 column, cellIdProperty `key`, a key both sections have
 //   listInitial   drawn with scrollTo 7 — it must stay at its top
+//   listCellIds   1 column, no cellIdProperty, cells carrying a `cellId` (a
+//                 key both sections have): a string is matched against it
 // It prints one line per step and exits 1 on any step that breaks the rule.
 //
 //   --rjui / RJUI_TOOLS_PATH   default: <repo>/rjui_tools
@@ -68,6 +70,7 @@ const LAYOUT = {
     { name: 'gridTarget', class: 'Int', defaultValue: 0 }, { name: 'oneTarget', class: 'Int', defaultValue: 0 },
     { name: 'listTarget', class: 'Int', defaultValue: 0 }, { name: 'keyTarget', class: 'String', defaultValue: '' },
     { name: 'initialTarget', class: 'Int', defaultValue: 0 },
+    { name: 'idRows', class: 'CollectionDataSource' }, { name: 'idTarget', class: 'String', defaultValue: '' },
   ],
   child: [
     collection('gridSections', { items: '@{gridRows}', sections: two, columns: 2, scrollTo: '@{gridTarget}' }),
@@ -76,6 +79,8 @@ const LAYOUT = {
     collection('listKeyed', { items: '@{keyedRows}', sections: [{ cell: 'probe_scroll_cell' }, { cell: 'probe_scroll_cell' }],
       cellIdProperty: 'key', scrollTo: '@{keyTarget}' }),
     collection('listInitial', { items: '@{listRows}', sections: two, scrollTo: '@{initialTarget}' }),
+    collection('listCellIds', { items: '@{idRows}', sections: [{ cell: 'probe_scroll_cell' }, { cell: 'probe_scroll_cell' }],
+      scrollTo: '@{idTarget}' }),
   ],
 }
 
@@ -86,7 +91,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { CollectionScrollProbe } from './generated/components/CollectionScrollProbe'
 const w = window as unknown as { __set: (k: string, v: unknown) => void }
-const cells = (names: string[], keys?: string[]) => ({ data: names.map((name, i) => (keys ? { name, key: keys[i] } : { name })) })
+const cells = (names: string[], keys?: string[], field = 'key') => ({ data: names.map((name, i) => (keys ? { name, [field]: keys[i] } : { name })) })
 const range = (p: string, n: number) => Array.from({ length: n }, (_, i) => p + i)
 const sections = (a: string[], b: string[]) => ({ sections: [
   { header: { title: 'HA' }, cells: cells(a) }, { header: { title: 'HB' }, cells: cells(b) },
@@ -100,7 +105,11 @@ function Probe() {
       { cells: cells(range('a', 6), range('k', 6)) },
       { cells: cells(range('b', 6), ['k3', 'x1', 'x2', 'x3', 'x4', 'x5']) },
     ] },
-    gridTarget: 0, oneTarget: 0, listTarget: 0, keyTarget: '', initialTarget: 7,
+    idRows: { sections: [
+      { cells: cells(range('a', 6), range('c', 6), 'cellId') },
+      { cells: cells(range('b', 6), ['c3', 'y1', 'y2', 'y3', 'y4', 'y5'], 'cellId') },
+    ] },
+    gridTarget: 0, oneTarget: 0, listTarget: 0, keyTarget: '', initialTarget: 7, idTarget: '',
   })
   w.__set = (k, v) => setState((s) => ({ ...s, [k]: v }))
   return <CollectionScrollProbe data={state} />
@@ -152,14 +161,19 @@ const STEPS = [
   ['gridOne', 9, 'g9'],
   ['listSections', undefined, null],
   ['listSections', 6, 'b1'],          // a0…a4 are cells 0…4, b0 5, b1 6
+  ['listSections', '2', 'b1'],        // a string of digits is a key, and no cell has it: it stays
   ['listKeyed', undefined, 'a0'],
   ['listKeyed', 'k3', 'a3'],          // both sections have k3: the first section's
   ['listKeyed', 'x2', 'b2'],
   ['listKeyed', 'nothing', 'b2'],     // no cell's key: it stays where it was
   ['listKeyed', '0#123', 'b2'],       // the Kotlin-only legacy form: the web does not read it
   ['listInitial', undefined, null],   // drawn with 7: still at its top
+  ['listCellIds', 'c3', 'a3'],        // no cellIdProperty: the cellId, the first section's
+  ['listCellIds', 'y2', 'b2'],
+  ['listCellIds', 4, 'a4'],           // an Int still counts the cells
 ]
-const TARGETS = { gridSections: 'gridTarget', gridOne: 'oneTarget', listSections: 'listTarget', listKeyed: 'keyTarget', listInitial: 'initialTarget' }
+const TARGETS = { gridSections: 'gridTarget', gridOne: 'oneTarget', listSections: 'listTarget', listKeyed: 'keyTarget', listInitial: 'initialTarget',
+  listCellIds: 'idTarget' }
 
 prepare()
 await build({

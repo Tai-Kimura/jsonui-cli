@@ -95,7 +95,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
   # generator's ref and effect lines under a minimal useRef / useEffect (a
   # ref kept across renders, an effect run when a dependency changed, the
   # first render included) — and the view at the top is read after each.
-  def top_after(node, targets, renders: false)
+  def top_after(node, targets, renders: false, data: SCROLL_TO_CELL_DATA)
     esbuild = File.expand_path('../support/node_modules/.bin/esbuild', __dir__)
     skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
     skip 'no headless Chromium in the Playwright cache' unless chromium
@@ -145,7 +145,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
           };
           let root = null;
           #{targets.to_json}.forEach((target, n) => {
-            const data = Object.assign(#{SCROLL_TO_CELL_DATA.strip}, { target });
+            const data = Object.assign(#{data.strip}, { target });
             slot = 0; pending = [];
             #{renders ? effect_lines(node).gsub("
 ", "
@@ -161,7 +161,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
           });
         } else {
           for (const target of #{targets.to_json}) {
-            const data = Object.assign(#{SCROLL_TO_CELL_DATA.strip}, { target });
+            const data = Object.assign(#{data.strip}, { target });
             const targetRef = { current: null };
             const root = (#{jsx.strip});
             root.style.width = '100px';
@@ -186,16 +186,39 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
     end
   end
 
-  it 'the effect names the Collection and hands keys only with cellIdProperty' do
-    expect(scroll_call(SCROLL_TO_CELL_NODE)).to eq("scrollCollectionToCell(targetRef.current, \"target\", data.target, null, 'top', false, false)")
+  # A cell's key is its cellId, else — only with cellIdProperty — that
+  # property's value; the effect hands the keys either way (jsonui-cli 1.9.0:
+  # with no cellIdProperty they were null, and a string never met a cellId).
+  it 'the effect names the Collection and hands the keys, the cellIdProperty only when there is one' do
+    lists = '[(data.rows?.sections?.[0]?.cells?.data ?? []), (data.rows?.sections?.[1]?.cells?.data ?? [])]'
+    expect(scroll_call(SCROLL_TO_CELL_NODE)).to eq("scrollCollectionToCell(targetRef.current, \"target\", data.target, " \
+                                                   "collectionCellKeys(#{lists}, null), 'top', false, false)")
     keyed = scroll_call(SCROLL_TO_CELL_NODE.merge('cellIdProperty' => 'key'))
-    expect(keyed).to include('collectionCellKeys([(data.rows?.sections?.[0]?.cells?.data ?? []), (data.rows?.sections?.[1]?.cells?.data ?? [])], "key")')
+    expect(keyed).to include("collectionCellKeys(#{lists}, \"key\")")
   end
 
   it 'renders: a number is a cell counted across the sections, headers and footers not counted' do
     # Children of the list: H0 A0 A1 A2 A3 A4 F0 H1 B0 B1 … — child 6 is F0,
     # child 3 is A2. The cells: A0…A4 are 0…4, B0 5, B1 6.
-    expect(top_after(SCROLL_TO_CELL_NODE, [0, 3, 6, '6'])).to eq('0' => 'A0', '3' => 'A3', '6' => 'B1')
+    expect(top_after(SCROLL_TO_CELL_NODE, [0, 3, 6])).to eq('0' => 'A0', '3' => 'A3', '6' => 'B1')
+  end
+
+  # A string is a key, and anything that names no cell scrolls nowhere: a
+  # string of digits is not an index (only Kotlin reads the legacy
+  # `<digits>` form). Until jsonui-cli 1.9.0 the web read "6" as 6 when the
+  # Collection had no cellIdProperty.
+  it 'renders: a string of digits is a key no cell has — it scrolls nowhere, with or without cellIdProperty' do
+    expect(top_after(SCROLL_TO_CELL_NODE, %w[6 3])).to eq('6' => 'H0', '3' => 'H0')
+    expect(top_after(SCROLL_TO_CELL_NODE.merge('cellIdProperty' => 'key'), %w[6])).to eq('6' => 'H0')
+  end
+
+  # With no cellIdProperty a cell's key is its cellId: a string lands on the
+  # first cell, in section order, whose cellId it is. Until jsonui-cli 1.9.0
+  # the web handed no keys there, and a cellId scrolled nowhere.
+  it 'renders: with no cellIdProperty a string is a cellId, the first section\'s first' do
+    ids = SCROLL_TO_CELL_DATA.gsub('key: ', 'cellId: ').gsub(/, key \}/, ', cellId: key }')
+    expect(ids).to include('cellId:')
+    expect(top_after(SCROLL_TO_CELL_NODE, %w[k3 x2 nothing], data: ids)).to eq('k3' => 'A3', 'x2' => 'B2', 'nothing' => 'H0')
   end
 
   it 'renders: a key two sections share lands on the first section\'s cell; a key of one on its own' do
