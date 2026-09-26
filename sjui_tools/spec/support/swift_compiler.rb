@@ -117,7 +117,7 @@ module SwiftCompiler
       mock_types = <<~SWIFT
         // Mock types for testing (simulating SwiftJsonUI types)
         struct PartialAttributedText: View {
-            init(_ text: String, partialAttributes: [PartialAttribute] = [], fontSize: CGFloat? = nil, fontWeight: String? = nil, fontColor: Color? = nil, highlightColor: Color? = nil, underline: Bool = false, strikethrough: Bool = false, lineSpacing: CGFloat? = nil, lineLimit: Int? = nil, textAlignment: TextAlignment = .leading, linkable: Bool = false) {}
+            init(_ text: String, partialAttributes: [PartialAttribute] = [], fontSize: CGFloat? = nil, fontWeight: String? = nil, fontColor: Color? = nil, highlightColor: Color? = nil, underline: Bool = false, strikethrough: Bool = false, lineSpacing: CGFloat? = nil, lineLimit: Int? = nil, textAlignment: TextAlignment = .leading, linkable: Bool = false, linksEnabled: Bool = true) {}
             var body: some View { Text("") }
         }
         struct PartialAttribute {
