@@ -151,6 +151,21 @@ module KjuiTools
           end
         end
 
+        # Spacing on every horizontal Collection, one lane or many (4f ruling,
+        # 2026-09-26, the rule SwiftJsonUI Dynamic dde0628 and sjui codegen
+        # draw): along the scroll axis lineSpacing (its alias sectionSpacing),
+        # else itemSpacing, else 0; between lanes columnSpacing, else
+        # itemSpacing, else 0. Pages sit along the scroll axis. `spacing` is
+        # kjui's extra spelling of itemSpacing and keeps its place after it.
+        # nil where nothing is declared (Compose's own 0).
+        def self.horizontal_scroll_spacing(json_data)
+          json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+        end
+
+        def self.horizontal_lane_spacing(json_data)
+          json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+        end
+
         def self.default_scroll_anchor?(json_data)
           return false unless %w[center bottom].include?(json_data['defaultScrollAnchor'].to_s)
 
@@ -383,23 +398,31 @@ module KjuiTools
           line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
           column_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
 
-          if line_spacing || column_spacing
+          if is_horizontal
+            # The horizontal rule (horizontal_scroll_spacing): the scroll axis
+            # (horizontalArrangement) by lineSpacing, else itemSpacing; the
+            # lanes (verticalArrangement) by columnSpacing, else itemSpacing.
+            # The scroll axis fell back to columnSpacing and the lanes were
+            # never spaced until jsonui-cli 1.9.0.
+            if (along = horizontal_scroll_spacing(json_data))
+              required_imports&.add(:arrangement)
+              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{along}.dp),", depth + 1)
+            end
+            # Lanes only where there are several (a bound count is the
+            # sentinel 2 here): one row has nothing between it.
+            if columns > 1 && (between = horizontal_lane_spacing(json_data))
+              required_imports&.add(:arrangement)
+              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{between}.dp),", depth + 1)
+            end
+          elsif line_spacing || column_spacing
             required_imports&.add(:arrangement)
-            if is_horizontal
-              # Horizontal scroll: both lineSpacing and columnSpacing map to
-              # horizontalArrangement (item spacing along scroll direction).
-              # For single-row horizontal grids, verticalArrangement is not needed.
-              h_spacing = line_spacing || column_spacing
-              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
-            else
-              # Vertical scroll: lineSpacing = vertical spacing between rows,
-              # columnSpacing = horizontal spacing between columns
-              if line_spacing
-                code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{line_spacing}.dp),", depth + 1)
-              end
-              if column_spacing
-                code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{column_spacing}.dp),", depth + 1)
-              end
+            # Vertical scroll: lineSpacing = vertical spacing between rows,
+            # columnSpacing = horizontal spacing between columns
+            if line_spacing
+              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{line_spacing}.dp),", depth + 1)
+            end
+            if column_spacing
+              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{column_spacing}.dp),", depth + 1)
             end
           end
 
@@ -1007,7 +1030,9 @@ module KjuiTools
 
           items_property = json_data['items']
           item_binding = items_property&.match(/@\{([^}]+)\}/)&.captures&.first
-          page_spacing = json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['spacing']
+          # Pages sit along the scroll axis (horizontal_scroll_spacing); this
+          # read itemSpacing, then columnSpacing, until jsonui-cli 1.9.0.
+          page_spacing = horizontal_scroll_spacing(json_data)
 
           # currentPage binding
           current_page_raw = json_data['currentPage']
@@ -1572,7 +1597,9 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
-          column_spacing = json_data['columnSpacing'] || json_data['itemSpacing']
+          # Along the scroll axis (horizontal_scroll_spacing); this read
+          # columnSpacing, then itemSpacing, until jsonui-cli 1.9.0.
+          column_spacing = horizontal_scroll_spacing(json_data)
 
           code = indent("Row(", depth)
           code += Helpers::ModifierBuilder.format(modifiers, depth)
@@ -1692,7 +1719,9 @@ module KjuiTools
           # LazyHorizontalGrid path (line ~150) already accepts `lineSpacing`
           # as the horizontal-spacing source; CollectionStack must match.
           spacing_value = if is_horizontal
-                           json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['spacing']
+                           # The horizontal rule; this read itemSpacing, then
+                           # columnSpacing, then lineSpacing until jsonui-cli 1.9.0.
+                           horizontal_scroll_spacing(json_data)
                          else
                            json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
                          end
