@@ -73,8 +73,9 @@ module KjuiTools
 
         handles = source[/handles\s*=\s*setOf\(([^)]*)\)/, 1].to_s.scan(/"([^"]+)"/).flatten
         passed = converter_parameters(type, converter_class)
-        # `map { }.compact`, not `filter_map`: the tools run on Ruby 2.6 too
-        # (the consumer floor), where Array#filter_map does not exist.
+        # `map { }.compact`, not `filter_map`: the tools ran on Ruby 2.6 too
+        # until jsonui-cli 1.9.0 (the floor is 3.2 since), where
+        # Array#filter_map does not exist.
         STAGE_KEYS.reject { |key| handles.include?(key) }.map do |key|
           if source.match?(/"#{key}"/)
             "Dynamic component '#{type}' reads the node's #{key} itself, and ModifierBuilder.buildModifier applies it too — " \
