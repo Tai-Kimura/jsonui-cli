@@ -36,16 +36,12 @@ RSpec.describe 'kjui codegen: a grid per section' do
 
   def scaffold(class_name, letter)
     generator = KjuiTools::Compose::Generators::CellGenerator.allocate
-    Dir.mktmpdir('kjui_cell') do |dir|
-      view = File.join(dir, 'view.kt')
-      model = File.join(dir, 'model.kt')
-      generator.send(:create_main_cell_template, view, class_name, 'x_cell', nil, 'com.example')
-      generator.send(:create_cell_viewmodel_template, model, class_name, 'x_cell', nil, 'com.example')
-      params = File.read(view)[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
-      update = File.read(model)[/fun updateData\((.*?)\)/, 1] or raise "no updateData in the scaffold"
-      "class #{class_name}ViewModel { fun updateData(#{update}) {} }\n" \
-        "@Composable fun #{class_name}View(#{params.strip}) { Layout.draw(\"#{letter}\" + ((modifier as? Tagged)?.tag?.substringAfterLast('_') ?: \"\")) }\n"
-    end
+    view = generator.send(:main_cell_content, class_name, nil, 'com.example')
+    model = generator.send(:cell_viewmodel_content, class_name, 'x_cell', 'com.example')
+    params = view[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
+    update = model[/fun updateData\((.*?)\)/, 1] or raise "no updateData in the scaffold"
+    "class #{class_name}ViewModel { fun updateData(#{update}) {} }\n" \
+      "@Composable fun #{class_name}View(#{params.strip}) { Layout.draw(\"#{letter}\" + ((modifier as? Tagged)?.tag?.substringAfterLast('_') ?: \"\")) }\n"
   end
 
   SECTION_GRID_STUBS = <<~KOTLIN

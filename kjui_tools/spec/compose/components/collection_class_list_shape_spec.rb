@@ -22,7 +22,7 @@ require_relative '../../support/kotlin_compiler'
 # Ticket collection-attributes-declared-but-not-drawn-on-some-paths.
 #
 # Compiled against the view and ViewModel signatures `kjui g cell` scaffolds,
-# read from the generator's own templates (CellGenerator), and a
+# read from the generator's own templates (CellGenerator#main_cell_content / #cell_viewmodel_content), and a
 # CollectionDataSource transcribed from KotlinJsonUI's
 # com.kotlinjsonui.data.CollectionDataSection.kt (fields only; a
 # transcription, not a compile against the library). Stubs for the Compose
@@ -54,16 +54,12 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
 
   def scaffold(class_name)
     generator = KjuiTools::Compose::Generators::CellGenerator.allocate
-    Dir.mktmpdir('kjui_cell') do |dir|
-      view = File.join(dir, 'view.kt')
-      model = File.join(dir, 'model.kt')
-      generator.send(:create_main_cell_template, view, class_name, 'x_cell', nil, 'com.example')
-      generator.send(:create_cell_viewmodel_template, model, class_name, 'x_cell', nil, 'com.example')
-      params = File.read(view)[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
-      update = File.read(model)[/fun updateData\((.*?)\)/, 1] or raise "no updateData in the #{class_name}ViewModel scaffold"
-      "class #{class_name}ViewModel { fun updateData(#{update}) {} }\n" \
-        "@Composable fun #{class_name}View(#{params.strip}) {}\n"
-    end
+    view = generator.send(:main_cell_content, class_name, nil, 'com.example')
+    model = generator.send(:cell_viewmodel_content, class_name, 'x_cell', 'com.example')
+    params = view[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
+    update = model[/fun updateData\((.*?)\)/, 1] or raise "no updateData in the #{class_name}ViewModel scaffold"
+    "class #{class_name}ViewModel { fun updateData(#{update}) {} }\n" \
+      "@Composable fun #{class_name}View(#{params.strip}) {}\n"
   end
 
   CLASS_LIST_STUBS = <<~KOTLIN
