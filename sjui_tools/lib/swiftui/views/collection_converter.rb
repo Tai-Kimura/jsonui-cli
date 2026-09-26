@@ -386,7 +386,7 @@ module SjuiTools
                             vars = open_cell_foreach('cellsData', section_index: index)
                             indent do
                               add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                              generate_cell_identity(vars[:index_var])
+                              generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
 
                               apply_cell_frame
 
@@ -431,7 +431,7 @@ module SjuiTools
                           vars = open_cell_foreach('cellsData')
                           indent do
                             add_line "#{cell_class_name}(data: #{vars[:data_var]})"
-                            generate_cell_identity(vars[:index_var])
+                            generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame
                             # Add accessibilityIdentifier for test automation (tapItem action)
                             apply_cell_item_identifier(vars[:index_var])
@@ -512,7 +512,7 @@ module SjuiTools
                             vars = open_cell_foreach('cellsData', section_index: index)
                             indent do
                               add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                              generate_cell_identity(vars[:index_var])
+                              generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
 
                               apply_cell_frame(grid: true)
 
@@ -846,7 +846,7 @@ module SjuiTools
                       vars = open_cell_foreach('cellsData', section_index: index)
                       indent do
                         add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                        generate_cell_identity(vars[:index_var])
+                        generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                         apply_cell_frame
                         apply_cell_item_identifier(vars[:index_var])
                       end
@@ -870,7 +870,7 @@ module SjuiTools
                     vars = open_cell_foreach('cellsData')
                     indent do
                       add_line "#{cell_class_name}(data: #{vars[:data_var]})"
-                      generate_cell_identity(vars[:index_var])
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
                       apply_cell_item_identifier(vars[:index_var])
                     end
@@ -931,7 +931,7 @@ module SjuiTools
                           vars = open_cell_foreach('cellsData', section_index: index)
                           indent do
                             add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                            generate_cell_identity(vars[:index_var])
+                            generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame(grid: true)
                             apply_cell_item_identifier(vars[:index_var])
                           end
@@ -1061,7 +1061,7 @@ module SjuiTools
                           vars = open_cell_foreach('cellsData', section_index: index)
                           indent do
                             add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                            generate_cell_identity(vars[:index_var])
+                            generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame
                             apply_cell_item_identifier(vars[:index_var])
                           end
@@ -1088,7 +1088,7 @@ module SjuiTools
                     vars = open_cell_foreach('cellsData')
                     indent do
                       add_line "#{cell_class_name}(data: #{vars[:data_var]})"
-                      generate_cell_identity(vars[:index_var])
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
                       apply_cell_item_identifier(vars[:index_var])
                     end
@@ -1208,7 +1208,7 @@ module SjuiTools
         # test tag and rjui's item id do (round 7).
         def add_paging_cell(cell_view_name, vars, spacing)
           add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-          generate_cell_identity(vars[:index_var])
+          generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
           apply_cell_frame
           if spacing > 0
             add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
@@ -1272,7 +1272,7 @@ module SjuiTools
                         vars = open_cell_foreach('cellsData', section_index: index)
                         indent do
                           add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                          generate_cell_identity(vars[:index_var])
+                          generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                           apply_cell_frame
                           apply_cell_item_identifier(vars[:index_var])
                         end
@@ -1299,7 +1299,7 @@ module SjuiTools
                     vars = open_cell_foreach('cellsData')
                     indent do
                       add_line "#{cell_class_name}(data: #{vars[:data_var]})"
-                      generate_cell_identity(vars[:index_var])
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
                       apply_cell_item_identifier(vars[:index_var])
                     end
@@ -1549,21 +1549,37 @@ module SjuiTools
 
           later = section_index.to_i.positive?
           index_expr = page_start ? "#{page_start} + index" : 'index'
+          # A later section's scroll target (scrollTo): a scrolled-to index is
+          # a cell's place among the drawn sections' cells, as a pager's page
+          # is — `.id(sectionStart + index)`; it was `.id(index)`, so every
+          # section answered 0… and scrollTo(n) reached the first section's
+          # cell n (4f round 9). A pager's later section already counts from
+          # its pageStart.
+          section_start = later && !page_start && has_scroll_to? && !cell_id_property && earlier_cells_count(section_index)
+          add_line "let sectionStart = #{section_start}" if section_start
           if cell_id_property
             add_line "let items = #{source_expr}.enumerated().map { index, data in"
             indent do
               # Prefer the pre-enriched "cellId" when autoChangeTrackingId is on;
-              # otherwise fall back to the user's primary key.
-              id = "(data[\"cellId\"] as? String) ?? (data[\"#{cell_id_property}\"] as? String) ?? \"\\(index)\""
+              # otherwise fall back to the user's primary key. A later section's
+              # id carries its section (4f round 9): keys two sections share
+              # were one id to the lazy stack / TabView they share, which
+              # dropped the later section's cell — as `\.offset` did (9ef11908).
+              id = cell_key_expr('data', 'index')
+              id = "\"#{section_index}:\" + (#{id})" if later
               add_line "IdentifiedCellItem(id: #{id}, index: #{index_expr}, data: data)"
             end
             add_line "}"
             add_line "ForEach(items) { cell in"
-            { data_var: 'cell.data', index_var: 'cell.index' }
+            # scrollTo names a cell by its key: a later section's cell takes its
+            # key as an explicit `.id` too, since its ForEach id is prefixed.
+            vars = { data_var: 'cell.data', index_var: 'cell.index' }
+            later ? vars.merge(scroll_id: cell_key_expr('cell.data', 'cell.index')) : vars
           elsif later
             add_line "ForEach(#{source_expr}.enumerated().map { IdentifiedCellItem(id: \"#{section_index}:\\($0.offset)\", " \
                      "index: #{page_start ? "#{page_start} + " : ''}$0.offset, data: $0.element) }) { cell in"
-            { data_var: 'cell.data', index_var: 'cell.index' }
+            vars = { data_var: 'cell.data', index_var: 'cell.index' }
+            section_start ? vars.merge(scroll_id: 'sectionStart + cell.index') : vars
           else
             add_line "ForEach(Array(#{source_expr}.enumerated()), id: \\.offset) { cellIndex, cellData in"
             { data_var: 'cellData', index_var: 'cellIndex' }
@@ -1580,12 +1596,38 @@ module SjuiTools
           "#{view_name}(data: [String: Any]())"
         end
 
-        def generate_cell_identity(index_var = 'cellIndex')
-          # When cellIdProperty is set, ForEach(Identifiable) handles identity — no .id() needed
-          unless @component['cellIdProperty']
-            # Integer-based ID for scroll target only
-            if has_scroll_to?
-              add_modifier_line ".id(#{index_var})"
+        # A cell's key as `data` holds it: the pre-enriched "cellId", else the
+        # cellIdProperty value, else its index.
+        def cell_key_expr(data_var, index_var)
+          "(#{data_var}[\"cellId\"] as? String) ?? (#{data_var}[\"#{@component['cellIdProperty']}\"] as? String) ?? \"\\(#{index_var})\""
+        end
+
+        # The drawn sections before `section_index` (a declared cell), their
+        # cells counted: `(dataSource.sections[0].cells?.data.count ?? 0) + …`,
+        # or nil when none is before it. The data reference is the one every
+        # sectioned route binds (`dataSource` for an optional property).
+        def earlier_cells_count(section_index)
+          prop = extract_property_name(@component['items'])
+          return nil unless prop
+
+          data_ref = is_property_optional?(prop) ? 'dataSource' : "data.#{prop}"
+          terms = (@component['sections'] || []).first(section_index).each_with_index
+                                                .select { |section, _| section.is_a?(Hash) && section['cell'] }
+                                                .map { |_, j| "(#{data_ref}.sections[#{j}].cells?.data.count ?? 0)" }
+          terms.empty? ? nil : terms.join(' + ')
+        end
+
+        # `scroll_id`: the cell's scroll target when it is not `index_var`
+        # (open_cell_foreach's `:scroll_id`).
+        def generate_cell_identity(index_var = 'cellIndex', scroll_id: nil)
+          if has_scroll_to?
+            if @component['cellIdProperty']
+              # ForEach(Identifiable) identity is the key a scrollTo names; a
+              # later section's is prefixed, so its cell takes the key as `.id`.
+              add_modifier_line ".id(#{scroll_id})" if scroll_id
+            else
+              # Integer-based ID for scroll target only
+              add_modifier_line ".id(#{scroll_id || index_var})"
             end
           end
 
@@ -1719,7 +1761,7 @@ module SjuiTools
                     vars = open_cell_foreach('cellsData', section_index: index)
                     indent do
                       add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                      generate_cell_identity(vars[:index_var])
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame(grid: !own_columns.nil?)
                       # Add accessibilityIdentifier for test automation (tapItem action)
                       apply_cell_item_identifier(vars[:index_var])
@@ -1922,7 +1964,7 @@ module SjuiTools
             vars = open_cell_foreach('cellsData')
             indent do
               add_line "#{cell_view}(data: #{vars[:data_var]})"
-              generate_cell_identity(vars[:index_var])
+              generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
               apply_cell_frame(grid: columns_is_multi?)
               apply_cell_item_identifier(vars[:index_var])
             end
