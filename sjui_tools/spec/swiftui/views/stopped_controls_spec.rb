@@ -58,12 +58,18 @@ RSpec.describe 'sjui a control a stop holds' do
     expect(bound['child'][0][JsonUIShared::TapAccessibility::GATES_KEY]).to eq(['@{u}'])
   end
 
+  # A Segment's segments are UIKit's elements, which the modifier's
+  # treatment of the control does not reach: it is told so (`items: true`,
+  # SwiftJsonUI reads the control as disabled instead — measured,
+  # ConformanceHost -a11yActivationProbe -wrappers). No other control.
+  items = ->(type) { type == 'Segment' ? ', items: true' : '' }
+
   controls.each_key do |type|
     it "#{type}: inside false, with false of its own, inside a binding, reached by a stop handed down — and nothing beside no stop" do
-      expect(convert.call(stopping.call(false, node.call(type))).scan('.jsonuiStoppedControl(true)').size).to eq(1)
-      expect(convert.call(node.call(type).merge('userInteractionEnabled' => false)).scan('.jsonuiStoppedControl(true)').size).to eq(1)
-      expect(convert.call(stopping.call('@{u}', node.call(type)))).to include('.jsonuiStoppedControl(!((data.u ?? false)))')
-      expect(convert.call(node.call(type), reads: true)).to include('.jsonuiStoppedControl()')
+      expect(convert.call(stopping.call(false, node.call(type))).scan(".jsonuiStoppedControl(true#{items.call(type)})").size).to eq(1)
+      expect(convert.call(node.call(type).merge('userInteractionEnabled' => false)).scan(".jsonuiStoppedControl(true#{items.call(type)})").size).to eq(1)
+      expect(convert.call(stopping.call('@{u}', node.call(type)))).to include(".jsonuiStoppedControl(!((data.u ?? false))#{items.call(type)})")
+      expect(convert.call(node.call(type), reads: true)).to include(".jsonuiStoppedControl(#{items.call(type).delete_prefix(', ')})")
       expect(convert.call(node.call(type))).not_to include('jsonuiStoppedControl')
       expect(convert.call(node.call(type).merge('userInteractionEnabled' => true))).not_to include('jsonuiStoppedControl')
     end
@@ -83,8 +89,26 @@ RSpec.describe 'sjui a control a stop holds' do
     # The data is @State here: the Switch binds `$data.on`.
     source = <<~SWIFT
       #{EmittedSwift::LIBRARY_STUBS}
-      extension View { func jsonuiStoppedControl(_ stopped: Bool = false) -> some View { self } }
+      extension View { func jsonuiStoppedControl(_ stopped: Bool = false, items: Bool = false) -> some View { self } }
       struct TestData { var u: Bool? = false; var on: Bool = false }
+      struct EmittedHost: View {
+          @State var data = TestData()
+          var body: some View {
+      #{code.lines.map { |l| "        #{l}" }.join}
+          }
+      }
+    SWIFT
+    expect(source).to compile_as_swift
+  end
+
+  it 'a Segment inside a bound stop compiles with the items the library declares', :swift_compile do
+    skip("swiftc: #{SwiftCompiler.unavailable_reason}") if SwiftCompiler.unavailable_reason
+    code = convert.call(stopping.call('@{u}', node.call('Segment')))
+    # The data is @State here: the Segment binds `$data.idx`.
+    source = <<~SWIFT
+      #{EmittedSwift::LIBRARY_STUBS}
+      extension View { func jsonuiStoppedControl(_ stopped: Bool = false, items: Bool = false) -> some View { self } }
+      struct TestData { var u: Bool? = false; var idx: Int = 0 }
       struct EmittedHost: View {
           @State var data = TestData()
           var body: some View {

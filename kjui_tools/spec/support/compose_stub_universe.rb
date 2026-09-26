@@ -261,7 +261,7 @@ module ComposeStubUniverse
                         cornerRadius: Int? = null, fontSize: Int = 16) {}
       fun Segment(selectedTabIndex: Int, modifier: Modifier = Modifier, enabled: Boolean = true,
                   containerColor: Color = Color(), content: () -> Unit) {}
-      fun Tab(selected: Boolean, onClick: () -> Unit, enabled: Boolean = true, text: (() -> Unit)? = null) {}
+      fun Tab(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, text: (() -> Unit)? = null) {}
       class GridCells { companion object { fun Fixed(count: Int) = GridCells() } }
       fun LazyVerticalGrid(columns: GridCells, modifier: Modifier = Modifier, contentPadding: PaddingValues? = null,
                            verticalArrangement: Arrangement = Arrangement(), horizontalArrangement: Arrangement = Arrangement(),

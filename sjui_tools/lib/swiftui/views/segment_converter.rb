@@ -83,6 +83,14 @@ module SjuiTools
           
           generated_code
         end
+
+        # A segmented Picker's segments are UIKit's elements, not SwiftUI
+        # views: inside a stop each read as a button that responds until the
+        # control is read as disabled (JsonUIStoppedControl `items`).
+        def stopped_items?
+          true
+        end
+
         private
 
         # valueChange — the selector-based handler, string only: its own
