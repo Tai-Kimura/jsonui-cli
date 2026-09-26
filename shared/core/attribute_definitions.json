@@ -701,7 +701,7 @@
     },
     "onClick": {
       "type": "binding",
-      "description": "Click handler (camelCase) - binding only (@{functionName})"
+      "description": "Click handler (camelCase) - binding only (@{functionName}). On a type the SSoT does not declare (an app's own component) JsonUI gives the tap no screen-reader role; the component carries its own."
     },
     "onLongPress": {
       "type": "binding",

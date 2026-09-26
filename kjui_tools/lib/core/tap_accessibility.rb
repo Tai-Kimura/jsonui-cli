@@ -47,7 +47,10 @@ module JsonUIShared
   # binding and are operable). INTERACTIVE_TYPES and KNOWN_TYPES below are
   # that declaration with its aliases, pinned to it by spec. A type the
   # declaration does not know (a custom component) counts as operable: a
-  # container that might hold a control is not flattened.
+  # container that might hold a control is not flattened. So a tap on an
+  # app's own component gets no role (shape `none`): JsonUI does not know
+  # what the component holds, and a role could hide a control inside it from
+  # a screen reader. The component carries its own role (4f's ruling, 1.9.0).
   module TapAccessibility
     module_function
 
