@@ -675,11 +675,14 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(converter.state_variables).to include('@State private var selectedGroup: String = "B"')
     end
 
-    it 'a bound SelectBox selectedValue resolves to its index at run time' do
+    it 'a bound SelectBox selectedValue resolves to its index at run time, and a pick is written back' do
       code = convert(:SelectBoxConverter,
                      'type' => 'SelectBox', 'items' => %w[A B], 'selectedValue' => '@{picked}')
       expect_no_leak(code)
-      expect(code).to include('selectedIndex: ["A", "B"].firstIndex(of: (data.picked ?? "")),')
+      # Two-way, as declared (selectbox-selected-item-binding-is-read-once): the read
+      # keeps the optional-aware expression, the write goes to the property.
+      expect(code).to include('selectedIndexBinding: SwiftUI.Binding(get: { ["A", "B"].firstIndex(of: (data.picked ?? "")) ?? -1 }, ')
+      expect(code).to include('set: { index in data.picked = ["A", "B"].indices.contains(index) ? ["A", "B"][index] : "" })')
     end
 
     it 'bound date bounds are parsed, not pasted' do

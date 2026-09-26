@@ -240,14 +240,17 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
   end
 
   # Under every gate at once, each gate is emitted once. A container that
-  # emits the blocker ahead of its margins takes the click and `disabled()`
-  # once each. A control carries no outer click (its onClick is called from
-  # its own operation) and `disabled()` only where a wrapper carries the tag:
-  # the Segment's TabRow and the Radio's Row / Column; the bare Switch,
-  # Toggle and CheckBox carry `enabled` on the tagged node.
+  # emits the blocker ahead of its margins takes `disabled()` once, and its
+  # click once under `enabled: false` alone; `userInteractionEnabled: false`
+  # takes the click away, as canTap false does (the tap rule,
+  # shared/core/tap_accessibility.rb). A control carries no outer click (its
+  # onClick is called from its own operation) and `disabled()` only where a
+  # wrapper carries the tag: the Segment's TabRow and the Radio's Row /
+  # Column; the bare Switch, Toggle and CheckBox carry `enabled` on the
+  # tagged node.
   gated = {
     'Switch' => [0, 0], 'Toggle' => [0, 0], 'CheckBox' => [0, 0], 'Segment' => [0, 1], 'Radio' => [0, 1],
-    'TabView' => [1, 1], 'Embed' => [1, 1], 'SafeAreaView' => [1, 1]
+    'TabView' => [0, 1], 'Embed' => [0, 1], 'SafeAreaView' => [0, 1]
   }
   gated.each do |type, (clicks, disabled)|
     it "#{type} carries #{clicks} outer click, one blocker and #{disabled} disabled() under every gate" do
@@ -256,6 +259,14 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
       expect(count.call(code, /\.clickable\b[^{]*\{ data\.onTap/)).to eq(clicks)
       expect(count.call(code, blocker)).to eq(1)
       expect(count.call(code, 'disabled()')).to eq(disabled)
+    end
+  end
+
+  %w[TabView Embed SafeAreaView].each do |type|
+    it "#{type} carries 1 outer click and 1 disabled() under enabled false alone" do
+      code = emit.call({ 'type' => type }.merge(base[type], stages['clickable'], 'enabled' => false))
+      expect(count.call(code, /\.clickable\b[^{]*\{ data\.onTap/)).to eq(1)
+      expect(count.call(code, 'disabled()')).to eq(1)
     end
   end
 

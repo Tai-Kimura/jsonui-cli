@@ -881,13 +881,17 @@ module KjuiTools
         # The declared onClick as a Kotlin call, and its canTap gate:
         # `[call, gate]` (gate nil when there is none), or nil when there is
         # no handler or `canTap` is false. The one reading build_click and
-        # operation_click_call share.
+        # operation_click_call share. `userInteractionEnabled` gates it the
+        # same way (tap_gate): on this node, and on every node around it (the
+        # tap rule, shared/core/tap_accessibility.rb). The pointer blocker
+        # stopped a touch there, not TalkBack's double tap, which calls the
+        # click's action and announced it as a button.
         def self.click_call(json_data)
           # A handler names a method (shared/core/tap_accessibility.rb
           # `handler?`): `""`, `"   "`, `"@{}"`, `[]` and `[""]` are no tap.
           tap = JsonUIShared::TapAccessibility
           handler = [json_data['onclick'], json_data['onClick']].find { |value| tap.handler?(value) }
-          can_tap = boolean_expression(json_data['canTap'])
+          can_tap = tap_gate(json_data)
           return nil if handler.nil? || can_tap == 'false'
 
           view_id = json_data['id']
@@ -904,7 +908,8 @@ module KjuiTools
         # The declared onClick of a CONTROL — Switch / Toggle, CheckBox,
         # Radio, Segment, Slider, SelectBox — called from the control's own
         # operation, after its own update: a statement for the operation's
-        # lambda, or nil. `canTap` gates the call (a binding: while it holds);
+        # lambda, or nil. `canTap` gates the call (a binding: while it holds),
+        # and userInteractionEnabled with it (click_call);
         # `enabled` is the control's own parameter, so a disabled control
         # neither operates nor calls. No `.clickable` is added: on the
         # control's node an outer clickable's OnClick action replaces the
@@ -1048,6 +1053,38 @@ module KjuiTools
             modifiers << (can_tap ? ".then(if (#{can_tap}) Modifier.#{clickable} else Modifier)" : ".#{clickable}")
           end
           modifiers
+        end
+
+        # The click's gate as one Kotlin condition: nil (none), 'false' (shut),
+        # or the bound gates joined — `canTap`, then each bound
+        # userInteractionEnabled of the nodes around it (outermost first) and
+        # its own (TapAccessibility.interaction_gates). `userInteractionEnabled:
+        # false` on it or on a node around it shuts it (TapAccessibility.stopped?).
+        def self.tap_gate(json_data)
+          return 'false' if JsonUIShared::TapAccessibility.stopped?(json_data)
+
+          gates = [boolean_expression(json_data['canTap'])]
+          gates.concat(JsonUIShared::TapAccessibility.interaction_gates(json_data).map { |g| boolean_expression(g) })
+          gates = gates.compact.uniq
+          return nil if gates.empty?
+          return 'false' if gates.include?('false')
+          return gates.first if gates.size == 1
+
+          gates.map { |g| conjunct(g) }.join(' && ')
+        end
+
+        # A condition as one operand of `&&`: as it is when it is one already
+        # (a parenthesised whole, or a member access), else parenthesised.
+        def self.conjunct(expr)
+          return expr if expr.match?(/\A!?[\w.]+\z/)
+
+          depth = 0
+          closes_at_end = expr.start_with?('(') && expr.each_char.with_index.all? do |ch, i|
+            depth += 1 if ch == '('
+            depth -= 1 if ch == ')'
+            depth.positive? || i == expr.length - 1
+          end
+          closes_at_end ? expr : "(#{expr})"
         end
 
         # userInteractionEnabled — blocks touches for this node AND its

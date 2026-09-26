@@ -89,8 +89,11 @@ module KjuiTools
           # `canTap` gates the handler's call (attribute_definitions
           # common.canTap: false turns onClick / onclick off), as `clickable`
           # gates every other type's — not `enabled`: a button that cannot be
-          # tapped is not disabled to a screen reader.
-          can_tap = Helpers::ModifierBuilder.boolean_expression(json_data['canTap'])
+          # tapped is not disabled to a screen reader. userInteractionEnabled
+          # with it, on the button or on a node around it (tap_gate): its
+          # pointer blocker stops a touch, not TalkBack's double tap, which
+          # calls onClick.
+          can_tap = Helpers::ModifierBuilder.tap_gate(json_data)
           on_click = lambda do |call|
             next 'onClick = { }' if can_tap == 'false'
 

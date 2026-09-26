@@ -130,7 +130,7 @@ module SjuiTools
             # onValueChange (camelCase) -> binding format only (@{functionName});
             # `action` and `onValueChanged` are its legacy spellings. Then the
             # declared onClick, from the same check (operation_click_call —
-            # canTap gates it, not the check). onClick was onValueChange's
+            # canTap and userInteractionEnabled gate it, not the check). onClick was onValueChange's
             # fallback: a CheckBox with both called only onValueChange.
             handler_attr = @component['onValueChange'] || @component['action'] || @component['onValueChanged']
             calls = []
@@ -170,8 +170,9 @@ module SjuiTools
             return "$data.#{extract_binding_property(@component['value'])}"
           end
 
-          # Create local state variable
-          state_var = "#{id}IsOn"
+          # Create local state variable — no id: its position (position_name);
+          # `checkbox` was every id-less CheckBox's name.
+          state_var = "#{@component['id'] || position_name('checkbox')}IsOn"
           initial_value = @component['isOn'] || @component['checked'] || @component['value'] == true || false
           add_state_variable(state_var, "Bool", initial_value.to_s)
           "$#{state_var}"
