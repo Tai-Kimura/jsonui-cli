@@ -69,12 +69,16 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
   EMIT_MARKERS_KT = ['expect(code)', 'expect(kotlin', 'expect(out'].freeze
   COMPILE_MARKER_KT = 'compile_as_kotlin'
   LIB_KT = File.expand_path('../lib', __dir__)
+  # core/resources/color_manager writes ColorManager.kt. Until 1.8.121 it was
+  # outside this list, and its spec was in only by the markers' spelling.
   EMITTING_LIB_KT = (Dir.glob(File.join(LIB_KT, 'compose', '{components,generators,helpers}', '*.rb')) +
-                     %w[compose/compose_builder.rb compose/data_model_updater.rb].map { |f| File.join(LIB_KT, f) })
+                     %w[compose/compose_builder.rb compose/data_model_updater.rb
+                        core/resources/color_manager.rb].map { |f| File.join(LIB_KT, f) })
                     .map { |f| f.sub("#{LIB_KT}/", '').sub(/\.rb\z/, '') }.freeze
   EMITTING_NAMESPACES_KT = %w[
     KjuiTools::Compose::Components:: KjuiTools::Compose::Generators:: KjuiTools::Compose::Helpers::
     KjuiTools::Compose::ComposeBuilder KjuiTools::Compose::DataModelUpdater
+    KjuiTools::Core::Resources::ColorManager
   ].freeze
 
   def self.emits_kotlin?(body)
@@ -125,7 +129,6 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/components/networkimage_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/pair_scan_closure_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/progress_component_spec.rb' => "p3 — #{UNCONVERTED}",
-    'compose/components/radio_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/segment_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/slider_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/switch_component_spec.rb' => "p2 — #{UNCONVERTED}",
@@ -161,6 +164,7 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/helpers/visibility_helper_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/regen_idempotency_spec.rb' => FILE_EFFECTS,
     'compose/unreferenced_generated_view_spec.rb' => "p1 — #{UNCONVERTED}",
+    'core/defined_colors_ledger_spec.rb' => '— asserts the defined_colors.json ledger the color manager writes, not the Kotlin it generates',
     'core/resources/color_manager_spec.rb' => "p3 — #{UNCONVERTED}",
   }.freeze
 
@@ -207,6 +211,17 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
       rel if EMIT_MARKERS_KT.any? { |m| File.read(path).include?(m) }
     end.compact
     expect(by_spelling - emit_specs(root).map(&:first)).to be_empty
+  end
+
+  # A spec is in by what it loads and describes, whatever it spells: the
+  # color manager writes ColorManager.kt, so its spec stays in with every
+  # marker taken out. Red until 1.8.121, when the file was outside
+  # EMITTING_LIB_KT and the spec was in by its markers alone.
+  it 'keeps the color manager spec in without its markers' do
+    rel = 'core/resources/color_manager_spec.rb'
+    stripped = EMIT_MARKERS_KT.reduce(File.read(File.join(root, rel))) { |body, marker| body.gsub(marker, 'expect(value') }
+    expect(EMIT_MARKERS_KT.none? { |marker| stripped.include?(marker) }).to be(true)
+    expect(self.class.emits_kotlin?(stripped)).to be(true)
   end
 
   it 'has no spec asserting emitted Kotlin that neither compiles nor is listed' do

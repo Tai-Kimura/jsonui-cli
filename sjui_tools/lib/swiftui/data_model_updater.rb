@@ -407,11 +407,12 @@ module SjuiTools
       end
 
       def format_default_value(value, json_class)
-        if json_class == 'String'
+        if json_class.to_s.chomp('?') == 'String'
           # The text the layout's spelling means ('' / "…" / '…' / bare,
-          # StringLiterals.default_text). Until 1.8.121 the spelling was
-          # wrapped in quotes as it stood, so `"Test"` became the value
-          # `"Test"` with its quotes.
+          # StringLiterals.default_text), for a String and a String? alike.
+          # Until 1.8.121 the spelling was wrapped in quotes as it stood, so
+          # `"Test"` became the value `"Test"` with its quotes — and a
+          # String? default was written as it stood, as code (`= Hello`).
           text = JsonUIShared::StringLiterals.default_text(value)
           if text.empty?
             '""'

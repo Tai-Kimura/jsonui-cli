@@ -3,6 +3,7 @@
 require 'compose/components/radio_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
+require_relative '../../support/kotlin_compiler'
 
 RSpec.describe KjuiTools::Compose::Components::RadioComponent do
   let(:required_imports) { Set.new }
@@ -405,5 +406,58 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
   it 'compares against value when declared, falling back to the id' do
     expect(selected_for('value' => 'optionB')).to eq('data.selectedRadiogroup == "optionB"')
     expect(selected_for({})).to eq('data.selectedRadiogroup == "target"')
+  end
+
+  # Every shape `items` is declared in draws, and what it draws type-checks —
+  # a static selection (seeded), a bound one, and a bound list (forEach).
+  # rel/v1.8.121 at 2f654ab3 raised NameError on all three: the body was
+  # extracted from its caller (static seeding, 46b7d599) while the caller
+  # gained `options` / `bound_items` (f5411c11), and the two merged without a
+  # conflict. Stubs, types only: "well-typed Kotlin", not "valid Compose".
+  describe 'the three shapes of items' do
+    shapes = [
+      { 'type' => 'Radio', 'items' => %w[a b], 'selectedValue' => 'a', 'text' => 'T', 'fontColor' => '#FF0000' },
+      { 'type' => 'Radio', 'items' => %w[a b], 'selectedValue' => '@{sel}', 'margins' => [1, 2, 3, 4] },
+      { 'type' => 'Radio', 'items' => '@{list}', 'selectedValue' => '@{sel}' }
+    ]
+
+    it 'each draws its options and writes the selection on a tap' do
+      static, bound, list = shapes.map { |n| described_class.generate(n, 0, Set.new) }
+      expect(static).to include('var seeded by remember { mutableStateOf("a") }', 'seeded = "b"', 'selected = seeded == "b"')
+      expect(bound).to include('viewModel.updateData(mapOf("sel" to "b"))', 'selected = data.sel == "b"')
+      expect(list).to include('data.list.forEach { item ->', 'viewModel.updateData(mapOf("sel" to item))')
+    end
+
+    it 'compiles' do
+      emitted = shapes.each_with_index.map do |node, i|
+        "fun shape#{i}(data: Data, viewModel: ViewModel) {\n#{described_class.generate(node, 0, Set.new)}\n}"
+      end.join("\n\n")
+      expect(<<~KOTLIN).to compile_as_kotlin
+        interface Modifier { companion object : Modifier }
+        class Dp
+        val Int.dp: Dp get() = Dp()
+        fun Modifier.padding(top: Dp = Dp(), end: Dp = Dp(), bottom: Dp = Dp(), start: Dp = Dp()): Modifier = this
+        fun Modifier.fillMaxWidth(): Modifier = this
+        fun Modifier.clickable(enabled: Boolean = true, onClick: () -> Unit): Modifier = this
+        fun Modifier.width(width: Dp): Modifier = this
+        fun Modifier.height(height: Dp): Modifier = this
+        class Color(val argb: Int = 0) { companion object { val Black = Color() } }
+        object android { object graphics { object Color { fun parseColor(hex: String): Int = 0 } } }
+        interface Alignment { interface Vertical; companion object { val CenterVertically: Vertical = object : Vertical {} } }
+        fun Column(modifier: Modifier = Modifier, content: () -> Unit) {}
+        fun Row(verticalAlignment: Alignment.Vertical? = null, modifier: Modifier = Modifier, content: () -> Unit) {}
+        fun RadioButton(selected: Boolean, onClick: () -> Unit, enabled: Boolean = true) {}
+        fun Spacer(modifier: Modifier) {}
+        fun Text(text: String, color: Color = Color()) {}
+        class MutableState<T>(var value: T)
+        operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
+        operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
+        fun <T> remember(calculation: () -> T): T = calculation()
+        fun <T> mutableStateOf(value: T) = MutableState(value)
+        class Data(val sel: String = "", val list: List<String> = emptyList())
+        class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+        #{emitted}
+      KOTLIN
+    end
   end
 end

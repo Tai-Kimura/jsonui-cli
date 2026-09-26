@@ -1281,6 +1281,66 @@ module RjuiTools
           " onClick={(e) => { if (#{gate}) #{handler_expr}?.(e); }}"
         end
 
+        # A control's declared onClick, called from the control's own
+        # operation after its own update — one rule for the five paths
+        # (ticket control-onclick-is-called-differently-on-every-path): a
+        # Switch / Toggle / CheckBox after the value, a Radio after the
+        # selection, a Segment after the tab, a Slider when the change is
+        # finished, a SelectBox after the selection. None of them gets a
+        # plain onClick (build_onclick_attr): until 1.8.121 none called it.
+        #
+        # nil when the node declares no handler, or `canTap: false` closes
+        # the gate; `if (gate) { … }` for a bound canTap. `enabled: false`
+        # needs nothing here: the operated element is `disabled`, and a
+        # browser dispatches no operation on it.
+        def operation_click_call
+          calls = declared_click_calls
+          return nil if calls.empty?
+
+          gate = attributes['canTap']
+          return nil if gate == false || gate == 'false'
+
+          statements = calls.join(' ')
+          return statements unless gate.is_a?(String) && has_binding?(gate)
+
+          "if (#{extract_binding_property(gate)}) { #{statements} }"
+        end
+
+        # The declared onClick / onclick as statements, read as
+        # build_onclick_attr reads them: a binding on onClick, selectors on
+        # onclick (a string or an array, blanks skipped), or the link action.
+        def declared_click_calls
+          handler = attributes['onClick']
+          if handler.is_a?(Hash)
+            return [] unless handler['action'] == 'link' && handler['url']
+
+            return ["window.open(#{JsonUIShared::StringLiterals.ts_single(handler['url'])}, '_blank');"]
+          end
+          if JsonUIShared::TapAccessibility.handler?(handler)
+            return [] unless is_binding_format?(handler)
+
+            return ["#{add_viewmodel_data_prefix(handler.gsub(/@\{|\}/, ''))}?.();"]
+          end
+          selectors = attributes['onclick']
+          return [] unless JsonUIShared::TapAccessibility.handler?(selectors)
+
+          names = selectors.is_a?(Array) ? JsonUIShared::TapAccessibility.handler_values(selectors) : [selectors]
+          return [] if names.any? { |name| is_binding_format?(name) }
+
+          names.map { |name| "data.#{name}?.();" }
+        end
+
+        # One operation handler attribute: the control's own update (`own`, an
+        # expression or nil) and then the declared onClick. Without an onClick
+        # it is written as before, byte for byte (` onChange={(e) => own}`, or
+        # nothing).
+        def operation_attr(event, params, own)
+          call = operation_click_call
+          return own ? " #{event}={#{params} => #{own}}" : '' if call.nil?
+
+          " #{event}={#{params} => { #{own ? "#{own}; " : ''}#{call} }}"
+        end
+
         def enabled_class_expression
           enabled = attributes['enabled']
           return nil unless enabled.is_a?(String) && has_binding?(enabled)

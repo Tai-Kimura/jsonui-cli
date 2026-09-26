@@ -271,7 +271,7 @@ module RjuiTools
                   chosen = static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)
                   chosen ? ' defaultChecked' : ''
                 end
-              return on_change ? "#{seed} onChange={() => #{on_change}?.(#{value_literal})}" : seed
+              return "#{seed}#{operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")}"
             end
             checked =
               if static_selected && expr.nil?
@@ -282,15 +282,14 @@ module RjuiTools
               else
                 " checked={#{selected_binding} === #{value_literal}}"
               end
-            if on_change
-              "#{checked} onChange={() => #{on_change}?.(#{value_literal})}"
+            if on_change || operation_click_call
+              "#{checked}#{operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")}"
             else
               "#{checked} readOnly"
             end
-          elsif on_change
-            " onChange={() => #{on_change}?.(#{value_literal})}"
           else
-            ''
+            # The selection is the operation a declared onClick follows.
+            operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")
           end
         end
 
