@@ -133,14 +133,22 @@ RSpec.describe 'sjui tap accessibility emission' do
   # A tap exactly where the rule reads a handler (TapAccessibility.handler?
   # on either spelling), on every vector: a Button's tap is its action, and a
   # statically disabled view or one gated shut by `canTap: false` gets none,
-  # as register_click_lines says. A bound canTap's tap is the masked gesture.
+  # as register_click_lines says, nor one `userInteractionEnabled: false`
+  # stops, on it or on a node around it. A bound gate's tap is the masked
+  # gesture.
   it 'emits a tap exactly where the rule reads a handler' do
     checked = 0
+    stopped_seen = 0
     JSON.parse(File.read(vectors_path))['cases'].each do |vector|
       layout = JSON.parse(JSON.generate(vector['layout']))
       want = 0
-      JsonUIShared::TapAccessibility.walk(layout) do |node|
+      JsonUIShared::TapAccessibility.walk(layout) do |node, around|
         next if node['type'] == 'Button' || node['enabled'] == false || node['canTap'] == false
+
+        if around || node['userInteractionEnabled'] == false
+          stopped_seen += 1 if JsonUIShared::TapAccessibility::TAP_KEYS.any? { |key| node.key?(key) }
+          next
+        end
 
         checked += 1 if JsonUIShared::TapAccessibility::TAP_KEYS.any? { |key| node.key?(key) }
         want += 1 if JsonUIShared::TapAccessibility::TAP_KEYS.any? { |key| JsonUIShared::TapAccessibility.handler?(node[key]) }
@@ -151,6 +159,7 @@ RSpec.describe 'sjui tap accessibility emission' do
       expect(taps).to eq(want), "#{vector['name']}:\n#{code}"
     end
     expect(checked).to be >= 12
+    expect(stopped_seen).to be >= 6
   end
 
   JSON.parse(File.read(vectors_path))['cases'].each do |vector|
@@ -159,7 +168,10 @@ RSpec.describe 'sjui tap accessibility emission' do
       JsonUIShared::TapAccessibility.annotate!(layout)
       code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(layout).convert
       shapes = vector['shapes'].values
-      expect(code.scan('.accessibilityAddTraits(.isButton)').size).to eq(shapes.count { |s| %w[button combine].include?(s) })
+      # The trait as it is, or following a bound gate (button_trait_line).
+      traits = code.scan('.accessibilityAddTraits(.isButton)').size +
+               code.scan(/\.accessibilityAddTraits\(.* \? AccessibilityTraits\.isButton : \[\]\)/).size
+      expect(traits).to eq(shapes.count { |s| %w[button combine].include?(s) })
       expect(code.scan('.accessibilityElement(children: .combine)').size).to eq(shapes.count('combine'))
       root = vector['shapes'][layout['id']]
       expect(code).not_to include('.accessibilityElement(children: .contain)') if root == 'combine'

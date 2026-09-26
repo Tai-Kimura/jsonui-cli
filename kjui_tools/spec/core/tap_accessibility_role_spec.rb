@@ -47,23 +47,30 @@ RSpec.describe 'kjui tap role' do
   # a disabled tap is still emitted, as `.clickable(enabled = false)`; one
   # gated shut is none (a bound gate attaches it while it holds,
   # `.then(if (…) Modifier.clickable … else Modifier)`). An empty or blank
-  # handler gets none.
+  # handler gets none, and so does a tap `userInteractionEnabled: false`
+  # stops, on the node or on one around it (the walk says which).
   it 'emits a clickable exactly where the rule reads a handler' do
     checked = 0
+    stopped_seen = 0
     JSON.parse(File.read(vectors_path))['cases'].each do |vector|
       tree = JSON.parse(JSON.generate(vector['layout']))
-      JsonUIShared::TapAccessibility.walk(tree) do |node|
+      JsonUIShared::TapAccessibility.annotate!(tree)
+      JsonUIShared::TapAccessibility.walk(tree) do |node, around|
         keys = JsonUIShared::TapAccessibility::TAP_KEYS.select { |key| node.key?(key) }
         next if keys.empty?
 
         checked += 1
-        want = node['canTap'] != false && keys.any? { |key| JsonUIShared::TapAccessibility.handler?(node[key]) }
+        stopped = around || node['userInteractionEnabled'] == false
+        stopped_seen += 1 if stopped
+        want = node['canTap'] != false && !stopped &&
+               keys.any? { |key| JsonUIShared::TapAccessibility.handler?(node[key]) }
         clickable = KjuiTools::Compose::Helpers::ModifierBuilder.build_clickable(node, Set.new)
                                                                 .select { |m| m.start_with?('.clickable') || m.include?('Modifier.clickable') }
         expect(clickable.any?).to eq(want), "#{vector['name']} / #{node['id']}: #{clickable.inspect}"
       end
     end
     expect(checked).to be >= 12
+    expect(stopped_seen).to be >= 6
   end
 
   JSON.parse(File.read(vectors_path))['cases'].each do |vector|
