@@ -162,11 +162,16 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
 
   # Every XcodeProjectManager#add_file raises: the step the UIKit generators
   # roll back on. (add_file rescues its own errors, so the raise is injected.)
+  # The injected file is loaded by the sjui under test, on every Ruby CI runs
+  # it with — 2.6 too, which has no endless `def x = …` (3.0): it was a
+  # SyntaxError there, and the six examples using it failed on 2.6 only.
   def self.fault_file(root)
     path = File.join(root, 'fault_add_file.rb')
     File.write(path, <<~RUBY)
       module FaultAddFile
-        def add_file(*) = raise('injected: add_file failed')
+        def add_file(*)
+          raise('injected: add_file failed')
+        end
       end
       module SjuiTools; module Core; class XcodeProjectManager; prepend FaultAddFile; end; end; end
     RUBY
