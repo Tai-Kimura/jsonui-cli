@@ -268,8 +268,13 @@ module KjuiTools
           
           # Use the class names directly
           cell_class_name = cell_classes.first if cell_classes.any?
-          header_class_name = header_classes.first if header_classes.any?
-          footer_class_name = footer_classes.first if footer_classes.any?
+          # The header / footer composables: drawn once, full width, before
+          # and after the cells — sjui's reading (the view with its own
+          # ViewModel, no item data). Until 1.8.121 both names were read here
+          # and never used, so the declared attributes drew nothing on Android
+          # (ticket collection-attributes-declared-but-not-drawn-on-some-paths).
+          header_class_name = cell_class_name(header_classes.first) if header_classes.any?
+          footer_class_name = cell_class_name(footer_classes.first) if footer_classes.any?
           
           # Resolve the grid column count. The top-level `columns` attribute
           # accepts either a literal Int or a `@{prop}` binding (see
@@ -555,78 +560,10 @@ module KjuiTools
           if sections.any?
             # Generate section-based collection
             code += generate_sections_content(json_data, sections, columns, depth, required_imports, gravity_alignment)
-          elsif cell_class_name
-            # Check if items property is specified (e.g., "@{items}")
-            items_property = json_data['items']
-            
-            if items_property && items_property.match(/@\{([^}]+)\}/)
-              # Extract property name from @{propertyName}
-              property_name = $1
-              
-              # Items should be a Map<String, List<Any>> where key is cell class name
-              # Get the items for this specific cell class
-              code += "\n" + indent("// Collection with data source: #{property_name}[\"#{cell_class_name}\"]", depth + 1)
-              code += "\n" + indent("val cellItems = data.#{property_name}?.get(\"#{cell_class_name}\") ?: emptyList()", depth + 1)
-              code += "\n" + indent("items(cellItems.size) { index ->", depth + 1)
-              code += "\n" + indent("val item = cellItems[index]", depth + 2)
-            else
-              # Default to empty list
-              code += "\n" + indent("// Collection with no data source", depth + 1)
-              code += "\n" + indent("items(0) { index ->", depth + 1)
-              code += "\n" + indent("// No items", depth + 2)
-            end
-            
-            # Create cell view with data
-            if (nonsection_chrome = chrome_open(json_data, required_imports))
-              code += "\n" + indent(nonsection_chrome, depth + 2)
-            end
-            code += "\n" + indent("when (val itemData = item) {", depth + 2)
-            code += "\n" + indent("is #{cell_class_name}Data -> {", depth + 3)
-            code += "\n" + indent("#{cell_class_name}View(", depth + 4)
-            code += "\n" + indent("data = itemData,", depth + 5)
-            code += "\n" + indent("viewModel = viewModel(),", depth + 5)
-            code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
-
-            # Cell-specific modifiers
-            if json_data['cellHeight']
-              code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 5)
-            end
-
-            # For grid layouts, ensure cells expand to fill width
-            if columns > 1
-              code += "\n" + indent("    .fillMaxWidth()", depth + 5)
-            end
-
-            code += "\n" + indent(")", depth + 4)
-            code += "\n" + indent("}", depth + 3)
-            code += "\n" + indent("is Map<*, *> -> {", depth + 3)
-            code += "\n" + indent("// Convert map to data class", depth + 4)
-            code += "\n" + indent("val data = #{cell_class_name}Data.fromMap(itemData as Map<String, Any>)", depth + 4)
-            code += "\n" + indent("#{cell_class_name}View(", depth + 4)
-            code += "\n" + indent("data = data,", depth + 5)
-            code += "\n" + indent("viewModel = viewModel(),", depth + 5)
-            code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
-
-            # Cell-specific modifiers
-            if json_data['cellHeight']
-              code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 5)
-            end
-
-            # For grid layouts, ensure cells expand to fill width
-            if columns > 1
-              code += "\n" + indent("    .fillMaxWidth()", depth + 5)
-            end
-
-            code += "\n" + indent(")", depth + 4)
-            code += "\n" + indent("}", depth + 3)
-            code += "\n" + indent("else -> {", depth + 3)
-            code += "\n" + indent("// Unsupported item type", depth + 4)
-            code += "\n" + indent("}", depth + 3)
-            code += "\n" + indent("}", depth + 2)
-            if chrome_open(json_data, nil)
-              code += "\n" + indent("}", depth + 2)
-            end
-            code += "\n" + indent("}", depth + 1)
+          elsif cell_class_name || header_class_name || footer_class_name
+            code += class_list_edge_item(header_class_name, 'header', depth + 1) if header_class_name
+            code += class_list_cells(json_data, cell_class_name, columns, depth, required_imports) if cell_class_name
+            code += class_list_edge_item(footer_class_name, 'footer', depth + 1) if footer_class_name
           else
             # Declaration-faithful (2026-08-02 ruling): no cell class
             # declared → nothing rendered (was a 10-item placeholder Card).
@@ -634,6 +571,97 @@ module KjuiTools
           end
           
           code += "\n" + indent("}", depth)
+          code
+        end
+
+        # A `headerClasses` / `footerClasses` view in the class-list grid: one
+        # full-width item holding the composable, which reads its own
+        # ViewModel (the scaffold's `XView(viewModel, modifier)` shape — the
+        # one the section header/footer path already calls).
+        def self.class_list_edge_item(class_name, role, depth)
+          code = "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth)
+          code += "\n" + indent("val #{role}ViewModel: #{class_name}ViewModel = viewModel(key = \"#{class_name}_#{role}_\${viewModel.hashCode()}\")", depth + 1)
+          code += "\n" + indent("#{class_name}View(", depth + 1)
+          code += "\n" + indent("viewModel = #{role}ViewModel,", depth + 2)
+          code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 2)
+          code += "\n" + indent(")", depth + 1)
+          code + "\n" + indent("}", depth)
+        end
+
+        # The cells of a class-list Collection (`cellClasses`, no sections).
+        def self.class_list_cells(json_data, cell_class_name, columns, depth, required_imports)
+          code = ''
+          # Check if items property is specified (e.g., "@{items}")
+          items_property = json_data['items']
+          
+          if items_property && items_property.match(/@\{([^}]+)\}/)
+            # Extract property name from @{propertyName}
+            property_name = $1
+            
+            # Items should be a Map<String, List<Any>> where key is cell class name
+            # Get the items for this specific cell class
+            code += "\n" + indent("// Collection with data source: #{property_name}[\"#{cell_class_name}\"]", depth + 1)
+            code += "\n" + indent("val cellItems = data.#{property_name}?.get(\"#{cell_class_name}\") ?: emptyList()", depth + 1)
+            code += "\n" + indent("items(cellItems.size) { index ->", depth + 1)
+            code += "\n" + indent("val item = cellItems[index]", depth + 2)
+          else
+            # Default to empty list
+            code += "\n" + indent("// Collection with no data source", depth + 1)
+            code += "\n" + indent("items(0) { index ->", depth + 1)
+            code += "\n" + indent("// No items", depth + 2)
+          end
+          
+          # Create cell view with data
+          if (nonsection_chrome = chrome_open(json_data, required_imports))
+            code += "\n" + indent(nonsection_chrome, depth + 2)
+          end
+          code += "\n" + indent("when (val itemData = item) {", depth + 2)
+          code += "\n" + indent("is #{cell_class_name}Data -> {", depth + 3)
+          code += "\n" + indent("#{cell_class_name}View(", depth + 4)
+          code += "\n" + indent("data = itemData,", depth + 5)
+          code += "\n" + indent("viewModel = viewModel(),", depth + 5)
+          code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
+
+          # Cell-specific modifiers
+          if json_data['cellHeight']
+            code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 5)
+          end
+
+          # For grid layouts, ensure cells expand to fill width
+          if columns > 1
+            code += "\n" + indent("    .fillMaxWidth()", depth + 5)
+          end
+
+          code += "\n" + indent(")", depth + 4)
+          code += "\n" + indent("}", depth + 3)
+          code += "\n" + indent("is Map<*, *> -> {", depth + 3)
+          code += "\n" + indent("// Convert map to data class", depth + 4)
+          code += "\n" + indent("val data = #{cell_class_name}Data.fromMap(itemData as Map<String, Any>)", depth + 4)
+          code += "\n" + indent("#{cell_class_name}View(", depth + 4)
+          code += "\n" + indent("data = data,", depth + 5)
+          code += "\n" + indent("viewModel = viewModel(),", depth + 5)
+          code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
+
+          # Cell-specific modifiers
+          if json_data['cellHeight']
+            code += "\n" + indent("    .height(#{json_data['cellHeight']}.dp)", depth + 5)
+          end
+
+          # For grid layouts, ensure cells expand to fill width
+          if columns > 1
+            code += "\n" + indent("    .fillMaxWidth()", depth + 5)
+          end
+
+          code += "\n" + indent(")", depth + 4)
+          code += "\n" + indent("}", depth + 3)
+          code += "\n" + indent("else -> {", depth + 3)
+          code += "\n" + indent("// Unsupported item type", depth + 4)
+          code += "\n" + indent("}", depth + 3)
+          code += "\n" + indent("}", depth + 2)
+          if chrome_open(json_data, nil)
+            code += "\n" + indent("}", depth + 2)
+          end
+          code += "\n" + indent("}", depth + 1)
           code
         end
         

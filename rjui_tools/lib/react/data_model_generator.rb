@@ -291,6 +291,11 @@ module RjuiTools
             extract_handler_binding(json_data, 'onValueChange', 'number', handlers)
           elsif %w[Radio Segment].include?(component_type)
             extract_handler_binding(json_data, 'onValueChange', 'string', handlers)
+          # Collection - the page-change callback, with the new page index
+          # (the definitions' alias spellings too: this reads the raw node)
+          elsif component_type == 'Collection'
+            key = %w[onValueChange onValueChanged onPageChanged].find { |k| json_data[k] }
+            extract_handler_binding(json_data, key, 'number', handlers) if key
           # SelectBox - onValueChanged or onChange with string
           elsif component_type == 'SelectBox'
             handler_key = json_data['onValueChanged'] ? 'onValueChanged' : 'onChange'

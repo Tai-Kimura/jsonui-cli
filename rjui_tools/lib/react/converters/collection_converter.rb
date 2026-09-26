@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../component_name'
 
 module RjuiTools
   module React
@@ -75,8 +76,22 @@ module RjuiTools
             'scrollTo' => attributes['scrollTo'],
             'defaultScrollAnchor' => attributes['defaultScrollAnchor'],
             'currentPage' => attributes['currentPage'],
-            'onItemAppear' => attributes['onItemAppear']
+            'onItemAppear' => attributes['onItemAppear'],
+            'onValueChange' => page_change_handler
           }.compact.keys
+        end
+
+        # The page-change callback (`onValueChange`, alias `onPageChanged`):
+        # a paging Collection's, called with the page index when the page the
+        # user scrolled to changes — what sjui's TabView onChange and kjui's
+        # pager snapshotFlow call. Until 1.8.121 rjui read it nowhere, so the
+        # callback never fired on web (ticket
+        # collection-attributes-declared-but-not-drawn-on-some-paths).
+        def page_change_handler
+          handler = attributes['onValueChange']
+          return nil unless attributes['paging'] == true && handler.is_a?(String) && has_binding?(handler)
+
+          extract_binding_property(handler)
         end
 
         def build_collection_ref_attr
@@ -98,14 +113,25 @@ module RjuiTools
         # against the bound value is what keeps a scroll event from firing the
         # handler on every frame.
         def build_current_page_scroll_attr
-          current_page = attributes['currentPage']
-          return '' unless current_page.is_a?(String) && has_binding?(current_page)
           return '' unless scroll_control_id
 
-          prop = extract_binding_property(current_page)
-          handler = "data.on#{capitalize_first(extract_raw_binding_property(current_page))}Change"
+          calls = []
+          current_page = attributes['currentPage']
+          if current_page.is_a?(String) && has_binding?(current_page)
+            prop = extract_binding_property(current_page)
+            handler = "data.on#{capitalize_first(extract_raw_binding_property(current_page))}Change"
+            calls << "if (page !== #{prop}) #{handler}?.(page);"
+          end
+          # The callback fires once per page change: the element remembers
+          # the page it last reported (a scroll fires many events per page).
+          if (callback = page_change_handler)
+            calls << "const el = #{ref_var}; if (el && el.dataset.jsonuiPage !== String(page)) " \
+                     "{ el.dataset.jsonuiPage = String(page); #{callback}?.(page); }"
+          end
+          return '' if calls.empty?
+
           " onScroll={() => { const page = currentCollectionPage(#{ref_var}, #{horizontal_collection?}); " \
-            "if (page !== #{prop}) #{handler}?.(page); }}"
+            "#{calls.join(' ')} }}"
         end
 
         def ref_var
@@ -378,7 +404,7 @@ module RjuiTools
 
         def generate_collection_content(indent)
           sections = attributes['sections'] || []
-          items_binding = extract_collection_binding(with_bind_fallback(attributes['items']))
+          items_binding = extract_collection_binding(attributes['items'])
 
           content_lines = []
 
@@ -487,7 +513,7 @@ module RjuiTools
           header_view = extract_view_name(header_classes.first) if header_classes.any?
           footer_view = extract_view_name(footer_classes.first) if footer_classes.any?
 
-          items_binding = extract_collection_binding(with_bind_fallback(attributes['items']))
+          items_binding = extract_collection_binding(attributes['items'])
 
           # Header
           if header_view
@@ -534,61 +560,22 @@ module RjuiTools
           lines.join("\n")
         end
 
+        # The component a class reference names — the same name the import
+        # and the cell Data type use (React::ComponentName).
         def extract_view_name(class_info)
-          return nil unless class_info
-
-          class_name = if class_info.is_a?(Hash)
-                         class_info['className']
-                       elsif class_info.is_a?(String)
-                         class_info
-                       end
-
-          return nil unless class_name
-
-          # Handle path-based component references like "components/attribute_row"
-          if class_name.include?('/')
-            # Extract the last part of the path and convert to PascalCase
-            base_name = class_name.split('/').last
-            return to_pascal_case(base_name)
-          end
-
-          # Layout-file view names ("conformance_cell") resolve exactly like
-          # the path branch above: the component rjui build generates from
-          # conformance_cell.json is ConformanceCell — the same name
-          # extract_included_components imports and
-          # extract_collection_cell_types types against. The UIKit-suffix
-          # heuristics below are for migrated UIKit CLASS names, which are
-          # always PascalCase; running a snake_case name through them emitted
-          # "conformance_CellView", a component that exists nowhere.
-          return to_pascal_case(class_name) if class_name.include?('_') || class_name.match?(/^[a-z]/)
-
-          # If already PascalCase React component name (starts with uppercase, no underscores),
-          # use as-is without appending 'View'
-          if class_name.match?(/^[A-Z]/) && !class_name.include?('_') &&
-             !class_name.end_with?('Cell') && !class_name.end_with?('CollectionViewCell')
-            return class_name
-          end
-
-          # Convert UIKit cell class name to React component name
-          # InformationListCollectionViewCell -> InformationListView
-          # SomeCell -> SomeCellView
-          if class_name.end_with?('CollectionViewCell')
-            class_name.sub(/CollectionViewCell$/, 'View')
-          elsif class_name.end_with?('cell')
-            class_name.sub(/cell$/, 'Cell') + 'View'
-          elsif class_name.end_with?('Cell')
-            class_name + 'View'
-          elsif !class_name.end_with?('View')
-            class_name + 'View'
-          else
-            class_name
-          end
+          ComponentName.for_reference(class_info)
         end
 
         def to_pascal_case(string)
           string.split('_').map(&:capitalize).join
         end
 
+        # `items` only. `bind` was read as the items when `items` was absent
+        # (BaseConverter#with_bind_fallback) — rjui was the one path that did;
+        # sjui, kjui and both Dynamics never read it, so a Collection bound by
+        # `bind` drew on web and nowhere else. `bind` is not a Collection's
+        # data source; the validator says so (ticket
+        # collection-attributes-declared-but-not-drawn-on-some-paths).
         def extract_collection_binding(items_property)
           return nil unless items_property.is_a?(String)
           return nil unless has_binding?(items_property)

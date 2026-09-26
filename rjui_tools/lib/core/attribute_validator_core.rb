@@ -215,6 +215,14 @@ module JsonUIShared
       # Check for weight + dimension conflict
       check_weight_dimension_conflict(merged_component, type, parent_orientation)
 
+      # `bind` on a Collection (a Table is one): not its data source. rjui read
+      # it as the items when `items` was absent and no other path did, so a
+      # Collection bound that way drew on web only (ticket
+      # collection-attributes-declared-but-not-drawn-on-some-paths).
+      if map_type_to_definition(type) == 'Collection' && merged_component.key?('bind')
+        add_warning("'bind' is not a Collection's data source; use 'items' (e.g. \"items\": \"@{rows}\")")
+      end
+
       # Check Collection requires cellIdProperty in SwiftUI/Compose mode
       if type == 'Collection' && (@mode == :swiftui || @mode == :compose)
         unless merged_component.key?('cellIdProperty')
@@ -564,6 +572,18 @@ module JsonUIShared
       # Check type
       expected_types = Array(definition['type'])
       actual_type = get_value_type(value)
+
+      # An attribute declared as a binding only, given a literal array /
+      # number / boolean / object: named for what it is — nothing draws a
+      # literal there. `Collection.items` lost its array form on 2026-09-26
+      # (declared, drawn by no platform, used by no face); this is the
+      # sentence a layout still writing one gets (ticket
+      # collection-attributes-declared-but-not-drawn-on-some-paths).
+      if expected_types == ['binding'] && actual_type != 'string'
+        add_warning("Attribute '#{current_path}' in '#{component_type}' takes a binding (\"@{…}\"), got a literal #{actual_type}: " \
+                    'no platform draws a literal here — bind it')
+        return
+      end
 
       unless type_matches?(actual_type, expected_types, value, definition)
         # Edge-inset style attributes (padding / margin) also accept

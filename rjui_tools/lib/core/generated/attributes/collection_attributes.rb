@@ -58,8 +58,8 @@ module JsonUI
         { name: 'itemSpacing', kind: :number }.freeze,
         # Item sizing weight
         { name: 'itemWeight', kind: :number }.freeze,
-        # Data source binding
-        { name: 'items', kind: :array, bindable: true }.freeze,
+        # Data source binding (@{…}). A binding only: the array form was declared and drawn by no platform (codegen or Dynamic) and used by no face, so it was taken out on 2026-09-26; a literal array is named by the validator.
+        { name: 'items', kind: :binding }.freeze,
         # Enable keyboard avoidance
         { name: 'keyboardAvoidance', kind: :boolean }.freeze,
         # Layout type (vertical | horizontal | flow — wrapping layout packed to the leading edge). Flow/LeftAligned/leftAligned are accepted alias spellings of flow (2026-08-03 unification ruling; the old 'left-aligned wrapping' distinction was a frozen-UIKit fossil — no modern path ever implemented it). Scroll rule for flow (2026-09-03 ruling): with `lazy` in effect (default or 'eager') the flow Collection scrolls vertically inside its own bounds; with lazy:'none' it only wraps and the parent must scroll.
@@ -90,9 +90,9 @@ module JsonUI
         { name: 'scrollTo', kind: :binding }.freeze,
         # Section-based configuration
         { name: 'sections', kind: :array }.freeze,
-        # Set target as data source
+        # Set target as data source (UIKit: SJUICollectionView reads it; the SwiftUI paths have no data source to set)
         { name: 'setTargetAsDataSource', kind: :boolean }.freeze,
-        # Set target as delegate
+        # Set target as delegate (UIKit: SJUICollectionView reads it; the SwiftUI paths have no delegate to set)
         { name: 'setTargetAsDelegate', kind: :boolean }.freeze,
         # Show horizontal indicator
         { name: 'showsHorizontalScrollIndicator', kind: :boolean }.freeze,
