@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -61,7 +62,7 @@ RSpec.describe 'a leaf turned back into a container, through rjui g converter an
     # 1.8.121 the prompt is shown only on a terminal, and a "y" on a pipe is
     # not an answer (a stdin that is not a terminal is not read).
     rjui = lambda do |component, args, stdin|
-      cmd = ['ruby', File.join(tool, 'bin', 'rjui'), 'g', 'converter', component, '--attributes', 'title:String', *args]
+      cmd = [RbConfig.ruby, File.join(tool, 'bin', 'rjui'), 'g', 'converter', component, '--attributes', 'title:String', *args]
       if stdin.empty?
         said, status = Open3.capture2e(*cmd, chdir: @dir, stdin_data: stdin)
       else
@@ -103,7 +104,7 @@ RSpec.describe 'a leaf turned back into a container, through rjui g converter an
 
     @ledger = File.join(@dir, 'stage-failures.json')
     @log, @status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => @ledger },
-                                    'ruby', File.join(tool, 'bin', 'rjui'), 'build', chdir: @dir)
+                                    RbConfig.ruby, File.join(tool, 'bin', 'rjui'), 'build', chdir: @dir)
     @log = @log.gsub(/\e\[[0-9;]*m/, '')
   end
 

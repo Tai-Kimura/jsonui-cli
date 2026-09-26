@@ -399,7 +399,7 @@ module KjuiTools
                 end
               end
             else
-              warn "[TypeConverter] Warning: Color '#{value}' is not defined in colors.json"
+              report_warning("Color '#{value}' is not defined in colors.json")
               if mode == 'xml'
                 "0"
               else

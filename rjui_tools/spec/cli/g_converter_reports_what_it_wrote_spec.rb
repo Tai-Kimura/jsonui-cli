@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'pty'
 require 'tmpdir'
 require 'json'
@@ -49,7 +50,7 @@ RSpec.describe 'what rjui g converter says it wrote, against the disk' do
   end
 
   def run_tool(dir, tool, flags, stdin)
-    cmd = ['ruby', File.join(tool, 'bin', 'rjui'), 'g', 'converter', 'Probe', '--attributes', 'title:String', *flags]
+    cmd = [RbConfig.ruby, File.join(tool, 'bin', 'rjui'), 'g', 'converter', 'Probe', '--attributes', 'title:String', *flags]
     said, status = stdin.empty? ? Open3.capture2e(*cmd, chdir: dir, stdin_data: stdin) : on_terminal(cmd, dir, stdin)
     raise "rjui g converter failed:\n#{said}" unless status.success?
 

@@ -216,12 +216,17 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "navigationMode": {
                     "type": "string",
-                    "enum": ["delegate"],
+                    "enum": ["delegate", "isolated"],
                     "default": "delegate",
                     "description": (
-                        "v1 supports 'delegate' only — embedded screen "
-                        "shares the parent's NavController/Router. "
-                        "'isolated' is deferred to v1.5."
+                        "The Layout JSON Embed's navigationMode "
+                        "(shared/core/attribute_definitions.json). "
+                        "'delegate' (default): the embedded screen shares the "
+                        "parent's NavController/Router. 'isolated': the embed "
+                        "owns a private navigation stack, and the embedded "
+                        "screen's spec may not declare present-type "
+                        "transitions (jui build refuses it). Until jsonui-cli "
+                        "1.9.0 the spec allowed 'delegate' only."
                     )
                 }
             }
@@ -254,11 +259,20 @@ SCREEN_SPEC_SCHEMA = {
                     "enum": [
                         "View", "ScrollView", "SafeAreaView",
                         "Label", "TextField", "TextView",
-                        "Button", "Image", "Collection", "TabView",
-                        "SelectBox", "CheckBox", "Switch", "Web",
-                        "Spacer", "Divider", "Indicator"
+                        "Button", "Image", "NetworkImage", "CircleView",
+                        "IconLabel", "Collection", "TabView",
+                        "SelectBox", "CheckBox", "Switch", "Radio",
+                        "Segment", "Slider", "Progress", "Indicator",
+                        "Web", "Blur", "GradientView"
                     ],
-                    "description": "Component type"
+                    "description": (
+                        "Component type: a Layout JSON component "
+                        "(shared/core/attribute_definitions.json), by its "
+                        "canonical name. Not Embed — another screen is hosted "
+                        "through structure.embeds. Until jsonui-cli 1.9.0 the "
+                        "list also held Spacer and Divider, which no Layout "
+                        "tool knows, and lacked ten components it has."
+                    )
                 },
                 "id": {
                     "type": "string",
@@ -480,9 +494,9 @@ SCREEN_SPEC_SCHEMA = {
                     "description": (
                         "Layout JSON refs (layouts_directory-relative, no "
                         ".json) of the cells this Collection may use — the "
-                        "multi-cell form. Read by the spec validator and "
-                        "jsonui-doc; `jui g project` does not write it onto "
-                        "the generated Collection."
+                        "multi-cell form. Written onto the Collection "
+                        "`jui g project` generates (from jsonui-cli 1.9.0; "
+                        "read by the validator and jsonui-doc before)."
                     )
                 },
                 "sections": {
@@ -498,9 +512,10 @@ SCREEN_SPEC_SCHEMA = {
                     },
                     "description": (
                         "Section-based Collection: each section names its "
-                        "cell / header / footer layout. Read by the spec "
-                        "validator and jsonui-doc; `jui g project` does not "
-                        "write it onto the generated Collection."
+                        "cell / header / footer layout. Written onto the "
+                        "Collection `jui g project` generates, in place of "
+                        "the section it derives from cell / header / footer "
+                        "(from jsonui-cli 1.9.0)."
                     )
                 }
             }

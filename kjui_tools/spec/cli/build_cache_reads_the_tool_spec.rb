@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -24,7 +25,7 @@ RSpec.describe 'the kjui build cache reads the tool and the components' do
   end
 
   def run(*args)
-    out, = Open3.capture2e('ruby', File.join(@dir, 'kjui_tools', 'bin', 'kjui'), *args, chdir: @dir)
+    out, = Open3.capture2e(RbConfig.ruby, File.join(@dir, 'kjui_tools', 'bin', 'kjui'), *args, chdir: @dir)
     out.gsub(/\e\[[0-9;]*m/, '')
   end
 

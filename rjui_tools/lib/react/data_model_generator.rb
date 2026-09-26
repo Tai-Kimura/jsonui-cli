@@ -5,6 +5,7 @@ require 'fileutils'
 require 'set'
 require_relative '../core/tap_accessibility'
 require_relative '../core/bind_fold'
+require_relative '../core/logger'
 require_relative '../core/binding_validator_core'
 require_relative '../core/node_keys'
 require_relative '../core/config_manager'
@@ -100,7 +101,10 @@ module RjuiTools
             begin
               @project_type_map = JSON.parse(File.read(path)).fetch('types', {})
             rescue JSON::ParserError => e
-              warn "[DataModelGenerator] Warning: failed to parse #{path}: #{e.message}"
+              # Through rjui's warning logger ("[WARN] "): every custom type
+              # then falls back to its bare name, which a warning count has
+              # to see (a bare `warn` on stderr until jsonui-cli 1.9.0).
+              RjuiTools::Core::Logger.warn "[DataModelGenerator] failed to parse #{path}: #{e.message}"
             end
             break
           end

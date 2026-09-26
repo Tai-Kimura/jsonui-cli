@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../../core/logger'
 require_relative '../component_name'
 
 module RjuiTools
@@ -145,7 +146,8 @@ module RjuiTools
 
           id = scroll_control_id
           unless id
-            warn "[rjui] Collection: #{declared.join(', ')} #{declared.one? ? 'needs' : 'need'} " \
+            RjuiTools::Core::Logger.warn "[rjui] Collection: #{declared.join(', ')} " \
+                                         "#{declared.one? ? 'needs' : 'need'} " \
                  'a literal `id` on the collection to bind to; ignoring.'
             return ''
           end

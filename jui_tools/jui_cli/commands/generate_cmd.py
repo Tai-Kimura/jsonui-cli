@@ -15,7 +15,10 @@ def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
     # jui g project
     project_parser = gen_sub.add_parser("project", help="Generate all files from specs")
     project_parser.add_argument("--file", metavar="SPEC_FILE", help="Single spec file to process")
-    project_parser.add_argument("--force", action="store_true", help="Force overwrite declaration files")
+    project_parser.add_argument(
+        "--force", action="store_true",
+        help="Replace declaration files, and Layout JSON (screen, cell, header, footer) that "
+             "already exists and differs from what the spec generates — kept otherwise")
     project_parser.add_argument("--skip-layout", action="store_true", help="Skip Layout JSON generation")
     project_parser.add_argument("--dry-run", action="store_true", help="Show what would be generated")
     project_parser.add_argument("--ios-only", action="store_true", help="Generate iOS files only")
@@ -616,70 +619,22 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
             # for data shape (Layout JSON → spec is never automatic), so any
             # orphan means the author needs to either declare it in
             # stateManagement.uiVariables or consciously drop it.
-            orphans: list[tuple[str, str]] = []
-            if layout_path.exists():
-                orphans = _find_data_orphans(layout_path, layout_json)
-
-            if orphans:
-                rel = layout_path.relative_to(config_mgr.project_root)
-                lines = [
-                    f"ERROR: {rel}: existing Layout JSON has data entries "
-                    f"not declared in spec.uiVariables:"
-                ]
-                for name, klass in orphans:
-                    lines.append(f"  - data.{name} ({klass})")
-                lines.append(
-                    "  → add each to stateManagement.uiVariables, or "
-                    "delete the entry from the Layout JSON's data section "
-                    "to acknowledge the removal. Layout JSON is regenerated "
-                    "from spec and these entries would otherwise be silently "
-                    "dropped."
-                )
-                errors.append("\n".join(lines))
-                skipped_files.append(layout_path)
-            elif args.dry_run:
-                print(f"  [DRY-RUN] Would create: {layout_path}")
-            else:
-                layout_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(layout_path, "w", encoding="utf-8") as f:
-                    json.dump(layout_json, f, indent=2, ensure_ascii=False)
-                    f.write("\n")
-                generated_files.append(layout_path)
-                print(f"  Created: {layout_path.relative_to(config_mgr.project_root)}")
+            _write_layout(
+                layout_path, layout_json, args=args, project_root=config_mgr.project_root,
+                label="", where="spec.uiVariables (stateManagement.uiVariables)",
+                generated_files=generated_files, skipped_files=skipped_files, errors=errors)
 
             # Generate the cell / header / footer Layout JSON each entry opts
             # into — for every declared Collection (structure.collection +
-            # structure.collections[]). The same data-orphan guard as the
-            # screen layout: until jsonui-cli 1.9.0 a cell layout was overwritten with
-            # no look at what its data section held.
+            # structure.collections[]). The same rule as the screen layout.
             for coll_def in screen_spec.collections:
                 for slot in cell_gen.slots_to_generate(coll_def):
-                    cell_json = cell_gen.generate_slot(slot, screen_spec)
-                    cell_path = cell_gen.slot_output_path(coll_def, slot, layouts_dir)
-                    slot_orphans = _find_data_orphans(cell_path, cell_json) if cell_path.exists() else []
-                    if slot_orphans:
-                        rel = cell_path.relative_to(config_mgr.project_root)
-                        lines = [
-                            f"ERROR: {rel}: existing {slot.kind} Layout JSON has data "
-                            f"entries not declared in structure.collection.{slot.kind}.uiVariables:"
-                        ]
-                        for name, klass in slot_orphans:
-                            lines.append(f"  - data.{name} ({klass})")
-                        lines.append(
-                            f"  → add each to the {slot.kind}'s uiVariables, or delete the "
-                            "entry from the Layout JSON's data section to acknowledge the "
-                            "removal.")
-                        errors.append("\n".join(lines))
-                        skipped_files.append(cell_path)
-                    elif args.dry_run:
-                        print(f"  [DRY-RUN] Would create {slot.kind}: {cell_path}")
-                    else:
-                        cell_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(cell_path, "w", encoding="utf-8") as f:
-                            json.dump(cell_json, f, indent=2, ensure_ascii=False)
-                            f.write("\n")
-                        generated_files.append(cell_path)
-                        print(f"  Created {slot.kind}: {cell_path.relative_to(layouts_dir)}")
+                    _write_layout(
+                        cell_gen.slot_output_path(coll_def, slot, layouts_dir),
+                        cell_gen.generate_slot(slot, screen_spec), args=args,
+                        project_root=config_mgr.project_root, label=f"{slot.kind} ",
+                        where=f"structure.collection.{slot.kind}.uiVariables",
+                        generated_files=generated_files, skipped_files=skipped_files, errors=errors)
 
         # Extract subdir from metadata.layoutFile (e.g. "mypage/change_email_sheet" -> "mypage")
         vm_subdir = ""
@@ -870,6 +825,69 @@ def _get_generator(platform: str, pconfig: dict, config_mgr, type_mapper):
     elif platform == "web":
         return WebGenerator(root, pconfig, type_mapper)
     return None
+
+
+def _write_layout(path, layout_json: dict, *, args, project_root, label: str, where: str,
+                  generated_files: list, skipped_files: list, errors: list) -> None:
+    """Write one Layout JSON `jui g project` generates — the screen's, or a
+    cell / header / footer's.
+
+    - not there: written.
+    - there, byte for byte what the spec generates: left as it is.
+    - there and different: KEPT, and a line names it and `--force` — the
+      Layout JSON is hand-edited from here (design-philosophy.md: "jui g
+      project → Layout JSON (SSoT for UI, hand-edited from here)"). On a
+      terminal the run asks first; a stdin that is not a terminal is not read.
+    - replaced (--force, or "y"): not while its data section holds entries
+      the spec does not declare — those are named and the file kept, as
+      before.
+
+    Until jsonui-cli 1.9.0 every run rewrote an existing layout: an edit
+    outside the data section (a style, a node) was lost with "Created:"
+    printed for it (measured 2026-09-26 on a scratch project).
+    """
+    import json as _json
+    import sys as _sys
+
+    rel = path.relative_to(project_root) if str(path).startswith(str(project_root)) else path
+    text = _json.dumps(layout_json, indent=2, ensure_ascii=False) + "\n"
+    exists = path.exists()
+    if exists:
+        try:
+            current = path.read_text(encoding="utf-8")
+        except OSError:
+            current = None
+        if current == text:
+            skipped_files.append(path)
+            return
+        replace = bool(args.force)
+        if not replace and not args.dry_run and _sys.stdin is not None and _sys.stdin.isatty():
+            answer = input(f"  {rel} differs from what the spec generates. Replace it? [y/N] ")
+            replace = answer.strip().lower() in ("y", "yes")
+        if not replace:
+            print(f"  Kept existing {label}layout: {rel} (it differs from what the spec generates; "
+                  f"--force replaces it)")
+            skipped_files.append(path)
+            return
+        orphans = _find_data_orphans(path, layout_json)
+        if orphans:
+            lines = [f"ERROR: {rel}: existing {label}Layout JSON has data entries not declared in {where}:"]
+            for name, klass in orphans:
+                lines.append(f"  - data.{name} ({klass})")
+            lines.append(
+                "  → add each to the uiVariables, or delete the entry from the Layout JSON's data "
+                "section to acknowledge the removal; replacing the file would drop it.")
+            errors.append("\n".join(lines))
+            skipped_files.append(path)
+            return
+    if args.dry_run:
+        print(f"  [DRY-RUN] Would {'replace' if exists else 'create'} {label}layout: {rel}")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    generated_files.append(path)
+    print(f"  {'Replaced' if exists else 'Created'} {label}layout: {rel}" if label
+          else f"  {'Replaced' if exists else 'Created'}: {rel}")
 
 
 def _find_data_orphans(

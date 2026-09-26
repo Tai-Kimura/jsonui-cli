@@ -174,8 +174,6 @@ NOT_READ = [
      "read by jsonui-doc, the validator and jsonui-test unit-stubs; the converters are scaffolded by "
      "g converter"),
     (r"^transitions\.destination$", "read by jsonui-doc (and its flow diagram)"),
-    (r"^structure\.collections?\.(cellClasses|sections)(\.|$)",
-     "REPORTED: read by the validator and jsonui-doc; g project does not write them onto the Collection"),
     (r"^structure\.collections?\.(cell|header|footer)\.dataKeys$",
      "legacy binding list (the schema prefers uiVariables): read by jsonui-doc only"),
     (r"^structure\.collections?\.(cell|header|footer)\.viewName$",

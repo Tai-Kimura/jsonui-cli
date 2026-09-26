@@ -251,12 +251,12 @@ def project(tmp_path):
         os.chdir(cwd)
 
 
-def _g_project(project: Path, structure: dict) -> str:
+def _g_project(project: Path, structure: dict, *args: str) -> str:
     from jui_cli.cli import main
     (project / "docs/screens/json/probe.spec.json").write_text(json.dumps(_spec(structure)))
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        main(["g", "project"])
+        main(["g", "project", *args])
     return out.getvalue()
 
 
@@ -275,11 +275,58 @@ def test_g_project_writes_the_header_and_the_cell(project):
     assert coll["sections"] == [{"cell": "probe/cell", "header": "probe/header"}]
 
 
-def test_g_project_keeps_an_entry_layout_whose_nested_data_the_spec_does_not_declare(project):
+def test_g_project_keeps_an_existing_entry_layout_that_differs(project):
     header = project / "docs/screens/layouts/probe/header.json"
     header.parent.mkdir(parents=True)
     kept = {"type": "View", "id": "h", "child": [{"data": [{"name": "handWritten", "class": "String"}]}]}
     header.write_text(json.dumps(kept))
     said = _g_project(project, STRUCTURE)
     assert json.loads(header.read_text()) == kept, said
+    assert ("Kept existing header layout: docs/screens/layouts/probe/header.json (it differs from what the "
+            "spec generates; --force replaces it)") in said, said
+
+
+def test_force_does_not_replace_one_whose_nested_data_the_spec_does_not_declare(project):
+    header = project / "docs/screens/layouts/probe/header.json"
+    header.parent.mkdir(parents=True)
+    kept = {"type": "View", "id": "h", "child": [{"data": [{"name": "handWritten", "class": "String"}]}]}
+    header.write_text(json.dumps(kept))
+    said = _g_project(project, STRUCTURE, "--force")
+    assert json.loads(header.read_text()) == kept, said
     assert "existing header Layout JSON has data entries not declared" in said and "data.handWritten" in said
+
+
+def test_a_hand_edited_screen_layout_is_kept_and_force_replaces_it(project):
+    _g_project(project, STRUCTURE)
+    screen = project / "docs/screens/layouts/probe.json"
+    edited = json.loads(screen.read_text())
+    edited["background"] = "#FF0000"
+    screen.write_text(json.dumps(edited, indent=2))
+    said = _g_project(project, STRUCTURE)
+    assert json.loads(screen.read_text())["background"] == "#FF0000", said
+    assert "Kept existing layout: docs/screens/layouts/probe.json" in said
+    said = _g_project(project, STRUCTURE, "--force")
+    assert "background" not in json.loads(screen.read_text()), said
+    assert "Replaced: docs/screens/layouts/probe.json" in said
+
+
+def test_a_layout_the_spec_generates_unchanged_is_not_rewritten(project):
+    _g_project(project, STRUCTURE)
+    screen = project / "docs/screens/layouts/probe.json"
+    before = (screen.read_bytes(), screen.stat().st_mtime_ns)
+    said = _g_project(project, STRUCTURE)
+    assert (screen.read_bytes(), screen.stat().st_mtime_ns) == before
+    assert "probe.json" not in said, said
+
+
+def test_a_specs_cell_classes_and_sections_reach_a_new_collection(project):
+    _g_project(project, {"components": C, "layout": {"root": "root_view", "children": ["title"]},
+                         "collection": {"id": "messages", "cellClasses": ["chat/message_cell", "chat/typing_cell"],
+                                        "sections": [{"index": 0, "cell": "chat/message_cell",
+                                                      "header": "chat/day_header", "description": "d"},
+                                                     {"cell": "chat/typing_cell", "header": None, "columns": 2}]}})
+    screen = json.loads((project / "docs/screens/layouts/probe.json").read_text())
+    coll = _nodes(screen, lambda n: n.get("type") == "Collection")[0]
+    assert coll["cellClasses"] == ["chat/message_cell", "chat/typing_cell"]
+    assert coll["sections"] == [{"cell": "chat/message_cell", "header": "chat/day_header"},
+                                {"cell": "chat/typing_cell", "columns": 2}]

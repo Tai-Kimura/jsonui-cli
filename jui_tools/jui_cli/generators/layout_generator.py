@@ -468,6 +468,9 @@ class LayoutGenerator:
         if coll.auto_change_tracking_id:
             node["autoChangeTrackingId"] = True
 
+        if coll.cell_classes:
+            node["cellClasses"] = list(coll.cell_classes)
+
         if coll.sections:
             node["sections"] = []
             for section in coll.sections:
@@ -478,6 +481,8 @@ class LayoutGenerator:
                     s["header"] = section["header"]
                 if section.get("footer"):
                     s["footer"] = section["footer"]
+                if "columns" in section:
+                    s["columns"] = section["columns"]
                 node["sections"].append(s)
 
         if coll.columns > 1:

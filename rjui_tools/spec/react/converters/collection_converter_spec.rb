@@ -351,7 +351,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         converter = create_converter(
           { 'class' => 'Collection', 'scrollTo' => '@{scrollIndex}', 'cellClasses' => ['ItemCell'] }
         )
-        expect { converter.convert }.to output(/literal `id`/).to_stderr
+        expect { converter.convert }.to output(/\[WARN\].*\[rjui\] Collection: .*literal `id`/).to_stdout
       end
 
       # currentPage read-back: `data.on<Prop>Change` is the same write-back
