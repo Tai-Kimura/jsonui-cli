@@ -6,7 +6,7 @@ package com.kotlinjsonui.dynamic.generated
 
 /** Typed attribute extraction for the `Label` component.
  * Shared attributes are available via [common].
- * Overrides the common definition of: `shadow` (use the property on this class).
+ * Overrides the common definition of: `bind`, `shadow` (use the property on this class).
  */
 data class LabelAttributes(
     /** Attributes shared across all components. */

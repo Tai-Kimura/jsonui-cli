@@ -13,6 +13,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # Two-way binding for the component's primary value (mini fixture of common.bind.primaryValue).
+        { name: 'bind', kind: :binding }.freeze,
         # Hide view
         { name: 'hidden', kind: :boolean, bindable: true }.freeze,
         # Unique identifier for the component

@@ -53,7 +53,43 @@ def emit(model: AttrModel) -> dict[str, str]:
     files["CommonAttributes.swift"] = _component_file(model.common, model, mapper)
     for comp in model.components:
         files[f"{comp.name}Attributes.swift"] = _component_file(comp, model, mapper)
+    files["BindPrimaryValue.swift"] = _bind_primary_value_file(model)
     return dict(sorted(files.items()))
+
+
+def _swift_string_list(values: tuple[str, ...]) -> str:
+    return "[" + ", ".join(f'"{v}"' for v in values) + "]"
+
+
+def _bind_primary_value_file(model: AttrModel) -> str:
+    """``JsonUIBindPrimaryValue`` — ``common.bind.primaryValue`` for
+    SwiftJsonUI Dynamic's bind fold (model.bind_value_cases)."""
+    lines = [HEADER.rstrip("\n"), "", "import Foundation", "",
+             "/// `common.bind.primaryValue`: the attributes `bind` stands for, per section —",
+             "/// the table SwiftJsonUI Dynamic folds `bind` by, the one jsonui-cli's codegen",
+             "/// and validator read (shared/core/bind_fold.rb).",
+             "public enum JsonUIBindPrimaryValue {",
+             "    /// The attributes `bind` stands for on a node of `type`, the first being where",
+             "    /// a lone `bind` goes. `type` is matched as written: a section the table names,",
+             "    /// or one whose `_alias_of` names it; a type-synonym is the caller's to resolve",
+             "    /// first. An empty list: no entry, and `bind` is not folded.",
+             "    public static func attributes(for type: String, node: [String: Any]) -> [String] {",
+             "        switch type {"]
+    for case in model.bind_value_cases:
+        labels = ", ".join(f'"{label}"' for label in case.labels)
+        lines.append(f"        case {labels}:")
+        if case.by is None:
+            lines.append(f"            return {_swift_string_list(case.values)}")
+            continue
+        lines.append(f'            switch node["{case.by}"] as? String {{')
+        for value, attrs in case.lists:
+            lines.append(f'            case "{value}":')
+            lines.append(f"                return {_swift_string_list(attrs)}")
+        lines.append("            default:")
+        lines.append(f"                return {_swift_string_list(case.when_absent)}")
+        lines.append("            }")
+    lines += ["        default:", "            return []", "        }", "    }", "}", ""]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
