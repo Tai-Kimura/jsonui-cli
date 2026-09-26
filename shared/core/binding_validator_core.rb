@@ -480,6 +480,10 @@ module JsonUIShared
       # Embed-specific structural rules (params tree grammar + navigationMode)
       validate_embed_component(component) if component_type == 'Embed'
 
+      # A date SelectBox whose onValueChange is declared to take an index
+      # (date_pick_handler_problem).
+      check_date_pick_handler(component) if resolve_component_alias(component_type) == 'SelectBox'
+
       component.each do |key, value|
         next if key == 'type' || key == 'child' || key == 'children' || key == 'sections'
         next if key == 'data' || key == 'generatedBy' || key == 'include' || key == 'style' || key == 'shared_data'
@@ -851,6 +855,39 @@ module JsonUIShared
       else
         "#{handler.is_a?(String) ? "'#{handler}'" : handler.inspect} is not a method name"
       end
+    end
+
+    # The parameters a handler's declared class takes — `((String, Int) ->
+    # Void)?` is ["String", "Int"], `(() -> Unit)?` is [] — or nil when the
+    # class is not a closure type. What sjui's SelectBox reads to spell its
+    # onValueChange call (selectbox_converter.rb pick_invocation).
+    def self.closure_parameters(klass)
+      inner = klass.to_s[/\(\s*([^()]*?)\s*\)\s*(?:throws\s*)?->/, 1]
+      inner&.split(',')&.map(&:strip)&.reject(&:empty?)
+    end
+
+    DATE_PICK_HAS_NO_INDEX = 'a date SelectBox has no index: declare onValueChange as (String) or (String, String)'
+
+    # A date SelectBox's onValueChange declared to take an Int — `(Int)`,
+    # `(String, Int)` — asks for an index a date does not have (4f's ruling on
+    # control-onclick-is-called-differently-on-every-path, 1.9.0): it is not
+    # called on any path. sjui writes an `// ERROR:` comment where the call
+    # would be, SwiftJsonUI's Dynamic runtime names it once in DEBUG, and the
+    # build says it here. nil for any other declaration.
+    def self.date_pick_handler_problem(klass)
+      params = closure_parameters(klass)
+      params&.include?('Int') ? DATE_PICK_HAS_NO_INDEX : nil
+    end
+
+    def check_date_pick_handler(component)
+      return unless component['selectItemType'] == 'Date'
+
+      handler = component['onValueChange']
+      name = handler.is_a?(String) && handler.strip[/\A@\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\z/, 1]
+      return unless name
+
+      problem = self.class.date_pick_handler_problem(@data_types[name])
+      @warnings << "#{build_context_prefix}'SelectBox.onValueChange' '#{name}' (#{@data_types[name]}) is not called: #{problem}" if problem
     end
 
     def validate_embed_params_node(node, path)
