@@ -2,9 +2,10 @@
 
 1. A uiVariable's initial value, on the screen path (stateManagement) and the
    cell path (structure.collection.cell): `defaultValue` — the spelling the
-   agents pack teaches — and `default`, the older one, both reach the Layout
-   JSON `data` section; `defaultValue` wins when both are given (and the other
-   is named); false / 0 / "" are values. Until 1.8.121 the screen path read
+   agents pack's examples use — and `default`, the older one, both reach the
+   Layout JSON `data` section; `default` wins when both are given, the
+   precedence the pack states (and the other is named when it differs);
+   false / 0 / "" are values. Until 1.8.121 the screen path read
    `default` only, so `"defaultValue": "gone"` became the type's "" without a
    word (`jui verify` compares data names only), and the cell path's
    `default or defaultValue` let a falsy `default` fall through.
@@ -66,9 +67,11 @@ CASES = [
     ("viaDefault", "String", {"default": "gone"}, "gone"),
     ("boolTrueDefaultValue", "Bool", {"defaultValue": True}, True),
     ("boolFalseDefault", "Bool", {"default": False}, False),
-    ("zeroDefaultSevenDefaultValue", "Int", {"default": 0, "defaultValue": 7}, 7),
+    # default wins, a falsy one too (the cell path's `or` gave 7 here)
+    ("zeroDefaultSevenDefaultValue", "Int", {"default": 0, "defaultValue": 7}, 0),
     ("emptyDefaultValue", "String", {"defaultValue": ""}, ""),
-    ("both", "String", {"default": "a", "defaultValue": "b"}, "b"),
+    ("both", "String", {"default": "a", "defaultValue": "b"}, "a"),
+    ("falseDefaultTrueDefaultValue", "Bool", {"default": False, "defaultValue": True}, False),
     ("neither", "String", {}, ""),  # the type's own default
 ]
 
@@ -85,8 +88,8 @@ def test_both_spellings_with_different_values_are_named(capsys):
     _data(_spec([{"name": "both", "type": "String", "description": "d", "default": "a", "defaultValue": "b"}]))
     said = capsys.readouterr().out
     for where in ("stateManagement.uiVariables", "structure.collection.cell.uiVariables"):
-        assert (f"WARNING: {where} 'both': both defaultValue (\"b\") and default (\"a\") are given; "
-                f"defaultValue is used") in said, said
+        assert (f"WARNING: {where} 'both': both default (\"a\") and defaultValue (\"b\") are given; "
+                f"default is used") in said, said
 
 
 def test_the_same_value_in_both_spellings_says_nothing(capsys):

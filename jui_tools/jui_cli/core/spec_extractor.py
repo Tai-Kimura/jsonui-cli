@@ -212,14 +212,15 @@ class ScreenSpec:
 
 
 def _ui_variable_default(var: dict, where: str) -> Any:
-    """A uiVariable's initial value: `defaultValue`, else `default`, else None.
+    """A uiVariable's initial value: `default`, else `defaultValue`, else None.
 
-    `defaultValue` is the spelling the agents pack teaches and the key the
-    Layout JSON `data` section writes; `default` is read as the older one.
-    Neither is in the spec schema (it declares name / type / description /
-    notes), so a spec may carry either. When both are given with different
-    values, `defaultValue` is used and the other is named — a spec says one
-    thing. Read by key, so false / 0 / "" are values, not absences.
+    Both spellings are read: `defaultValue` is the one the agents pack's
+    examples use and the key the Layout JSON `data` section writes; `default`
+    is the older one. When both are given, `default` wins — the precedence the
+    pack states for this field (and the one the cell path already had for a
+    truthy `default`) — and, when their values differ, the other is named: a
+    spec says one thing. Neither is in the spec schema (it declares name /
+    type / description / notes). Read by key, so false / 0 / "" are values.
 
     Until 1.8.121 the screen path (stateManagement.uiVariables) read `default`
     only: `"defaultValue": "gone"` reached the Layout JSON as the type's
@@ -228,14 +229,14 @@ def _ui_variable_default(var: dict, where: str) -> Any:
     fall through to `defaultValue`. Ticket
     generate-commands-overwrite-edited-files-and-ignore-their-flags (round 4).
     """
-    if "defaultValue" in var:
-        value = var["defaultValue"]
-        if "default" in var and var["default"] != value:
-            print(f"WARNING: {where} '{var.get('name', '?')}': both defaultValue "
-                  f"({json.dumps(value)}) and default ({json.dumps(var['default'])}) "
-                  f"are given; defaultValue is used")
+    if "default" in var:
+        value = var["default"]
+        if "defaultValue" in var and var["defaultValue"] != value:
+            print(f"WARNING: {where} '{var.get('name', '?')}': both default "
+                  f"({json.dumps(value)}) and defaultValue ({json.dumps(var['defaultValue'])}) "
+                  f"are given; default is used")
         return value
-    return var.get("default")
+    return var.get("defaultValue")
 
 
 def _parse_collection(coll_data: dict) -> CollectionDef:
