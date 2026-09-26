@@ -52,13 +52,17 @@ RSpec.describe 'sjui g converter: a binding prop and what the layout gives it' d
         name = "BindingProp#{kase.to_s.capitalize}#{i}"
         node = { 'type' => name }
         node['v'] = value unless kase == :absent
+        # What it printed through sjui's warning logger (not stubbed for
+        # this; stdout captured) — from 1.8.121 the line goes there,
+        # "WARNING: [sjui] …", not to stderr through a bare `warn`.
         said = StringIO.new
-        saved = $stderr
+        saved = $stdout
         call = begin
-          $stderr = said
+          allow(SjuiTools::Core::Logger).to receive(:warn).and_call_original
+          $stdout = said
           converter_for(name, type).new(node, 0, nil, nil, nil, nil).convert
         ensure
-          $stderr = saved
+          $stdout = saved
         end
         t = JsonUIShared::AttributeTypes.parse(type)
         swift = JsonUIShared::AttributeTypes.swift_type(t)
