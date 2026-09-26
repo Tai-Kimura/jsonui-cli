@@ -1438,11 +1438,16 @@ module KjuiTools
               end
 
               cell_class = cell_class_name(cell_view_name)
+              # The key carries the section (#{index}), as the sectioned
+              # grid's `<cell>_cell_<section>_<cellIndex>` does: without it
+              # two sections of the same cell class shared their cells'
+              # ViewModels, and the later section's data drew in both
+              # (measured on 137468b2; collection_flow_sections_spec.rb).
               if cell_id_property
                 code += "\n" + indent("val flowCellId = (item[\"cellId\"] as? String) ?: (item[\"#{cell_id_property}\"] as? String) ?: \"$cellIndex\"", inner_depth)
-                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_\${flowCellId}_\${viewModel.hashCode()}\")", inner_depth)
+                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_#{index}_\${flowCellId}_\${viewModel.hashCode()}\")", inner_depth)
               else
-                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_\${cellIndex}_\${viewModel.hashCode()}\")", inner_depth)
+                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", inner_depth)
               end
               code += "\n" + indent("LaunchedEffect(item) {", inner_depth)
               code += "\n" + indent("cellViewModel.updateData(item)", inner_depth + 1)
