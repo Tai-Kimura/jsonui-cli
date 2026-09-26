@@ -185,7 +185,7 @@ module RjuiTools
 
         # SelectBox: selectedValue/value binding → onXxxChange
         if %w[SelectBox Spinner Picker].include?(component_type)
-          value_key = component['selectedValue'] || component['value'] || component['selectedIndex']
+          value_key = component['selectedItem'] || component['selectedValue'] || component['value'] || component['selectedIndex']
           if value_key.is_a?(String) && value_key.start_with?('@{') && value_key.end_with?('}')
             prop = value_key[2..-2]
             handler = "on#{prop[0].upcase}#{prop[1..]}Change"

@@ -222,7 +222,25 @@ module SjuiTools
                 # implementation" — SelectBoxView takes `selectedIndex: Int?`,
                 # and the index of a bound value is an expression over the
                 # item list rather than a number the generator can compute.
-                add_line "selectedIndex: #{items_expression(items)}.firstIndex(of: #{selected_expr}),"
+                items_expr = items_expression(items)
+                expression = SjuiTools::SwiftUI::Binding::BindingExpression
+                parsed = expression.parse(selected_declaration[2..-2])
+                prop = parsed.path
+                if parsed.default_kind == :none && !parsed.negated && expression.emittable_path?(prop)
+                  # A bound selectedItem / selectedValue is declared two-way: the
+                  # item's index, read through the items so the box follows the
+                  # data, and the picked item written back. As a one-time
+                  # `selectedIndex` it was neither (ticket
+                  # selectbox-selected-item-binding-is-read-once).
+                  # The read is the same expression the seed used (it knows the
+                  # property's optionality: `(data.x ?? "")` for a String?).
+                  add_line "selectedIndexBinding: SwiftUI.Binding(get: { #{items_expr}.firstIndex(of: #{selected_expr}) ?? -1 }, " \
+                           "set: { index in data.#{prop} = #{items_expr}.indices.contains(index) ? #{items_expr}[index] : \"\" }),"
+                else
+                  # A default (`?? …`) or a negation: a value to read, nothing
+                  # to write back to.
+                  add_line "selectedIndex: #{items_expr}.firstIndex(of: #{selected_expr}),"
+                end
               end
             end
 
