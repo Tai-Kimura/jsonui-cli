@@ -42,7 +42,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'cellClasses' => ['ItemCell'], 'footerClasses' => ['MyFooter'] }
       )
       expect(code).to include('List {')
-      expect(code).to include('MyFooterView()')
+      expect(code).to include('MyFooterView(data: [String: Any]())')
       expect(code).to include('.listStyle(PlainListStyle())')
 
       # This example used to assert
@@ -176,8 +176,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         { 'type' => 'Collection', 'columns' => 2, 'cellClasses' => ['CCell'],
           'headerClasses' => ['HClass'], 'footerClasses' => ['FClass'], 'items' => '@{rows}' }
       )
-      expect(code).to include("HClassView()\n")
-      expect(code).to include("FClassView()\n")
+      expect(code).to include("HClassView(data: [String: Any]())\n")
+      expect(code).to include("FClassView(data: [String: Any]())\n")
     end
   end
 
@@ -244,8 +244,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       )
       expect(code).not_to include('List {')
       expect(code).to include('VStack(alignment: .leading, spacing: 0) {')
-      expect(code).to include("HdrCView()\n")
-      expect(code).to include("FtrCView()\n")
+      expect(code).to include("HdrCView(data: [String: Any]())\n")
+      expect(code).to include("FtrCView(data: [String: Any]())\n")
     end
 
     it 'grid with sections: data-bound header/footer around a LazyVGrid' do
@@ -287,9 +287,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'footerClasses' => ['GF'], 'items' => '@{rows}' }
       )
       expect(code).to start_with('VStack(')
-      expect(code).to include("{\n    GHView()\n")
+      expect(code).to include("{\n    GHView(data: [String: Any]())\n")
       expect(code).to include('LazyVGrid(')
-      expect(code).to include("}\n    GFView()\n}")
+      expect(code).to include("}\n    GFView(data: [String: Any]())\n}")
       expect(code).not_to include('ScrollView(')
     end
   end

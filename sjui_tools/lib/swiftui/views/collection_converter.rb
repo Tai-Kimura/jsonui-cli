@@ -310,7 +310,7 @@ module SjuiTools
                 end
                 add_line "} header: {"
                 indent do
-                  add_line "#{header_class_name}()"
+                  add_line class_list_edge_call(header_class_name)
                 end
                 add_line "}"
 
@@ -319,7 +319,7 @@ module SjuiTools
                   add_modifier_line ".listSectionSeparator(.hidden)"
                   add_line "Section {"
                   indent do
-                    add_line "#{footer_class_name}()"
+                    add_line class_list_edge_call(footer_class_name)
                   end
                   add_line "}"
                 end
@@ -339,7 +339,7 @@ module SjuiTools
                 # Footer without header
                 if footer_class_name
                   add_line ""
-                  add_line "#{footer_class_name}()"
+                  add_line class_list_edge_call(footer_class_name)
                 end
               end
             end
@@ -551,7 +551,7 @@ module SjuiTools
               else
                 # Legacy behavior - header/footer from cellClasses
                 if header_class_name
-                  add_line "#{header_class_name}()"
+                  add_line class_list_edge_call(header_class_name)
                   apply_header_footer_padding
                 end
                 
@@ -564,7 +564,7 @@ module SjuiTools
 
                 if footer_class_name
                   add_line ""
-                  add_line "#{footer_class_name}()"
+                  add_line class_list_edge_call(footer_class_name)
                   apply_header_footer_padding
                 end
               end
@@ -803,11 +803,11 @@ module SjuiTools
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
             indent do
               if header_class_name
-                add_line "#{header_class_name}()"
+                add_line class_list_edge_call(header_class_name)
               end
               generate_collection_content(cell_class_name, id)
               if footer_class_name
-                add_line "#{footer_class_name}()"
+                add_line class_list_edge_call(footer_class_name)
               end
             end
             add_line "}"
@@ -968,14 +968,14 @@ module SjuiTools
               add_line "VStack(alignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}, spacing: #{grid_row_spacing}) {"
             end
             maybe_indent(edges) do
-              add_line "#{header_class_name}()" if header_class_name
+              add_line class_list_edge_call(header_class_name) if header_class_name
               add_line "LazyVGrid(columns: #{grid_cols}, alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
               indent do
                 generate_collection_content(cell_class_name, id = @component['id'] || 'collection')
               end
               add_line "}"
               apply_insets_only
-              add_line "#{footer_class_name}()" if footer_class_name
+              add_line class_list_edge_call(footer_class_name) if footer_class_name
             end
             add_line "}" if edges
           end
@@ -1568,6 +1568,16 @@ module SjuiTools
             add_line "ForEach(Array(#{source_expr}.enumerated()), id: \\.offset) { cellIndex, cellData in"
             { data_var: 'cellData', index_var: 'cellIndex' }
           end
+        end
+
+        # A class-list header or footer (headerClasses / footerClasses): drawn
+        # once, with no data of its own — called as every cell and section
+        # header is, `View(data:)` (the initializer `sjui g collection` writes
+        # is `init(data: Any)`), with an empty dictionary. It was `View()`, which
+        # does not compile against a view whose only initializer takes data
+        # (4f round 9).
+        def class_list_edge_call(view_name)
+          "#{view_name}(data: [String: Any]())"
         end
 
         def generate_cell_identity(index_var = 'cellIndex')

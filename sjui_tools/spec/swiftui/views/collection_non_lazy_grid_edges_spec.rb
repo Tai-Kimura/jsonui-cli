@@ -35,8 +35,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     expect(names).to eq(['VStack']), lines.join
     expect(lines[first_modifier - 1]).to eq("}\n") # the VStack's own closing brace
     body = lines[at.first...first_modifier].join
-    expect(body.index('HeadCellView()')).to be < body.index('LazyVGrid(')
-    expect(body.index('LazyVGrid(')).to be < body.index('FootCellView()')
+    expect(body.index('HeadCellView(data: [String: Any]())')).to be < body.index('LazyVGrid(')
+    expect(body.index('LazyVGrid(')).to be < body.index('FootCellView(data: [String: Any]())')
     expect(lines.first).to include('spacing: 7') # rows, header and footer spaced by lineSpacing
   end
 
@@ -54,8 +54,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
 
   describe 'the emitted Swift type-checks', :swift_compile do
     it 'with a header, a footer, both and neither' do
-      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + cell_view_stub('ACellView') +
-              %w[HeadCellView FootCellView].map { |n| "struct #{n}: View { var body: some View { Text(\"#{n}\") } }\n" }.join
+      # The header and footer are cell views (`sjui g collection`): their one
+      # initializer takes data (round 9 — these were stubbed with none, the
+      # shape the emit then assumed).
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + cell_view_stub('ACellView', 'HeadCellView', 'FootCellView')
       codes = [convert, convert('headerClasses' => nil), convert('footerClasses' => nil),
                convert('headerClasses' => nil, 'footerClasses' => nil)]
       expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: ['var rows: CollectionDataSource? = nil'], stubs: stubs))
