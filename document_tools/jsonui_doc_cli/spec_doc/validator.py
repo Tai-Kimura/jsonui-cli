@@ -123,23 +123,16 @@ def _running_version() -> str:
 class SpecValidator:
     """Validates screen and component specification JSON files."""
 
-    # Valid component types for screen specs
-    VALID_SCREEN_COMPONENT_TYPES = {
-        "View", "ScrollView", "SafeAreaView",
-        "Label", "TextField", "TextView",
-        "Button", "Image", "Collection", "TabView",
-        "SelectBox", "CheckBox", "Switch", "Web",
-        "Spacer", "Divider", "Indicator"
-    }
+    # Valid component types: the schemas' enums, which hold the Layout SSoT's
+    # canonical components (test_spec_enums_match_the_layout_ssot). Two
+    # hand-kept sets here had drifted with the schemas (Spacer, Divider —
+    # no Layout tool knows them — and ten Layout components missing).
+    VALID_SCREEN_COMPONENT_TYPES = frozenset(
+        SCREEN_SPEC_SCHEMA["$defs"]["component"]["properties"]["type"]["enum"])
 
     # Valid component types for component specs (no TabView, SafeAreaView)
-    VALID_COMPONENT_TYPES = {
-        "View", "ScrollView",
-        "Label", "TextField", "TextView",
-        "Button", "Image", "Collection",
-        "SelectBox", "CheckBox", "Switch", "Web",
-        "Spacer", "Divider", "Indicator"
-    }
+    VALID_COMPONENT_TYPES = frozenset(
+        COMPONENT_SPEC_SCHEMA["$defs"]["component"]["properties"]["type"]["enum"])
 
     # Valid component categories
     VALID_COMPONENT_CATEGORIES = {
@@ -1113,10 +1106,11 @@ class SpecValidator:
     # Layout form (validated by jui build, not here): {type: "Embed", id, screen, ...}
     # See specification-rules.md (5) and docs/plans/2026-05-11-embed-feature.md.
 
-    # v1 supports 'delegate' only. 'isolated' (private nav stack) is
-    # deferred to v1.5. Keep this tuple aligned with the navigationMode
-    # enum in shared/core/attribute_definitions.json :: Embed.
-    _EMBED_VALID_NAV_MODES = ("delegate",)
+    # The schema's enum, which is the Layout SSoT's Embed.navigationMode
+    # (test_spec_enums_match_the_layout_ssot). It was ("delegate",) with a
+    # note to keep it aligned with the SSoT, which had delegate and isolated.
+    _EMBED_VALID_NAV_MODES = tuple(
+        SCREEN_SPEC_SCHEMA["$defs"]["embedEntry"]["properties"]["navigationMode"]["enum"])
 
     def _validate_embeds_section(self, embeds: Any, result: SpecValidationResult) -> None:
         """Validate structure.embeds[] — local-only checks.
