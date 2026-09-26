@@ -4,6 +4,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/static_seed'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -170,7 +171,7 @@ module KjuiTools
           # the Dynamic runtime honoured it (DynamicToggleComponent). Built as a
           # separate string so it can be placed either side.
           label_code = build_label_code(json_data, depth, required_imports)
-          label_position = (json_data['labelPosition'] || 'leading').to_s.downcase
+          label_position = JsonUIShared::EnumSpelling.lowered(json_data['labelPosition'] || 'leading', 'Switch', 'labelPosition').to_s
           code += label_code unless label_position == 'trailing'
 
           # Switch

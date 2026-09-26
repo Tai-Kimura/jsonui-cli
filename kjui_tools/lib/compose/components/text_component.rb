@@ -5,6 +5,7 @@ require_relative '../helpers/visibility_helper'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -478,7 +479,7 @@ module KjuiTools
           # value untouched — matches the original silent-skip semantics
           # for those modes.
           if json_data['lineBreakMode']
-            case json_data['lineBreakMode'].downcase
+            case JsonUIShared::EnumSpelling.lowered(json_data['lineBreakMode'], 'Label', 'lineBreakMode')
             when 'clip'
               overflow_value = 'TextOverflow.Clip'
             when 'tail', 'word'

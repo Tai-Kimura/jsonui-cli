@@ -372,7 +372,7 @@ module SjuiTools
             if parent_orientation == 'horizontal'
               # In horizontal stack with weight - fill width
               # Add alignment based on textAlign
-              frame_alignment = case @component['textAlign'].to_s.downcase
+              frame_alignment = case JsonUIShared::EnumSpelling.lowered(@component['textAlign'], 'Label', 'textAlign')
               when 'center'
                 '.center'
               when 'right', 'trailing'

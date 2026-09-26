@@ -189,7 +189,7 @@ module RjuiTools
           # equalSpacing / equalCentering would compute; it says nothing about
           # size, so the size values still apply underneath it (the canon's
           # spacingWins clause).
-          distribution = attributes['distribution'].to_s.downcase
+          distribution = JsonUIShared::EnumSpelling.lowered(attributes['distribution'], 'View', 'distribution').to_s
           if (justify = DISTRIBUTION_JUSTIFY[distribution]) && !attributes['spacing']
             classes << justify
           end

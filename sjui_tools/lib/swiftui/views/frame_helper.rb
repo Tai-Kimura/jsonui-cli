@@ -292,9 +292,9 @@ module SjuiTools
 
                         []
                       elsif gravity.is_a?(Array)
-                        gravity.map { |g| g.to_s.strip.downcase }
+                        gravity.map { |g| JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity') }.compact
                       else
-                        gravity.to_s.split('|').map { |g| g.strip.downcase }
+                        gravity.to_s.split('|').map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') }.compact
                       end
 
           h = nil
@@ -346,9 +346,9 @@ module SjuiTools
           v = 'top'  # デフォルト
           if gravity
             gravities = if gravity.is_a?(Array)
-                          gravity.map { |g| g.to_s.strip.downcase }
+                          gravity.map { |g| JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity') }.compact
                         else
-                          gravity.to_s.split('|').map { |g| g.strip.downcase }
+                          gravity.to_s.split('|').map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') }.compact
                         end
             gravities.each do |g|
               case g
@@ -360,7 +360,7 @@ module SjuiTools
           end
 
           # textAlignから横位置を取得
-          h = case text_align.to_s.downcase
+          h = case JsonUIShared::EnumSpelling.lowered(text_align, @component['type'], 'textAlign')
               when 'center' then 'center'
               when 'right', 'trailing' then 'trailing'
               else 'leading'

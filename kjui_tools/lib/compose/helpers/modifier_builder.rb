@@ -7,6 +7,7 @@ require_relative 'resource_resolver'
 require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
 require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -449,9 +450,9 @@ module KjuiTools
           label_valign = nil
           if is_label && json_data['gravity']
             gravity_parts = if json_data['gravity'].is_a?(Array)
-                              json_data['gravity'].map { |g| g.to_s.strip.downcase }
+                              json_data['gravity'].map { |g| JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity') }.compact
                             else
-                              json_data['gravity'].to_s.split('|').map { |g| g.strip.downcase }
+                              json_data['gravity'].to_s.split('|').map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') }.compact
                             end
             if gravity_parts.include?('bottom')
               label_valign = 'Alignment.Bottom'
@@ -690,8 +691,8 @@ module KjuiTools
           if json_data['effectStyle'] && json_data['type'] != 'Blur' && json_data['type'] != 'BlurView'
             required_imports&.add(:background)
             required_imports&.add(:blur)
-            modifiers << ".background(#{EffectStyleHelper.scrim(json_data['effectStyle'])})"
-            modifiers << ".blur(#{EffectStyleHelper.blur_dp(json_data['effectStyle'])}.dp)"
+            modifiers << ".background(#{EffectStyleHelper.scrim(json_data['effectStyle'], json_data['type'])})"
+            modifiers << ".blur(#{EffectStyleHelper.blur_dp(json_data['effectStyle'], json_data['type'])}.dp)"
           end
 
           # clipToBounds — declared boolean|binding. A plain truthiness test

@@ -13,6 +13,7 @@ require_relative '../binding/binding_handler_registry'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/tap_accessibility'
 require_relative '../../core/layout_path'
+require_relative '../../core/enum_spelling'
 require_relative '../../core/binding_validator_core'
 require_relative '../../core/string_literals'
 require_relative '../helpers/string_manager_helper'
@@ -1564,7 +1565,7 @@ module SjuiTools
         INDICATOR_SIZE_SCALES = { 'large' => 1.5, 'small' => 0.8 }.freeze
 
         def indicator_size_scale(style)
-          INDICATOR_SIZE_SCALES.fetch(style.to_s.downcase, 1.0)
+          INDICATOR_SIZE_SCALES.fetch(JsonUIShared::EnumSpelling.lowered(style, @component['type'], 'indicatorStyle').to_s, 1.0)
         end
 
         # The border overlay this component declares, or nil when it declares
@@ -1818,7 +1819,7 @@ module SjuiTools
         # the two must not be merged, and are not — the TextField converter
         # never reaches this overlay.
         def stroke_style_argument(border_width, style)
-          case style.to_s.downcase
+          case JsonUIShared::EnumSpelling.lowered(style, 'common', 'borderStyle')
           when 'dashed'
             "style: StrokeStyle(lineWidth: #{border_width}, dash: [6, 3])"
           when 'dotted'

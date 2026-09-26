@@ -88,7 +88,7 @@ module RjuiTools
         # `loading` — the native lazy/eager fetch hint, passed through
         # unchanged when it is one of the two values the browser knows.
         def loading_attr
-          loading = attributes['loading'].to_s.downcase
+          loading = JsonUIShared::EnumSpelling.lowered(attributes['loading'], 'Image', 'loading').to_s
           return '' unless %w[lazy eager].include?(loading)
 
           " loading=\"#{loading}\""

@@ -8,6 +8,7 @@ require_relative '../helpers/binding_expression'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -408,7 +409,7 @@ module KjuiTools
           if json_data['lineBreakMode']
             # Note: For multi-line TextField, overflow is less relevant
             # but we include it for completeness
-            case json_data['lineBreakMode'].to_s.downcase
+            case JsonUIShared::EnumSpelling.lowered(json_data['lineBreakMode'], 'TextView', 'lineBreakMode')
             when 'clip'
               code += "\n" + indent("// lineBreakMode: clip", depth + 1)
             when 'tail', 'truncatetail'

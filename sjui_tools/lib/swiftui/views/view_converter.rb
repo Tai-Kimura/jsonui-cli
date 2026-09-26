@@ -188,7 +188,7 @@ module SjuiTools
             # it used to share with `equalSpacing` (the GAP half). Both values
             # emitting one between-children Spacer made them the same picture.
             # F's dynamic half is SwiftJsonUI 4801af7, `implicitWeight`.
-            fills_equally = @component['distribution'].to_s.downcase == 'fillequally'
+            fills_equally = JsonUIShared::EnumSpelling.lowered(@component['distribution'], 'View', 'distribution') == 'fillequally'
             has_weights = fills_equally || children.any? { |child|
               weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight']).first
             }
@@ -546,7 +546,7 @@ module SjuiTools
         # bottom of the size topic's explicit > bounds > fill order, so only
         # an undeclared axis grows.
         def apply_distribution_fill(child, distribution, orientation)
-          return unless distribution.to_s.downcase == 'fill'
+          return unless JsonUIShared::EnumSpelling.lowered(distribution, 'View', 'distribution') == 'fill'
           return unless orientation == 'horizontal' || orientation == 'vertical'
 
           axis = orientation == 'horizontal' ? 'width' : 'height'

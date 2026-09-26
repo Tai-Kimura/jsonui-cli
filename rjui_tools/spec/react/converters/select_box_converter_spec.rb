@@ -2,6 +2,7 @@
 
 require_relative '../../spec_helper'
 require 'react/converters/select_box_converter'
+require 'react/converters/view_converter'
 
 RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
   let(:default_config) { { 'use_tailwind' => true } }
@@ -615,5 +616,34 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include('data.onDayChange?.(e.target.value)')
       end
     end
+  end
+end
+
+# An enum value is its declared spelling, case and all (1.9.0): a spelling
+# declared in no case is drawn as no declared value is — the default — on
+# every path, as the validator names it. The two values the ruling names:
+# View.orientation declares `horizontal`, SelectBox.selectItemType `Date`.
+RSpec.describe 'rjui: an enum value is its declared spelling, case and all' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  def view_classes(orientation)
+    kids = [{ 'type' => 'Label', 'text' => 'a' }, { 'type' => 'Label', 'text' => 'b' }]
+    RjuiTools::React::Converters::ViewConverter.new({ 'type' => 'View', 'orientation' => orientation, 'child' => kids }, config)
+                                                .send(:build_class_name)
+  end
+
+  def date_picker?(item_type)
+    RjuiTools::React::Converters::SelectBoxConverter.new({ 'class' => 'SelectBox', 'id' => 's', 'selectItemType' => item_type }, config)
+                                                     .send(:date_picker?)
+  end
+
+  it "orientation: 'horizontal' is a flex row; 'Horizontal' is not" do
+    expect(view_classes('horizontal')).to include('flex-row')
+    expect(view_classes('Horizontal')).not_to include('flex-row')
+  end
+
+  it "selectItemType: 'Date' is a date picker; 'date' is not" do
+    expect(date_picker?('Date')).to be(true)
+    expect(date_picker?('date')).to be(false)
   end
 end

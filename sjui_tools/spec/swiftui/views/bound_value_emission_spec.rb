@@ -170,8 +170,11 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
 
       bound = convert(:LabelConverter, 'type' => 'Label', 'text' => 'a', 'textAlign' => '@{align}')
       expect_no_leak(bound)
-      expect(bound).to include('"center": .center')
-      expect(bound).to include('[(data.align ?? "").lowercased()] ?? .leading)')
+      # Keyed by each declared spelling and looked up as the value is: a
+      # value is its declared spelling, case and all (1.9.0).
+      expect(bound).to include('"center": .center').and include('"Center": .center')
+      expect(bound).to include('[(data.align ?? "")] ?? .leading)')
+      expect(bound).not_to include('lowercased()')
     end
 
     it 'TextField contentType stays Optional so an unknown value turns autofill off' do

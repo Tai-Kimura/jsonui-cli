@@ -309,10 +309,10 @@ RSpec.describe 'bound value emitters' do
     end
 
     it 'leaves Blur to its own richer builder' do
-      out = convert({ 'type' => 'Blur', 'effectStyle' => 'Thin' },
+      out = convert({ 'type' => 'Blur', 'effectStyle' => 'Dark' },
                     RjuiTools::React::Converters::BlurConverter)
       expect(out.scan('backdropFilter').length).to eq(1), 'base and Blur both emitted'
-      expect(out).to include("blur(8px)")
+      expect(out).to include("rgba(0, 0, 0, 0.5)")
     end
 
     # A Blur with no declared style falls back to `regular`, whose radius is

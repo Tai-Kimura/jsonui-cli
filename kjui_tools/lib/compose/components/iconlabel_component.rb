@@ -6,6 +6,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -37,7 +38,7 @@ module KjuiTools
         DEFAULT_ICON_SIZE = 24
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          position = (json_data['iconPosition'] || 'Left').to_s.downcase
+          position = JsonUIShared::EnumSpelling.lowered(json_data['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
           vertical = %w[top bottom].include?(position)
           icon_first = !%w[right bottom].include?(position)
 

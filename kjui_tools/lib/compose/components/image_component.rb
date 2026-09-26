@@ -4,6 +4,7 @@ require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/image_accessibility_helper'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -132,7 +133,7 @@ module KjuiTools
         end
 
         def self.rendering_color_filter(json_data, required_imports)
-          mode = json_data['renderingMode'].to_s.downcase
+          mode = JsonUIShared::EnumSpelling.lowered(json_data['renderingMode'], 'Image', 'renderingMode').to_s
           tint = json_data['tintColor'] || json_data['iconColor']
 
           case mode

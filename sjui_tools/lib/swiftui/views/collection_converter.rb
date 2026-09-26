@@ -166,7 +166,7 @@ module SjuiTools
           # alias spelling of flow (SSoT valueAliases, 2026-08-03
           # unification) — dynamic folds it via the generated enum, so the
           # raw-reading codegen must accept it too.
-          is_flow = %w[flow leftaligned].include?(layout.to_s.downcase)
+          is_flow = %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
 
           if !is_lazy
             generate_non_lazy(
@@ -733,7 +733,7 @@ module SjuiTools
         # ORTHOGONAL to `hideSeparator`: this picks the chrome, that hides the
         # separators, and neither overrides the other.
         def list_style_to_swiftui
-          LIST_STYLES[@component['listStyle'].to_s.downcase] || LIST_STYLES['plain']
+          LIST_STYLES[JsonUIShared::EnumSpelling.lowered(@component['listStyle'], 'Collection', 'listStyle')] || LIST_STYLES['plain']
         end
 
         # Non-lazy path: no ScrollView, no Lazy* containers. The Collection is
@@ -1798,7 +1798,7 @@ module SjuiTools
           return false if collection_lazy_mode == :none
 
           layout = @component['layout'] || @component['orientation'] || 'vertical'
-          return false unless %w[flow leftaligned].include?(layout.to_s.downcase)
+          return false unless %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
 
           height = @component['height']
           height.nil? || height == 'wrapContent'

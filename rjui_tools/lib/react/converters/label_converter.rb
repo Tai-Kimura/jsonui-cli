@@ -269,7 +269,7 @@ module RjuiTools
 
           classes = [TailwindMapper.map_text_align(value)]
           unless multi_run_text?
-            case value.downcase
+            case JsonUIShared::EnumSpelling.lowered(value, 'Label', 'textAlign')
             when 'center' then classes << 'justify-center'
             when 'right' then classes << 'justify-end'
             when 'left' then classes << 'justify-start'
@@ -353,7 +353,7 @@ module RjuiTools
             end
 
             # textAlign → justify-* for horizontal alignment within flex
-            case attributes['textAlign']&.downcase
+            case JsonUIShared::EnumSpelling.lowered(attributes['textAlign'], 'Label', 'textAlign')
             when 'center'
               classes << 'justify-center'
             when 'right'

@@ -81,7 +81,7 @@ module RjuiTools
           return "#{attributes['angle']}deg" if attributes['angle']
 
           # Fall back to gradientDirection
-          direction = (attributes['gradientDirection'] || attributes['direction'] || 'Vertical').downcase
+          direction = JsonUIShared::EnumSpelling.lowered(attributes['gradientDirection'] || attributes['direction'] || 'Vertical', 'GradientView', 'gradientDirection').to_s
           case direction
           when 'horizontal', 'lefttoright'
             'to right'

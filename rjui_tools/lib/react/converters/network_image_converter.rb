@@ -113,7 +113,7 @@ module RjuiTools
 
         # Native lazy/eager fetch hint, forwarded to the underlying <img>.
         def loading_attr
-          loading = attributes['loading'].to_s.downcase
+          loading = JsonUIShared::EnumSpelling.lowered(attributes['loading'], 'NetworkImage', 'loading').to_s
           return '' unless %w[lazy eager].include?(loading)
 
           " loading=\"#{loading}\""

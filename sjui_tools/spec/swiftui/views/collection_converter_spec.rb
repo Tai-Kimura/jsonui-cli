@@ -24,6 +24,22 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(result).to eq('TestView')
     end
 
+    # A node written inline (no className) names no layout: not drawn — the
+    # validator says so (inline_layout?; 4f's ruling, 1.9.0). It raised
+    # NoMethodError, and the build stopped.
+    it 'names no layout for a node written inline' do
+      expect(converter.send(:extract_view_name, { 'type' => 'Label', 'text' => 'x' })).to be_nil
+    end
+
+    it 'converts a Collection whose section holds an inline cell, drawing its named cell only' do
+      node = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'cellIdProperty' => 'id',
+               'sections' => [{ 'cell' => { 'type' => 'Label', 'text' => 'INLINE_CELL_MARK' } }, { 'cell' => 'row_cell' }] }
+      code = nil
+      expect { code = described_class.new(node).convert }.not_to raise_error
+      expect(code).not_to include('INLINE_CELL_MARK')
+      expect(code).to include('RowCell')
+    end
+
     it 'adds View suffix if missing' do
       result = converter.send(:extract_view_name, 'MyComponent')
       expect(result).to eq('MyComponentView')

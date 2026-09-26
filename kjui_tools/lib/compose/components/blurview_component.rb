@@ -3,6 +3,7 @@
 require_relative '../helpers/effect_style_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -44,7 +45,7 @@ module KjuiTools
           # explicit background is declared, and `blurRadius` (default 10)
           # is a plain radius, NOT derived from the style — mirrors
           # DynamicBlurViewComponent (effectStyleColor + resolveFloat).
-          effect_style = json_data['effectStyle'].to_s.downcase
+          effect_style = JsonUIShared::EnumSpelling.lowered(json_data['effectStyle'], 'Blur', 'effectStyle').to_s
           blur_radius = json_data['blurRadius'] || 10
 
           bg_source = json_data['background'] || json_data['backgroundColor']

@@ -23,7 +23,7 @@ RSpec.describe RjuiTools::React::Converters::BlurConverter do
 
     context 'with effectStyle light' do
       it 'applies light blur effect' do
-        converter = create_converter({ 'class' => 'Blur', 'effectStyle' => 'light' })
+        converter = create_converter({ 'class' => 'Blur', 'effectStyle' => 'Light' })
         result = converter.convert
         expect(result).to include('rgba(255, 255, 255, 0.7)')
       end
@@ -31,17 +31,24 @@ RSpec.describe RjuiTools::React::Converters::BlurConverter do
 
     context 'with effectStyle dark' do
       it 'applies dark blur effect' do
-        converter = create_converter({ 'class' => 'Blur', 'effectStyle' => 'dark' })
+        converter = create_converter({ 'class' => 'Blur', 'effectStyle' => 'Dark' })
         result = converter.convert
         expect(result).to include('rgba(0, 0, 0, 0.5)')
       end
     end
 
-    context 'with effectStyle thick' do
-      it 'applies thick blur effect' do
-        converter = create_converter({ 'class' => 'Blur', 'effectStyle' => 'thick' })
-        result = converter.convert
-        expect(result).to include("blur(16px)")
+    # Blur declares Light / Dark / ExtraLight; the thickness names are
+    # common's, for any other node. On a Blur the validator names Thick, and
+    # the Blur draws its default, as for any undeclared value — and a
+    # lowercase 'dark' is declared in no case.
+    context 'with an effectStyle Blur does not declare' do
+      it 'draws the default material' do
+        %w[Thick dark].each do |style|
+          result = create_converter({ 'class' => 'Blur', 'effectStyle' => style }).convert
+          expect(result).to include('blur(12px)'), style
+          expect(result).not_to include('blur(16px)'), style
+          expect(result).not_to include('rgba(0, 0, 0, 0.5)'), style
+        end
       end
     end
 

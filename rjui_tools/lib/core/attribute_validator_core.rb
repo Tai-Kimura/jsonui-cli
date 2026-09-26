@@ -3,6 +3,7 @@
 
 require 'json'
 require_relative 'tap_accessibility'
+require_relative 'enum_spelling'
 
 module JsonUIShared
   # Validates JSON component attributes against the SSoT definitions
@@ -847,7 +848,9 @@ module JsonUIShared
     end
 
     def check_flow_columns(component)
-      layout = (component['layout'] || component['orientation']).to_s.downcase
+      # `orientation` is read as the layout when `layout` is absent, as the
+      # converters read it — so its value is judged by layout's spellings.
+      layout = JsonUIShared::EnumSpelling.lowered(component['layout'] || component['orientation'], 'Collection', 'layout')
       return unless %w[flow leftaligned].include?(layout) && component['horizontalScroll'] != true
 
       said = 'has no effect on a flow Collection (it wraps by content width)'
@@ -1133,7 +1136,7 @@ module JsonUIShared
       return unless component.key?('distribution') && component.key?('gravity')
 
       main_axis_values =
-        case component['orientation'].to_s.downcase
+        case JsonUIShared::EnumSpelling.lowered(component['orientation'], 'View', 'orientation')
         when 'horizontal' then %w[left right centerHorizontal]
         when 'vertical' then %w[top bottom centerVertical]
         else return # no linear axis — no main-axis conflict possible

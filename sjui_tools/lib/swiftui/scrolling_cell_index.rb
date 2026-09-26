@@ -3,6 +3,7 @@
 require 'json'
 require 'set'
 require_relative '../core/screen_index'
+require_relative '../core/enum_spelling'
 
 module SjuiTools
   module SwiftUI
@@ -83,7 +84,7 @@ module SjuiTools
       def self.horizontal?(node)
         return true if node['horizontalScroll'] == true
 
-        %w[layout orientation].any? { |key| node[key].to_s.casecmp('horizontal').zero? }
+        %w[layout orientation].any? { |key| JsonUIShared::EnumSpelling.lowered(node[key], 'Collection', key) == 'horizontal' }
       end
 
       # Every layout this Collection instantiates: section-level cell /

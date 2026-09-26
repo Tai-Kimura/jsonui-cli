@@ -182,17 +182,17 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
-          'contentMode' => 'aspectFit'
+          'contentMode' => 'AspectFit'
         })
         classes = converter.send(:build_class_name)
         expect(classes).to include('object-contain')
       end
 
-      it 'maps aspectFill to object-cover' do
+      it 'maps AspectFill to object-cover' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
-          'contentMode' => 'aspectFill'
+          'contentMode' => 'AspectFill'
         })
         classes = converter.send(:build_class_name)
         expect(classes).to include('object-cover')
@@ -209,11 +209,11 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
         expect(classes).to include('object-center')
       end
 
-      it 'maps scaleToFill to object-fill' do
+      it 'maps ScaleToFill to object-fill' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
-          'contentMode' => 'scaleToFill'
+          'contentMode' => 'ScaleToFill'
         })
         classes = converter.send(:build_class_name)
         expect(classes).to include('object-fill')

@@ -11,6 +11,7 @@ require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
 require_relative '../helpers/font_spec_helper'
+require_relative '../../core/enum_spelling'
 
 module RjuiTools
   module React
@@ -318,7 +319,7 @@ module RjuiTools
           # lookup, and no second copy of the vocabulary. `map_text_align`
           # matched on a `case` and silently returned '' for a binding.
           classes << TailwindMapper.map_text_align(
-            bound_enum_style('textAlign', attributes['textAlign'])
+            bound_enum_style('textAlign', attributes['textAlign']), enum_section
           )
 
           # Orientation (flex)
@@ -717,6 +718,12 @@ module RjuiTools
         # specs, or a defaulted root). Derived from the converter class
         # name: SliderConverter → 'Slider'. An explicit `type` always
         # wins (SwitchConverter also serves 'Toggle' nodes, etc.).
+        # The section an enum value is judged on: the node's type, as the
+        # validator judges it (`class` keyed nodes: the converter's own).
+        def enum_section
+          json['type'] || fallback_component_type || 'View'
+        end
+
         def fallback_component_type
           name = self.class.name.to_s.split('::').last
           return nil unless name&.end_with?('Converter')
@@ -1094,7 +1101,7 @@ module RjuiTools
 
         # The lowercased SIZE value this container declares, or nil.
         def distribution_size_value
-          key = attributes['distribution'].to_s.downcase
+          key = JsonUIShared::EnumSpelling.lowered(attributes['distribution'], 'View', 'distribution').to_s
           DISTRIBUTION_CHILD_CLASS.key?(key) ? key : nil
         end
 
@@ -1140,7 +1147,7 @@ module RjuiTools
 
         # The declared value, normalised. `regular` when absent.
         def effect_style_key(value = attributes['effectStyle'])
-          normalized = value.to_s.downcase.gsub(/\s+/, '')
+          normalized = JsonUIShared::EnumSpelling.lowered(value, enum_section, 'effectStyle').to_s.gsub(/\s+/, '')
           normalized.empty? ? 'regular' : normalized
         end
 
@@ -1159,7 +1166,7 @@ module RjuiTools
         # The Tailwind classes for a STATIC contentMode. `none` is the only fit
         # that also needs a position, which is why the two tables are separate.
         def content_mode_classes(value)
-          key = value.to_s.downcase
+          key = JsonUIShared::EnumSpelling.lowered(value, enum_section, 'contentMode').to_s
           fit = CONTENT_MODE_OBJECT_FIT.fetch(key, CONTENT_MODE_DEFAULT_FIT)
           position = CONTENT_MODE_OBJECT_POSITION[key]
           position ? "object-#{fit} object-#{position}" : "object-#{fit}"
@@ -1167,7 +1174,7 @@ module RjuiTools
 
         # The same value as the NetworkImageProps `contentMode` union wants.
         def content_mode_prop(value)
-          CONTENT_MODE_OBJECT_FIT.fetch(value.to_s.downcase, CONTENT_MODE_DEFAULT_FIT)
+          CONTENT_MODE_OBJECT_FIT.fetch(JsonUIShared::EnumSpelling.lowered(value, enum_section, 'contentMode').to_s, CONTENT_MODE_DEFAULT_FIT)
         end
 
         # Route a bound contentMode to object-fit / object-position. Returns
@@ -1974,7 +1981,7 @@ module RjuiTools
         # the same ideas (inputMode / enterKeyHint). One copy so the two
         # converters cannot drift.
         def map_input_mode(input)
-          case input&.downcase
+          case JsonUIShared::EnumSpelling.lowered(input, 'TextField', 'input')
           when 'number', 'numberpad'
             'numeric'
           # `signedDecimal` collapses onto `decimal` here for the same reason

@@ -384,9 +384,13 @@ RSpec.describe SjuiTools::Core::TypeConverter do
         expect(described_class.convert_default_value('invisible', 'Visibility')).to eq('.invisible')
       end
 
-      it 'handles case-insensitive values' do
-        expect(described_class.convert_default_value('VISIBLE', 'Visibility')).to eq('.visible')
-        expect(described_class.convert_default_value('Gone', 'Visibility')).to eq('.gone')
+      # A value is its declared spelling, case and all (4f's ruling, 1.9.0):
+      # 'VISIBLE' / 'Gone' are declared in no case, so they are not these
+      # values; the validator names them. They were taken case-insensitively.
+      it 'takes the declared spelling only' do
+        expect(described_class.convert_default_value('visible', 'Visibility')).to eq('.visible')
+        expect(described_class.convert_default_value('VISIBLE', 'Visibility')).not_to eq('.visible')
+        expect(described_class.convert_default_value('Gone', 'Visibility')).not_to eq('.gone')
       end
 
       it 'preserves already formatted values' do

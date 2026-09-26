@@ -179,7 +179,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
         {
           'type' => 'TextField',
           'hint' => 'URL',
-          'input' => 'URL'
+          'input' => 'url'
         }
       end
 

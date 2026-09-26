@@ -89,27 +89,27 @@ module SjuiTools
         }.freeze
 
         def text_alignment_to_swiftui(alignment)
-          TEXT_ALIGNMENTS[alignment.to_s.downcase] || '.leading'
+          TEXT_ALIGNMENTS[JsonUIShared::EnumSpelling.lowered(alignment, @component && @component['type'], 'textAlign')] || '.leading'
         end
 
         def bound_text_alignment(value)
-          bound_enum(value, vocabulary('textAlign', TEXT_ALIGNMENTS),
+          bound_enum(value, declared_vocabulary('textAlign', TEXT_ALIGNMENTS), exact: true,
                      default: '.leading', type: 'TextAlignment')
         end
 
         def input_to_keyboard_type(input)
-          KEYBOARD_TYPES[input.to_s.downcase] || '.default'
+          KEYBOARD_TYPES[JsonUIShared::EnumSpelling.lowered(input, @component && @component['type'], 'input')] || '.default'
         end
 
         def bound_keyboard_type(value)
-          bound_enum(value, vocabulary('input', KEYBOARD_TYPES),
+          bound_enum(value, declared_vocabulary('input', KEYBOARD_TYPES), exact: true,
                      default: '.default', type: 'UIKeyboardType')
         end
 
         # Unknown values warn instead of silently degrading to `.none`
         # (sjui-textfield-contenttype-newpassword-not-mapped).
         def map_content_type(type)
-          mapped = CONTENT_TYPES[type.to_s.downcase]
+          mapped = CONTENT_TYPES[JsonUIShared::EnumSpelling.lowered(type, 'TextField', 'contentType')]
           return mapped if mapped
 
           puts "Warning: unknown contentType '#{type}' — emitting .textContentType(.none); add a mapping if this is a canonical value"
@@ -182,6 +182,14 @@ module SjuiTools
         # binding never passes through it.
         def vocabulary(attribute, mapping)
           AttributeVocabulary.widen(@component && @component['type'] || 'View', attribute, mapping)
+        end
+
+        # The same table keyed by each spelling the SSoT declares, as written —
+        # what a run-time lookup of a bound value matches (bound_enum exact:).
+        def declared_vocabulary(attribute, mapping)
+          widened = vocabulary(attribute, mapping)
+          JsonUIShared::EnumSpelling.declared(@component && @component['type'] || 'View', attribute)
+                                    .map { |spelling| (literal = widened[spelling.downcase]) && [spelling, literal] }.compact.to_h
         end
       end
     end
