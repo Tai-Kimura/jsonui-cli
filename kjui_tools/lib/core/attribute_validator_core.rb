@@ -212,6 +212,9 @@ module JsonUIShared
       # A text field's declared onClick is not called
       check_text_field_click(merged_component, type)
 
+      # A style named inside a responsive override is not applied
+      check_responsive_override_style(merged_component)
+
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
 
@@ -806,6 +809,23 @@ module JsonUIShared
     # A flow Collection: `layout` (or `orientation`) flow or one of its alias
     # spellings, not turned horizontal by `horizontalScroll: true` — the
     # reading every codegen routes by.
+    # A `style` inside a responsive override (`responsive.<class>.style`): an
+    # override's attributes are its own, and no path applies a style named
+    # there — sjui / kjui codegen, rjui and both Dynamic runtimes did not; jui's
+    # normalizer did, so the hotloader drew what no build draws (4f's ruling,
+    # 1.9.0: named on every path, applied by none). The same sentence as the
+    # normalizer's StyleMerger and SwiftJsonUI Dynamic's ResponsiveResolver.
+    STYLE_IN_RESPONSIVE_OVERRIDE =
+      "'style' inside a responsive override is not applied — put the attributes in the override"
+
+    def check_responsive_override_style(component)
+      responsive = component['responsive']
+      return unless responsive.is_a?(Hash)
+      return unless responsive.values.any? { |override| override.is_a?(Hash) && override.key?('style') }
+
+      add_warning(STYLE_IN_RESPONSIVE_OVERRIDE)
+    end
+
     def check_flow_columns(component)
       layout = (component['layout'] || component['orientation']).to_s.downcase
       return unless %w[flow leftaligned].include?(layout) && component['horizontalScroll'] != true

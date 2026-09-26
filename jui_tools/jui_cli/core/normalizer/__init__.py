@@ -101,6 +101,9 @@ def normalize(
     include_expander = IncludeExpander(Path(layouts_dir), style_merger)
     working = style_merger.resolve(copy.deepcopy(working))
     working = include_expander.expand(working)
+    for w in style_merger.warnings:
+        if w not in warnings:
+            warnings.append(w)
     if platform:
         working = filter_for_platform(working, platform)
     # Styles / includes may themselves use alias spellings — run a second

@@ -14,12 +14,28 @@ from pathlib import Path
 from typing import Any
 
 
+#: The sentence every path says for a ``style`` named inside a responsive
+#: override (the shared validator, SwiftJsonUI Dynamic's ResponsiveResolver).
+STYLE_IN_RESPONSIVE_OVERRIDE = (
+    "'style' inside a responsive override is not applied — put the attributes in the override"
+)
+
+
 class StyleMerger:
-    """Resolves ``style`` references recursively across a layout tree."""
+    """Resolves ``style`` references recursively across a layout tree.
+
+    Not inside a ``responsive`` override: an override's attributes are its
+    own, and no path applies a style named there (4f's ruling on
+    control-onclick-is-called-differently-on-every-path's style family,
+    1.9.0 — sjui / kjui codegen, rjui and both Dynamic runtimes do not). It
+    is dropped from the override and named once in :attr:`warnings`. This
+    merger applied it, so the hotloader drew what no build draws.
+    """
 
     def __init__(self, styles_dir: Path):
         self._styles_dir = styles_dir
         self._cache: dict[str, dict[str, Any] | None] = {}
+        self.warnings: list[str] = []
 
     def resolve(self, component: Any) -> Any:
         if not isinstance(component, dict):
@@ -52,6 +68,9 @@ class StyleMerger:
         for key, value in list(component.items()):
             if key in ("child", "children"):
                 continue
+            if key == "responsive" and isinstance(value, dict):
+                component[key] = self._without_override_styles(value)
+                continue
             if isinstance(value, dict):
                 component[key] = self.resolve(value)
             elif isinstance(value, list):
@@ -60,6 +79,16 @@ class StyleMerger:
                 ]
 
         return component
+
+    def _without_override_styles(self, responsive: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for size_class, override in responsive.items():
+            if isinstance(override, dict) and "style" in override:
+                override = {k: v for k, v in override.items() if k != "style"}
+                if STYLE_IN_RESPONSIVE_OVERRIDE not in self.warnings:
+                    self.warnings.append(STYLE_IN_RESPONSIVE_OVERRIDE)
+            out[size_class] = self.resolve(override) if isinstance(override, dict) else override
+        return out
 
     def _load_style(self, style_name: str) -> dict[str, Any] | None:
         if style_name in self._cache:
