@@ -1723,13 +1723,8 @@ module KjuiTools
         def self.build_lifecycle_effects(json_data, depth, required_imports = nil)
           result = { before: "", after: "" }
 
-          if json_data['onAppear']
+          if json_data['onAppear'] && !(property = lifecycle_handler_name(json_data['onAppear'])).empty?
             required_imports&.add(:launched_effect)
-            handler = json_data['onAppear']
-            # Strip @{} binding syntax if present
-            property = is_binding?(handler) ? extract_binding_property(handler) : handler
-            # Also strip : prefix if present
-            property = property.gsub(':', '') if property.include?(':')
 
             result[:before] += indent("// onAppear lifecycle event", depth)
             result[:before] += "\n" + indent("LaunchedEffect(Unit) {", depth)
@@ -1740,13 +1735,8 @@ module KjuiTools
             result[:before] += "\n"
           end
 
-          if json_data['onDisappear']
+          if json_data['onDisappear'] && !(property = lifecycle_handler_name(json_data['onDisappear'])).empty?
             required_imports&.add(:disposable_effect)
-            handler = json_data['onDisappear']
-            # Strip @{} binding syntax if present
-            property = is_binding?(handler) ? extract_binding_property(handler) : handler
-            # Also strip : prefix if present
-            property = property.gsub(':', '') if property.include?(':')
 
             result[:before] += indent("// onDisappear lifecycle event", depth)
             result[:before] += "\n" + indent("DisposableEffect(Unit) {", depth)
@@ -1758,6 +1748,15 @@ module KjuiTools
           end
 
           result
+        end
+
+        # The data name a lifecycle handler calls: `x`, `@{x}` and `x:` are all
+        # `x` ("" for a value that names none — nothing is called for it).
+        def self.lifecycle_handler_name(handler)
+          return '' unless handler.is_a?(String)
+
+          value = handler.strip
+          (value[/\A@\{(.*)\}\z/m, 1] || value).delete(':').strip
         end
 
         # Check if component has lifecycle events

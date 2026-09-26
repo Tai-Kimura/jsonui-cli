@@ -399,7 +399,7 @@ module KjuiTools
         # (see update_generated_file responsive_functions append). Inline
         # avoids both.
         if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Embed' && Helpers::ResponsiveHelper.responsive?(json_data)
-          code = generate_embed_responsive_inline(JsonUIShared::TypeSynonyms.drawn(json_data), depth, parent_type)
+          code = lifecycle_at_leaf(json_data, generate_embed_responsive_inline(JsonUIShared::TypeSynonyms.drawn(json_data), depth, parent_type), depth)
           # The inline path returns early, BEFORE the top-level
           # wrap_with_visibility at the bottom of this method. Embed does not
           # self-wrap (it relies on that bottom wrap for the non-responsive
@@ -417,7 +417,7 @@ module KjuiTools
         # neither in scope, so we inline the if/else at the call site.
         # Mirrors sjui's collection_converter.rb Group { if/else } shape.
         if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Collection' && Helpers::ResponsiveHelper.responsive?(json_data)
-          code = generate_collection_responsive_inline(JsonUIShared::TypeSynonyms.drawn(json_data), depth, parent_type)
+          code = lifecycle_at_leaf(json_data, generate_collection_responsive_inline(JsonUIShared::TypeSynonyms.drawn(json_data), depth, parent_type), depth)
           # Same early-return-before-visibility-wrap bug as the Embed path
           # above. Collection does not self-wrap, so a responsive Collection
           # carrying `visibility: "@{...}"` (e.g. a grid/list display toggle)
@@ -463,17 +463,23 @@ module KjuiTools
               code = undeclared_component(component_type)
             end
           end
+          # the node's onAppear / onDisappear (custom_component_code places an
+          # app's component's); an undeclared type draws nothing to call them
+          code = lifecycle_at_leaf(json_data, code, depth) unless undeclared?(code)
         end
 
         # Wrap with VisibilityWrapper for all components
         # Container types already handle this in handle_container_result, so skip them.
-        # `Embed` is NOT actually a container (EmbedComponent.generate returns a
-        # plain String, not a Hash) so handle_container_result falls through
-        # without wrapping — exclude it from the skip list so this fallback
-        # path applies and `visibility: "@{...}"` on an Embed node actually
-        # gates rendering.
-        unless %w[View ScrollView GradientView CircleView Blur TabView].include?(component_type)
-          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
+        # `Embed` and `TabView` are NOT containers there (their generate
+        # returns a plain String, not a Hash), so handle_container_result
+        # falls through without wrapping — they are not in the skip list, so
+        # this fallback path applies and `visibility: "@{...}"` gates them.
+        # TabView was in it, and a TabView's visibility drew nothing.
+        unless %w[View ScrollView GradientView CircleView Blur].include?(component_type)
+          # TabView's tintColor is its own row (the selected tab's colour),
+          # not common's handed down — it was never wrapped in the tint
+          tinted = component_type == 'TabView' ? code : Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports)
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, tinted, depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 
         provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
@@ -869,6 +875,13 @@ module KjuiTools
           # Fall through to normal generation for other types (responsive already stripped)
           return generate_component(json_data, depth, parent_type, is_root: is_root)
         end
+        # A leaf drawn here is the branch's node: its onAppear / onDisappear
+        # and its visibility, as generate_component gives them — neither was
+        # (a responsive Button's or Image's `visibility` drew nothing). The
+        # View's are in its container result.
+        unless code.is_a?(ContainerContent)
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, lifecycle_at_leaf(json_data, code, depth), depth, @required_imports), depth, @required_imports, parent_type)
+        end
 
         provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
       end
@@ -940,9 +953,32 @@ module KjuiTools
         # The component's own code, not its children's: what app_component_stages reads.
         own_code = result.is_a?(Hash) ? result[:code].to_s : result.to_s
 
-        # Handle container components that return metadata
-        code = result.is_a?(Hash) && result[:children] ? handle_container_result(result, depth, parent_type) : result
-        app_component_stages(json_data, own_code, code, depth)
+        # Handle container components that return metadata. Its onAppear /
+        # onDisappear go around the component (below), not into its content.
+        if result.is_a?(Hash) && result[:children]
+          content = result[:json_data] && result[:json_data].reject { |key, _| LIFECYCLE_KEYS.include?(key) }
+          # a plain String: its content holds no lifecycle, so the one below goes on
+          code = String.new(handle_container_result(result.merge(json_data: content), depth, parent_type))
+        else
+          code = result
+        end
+        code = app_component_stages(json_data, own_code, code, depth)
+        lifecycle_at_leaf(json_data, code, depth, own_code: own_code)
+      end
+
+      # The judge every stage codegen applies around an app's component asks:
+      # does the code its converter emitted for THIS node (its own code, not
+      # its children's) already call one of `names` — the data names the stage
+      # would call? Then the stage is the converter's and is not applied a
+      # second time. The tap, long press, pan and pinch (app_component_stages)
+      # and onAppear / onDisappear (lifecycle_at_leaf) ask it; one helper, so
+      # the two cannot come to answer differently. A name is matched whole:
+      # `data.open` is not `data.openDetail`.
+      def self.converter_calls_any?(own_code, names)
+        names.any? do |name|
+          name = name.to_s
+          !name.empty? && own_code.match?(/\bdata\.#{Regexp.escape(name)}(?![A-Za-z0-9_])/)
+        end
       end
 
       # The handlers an app's component may call itself, and the common stage
@@ -966,7 +1002,7 @@ module KjuiTools
         node = json_data.dup
         APP_COMPONENT_HANDLER_KEYS.each do |key|
           names = JsonUIShared::TapAccessibility.handler_values(node[key]).map { |v| (v[/\A@\{(.*)\}\z/m, 1] || v).strip }
-          node.delete(key) if names.any? { |name| own_code.include?("data.#{name}") }
+          node.delete(key) if self.class.converter_calls_any?(own_code, names)
         end
         node.delete('alpha') if own_code.include?('.alpha(')
         modifiers = Helpers::ModifierBuilder.build_alpha(node, @required_imports) +
@@ -978,6 +1014,53 @@ module KjuiTools
           Helpers::TintHelper.pad(') {', depth) + "\n" +
           Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
           Helpers::TintHelper.pad('}', depth)
+      end
+
+      LIFECYCLE_KEYS = %w[onAppear onDisappear].freeze
+
+      # A container's code whose content already starts with its node's
+      # onAppear / onDisappear (handle_container_result): no exit adds them
+      # again.
+      class ContainerContent < String; end
+
+      # onAppear / onDisappear on a node drawn at an exit that is not a
+      # container's content: the effects before the node's code, where the
+      # node's visibility wrapper (applied after this, at the same exit)
+      # holds them — so a `gone` node, not in the tree, does not call them
+      # and an `invisible` one does (4f's ruling; the container's are at the
+      # start of its content, inside the same wrapper). Each exit that draws
+      # a node calls this: generate_component (a declared type, an app's
+      # component, a responsive Embed / Collection), a responsive branch's
+      # leaf (generate_non_responsive_component), and SafeAreaView's
+      # constrained View / ScrollView (at the start of their content).
+      #
+      # An app's component (`own_code`, the code its converter emitted for the
+      # node): a handler its converter already calls is its own
+      # (converter_calls_any?), not called again.
+      def lifecycle_at_leaf(json_data, code, depth, own_code: nil)
+        return code unless code.is_a?(String) && !code.empty? && !code.is_a?(ContainerContent)
+
+        effects = lifecycle_effects(json_data, depth, own_code: own_code)
+        effects.empty? ? code : effects + code
+      end
+
+      # The node's onAppear / onDisappear effects at `depth` ("" for none),
+      # less a handler an app's converter calls itself.
+      def lifecycle_effects(json_data, depth, own_code: nil)
+        node = json_data.select { |key, _| LIFECYCLE_KEYS.include?(key) }
+        if own_code
+          node.reject! do |_, value|
+            self.class.converter_calls_any?(own_code, [Helpers::ModifierBuilder.lifecycle_handler_name(value)])
+          end
+        end
+        return '' unless Helpers::ModifierBuilder.has_lifecycle_events?(node)
+
+        Helpers::ModifierBuilder.build_lifecycle_effects(node, depth, @required_imports)[:before]
+      end
+
+      # What undeclared_component emits: a comment, nothing drawn.
+      def undeclared?(code)
+        code.is_a?(String) && code.start_with?('// ') && !code.include?("\n")
       end
 
       # What a type no case takes emits. A type this tool draws nothing for:
@@ -1039,7 +1122,8 @@ module KjuiTools
             code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
           end
 
-          code
+          # the node's lifecycle is in its content (above): no exit adds it again
+          json_data ? ContainerContent.new(code) : code
         else
           result
         end
@@ -1308,6 +1392,11 @@ module KjuiTools
         scroll_children = child_data['child'] || child_data['children'] || []
         scroll_children = [scroll_children] unless scroll_children.is_a?(Array)
 
+        # the node's onAppear / onDisappear at the start of its content, as a
+        # container's (handle_container_result); this inline one had none
+        effects = lifecycle_effects(child_data, depth + 1)
+        code += "\n" + effects.chomp unless effects.empty?
+
         code += "\n" + indent("item {", depth + 1)
         scroll_children.each do |scroll_child|
           child_code = generate_component(scroll_child, depth + 2)
@@ -1350,6 +1439,11 @@ module KjuiTools
         # Process children
         view_children = child_data['child'] || child_data['children'] || []
         view_children = [view_children] unless view_children.is_a?(Array)
+
+        # the node's onAppear / onDisappear at the start of its content, as a
+        # container's (handle_container_result); this inline one had none
+        effects = lifecycle_effects(child_data, depth + 1)
+        code += "\n" + effects.chomp unless effects.empty?
 
         view_children.each do |view_child|
           child_code = generate_component(view_child, depth + 1, container)
