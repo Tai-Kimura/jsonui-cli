@@ -130,7 +130,7 @@ def _project(tmp: Path, *, pins: dict, root_pins: dict, installed: list) -> Path
     return project
 
 
-def _jui_build(tmp: Path, project: Path, ruby_script: str) -> tuple[int, str, str]:
+def _jui(tmp: Path, cwd: Path, ruby_script: str, argv: list, path_dirs: tuple = ()) -> tuple[int, str, str]:
     host = _host_ruby()
     fake = tmp / "fake_ruby_version.rb"
     fake.write_text(FAKE_RB)
@@ -141,12 +141,16 @@ def _jui_build(tmp: Path, project: Path, ruby_script: str) -> tuple[int, str, st
     ruby.chmod(0o755)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("RBENV_", "RUBY", "BUNDLE", "GEM_"))}
-    env.update(PATH=f"{fake_bin}{os.pathsep}/usr/bin{os.pathsep}/bin",
+    env.update(PATH=os.pathsep.join([str(fake_bin), *map(str, path_dirs), "/usr/bin", "/bin"]),
                PYTHONPATH=str(REPO / "jui_tools"), RBENV_ROOT=str(tmp / "rbenv"),
                LANG="en_US.UTF-8", LC_ALL="en_US.UTF-8")
-    run = subprocess.run([sys.executable, "-c", "import sys; from jui_cli.cli import main; sys.exit(main(['build']))"],
-                         cwd=project, env=env, capture_output=True, text=True, timeout=300)
+    run = subprocess.run([sys.executable, "-c", f"import sys; from jui_cli.cli import main; sys.exit(main({argv!r}))"],
+                         cwd=cwd, env=env, capture_output=True, text=True, timeout=300)
     return run.returncode, run.stdout + run.stderr, host
+
+
+def _jui_build(tmp: Path, project: Path, ruby_script: str) -> tuple[int, str, str]:
+    return _jui(tmp, project, ruby_script, ["build"])
 
 
 def _floor_line(log: str, tool: str) -> list[str]:
@@ -173,7 +177,9 @@ def test_with_only_a_path_ruby_every_tool_names_it_and_a_pin_is_said_to_have_sel
 
 
 def test_under_rbenv_a_tool_directory_without_a_pin_falls_to_system_and_is_named(tmp_path):
-    # kjui_tools carries no .ruby-version today; sjui_tools and rjui_tools pin 3.2.2.
+    # A tool directory without a .ruby-version (kjui_tools' until jsonui-cli
+    # 1.9.0; all three pin 3.2.2 since, test_the_three_tool_directories_pin_
+    # the_floor_the_suites_run_on).
     project = _project(tmp_path, pins={"sjui": "3.2.2", "rjui": "3.2.2"}, root_pins={}, installed=["3.2.2"])
     rc, log, host = _jui_build(tmp_path, project, RBENV_RUBY)
     assert rc == 1, log
@@ -203,3 +209,73 @@ def test_under_rbenv_a_ruby_version_in_the_platform_root_is_what_a_face_writes_t
     assert rc == 0, log
     assert all(f"REACHED {tool}" in log for tool in TOOLS.values()), log
     assert not any(_floor_line(log, tool) for tool in TOOLS.values()), log
+
+
+def _home_install(tmp: Path, pin: str | None) -> list[Path]:
+    """A home install of the three tools (real bin, stub lib), as bootstrap
+    leaves it: ~/.jsonui-cli/<tool>_tools/bin on PATH, before `jui init`
+    copies anything into the project."""
+    dirs = []
+    for tool in TOOLS.values():
+        tool_dir = tmp / "home" / f"{tool}_tools"
+        (tool_dir / "bin").mkdir(parents=True)
+        (tool_dir / "lib" / "cli").mkdir(parents=True)
+        shutil.copy2(REPO / f"{tool}_tools" / "bin" / tool, tool_dir / "bin" / tool)
+        (tool_dir / "lib" / "cli" / "main.rb").write_text(STUB[tool])
+        if pin:
+            (tool_dir / ".ruby-version").write_text(pin + "\n")
+        dirs.append(tool_dir / "bin")
+    return dirs
+
+
+def test_jui_init_starts_the_tools_on_their_pin_as_jui_build_does(tmp_path):
+    # jui init runs the tools BEFORE it copies them into the project, so what
+    # runs is the home install's bare name on PATH. Through tool_command its
+    # .ruby-version reaches the tool (rbenv has 3.2.2 here); until jsonui-cli
+    # 1.9.0 init passed nothing, and a fresh project fell to rbenv's global.
+    path_dirs = _home_install(tmp_path, "3.2.2")
+    (tmp_path / "rbenv" / "versions" / "3.2.2").mkdir(parents=True)
+    project = tmp_path / "fresh"
+    project.mkdir()
+    rc, log, _host = _jui(tmp_path, project, RBENV_RUBY,
+                          ["init", "--project-name", "Probe", "--ios", "ios", "--android", "android",
+                           "--web", "web", "--no-sync-tools"], path_dirs=path_dirs)
+    assert all(f"REACHED {tool}" in log for tool in TOOLS.values()), log
+    assert not any(_floor_line(log, tool) for tool in TOOLS.values()), log
+    assert rc == 0, log
+
+
+def test_jui_init_without_a_pin_names_the_ruby_it_fell_to(tmp_path):
+    # The other side: a home install with no .ruby-version gives jui nothing
+    # to pass, so rbenv falls to its global and every tool names it.
+    path_dirs = _home_install(tmp_path, None)
+    (tmp_path / "rbenv" / "versions").mkdir(parents=True)
+    project = tmp_path / "fresh"
+    project.mkdir()
+    rc, log, host = _jui(tmp_path, project, RBENV_RUBY,
+                         ["init", "--project-name", "Probe", "--ios", "ios", "--android", "android",
+                          "--web", "web", "--no-sync-tools"], path_dirs=path_dirs)
+    assert rc == 1, log
+    for tool in TOOLS.values():
+        lines = _floor_line(log, tool)
+        assert len(lines) == 1 and f"Ruby 2.6.10 at {host} (rbenv chose system)." in lines[0], log
+
+
+def test_the_three_tool_directories_pin_the_floor_the_suites_run_on():
+    # jui passes each tool directory's .ruby-version (when rbenv has it), so
+    # through jui every tool runs on that version. It has to be the one the
+    # Ruby suites are measured on: run-suites.sh's default RBENV_VERSION, in
+    # the 3.2 series CI's ruby-suites legs pin, and at or above the floor.
+    pins = {tool: (REPO / f"{tool}_tools" / ".ruby-version").read_text().strip() for tool in TOOLS.values()}
+    assert len(set(pins.values())) == 1, pins
+    pin = pins["sjui"]
+    suites = re.search(r'^export RBENV_VERSION=\$\{RBENV_VERSION:-([0-9.]+)\}$',
+                       (REPO / "dev-guide" / "release" / "run-suites.sh").read_text(), re.M)
+    assert suites and suites.group(1) == pin, (pin, suites and suites.group(1))
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+    start = ci.index("\n  ruby-suites:\n") + 1
+    following = re.compile(r"^  [a-z0-9-]+:\n", re.M).search(ci, start + 1)
+    job = ci[start:following.start() if following else len(ci)]
+    legs = re.findall(r'ruby-version: "([0-9.]+)"', job)
+    assert legs and all(pin.startswith(v + ".") or pin == v for v in legs), (pin, legs)
+    assert [int(x) for x in pin.split(".")] >= [3, 2, 0], pin

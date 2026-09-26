@@ -217,9 +217,17 @@ def _run_tool(cmd: list[str], cwd: Path) -> str | None:
     printed "Init failed for: ios (sjui init)" with no way to say which, and
     the operator could not tell a missing PATH entry from a broken project.
     The reason travels back so the error names it.
+
+    Started through tool_command, as `jui build` starts them: until
+    jsonui-cli 1.9.0 this ran the bare name with the parent's env, so no
+    tool's .ruby-version reached it and a fresh platform root ran the tools on
+    rbenv's global — the system Ruby 2.6 on an unset Mac, below the 3.2 floor.
     """
+    from ..core.tool_resolver import tool_command
+
+    actual_cmd, env = tool_command(cmd, cwd)
     try:
-        result = subprocess.run(cmd, cwd=cwd)
+        result = subprocess.run(actual_cmd, cwd=cwd, env=env)
     except FileNotFoundError:
         return f"'{cmd[0]}' not found in PATH"
     if result.returncode == 0:

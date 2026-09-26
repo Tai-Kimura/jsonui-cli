@@ -54,10 +54,37 @@ class ResolveToolTest(unittest.TestCase):
 
 
 class BuildToolEnvTest(unittest.TestCase):
-    def test_returns_none_when_no_tweaks_and_no_extra(self):
-        # Bare-name resolved + no extras → env should be None so the
-        # subprocess inherits the parent env unchanged.
+    @patch("jui_cli.core.tool_resolver.shutil.which", return_value=None)
+    def test_returns_none_when_no_tweaks_and_no_extra(self, _which):
+        # Bare-name resolved, nothing on PATH either, no extras → env should
+        # be None so the subprocess inherits the parent env unchanged.
         self.assertIsNone(build_tool_env("sjui", "sjui"))
+
+    @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=True)
+    def test_a_bare_name_takes_the_pin_of_the_tool_path_will_run(self, _installed):
+        # jsonui-cli 1.9.0: `jui init` runs the home install's bare name
+        # before the project has a copy; its .ruby-version is the one that
+        # applies (until 1.9.0 a bare name got no pin at all).
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp) / "kjui_tools" / "bin"
+            bin_dir.mkdir(parents=True)
+            (bin_dir / "kjui").write_text("#!/bin/sh\n")
+            (bin_dir / "kjui").chmod(0o755)
+            (Path(tmp) / "kjui_tools" / ".ruby-version").write_text("3.2.2\n")
+            with patch.dict(os.environ, {"PATH": str(bin_dir)}, clear=True):
+                env = build_tool_env("kjui", "kjui")
+            self.assertEqual(env.get("RBENV_VERSION"), "3.2.2")
+
+    @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=False)
+    def test_a_bare_name_whose_pin_rbenv_lacks_gets_nothing(self, _installed):
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp) / "kjui_tools" / "bin"
+            bin_dir.mkdir(parents=True)
+            (bin_dir / "kjui").write_text("#!/bin/sh\n")
+            (bin_dir / "kjui").chmod(0o755)
+            (Path(tmp) / "kjui_tools" / ".ruby-version").write_text("3.2.2\n")
+            with patch.dict(os.environ, {"PATH": str(bin_dir)}, clear=True):
+                self.assertIsNone(build_tool_env("kjui", "kjui"))
 
     @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=True)
     def test_includes_rbenv_version_when_pinned_version_installed(self, _mock):
@@ -163,6 +190,20 @@ class BuildToolEnvTest(unittest.TestCase):
             )
             self.assertEqual(env.get("RBENV_VERSION"), "3.2.5")
             self.assertEqual(env.get("JUI_SKIP_EXISTING"), "1")
+
+    def test_tool_command_is_resolve_tool_and_build_tool_env_together(self):
+        from jui_cli.core.tool_resolver import tool_command
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_path = root / "rjui_tools" / "bin" / "rjui"
+            bin_path.parent.mkdir(parents=True)
+            bin_path.write_text("#!/bin/sh\n")
+            with patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=True):
+                (root / "rjui_tools" / ".ruby-version").write_text("3.2.2\n")
+                argv, env = tool_command(["rjui", "build", "--clean"], root, extra={"X": "1"})
+            self.assertEqual(argv, [str(bin_path), "build", "--clean"])
+            self.assertEqual((env["RBENV_VERSION"], env["X"]), ("3.2.2", "1"))
 
     def test_returns_env_with_extras_even_when_bare_name(self):
         # No local install but caller passes extras — env must still be

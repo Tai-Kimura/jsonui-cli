@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'optparse'
+require 'rbconfig'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/converter_generator_core'
@@ -381,8 +382,10 @@ module KjuiTools
           require_relative '../../compose/compose_builder'
           
           puts "Generating all Compose views..."
-          # Call the existing Compose builder
-          system("ruby #{File.join(File.dirname(__FILE__), '../../..', 'bin', 'kjui')} build")
+          # Call the existing Compose builder — on RbConfig.ruby, the ruby
+          # that passed bin/kjui's floor, not whatever `ruby` PATH names here
+          # (until jsonui-cli 1.9.0 this was `system("ruby …")`).
+          system(RbConfig.ruby, File.join(File.dirname(__FILE__), '../../..', 'bin', 'kjui'), 'build')
         end
         
         def generate_specific_xml_layout(layout_name, args, config)
@@ -398,7 +401,7 @@ module KjuiTools
           
           puts "Building Compose layout: #{layout_name}"
           # TODO: Implement single layout generation for compose
-          system("ruby #{File.join(File.dirname(__FILE__), '../../..', 'bin', 'kjui')} build")
+          system(RbConfig.ruby, File.join(File.dirname(__FILE__), '../../..', 'bin', 'kjui'), 'build')
         end
 
         def generate_adapter(args, mode)

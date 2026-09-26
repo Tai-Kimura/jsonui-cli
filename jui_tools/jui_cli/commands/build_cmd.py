@@ -1047,11 +1047,9 @@ def _is_generated_dir(directory) -> bool:
 
 def _run_tool(cmd: list[str], cwd: Path) -> bool:
     """Run a platform tool, handling missing executables gracefully."""
-    from ..core.tool_resolver import build_tool_env, resolve_tool
+    from ..core.tool_resolver import tool_command
 
     tool_name = cmd[0]
-    resolved = resolve_tool(tool_name, cwd)
-    actual_cmd = [resolved] + cmd[1:]
     extra = None
     if tool_name == "rjui":
         # Design U8: whether web prefixes the ids inside an include is decided
@@ -1059,7 +1057,7 @@ def _run_tool(cmd: list[str], cwd: Path) -> bool:
         # (run standalone it keeps the old spelling and says so).
         from ..core.layout_facts import include_id_prefix_env
         extra = {"JSONUI_INCLUDE_ID_PREFIX": include_id_prefix_env()}
-    env = build_tool_env(resolved, tool_name, extra=extra)
+    actual_cmd, env = tool_command(cmd, cwd, extra=extra)
 
     try:
         result = subprocess.run(actual_cmd, cwd=cwd, env=env)
