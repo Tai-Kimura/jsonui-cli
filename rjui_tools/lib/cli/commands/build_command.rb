@@ -7,6 +7,7 @@ require_relative '../../core/config_manager'
 require_relative '../../core/frameworks'
 require_relative '../../core/generated_marker'
 require_relative '../../core/logger'
+require_relative '../../core/templates'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
@@ -452,8 +453,8 @@ module RjuiTools
           extensions_dir = @config['extensions_directory'] || 'src/components/extensions'
           FileUtils.mkdir_p(extensions_dir)
 
-          network_image_path = File.join(extensions_dir, 'NetworkImage.tsx')
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/network_image.tsx')
+          network_image_path = File.join(extensions_dir, Core::Templates.file_name('NetworkImage.tsx', @config))
+          template_path = Core::Templates.path('network_image.tsx', @config)
           if File.exist?(template_path)
             template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))
             if !File.exist?(network_image_path)
@@ -484,8 +485,8 @@ module RjuiTools
           extensions_dir = @config['extensions_directory'] || 'src/components/extensions'
           FileUtils.mkdir_p(extensions_dir)
 
-          target_path = File.join(extensions_dir, 'LinkifyText.tsx')
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/linkify_text.tsx')
+          target_path = File.join(extensions_dir, Core::Templates.file_name('LinkifyText.tsx', @config))
+          template_path = Core::Templates.path('linkify_text.tsx', @config)
           return unless File.exist?(template_path)
 
           template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))
@@ -510,10 +511,10 @@ module RjuiTools
           lib_dir = @config['lib_directory'] || 'src/lib/jsonui'
           FileUtils.mkdir_p(lib_dir)
 
-          target_path = File.join(lib_dir, 'Configuration.ts')
+          target_path = File.join(lib_dir, Core::Templates.file_name('Configuration.ts', @config))
           return if File.exist?(target_path)
 
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/Configuration.ts')
+          template_path = Core::Templates.path('Configuration.ts', @config)
           return unless File.exist?(template_path)
 
           File.write(target_path, File.read(template_path))
@@ -694,8 +695,8 @@ module RjuiTools
           hooks_dir = @config['hooks_directory'] || 'src/hooks'
           FileUtils.mkdir_p(hooks_dir)
 
-          target_path = File.join(hooks_dir, 'useColorMode.ts')
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/use_color_mode.ts')
+          target_path = File.join(hooks_dir, Core::Templates.file_name('useColorMode.ts', @config))
+          template_path = Core::Templates.path('use_color_mode.ts', @config)
           return unless File.exist?(template_path)
 
           template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))

@@ -24,7 +24,12 @@ module RjuiTools
         @viewmodels_dir = File.join(@source_path, @config['viewmodels_directory'] || 'src/viewmodels')
         @data_dir = File.join(@source_path, @config['data_directory'] || 'src/generated/data')
         @styles_dir = File.join(@source_path, @config['styles_directory'] || 'Styles')
-        @use_typescript = @config['typescript'] != false
+        # TypeScript only when the project says so — the components are .jsx
+        # otherwise (build_command: `@config['typescript'] ? '.tsx' : '.jsx'`),
+        # and a config without the key is JavaScript (DEFAULT_CONFIG). Until
+        # jsonui-cli 1.9.0 this read `!= false`: a config without the key got
+        # .ts here beside .jsx components.
+        @use_typescript = @config['typescript'] ? true : false
         @framework = Core::Frameworks.for(@config)
       end
 

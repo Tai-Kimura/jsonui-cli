@@ -5,6 +5,7 @@ require_relative '../../core/config_manager'
 require_relative '../../core/frameworks'
 require_relative '../../core/generated_marker'
 require_relative '../../core/logger'
+require_relative '../../core/templates'
 
 module RjuiTools
   module CLI
@@ -432,26 +433,26 @@ module RjuiTools
           FileUtils.mkdir_p(extensions_dir)
 
           # Create NetworkImage component
-          network_image_path = File.join(extensions_dir, 'NetworkImage.tsx')
+          network_image_path = File.join(extensions_dir, Core::Templates.file_name('NetworkImage.tsx', config))
           unless File.exist?(network_image_path)
-            template_path = File.join(File.dirname(__FILE__), '../../react/templates/network_image.tsx')
+            template_path = Core::Templates.path('network_image.tsx', config)
             fw = Core::Frameworks.for(config)
             File.write(network_image_path, Core::Frameworks.apply_directive(File.read(template_path), fw))
             Core::Logger.success("Created built-in component: #{network_image_path}")
           end
 
           # Create EmbedContainer component (Embed view type runtime helper)
-          embed_container_path = File.join(extensions_dir, 'EmbedContainer.tsx')
+          embed_container_path = File.join(extensions_dir, Core::Templates.file_name('EmbedContainer.tsx', config))
           unless File.exist?(embed_container_path)
-            template_path = File.join(File.dirname(__FILE__), '../../react/templates/EmbedContainer.tsx')
+            template_path = Core::Templates.path('EmbedContainer.tsx', config)
             File.write(embed_container_path, File.read(template_path))
             Core::Logger.success("Created built-in component: #{embed_container_path}")
           end
 
           # Create LinkifyText component (Label `linkable` runtime)
-          linkify_text_path = File.join(extensions_dir, 'LinkifyText.tsx')
+          linkify_text_path = File.join(extensions_dir, Core::Templates.file_name('LinkifyText.tsx', config))
           unless File.exist?(linkify_text_path)
-            template_path = File.join(File.dirname(__FILE__), '../../react/templates/linkify_text.tsx')
+            template_path = Core::Templates.path('linkify_text.tsx', config)
             fw = Core::Frameworks.for(config)
             File.write(linkify_text_path, Core::Frameworks.apply_directive(File.read(template_path), fw))
             Core::Logger.success("Created built-in component: #{linkify_text_path}")
@@ -461,9 +462,9 @@ module RjuiTools
           # so generated components can `import { Configuration } from '@/lib/jsonui/Configuration'`.
           lib_dir = config['lib_directory'] || 'src/lib/jsonui'
           FileUtils.mkdir_p(lib_dir)
-          configuration_path = File.join(lib_dir, 'Configuration.ts')
+          configuration_path = File.join(lib_dir, Core::Templates.file_name('Configuration.ts', config))
           unless File.exist?(configuration_path)
-            template_path = File.join(File.dirname(__FILE__), '../../react/templates/Configuration.ts')
+            template_path = Core::Templates.path('Configuration.ts', config)
             if File.exist?(template_path)
               File.write(configuration_path, File.read(template_path))
               Core::Logger.success("Created Configuration template: #{configuration_path}")

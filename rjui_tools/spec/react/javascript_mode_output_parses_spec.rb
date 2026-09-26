@@ -81,17 +81,25 @@ RSpec.describe 'rjui output for a JavaScript project parses as JavaScript' do
   end
 
   # { file => first error, with its source line } for every file esbuild does
-  # not parse as JSX; one node process for the lot.
+  # not parse as JSX, or that holds TypeScript syntax JavaScript also parses
+  # (a type argument, `f<T>(x)`, reads as two comparisons): such a file
+  # transforms differently as TSX than as JSX — imports kept verbatim, so an
+  # unused import is not the difference. One node process for the lot.
   def unparsed(sources)
     Dir.mktmpdir do |dir|
       sources.each { |name, code| File.write(File.join(dir, "#{name}.jsx"), code) }
       script = <<~JS
         const fs = require('fs'), path = require('path');
         const esbuild = require(#{JSON.generate(File.join(BundlerDefine::SUPPORT_DIR, 'node_modules', 'esbuild'))});
+        const opts = { jsx: 'preserve', charset: 'utf8', tsconfigRaw: { compilerOptions: { verbatimModuleSyntax: true } } };
         const dir = process.argv[1], out = { parsed: 0, failed: {} };
         for (const f of fs.readdirSync(dir).sort()) {
-          try { esbuild.transformSync(fs.readFileSync(path.join(dir, f), 'utf8'), { loader: 'jsx' }); out.parsed++; }
-          catch (e) { const m = e.errors && e.errors[0];
+          const src = fs.readFileSync(path.join(dir, f), 'utf8');
+          try {
+            const js = esbuild.transformSync(src, { ...opts, loader: 'jsx' }).code;
+            if (js !== esbuild.transformSync(src, { ...opts, loader: 'tsx' }).code) { out.failed[f] = 'TypeScript syntax (TSX and JSX transforms differ)'; continue; }
+            out.parsed++;
+          } catch (e) { const m = e.errors && e.errors[0];
             out.failed[f] = m ? `${m.text} — ${m.location ? m.location.lineText.trim().slice(0, 160) : ''}` : String(e); }
         }
         console.log(JSON.stringify(out));
@@ -137,9 +145,11 @@ RSpec.describe 'rjui output for a JavaScript project parses as JavaScript' do
     failed = unparsed(
       'cast' => "export const A = () => <div style={{ '--c': 'red' } as React.CSSProperties} />;\n",
       'annotation' => "export const B = (rows) => rows.map((item, index: number) => <i key={index} />);\n",
-      'plain' => "export const C = (rows) => rows.map((item, index) => <i key={index} style={{ '--c': 'red' }} />);\n"
+      'typeArgument' => "import { useState } from 'react';\nexport const P = () => { const [d] = useState<PData>(make()); return <div>{d}</div>; };\n",
+      'plain' => "import React from 'react';\nimport { unused } from './x';\n" \
+                 "export const C = (rows) => rows.map((item, index) => <i key={index} style={{ '--c': 'red' }} />);\n"
     )
-    expect(failed.keys.sort).to eq(%w[annotation.jsx cast.jsx])
+    expect(failed.keys.sort).to eq(%w[annotation.jsx cast.jsx typeArgument.jsx])
   end
 
   # The TypeScript twin keeps what the JavaScript project drops, and still
@@ -166,6 +176,56 @@ RSpec.describe 'rjui output for a JavaScript project parses as JavaScript' do
         #{ts}
         );
       TSX
+    end
+  end
+
+  # The whole project, as the commands write it: `rjui init`, `rjui g view /
+  # component / collection`, `rjui build`. A JavaScript project holds no .ts
+  # or .tsx file, and every .js / .jsx parses as JavaScript. Until jsonui-cli
+  # 1.9.0 (measured on deaead11, typescript false): 12 TypeScript files — the
+  # page and ViewModel scaffolds (`g`), the ViewModel bases and hooks `build`
+  # derived from them, and the built-ins `init` / `build` copy (NetworkImage,
+  # LinkifyText, EmbedContainer, Configuration, useColorMode); with no
+  # `typescript` key, 81 more (the data models: `!= false`).
+  describe 'the files of a JavaScript project' do
+    def project(config_edit)
+      Dir.mktmpdir('rjui_js_project') do |dir|
+        rjui = File.expand_path('../../bin/rjui', __dir__)
+        run = lambda do |*args|
+          out, status = Open3.capture2e(RbConfig.ruby, rjui, *args, chdir: dir)
+          raise "rjui #{args.join(' ')}: #{out}" unless status.success?
+        end
+        run.call('init')
+        config_path = File.join(dir, 'rjui.config.json')
+        File.write(config_path, JSON.pretty_generate(config_edit.call(JSON.parse(File.read(config_path)))))
+        run.call('g', 'view', 'home_screen')
+        run.call('g', 'component', 'chip_card')
+        run.call('g', 'collection', 'item_list')
+        run.call('build')
+        files = Dir.glob(File.join(dir, '**', '*')).select { |f| File.file?(f) }
+        yield files.map { |f| f.sub("#{dir}/", '') }, files.to_h { |f| [f.sub("#{dir}/", ''), File.read(f)] }
+      end
+    end
+
+    it 'typescript false, and no typescript key: no .ts or .tsx file, and every .js / .jsx parses' do
+      { 'typescript: false' => ->(c) { c.merge('typescript' => false) },
+        'no typescript key' => ->(c) { c.reject { |k, _| k == 'typescript' } } }.each do |mode, edit|
+        project(edit) do |names, contents|
+          expect(names.grep(/\.tsx?\z/)).to eq([]), mode
+          scripts = contents.select { |name, _| name.match?(/\.jsx?\z/) }
+          expect(scripts.size).to be >= 20 # the components, data, view models, hooks and built-ins are there
+          failed = unparsed(scripts.transform_keys { |name| name.gsub(/[^A-Za-z0-9]/, '_') })
+          expect(failed).to be_empty, "#{mode}:\n#{failed.map { |f, e| "  #{f}: #{e}" }.join("\n")}"
+        end
+      end
+    end
+
+    it 'control: a TypeScript project writes them as TypeScript' do
+      project(->(c) { c.merge('typescript' => true) }) do |names, _|
+        expect(names).to include('src/viewmodels/HomeScreenViewModel.ts', 'src/app/home-screen/page.tsx',
+                                 'src/generated/data/HomeScreenData.ts', 'src/generated/hooks/useColorMode.ts',
+                                 'src/components/extensions/NetworkImage.tsx')
+      end
     end
   end
 
