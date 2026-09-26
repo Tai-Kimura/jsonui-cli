@@ -186,7 +186,7 @@ RSpec.describe 'rjui output for a JavaScript project parses as JavaScript' do
   # page and ViewModel scaffolds (`g`), the ViewModel bases and hooks `build`
   # derived from them, and the built-ins `init` / `build` copy (NetworkImage,
   # LinkifyText, EmbedContainer, Configuration, useColorMode); with no
-  # `typescript` key, 81 more (the data models: `!= false`).
+  # `typescript` key, 17 (the data models too: `!= false`).
   describe 'the files of a JavaScript project' do
     def project(config_edit)
       Dir.mktmpdir('rjui_js_project') do |dir|
