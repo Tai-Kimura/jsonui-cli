@@ -44,7 +44,9 @@ module SjuiTools
                                # Seeded with the literal selectedIndex — a
                                # hard-coded 0 opened segment One regardless
                                # of the declaration.
-                               state_var = "selected#{id.split('_').map(&:capitalize).join}"
+                               # No id: its position (position_name),
+                               # not camelCased (the path keeps its `_`).
+                               state_var = @component['id'] ? "selected#{id.split('_').map(&:capitalize).join}" : "selected#{position_name('Segment')}"
                                add_state_variable(state_var, "Int", initial_selection.to_i.to_s)
                                "$#{state_var}"
                              end

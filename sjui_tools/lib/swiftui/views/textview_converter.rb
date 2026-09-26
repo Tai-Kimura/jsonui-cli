@@ -33,7 +33,9 @@ module SjuiTools
             # A literal `text` seeds the editor's initial content (TextField's
             # literal-seed precedent) — an empty seed dropped the declared
             # text and the editor rendered placeholder-gray (32 parity).
-            state_var = "#{id}Text"
+            # No id: its position (position_name) — `textEditor` was every
+            # id-less TextView's name.
+            state_var = "#{@component['id'] || position_name('textEditor')}Text"
             seed = text_binding.is_a?(String) && !text_binding.empty? ? swift_string_literal(text_binding) : '""'
             add_state_variable(state_var, "String", seed)
             binding_path = state_var

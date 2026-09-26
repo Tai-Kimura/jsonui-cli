@@ -35,7 +35,9 @@ module SjuiTools
                            # pointed at a property the Data model never grows
                            # and did not compile (codegen parity host,
                            # __control/Switch, 2026-08-02).
-                           state_var = "#{id}IsOn"
+                           # No id: its position (position_name) — `toggle`
+                           # was every id-less Switch's name.
+                           state_var = "#{@component['id'] || position_name('toggle')}IsOn"
                            add_state_variable(state_var, "Bool", @component['isOn'] || @component['checked'] || @component['value'] == true ? 'true' : 'false')
                            "$#{state_var}"
                          end

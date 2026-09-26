@@ -635,7 +635,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
           'type' => 'TextField', 'text' => '@{email}', 'onFocus' => 'handleFocus'
         }).convert
 
-        expect(code).to include('.focused($fieldIsFocused)')
+        # No id: named by its position — on its own, the root `0`.
+        expect(code).to include('.focused($field_0IsFocused)')
       end
     end
 
@@ -726,11 +727,12 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
         })
         code = converter.convert
 
-        expect(converter.state_variables).to include('@FocusState private var fieldIsFocused: Bool')
-        expect(code).to include('.focused($fieldIsFocused)')
-        expect(code).to include('isEditing: fieldIsFocused')
+        # No id: named by its position — on its own, the root `0`.
+        expect(converter.state_variables).to include('@FocusState private var field_0IsFocused: Bool')
+        expect(code).to include('.focused($field_0IsFocused)')
+        expect(code).to include('isEditing: field_0IsFocused')
         # Nothing to sync, so the closure would have had an empty body.
-        expect(code).not_to include('.onChange(of: fieldIsFocused)')
+        expect(code).not_to include('.onChange(of: field_0IsFocused)')
       end
 
       it 'leaves a bare field alone for modes that do not read focus' do

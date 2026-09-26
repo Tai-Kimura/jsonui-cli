@@ -24,7 +24,8 @@ module SjuiTools
             # A literal selectedIndex seeds the initial tab (the dynamic
             # renderer and the UIKit runtime both honor it) — without a
             # selection binding TabView always opened the first tab.
-            state_name = "#{to_camel_case(@component['id'] || 'tabView')}Selection"
+            # No id: its position (position_name), not camelCased.
+            state_name = @component['id'] ? "#{to_camel_case(@component['id'])}Selection" : "#{position_name('tabView')}Selection"
             @state_variables << "@State private var #{state_name}: Int = #{selected_index.to_i}"
             add_line "TabView(selection: $#{state_name}) {"
           else
