@@ -21,6 +21,13 @@ module KjuiTools
           # Detect mode
           mode = options[:mode] || Core::ConfigManager.get('mode') || 'compose'
 
+          # The app's own component spellings, before anything reads a layout:
+          # the validators and the data model classify a node by the type it
+          # is drawn as, and a registered spelling is drawn as written
+          # (shared/core/type_synonyms.rb, TypeSynonyms.app_types).
+          require_relative '../../compose/compose_builder'
+          JsonUIShared::TypeSynonyms.app_types = Compose::ComposeBuilder.custom_component_types
+
           # Store validation results
           @validation_warnings = []
           @validation_errors = 0

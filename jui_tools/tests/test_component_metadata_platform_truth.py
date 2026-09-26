@@ -222,11 +222,10 @@ DEFINITIONS = REPO_ROOT / "shared" / "core" / "attribute_definitions.json"
 #: Facets whose dispatch resolves a declared alias section (`_alias_of`:
 #: EditText / Input -> TextField, Check -> CheckBox, Toggle -> Switch) to
 #: its canonical section before it looks the type up, so an alias is drawn
-#: exactly when its canonical section is. The sjui SwiftUI factory, rjui
-#: and SwiftJsonUI Dynamic do (2026-09-26). The two Kotlin facets join when
-#: kjui's codegen and KotlinJsonUI Dynamic do; until then their tables are
-#: read as written — kjui's codegen does not draw EditText / Input.
-RESOLVES_ALIASES = {"swift_generated", "react", "swift_dynamic"}
+#: exactly when its canonical section is. The sjui SwiftUI factory, rjui,
+#: SwiftJsonUI Dynamic and kjui's codegen do (2026-09-26). KotlinJsonUI
+#: Dynamic joins when it does; until then its table is read as written.
+RESOLVES_ALIASES = {"swift_generated", "react", "swift_dynamic", "kotlin_generated"}
 
 
 def alias_targets() -> dict[str, str]:

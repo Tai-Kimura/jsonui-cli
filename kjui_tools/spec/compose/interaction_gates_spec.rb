@@ -46,8 +46,10 @@ RSpec.describe 'kjui interaction gates' do
   node = ->(type, more = {}) { { 'type' => type, 'id' => 'n' }.merge(extra[type] || {}).merge(more) }
 
   # Declared, and not drawn by kjui: the emission is a TODO comment. Pinned,
-  # so a type that starts being drawn joins the arms below.
-  not_drawn = %w[CircleView EditText Input]
+  # so a type that starts being drawn joins the arms below. CircleView,
+  # EditText and Input joined in 1.9.0 (CircleView drawn; the two aliases
+  # drawn as TextField).
+  not_drawn = %w[]
 
   it 'reads every type the declaration knows' do
     expect(types.size).to be >= 29

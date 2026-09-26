@@ -29,7 +29,9 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       expect(required_imports).to include(:box)
     end
 
-    it 'leaves a static url inside the Box byte-identical to 1.8.104' do
+    # byte-identical to 1.8.104 but for the order 1.9.0 gives the clients:
+    # before the first load, as webview_component.rb and Dynamic set them
+    it 'leaves a static url inside the Box as 1.8.104 drew it, the clients set before the load' do
       result = described_class.generate({ 'type' => 'Web', 'id' => 'wv', 'url' => 'https://example.com' }, 0, required_imports)
       expect(result).to eq(<<~KOTLIN.chomp)
         Box(
@@ -42,9 +44,9 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
                 factory = { context ->
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
-                        loadUrl("https://example.com")
                         webViewClient = KjuiWebViewClient()
                         webChromeClient = WebChromeClient()
+                        loadUrl("https://example.com")
                     }
                 },
                 update = { webView ->
@@ -55,16 +57,16 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       KOTLIN
     end
 
-    it 'leaves the emit without an id byte-identical (no Box)' do
+    it 'leaves the emit without an id as it was (no Box), the clients set before the load' do
       result = described_class.generate({ 'type' => 'Web', 'url' => 'https://example.com' }, 0, required_imports)
       expect(result).to eq(<<~KOTLIN.chomp)
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
                     settings.javaScriptEnabled = true
-                    loadUrl("https://example.com")
                     webViewClient = KjuiWebViewClient()
                     webChromeClient = WebChromeClient()
+                    loadUrl("https://example.com")
                 }
             },
             update = { webView ->

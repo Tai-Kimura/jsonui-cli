@@ -655,15 +655,13 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         expect(result).not_to be_empty
       end
 
-      it 'generates Spacer component' do
+      # Spacer is neither declared nor a type synonym: it is drawn as an
+      # undeclared type, as sjui and rjui draw it (kjui drew a fixed Spacer of
+      # its own until 1.9.0)
+      it 'generates Spacer as an undeclared type' do
         result = builder.send(:generate_component, { 'type' => 'Spacer', 'height' => 16 })
-        expect(result).to include('Spacer')
-        expect(result).to include('16.dp')
-      end
-
-      it 'generates Spacer with default height' do
-        result = builder.send(:generate_component, { 'type' => 'Spacer' })
-        expect(result).to include('8.dp')
+        expect(result).to include('// TODO: Implement component type: Spacer')
+        expect(result).not_to include('16.dp')
       end
 
       it 'generates TODO for unknown component' do
