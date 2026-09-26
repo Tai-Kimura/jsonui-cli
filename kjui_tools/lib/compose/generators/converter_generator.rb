@@ -20,6 +20,12 @@ module KjuiTools
       # shared core; this class owns the Compose scaffold template, the
       # Kotlin/Dynamic sub-generators and the DynamicComponentInitializer
       # pair.
+      #
+      # The converter it scaffolds applies neither the tap, long press, pan
+      # and pinch nor the alpha: kjui applies those around the component
+      # (ComposeBuilder#app_component_stages). A converter that applies one
+      # itself — calls the node's handler by its data name, or writes
+      # `.alpha(` — keeps it, and kjui does not apply it a second time.
       class ConverterGenerator < ::JsonUIShared::ConverterGeneratorCore
         def initialize(name, options = {})
           @name = name
@@ -207,6 +213,13 @@ module KjuiTools
                         # a list here because converting this template to
                         # delegation changes what every generated converter
                         # emits, and that belongs in its own release.
+                        #
+                        # The tap, long press, pan and pinch, and the alpha, are
+                        # not in this list: kjui applies them around the component
+                        # (ComposeBuilder#app_component_stages), as around a
+                        # built-in one. If this converter applies one itself —
+                        # calls the node's handler (`data.<name>`) or writes
+                        # `.alpha(` — kjui does not apply that one again.
                         modifiers = []
                         modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))

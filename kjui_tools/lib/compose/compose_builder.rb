@@ -832,9 +832,47 @@ module KjuiTools
         @custom_components&.add(component_type)
 
         result = component_class.generate(json_data, depth, @required_imports, parent_type)
+        # The component's own code, not its children's: what app_component_stages reads.
+        own_code = result.is_a?(Hash) ? result[:code].to_s : result.to_s
 
         # Handle container components that return metadata
-        result.is_a?(Hash) && result[:children] ? handle_container_result(result, depth, parent_type) : result
+        code = result.is_a?(Hash) && result[:children] ? handle_container_result(result, depth, parent_type) : result
+        app_component_stages(json_data, own_code, code, depth)
+      end
+
+      # The handlers an app's component may call itself, and the common stage
+      # that calls each around a built-in one (build_clickable).
+      APP_COMPONENT_HANDLER_KEYS = %w[onClick onclick onLongPress onPan onPinch].freeze
+
+      # The common stages an app's component does not apply itself — its tap,
+      # long press, pan and pinch (with the gates around them), and its alpha —
+      # applied around it in a Box, as the built-in components apply them. The
+      # `kjui g converter` scaffold applies none of them, so an app's own
+      # component tapped, faded and called onLongPress in Debug (KotlinJsonUI
+      # Dynamic applies them to it) and did none of it in release.
+      #
+      # A component that does apply one keeps it and gets no second: a handler
+      # whose data name its own code already calls (`data.<name>`, in the code
+      # it emitted for this node, not in its children's), or `.alpha(` in that
+      # code. The scaffold says so to whoever writes a converter.
+      def app_component_stages(json_data, own_code, code, depth)
+        return code unless code.is_a?(String) && !code.empty?
+
+        node = json_data.dup
+        APP_COMPONENT_HANDLER_KEYS.each do |key|
+          names = JsonUIShared::TapAccessibility.handler_values(node[key]).map { |v| (v[/\A@\{(.*)\}\z/m, 1] || v).strip }
+          node.delete(key) if names.any? { |name| own_code.include?("data.#{name}") }
+        end
+        node.delete('alpha') if own_code.include?('.alpha(')
+        modifiers = Helpers::ModifierBuilder.build_alpha(node, @required_imports) +
+                    Helpers::ModifierBuilder.build_clickable(node, @required_imports)
+        return code if modifiers.empty?
+
+        @required_imports&.add(:box)
+        Helpers::TintHelper.pad('Box(', depth) + Helpers::ModifierBuilder.format(modifiers, depth) + "\n" +
+          Helpers::TintHelper.pad(') {', depth) + "\n" +
+          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
+          Helpers::TintHelper.pad('}', depth)
       end
 
       # What a type no case takes emits: kjui's mark of an undeclared type.
