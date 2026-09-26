@@ -8,7 +8,7 @@ require 'cli/commands/build_command'
 require_relative '../support/typescript_compiler'
 
 # `scrollAnimated` on the web: the `animated` argument of
-# scrollCollectionToItem. A literal false jumps, absent or true animates (the
+# scrollCollectionToCell (scrollCollectionToItem until jsonui-cli 1.9.0). A literal false jumps, absent or true animates (the
 # declared default), and a binding decides at run time — true only when the
 # bound value is true, the reading sjui (`(data.x ?? false)`) and kjui
 # (`(data.x ?: false)`) give an unset bound value. Until 1.8.121 (measured on
@@ -35,7 +35,7 @@ RSpec.describe 'rjui Collection: scrollAnimated' do
   end
 
   def animated_arg(tsx)
-    tsx[/scrollCollectionToItem\(listRef\.current, data\.target, '\w+', (.+), false\)/, 1] or raise "no scroll call in\n#{tsx}"
+    tsx[/scrollCollectionToCell\(listRef\.current, "list", data\.target, null, '\w+', (.+), false\)/, 1] or raise "no scroll call in\n#{tsx}"
   end
 
   it 'absent and true animate, a literal false jumps, a binding is true only when the bound value is' do

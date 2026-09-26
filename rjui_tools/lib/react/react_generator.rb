@@ -912,10 +912,16 @@ module RjuiTools
                           end
             if scroll_to || default_anchor || current_page || on_item_appear || page_change
               layout = json['orientation'] || json['layout'] || json['scrollDirection'] || 'vertical'
+              lowered_layout = JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout')
               found << {
+                id: id,
                 camel: snake_to_camel_id(id),
-                horizontal: JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout') == 'horizontal' || !!json['horizontalScroll'],
+                horizontal: lowered_layout == 'horizontal' || !!json['horizontalScroll'],
+                flow: %w[flow leftaligned].include?(lowered_layout),
                 items: json['items'],
+                sections: json['sections'],
+                cell_id_property: json['cellIdProperty'],
+                auto_tracking: json['autoChangeTrackingId'] == true,
                 scroll_to: scroll_to,
                 scroll_anchor: json['scrollAnchor'],
                 scroll_animated: json['scrollAnimated'],
@@ -945,7 +951,9 @@ module RjuiTools
         return '' if collections.empty?
 
         names = []
-        names << 'scrollCollectionToItem' if collections.any? { |c| c[:scroll_to] || c[:current_page] }
+        names << 'scrollCollectionToItem' if collections.any? { |c| c[:current_page] }
+        names << 'scrollCollectionToCell' if collections.any? { |c| scroll_to_binding?(c) }
+        names << 'collectionCellKeys' if collections.any? { |c| scroll_to_binding?(c) && collection_cell_key_lists(c) }
         names << 'applyCollectionDefaultAnchor' if collections.any? { |c| c[:default_anchor] }
         names << 'currentCollectionPage' if collections.any? { |c| c[:current_page] || c[:page_change] }
         names << 'observeCollectionItems' if collections.any? { |c| c[:on_item_appear] }
@@ -970,13 +978,18 @@ module RjuiTools
 
         # scrollTo: iOS receives a PassthroughSubject, so a repeat send
         # re-scrolls; a React effect keys on a value, so re-scrolling to the
-        # same index needs the bound value to change.
-        if (target = collection[:scroll_to]) && binding_expression?(target)
-          prop = binding_data_path(target)
+        # same index needs the bound value to change. The value names a CELL
+        # (scrollCollectionToCell): a number its place among the drawn
+        # sections' cells, a string — with cellIdProperty — the first cell
+        # whose key it is, from the keys the effect reads off the data.
+        if scroll_to_binding?(collection)
+          prop = binding_data_path(collection[:scroll_to])
           anchor_expr = scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
           animated = scroll_animated_arg(collection[:scroll_animated])
-          lines << "  useEffect(() => { scrollCollectionToItem(#{ref}.current, #{prop}, " \
-                   "#{anchor_expr}, #{animated}, #{horizontal}); }, [#{prop}]);"
+          lists = collection_cell_key_lists(collection)
+          keys = lists ? "collectionCellKeys(#{lists}, #{collection[:cell_id_property].to_json})" : 'null'
+          lines << "  useEffect(() => { scrollCollectionToCell(#{ref}.current, #{collection[:id].to_json}, #{prop}, " \
+                   "#{keys}, #{anchor_expr}, #{animated}, #{horizontal}); }, [#{prop}]);"
         end
 
         # currentPage: data -> DOM. The DOM -> data direction is the onScroll
@@ -997,6 +1010,49 @@ module RjuiTools
         end
 
         lines.join("\n")
+      end
+
+      def scroll_to_binding?(collection)
+        binding_expression?(collection[:scroll_to])
+      end
+
+      # The drawn cells' lists, in section order, as a JS array expression —
+      # the keys scrollTo matches a string against — or nil when the
+      # Collection has no cellIdProperty (a scrollTo is then a number) or no
+      # items binding. The lists are the ones CollectionConverter draws:
+      # each section that declares a cell (its cells enriched with their
+      # cellIds under autoChangeTrackingId); with no sections, the class-list
+      # shape's every data section, the first only on a flow or a horizontal
+      # Collection, or the one list an array-typed items is.
+      def collection_cell_key_lists(collection)
+        prop = collection[:cell_id_property]
+        items = collection[:items]
+        return nil unless prop.is_a?(String) && !prop.empty? && binding_expression?(items)
+
+        path = binding_data_path(items)
+        sections = collection[:sections]
+        if sections.is_a?(Array) && !sections.empty?
+          lists = sections.each_with_index.select { |section, _| section.is_a?(Hash) && section['cell'] }.map do |_, index|
+            source = "(#{path}?.sections?.[#{index}]?.cells?.data ?? [])"
+            collection[:auto_tracking] ? "enrichCellIds(#{source}, #{prop.to_json})" : source
+          end
+          "[#{lists.join(', ')}]"
+        elsif collection_items_list?(items)
+          "[#{path} ?? []]"
+        elsif collection[:flow] || collection[:horizontal]
+          "[#{path}?.sections?.[0]?.cells?.data ?? []]"
+        else
+          "(#{path}?.sections ?? []).map((section) => section.cells?.data ?? [])"
+        end
+      end
+
+      # items bound to a property the layout declares as a list (`[T]`,
+      # `Array`) — CollectionConverter#legacy_items_list_element's reading.
+      def collection_items_list?(items)
+        name = items[/\A@\{\s*([A-Za-z_]\w*)\s*\}\z/, 1]
+        return false unless name
+
+        !JsonUIShared::AttributeTypes.list_element((@config['_data_classes'] || {})[name]).nil?
       end
 
       def scroll_anchor_expr(anchor)

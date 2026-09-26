@@ -386,7 +386,7 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'collection scroll declarations
 
   it 'hoists a ref and imports only the helpers it uses' do
     out = screen(base.merge('scrollTo' => '@{scrollIndex}'))
-    expect(out).to include("import { scrollCollectionToItem } from '@/generated/collectionScroll';")
+    expect(out).to include("import { scrollCollectionToCell } from '@/generated/collectionScroll';")
     expect(out).to include('const itemListRef = useRef<HTMLDivElement | null>(null);')
     expect(out).to include("import React, { useRef, useEffect } from 'react';")
     expect(out).to include('"use client"')
@@ -396,7 +396,7 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'collection scroll declarations
     out = screen(base.merge('scrollTo' => '@{scrollIndex}', 'scrollAnchor' => 'top',
                             'scrollAnimated' => false))
     expect(out).to include(
-      'useEffect(() => { scrollCollectionToItem(itemListRef.current, data.scrollIndex, ' \
+      'useEffect(() => { scrollCollectionToCell(itemListRef.current, "item_list", data.scrollIndex, null, ' \
       "'top', false, false); }, [data.scrollIndex]);"
     )
   end
@@ -404,12 +404,12 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'collection scroll declarations
   # The SSoT states bottom as the default anchor, and animation defaults on.
   it 'defaults to a bottom anchor with animation' do
     out = screen(base.merge('scrollTo' => '@{scrollIndex}'))
-    expect(out).to include("data.scrollIndex, 'bottom', true, false)")
+    expect(out).to include("data.scrollIndex, null, 'bottom', true, false)")
   end
 
   it 'measures the horizontal axis for a horizontal collection' do
     out = screen(base.merge('scrollTo' => '@{scrollIndex}', 'orientation' => 'horizontal'))
-    expect(out).to include("data.scrollIndex, 'bottom', true, true)")
+    expect(out).to include("data.scrollIndex, null, 'bottom', true, true)")
   end
 
   # Mount-only: a later re-run would yank the user back to the anchor.

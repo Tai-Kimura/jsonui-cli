@@ -2128,6 +2128,14 @@ module RjuiTools
           behavior_type = is_ts ? ': ScrollBehavior' : ''
           appear_param = is_ts ? ': (index: number) => void' : ''
           cleanup_ret = is_ts ? ': () => void' : ''
+          element_param = is_ts ? ': Element' : ''
+          id_param = is_ts ? ': string' : ''
+          target_param = is_ts ? ': unknown' : ''
+          keys_param = is_ts ? ': unknown[] | null' : ''
+          lists_param = is_ts ? ': unknown[][]' : ''
+          keys_ret = is_ts ? ': unknown[]' : ''
+          keys_decl = is_ts ? ': unknown[]' : ''
+          record_cast = is_ts ? ' as Record<string, unknown>' : ''
 
           marker_header = Core::GeneratedMarker.comment_header(
             source: "collectionScroll (Collection scroll-control helper)",
@@ -2145,7 +2153,7 @@ module RjuiTools
               return horizontal ? box.left : box.top;
             }
 
-            // scrollTo: bring the cell at `index` to `anchor` within the
+            // currentPage: bring the child at `index` to `anchor` within the
             // collection's own scroll box — NOT the page's.
             export function scrollCollectionToItem(
               container#{el_param},
@@ -2157,6 +2165,70 @@ module RjuiTools
               if (!container || index === undefined || index === null) return;
               const child = container.children[Number(index)];
               if (!child) return;
+              scrollCollectionToElement(container, child, anchor, animated, horizontal);
+            }
+
+            // scrollTo names a CELL (4f ruling 2026-09-27; the SSoT's
+            // Collection.scrollTo): a number is the cell's place among the
+            // cells of every drawn section, in section order — a section's
+            // header or footer, and a section's block, is not a cell; a
+            // string is the first cell, in section order, whose key it is
+            // (`keys`, the drawn cells' keys in that order — null when the
+            // Collection has no cellIdProperty). The cells are the elements
+            // addressed `<collectionId>_item_<n>`, in document order; a
+            // Collection whose cells carry no address falls back to its
+            // children. Until jsonui-cli 1.9.0 this was the container's
+            // child at the index, which counts a header, a footer and a
+            // section's block, and a string was read as a number.
+            export function scrollCollectionToCell(
+              container#{el_param},
+              collectionId#{id_param},
+              target#{target_param},
+              keys#{keys_param},
+              anchor#{anchor_param},
+              animated#{animated_param},
+              horizontal#{horizontal_param}
+            ) {
+              if (!container || target === undefined || target === null || target === '') return;
+              let n = -1;
+              if (keys) {
+                n = keys.findIndex((key) => key !== null && key !== undefined && String(key) === String(target));
+              } else if (typeof target === 'number') {
+                n = target;
+              } else if (/^[0-9]+$/.test(String(target))) {
+                n = Number(target);
+              }
+              if (!Number.isInteger(n) || n < 0) return;
+              const prefix = collectionId + '_item_';
+              const cells = Array.from(container.querySelectorAll('[id]')).filter((el) =>
+                el.id.startsWith(prefix) && /^[0-9]+$/.test(el.id.slice(prefix.length))
+              );
+              const cell = cells.length > 0 ? cells[n] : container.children[n];
+              if (!cell) return;
+              scrollCollectionToElement(container, cell, anchor, animated, horizontal);
+            }
+
+            // The keys of the drawn cells, in section order (`lists`, each drawn
+            // section's cells): a cell's `cellId`, else its cellIdProperty
+            // value, else null — a cell with neither has no key.
+            export function collectionCellKeys(lists#{lists_param}, cellIdProperty#{id_param})#{keys_ret} {
+              const keys#{keys_decl} = [];
+              for (const cells of lists) {
+                for (const cell of cells ?? []) {
+                  const record = (cell ?? {})#{record_cast};
+                  keys.push(record['cellId'] ?? record[cellIdProperty] ?? null);
+                }
+              }
+              return keys;
+            }
+
+            function scrollCollectionToElement(
+              container#{is_ts ? ': HTMLElement' : ''},
+              child#{element_param},
+              anchor#{anchor_param},
+              animated#{animated_param},
+              horizontal#{horizontal_param}
+            ) {
               const containerBox = container.getBoundingClientRect();
               const childBox = child.getBoundingClientRect();
               const scrolled = horizontal ? container.scrollLeft : container.scrollTop;
