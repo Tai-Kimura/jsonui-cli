@@ -17,6 +17,7 @@ require_relative '../../core/enum_spelling'
 require_relative '../../core/binding_validator_core'
 require_relative '../../core/string_literals'
 require_relative '../helpers/string_manager_helper'
+require_relative 'responsive_helper'
 
 module SjuiTools
   module SwiftUI
@@ -1449,8 +1450,8 @@ module SjuiTools
           factory = @converter_factory || @factory
           registry = @view_registry || @registry
           return nil unless factory
-          if child.is_a?(Hash) && child['visibility']
-            visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+          if ResponsiveHelper.visibility_declared?(child)
+            visibility_param = ResponsiveHelper.visibility_param(child)
             child_converter = factory.create_converter(child, @indent_level + 1, @action_manager, factory, registry)
             return nil unless child_converter
             add_line "VisibilityWrapper(#{visibility_param}) {"

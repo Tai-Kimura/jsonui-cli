@@ -336,7 +336,7 @@ module SjuiTools
                     # Capture full child code including VisibilityWrapper if needed
                     before_count = @generated_code.size
 
-                    has_visibility = child['visibility']
+                    has_visibility = ResponsiveHelper.visibility_declared?(child)
                     # If visibility wrapper is needed, child content goes 1 level deeper
                     child_indent = has_visibility ? @indent_level + 3 : @indent_level + 2
 
@@ -347,7 +347,7 @@ module SjuiTools
                     if has_visibility
                       # Wrap with VisibilityWrapper (canonical expression
                       # parsing shared with view_binding_handler#parse_binding)
-                      visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+                      visibility_param = ResponsiveHelper.visibility_param(child)
                       wrapper_indent = "    " * (@indent_level + 2)
                       @generated_code << "#{wrapper_indent}VisibilityWrapper(#{visibility_param}) {"
                       child_code.split("\n").each { |line| @generated_code << line }

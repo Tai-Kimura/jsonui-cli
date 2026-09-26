@@ -102,4 +102,60 @@ RSpec.describe 'sjui: a responsive override is drawn on every type' do
     SWIFT
     expect(swift).to compile_as_swift.with_imports('SwiftUI')
   end
+
+  # The parent draws two stages OUTSIDE the child's function, from the
+  # child's own attributes: the VisibilityWrapper (every parent) and the
+  # ZStack offset from the margins (a parent without orientation). An
+  # override of either reached only the function and was dropped; both are
+  # drawn at the call site now, over the same size-class condition.
+  describe 'what the parent draws for the child, per size class' do
+    def convert_under(parent, child)
+      path = File.join(dir, 'parent.json')
+      File.write(path, JSON.generate(parent.merge('child' => [child])))
+      converter.convert_json_to_view(path)
+    end
+
+    it 'visibility: the wrapper takes the value per size class' do
+      code, = convert_under({ 'type' => 'View', 'orientation' => 'vertical' },
+                            { 'type' => 'Switch', 'responsive' => { 'regular' => { 'visibility' => 'invisible' } } })
+      expect(code).to include('VisibilityWrapper((horizontalSizeClass == .regular ? ("invisible" as String?) : ("visible" as String?)))')
+    end
+
+    it 'a ZStack margin: the offset takes the value per size class' do
+      code, = convert_under({ 'type' => 'View' },
+                            { 'type' => 'Switch', 'topMargin' => 4, 'responsive' => { 'regular' => { 'topMargin' => 13 } } })
+      expect(code).to include('.offset(x: 0, y: (horizontalSizeClass == .regular ? 13 : 4))')
+    end
+
+    it 'a child without such an override is drawn as before' do
+      code, = convert_under({ 'type' => 'View' }, { 'type' => 'Switch', 'topMargin' => 4, 'visibility' => 'invisible' })
+      expect(code).to include('VisibilityWrapper("invisible")').and include('.offset(x: 0, y: 4)')
+      expect(code).not_to include('horizontalSizeClass == .regular ?')
+    end
+
+    it 'compiles: both, under a ZStack' do
+      code, _actions, decls, _root, functions = convert_under(
+        { 'type' => 'View' },
+        { 'type' => 'Switch', 'responsive' => { 'regular' => { 'visibility' => 'gone', 'topMargin' => 13 } } }
+      )
+      body = code.to_s.lines.map { |l| "        #{l}" }.join
+      swift = <<~SWIFT
+        #{EmittedSwift::LIBRARY_STUBS}
+        struct VisibilityWrapper<Content: View>: View {
+            init(_ visibility: String?, @ViewBuilder content: () -> Content) {}
+            var body: some View { EmptyView() }
+        }
+        struct TestData {}
+        struct EmittedHost: View {
+            @Binding var data: TestData
+        #{decls.map { |d| "    #{d}" }.join("\n")}
+            var body: some View {
+        #{body}
+            }
+        #{functions.join("\n")}
+        }
+      SWIFT
+      expect(swift).to compile_as_swift.with_imports('SwiftUI')
+    end
+  end
 end

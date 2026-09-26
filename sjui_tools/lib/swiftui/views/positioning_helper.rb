@@ -1,4 +1,5 @@
 require_relative 'margin_expression_helper'
+require_relative 'responsive_helper'
 
 module SjuiTools
   module SwiftUI
@@ -6,18 +7,50 @@ module SjuiTools
       module PositioningHelper
         include MarginExpressionHelper
 
-        def apply_zstack_positioning(child, index)
-          # 各子要素の位置を調整
-          # SwiftJsonUIの各種margin属性を使用してoffsetを計算
-          offset_x = 0
-          offset_y = 0
-          
-          # 個別のmargin属性から位置を計算
+        #: The attributes the ZStack offset is computed from.
+        ZSTACK_OFFSET_KEYS = %w[leftMargin rightMargin topMargin bottomMargin centerInParent centerVertical centerHorizontal].freeze
+
+        # [x, y] of the ZStack offset for *child*'s attributes (no relative
+        # positioning): the margin difference per axis, zero on a centred axis.
+        def zstack_offsets(child)
           left_margin = child['leftMargin'] || 0
           right_margin = child['rightMargin'] || 0
           top_margin = child['topMargin'] || 0
           bottom_margin = child['bottomMargin'] || 0
+
+          # ZStackでは左上を基準にoffsetを計算
+          offset_x = margin_difference(left_margin, right_margin)
+          offset_y = margin_difference(top_margin, bottom_margin)
           
+          # SwiftJsonUIの位置属性を処理
+          # centerInParent
+          if child['centerInParent']
+            # ZStackのalignmentで処理されるため、追加のoffsetは不要。
+            # The comment said so; the code did not do it, and kept emitting
+            # the margin difference on both axes — moving the child back off
+            # the centre it had just been aligned to. semantics.margins
+            # disables the margin on a centred axis, and this centres both
+            # (the library agrees: zstackMarginOffset returns .zero here).
+            offset_x = 0
+            offset_y = 0
+          end
+          
+          # centerVertical / centerHorizontal
+          if child['centerVertical'] && !child['centerInParent']
+            # 垂直方向のみセンタリング（offsetのy成分をリセット）
+            offset_y = 0
+          end
+          
+          if child['centerHorizontal'] && !child['centerInParent']
+            # 水平方向のみセンタリング（offsetのx成分をリセット）
+            offset_x = 0
+          end
+
+          [offset_x, offset_y]
+        end
+
+        def apply_zstack_positioning(child, index)
+          # 各子要素の位置を調整（margin 属性から offset を計算 — zstack_offsets）
           # 相対配置属性の処理（alignTopOfView, alignBottomOfView, alignLeftOfView, alignRightOfView）
           # または代替形式（alignTopView, alignBottomView, alignLeftView, alignRightView）
           has_relative_positioning = child['alignTopOfView'] || child['alignBottomOfView'] || 
@@ -35,35 +68,15 @@ module SjuiTools
           
           # 通常のoffset計算（相対配置がない場合、または追加の調整として）
           if !has_relative_positioning
-            # 通常のoffset計算
-            # ZStackでは左上を基準にoffsetを計算
-            offset_x = margin_difference(left_margin, right_margin)
-            offset_y = margin_difference(top_margin, bottom_margin)
-            
-            # SwiftJsonUIの位置属性を処理
-            # centerInParent
-            if child['centerInParent']
-              # ZStackのalignmentで処理されるため、追加のoffsetは不要。
-              # The comment said so; the code did not do it, and kept emitting
-              # the margin difference on both axes — moving the child back off
-              # the centre it had just been aligned to. semantics.margins
-              # disables the margin on a centred axis, and this centres both
-              # (the library agrees: zstackMarginOffset returns .zero here).
-              offset_x = 0
-              offset_y = 0
+            offset_x, offset_y = zstack_offsets(child)
+            if ResponsiveHelper.overrides_any?(child, ZSTACK_OFFSET_KEYS)
+              # The parent draws this offset outside the child's function, so a
+              # size class that overrides a margin or a centring flag is drawn
+              # here, per size class (ticket sjui-codegen-drops-a-leafs-responsive).
+              offset_x = ResponsiveHelper.per_size_class(child) { |attrs| zstack_offsets(attrs)[0] }
+              offset_y = ResponsiveHelper.per_size_class(child) { |attrs| zstack_offsets(attrs)[1] }
             end
-            
-            # centerVertical / centerHorizontal
-            if child['centerVertical'] && !child['centerInParent']
-              # 垂直方向のみセンタリング（offsetのy成分をリセット）
-              offset_y = 0
-            end
-            
-            if child['centerHorizontal'] && !child['centerInParent']
-              # 水平方向のみセンタリング（offsetのx成分をリセット）
-              offset_x = 0
-            end
-            
+
             # offsetを適用
             if offset_component?(offset_x) || offset_component?(offset_y)
               add_modifier_line ".offset(x: #{offset_x}, y: #{offset_y})"

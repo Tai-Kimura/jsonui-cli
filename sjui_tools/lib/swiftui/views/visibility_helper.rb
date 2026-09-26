@@ -1,15 +1,16 @@
 require_relative '../binding/binding_expression'
+require_relative 'responsive_helper'
 
 module SjuiTools
   module SwiftUI
     module Views
       module VisibilityHelper
         def apply_visibility_wrapper(child)
-          if child['visibility']
+          if ResponsiveHelper.visibility_declared?(child)
             # Canonical expression parsing (path / '?? default' / '!path')
             # shared with view_binding_handler#parse_binding — no more
             # to_camel_case mangling of '??' and '!'
-            visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+            visibility_param = ResponsiveHelper.visibility_param(child)
 
             # Create child converter with extra indent level for content inside VisibilityWrapper
             child_converter = @converter_factory.create_converter(child, @indent_level + 1, @action_manager, @converter_factory, @view_registry)

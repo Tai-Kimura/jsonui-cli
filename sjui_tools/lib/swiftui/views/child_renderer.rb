@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative '../binding/binding_expression'
+require_relative 'responsive_helper'
 
 module SjuiTools
   module SwiftUI
@@ -33,7 +34,7 @@ module SjuiTools
           end
           
           # Wrap with VisibilityWrapper if visibility is set
-          if child['visibility']
+          if ResponsiveHelper.visibility_declared?(child)
             render_child_with_visibility(child, orientation)
           else
             render_child_with_alignment(child, orientation)
@@ -49,7 +50,7 @@ module SjuiTools
         def render_child_with_visibility(child, orientation)
           # Canonical expression parsing (path / '?? default' / '!path')
           # shared with view_binding_handler#parse_binding
-          visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+          visibility_param = ResponsiveHelper.visibility_param(child)
 
           # Create child converter with extra indent level for content inside VisibilityWrapper
           child_converter = @converter_factory.create_converter(child, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
