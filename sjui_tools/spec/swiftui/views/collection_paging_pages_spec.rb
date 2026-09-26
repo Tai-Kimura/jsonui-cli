@@ -49,6 +49,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
                  0
                end
       expect(tag).to eq(start ? 'pageStart + cellIndex' : 'cellIndex').or eq(start ? 'pageStart + cell.index' : 'cell.index')
+      # The item address counts as the tag does (round 7; it restarted per
+      # section until jsonui-cli 1.9.0) — as kjui's pager tag and rjui's id do.
+      expect(body).to include(".accessibilityIdentifier(\"pager_item_\\(#{tag})\")")
       (0...counts[k]).map { |i| offset + i }
     end
   end

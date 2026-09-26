@@ -1190,7 +1190,10 @@ module SjuiTools
           if spacing > 0
             add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
           end
-          apply_cell_item_identifier(vars[:index_var])
+          # The address counts across the sections as the tag does, as kjui's
+          # pager test tag and rjui's item id do (round 7; it restarted per
+          # section until jsonui-cli 1.9.0).
+          apply_cell_item_identifier(page_start ? "#{page_start} + #{vars[:index_var]}" : vars[:index_var])
           add_modifier_line page_start ? ".tag(#{page_start} + #{vars[:index_var]})" : ".tag(#{vars[:index_var]})"
         end
 
