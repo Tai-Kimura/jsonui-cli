@@ -56,30 +56,7 @@ module KjuiTools
             binding_variable = $1
           end
 
-          # onToggle and onValueChange are aliases
-          # onValueChange (camelCase) -> binding format only (@{functionName})
-          handler = json_data['onValueChange'] || json_data['onToggle']
-          view_id = json_data['id'] || 'switch'
-          if handler
-            # onValueChange must be binding format
-            if Helpers::ModifierBuilder.is_binding?(handler)
-              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'newValue')
-              if binding_variable
-                # Both data binding and event handler
-                code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} },", depth + 1)
-              else
-                # Event handler only
-                code += "\n" + indent("onCheckedChange = { newValue -> #{handler_call} },", depth + 1)
-              end
-            else
-              code += "\n" + indent("onCheckedChange = { // ERROR: #{handler} - camelCase events require binding format @{functionName} },", depth + 1)
-            end
-          elsif binding_variable
-            # Update the bound variable only
-            code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) },", depth + 1)
-          else
-            code += "\n" + indent("onCheckedChange = { },", depth + 1)
-          end
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable)},", depth + 1)
 
           # Build modifiers
           modifiers = []
@@ -130,7 +107,7 @@ module KjuiTools
             end
 
             if colors_params.any?
-              code += ",\n" + indent("colors = SwitchDefaults.colors(", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("colors = SwitchDefaults.colors(", depth + 1))
               code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
               code += "\n" + indent(")", depth + 1)
             end
@@ -140,9 +117,9 @@ module KjuiTools
           if json_data.key?('enabled')
             if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
               inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1))
             else
-              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1))
             end
           end
 
@@ -163,7 +140,7 @@ module KjuiTools
           # component builds no clickable, which is where it came from.
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(common_stages(json_data, parent_type, required_imports))
+          modifiers.concat(common_stages(json_data, parent_type, required_imports, labelled: true))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
           if parent_type == 'Row' || parent_type == 'Column'
@@ -196,27 +173,7 @@ module KjuiTools
             binding_variable = $1
           end
 
-          handler = json_data['onValueChange'] || json_data['onToggle']
-          view_id = json_data['id'] || 'switch'
-          if handler
-            # onValueChange (camelCase) -> binding format only (@{functionName})
-            if Helpers::ModifierBuilder.is_binding?(handler)
-              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'newValue')
-              if binding_variable
-                # Both data binding and event handler
-                code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} }", depth + 2)
-              else
-                # Event handler only
-                code += "\n" + indent("onCheckedChange = { newValue -> #{handler_call} }", depth + 2)
-              end
-            else
-              code += "\n" + indent("onCheckedChange = { // ERROR: #{handler} - camelCase events require binding format @{functionName} }", depth + 2)
-            end
-          elsif binding_variable
-            code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) }", depth + 2)
-          else
-            code += "\n" + indent("onCheckedChange = { }", depth + 2)
-          end
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable)}", depth + 2)
 
           # Switch colors — same canonical/legacy pair as the block above.
           track_color = json_data['onTintColor'] || json_data['tint'] || json_data['tintColor']
@@ -244,7 +201,7 @@ module KjuiTools
             end
 
             if colors_params.any?
-              code += ",\n" + indent("colors = SwitchDefaults.colors(", depth + 2)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("colors = SwitchDefaults.colors(", depth + 2))
               code += "\n" + colors_params.map { |param| indent(param, depth + 3) }.join(",\n")
               code += "\n" + indent(")", depth + 2)
             end
@@ -254,9 +211,9 @@ module KjuiTools
           if json_data.key?('enabled')
             if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
               inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 2)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 2))
             else
-              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 2)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{json_data['enabled']}", depth + 2))
             end
           end
 
@@ -266,22 +223,46 @@ module KjuiTools
           code
         end
 
-        # size → offset → alpha → shadow → background → click: the View slots
-        # between margins and padding. Size, shadow, background (with its
-        # cornerRadius and border) and onClick are declared on `common` and
-        # were dropped by both branches
-        # (kjui-dynamic-components-that-skip-the-common-modifiers). The click
-        # is the click alone — the blocker is emitted above and `enabled`
-        # reaches the Switch through its own parameter.
-        def self.common_stages(json_data, parent_type, required_imports)
+        # size → offset → alpha → shadow → background: the View slots between
+        # margins and padding. Size, shadow and background (with its
+        # cornerRadius and border) are declared on `common` and were dropped by
+        # both branches (kjui-dynamic-components-that-skip-the-common-
+        # modifiers). There is no click here: the declared onClick is called
+        # from onCheckedChange (checked_change_lambda). The labelled Row
+        # carries the tag and the Switch inside it the `enabled`, so the Row
+        # takes `disabled()` for a UI test to read; on the bare Switch the
+        # control's own `enabled` is on the tagged node.
+        def self.common_stages(json_data, parent_type, required_imports, labelled: false)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          if labelled
+            modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+              json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+            ))
+          end
           modifiers
+        end
+
+        # The Switch's own operation: write the bound value, run onValueChange
+        # / onToggle, then the declared onClick
+        # (ModifierBuilder.with_operation_click). The first three forms are the
+        # ones this component always emitted.
+        def self.checked_change_lambda(json_data, binding_variable)
+          handler = json_data['onValueChange'] || json_data['onToggle']
+          view_id = json_data['id'] || 'switch'
+          update = "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))" if binding_variable
+          lambda = if handler && !Helpers::ModifierBuilder.is_binding?(handler)
+                     "{ // ERROR: #{handler} - camelCase events require binding format @{functionName} }"
+                   else
+                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'newValue') if handler
+                     body = [update, handler_call].compact
+                     body.empty? ? '{ }' : "{ newValue -> #{body.join('; ')} }"
+                   end
+          Helpers::ModifierBuilder.with_operation_click(lambda, json_data)
         end
 
         # The label's TEXT: the bag's own `text` outranks the flat spelling,

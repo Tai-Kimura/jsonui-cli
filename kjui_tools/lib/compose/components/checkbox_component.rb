@@ -60,7 +60,7 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-            modifiers.concat(decoration_stages(json_data, required_imports))
+            modifiers.concat(decoration_stages(json_data, required_imports, labelled: true))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
             code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
@@ -79,24 +79,7 @@ module KjuiTools
               binding_variable = $1
             end
 
-            view_id = json_data['id'] || 'checkbox'
-            if json_data['onValueChange']
-              # onValueChange (camelCase) -> binding format only (@{functionName})
-              if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'it')
-                if binding_variable
-                  code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} }", depth + 2)
-                else
-                  code += "\n" + indent("onCheckedChange = { #{handler_call} }", depth + 2)
-                end
-              else
-                code += "\n" + indent("onCheckedChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} }", depth + 2)
-              end
-            elsif binding_variable
-              code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) }", depth + 2)
-            else
-              code += "\n" + indent("onCheckedChange = { }", depth + 2)
-            end
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false)}", depth + 2)
 
             # iconSize on the labeled default checkbox sizes the box itself —
             # the dynamic labeled path does the same (it was only emitted on
@@ -110,8 +93,8 @@ module KjuiTools
             # were unreachable for every measurement (plan 49 lane C: 4 of the
             # CheckBox entries; 32 closed `iconSize` the same way and left
             # these four behind — see the comment above).
-            code += checkbox_colors_arg(json_data, required_imports, depth + 1)
-            code += checkbox_enabled_arg(json_data, depth + 1)
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_colors_arg(json_data, required_imports, depth + 1))
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_enabled_arg(json_data, depth + 1))
 
             code += "\n" + indent(")", depth + 1)
 
@@ -166,24 +149,7 @@ module KjuiTools
               binding_variable = $1
             end
 
-            view_id = json_data['id'] || 'checkbox'
-            if json_data['onValueChange']
-              # onValueChange (camelCase) -> binding format only (@{functionName})
-              if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'it')
-                if binding_variable
-                  code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} },", depth + 1)
-                else
-                  code += "\n" + indent("onCheckedChange = { #{handler_call} },", depth + 1)
-                end
-              else
-                code += "\n" + indent("onCheckedChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
-              end
-            elsif binding_variable
-              code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) },", depth + 1)
-            else
-              code += "\n" + indent("onCheckedChange = { },", depth + 1)
-            end
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false)},", depth + 1)
 
             # Build modifiers
             modifiers = []
@@ -211,8 +177,8 @@ module KjuiTools
 
             code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
 
-            code += checkbox_colors_arg(json_data, required_imports, depth)
-            code += checkbox_enabled_arg(json_data, depth)
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_colors_arg(json_data, required_imports, depth))
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_enabled_arg(json_data, depth))
 
             code += "\n" + indent(")", depth)
           end
@@ -311,24 +277,7 @@ module KjuiTools
             binding_variable = $1
           end
 
-          view_id = json_data['id'] || 'checkbox'
-          if json_data['onValueChange']
-            # onValueChange (camelCase) -> binding format only (@{functionName})
-            if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'it')
-              if binding_variable
-                code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} },", depth + 1)
-              else
-                code += "\n" + indent("onCheckedChange = { #{handler_call} },", depth + 1)
-              end
-            else
-              code += "\n" + indent("onCheckedChange = { /* ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} */ },", depth + 1)
-            end
-          elsif binding_variable
-            code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) },", depth + 1)
-          else
-            code += "\n" + indent("onCheckedChange = { },", depth + 1)
-          end
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: true)},", depth + 1)
 
           # Build modifiers — declared width/height must reach the control
           # (the dynamic renderer's buildModifier applies size in the same
@@ -349,6 +298,10 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
 
           code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+          # `enabled` is the control's own parameter here too: a disabled
+          # IconToggleButton neither toggles nor calls the declared onClick
+          # (it was never passed, so a disabled icon checkbox still toggled).
+          code = Helpers::ModifierBuilder.join_argument(code, checkbox_enabled_arg(json_data, depth))
 
           code += "\n" + indent(") {", depth)
 
@@ -384,18 +337,47 @@ module KjuiTools
           code
         end
 
-        # shadow → background → click: the View slots between alpha and
-        # padding, on every branch. Size (on the two branches without it),
-        # shadow, background (with its cornerRadius and border) and onClick are
-        # declared on `common` and were dropped
-        # (kjui-dynamic-components-that-skip-the-common-modifiers). The click
-        # is the click alone — the blocker is emitted before the margins and
-        # `enabled` reaches the control through its own parameter.
-        def self.decoration_stages(json_data, required_imports)
+        # The CheckBox's own operation: write the bound value, run
+        # onValueChange, then the declared onClick
+        # (ModifierBuilder.with_operation_click) — the one lambda all three
+        # branches emit. The first four forms are the ones they always emitted.
+        def self.checked_change_lambda(json_data, binding_variable, block_comment: false)
+          view_id = json_data['id'] || 'checkbox'
+          on_change = json_data['onValueChange']
+          lambda = if on_change && !Helpers::ModifierBuilder.is_binding?(on_change)
+                     error = "ERROR: #{on_change} - camelCase events require binding format @{functionName}"
+                     block_comment ? "{ /* #{error} */ }" : "{ // #{error} }"
+                   else
+                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_change, view_id, 'it') if on_change
+                     update = "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))" if binding_variable
+                     if update && handler_call then "{ newValue -> #{update}; #{handler_call} }"
+                     elsif handler_call then "{ #{handler_call} }"
+                     elsif update then "{ newValue -> #{update} }"
+                     else '{ }'
+                     end
+                   end
+          Helpers::ModifierBuilder.with_operation_click(lambda, json_data)
+        end
+
+        # shadow → background: the View slots between alpha and padding, on
+        # every branch. Size (on the two branches without it), shadow and
+        # background (with its cornerRadius and border) are declared on
+        # `common` and were dropped
+        # (kjui-dynamic-components-that-skip-the-common-modifiers). There is
+        # no click here: the declared onClick is called from onCheckedChange
+        # (checked_change_lambda). The labelled Row carries the tag and the
+        # Checkbox inside it the `enabled`, so the Row takes `disabled()` for a
+        # UI test to read; the bare Checkbox and the IconToggleButton carry
+        # their own `enabled` on the tagged node.
+        def self.decoration_stages(json_data, required_imports, labelled: false)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          if labelled
+            modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+              json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+            ))
+          end
           modifiers
         end
 

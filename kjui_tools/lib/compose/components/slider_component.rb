@@ -73,6 +73,13 @@ module KjuiTools
           else
             code += "\n" + indent("onValueChange = { },", depth + 1)
           end
+          # The declared onClick is called when the value change finishes —
+          # the Slider's own operation, not an outer `.clickable`, whose
+          # action would replace the Slider's own for TalkBack
+          # (ModifierBuilder.operation_click_call).
+          if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
+            code += "\n" + indent("onValueChangeFinished = { #{click} },", depth + 1)
+          end
           
           # Value range
           # `min|maxValue` (and their `minimum`/`maximum` aliases) are
@@ -99,7 +106,9 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          # The node's gestures and blocker; the click is onValueChangeFinished
+          # above, and `enabled` is the Slider's own parameter on this node.
+          modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
@@ -137,7 +146,7 @@ module KjuiTools
             end
             
             if colors_params.any?
-              code += ",\n" + indent("colors = SliderDefaults.colors(", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("colors = SliderDefaults.colors(", depth + 1))
               code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
               code += "\n" + indent(")", depth + 1)
             end
@@ -147,9 +156,9 @@ module KjuiTools
           if json_data.key?('enabled')
             if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
               inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1))
             else
-              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1))
             end
           end
           

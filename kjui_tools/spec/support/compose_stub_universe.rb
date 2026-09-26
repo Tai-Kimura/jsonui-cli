@@ -184,9 +184,9 @@ module ComposeStubUniverse
       fun Text(text: String, color: Color = Color(), fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
                fontSize: TextUnit = TextUnit(), fontStyle: FontStyle? = null, modifier: Modifier = Modifier) {}
       fun Spacer(modifier: Modifier = Modifier) {}
-      fun RadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {}
+      fun RadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
       fun IconToggleButton(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier,
-                           content: () -> Unit) {}
+                           enabled: Boolean = true, content: () -> Unit) {}
       fun Icon(painter: Painter, contentDescription: String?, tint: Color = Color()) {}
       fun Column(modifier: Modifier = Modifier, content: ColumnScope.() -> Unit) {}
       interface ColumnScope
@@ -209,7 +209,7 @@ module ComposeStubUniverse
       fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
       fun Checkbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
       fun Slider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
-                 valueRange: ClosedFloatingPointRange<Float> = 0f..1f) {}
+                 valueRange: ClosedFloatingPointRange<Float> = 0f..1f, onValueChangeFinished: (() -> Unit)? = null) {}
       fun LinearProgressIndicator(modifier: Modifier = Modifier) {}
       fun CircularProgressIndicator(modifier: Modifier = Modifier) {}
       fun SelectBox(value: String, onValueChange: (String) -> Unit, options: List<String>, modifier: Modifier = Modifier,

@@ -52,6 +52,10 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     'userInteraction' => { 'userInteractionEnabled' => false }, 'padding' => { 'paddings' => [5, 5, 5, 5] }
   }
   against = { 'cornerRadius' => 'background', 'enabled' => 'clickable' }
+  # A control's `enabled` is its own parameter (and `disabled()` on the node
+  # that carries the tag, where that is a wrapper); a container's is the
+  # clickable's `enabled` and `disabled()`.
+  enabled_markers = { 'Radio' => [/\benabled = false[,)\n]/, '.semantics { disabled() }'] }
 
   blocker = 'awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }'
   # Each stage's own modifier with the stage's own values. Every one must
@@ -68,7 +72,10 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     'background' => ['.background(Color(android.graphics.Color.parseColor("#3366CC")))'],
     'cornerRadius' => ['.clip(RoundedCornerShape(6.dp))'],
     'border' => ['.border(2.dp, Color(android.graphics.Color.parseColor("#FF0000")), RectangleShape)'],
-    'clickable' => [/\.clickable(?:\([^)]*\))? \{ data\.onTap\?\.invoke\(\) \}/],
+    # The declared handler's call. Where it sits — an outer `.clickable` on a
+    # container, the control's own operation on a control — is
+    # controls_call_onclick_from_their_operation_spec.rb's.
+    'clickable' => [/data\.onTap\?\.invoke\(\)/],
     'enabled' => [/\.clickable\(enabled = false[,)]/, '.semantics { disabled() }'],
     'userInteraction' => [blocker],
     'padding' => ['.padding(top = 5.dp, end = 5.dp, bottom = 5.dp, start = 5.dp)']
@@ -145,7 +152,8 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
         expect(size_at.call(with)).not_to be_nil, "#{label}: no size\n#{with}"
         expect(margin_at).to be < size_at.call(with), "#{label}: the margins sit inside the size\n#{with}"
       end
-      markers[stage].each do |marker|
+      stage_markers = stage == 'enabled' ? enabled_markers.fetch(node['type'], markers['enabled']) : markers[stage]
+      stage_markers.each do |marker|
         expect(count.call(with, marker)).to be > count.call(ref, marker),
                                             "#{label} #{stage}: #{marker.inspect} occurs " \
                                             "#{count.call(with, marker)} times with the stage, " \
@@ -231,20 +239,21 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     end
   end
 
-  # The components that emit the blocker ahead of their margins take the
-  # click alone: one click and one blocker. `enabled` stays where it was —
-  # the control's own parameter on Switch, Toggle, CheckBox and Segment (no
-  # disabled() semantics added), the disabled() semantics where the node has
-  # no such parameter.
+  # Under every gate at once, each gate is emitted once. A container that
+  # emits the blocker ahead of its margins takes the click and `disabled()`
+  # once each. A control carries no outer click (its onClick is called from
+  # its own operation) and `disabled()` only where a wrapper carries the tag:
+  # the Segment's TabRow and the Radio's Row / Column; the bare Switch,
+  # Toggle and CheckBox carry `enabled` on the tagged node.
   gated = {
-    'Switch' => 0, 'Toggle' => 0, 'CheckBox' => 0, 'Segment' => 0,
-    'Radio' => 1, 'TabView' => 1, 'Embed' => 1, 'SafeAreaView' => 1
+    'Switch' => [0, 0], 'Toggle' => [0, 0], 'CheckBox' => [0, 0], 'Segment' => [0, 1], 'Radio' => [0, 1],
+    'TabView' => [1, 1], 'Embed' => [1, 1], 'SafeAreaView' => [1, 1]
   }
-  gated.each do |type, disabled|
-    it "#{type} carries one click, one blocker and #{disabled} disabled() under every gate" do
+  gated.each do |type, (clicks, disabled)|
+    it "#{type} carries #{clicks} outer click, one blocker and #{disabled} disabled() under every gate" do
       code = emit.call({ 'type' => type }.merge(base[type], stages['clickable'], stages['userInteraction'],
                                                  'enabled' => false))
-      expect(count.call(code, '.clickable(')).to eq(1)
+      expect(count.call(code, /\.clickable\b[^{]*\{ data\.onTap/)).to eq(clicks)
       expect(count.call(code, blocker)).to eq(1)
       expect(count.call(code, 'disabled()')).to eq(disabled)
     end
@@ -255,7 +264,8 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
       code = emit.call({ 'type' => type }.merge(base[type], 'enabled' => false))
       expect(code).to include('enabled = false')
       expect(code).not_to include('.clickable')
-      expect(code).not_to include('disabled()')
+      # the Segment's tag is on its TabRow, a wrapper of the tabs
+      expect(count.call(code, 'disabled()')).to eq(type == 'Segment' ? 1 : 0)
     end
   end
 
