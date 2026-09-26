@@ -216,7 +216,7 @@ module KjuiTools
         def self.stage_modifiers(json_data, parent_type, required_imports)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-          # userInteractionEnabled / touchDisabledState stop this node and
+          # userInteractionEnabled stops this node and
           # what is in it (ModifierBuilder.build_interaction_blocker).
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))

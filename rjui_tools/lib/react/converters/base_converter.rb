@@ -413,7 +413,10 @@ module RjuiTools
             end
           end
 
-          # Disabled state
+          # Disabled state. This converter's className passes through here:
+          # a bound `enabled` gets the same classes behind its binding
+          # (apply_enabled_class).
+          @base_enabled_classes = true
           if attributes['enabled'] == false
             classes << 'opacity-50'
             classes << 'pointer-events-none'
@@ -2239,6 +2242,7 @@ module RjuiTools
 
           @visibility_applied = true
           jsx = apply_interaction_class(jsx)
+          jsx = apply_enabled_class(jsx)
           jsx = apply_hidden_binding(jsx)
 
           vis_info = build_visibility_info
@@ -2292,8 +2296,71 @@ module RjuiTools
                        end
           return jsx unless class_expr
 
-          open_tag = root_open_tag_range(jsx)
-          return jsx unless open_tag
+          append_class_to_element(jsx, class_expr, 'userInteractionEnabled')
+        end
+
+        # `enabled` bound: the classes a literal `false` gives this converter's
+        # className (`opacity-50 pointer-events-none`, build_class_name), behind
+        # the binding — the tap does not happen while it is false. Only View
+        # built the bound form (build_responsive_class_attr); every other type
+        # whose className passes through build_class_name dropped it and kept
+        # its tap (measured: Label, Image, NetworkImage, IconLabel, Blur,
+        # CircleView, GradientView — a control's own `disabled={…}` stopped its
+        # operation). A converter whose className does not pass through there
+        # (TabView) gets nothing for `false` either, and so nothing here.
+        #
+        # A control that is stopped already — its operated element carries
+        # `disabled={…}` on the same binding (Button, a text field, a
+        # SelectBox, a Slider, a Switch …) — is left as it is: a browser runs
+        # no operation on a disabled control, and the classes would dim it a
+        # second time over its own disabled look.
+        def apply_enabled_class(jsx)
+          return jsx unless @base_enabled_classes
+
+          class_expr = enabled_class_expression
+          return jsx unless class_expr
+
+          gate = extract_binding_property(attributes['enabled'])
+          return jsx if jsx.match?(/(?<![-\w])disabled=\{!\(?#{Regexp.escape(gate)}\)?\}/)
+
+          append_class_to_element(jsx, class_expr, 'enabled')
+        end
+
+        # Tags that are not an element of the page: a converter's markup can
+        # start with one (the state holder a static-seeded control is wrapped
+        # in), and a className on it is no prop of it — the TSX does not
+        # compile (`{ seed, children }` declares none).
+        NON_ELEMENT_ROOTS = %w[JsonUISeeded].freeze
+
+        # The opening tag of the first element of the page in `jsx` — past a
+        # NON_ELEMENT_ROOTS wrapper — or nil when there is none.
+        def element_root_range(jsx)
+          offset = 0
+          loop do
+            range = root_open_tag_range(jsx[offset..])
+            return nil unless range
+
+            absolute = (range.first + offset)..(range.last + offset)
+            name = jsx[absolute][/\A<([A-Za-z][\w.]*)/, 1]
+            return absolute unless NON_ELEMENT_ROOTS.include?(name)
+
+            offset = absolute.last + 1
+          end
+        end
+
+        # `class_expr` appended to the className of the first element of the
+        # page (element_root_range), whatever form it has. A subtree with no
+        # element to carry it is named, not passed over: `what` says which
+        # attribute is not applied.
+        def append_class_to_element(jsx, class_expr, what)
+          open_tag = element_root_range(jsx)
+          unless open_tag
+            Core::Logger.warn(
+              "#{json['type']} '#{attributes['id'] || '(no id)'}': #{what} is not applied — " \
+              'its markup has no element to carry the class'
+            )
+            return jsx
+          end
           return jsx if jsx[open_tag].include?(class_expr)
 
           append_root_class(jsx, open_tag, class_expr)
@@ -2341,24 +2408,14 @@ module RjuiTools
         # binding produces — the parent silently donated its invisible class
         # to that child and rendered fully visible
         # (rjui-parent-invisible-class-lands-on-a-descendant).
+        #
+        # It passed over a root tag whose className is an expression or absent,
+        # and a markup that starts with a state holder (JsonUISeeded), without
+        # a word: a bound `hidden` on a Segment, a TabView or an Embed drew the
+        # element anyway (measured). append_class_to_element takes every form,
+        # past the holder, and names a markup with no element to carry it.
         def inject_class_expression(jsx, class_expr)
-          open_tag = root_open_tag_range(jsx)
-          return jsx unless open_tag
-
-          head = jsx[open_tag]
-          # Template literal first, then static string — within this tag the
-          # two forms are mutually exclusive, so the order is not a priority.
-          patched = head.sub(/className=\{`([^`]*)`\}/) do
-            "className={`#{$1} #{class_expr}`}"
-          end
-          if patched == head
-            patched = head.sub(/className="([^"]*)"/) do
-              "className={`#{$1} #{class_expr}`}"
-            end
-          end
-          return jsx if patched == head
-
-          jsx[0...open_tag.first] + patched + jsx[(open_tag.last + 1)..]
+          append_class_to_element(jsx, class_expr, 'hidden / visibility')
         end
 
         # Range covering the first `<...>` opening tag, or nil when the

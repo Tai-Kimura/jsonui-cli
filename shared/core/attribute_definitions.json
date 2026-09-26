@@ -962,8 +962,16 @@
     },
     "touchDisabledState": {
       "type": "string",
-      "description": "Touch disable mode",
-      "platform": "swift"
+      "enum": [
+        "none",
+        "onlyMe",
+        "viewsWithoutTouchEnabled",
+        "viewsWithoutInList"
+      ],
+      "description": "The hit-test mode of SJUIView (UIKit). none — as usual; onlyMe — the view itself lets a touch through to what is behind it, its subviews still take theirs; viewsWithoutTouchEnabled — only subviews with isUserInteractionEnabled take a touch; viewsWithoutInList — only the subviews whose id is in touchEnabledViewIds do. SwiftUI, Compose and web do not read it: to stop a view and everything in it, use userInteractionEnabled: false.",
+      "platform": "swift",
+      "mode": "uikit",
+      "warn_outside_mode": true
     },
     "touchEnabledViewIds": {
       "type": "array",

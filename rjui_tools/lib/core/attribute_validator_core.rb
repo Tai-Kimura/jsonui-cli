@@ -199,10 +199,14 @@ module JsonUIShared
             if mode_compatible?(attr_def)
               # Validate attribute value
               validate_attribute(key, value, attr_def, type)
+            elsif attr_def['warn_outside_mode']
+              add_outside_mode_warning(key, attr_def, type)
             else
               # Attribute not supported in current mode - log as info
               add_mode_info(key, attr_def, type)
             end
+          elsif attr_def['warn_outside_mode']
+            add_outside_mode_warning(key, attr_def, type)
           else
             # Attribute for other platform - log as info
             add_platform_info(key, attr_def, type)
@@ -1327,6 +1331,17 @@ module JsonUIShared
       current_mode_str = @mode.to_s.capitalize
 
       add_info("Attribute '#{attr_name}' in '#{component_type}' is for #{mode_str} mode (current: #{current_mode_str})")
+    end
+
+    # An attribute declared `warn_outside_mode` is read by its mode alone, and
+    # a layout that writes it elsewhere expects something that does not
+    # happen — so it is named, a WARNING, not the usual INFO:
+    # `touchDisabledState` is UIKit's hit-test mode, and SwiftUI read any
+    # value of it as "stop everything" until jsonui-cli 1.9.0.
+    def add_outside_mode_warning(attr_name, attr_def, component_type)
+      modes = Array(attr_def['mode']).map { |m| m == 'uikit' ? 'UIKit' : m.capitalize }
+      add_warning("Attribute '#{attr_name}' in '#{component_type}' is #{modes.join('/')} only — " \
+                  "#{attr_def['description']}")
     end
 
     # Add info for platform-specific attribute (not an error, just informational)

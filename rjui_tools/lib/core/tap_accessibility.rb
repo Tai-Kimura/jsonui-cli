@@ -212,14 +212,13 @@ module JsonUIShared
     end
 
     # A node a user can operate on its own, inside a tappable. `stopped`: a
-    # node around it has `userInteractionEnabled: false`, so its own tap and
-    # long press are none (its type still says whether it is a control) — and so are its
-    # links: a Label's links stop with it (the emitters make them no links,
-    # jsonui-cli 1.9.0), so they do not count. `stopped` counts the node's
-    # own flag where holds_a_control? passes it.
+    # node around it has `userInteractionEnabled: false`, so its own tap, its
+    # long press and its links are none — the flag on the node itself too, for
+    # the links: a stopped Label's link spans do not open (the Linkable Label
+    # ticket). Its type still says whether it is a control.
     def operable?(node, stopped = false)
       interactive_type?(node['type']) || (!stopped && tappable?(node)) || long_press?(node, stopped) ||
-        (!stopped && linked_text?(node))
+        (!stopped && !stops?(node) && linked_text?(node))
     end
 
     # Something inside `node` (not itself) a user can operate on its own.
