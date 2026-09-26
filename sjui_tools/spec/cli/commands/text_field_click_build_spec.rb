@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -48,7 +49,7 @@ RSpec.describe 'onClick on a text field, through sjui build' do
         node.call('Switch', 'toggle', 'onClick' => '@{onToggle}')
       ]
     ))
-    @log, @status = Open3.capture2e('ruby', File.join(tool, 'bin', 'sjui'), 'build', chdir: @dir)
+    @log, @status = Open3.capture2e(RbConfig.ruby, File.join(tool, 'bin', 'sjui'), 'build', chdir: @dir)
     @log = @log.gsub(/\e\[[0-9;]*m/, '')
   end
 

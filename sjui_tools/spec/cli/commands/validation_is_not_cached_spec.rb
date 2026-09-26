@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -64,7 +65,7 @@ RSpec.describe 'validation is not cached' do
   end
 
   def sjui(dir, *args)
-    Open3.capture2e('ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', *args, chdir: dir)
+    Open3.capture2e(RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', *args, chdir: dir)
   end
 
   # Build until the cache skips every layout it may skip, so the examples

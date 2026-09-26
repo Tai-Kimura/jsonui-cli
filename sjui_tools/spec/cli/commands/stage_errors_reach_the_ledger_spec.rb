@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -66,7 +67,7 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
   def build(dir)
     ledger = File.join(dir, 'ledger.json')
     File.delete(ledger) if File.exist?(ledger)
-    log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => ledger }, 'ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
+    log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => ledger }, RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
     [log.gsub(/\e\[[0-9;]*m/, ''), status.exitstatus, File.exist?(ledger) ? JSON.parse(File.read(ledger)) : []]
   end
 

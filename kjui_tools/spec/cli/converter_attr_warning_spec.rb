@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -57,7 +58,7 @@ RSpec.describe 'the warning for an attribute type outside the vocabulary, throug
     FileUtils.mkdir_p(File.join(@dir, 'app', 'src', 'main', 'assets', 'Layouts'))
 
     kjui = lambda do |component, type, flags|
-      said, status = Open3.capture2e('ruby', File.join(tool, 'bin', 'kjui'), 'g', 'converter', component,
+      said, status = Open3.capture2e(RbConfig.ruby, File.join(tool, 'bin', 'kjui'), 'g', 'converter', component,
                                      '--attr', "r:#{type}", *flags, chdir: @dir, stdin_data: '')
       [said.gsub(/\e\[[0-9;]*m/, ''), status]
     end
