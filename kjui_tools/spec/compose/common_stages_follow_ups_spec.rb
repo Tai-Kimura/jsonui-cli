@@ -282,6 +282,51 @@ RSpec.describe 'kjui codegen: the common stages, follow-ups' do
     expect(builder.subcompose_node?('type' => 'View', 'children' => [{ 'type' => 'Label' }])).to be(false)
   end
 
+  # --- C ------------------------------------------------------------------
+  # Indicator read `style` (the style-file key) and an undeclared `size`;
+  # `indicatorStyle` was declared for swift only. It is declared for Compose
+  # now (small / medium / large / linear) and is what the converter reads;
+  # the layout normalizer folds the legacy spellings
+  # (jui_tools tests/test_normalizer_indicator_legacy_spelling.py).
+  indicator = ->(extra) { emit.call({ 'type' => 'Indicator', 'margins' => [7, 7, 7, 7] }.merge(extra)) }
+  margins_at = ->(code) { code.index('.padding(top = 7.dp') }
+
+  it 'C: Indicator draws each declared indicatorStyle, its size in the size slot after the margins' do
+    { 'small' => '.size(16.dp)', 'large' => '.size(48.dp)' }.each do |style, size|
+      code = indicator.call('indicatorStyle' => style)
+      expect(code).to include('CircularProgressIndicator(')
+      expect(code.index(size)).to be > margins_at.call(code), code
+    end
+    medium = indicator.call('indicatorStyle' => 'medium')
+    expect(medium).to include('CircularProgressIndicator(')
+    expect(medium).not_to match(/\.size\(/)
+    expect(indicator.call('indicatorStyle' => 'linear')).to include('LinearProgressIndicator(')
+    # a declared size wins over the style's
+    sized = indicator.call('indicatorStyle' => 'large', 'width' => 40, 'height' => 40)
+    expect(sized).to include('.requiredWidth(40.dp)')
+    expect(sized).not_to include('.size(48.dp)')
+  end
+
+  it 'C: Indicator reads neither `style` nor `size`' do
+    plain = indicator.call({})
+    expect(indicator.call('style' => 'large')).to eq(plain)
+    expect(indicator.call('style' => 'linear')).to eq(plain)
+    expect(indicator.call('size' => 30)).to eq(plain)
+  end
+
+  it 'C: the Compose validator takes indicatorStyle on Indicator, and only its values' do
+    require 'core/attribute_validator'
+    warnings_for = lambda do |node|
+      validator = KjuiTools::Core::AttributeValidator.new(:compose)
+      validator.validate(node)
+      validator.warnings.grep(/indicatorStyle/)
+    end
+    %w[small medium large linear].each do |style|
+      expect(warnings_for.call('type' => 'Indicator', 'indicatorStyle' => style)).to be_empty
+    end
+    expect(warnings_for.call('type' => 'Indicator', 'indicatorStyle' => 'huge')).not_to be_empty
+  end
+
   # --- compile --------------------------------------------------------------
   # Every type and branch with the gestures, a bound enabled / interaction
   # gate, a bound cornerRadius and (TabView) a bound selection whose name holds

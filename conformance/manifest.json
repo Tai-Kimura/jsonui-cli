@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "ad3e649a1425b4a03d9ed912df7318022db82d28b4ffcd76d55d30aea68d1e9f",
+  "generatedFrom": "17fc1ac6fd8ec320ade36b6bc9fae11fdd0dc7578e2a5cde57bd92c1ec1a1848",
   "counts": {
-    "fixtures": 1118,
+    "fixtures": 1120,
     "assertable": 49,
-    "visual": 837,
+    "visual": 839,
     "interactive": 38,
     "control": 116,
     "declarationOnly": 77,
@@ -22016,12 +22016,42 @@
       "aliasOf": null,
       "value": "large",
       "platforms": [
-        "ios"
+        "ios",
+        "android"
       ],
-      "mode": "swiftui",
+      "mode": [
+        "swiftui",
+        "compose"
+      ],
       "deprecated": null,
       "layout": "fixtures/Indicator/indicatorStyle__large.layout.json",
       "test": "fixtures/Indicator/indicatorStyle__large.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Indicator/indicatorStyle@Indicator",
+      "control": "__control/Indicator"
+    },
+    {
+      "id": "Indicator/indicatorStyle__small",
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "case": "small",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "indicatorStyle",
+      "aliasOf": null,
+      "value": "small",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": [
+        "swiftui",
+        "compose"
+      ],
+      "deprecated": null,
+      "layout": "fixtures/Indicator/indicatorStyle__small.layout.json",
+      "test": "fixtures/Indicator/indicatorStyle__small.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Indicator/indicatorStyle@Indicator",
@@ -22038,12 +22068,42 @@
       "aliasOf": null,
       "value": "medium",
       "platforms": [
-        "ios"
+        "ios",
+        "android"
       ],
-      "mode": "swiftui",
+      "mode": [
+        "swiftui",
+        "compose"
+      ],
       "deprecated": null,
       "layout": "fixtures/Indicator/indicatorStyle__medium.layout.json",
       "test": "fixtures/Indicator/indicatorStyle__medium.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Indicator/indicatorStyle@Indicator",
+      "control": "__control/Indicator"
+    },
+    {
+      "id": "Indicator/indicatorStyle__linear",
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "case": "linear",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "indicatorStyle",
+      "aliasOf": null,
+      "value": "linear",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": [
+        "swiftui",
+        "compose"
+      ],
+      "deprecated": null,
+      "layout": "fixtures/Indicator/indicatorStyle__linear.layout.json",
+      "test": "fixtures/Indicator/indicatorStyle__linear.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Indicator/indicatorStyle@Indicator",
