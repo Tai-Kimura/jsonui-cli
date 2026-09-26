@@ -21,7 +21,8 @@ RSpec.describe 'sjui SelectBox: onValueChange is handed what its declared parame
   HANDLERS = {
     '(String)' => ['pickItem', '((String) -> Void)?'],
     '(String, Int)' => ['pickIndex', '((String, Int) -> Void)?'],
-    '(String, String)' => ['pickNamed', '((String, String) -> Void)?']
+    '(String, String)' => ['pickNamed', '((String, String) -> Void)?'],
+    '(Int)' => ['pickAt', '((Int) -> Void)?']
   }.freeze
 
   BINDINGS = {
@@ -90,13 +91,34 @@ RSpec.describe 'sjui SelectBox: onValueChange is handed what its declared parame
     expect(closure(emit('pickNamed', date)).lines.map(&:strip)).to eq(['data.day = newValue', 'data.pickNamed?("box", newValue)'])
   end
 
+  # A date has no index: a handler declared to take one is not called, and
+  # the comment says why where the call would be (4f's ruling, 1.9.0). It was
+  # handed the date string for its Int.
+  it 'a date picker does not call a handler that takes an index' do
+    date = { 'selectItemType' => 'Date', 'selectedDate' => '@{day}' }
+    %w[pickIndex pickAt].each do |handler|
+      expect(closure(emit(handler, date)).lines.map(&:strip)).to eq([
+        'data.day = newValue',
+        "// ERROR: SelectBox.onValueChange #{handler} is not called: a date SelectBox has no index: declare onValueChange as (String) or (String, String)"
+      ])
+    end
+    expect(closure(emit('pickIndex', { 'selectItemType' => 'Date' }))).to start_with('// ERROR: SelectBox.onValueChange pickIndex is not called')
+  end
+
+  it 'a list picker hands an index-taking handler its index' do
+    expect(closure(emit('pickAt', BINDINGS['index bound']))).to eq('data.pickAt?(data.idx)')
+    expect(closure(emit('pickAt', {}))).to eq('data.pickAt?((["a", "b"].firstIndex(of: newValue) ?? -1))')
+  end
+
   # Every closure above, type-checked as SelectBoxView's
   # `onValueChange: ((String) -> Void)?` (SwiftJsonUI SelectBoxView.swift)
   # over the declared handlers — SelectBoxView itself is not on this
   # machine's search path, so the closures are compiled, not the call.
   it 'compiles: every closure over the declared handlers' do
     closures = EXPECTED.keys.map { |declared, bound| closure(emit(HANDLERS[declared].first, BINDINGS[bound])) }
-    closures += %w[pickItem pickNamed].map { |h| closure(emit(h, { 'selectItemType' => 'Date', 'selectedDate' => '@{day}' })) }
+    closures += %w[pickItem pickNamed pickIndex pickAt].map { |h| closure(emit(h, { 'selectItemType' => 'Date', 'selectedDate' => '@{day}' })) }
+    closures << closure(emit('pickIndex', { 'selectItemType' => 'Date' }))
+    closures += [BINDINGS['index bound'], {}].map { |b| closure(emit('pickAt', b)) }
     lets = closures.each_with_index.map do |body, i|
       "        let c#{i}: (String) -> Void = { newValue in\n#{body.lines.map { |l| "            #{l.strip}\n" }.join}        }\n        _ = c#{i}"
     end
