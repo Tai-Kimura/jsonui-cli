@@ -96,11 +96,11 @@ module JsonUIShared
           begin
             @type_mapping = JSON.parse(File.read(mapping_path))
           rescue JSON::ParserError => e
-            warn "[TypeConverter] Warning: Failed to parse type_mapping.json: #{e.message}"
+            report_warning("Failed to parse type_mapping.json: #{e.message}")
             @type_mapping = { 'types' => {}, 'events' => {}, 'defaults' => {} }
           end
         else
-          warn "[TypeConverter] Warning: type_mapping.json not found at #{mapping_path}"
+          report_warning("type_mapping.json not found at #{mapping_path}")
           @type_mapping = { 'types' => {}, 'events' => {}, 'defaults' => {} }
         end
 
@@ -173,7 +173,7 @@ module JsonUIShared
             raw = JSON.parse(File.read(@colors_file_path))
             @colors_data = flatten_colors_for_lookup(raw)
           rescue JSON::ParserError => e
-            warn "[TypeConverter] Warning: Failed to parse colors.json: #{e.message}"
+            report_warning("Failed to parse colors.json: #{e.message}")
             @colors_data = {}
           end
         else
