@@ -46,18 +46,29 @@ module KjuiTools
           # Add testTag and contentDescription for UI testing
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
-          # Size based on style
-          if style == 'large'
-            modifiers << ".size(48.dp)"
-          elsif style == 'small'
-            modifiers << ".size(16.dp)"
-          elsif json_data['size']
-            modifiers << ".size(#{json_data['size']}.dp)"
+          # Size. The declared `width` / `height` (common) win and go through
+          # the one size builder, in the size slot after the margins; they
+          # were dropped, so a declared 40x40 spinner drew at the style's size
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). With
+          # neither declared, the style's size stays as it was.
+          declared_size = json_data['width'] || json_data['height'] || json_data['frame']
+          unless declared_size
+            if style == 'large'
+              modifiers << ".size(48.dp)"
+            elsif style == 'small'
+              modifiers << ".size(16.dp)"
+            elsif json_data['size']
+              modifiers << ".size(#{json_data['size']}.dp)"
+            end
           end
-          
+
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports)) if declared_size
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → background (border + clip + background): the View slots.
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))

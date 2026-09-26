@@ -189,7 +189,15 @@ module KjuiTools
             box_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             box_modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             box_modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
-            box_modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+            # A text field is a control whose own tap focuses it: an outer
+            # `.clickable` replaced that action for TalkBack (Compose applies a
+            # node's semantics innermost first; a later action wins), so a
+            # screen-reader user could not reach the field. iOS codegen
+            # attaches no tap to a text field and calls no onClick; the tap
+            # rule's shape for it is `none`. So the declared onClick is not
+            # called here (kjui-dynamic-components-that-skip-the-common-
+            # modifiers, item A); the gestures and the blocker stay.
+            box_modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: false))
             if box_modifiers.any?
               code += "\n" + indent("boxModifier = Modifier", depth + 1)
               box_modifiers.each do |mod|
@@ -236,7 +244,8 @@ module KjuiTools
 
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-            textfield_modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+            textfield_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: TextFieldComponent.shadow_outline(json_data, required_imports)))
+            textfield_modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
             if focus_prop
               required_imports&.add(:focus_changed)
@@ -289,7 +298,16 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-            modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: TextFieldComponent.shadow_outline(json_data, required_imports)))
+            # A text field is a control whose own tap focuses it: an outer
+            # `.clickable` replaced that action for TalkBack (Compose applies a
+            # node's semantics innermost first; a later action wins), so a
+            # screen-reader user could not reach the field. iOS codegen
+            # attaches no tap to a text field and calls no onClick; the tap
+            # rule's shape for it is `none`. So the declared onClick is not
+            # called here (kjui-dynamic-components-that-skip-the-common-
+            # modifiers, item A); the gestures and the blocker stay.
+            modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
             if focus_prop

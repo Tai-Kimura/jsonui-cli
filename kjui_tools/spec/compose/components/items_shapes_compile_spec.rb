@@ -24,6 +24,10 @@ RSpec.describe 'kjui codegen: each declared shape of `items`' do
     fun Modifier.height(h: Dp): Modifier = this
     fun Modifier.width(w: Dp): Modifier = this
     fun Modifier.clickable(onClick: () -> Unit): Modifier = this
+    // A node with an id carries its test tag (the common stages).
+    fun Modifier.testTag(tag: String): Modifier = this
+    class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
+    fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
     class Color { companion object { val Black = Color() } }
     object Alignment { class Vertical; val CenterVertically = Vertical() }
     fun Row(modifier: Modifier = Modifier, verticalAlignment: Alignment.Vertical = Alignment.CenterVertically, content: () -> Unit) {}

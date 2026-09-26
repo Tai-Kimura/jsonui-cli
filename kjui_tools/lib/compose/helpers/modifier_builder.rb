@@ -547,11 +547,18 @@ module KjuiTools
           modifiers
         end
         
-        def self.build_shadow(json_data, required_imports = nil)
+        # `shape:` — the outline of a component whose drawn shape is not the
+        # declared cornerRadius: CircleImage clips to CircleShape, and Button
+        # draws its default rounded shape when no cornerRadius is declared. A
+        # RectangleShape shadow would sit square behind either. Everything
+        # else about the shadow is this one builder.
+        def self.build_shadow(json_data, required_imports = nil, shape: nil)
           modifiers = []
-          
+
           if json_data['shadow']
-            if json_data['cornerRadius']
+            if shape
+              # the caller's outline, as given
+            elsif json_data['cornerRadius']
               shape = "RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])})"
             else
               shape = "RectangleShape"
@@ -586,7 +593,14 @@ module KjuiTools
 
             if shadow_args
               required_imports&.add(:drop_shadow)
+              # The shadow brings the import of the shape it names. The
+              # RoundedCornerShape one used to ride on an import something
+              # else in the chain happened to add (a background's clip, a
+              # `shape =` argument); TextField, TextView and SelectBox add
+              # none, so their shadow did not resolve in the generated file.
               required_imports&.add(:rectangle_shape) if shape == "RectangleShape"
+              required_imports&.add(:shape) if shape.start_with?('RoundedCornerShape')
+              required_imports&.add(:circle_shape) if shape == 'CircleShape'
               modifiers << ".dropShadow(shape = #{shape}, shadow = Shadow(#{shadow_args}))"
             end
           end
@@ -624,23 +638,9 @@ module KjuiTools
               background_color = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else #{background_color}"
             end
             
-            if json_data['cornerRadius'] || json_data['borderColor'] || json_data['borderWidth']
-              required_imports&.add(:border)
-              required_imports&.add(:shape)
-
-              # border before clip to prevent border being clipped
-              if json_data['borderColor'] && json_data['borderWidth']
-                modifiers << build_border_modifier(json_data, required_imports)
-              end
-
-              if json_data['cornerRadius']
-                modifiers << ".clip(RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])}))"
-              end
-
-              modifiers << ".background(#{background_color})"
-            else
-              modifiers << ".background(#{background_color})"
-            end
+            # border before clip to prevent border being clipped
+            modifiers.concat(build_border_and_clip(json_data, required_imports))
+            modifiers << ".background(#{background_color})"
           elsif highlight_cond && highlight_bg
             # No base background: the highlight IS the background when the
             # flag holds (transparent otherwise, which is what no-background
@@ -649,18 +649,8 @@ module KjuiTools
             hl = ResourceResolver.process_color(highlight_bg, required_imports)
             expr = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else Color.Transparent"
             modifiers << ".background(#{expr})"
-          elsif json_data['cornerRadius'] || json_data['borderColor'] || json_data['borderWidth']
-            required_imports&.add(:border)
-            required_imports&.add(:shape)
-
-            # border before clip
-            if json_data['borderColor'] && json_data['borderWidth']
-              modifiers << build_border_modifier(json_data, required_imports)
-            end
-
-            if json_data['cornerRadius']
-              modifiers << ".clip(RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])}))"
-            end
+          else
+            modifiers.concat(build_border_and_clip(json_data, required_imports))
           end
 
           # `safeAreaInsetPositions` on a PLAIN node. The SSoT declares it on
@@ -705,6 +695,46 @@ module KjuiTools
           end
 
           modifiers
+        end
+
+        # The background stage without its colour: the border (width + colour
+        # pair), then the corner clip — border first so the clip does not cut
+        # it. build_background paints its colour after these; a component that
+        # paints its own background (a native parameter or view) takes these
+        # two alone. The imports are the ones build_background always added
+        # for any of the three attributes.
+        def self.build_border_and_clip(json_data, required_imports = nil)
+          return [] unless json_data['cornerRadius'] || json_data['borderColor'] || json_data['borderWidth']
+
+          required_imports&.add(:border)
+          required_imports&.add(:shape)
+          modifiers = []
+          modifiers << build_border_modifier(json_data, required_imports) if json_data['borderColor'] && json_data['borderWidth']
+          modifiers.concat(build_corner_clip(json_data, required_imports))
+          modifiers
+        end
+
+        # The corner clip alone — `.clip(RoundedCornerShape(cornerRadius))`.
+        def self.build_corner_clip(json_data, required_imports = nil)
+          return [] unless json_data['cornerRadius']
+
+          required_imports&.add(:shape)
+          [".clip(RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])}))"]
+        end
+
+        # The border alone, for a component that paints its own background —
+        # a native parameter (Segment's containerColor) or view (WebView's
+        # setBackgroundColor, Blur's scrim) — and so cannot take
+        # build_background without painting it twice. The same modifier and
+        # the same imports build_background emits for the pair. `shape:` is
+        # the outline of a component whose drawn shape is not the declared
+        # cornerRadius (CircleImage's circle), as for build_shadow.
+        def self.build_border(json_data, required_imports = nil, shape: nil)
+          return [] unless json_data['borderColor'] && json_data['borderWidth']
+
+          required_imports&.add(:border)
+          required_imports&.add(:shape)
+          [build_border_modifier(json_data, required_imports, shape: shape)]
         end
 
         def self.build_test_tag(json_data, required_imports = nil)
@@ -821,13 +851,121 @@ module KjuiTools
         # fired long press consumes the gesture and the click never fires.
         def self.build_clickable(json_data, required_imports = nil)
           modifiers = []
+          modifiers.concat(build_gestures(json_data, required_imports))
+          modifiers.concat(build_click(json_data, required_imports))
+          # `disabled()` follows `enabled` only: a view that is merely not
+          # tappable is not "disabled" to a screen reader.
+          modifiers.concat(build_disabled_semantics(json_data, enabled_expression(json_data), required_imports))
+          modifiers.concat(build_interaction_blocker(json_data, required_imports))
+          modifiers
+        end
+
+        # The node's own long press, pan and pinch — build_clickable's
+        # gestures, each gated by gesture_gate.
+        def self.build_gestures(json_data, required_imports = nil)
+          modifiers = []
           modifiers.concat(build_long_pressable(json_data, required_imports))
           modifiers.concat(build_pannable(json_data, required_imports))
           modifiers.concat(build_pinchable(json_data, required_imports))
+          modifiers
+        end
+
+        # The declared onClick as a Kotlin call, and its canTap gate:
+        # `[call, gate]` (gate nil when there is none), or nil when there is
+        # no handler or `canTap` is false. The one reading build_click and
+        # operation_click_call share.
+        def self.click_call(json_data)
           # A handler names a method (shared/core/tap_accessibility.rb
           # `handler?`): `""`, `"   "`, `"@{}"`, `[]` and `[""]` are no tap.
           tap = JsonUIShared::TapAccessibility
           handler = [json_data['onclick'], json_data['onClick']].find { |value| tap.handler?(value) }
+          can_tap = boolean_expression(json_data['canTap'])
+          return nil if handler.nil? || can_tap == 'false'
+
+          view_id = json_data['id']
+          call = if tap.handler?(json_data['onClick']) && is_binding?(json_data['onClick'])
+                   get_event_handler_invocation(json_data['onClick'], view_id, nil)
+                 elsif tap.handler?(json_data['onClick'])
+                   get_event_handler_call(json_data['onClick'], is_camel_case: true)
+                 else
+                   get_event_handler_call(json_data['onclick'], is_camel_case: false)
+                 end
+          [call, can_tap]
+        end
+
+        # The declared onClick of a CONTROL — Switch / Toggle, CheckBox,
+        # Radio, Segment, Slider, SelectBox — called from the control's own
+        # operation, after its own update: a statement for the operation's
+        # lambda, or nil. `canTap` gates the call (a binding: while it holds);
+        # `enabled` is the control's own parameter, so a disabled control
+        # neither operates nor calls. No `.clickable` is added: on the
+        # control's node an outer clickable's OnClick action replaces the
+        # control's own (Compose applies a node's semantics innermost first and
+        # a later action replaces an earlier one), so TalkBack's double tap ran
+        # the handler and did not operate the control, while a touch operated
+        # it and never reached the handler. The tap rule's shape for these is
+        # `none` — a control already, left as it was
+        # (kjui-dynamic-components-that-skip-the-common-modifiers, item A).
+        def self.operation_click_call(json_data)
+          call, gate = click_call(json_data)
+          return nil unless call
+
+          gate ? "if (#{gate}) { #{call} }" : call
+        end
+
+        # Append an argument that opens with its own `,\n` to a call being
+        # built. When the call so far already ends in a comma — the argument
+        # before it closed with one and no modifier chain followed — the
+        # argument's comma is dropped: `onCheckedChange = { },,` does not
+        # compile (a Switch or CheckBox with `enabled` or colours and no
+        # modifier emitted it since before 24f7fad0).
+        def self.join_argument(code, argument)
+          return code if argument.nil? || argument.empty?
+          return code + argument.sub(/\A,/, '') if code.rstrip.end_with?(',') && argument.start_with?(',')
+
+          code + argument
+        end
+
+        # A control's operation lambda — `{ newValue -> … }`, `{ … }` or
+        # `{ }` — with operation_click_call as its last statement, after the
+        # value is written and onValueChange has run. Unchanged when there is
+        # no call, and for an `// ERROR` lambda (its comment runs to the end of
+        # the line). An empty lambda takes the call on `it`, so no unused
+        # parameter is named.
+        def self.with_operation_click(lambda_text, json_data)
+          call = operation_click_call(json_data)
+          return lambda_text if call.nil? || lambda_text.include?('ERROR')
+          return "{ #{call} }" if lambda_text.strip == '{ }'
+
+          lambda_text.sub(/\s*\}\z/, "; #{call} }")
+        end
+
+        # The clickable stage of a control whose tap is its own operation:
+        # build_clickable's gestures and blocker, no `.clickable` (see
+        # operation_click_call), and `disabled()` only where the control's own
+        # `enabled` does not land on this node — `enabled_on_node: false` for
+        # a wrapper (the labelled Row, a text field's margin Box), whose tag a
+        # UI test reads.
+        def self.build_control_clickable(json_data, required_imports = nil, enabled_on_node:, blocker: true)
+          modifiers = []
+          modifiers.concat(build_gestures(json_data, required_imports))
+          unless enabled_on_node
+            modifiers.concat(build_disabled_semantics(json_data, enabled_expression(json_data), required_imports))
+          end
+          modifiers.concat(build_interaction_blocker(json_data, required_imports)) if blocker
+          modifiers
+        end
+
+        # The click alone: `.clickable` for onClick / onclick, gated by canTap
+        # and carrying `enabled`. build_clickable wraps it in the node's
+        # gestures, its disabled semantics and its interaction blocker. A
+        # container that emits the blocker early (TabView, Embed,
+        # SafeAreaView) takes this piece and the disabled semantics, so no
+        # gate is emitted twice. Controls take operation_click_call instead.
+        def self.build_click(json_data, required_imports = nil)
+          modifiers = []
+          call, can_tap = click_call(json_data)
+          handler = call
           enabled = enabled_expression(json_data)
           # `canTap` (attribute_definitions.json common.canTap, the Compose tap
           # gate) decides whether there is a click at all, and `enabled` whether
@@ -838,19 +976,10 @@ module KjuiTools
           # emulator, AccessibilityNodeInfo.isEnabled), where iOS reads it as
           # enabled. So `false` emits no click (and no Role.Button), and a
           # binding attaches the click while it resolves true — what the iOS
-          # codegen and both dynamic runtimes do.
-          can_tap = boolean_expression(json_data['canTap'])
-          handler = nil if can_tap == 'false'
+          # codegen and both dynamic runtimes do (click_call).
           if handler
             required_imports&.add(:clickable)
-            view_id = json_data['id']
-            if tap.handler?(json_data['onClick']) && is_binding?(json_data['onClick'])
-              handler_call = get_event_handler_invocation(json_data['onClick'], view_id, nil)
-            elsif tap.handler?(json_data['onClick'])
-              handler_call = get_event_handler_call(json_data['onClick'], is_camel_case: true)
-            else
-              handler_call = get_event_handler_call(json_data['onclick'], is_camel_case: false)
-            end
+            handler_call = call
             # A tap a screen reader should call a button
             # (shared/core/tap_accessibility.rb): `role = Role.Button`. Left off
             # where the tappable is a control already or holds one — the same
@@ -865,10 +994,6 @@ module KjuiTools
             clickable = "clickable#{gate} { #{handler_call} }"
             modifiers << (can_tap ? ".then(if (#{can_tap}) Modifier.#{clickable} else Modifier)" : ".#{clickable}")
           end
-          # `disabled()` follows `enabled` only: a view that is merely not
-          # tappable is not "disabled" to a screen reader.
-          modifiers.concat(build_disabled_semantics(json_data, enabled, required_imports))
-          modifiers.concat(build_interaction_blocker(json_data, required_imports))
           modifiers
         end
 
@@ -1587,7 +1712,7 @@ module KjuiTools
         private
 
         # Build border modifier with support for solid/dashed/dotted styles
-        def self.build_border_modifier(json_data, required_imports = nil)
+        def self.build_border_modifier(json_data, required_imports = nil, shape: nil)
           # The width+color PAIR is what requests a border; neither half
           # summons one on its own, and there is no default border colour.
           # That is a recorded ruling, not an inference —
@@ -1608,7 +1733,9 @@ module KjuiTools
           # expression, so the `.dp` moved inside it.
           border_width = BoundValue.dp(json_data['borderWidth'])
           border_style = json_data['borderStyle'] || 'solid'
-          if json_data['cornerRadius']
+          if shape
+            border_shape = shape
+          elsif json_data['cornerRadius']
             border_shape = "RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])})"
           else
             # `RectangleShape` is in `androidx.compose.ui.graphics`, NOT the

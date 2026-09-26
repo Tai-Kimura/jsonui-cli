@@ -40,8 +40,11 @@ module SjuiTools
                            "$#{state_var}"
                          end
 
-          # Toggle
-          add_line "Toggle(isOn: #{state_binding}) {"
+          # Toggle. The declared onClick is called from the flip, after the
+          # value is written (operation_binding); no tap around the switch —
+          # its label is not the switch, and a tap there called it without a
+          # flip (register_click_lines, operation_click_type?).
+          add_line "Toggle(isOn: #{operation_binding(state_binding, operation_click_call)}) {"
           indent do
             # A bound label used to be escaped into the literal, which
             # compiles and then prints the characters `@{name}` on screen.
