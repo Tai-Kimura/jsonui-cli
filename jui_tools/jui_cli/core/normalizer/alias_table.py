@@ -123,10 +123,12 @@ class AliasTable:
         self._common_aliases = self._alias_map_for_section("common")
         self._common_deprecated = self._deprecated_map_for_section("common")
         self._common_value_aliases = self._value_alias_map_for_section("common")
+        self._common_item_aliases = self._item_alias_map_for_section("common")
         # component key -> cached maps
         self._alias_cache: dict[str | None, dict[str, str]] = {}
         self._deprecated_cache: dict[str | None, dict[str, DeprecationInfo]] = {}
         self._value_alias_cache: dict[str | None, dict[str, dict[str, str]]] = {}
+        self._item_alias_cache: dict[str | None, dict[str, dict[str, str]]] = {}
 
     # ------------------------------------------------------------------
     # Construction
@@ -231,6 +233,23 @@ class AliasTable:
         self._value_alias_cache[key] = merged
         return merged
 
+    def item_aliases_for(self, component_type: str | None) -> dict[str, dict[str, str]]:
+        """``{attribute: {alias: canonical}}`` for the objects inside an
+        array attribute of *component_type* — declared as ``aliases`` on a
+        property of the attribute's ``items`` (a partialAttributes range's
+        ``onClick`` declares ``["onclick"]``). Same overlay rule as
+        :meth:`aliases_for`.
+        """
+        key = self.definition_key_for(component_type)
+        if key in self._item_alias_cache:
+            return self._item_alias_cache[key]
+        merged = {attr: dict(m) for attr, m in self._common_item_aliases.items()}
+        if key and key != "common":
+            for attr, m in self._item_alias_map_for_section(key).items():
+                merged.setdefault(attr, {}).update(m)
+        self._item_alias_cache[key] = merged
+        return merged
+
     def deprecated_for(self, component_type: str | None) -> dict[str, DeprecationInfo]:
         """``{attribute: DeprecationInfo}`` effective for *component_type*."""
         key = self.definition_key_for(component_type)
@@ -271,6 +290,27 @@ class AliasTable:
             for alias in aliases:
                 if isinstance(alias, str) and alias and alias != canonical:
                     out[alias] = canonical
+        return out
+
+    def _item_alias_map_for_section(self, key: str) -> dict[str, dict[str, str]]:
+        out: dict[str, dict[str, str]] = {}
+        for attr, spec in self._section(key).items():
+            if not isinstance(spec, dict):
+                continue
+            items = spec.get("items")
+            properties = items.get("properties") if isinstance(items, dict) else None
+            if not isinstance(properties, dict):
+                continue
+            table: dict[str, str] = {}
+            for canonical, prop in properties.items():
+                aliases = prop.get("aliases") if isinstance(prop, dict) else None
+                if not isinstance(aliases, list):
+                    continue
+                for alias in aliases:
+                    if isinstance(alias, str) and alias and alias != canonical:
+                        table[alias] = canonical
+            if table:
+                out[attr] = table
         return out
 
     def _value_alias_map_for_section(self, key: str) -> dict[str, dict[str, str]]:

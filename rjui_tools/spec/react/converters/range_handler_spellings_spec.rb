@@ -8,7 +8,8 @@ require 'react/converters/button_converter'
 # A partialAttributes range's handler in both declared spellings: `onClick`
 # (a binding) is canonical, `onclick` (a selector) its alias. Every path reads
 # both, the canonical one first (TapAccessibility.range_handler; 4f ruling,
-# jsonui-cli 1.9.0). rjui read `onclick` only, so a range written the
+# jsonui-cli 1.9.0). The normalizer folds `onclick` into `onClick` (its declared
+# alias), so onClick may hold a method name as well as a binding. rjui read `onclick` only, so a range written the
 # canonical way had no handler on web (measured in two apps' generated TSX:
 # 8 such ranges, each emitted with no onClick).
 RSpec.describe 'rjui: a range\'s handler in either spelling' do
@@ -22,7 +23,8 @@ RSpec.describe 'rjui: a range\'s handler in either spelling' do
     'onClick (canonical)' => [{ 'range' => 'Terms', 'onClick' => '@{onTerms}' }, 'data.onTerms'],
     'onclick (alias)' => [{ 'range' => 'Terms', 'onclick' => 'onTerms' }, 'data.onTerms'],
     'both: the canonical one' => [{ 'range' => 'Terms', 'onClick' => '@{onTerms}', 'onclick' => 'onOther' }, 'data.onTerms'],
-    'onClick not a binding: the alias' => [{ 'range' => 'Terms', 'onClick' => 'onTerms', 'onclick' => 'onOther' }, 'data.onOther'],
+    'onClick holding a name (the alias folded)' => [{ 'range' => 'Terms', 'onClick' => 'onTerms', 'onclick' => 'onOther' }, 'data.onTerms'],
+    'onclick holding a binding' => [{ 'range' => 'Terms', 'onclick' => '@{onTerms}' }, 'data.onTerms'],
     'none' => [{ 'range' => 'Terms' }, nil]
   }
   %w[Label Button].each do |type|

@@ -10,7 +10,8 @@ require_relative '../support/compose_stub_universe'
 # A partialAttributes range's handler in both declared spellings: `onClick`
 # (a binding) is canonical, `onclick` (a selector) its alias. Every path reads
 # both, the canonical one first (TapAccessibility.range_handler; 4f ruling,
-# jsonui-cli 1.9.0). kjui read both and took `onclick` first.
+# jsonui-cli 1.9.0). The normalizer folds `onclick` into `onClick` (its declared
+# alias), so onClick may hold a method name as well as a binding. kjui read both and took `onclick` first.
 RSpec.describe 'kjui: a range\'s handler in either spelling' do
   emit = lambda do |ranges|
     KjuiTools::Compose::Components::TextComponent.reset_counter!
@@ -23,7 +24,8 @@ RSpec.describe 'kjui: a range\'s handler in either spelling' do
     'onClick (canonical)' => [{ 'range' => 'Terms', 'onClick' => '@{onTerms}' }, '{ data.onTerms?.invoke() }'],
     'onclick (alias)' => [{ 'range' => 'Terms', 'onclick' => 'onTerms' }, '{ data.onTerms?.invoke() }'],
     'both: the canonical one' => [{ 'range' => 'Terms', 'onClick' => '@{onTerms}', 'onclick' => 'onOther' }, '{ data.onTerms?.invoke() }'],
-    'onClick not a binding: the alias' => [{ 'range' => 'Terms', 'onClick' => 'onTerms', 'onclick' => 'onOther' }, '{ data.onOther?.invoke() }'],
+    'onClick holding a name (the alias folded)' => [{ 'range' => 'Terms', 'onClick' => 'onTerms', 'onclick' => 'onOther' }, '{ data.onTerms?.invoke() }'],
+    'onclick holding a binding' => [{ 'range' => 'Terms', 'onclick' => '@{onTerms}' }, '{ data.onTerms?.invoke() }'],
     'onclick array' => [{ 'range' => 'Terms', 'onclick' => %w[onA onB] }, '{ data.onA?.invoke(); data.onB?.invoke() }'],
     'none' => [{ 'range' => 'Terms' }, 'null']
   }.each do |name, (range, want)|
