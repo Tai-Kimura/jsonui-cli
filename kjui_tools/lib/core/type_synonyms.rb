@@ -101,10 +101,14 @@ module JsonUIShared
     DEFAULT_DEFINITIONS = File.join(__dir__, 'attribute_definitions.json')
 
     class << self
-      # alias spelling -> canonical section, read once per path.
+      # alias spelling -> canonical section, read once per path. A missing
+      # file reads as empty, as TypeSynonyms.entries reads a missing table:
+      # the validator names it and records the validation stage incomplete
+      # (load_definitions), and a converter then draws an alias as an
+      # undeclared type. A malformed file raises (JSON::ParserError).
       def table(path = DEFAULT_DEFINITIONS)
         @tables ||= {}
-        @tables[path] ||= read(path)
+        @tables[path] ||= File.exist?(path) ? read(path) : {}
       end
 
       # The canonical section `type` is an alias of, or `type` itself.
@@ -124,8 +128,6 @@ module JsonUIShared
       private
 
       def read(path)
-        raise "attribute_definitions.json not found at #{path}" unless File.exist?(path)
-
         definitions = JSON.parse(File.read(path))
         definitions.each_with_object({}) do |(name, section), aliases|
           next unless section.is_a?(Hash) && section['_alias_of'].is_a?(String)
