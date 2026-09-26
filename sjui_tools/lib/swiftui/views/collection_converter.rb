@@ -112,6 +112,49 @@ module SjuiTools
           @component['lineSpacing'] || @component['itemSpacing'] || 0
         end
 
+        # A horizontal Collection (4f ruling, 2026-09-26, the rule SwiftJsonUI
+        # Dynamic dde0628 draws): `columns` is its number of lanes — the SSoT
+        # names LazyHorizontalGrid / LazyHGrid for Collection.columns — and a
+        # section's own `columns` is that section block's lanes. A section has
+        # more than one lane when its own `columns`, else the Collection's, is
+        # above 1; a bound `columns` keeps the grid even at 1 lane, and a
+        # section's own count overrides it. The lane count as a Swift Int
+        # expression, or nil for one lane (the stack as it was). Until
+        # jsonui-cli 1.9.0 every horizontal route drew one lane whatever
+        # `columns` said. Paging is not a lane route.
+        def horizontal_lanes(section = {})
+          own = section.is_a?(Hash) ? section['columns'] : nil
+          return (own.to_i > 1 ? own.to_i.to_s : nil) if own.is_a?(Numeric)
+
+          value = @component['columns']
+          return "data.#{extract_binding_property(value)}" if value.is_a?(String) && is_binding?(value)
+
+          value.to_i > 1 ? value.to_i.to_s : nil
+        end
+
+        # Spacing on every horizontal Collection, one lane or many (the same
+        # ruling): along the scroll axis lineSpacing (its alias
+        # sectionSpacing), else itemSpacing, else 0; between lanes
+        # columnSpacing, else itemSpacing, else 0. The single-lane stack read
+        # itemSpacing, then columnSpacing, then lineSpacing.
+        def horizontal_scroll_spacing
+          @component['lineSpacing'] || @component['sectionSpacing'] || @component['itemSpacing'] || 0
+        end
+
+        def horizontal_lane_spacing
+          @component['columnSpacing'] || @component['itemSpacing'] || 0
+        end
+
+        # A section block of `lanes` rows: cells fill a column top to bottom,
+        # then the next column — LazyHorizontalGrid's order — and the block
+        # starts a new column. The caller emits the cells and closes it.
+        def open_horizontal_lanes(lanes)
+          return unless lanes
+
+          add_line "LazyHGrid(rows: Array(repeating: GridItem(.flexible(), spacing: #{horizontal_lane_spacing}), count: #{lanes}), " \
+                   "alignment: #{get_hstack_alignment_from_gravity(@component['gravity'])}, spacing: #{horizontal_scroll_spacing}) {"
+        end
+
         def convert_non_responsive
           id = @component['id'] || 'collection'
           apply_scroll_container_attrs
@@ -336,17 +379,22 @@ module SjuiTools
                         end
                         add_line "if let cellsData = section.cells?.data {"
                         indent do
-                          vars = open_cell_foreach('cellsData')
-                          indent do
-                            add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                            generate_cell_identity(vars[:index_var])
+                          lanes = horizontal_lanes(section)
+                          open_horizontal_lanes(lanes)
+                          maybe_indent(lanes) do
+                            vars = open_cell_foreach('cellsData')
+                            indent do
+                              add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                              generate_cell_identity(vars[:index_var])
 
-                            apply_cell_frame
+                              apply_cell_frame
 
-                            # Add accessibilityIdentifier for test automation (tapItem action)
-                            apply_cell_item_identifier(vars[:index_var])
+                              # Add accessibilityIdentifier for test automation (tapItem action)
+                              apply_cell_item_identifier(vars[:index_var])
+                            end
+                            add_line "}"
                           end
-                          add_line "}"
+                          add_line "}" if lanes
                         end
                         add_line "}"
                       end
@@ -380,15 +428,20 @@ module SjuiTools
                         add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
                       end
                       indent do
-                        vars = open_cell_foreach('cellsData')
-                        indent do
-                          add_line "#{cell_class_name}(data: #{vars[:data_var]})"
-                          generate_cell_identity(vars[:index_var])
-                          apply_cell_frame
-                          # Add accessibilityIdentifier for test automation (tapItem action)
-                          apply_cell_item_identifier(vars[:index_var])
+                        lanes = horizontal_lanes
+                        open_horizontal_lanes(lanes)
+                        maybe_indent(lanes) do
+                          vars = open_cell_foreach('cellsData')
+                          indent do
+                            add_line "#{cell_class_name}(data: #{vars[:data_var]})"
+                            generate_cell_identity(vars[:index_var])
+                            apply_cell_frame
+                            # Add accessibilityIdentifier for test automation (tapItem action)
+                            apply_cell_item_identifier(vars[:index_var])
+                          end
+                          add_line "}"
                         end
-                        add_line "}"
+                        add_line "}" if lanes
                       end
                       add_line "}"
                     else
@@ -780,7 +833,7 @@ module SjuiTools
         end
 
         def generate_non_lazy_horizontal(has_sections, cell_class_name)
-          spacing = @component['itemSpacing'] || @component['columnSpacing'] || 0
+          spacing = horizontal_scroll_spacing
           hstack_alignment = get_hstack_alignment_from_gravity(@component['gravity'])
           add_line "HStack(alignment: #{hstack_alignment}, spacing: #{spacing}) {"
           indent do
@@ -801,14 +854,19 @@ module SjuiTools
                   add_line "let section = #{data_ref}.sections[#{index}]"
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
-                    vars = open_cell_foreach('cellsData')
-                    indent do
-                      add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                      generate_cell_identity(vars[:index_var])
-                      apply_cell_frame
-                      apply_cell_item_identifier(vars[:index_var])
+                    lanes = horizontal_lanes(section)
+                    open_horizontal_lanes(lanes)
+                    maybe_indent(lanes) do
+                      vars = open_cell_foreach('cellsData')
+                      indent do
+                        add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                        generate_cell_identity(vars[:index_var])
+                        apply_cell_frame
+                        apply_cell_item_identifier(vars[:index_var])
+                      end
+                      add_line "}"
                     end
-                    add_line "}"
+                    add_line "}" if lanes
                   end
                   add_line "}"
                 end
@@ -824,14 +882,19 @@ module SjuiTools
                   add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
                 end
                 indent do
-                  vars = open_cell_foreach('cellsData')
-                  indent do
-                    add_line "#{cell_class_name}(data: #{vars[:data_var]})"
-                    generate_cell_identity(vars[:index_var])
-                    apply_cell_frame
-                    apply_cell_item_identifier(vars[:index_var])
+                  lanes = horizontal_lanes
+                  open_horizontal_lanes(lanes)
+                  maybe_indent(lanes) do
+                    vars = open_cell_foreach('cellsData')
+                    indent do
+                      add_line "#{cell_class_name}(data: #{vars[:data_var]})"
+                      generate_cell_identity(vars[:index_var])
+                      apply_cell_frame
+                      apply_cell_item_identifier(vars[:index_var])
+                    end
+                    add_line "}"
                   end
-                  add_line "}"
+                  add_line "}" if lanes
                 end
                 add_line "}"
               end
@@ -1018,7 +1081,10 @@ module SjuiTools
 
         # Generate horizontal paging collection using TabView
         def generate_paging_horizontal
-          spacing = @component['itemSpacing'] || @component['columnSpacing'] || 0
+          # Pages sit along the scroll axis: lineSpacing, else itemSpacing,
+          # else 0 (the horizontal rule; it read itemSpacing, then
+          # columnSpacing, until jsonui-cli 1.9.0).
+          spacing = horizontal_scroll_spacing
           property_name = extract_property_name(@component['items'])
 
           # currentPage binding
@@ -1925,7 +1991,7 @@ module SjuiTools
             # `lineSpacing` for a horizontal Collection should still set the
             # spacing. kjui's CollectionStack matches this fallback order AND
             # the all-absent default of 0 (the composable's `spacing: Dp = 0.dp`).
-            line_spacing = @component['itemSpacing'] || @component['columnSpacing'] || @component['lineSpacing'] || 0
+            line_spacing = horizontal_scroll_spacing
             alignment_param = "verticalAlignment: #{get_hstack_alignment_from_gravity(@component['gravity'])}"
           end
 
