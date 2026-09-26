@@ -27,7 +27,8 @@ from typing import Any
 # Cross-platform type-spelling synonyms, applied AFTER the exact-match
 # check in definition_key_for, come from shared/core/type_synonyms.json —
 # the one table. The Ruby validator (shared/core/attribute_validator_core.rb,
-# mirrored into {s,k,r}jui_tools) and every renderer read the same file;
+# mirrored into {s,k,r}jui_tools) reads the same file, and the renderers are
+# to draw synonyms from it (their own tests measure which do);
 # jui_tools/tests/test_type_synonyms_cross_language.py checks that each
 # reader answers what the file says. Loaded by load_type_synonyms() below.
 

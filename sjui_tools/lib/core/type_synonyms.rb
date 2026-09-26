@@ -6,8 +6,9 @@ module JsonUIShared
   # The type-spelling synonyms for Ruby — shared/core/type_synonyms.json, the
   # one table, read beside this file (each tool's lib/core carries the file
   # and this mirror). The validator (attribute_validator_core.rb) resolves a
-  # node's section with it, and every converter factory draws a synonym as
-  # it says; neither holds a list of its own.
+  # node's section with it, holding no list of its own; a converter factory
+  # is to draw a synonym as it says in the same way (the type_synonyms_draw
+  # specs measure the factories that do).
   #
   # An entry: `canonical` (the section the spelling validates against),
   # `render_as` (the type a renderer draws where that is not the canonical

@@ -446,7 +446,8 @@ module JsonUIShared
     # 1. the cross-platform synonym table (display spellings that are not
     #    sections themselves: Text, Scroll, Checkbox, ...), read from
     #    type_synonyms.json beside attribute_definitions.json — the one
-    #    table, which jui_cli's alias_table.py and every renderer read too
+    #    table, which jui_cli's alias_table.py reads too and the renderers
+    #    are to draw synonyms from
     #    (jui_tools/tests/test_type_synonyms_cross_language.py checks each
     #    reader answers what the file says),
     # 2. a component-alias hop: sections that are `_alias_of` pointers
