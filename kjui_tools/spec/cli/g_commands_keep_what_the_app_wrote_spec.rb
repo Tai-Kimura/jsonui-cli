@@ -6,6 +6,7 @@ require 'json'
 require 'fileutils'
 require 'digest'
 require 'pty'
+require 'rbconfig'
 
 # `kjui g view / partial / collection / adapter` (Compose mode; the XML mode is
 # frozen) against the disk: each command runs on a new project, every file it
@@ -111,7 +112,14 @@ RSpec.describe 'kjui g view / partial / collection / adapter keep the files the 
   # written), or [:terminal, typed] (a pseudo-terminal). Returns [output, rc],
   # rc :timeout when the run was killed after run_limit seconds.
   def self.run_kjui(dir, args, stdin: '')
-    cmd = ['ruby', File.join(dir, 'kjui_tools', 'bin', 'kjui'), *args]
+    # RbConfig.ruby, not `ruby`: the kjui under test runs on the interpreter
+    # running this spec. `ruby` from PATH is rbenv's choice — RBENV_VERSION,
+    # else the .ruby-version above the child's cwd (a tmpdir: none), else the
+    # global — so the 2.6 leg ran the tool on 3.2.2 or on 2.6 depending on the
+    # shell it was launched from (measured 2026-09-26 on sjui's spec of this
+    # name: with RBENV_VERSION set its children ran 3.2.2 and its 2.6-only
+    # failures vanished; unset, they ran 2.6 and failed on the 3.2.2 leg too).
+    cmd = [RbConfig.ruby, File.join(dir, 'kjui_tools', 'bin', 'kjui'), *args]
     out = +''
     rc = nil
     if stdin.is_a?(Array)

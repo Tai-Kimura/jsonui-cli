@@ -51,6 +51,51 @@ module RjuiTools
           %w[flow leftaligned].include?(layout.to_s.downcase)
         end
 
+        # A horizontal Collection (4f ruling, 2026-09-26; the rule sjui
+        # codegen and SwiftJsonUI Dynamic dde0628 draw): `columns` is its
+        # number of lanes, and a section's own `columns` is that section
+        # block's lanes. A section has more than one lane when its own
+        # `columns`, else the Collection's, is above 1; a bound `columns` keeps
+        # the grid even at 1 lane, and a section's own count overrides it.
+        # Paging is unchanged. The lane count as a JS expression, or nil for
+        # one lane (the flex row as it was). Until jsonui-cli 1.9.0 the
+        # horizontal row drew one lane whatever `columns` said.
+        def horizontal_lanes(section = {})
+          return nil unless horizontal_collection? && !flow_collection? && !attributes['paging']
+
+          own = section.is_a?(Hash) ? section['columns'] : nil
+          return (own.to_i > 1 ? own.to_i.to_s : nil) if own.is_a?(Numeric)
+
+          raw = attributes['columnCount'] || attributes['columns']
+          return extract_binding_property(raw) if raw.is_a?(String) && has_binding?(raw)
+
+          raw.to_i > 1 ? raw.to_i.to_s : nil
+        end
+
+        # Along the scroll axis lineSpacing (its alias sectionSpacing), else
+        # itemSpacing; between lanes columnSpacing, else itemSpacing — on
+        # every horizontal Collection, one lane or many. nil: nothing declared.
+        def horizontal_scroll_spacing
+          attributes['lineSpacing'] || attributes['sectionSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+        end
+
+        def horizontal_lane_spacing
+          attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+        end
+
+        # A section block of `lanes` rows: a grid that flows by column, so a
+        # column is filled top to bottom and then the next
+        # (LazyHorizontalGrid's order), the block starting a new column in the
+        # flex row; cells keep their own size at the top-leading corner of
+        # their slot, as on the other faces.
+        def horizontal_lanes_open(lanes, indent)
+          rows = lanes.match?(/\A\d+\z/) ? "'repeat(#{lanes}, minmax(0, 1fr))'" : "`repeat(${#{lanes}}, minmax(0, 1fr))`"
+          style = { 'gridTemplateRows' => rows }
+          (along = horizontal_scroll_spacing) && style['columnGap'] = "'#{along}px'"
+          (between = horizontal_lane_spacing) && style['rowGap'] = "'#{between}px'"
+          "#{indent_str(indent)}<div className=\"grid grid-flow-col auto-cols-max items-start justify-items-start shrink-0\"#{style_attr_for(style)}>"
+        end
+
         # A literal id is what ties the element to the hoisted ref, exactly as
         # it does for the focus bindings and for `{id}_item_{index}`. Without
         # one there is no stable variable name to agree on, so the attributes
@@ -212,8 +257,11 @@ module RjuiTools
               classes << 'flex-nowrap'
               dynamic_styles['flexWrap'] = "#{lazy_expr} === 'none' ? 'wrap' : 'nowrap'" if lazy_expr
             end
-            # For horizontal: columnSpacing (or lineSpacing/itemSpacing) = gap between items
-            spacing = attributes['columnSpacing'] || attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+            # Along the scroll axis — between cells, between section blocks,
+            # between pages — lineSpacing, else itemSpacing (the horizontal
+            # rule, horizontal_scroll_spacing). This read columnSpacing
+            # first until jsonui-cli 1.9.0; columnSpacing spaces the lanes.
+            spacing = horizontal_scroll_spacing
             classes << "gap-[#{spacing}px]" if spacing
           elsif !columns_binding && columns == 1
             # List style (single column). A binding-form `columns` can't
@@ -460,6 +508,11 @@ module RjuiTools
                 'cellIndex'
               end
 
+            lanes = horizontal_lanes(section)
+            if lanes
+              lines << horizontal_lanes_open(lanes, indent)
+              indent += 2
+            end
             if auto_tracking && cell_id_prop
               lines << "#{indent_str(indent)}{enrichCellIds(#{source_expr}, \"#{cell_id_prop}\").map((cellData, cellIndex) => ("
             else
@@ -476,6 +529,10 @@ module RjuiTools
               lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={cellData#{cell_cast}} />"
             end
             lines << "#{indent_str(indent)}))}"
+            if lanes
+              indent -= 2
+              lines << "#{indent_str(indent)}</div>"
+            end
           elsif cell_view
             # Placeholder for static content
             lines << "#{indent_str(indent)}{/* Cells for section #{section_index} */}"
@@ -527,6 +584,11 @@ module RjuiTools
             if items_binding
               # Add type annotation for TypeScript
               item_type = config['typescript'] ? ": #{cell_view}Data" : ''
+              lanes = horizontal_lanes
+              if lanes
+                lines << horizontal_lanes_open(lanes, indent)
+                indent += 2
+              end
               lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index: number) => ("
               # Same wrapper contract as the section path: the key rides the
               # outermost element of the map.
@@ -538,6 +600,10 @@ module RjuiTools
                 lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
               end
               lines << "#{indent_str(indent)}))}"
+              if lanes
+                indent -= 2
+                lines << "#{indent_str(indent)}</div>"
+              end
             else
               lines << "#{indent_str(indent)}{/* Add items prop to render cells */}"
               lines << "#{indent_str(indent)}<#{cell_view} />"

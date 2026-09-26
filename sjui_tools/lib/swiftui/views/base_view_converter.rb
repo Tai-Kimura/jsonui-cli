@@ -1911,10 +1911,16 @@ module SjuiTools
           ] + tap_accessibility_lines
         end
 
-        # Build lifecycle handler lines
+        # onAppear / onDisappear name their handler — `x`, `@{x}`, or `x:`
+        # (UIKit's sender mark, which means nothing in SwiftUI) are the one
+        # name `x` — and it is called as the data declares it (no_value_call;
+        # 4f's ruling on control-onclick-is-called-differently-on-every-path,
+        # 1.9.0: every path reads the three alike). `@{x}` wrote
+        # `data.@{x}?()`, which does not parse, and `x:` handed `self`.
         def build_lifecycle_handler_lines(modifier_name, handler)
           indent_str = "    " * (@indent_level + 1)
-          body = handler.include?(':') ? "data.#{handler.gsub(':', '')}?(self)" : no_value_call(handler)
+          name = is_binding?(handler) ? extract_binding_property(handler) : handler.to_s
+          body = no_value_call(name.delete(':'))
           ["#{modifier_name} {\n#{indent_str}#{body}\n#{indent_str[0...-4]}}"]
         end
 
