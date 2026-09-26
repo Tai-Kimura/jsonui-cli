@@ -225,6 +225,17 @@ module ComposeStubUniverse
       fun Modifier.statusBarsPadding(): Modifier = this
       fun Modifier.navigationBarsPadding(): Modifier = this
       fun Modifier.imePadding(): Modifier = this
+      class WindowInsets { companion object }
+      class WindowInsetsSides {
+          operator fun plus(sides: WindowInsetsSides): WindowInsetsSides = this
+          companion object {
+              val Top = WindowInsetsSides(); val Bottom = WindowInsetsSides()
+              val Start = WindowInsetsSides(); val End = WindowInsetsSides()
+          }
+      }
+      val WindowInsets.Companion.systemBars: WindowInsets get() = WindowInsets()
+      fun WindowInsets.only(sides: WindowInsetsSides): WindowInsets = this
+      fun Modifier.windowInsetsPadding(insets: WindowInsets): Modifier = this
       class Painter
       fun painterResource(id: Int): Painter = Painter()
       object R { object drawable { #{drawables.map { |d| "const val #{d}: Int = 0" }.join('; ')} } }

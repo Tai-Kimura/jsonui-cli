@@ -25,6 +25,7 @@ require_relative 'data_model_updater'
 require_relative 'helpers/import_manager'
 require_relative 'helpers/binding_expression'
 require_relative 'helpers/modifier_builder'
+require_relative 'helpers/safe_area_edges'
 require_relative 'helpers/resource_resolver'
 require_relative 'helpers/visibility_helper'
 require_relative 'helpers/responsive_helper'
@@ -917,9 +918,9 @@ module KjuiTools
         # Add import for SafeAreaConfig
         @required_imports&.add(:safe_area_config)
 
-        # Parse edges - support both 'edges' and 'safeAreaInsetPositions' (alias)
-        edges_array = json_data['edges'] || json_data['safeAreaInsetPositions'] || ['all']
-        edges = edges_array.is_a?(Array) ? edges_array : [edges_array]
+        # The edges it reserves — `edges` is the alias spelling and wins; a
+        # SafeAreaView that names none reserves every edge (SafeAreaEdges)
+        edges = Helpers::SafeAreaEdges.edges(json_data['edges'] || json_data['safeAreaInsetPositions'] || ['all'])
 
         # Get children - support both 'child' and 'children'
         children = json_data['children'] || json_data['child'] || []
@@ -954,18 +955,8 @@ module KjuiTools
                     else 'Box'
                     end
 
-        # Get parent SafeAreaConfig and filter edges
+        # The enclosing SafeAreaConfig (a TabView reserves its content's bottom)
         code = indent("val safeAreaConfig = LocalSafeAreaConfig.current", depth)
-        code += "\n" + indent("val edges = mutableListOf(#{edges.map { |e| "\"#{e}\"" }.join(', ')}).apply {", depth)
-        code += "\n" + indent("if (safeAreaConfig.ignoreBottom) {", depth + 1)
-        code += "\n" + indent("remove(\"bottom\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"top\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("if (safeAreaConfig.ignoreTop) {", depth + 1)
-        code += "\n" + indent("remove(\"top\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"bottom\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("}.distinct()", depth)
 
         code += "\n\n" + indent("#{container}(", depth)
 
@@ -1009,11 +1000,9 @@ module KjuiTools
         modifiers.concat(size_modifiers)
         modifiers.concat(safe_area_decoration_stages(json_data))
 
-        # Apply safe area padding based on edges (after background)
-        # Use conditional modifiers based on runtime edges
-        modifiers << ".then(if (edges.contains(\"all\")) Modifier.systemBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"top\")) Modifier.statusBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"bottom\")) Modifier.navigationBarsPadding() else Modifier)"
+        # The safe area, after the background so the background reaches the
+        # screen edges; the edge an enclosing TabView reserves is left to it
+        modifiers.concat(Helpers::SafeAreaEdges.modifiers(edges, 'safeAreaConfig', @required_imports))
 
         # Check if keyboard padding should be applied
         ignore_keyboard = json_data['ignoreKeyboard'] == true
@@ -1079,18 +1068,8 @@ module KjuiTools
       def generate_safe_area_view_with_constraints(json_data, children, edges, depth, is_root: false)
         @required_imports&.add(:constraint_layout)
 
-        # Get parent SafeAreaConfig and filter edges
+        # The enclosing SafeAreaConfig (a TabView reserves its content's bottom)
         code = indent("val safeAreaConfig = LocalSafeAreaConfig.current", depth)
-        code += "\n" + indent("val edges = mutableListOf(#{edges.map { |e| "\"#{e}\"" }.join(', ')}).apply {", depth)
-        code += "\n" + indent("if (safeAreaConfig.ignoreBottom) {", depth + 1)
-        code += "\n" + indent("remove(\"bottom\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"top\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("if (safeAreaConfig.ignoreTop) {", depth + 1)
-        code += "\n" + indent("remove(\"top\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"bottom\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("}.distinct()", depth)
 
         code += "\n\n" + indent("ConstraintLayout(", depth)
 
@@ -1114,10 +1093,9 @@ module KjuiTools
         modifiers.concat(size_modifiers)
         modifiers.concat(safe_area_decoration_stages(json_data))
 
-        # Apply safe area padding based on edges (after background)
-        modifiers << ".then(if (edges.contains(\"all\")) Modifier.systemBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"top\")) Modifier.statusBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"bottom\")) Modifier.navigationBarsPadding() else Modifier)"
+        # The safe area, after the background so the background reaches the
+        # screen edges; the edge an enclosing TabView reserves is left to it
+        modifiers.concat(Helpers::SafeAreaEdges.modifiers(edges, 'safeAreaConfig', @required_imports))
 
         # Check if keyboard padding should be applied
         ignore_keyboard = json_data['ignoreKeyboard'] == true
