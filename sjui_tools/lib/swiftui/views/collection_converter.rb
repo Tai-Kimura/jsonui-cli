@@ -110,7 +110,7 @@ module SjuiTools
         end
 
         def grid_row_spacing
-          @component['lineSpacing'] || @component['itemSpacing'] || 0
+          line_spacing_value || @component['itemSpacing'] || 0
         end
 
         # A horizontal Collection (4f ruling, 2026-09-26, the rule SwiftJsonUI
@@ -139,7 +139,7 @@ module SjuiTools
         # columnSpacing, else itemSpacing, else 0. The single-lane stack read
         # itemSpacing, then columnSpacing, then lineSpacing.
         def horizontal_scroll_spacing
-          @component['lineSpacing'] || @component['sectionSpacing'] || @component['itemSpacing'] || 0
+          line_spacing_value || @component['itemSpacing'] || 0
         end
 
         def horizontal_lane_spacing
@@ -504,7 +504,7 @@ module SjuiTools
                       end
 
                       # Grid for cells
-                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
+                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
                       indent do
                         if cell_view_name
                           add_line "if let cellsData = section.cells?.data {"
@@ -540,23 +540,12 @@ module SjuiTools
                     end
                     add_line "}"
                   else
-                    # No property binding - use static rendering
-                    if header_view_name
-                      add_line "#{header_view_name}()"
-                      apply_header_footer_padding
-                    end
-
-                    add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
-                    indent do
-                      add_line "// No items binding specified"
-                    end
-                    add_line "}"
-                    apply_grid_padding
-
-                    if footer_view_name
-                      add_line "#{footer_view_name}()"
-                      apply_header_footer_padding
-                    end
+                    # No `items`: nothing to draw the section from — no
+                    # header, cell or footer, as on every other route and
+                    # path (4f ruling 2026-09-26, round 6). Until jsonui-cli
+                    # 1.9.0 this drew the section's header and footer with no
+                    # data around an empty grid.
+                    add_line "// Section #{index + 1}: no items, nothing drawn"
                   end
                 end
               else
@@ -566,7 +555,7 @@ module SjuiTools
                   apply_header_footer_padding
                 end
                 
-                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
+                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
                 indent do
                   generate_collection_content(cell_class_name, id)
                 end
@@ -799,7 +788,7 @@ module SjuiTools
           elsif is_horizontal
             generate_non_lazy_horizontal(has_sections, cell_class_name)
           elsif has_sections && columns == 1
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
             indent do
@@ -809,7 +798,7 @@ module SjuiTools
             apply_insets_only
           elsif columns == 1 && !has_sections
             # Legacy single column without sections — plain VStack with ForEach
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
             indent do
@@ -904,7 +893,7 @@ module SjuiTools
 
           if has_sections
             property_name = extract_property_name(@component['items'])
-            section_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            section_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{section_spacing}) {"
             indent do
@@ -994,18 +983,28 @@ module SjuiTools
 
         # A flow's three gaps (attribute_semantics.json -> collectionSpacing):
         # between cells on a line columnSpacing, else itemSpacing; between
-        # lines lineSpacing, else itemSpacing; between the section blocks as
-        # between lines (sectionSpacing is lineSpacing's alias). 0 when none
-        # is declared, a declared 0 included. Until jsonui-cli 1.9.0 each
-        # undeclared gap was 8, and the section blocks did not fall back to
-        # itemSpacing.
+        # lines lineSpacing (line_spacing_value), else itemSpacing; between
+        # the section blocks as between lines. 0 when none is declared, a
+        # declared 0 included. Until jsonui-cli 1.9.0 each undeclared gap was
+        # 8, and the section blocks did not fall back to itemSpacing.
         def collection_flow_spacing
-          line = @component['lineSpacing'] || @component['itemSpacing'] || 0
+          line = line_spacing_value || @component['itemSpacing'] || 0
           {
             cells: @component['columnSpacing'] || @component['itemSpacing'] || 0,
             lines: line,
-            sections: @component['sectionSpacing'] || line
+            sections: line
           }
+        end
+
+        # lineSpacing as declared: `sectionSpacing` is its alias (SSoT
+        # `aliases`), read when lineSpacing is absent — an unnormalised layout
+        # may spell it either way. With both, the canonical lineSpacing wins
+        # (4f ruling 2026-09-26, round 6), as SwiftJsonUI Dynamic's typed
+        # attribute reads it. Until jsonui-cli 1.9.0 the flow's section
+        # blocks took sectionSpacing over lineSpacing, and the vertical and
+        # grid routes did not read the alias at all.
+        def line_spacing_value
+          @component.key?('lineSpacing') ? @component['lineSpacing'] : @component['sectionSpacing']
         end
 
         def generate_non_lazy_flow(has_sections)
@@ -1105,8 +1104,19 @@ module SjuiTools
             add_line "TabView {"
           end
 
+          # One page per cell, every drawn section's cells in order (4f
+          # ruling 2026-09-26, round 6: what SwiftJsonUI Dynamic, rjui and
+          # KotlinJsonUI Dynamic draw). A page's tag is its place among ALL
+          # the pages, so a bound currentPage names one page: a section's
+          # tags start where the drawn sections before it end (pageStart).
+          # Until jsonui-cli 1.9.0 each section counted from 0, so under
+          # TabView(selection:) section 2's pages repeated section 1's tags.
+          # The class-list shape (cellClasses, no `sections`) is one section,
+          # as on the other one-section routes: the first data section, or
+          # the declared list; it drew no page until jsonui-cli 1.9.0.
           indent do
             if @component['sections'] && !@component['sections'].empty? && property_name
+              drawn = []
               @component['sections'].each_with_index do |section, index|
                 cell_view_name = extract_view_name(section['cell']) if section['cell']
                 next unless cell_view_name && property_name
@@ -1120,25 +1130,33 @@ module SjuiTools
                 indent do
                   data_ref = is_optional ? "dataSource" : "data.#{property_name}"
                   add_line "let section = #{data_ref}.sections[#{index}]"
+                  unless drawn.empty?
+                    counts = drawn.map { |j| "(#{data_ref}.sections[#{j}].cells?.data.count ?? 0)" }
+                    add_line "let pageStart = #{counts.join(' + ')}"
+                  end
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
                     vars = open_cell_foreach('cellsData')
                     indent do
-                      add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                      generate_cell_identity(vars[:index_var])
-                      apply_cell_frame
-                      if spacing > 0
-                        add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
-                      end
-                      apply_cell_item_identifier(vars[:index_var])
-                      add_modifier_line ".tag(#{vars[:index_var]})"
+                      add_paging_cell(cell_view_name, vars, spacing, drawn.empty? ? nil : 'pageStart')
                     end
                     add_line "}"
                   end
                   add_line "}"
                 end
                 add_line "}"
+                drawn << index
               end
+            elsif (cell_view_name = legacy_paging_cell) && property_name
+              add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+              indent do
+                vars = open_cell_foreach('cellsData')
+                indent do
+                  add_paging_cell(cell_view_name, vars, spacing, nil)
+                end
+                add_line "}"
+              end
+              add_line "}"
             end
           end
           add_line "}"
@@ -1160,6 +1178,29 @@ module SjuiTools
 
           # Apply common modifiers
           apply_modifiers
+        end
+
+        # One page: the cell, its identity, frame, spacing and address, and
+        # its tag — its place among all the pages (page_start + its index in
+        # the section; nil for the first drawn section, whose pages start at 0).
+        def add_paging_cell(cell_view_name, vars, spacing, page_start)
+          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+          generate_cell_identity(vars[:index_var])
+          apply_cell_frame
+          if spacing > 0
+            add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
+          end
+          apply_cell_item_identifier(vars[:index_var])
+          add_modifier_line page_start ? ".tag(#{page_start} + #{vars[:index_var]})" : ".tag(#{vars[:index_var]})"
+        end
+
+        # The class-list shape's cell view (cellClasses[0], no `sections`),
+        # or nil.
+        def legacy_paging_cell
+          return nil if @component['sections'].is_a?(Array) && !@component['sections'].empty?
+
+          first = (@component['cellClasses'] || []).first
+          first && extract_view_name(first)
         end
 
         # Generate flow layout using FlowLayout (iOS 16+)
@@ -2059,7 +2100,7 @@ module SjuiTools
         def collection_stack_view_params(axis:)
           if axis == :vertical
             shows_indicators = @component['showsVerticalScrollIndicator'] != false
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             alignment_param = "horizontalAlignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}"
           else
             shows_indicators = @component['showsHorizontalScrollIndicator'] != false

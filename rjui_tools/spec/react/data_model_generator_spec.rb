@@ -505,7 +505,8 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings
       allow(RjuiTools::Core::ConfigManager).to receive(:load_config).and_return({
         'source_path' => temp_dir,
         'layouts_directory' => 'Layouts',
-        'data_directory' => 'src/generated/data'
+        'data_directory' => 'src/generated/data',
+        'typescript' => true
       })
       File.write(File.join(layouts_dir, 'Resources', 'strings.json'), JSON.generate({
         'note_input' => { 'register' => 'Register' },
@@ -569,7 +570,8 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings
       allow(RjuiTools::Core::ConfigManager).to receive(:load_config).and_return({
         'source_path' => temp_dir,
         'layouts_directory' => 'Layouts',
-        'data_directory' => 'src/generated/data'
+        'data_directory' => 'src/generated/data',
+        'typescript' => true
       })
       File.write(File.join(layouts_dir, 'Resources', 'strings.json'), JSON.generate({
         'kebab_widget' => { 'headline' => 'Headline' }
