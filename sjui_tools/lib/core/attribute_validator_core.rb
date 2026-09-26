@@ -622,6 +622,9 @@ module JsonUIShared
         # is tracked separately.
         if actual_type == 'array' && edge_inset_array?(name, value)
           # accepted
+        elsif inline_layout?(value) && expected_types == ['string']
+          add_warning(inline_layout_sentence(current_path))
+          return
         else
           add_warning("Attribute '#{current_path}' in '#{component_type}' expects #{format_expected_types(expected_types)}, got #{actual_type}")
           return # Don't validate nested properties if type is wrong
@@ -698,6 +701,8 @@ module JsonUIShared
       obj.each do |key, value|
         if properties.key?(key)
           validate_attribute(key, value, properties[key], component_type, path)
+        elsif %w[child children].include?(key) && inline_layout?(value)
+          add_warning(inline_layout_sentence("#{path}.#{key}"))
         else
           add_warning("Unknown property '#{path}.#{key}' in '#{component_type}'")
         end
@@ -817,6 +822,21 @@ module JsonUIShared
     # normalizer's StyleMerger and SwiftJsonUI Dynamic's ResponsiveResolver.
     STYLE_IN_RESPONSIVE_OVERRIDE =
       "'style' inside a responsive override is not applied — put the attributes in the override"
+
+    # A layout written inline where the declaration takes a layout's name —
+    # a tab's `child` (a tab names its layout with `view`), a section's
+    # header / cell / footer as a node — is declared nowhere, and no path
+    # draws it: sjui / kjui / rjui and both Dynamic runtimes read names (4f's
+    # ruling, 1.9.0). sjui's and kjui's builds raised on an inline cell; they
+    # go on without it now. It was "Unknown property" or "expects string".
+    def inline_layout?(value)
+      node = ->(v) { v.is_a?(Hash) && (v.key?('type') || v.key?('child') || v.key?('children')) }
+      node.call(value) || (value.is_a?(Array) && !value.empty? && value.all?(&node))
+    end
+
+    def inline_layout_sentence(path)
+      "'#{path}' is an inline layout, which is not declared and is not drawn — name a layout file instead"
+    end
 
     def check_responsive_override_style(component)
       responsive = component['responsive']

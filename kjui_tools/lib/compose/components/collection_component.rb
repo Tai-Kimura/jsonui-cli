@@ -220,6 +220,18 @@ module KjuiTools
             json_data = json_data.reject { |key, _| key == 'items' }
           end
 
+          # A section's header / cell / footer names its layout. A node written
+          # inline there is declared nowhere and drawn by no path (4f's ruling,
+          # 1.9.0; the validator names it — inline_layout?): it is set aside,
+          # where its Hash reached `.split` and the build stopped.
+          if json_data['sections'].is_a?(Array)
+            json_data = json_data.merge('sections' => json_data['sections'].map do |section|
+              next section unless section.is_a?(Hash)
+
+              section.reject { |key, value| %w[header cell footer].include?(key) && !value.is_a?(String) }
+            end)
+          end
+
           # Registered here, before the routing: `generate` forks into the
           # grid emitter and the CollectionStack emitter, and the inset can
           # come out of either. Registering inside one of them is how half a

@@ -1452,6 +1452,10 @@ module SjuiTools
           else
             return nil
           end
+          # A node written inline, with no className, names no layout: it is
+          # not drawn, and the validator says so (inline_layout?). It raised
+          # here, and the build stopped.
+          return nil unless class_name.is_a?(String) && !class_name.empty?
 
           # Strip directory path if present (e.g., "Chat/candidate_card" -> "candidate_card")
           class_name = File.basename(class_name) if class_name.include?('/')
