@@ -3,6 +3,8 @@
 require 'set'
 require_relative '../core/type_converter'
 require_relative '../core/bind_fold'
+require_relative '../core/logger'
+require_relative '../core/attribute_validator'
 require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/normalization'
@@ -231,7 +233,9 @@ module RjuiTools
           # sjui renders unknown types as a red "Unsupported component" Text
           # and swift dynamic as an error box; silently degrading to a plain
           # View here left react the only face that hid the failure.
-          Core::Logger.warn("Unknown component type '#{type}' — rendering as a plain View (no converter registered)") if defined?(Core::Logger)
+          # In the validator's sentence (JsonUIShared::AttributeValidatorCore
+          # .unknown_component_type_message), as kjui and sjui say it.
+          Core::Logger.warn(Core::AttributeValidator.new(:react).unknown_component_type_message(type.to_s)) if defined?(Core::Logger)
           converter_class = Converters::ViewConverter
         end
 

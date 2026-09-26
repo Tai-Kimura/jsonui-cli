@@ -782,7 +782,18 @@ module KjuiTools
           end
         end
 
-        "// TODO: Implement component type: #{component_type}"
+        # A type this tool draws nothing for: named in the build, in the
+        # validator's sentence (JsonUIShared::AttributeValidatorCore
+        # .unknown_component_type_message), and in the emitted comment where
+        # the node would be. It was a `// TODO: Implement component type`
+        # comment and nothing more.
+        sentence = unknown_type_validator.unknown_component_type_message(component_type)
+        Core::Logger.warn(sentence)
+        "// #{sentence}"
+      end
+
+      def unknown_type_validator
+        @unknown_type_validator ||= Core::AttributeValidator.new(:compose)
       end
 
       def handle_container_result(result, depth, parent_type = nil)

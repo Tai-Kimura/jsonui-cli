@@ -56,6 +56,26 @@ module SjuiTools
         ]
       end
 
+      # The extension converters the SwiftUI dispatch draws: the registry it
+      # reads (ConverterFactory#load_custom_converters — views/extensions/
+      # converter_mappings.rb, CONVERTER_MAPPINGS), so a registered type is a
+      # type this tool draws even without an attribute definition file.
+      def registered_component_types
+        mappings = component_registry_path
+        return [] unless mappings && File.exist?(mappings)
+
+        require mappings
+        table = defined?(SjuiTools::SwiftUI::Views::Extensions::CONVERTER_MAPPINGS) &&
+                SjuiTools::SwiftUI::Views::Extensions::CONVERTER_MAPPINGS
+        table.is_a?(Hash) ? table.keys.map(&:to_s) : []
+      rescue StandardError, LoadError, SyntaxError
+        []
+      end
+
+      def component_registry_path
+        File.expand_path('../swiftui/views/extensions/converter_mappings.rb', __dir__)
+      end
+
       def config_file_name
         'sjui.config.json'
       end

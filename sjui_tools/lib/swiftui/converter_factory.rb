@@ -28,6 +28,8 @@ require_relative 'views/embed_converter'
 require_relative 'view_registry'
 
 require_relative '../core/bind_fold'
+require_relative '../core/logger'
+require_relative '../core/attribute_validator'
 module SjuiTools
   module SwiftUI
     class ConverterFactory
@@ -279,9 +281,16 @@ module SjuiTools
       end
     end
 
+    # A type this tool draws nothing for: named in the build and on the
+    # placeholder in the validator's sentence
+    # (JsonUIShared::AttributeValidatorCore.unknown_component_type_message).
+    # The placeholder said "Unsupported component: <type>", in no other
+    # path's words.
     class DefaultConverter < Views::BaseViewConverter
       def convert
-        add_line "Text(\"Unsupported component: #{@component['type']}\")"
+        sentence = SjuiTools::Core::AttributeValidator.new(:swiftui).unknown_component_type_message(@component['type'].to_s)
+        SjuiTools::Core::Logger.warn(sentence)
+        add_line "Text(#{sentence.to_json})"
         add_modifier_line ".foregroundColor(.red)"
 
         apply_modifiers
