@@ -89,8 +89,10 @@ module SjuiTools
           'url' => '.URL'
         }.freeze
 
-        def text_alignment_to_swiftui(alignment)
-          TEXT_ALIGNMENTS[JsonUIShared::EnumSpelling.lowered(alignment, @component && @component['type'], 'textAlign')] || '.leading'
+        # *attribute*: a path for a textAlign declared inside an object
+        # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        def text_alignment_to_swiftui(alignment, attribute = 'textAlign')
+          TEXT_ALIGNMENTS[JsonUIShared::EnumSpelling.lowered(alignment, @component && @component['type'], attribute)] || '.leading'
         end
 
         def bound_text_alignment(value)
@@ -141,7 +143,10 @@ module SjuiTools
         # library grows the styled parameters.
         def line_decoration?(face)
           return false if face.nil? || face == false
-          return face['lineStyle'].to_s.downcase != 'none' if face.is_a?(Hash)
+          # `lineStyle` by its declared spelling (Label.underline / .strikethrough
+          # .lineStyle — the same four, Single / Double / Thick / None), case and
+          # all (1.9.0): an undeclared one is the default, a single line.
+          return JsonUIShared::EnumSpelling.lowered(face['lineStyle'], 'Label', %w[underline lineStyle]) != 'none' if face.is_a?(Hash)
 
           true
         end
@@ -169,7 +174,7 @@ module SjuiTools
           return nil unless face.is_a?(Hash)
           return nil unless line_decoration?(face)
 
-          args = ["lineStyle: #{DECORATION_LINE_STYLES[face['lineStyle'].to_s.downcase] || '.single'}"]
+          args = ["lineStyle: #{DECORATION_LINE_STYLES[JsonUIShared::EnumSpelling.lowered(face['lineStyle'], 'Label', %w[underline lineStyle]).to_s] || '.single'}"]
           args << "color: #{get_swiftui_color(face['color'])}" if face['color']
           args << "lineOffset: #{face['lineOffset']}" if line_offset && face['lineOffset']
 

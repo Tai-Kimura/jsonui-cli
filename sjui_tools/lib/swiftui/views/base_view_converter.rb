@@ -1690,7 +1690,9 @@ module SjuiTools
               return true
             end
 
-            spelling = shape.to_s.downcase
+            # As written: glass.shape is declared capsule / circle / rect, case
+            # and all (1.9.0) — `Capsule` is a spelling declared in no case.
+            spelling = shape.to_s
             return true if vocabulary.include?(spelling)
 
             # `rounded(N)` is a FORM, not a spelling: it carries a number, so it cannot
@@ -1764,7 +1766,7 @@ module SjuiTools
             values = glass&.dig('properties', 'shape', 'enum')
             return nil unless values.is_a?(Array) && !values.empty?
 
-            values.map { |v| v.to_s.downcase }
+            values.map(&:to_s)
         end
 
         def self.find_glass_definition(node)

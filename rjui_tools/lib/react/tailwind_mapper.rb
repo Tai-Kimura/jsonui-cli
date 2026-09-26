@@ -238,8 +238,10 @@ module RjuiTools
         end
 
         # *type*: the node's — a Button declares Left / Center / Right only.
-        def map_text_align(align, type = nil)
-          case JsonUIShared::EnumSpelling.lowered(align, type || 'Label', 'textAlign')
+        # *attribute*: a path for a textAlign declared inside an object
+        # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        def map_text_align(align, type = nil, attribute = 'textAlign')
+          case JsonUIShared::EnumSpelling.lowered(align, type || 'Label', attribute)
           when 'center'
             'text-center'
           when 'right'

@@ -12,6 +12,7 @@ require 'react/converters/text_view_converter'
 require 'react/converters/text_field_converter'
 require 'react/converters/collection_converter'
 require 'react/converters/blur_converter'
+require 'react/converters/network_image_converter'
 
 # The bound-value emitter series (plan 49 lane A).
 #

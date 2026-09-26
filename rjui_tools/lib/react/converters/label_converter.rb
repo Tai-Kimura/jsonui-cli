@@ -216,7 +216,7 @@ module RjuiTools
               classes << font_class if font_class && !font_class.empty?
             end
             classes << TailwindMapper.map_color(attrs['fontColor'], 'text') if attrs['fontColor']
-            classes.concat(align_classes(attrs['textAlign']))
+            classes.concat(align_classes(attrs['textAlign'], %w[highlightAttributes textAlign]))
           end
 
           classes = classes.reject { |c| c.nil? || c.empty? }
@@ -264,12 +264,15 @@ module RjuiTools
         # `text-*`, and a single-run label is a flex container so this converter
         # also maps it to `justify-*`. A highlight that changes the alignment has
         # to replace both, or the flex justification keeps the old value and wins.
-        def align_classes(value)
+        #
+        # *attribute*: Label.textAlign, or the highlight's own declaration
+        # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        def align_classes(value, attribute = 'textAlign')
           return [] unless value.is_a?(String)
 
-          classes = [TailwindMapper.map_text_align(value)]
+          classes = [TailwindMapper.map_text_align(value, 'Label', attribute)]
           unless multi_run_text?
-            case JsonUIShared::EnumSpelling.lowered(value, 'Label', 'textAlign')
+            case JsonUIShared::EnumSpelling.lowered(value, 'Label', attribute)
             when 'center' then classes << 'justify-center'
             when 'right' then classes << 'justify-end'
             when 'left' then classes << 'justify-start'
@@ -632,7 +635,7 @@ module RjuiTools
             lines << line_class
             next unless spec.is_a?(Hash)
 
-            classes.concat(TEXT_DECORATION_STYLES[spec['lineStyle'].to_s.downcase] || [])
+            classes.concat(TEXT_DECORATION_STYLES[JsonUIShared::EnumSpelling.lowered(spec['lineStyle'], 'Label', %w[underline lineStyle]).to_s] || [])
             # An absent colour means "do not modify" — the line inherits the
             # text colour, which is what CSS does with no decoration-color.
             if spec['color']
@@ -670,7 +673,10 @@ module RjuiTools
         # means "nothing" draw none; everything else draws.
         def decoration_drawn?(spec)
           return false if spec.nil? || spec == false || spec == 'false'
-          return spec['lineStyle'].to_s.casecmp('none') != 0 if spec.is_a?(Hash)
+          # `lineStyle` by its declared spelling (Label.underline / .strikethrough
+          # .lineStyle — the same four, Single / Double / Thick / None), case and
+          # all (1.9.0): an undeclared one is the default, a single line.
+          return JsonUIShared::EnumSpelling.lowered(spec['lineStyle'], 'Label', %w[underline lineStyle]) != 'none' if spec.is_a?(Hash)
 
           true
         end

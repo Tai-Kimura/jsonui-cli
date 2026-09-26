@@ -22,7 +22,10 @@ RSpec.describe 'EnumSpelling call sites' do
     'swiftui/views/text_style_helper.rb' => '`attribute` is what its callers name (declared_vocabulary)',
     'compose/helpers/bound_value.rb' => 'declared_mapping: its callers name the pair (declared:)',
     'compose/components/textview_component.rb' => "keyboardType or input, both TextView's",
-    'react/converters/base_converter.rb' => 'declared_table: its callers name the attribute'
+    'react/converters/base_converter.rb' => 'declared_table: its callers name the attribute',
+    'compose/components/text_component.rb' => 'compose_text_align: textAlign, or %w[highlightAttributes textAlign]',
+    'react/converters/label_converter.rb' => 'align_classes: textAlign, or %w[highlightAttributes textAlign]',
+    'react/tailwind_mapper.rb' => 'map_text_align: textAlign, or its callers\' path'
   }
 
   # The top-level arguments of the call whose `(` or `[` ends at *start*.
@@ -70,17 +73,24 @@ RSpec.describe 'EnumSpelling call sites' do
     source[/\A'([^']*)'\z/, 1] || source[/\A"([^"]*)"\z/, 1]
   end
 
+  # A path to an enum declared inside an object: %w[underline lineStyle].
+  def self.path_literal(source)
+    words = source[/\A%w\[([\w ]+)\]\z/, 1]
+    words && words.split
+  end
+
   # The offence a call makes, or nil.
   def self.offence(spelling, section, attribute)
-    name = literal(attribute)
+    name = literal(attribute) || path_literal(attribute)
     return nil if name.nil?
 
+    path = Array(name)
     owner = literal(section)
     if owner
-      declared = [owner, 'common'].any? { |s| spelling.spellings_of(spelling.entry(spelling.definitions[s], name)) }
-      declared ? nil : "#{owner}.#{name} is not an enum on #{owner} or common"
+      declared = [owner, 'common'].any? { |s| spelling.spellings_of(spelling.entry_at(spelling.definitions[s], path)) }
+      declared ? nil : "#{owner}.#{path.join('.')} is not an enum on #{owner} or common"
     else
-      spelling.declared(nil, name).empty? ? "no section declares #{name} as an enum" : nil
+      spelling.declared(nil, path).empty? ? "no section declares #{path.join('.')} as an enum" : nil
     end
   end
 
@@ -102,7 +112,7 @@ RSpec.describe 'EnumSpelling call sites' do
   end
 
   it 'names a literal attribute, except where the file says why not' do
-    computed = calls.reject { |_, _, _, attribute| self.class.literal(attribute) }.map(&:first).uniq
+    computed = calls.reject { |_, _, _, attribute| self.class.literal(attribute) || self.class.path_literal(attribute) }.map(&:first).uniq
     expect(computed - computed_attribute.keys).to be_empty, "a computed attribute with no reason: #{computed - computed_attribute.keys}"
   end
 
@@ -137,6 +147,12 @@ RSpec.describe 'EnumSpelling call sites' do
       expect(offence_of("enum(v, M, declared: [json_data['type'] || 'Label', 'textAlign'])")).to be_nil
       expect(offence_of("js(declared_table(CONTENT_MODE_OBJECT_FIT, 'contentModes'))")).to include('contentModes')
       expect(offence_of("bound_enum(v, declared_vocabulary('input', KEYBOARD_TYPES), exact: true,")).to be_nil
+    end
+
+    it 'reads a path to an enum declared inside an object' do
+      expect(offence_of("EnumSpelling.lowered(v, 'Label', %w[underline lineStyle])")).to be_nil
+      expect(offence_of("EnumSpelling.lowered(v, 'Label', %w[highlightAttributes textAlign])")).to be_nil
+      expect(offence_of("EnumSpelling.lowered(v, 'Label', %w[underline lineStyles])")).to include('Label.underline.lineStyles')
     end
   end
 end

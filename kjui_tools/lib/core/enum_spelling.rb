@@ -39,18 +39,37 @@ module JsonUIShared
     # declaration, else common's, else — a section no enum is declared on
     # (a synonym spelling, a helper shared by several types) — every
     # section's that declares one; empty only when no section does.
+    #
+    # `attribute` is a name, or a path to an enum declared INSIDE an
+    # object-typed attribute: %w[underline lineStyle],
+    # %w[highlightAttributes textAlign], %w[partialAttributes textAlign]
+    # (through an array's items) — the spellings the generator publishes as
+    # `<Section>Attributes.<Parent>.<Name>.declaredSpellings`.
     def declared(section, attribute)
+      path = Array(attribute).map(&:to_s)
       [section, 'common'].each do |name|
-        spellings = spellings_of(entry(definitions[name.to_s], attribute))
+        spellings = spellings_of(entry_at(definitions[name.to_s], path))
         return spellings if spellings
       end
       # `map` + `compact`, not `filter_map`: consumers run the tools on the
       # system Ruby 2.6, which has no filter_map.
-      definitions.values.map { |sec| spellings_of(entry(sec, attribute)) }.compact.flatten.uniq
+      definitions.values.map { |sec| spellings_of(entry_at(sec, path)) }.compact.flatten.uniq
     end
 
     def entry(section_definitions, attribute)
       section_definitions.is_a?(Hash) ? section_definitions[attribute.to_s] : nil
+    end
+
+    # The declaration at `path` inside a section: the attribute, then each
+    # property below it, through an array's items.
+    def entry_at(section_definitions, path)
+      node = entry(section_definitions, path.first)
+      path.drop(1).each do |key|
+        node = node['items'] if node.is_a?(Hash) && !node['properties'].is_a?(Hash) && node['items'].is_a?(Hash)
+        properties = node.is_a?(Hash) ? node['properties'] : nil
+        node = properties.is_a?(Hash) ? properties[key] : nil
+      end
+      node
     end
 
     def spellings_of(entry)

@@ -390,7 +390,7 @@ module KjuiTools
 
           # Text alignment
           highlight_align = if highlight && highlight_condition
-                              compose_text_align(highlight[:text_align], json_data['type'])
+                              compose_text_align(highlight[:text_align], 'Label', %w[highlightAttributes textAlign])
                             end
           base_align = compose_text_align(json_data['textAlign'], json_data['type'])
 
@@ -549,7 +549,10 @@ module KjuiTools
         # ruling keeps open on every platform.
         def self.decoration_on?(value)
           return false if value.nil? || value == false
-          return value['lineStyle'].to_s.casecmp('none') != 0 if value.is_a?(Hash) && value.key?('lineStyle')
+          # `lineStyle` by its declared spelling (Label.underline / .strikethrough
+          # .lineStyle — the same four, Single / Double / Thick / None), case and
+          # all (1.9.0): an undeclared one is the default, a single line.
+          return JsonUIShared::EnumSpelling.lowered(value['lineStyle'], 'Label', %w[underline lineStyle]) != 'none' if value.is_a?(Hash) && value.key?('lineStyle')
 
           true
         end
@@ -562,7 +565,7 @@ module KjuiTools
         def self.decoration_line_expression(value, required_imports, fallback_color_expr)
           return nil unless value.is_a?(Hash) && decoration_on?(value)
 
-          style = value['lineStyle'].to_s.downcase
+          style = JsonUIShared::EnumSpelling.lowered(value['lineStyle'], 'Label', %w[underline lineStyle]).to_s
           style = 'single' unless %w[double thick].include?(style)
           spelling = value['color']
           has_color = !(spelling.nil? || spelling.to_s.empty?)
@@ -592,14 +595,16 @@ module KjuiTools
 
         # *section*: the node's type — Button declares Left / Center / Right
         # only.
-        def self.compose_text_align(value, section = 'Label')
+        # *attribute*: a path for the highlight's own declaration
+        # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        def self.compose_text_align(value, section = 'Label', attribute = 'textAlign')
           return nil unless value.is_a?(String)
 
           # A static value outside the vocabulary still emits nothing; a bound
           # one needs an exhaustive `else` for the `when` to compile, and
           # `Unspecified` is Compose's own "no opinion" value.
           Helpers::BoundValue.enum(value, TEXT_ALIGN_MAPPING,
-                                   bound_default: 'TextAlign.Unspecified', declared: [section || 'Label', 'textAlign'])
+                                   bound_default: 'TextAlign.Unspecified', declared: [section || 'Label', attribute])
         end
 
         # `textShadow` is `{ color:, blur:, offset: [x, y] }` (a bare string is

@@ -213,11 +213,16 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
           'type' => 'Label',
           'text' => 'Plain',
           'underline' => { 'lineStyle' => 'None' },
-          'strikethrough' => { 'lineStyle' => 'none' }
+          'strikethrough' => { 'lineStyle' => 'None' }
         ).convert
 
         expect(code).not_to include('underline: true')
         expect(code).not_to include('strikethrough: true')
+
+        # lineStyle is declared Single / Double / Thick / None, case and all
+        # (1.9.0): `none` is declared in no case and draws the default line.
+        lower = described_class.new('type' => 'Label', 'text' => 'Plain', 'underline' => { 'lineStyle' => 'none' }).convert
+        expect(lower).to include('underline: true')
       end
     end
 

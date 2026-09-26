@@ -584,7 +584,7 @@ module SjuiTools
             fields << "lineHeightMultiple: #{attrs['lineHeightMultiple'].to_f}"
           end
           if attrs['textAlign']
-            alignment = text_alignment_to_swiftui(attrs['textAlign'])
+            alignment = text_alignment_to_swiftui(attrs['textAlign'], %w[highlightAttributes textAlign])
             fields << "textAlignment: #{alignment}" if alignment
           end
           fields
