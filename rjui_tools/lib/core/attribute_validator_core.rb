@@ -209,6 +209,9 @@ module JsonUIShared
       # Check that child/children actually hold nodes
       check_child_structure(merged_component, type)
 
+      # A text field's declared onClick is not called
+      check_text_field_click(merged_component, type)
+
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
 
@@ -709,6 +712,26 @@ module JsonUIShared
           actual == expected
         end
       end
+    end
+
+    # A text field — a section whose `text` the user writes, so its binding
+    # is two-way (read from the definitions, not a list of types: TextField
+    # and TextView, and every spelling that maps to them) — does not call a
+    # declared onClick: its own tap focuses it. The ruling for the five paths
+    # (ticket control-onclick-is-called-differently-on-every-path) leaves the
+    # handler uncalled on sjui, kjui and rjui alike, and this is the one
+    # sentence that tells the author, from the validator all three run.
+    def check_text_field_click(component, type)
+      handler = component['onClick']
+      tap = JsonUIShared::TapAccessibility
+      declared = handler.is_a?(Hash) || tap.handler?(handler) || tap.handler?(component['onclick'])
+      return unless declared
+
+      section = map_type_to_definition(type)
+      text = @definitions.dig(section, 'text')
+      return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
+
+      add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
     end
 
     def add_warning(message)

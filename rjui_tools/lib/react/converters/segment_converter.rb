@@ -31,10 +31,13 @@ module RjuiTools
             button_disabled = attributes['enabled'] == false ? ' disabled' : ''
             # Data closure props are always optional (type_converter makes all
             # function types `| undefined`), so the call must be optional-chained.
+            # The tab change is the operation a declared onClick follows
+            # (operation_click_call), after the segment's own update.
+            click_call = operation_click_call
             on_click_attr = if seeded
-                              " onClick={() => { setSeeded(#{index});#{on_change ? " #{on_change}?.(#{index});" : ''} }}"
+                              " onClick={() => { setSeeded(#{index});#{on_change ? " #{on_change}?.(#{index});" : ''}#{click_call ? " #{click_call}" : ''} }}"
                             else
-                              on_change ? " onClick={() => #{on_change}?.(#{index})}" : ''
+                              operation_attr('onClick', '()', on_change && "#{on_change}?.(#{index})")
                             end
             # Item labels go through the same string resolution as Label.text
             # (string key -> binding -> literal), matching sjui's per-item
