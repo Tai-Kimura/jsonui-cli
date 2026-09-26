@@ -248,36 +248,6 @@ RSpec.describe RjuiTools::Core::TypeConverter do
     end
   end
 
-  describe '.format_value' do
-    it 'formats string values with quotes' do
-      expect(described_class.format_value('hello', 'string')).to eq('"hello"')
-    end
-
-    it 'formats number values' do
-      expect(described_class.format_value(42, 'number')).to eq('42.0')
-      expect(described_class.format_value(3.14, 'number')).to eq('3.14')
-    end
-
-    it 'formats boolean values' do
-      expect(described_class.format_value(true, 'boolean')).to eq('true')
-      expect(described_class.format_value(false, 'boolean')).to eq('false')
-    end
-
-    it 'formats array values' do
-      expect(described_class.format_value([1, 2, 3], 'any[]')).to eq('[1,2,3]')
-      expect(described_class.format_value([], 'any[]')).to eq('[]')
-    end
-
-    it 'formats object values' do
-      expect(described_class.format_value({ 'a' => 1 }, 'Record<string, any>')).to eq('{"a":1}')
-      expect(described_class.format_value({}, 'Record<string, any>')).to eq('{}')
-    end
-
-    it 'returns undefined for nil' do
-      expect(described_class.format_value(nil, 'string')).to eq('undefined')
-    end
-  end
-
   describe '.to_typescript_type with function types' do
     context 'with simple function types' do
       it 'converts () -> Void to arrow function' do

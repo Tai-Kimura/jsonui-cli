@@ -52,7 +52,13 @@ module KjuiTools
           
           style_file = File.join(styles_dir, "#{style_name}.json")
           
-          return nil unless File.exist?(style_file)
+          unless File.exist?(style_file)
+            # Said, as sjui and rjui say it: until 1.8.121 a layout naming a
+            # style that is not there was drawn without it and nothing was
+            # printed (ticket uikit-build-reports-success-after-a-binding-error).
+            puts "Warning: Style file '#{style_name}' not found: #{style_file}"
+            return nil
+          end
           
           begin
             style_content = File.read(style_file)
@@ -62,6 +68,13 @@ module KjuiTools
             load_and_merge(style_data)
           rescue JSON::ParserError => e
             puts "Warning: Failed to parse style file #{style_file}: #{e.message}"
+            # The layouts using it are drawn without it — on every face a
+            # stage that did not complete (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            require_relative '../core/stage_failures'
+            JsonUI::StageFailures.record_once(
+              'styles', "#{style_file} could not be parsed (#{e.message}); the layouts using it were drawn without it"
+            )
             nil
           end
         end

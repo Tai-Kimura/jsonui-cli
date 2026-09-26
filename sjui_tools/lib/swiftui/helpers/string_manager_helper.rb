@@ -65,8 +65,12 @@ module SjuiTools
         # literal through the shared escaper, which is the one place it is
         # escaped (a caller that escaped first would get it escaped twice).
         def get_text_with_string_manager(text_content, warnings: true)
-          # Remove quotes if present
-          text_without_quotes = text_content.gsub(/^\"|\"|^'|'$/, '')
+          # The text between the quotes every caller puts around it (or a
+          # `'…'` pair around the whole). Only that pair: until 1.8.121 every
+          # `"` in the text was removed (and a `'` next to a line break), so
+          # `Say "hi"` was looked up as `Say hi` — missing the value the
+          # extractor stored, or finding a DIFFERENT text that lacks them.
+          text_without_quotes = quoted_text(text_content)
           literal = swift_literal_of_quoted(text_content)
 
           # Check if it's a binding (starts with @{)
@@ -111,9 +115,18 @@ module SjuiTools
 
         # `"text"` (unescaped) as the Swift literal of text.
         def swift_literal_of_quoted(text_content)
-          return text_content unless text_content.length >= 2 && text_content.start_with?('"') && text_content.end_with?('"')
+          return text_content unless quoted?(text_content)
 
           JsonUIShared::StringLiterals.swift(text_content[1...-1])
+        end
+
+        def quoted_text(text_content)
+          single = text_content.length >= 2 && text_content.start_with?("'") && text_content.end_with?("'")
+          quoted?(text_content) || single ? text_content[1...-1] : text_content
+        end
+
+        def quoted?(text_content)
+          text_content.length >= 2 && text_content.start_with?('"') && text_content.end_with?('"')
         end
 
         # Lookup by value (e.g., "AppFinder" -> StringManager.Login.appfinder())

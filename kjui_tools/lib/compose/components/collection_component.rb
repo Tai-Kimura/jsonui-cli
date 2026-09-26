@@ -184,6 +184,15 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # `items` is declared ["array", "binding"]; what these emitters draw
+          # from is the binding (the data's sections). An array names no data:
+          # it is set aside here, as the sjui and rjui Collections set it
+          # aside, where it used to reach `.match` and raise NoMethodError —
+          # the build down (ticket kjui-codegen-table-crashes-on-an-items-array).
+          unless json_data['items'].nil? || json_data['items'].is_a?(String)
+            json_data = json_data.reject { |key, _| key == 'items' }
+          end
+
           # Registered here, before the routing: `generate` forks into the
           # grid emitter and the CollectionStack emitter, and the inset can
           # come out of either. Registering inside one of them is how half a

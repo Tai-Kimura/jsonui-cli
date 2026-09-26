@@ -74,9 +74,8 @@ module SjuiTools
         unless json["style"].nil?
           file_path = "#{@style_path}/#{json["style"]}.json"
           if File.exist?(file_path) && File.file?(file_path)
-            File.open(file_path, "r") do |file|
-              json_string = file.read
-              style_json = JSON.parse(json_string, allow_duplicate_names: true)
+            begin
+              style_json = JSON.parse(File.read(file_path), allow_duplicate_names: true)
               # コンポーネントにtypeがある場合、スタイルのtypeを無視する
               # コンポーネントにtypeがない場合、スタイルのtypeを使用する
               if json["type"]
@@ -84,6 +83,16 @@ module SjuiTools
               end
               # Merge style first, then original JSON to preserve original values
               json = style_json.merge(json)
+            rescue JSON::ParserError => e
+              # Named, and drawn without it — as the SwiftUI build does. Until
+              # 1.8.121 the parse error went up uncaught: exit 1 with
+              # "Error: unexpected end of input …" and no file named (ticket
+              # uikit-build-reports-success-after-a-binding-error).
+              Core::Logger.error "Error parsing style file '#{file_path}': #{e.message}"
+              require_relative '../core/stage_failures'
+              JsonUI::StageFailures.record_once(
+                'styles', "#{file_path} could not be parsed (#{e.message}); the layouts using it were drawn without it"
+              )
             end
           elsif File.exist?(file_path)
             Core::Logger.warn "Style path is not a file: #{file_path}"

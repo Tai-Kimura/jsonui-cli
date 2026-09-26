@@ -199,6 +199,10 @@ module KjuiTools
               Core::Logger.warn "Failed to parse #{json_file}: #{e.message}"
             rescue => e
               Core::Logger.error "Error processing #{json_file}: #{e.message}"
+              # Named at the end of the build (ticket
+              # uikit-build-reports-success-after-a-binding-error).
+              require_relative '../stage_failures'
+              JsonUI::StageFailures.record('strings', "#{json_file}: its strings were not extracted (#{e.message})")
             end
           end
         end

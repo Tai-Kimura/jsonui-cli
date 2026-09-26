@@ -105,7 +105,7 @@ module KjuiTools
       # normalized spelling).
       def finalize_data_property(data_item, event_bindings)
         # Normalize type using TypeConverter with mode
-        normalized = Core::TypeConverter.normalize_data_property(data_item, @mode)
+        normalized = Core::TypeConverter.normalize_data_property(data_item, @mode, source: @current_layout)
 
         # Check if this property is bound to an event and has Event type
         prop_name = normalized['name']
@@ -174,7 +174,7 @@ module KjuiTools
         # raw literal as the pre-initialize fallback.
         @resolved_string_defaults = {}
         data_properties.each do |prop|
-          next unless prop['class'] == 'String'
+          next unless %w[String String?].include?(prop['class'])
           inner = string_default_inner(prop['defaultValue'])
           next if inner.nil? || inner.empty?
           full_key = Helpers::ResourceResolver.resolve_data_default_key(
@@ -422,41 +422,25 @@ module KjuiTools
         "KotlinJsonUI.localizedString(R.string.#{full_key}, #{formatted})"
       end
 
-      # The unquoted inner text of a String defaultValue, mirroring
-      # format_default_value's quoting rules ('' / 'x' / "x" / bare).
+      # The text a String defaultValue means — the one reading all three
+      # generators share (StringLiterals.default_text), so the key looked up
+      # here is the text format_default_value writes.
       def string_default_inner(value)
         return nil if value.nil?
-        v = value.to_s
-        return nil if v == "''"
-        if v.length > 1 &&
-           ((v.start_with?("'") && v.end_with?("'")) ||
-            (v.start_with?('"') && v.end_with?('"')))
-          v[1...-1]
-        else
-          v
-        end
+
+        JsonUIShared::StringLiterals.default_text(value)
       end
 
       def format_default_value(value, json_class)
         case json_class
-        when 'String'
-          # Handle string default values (matching SwiftUI implementation)
-          value_str = value.to_s
-          if value_str == "''"
-            # Handle '' as empty string (common shorthand)
-            '""'
-          elsif value_str.start_with?("'") && value_str.end_with?("'") && value_str.length > 1
-            # Handle single-quoted strings like "'gone'" -> "gone"
-            kotlin_string_literal(value_str[1...-1])
-          elsif !value_str.start_with?('"') || !value_str.end_with?('"')
-            # Handle unquoted strings like "gone" -> "gone"
-            kotlin_string_literal(value_str)
-          else
-            # Already quoted: passed through as written. TypeConverter
-            # quotes a Visibility default this way (`gone` -> `"gone"`), and
-            # layouts write the quotes themselves (`"defaultValue": "\"\""`).
-            value_str
-          end
+        when 'String', 'String?'
+          # The text the layout's spelling means ('' / "…" / '…' / bare,
+          # StringLiterals.default_text), written as a Kotlin literal. A
+          # `"…"` default was passed through as written until 1.8.121, so a
+          # `$` in it became a template. TypeConverter's quoted Visibility
+          # default (`gone` -> `"gone"`) reads back as `gone` and is written
+          # as the same `"gone"`.
+          kotlin_string_literal(JsonUIShared::StringLiterals.default_text(value))
         when 'Bool', 'Boolean'
           # Convert to boolean
           if value.is_a?(TrueClass) || value.is_a?(FalseClass)

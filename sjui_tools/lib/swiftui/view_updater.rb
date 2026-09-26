@@ -16,10 +16,20 @@ module SjuiTools
       # harder to diagnose than a build error.
       SCREEN_MARKER_MIN_LIBRARY_VERSION = '10.8.1'
 
+      # A generated view the build could not update keeps the previous
+      # build's body — the layout's change is not in the app. Until 1.8.121
+      # that was an "Error:" line above "SwiftUI build completed!" (ticket
+      # uikit-build-reports-success-after-a-binding-error).
+      def not_updated(swift_file_path, why)
+        require_relative '../core/stage_failures'
+        JsonUI::StageFailures.record('layout', "#{swift_file_path} was not updated: #{why}")
+        false
+      end
+
       def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [], variant_dispatch: nil, force_typed_view_model: false, view_model_type: nil, source_name: nil, screen_id: nil)
         unless File.exist?(swift_file_path)
           puts "Error: Swift file not found: #{swift_file_path}"
-          return false
+          return not_updated(swift_file_path, 'it is not there')
         end
 
         # Extract actual struct names from the existing file
@@ -29,7 +39,7 @@ module SjuiTools
         struct_match = existing_content.match(/struct\s+(\w+GeneratedView)\s*:\s*View/)
         unless struct_match
           puts "Error: Could not find struct definition in #{swift_file_path}"
-          return false
+          return not_updated(swift_file_path, 'it has no `struct …GeneratedView: View`')
         end
 
         generated_view_name = struct_match[1]

@@ -46,14 +46,17 @@ module RjuiTools
 
           if url
             if has_binding?(url)
-              " src={#{extract_binding_property(url)}}"
+              # One expression (attribute_expression): extract_binding_property
+              # reads a whole-value binding only, and text around one came
+              # out as `src={data.}`.
+              " src={#{attribute_expression(url)}}"
             else
               jsx_attr_text('src', url)
             end
           elsif html
             # For HTML content, use srcdoc
             if has_binding?(html)
-              " srcDoc={#{extract_binding_property(html)}}"
+              " srcDoc={#{attribute_expression(html)}}"
             else
               jsx_attr_text('srcDoc', html)
             end

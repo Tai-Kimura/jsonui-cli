@@ -356,7 +356,7 @@ module RjuiTools
             if border_width_binding || border_color_binding || border_style_binding
               # Dynamic border - use inline styles
               if border_width_binding
-                prop = convert_binding(attributes['borderWidth']).gsub(/[{}]/, '')
+                prop = attribute_expression(attributes['borderWidth'])
                 @dynamic_styles['borderWidth'] = "`${#{prop}}px`"
               elsif attributes['borderWidth']
                 @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
@@ -646,6 +646,41 @@ module RjuiTools
         # off; only the outer pair, so a template literal's `${…}` survives.
         def unwrap_jsx_braces(expr)
           expr.to_s.gsub(/\A\{|\}\z/, '')
+        end
+
+        # An attribute's value as ONE JavaScript expression, for `attr={…}`:
+        #
+        #   "@{img}"             => data.img                 (the value itself)
+        #   "https://x/@{id}.png" => `https://x/${data.id ?? ""}.png`
+        #   "{literal}"          => "{literal}"
+        #
+        # convert_binding writes a JSX CHILD (`https://x/{data.id}.png`), and
+        # the attribute sites took every brace out of it to make an
+        # expression, so text around a binding became code
+        # (`https://x/data.id.png`) and a literal brace was lost. The text
+        # around bindings is stringified as in a text sink (`?? ""`,
+        # text_binding_expression); a binding that is not an expression stays
+        # the author's text, as convert_text_binding keeps it.
+        def attribute_expression(value)
+          text = value.to_s
+          parts = text.split(/(@\{[^}]+\})/).reject(&:empty?)
+          binding = ->(part) { part[/\A@\{([^}]+)\}\z/, 1] }
+          valid = ->(inner) { inner && !JsonUIShared::AttributeValidatorCore.binding_content_problem(inner) }
+
+          if parts.length == 1 && valid.(binding.(parts.first))
+            return add_viewmodel_data_prefix(binding.(parts.first))
+          end
+          return JsonUIShared::StringLiterals.ts(text) unless parts.any? { |part| valid.(binding.(part)) }
+
+          body = parts.map do |part|
+            if valid.(binding.(part))
+              expr = text_binding_expression(binding.(part))
+              expr.nil? ? '' : "${#{expr}}"
+            else
+              escape_template_literal_segment(part)
+            end
+          end.join
+          "`#{body}`"
         end
 
         # Values CSS already understands. Everything else in a color
@@ -1246,6 +1281,66 @@ module RjuiTools
           " onClick={(e) => { if (#{gate}) #{handler_expr}?.(e); }}"
         end
 
+        # A control's declared onClick, called from the control's own
+        # operation after its own update — one rule for the five paths
+        # (ticket control-onclick-is-called-differently-on-every-path): a
+        # Switch / Toggle / CheckBox after the value, a Radio after the
+        # selection, a Segment after the tab, a Slider when the change is
+        # finished, a SelectBox after the selection. None of them gets a
+        # plain onClick (build_onclick_attr): until 1.8.121 none called it.
+        #
+        # nil when the node declares no handler, or `canTap: false` closes
+        # the gate; `if (gate) { … }` for a bound canTap. `enabled: false`
+        # needs nothing here: the operated element is `disabled`, and a
+        # browser dispatches no operation on it.
+        def operation_click_call
+          calls = declared_click_calls
+          return nil if calls.empty?
+
+          gate = attributes['canTap']
+          return nil if gate == false || gate == 'false'
+
+          statements = calls.join(' ')
+          return statements unless gate.is_a?(String) && has_binding?(gate)
+
+          "if (#{extract_binding_property(gate)}) { #{statements} }"
+        end
+
+        # The declared onClick / onclick as statements, read as
+        # build_onclick_attr reads them: a binding on onClick, selectors on
+        # onclick (a string or an array, blanks skipped), or the link action.
+        def declared_click_calls
+          handler = attributes['onClick']
+          if handler.is_a?(Hash)
+            return [] unless handler['action'] == 'link' && handler['url']
+
+            return ["window.open(#{JsonUIShared::StringLiterals.ts_single(handler['url'])}, '_blank');"]
+          end
+          if JsonUIShared::TapAccessibility.handler?(handler)
+            return [] unless is_binding_format?(handler)
+
+            return ["#{add_viewmodel_data_prefix(handler.gsub(/@\{|\}/, ''))}?.();"]
+          end
+          selectors = attributes['onclick']
+          return [] unless JsonUIShared::TapAccessibility.handler?(selectors)
+
+          names = selectors.is_a?(Array) ? JsonUIShared::TapAccessibility.handler_values(selectors) : [selectors]
+          return [] if names.any? { |name| is_binding_format?(name) }
+
+          names.map { |name| "data.#{name}?.();" }
+        end
+
+        # One operation handler attribute: the control's own update (`own`, an
+        # expression or nil) and then the declared onClick. Without an onClick
+        # it is written as before, byte for byte (` onChange={(e) => own}`, or
+        # nothing).
+        def operation_attr(event, params, own)
+          call = operation_click_call
+          return own ? " #{event}={#{params} => #{own}}" : '' if call.nil?
+
+          " #{event}={#{params} => { #{own ? "#{own}; " : ''}#{call} }}"
+        end
+
         def enabled_class_expression
           enabled = attributes['enabled']
           return nil unless enabled.is_a?(String) && has_binding?(enabled)
@@ -1338,7 +1433,9 @@ module RjuiTools
           return nil unless File.exist?(style_path)
 
           JSON.parse(File.read(style_path))
-        rescue JSON::ParserError
+        rescue JSON::ParserError => e
+          require_relative '../style_loader'
+          StyleLoader.unparsed_style(style_path, e)
           nil
         end
 

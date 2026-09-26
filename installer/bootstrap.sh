@@ -198,20 +198,24 @@ cd "$INSTALL_DIR"
 # once here so every export line is absolute.
 INSTALL_DIR="$(pwd -P)"
 
-# Copy shared attribute_definitions.json to each tool
+# Copy the shared definitions and type-synonym table to each tool (the
+# repository links them from each tool's lib/core; the installed tree holds
+# the files themselves)
 info "Setting up shared resources..."
-ATTR_DEF="shared/core/attribute_definitions.json"
-if [ -f "$ATTR_DEF" ]; then
-    for tool_dir in sjui_tools kjui_tools rjui_tools; do
-        if [ -d "$tool_dir/lib/core" ]; then
-            # Remove symlink if exists
-            rm -f "$tool_dir/lib/core/attribute_definitions.json"
-            # Copy the actual file
-            cp "$ATTR_DEF" "$tool_dir/lib/core/attribute_definitions.json"
-        fi
-    done
-    success "Copied attribute_definitions.json to all tools"
-fi
+for shared_json in attribute_definitions.json type_synonyms.json; do
+    src="shared/core/$shared_json"
+    if [ -f "$src" ]; then
+        for tool_dir in sjui_tools kjui_tools rjui_tools; do
+            if [ -d "$tool_dir/lib/core" ]; then
+                # Remove symlink if exists
+                rm -f "$tool_dir/lib/core/$shared_json"
+                # Copy the actual file
+                cp "$src" "$tool_dir/lib/core/$shared_json"
+            fi
+        done
+        success "Copied $shared_json to all tools"
+    fi
+done
 
 # NOTE: The old copy_shared_validation() step (which injected shared/validation
 # + shared/schema.py into the Python packages) was removed. test_tools

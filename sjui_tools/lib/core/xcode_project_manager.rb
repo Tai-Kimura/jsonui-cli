@@ -145,7 +145,7 @@ module SjuiTools
           end
         rescue ArgumentError => e
           Logger.error "Error calculating relative path: #{e.message}"
-          return
+          return :failed
         end
         
         # Only create group after validation passes
@@ -188,10 +188,16 @@ module SjuiTools
         :failed
       end
 
+      # The lines below that say what this class did to the project (a group
+      # used, made or removed) are at the level of what they say. Until
+      # 1.8.121 they were all ERROR, so a healthy UIKit build printed
+      # "ERROR: Removing empty group: …" above "Build completed successfully!"
+      # — and an ERROR a build prints must be a stage it did not complete
+      # (ticket uikit-build-reports-success-after-a-binding-error).
       def find_or_create_group(group_name)
         # Skip if synchronized project
         if @is_synchronized
-          Logger.error "Skipping group creation for synchronized project: #{group_name}"
+          Logger.debug "Skipping group creation for synchronized project: #{group_name}"
           return nil
         end
         
@@ -213,9 +219,9 @@ module SjuiTools
           app_group = current_group.groups.find { |g| g.name == app_name || g.path == app_name }
           if app_group
             current_group = app_group
-            Logger.error "Debug: Using app group '#{app_name}' as base"
+            Logger.debug "Using app group '#{app_name}' as base"
           else
-            Logger.error "Warning: Could not find app group '#{app_name}', using main group"
+            Logger.warn "Could not find app group '#{app_name}', using main group"
           end
         else
           # Navigate to source directory group if specified
@@ -233,7 +239,7 @@ module SjuiTools
                 Logger.debug "Found existing group by display_name '#{part}'"
               else
                 # If source directory group doesn't exist, create it
-                Logger.error "Warning: Creating new group '#{part}' - this might create duplicates!"
+                Logger.warn "Creating new group '#{part}' - this might create duplicates!"
                 current_group = current_group.new_group(part)
               end
             end
@@ -270,7 +276,7 @@ module SjuiTools
       def add_directory(dir_path, group_name)
         # Skip if synchronized project
         if @is_synchronized
-          Logger.error "Skipping directory addition for synchronized project: #{group_name}"
+          Logger.debug "Skipping directory addition for synchronized project: #{group_name}"
           return
         end
         
@@ -281,7 +287,7 @@ module SjuiTools
         relative_dir_path = Pathname.new(dir_path).relative_path_from(Pathname.new(project_dir)).to_s
         
         if EXCLUDED_PATTERNS.any? { |pattern| pattern.end_with?('/') && relative_dir_path.start_with?(pattern.chomp('/')) }
-          Logger.error "Excluding entire directory from Xcode project: #{relative_dir_path}"
+          Logger.debug "Excluding entire directory from Xcode project: #{relative_dir_path}"
           return
         end
         
@@ -306,7 +312,16 @@ module SjuiTools
 
       def add_binding_files(binding_files, project_dir)
         binding_files.each do |file_path|
-          add_file(file_path, 'Bindings')
+          # A binding file the project does not compile is a screen that is
+          # not there: the build says so at its end (until 1.8.121 the ERROR
+          # scrolled past a success line — ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          next unless add_file(file_path, 'Bindings') == :failed
+
+          require_relative 'stage_failures'
+          JsonUI::StageFailures.record(
+            'Xcode project', "#{File.basename(file_path)} was written but not added to #{File.basename(@project_path)}"
+          )
         end
         
         # Clean up any empty groups that might have been created
@@ -337,7 +352,7 @@ module SjuiTools
             # Special handling for certain groups we want to keep
             unless ['Products', 'Frameworks'].include?(subgroup.name)
               groups_to_remove << subgroup
-              Logger.error "Removing empty group: #{subgroup.name}"
+              Logger.info "Removing empty group: #{subgroup.name}"
             end
           end
         end
@@ -359,10 +374,10 @@ module SjuiTools
         
         # If there are multiple groups with the project name, keep the first one and remove others
         if project_groups.size > 1
-          Logger.error "Found #{project_groups.size} groups named '#{project_name}'"
+          Logger.warn "Found #{project_groups.size} groups named '#{project_name}'"
           # Remove all but the first one
           project_groups[1..-1].each do |group|
-            Logger.error "Removing duplicate project reference: #{group.name}"
+            Logger.warn "Removing duplicate project reference: #{group.name}"
             groups_to_remove << group
           end
         end
@@ -372,7 +387,7 @@ module SjuiTools
         
         @project.main_group.groups.each do |group|
           if phantom_patterns.include?(group.name) && group.files.empty? && group.groups.empty?
-            Logger.error "Removing phantom reference: #{group.name}"
+            Logger.info "Removing phantom reference: #{group.name}"
             groups_to_remove << group
           end
         end
@@ -386,7 +401,7 @@ module SjuiTools
       def add_file_to_group(file_path, group)
         # Skip if synchronized project
         if @is_synchronized
-          Logger.error "Skipping file-to-group addition for synchronized project: #{File.basename(file_path)}"
+          Logger.debug "Skipping file-to-group addition for synchronized project: #{File.basename(file_path)}"
           return
         end
         

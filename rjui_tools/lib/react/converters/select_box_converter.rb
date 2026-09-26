@@ -557,9 +557,9 @@ module RjuiTools
           if handler
             if has_binding?(handler)
               prop = extract_binding_property(handler)
-              return " onChange={(e) => #{prop}?.(#{changed_value_expr})}"
+              return operation_attr('onChange', '(e)', "#{prop}?.(#{changed_value_expr})")
             else
-              return " onChange={(e) => #{handler}?.(#{changed_value_expr})}"
+              return operation_attr('onChange', '(e)', "#{handler}?.(#{changed_value_expr})")
             end
           end
 
@@ -579,12 +579,14 @@ module RjuiTools
             # a string, which the declared `(value: number) => void` rejects.)
             if index_key
               index_expr = placeholder_row? ? 'e.target.selectedIndex - 1' : 'e.target.selectedIndex'
-              return " onChange={(e) => data.#{handler_name}?.(#{index_expr})}"
+              return operation_attr('onChange', '(e)', "data.#{handler_name}?.(#{index_expr})")
             end
-            return " onChange={(e) => data.#{handler_name}?.(#{changed_value_expr})}"
+            return operation_attr('onChange', '(e)', "data.#{handler_name}?.(#{changed_value_expr})")
           end
 
-          ''
+          # No own write-back: the selection still happens, and a declared
+          # onClick is called from it.
+          operation_attr('onChange', '(e)', nil)
         end
 
         # `e.target.value` on a multi-select is only the FIRST selected option,
@@ -699,17 +701,18 @@ module RjuiTools
           handler = attributes['onValueChange'] || attributes['onChange']
           if handler && has_binding?(handler)
             prop = extract_binding_property(handler)
-            return " onChange={(e) => #{prop}?.(#{value_expr})}"
+            return operation_attr('onChange', '(e)', "#{prop}?.(#{value_expr})")
           end
 
           # Auto-generate from selectedDate binding
           if date_value && has_binding?(date_value)
             property_name = date_value.match(/@\{(.+)\}/)[1]
             handler_name = "on#{property_name[0].upcase}#{property_name[1..]}Change"
-            return " onChange={(e) => data.#{handler_name}?.(#{value_expr})}"
+            return operation_attr('onChange', '(e)', "data.#{handler_name}?.(#{value_expr})")
           end
 
-          ''
+          # The picked date is the selection a declared onClick follows.
+          operation_attr('onChange', '(e)', nil)
         end
 
         def date_string_format
