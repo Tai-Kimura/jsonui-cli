@@ -1736,8 +1736,8 @@ module SjuiTools
           own_data = cell_view && cell_view.sub(/View\z/, 'Data')
           if element.any? || element.name != own_data
             unless element.any?
-              warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: items '#{property_name}' is a list of " \
-                   "#{element.name}; a cell reads its own #{own_data || 'Data'} or a dictionary, so its cells draw with no data."
+              SjuiTools::Core::Logger.warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: items '#{property_name}' is a list of " \
+                                           "#{element.name}; a cell reads its own #{own_data || 'Data'} or a dictionary, so its cells draw with no data."
             end
             conversion = 'compactMap({ $0 as? [String: Any] })'
           else

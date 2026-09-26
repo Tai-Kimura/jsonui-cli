@@ -61,12 +61,13 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # Through the tool's logger (its WARNING line), not a bare `warn` to stderr —
+  # the rule jui_tools' test_ruby_tools_print_problems_through_their_loggers
+  # holds for every line in lib.
   it "names a list of another type: its elements are no dictionary, so its cells draw with no data" do
-    said = StringIO.new
-    $stderr = said
-    code = convert({}, { 'name' => 'rows', 'class' => '[Booking]', 'defaultValue' => '[]' })
-    $stderr = STDERR
-    expect(said.string).to include("items 'rows' is a list of Booking; a cell reads its own RowCellData or a dictionary")
+    code = nil
+    expect { code = convert({}, { 'name' => 'rows', 'class' => '[Booking]', 'defaultValue' => '[]' }) }
+      .to output(/^WARNING: \[sjui\] Collection at list: items 'rows' is a list of Booking; a cell reads its own RowCellData or a dictionary/).to_stdout
     expect(code).to include('Optional(data.rows.compactMap({ $0 as? [String: Any] }))')
   end
 
