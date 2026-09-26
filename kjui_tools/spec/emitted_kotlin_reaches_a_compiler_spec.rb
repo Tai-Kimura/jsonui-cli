@@ -129,7 +129,6 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/components/networkimage_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/pair_scan_closure_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/progress_component_spec.rb' => "p3 — #{UNCONVERTED}",
-    'compose/components/radio_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/segment_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/slider_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/switch_component_spec.rb' => "p2 — #{UNCONVERTED}",

@@ -32,6 +32,7 @@ module RjuiTools
 
           value_attr = build_value_attr(min_value)
           on_change = build_on_change
+          finished = build_change_finished
           disabled_attr = build_disabled_attr
 
           # `min` / `max` / `step` are JSX attributes in CODE position, so a
@@ -48,7 +49,7 @@ module RjuiTools
           step_attr = step_value ? " step={#{jsx_value_expr(step_value)}}" : ' step="any"'
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_expr}} max={#{max_expr}}#{step_attr}#{value_attr}#{on_change}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_expr}} max={#{max_expr}}#{step_attr}#{value_attr}#{on_change}#{finished}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)
@@ -114,6 +115,19 @@ module RjuiTools
           else
             " defaultValue={#{jsx_value_expr(min_value)}}"
           end
+        end
+
+        # A declared onClick is called when the change is finished, as
+        # Compose's onValueChangeFinished: the input's native `change` event,
+        # which a browser fires when the thumb is let go or a key step lands —
+        # React's onChange is the native `input` event, once per movement. The
+        # ref sets the element's own `onchange`, so each render replaces the
+        # one listener rather than adding another.
+        def build_change_finished
+          call = operation_click_call
+          return '' if call.nil?
+
+          " ref={(el) => { if (el) el.onchange = () => { #{call} }; }}"
         end
 
         def build_on_change
