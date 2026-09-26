@@ -45,13 +45,20 @@ RSpec.describe 'kjui interaction gates' do
   end
   node = ->(type, more = {}) { { 'type' => type, 'id' => 'n' }.merge(extra[type] || {}).merge(more) }
 
-  # Declared, and not drawn by kjui: the emission is a TODO comment. Pinned,
-  # so a type that starts being drawn joins the arms below.
+  # Declared, and not drawn by kjui: the emission is the unknown-type
+  # sentence in a comment (JsonUIShared::AttributeValidatorCore
+  # .unknown_component_type_message; it was a `// TODO: Implement component
+  # type` comment). Pinned, so a type that starts being drawn joins the arms
+  # below. The fallback's prefix is read from the constant, and one type is
+  # checked to reach it, so a reworded fallback cannot leave `drawn` holding
+  # every type (the TODO prefix this matched on went silent that way).
   not_drawn = %w[CircleView EditText Input]
+  fallback = "// #{format(JsonUIShared::AttributeValidatorCore::UNKNOWN_COMPONENT_TYPE, written: '')}".delete_suffix("'")
 
   it 'reads every type the declaration knows' do
     expect(types.size).to be >= 29
-    drawn = types.reject { |type| emit.call(node.call(type)).start_with?('// TODO: Implement component type') }
+    expect(emit.call(node.call('ProbeUndeclaredType'))).to start_with(fallback)
+    drawn = types.reject { |type| emit.call(node.call(type)).start_with?(fallback) }
     expect(types - drawn).to match_array(not_drawn)
   end
 

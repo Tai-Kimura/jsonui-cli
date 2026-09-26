@@ -3,6 +3,7 @@
 require 'core/attribute_validator'
 require 'compose/compose_builder'
 require 'tmpdir'
+require_relative '../support/kotlin_compiler'
 require 'json'
 
 # A node whose type the tool cannot draw is named by its type, in one sentence
@@ -110,5 +111,7 @@ RSpec.describe 'unknown component type' do
     expect(code).to include("// #{sentence}")
     expect(code).not_to include('TODO')
     expect(said).to include(sentence)
+    # a comment where the node would be: the enclosing function still compiles
+    expect("fun screen() {\n#{code}\n}\n").to compile_as_kotlin
   end
 end

@@ -2,6 +2,7 @@
 
 require 'tmpdir'
 require 'swiftui/converter_factory'
+require_relative '../support/emitted_swift'
 
 # The one sentence for a type a tool cannot draw (JsonUIShared::
 # AttributeValidatorCore.unknown_component_type_message; kjui's
@@ -9,6 +10,7 @@ require 'swiftui/converter_factory'
 # placeholder with it and says it in the build. The placeholder said
 # "Unsupported component: <type>".
 RSpec.describe 'sjui: unknown component type' do
+  include EmittedSwift
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
   after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
 
@@ -20,6 +22,8 @@ RSpec.describe 'sjui: unknown component type' do
     expect(code).to include("Text(#{sentence.to_json})")
     expect(code).not_to include('Unsupported component')
     expect(said).to include(sentence)
+    # the sentence is written into the Swift as a string literal a compiler reads
+    expect(compilable_view(code)).to compile_as_swift
   end
 
   # The profile reads the registry the SwiftUI dispatch reads

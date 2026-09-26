@@ -11,7 +11,7 @@ module KjuiTools
     module Components
       class SliderComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          # Slider uses 'value' or 'bind' for binding
+          # Slider binds through 'value' (a lone 'bind' arrives as it: JsonUIShared::BindFold)
           # A bound value reads through BoundValue.float: `data.v.toFloat()` did
           # not compile on a nullable property (`(data.v?.toFloat() ?: 0f)`
           # does), and spliced a `?? default` in as it stood. A static value
@@ -40,7 +40,7 @@ module KjuiTools
           # minimum, as on the other faces. A bound value is the view model's.
           # Bound is decided on the layout, not on the emitted text: a nullable
           # binding's expression starts `(data.…`, not `data.`.
-          bound = Helpers::BoundValue.bound?(json_data['value']) || bind_bound
+          bound = Helpers::BoundValue.bound?(json_data['value'])
           unless bound
             seed = json_data['value'].nil? ? Helpers::BoundValue.float(min_value, fallback: 0) : value
             return Helpers::StaticSeed.wrap(seed, depth, required_imports) do |d, state|

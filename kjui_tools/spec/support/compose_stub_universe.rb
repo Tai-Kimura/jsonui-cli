@@ -238,6 +238,8 @@ module ComposeStubUniverse
                  valueRange: ClosedFloatingPointRange<Float> = 0f..1f, onValueChangeFinished: (() -> Unit)? = null,
                  steps: Int = 0) {}
       fun LinearProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
+      // the determinate overload (Material3: `progress: () -> Float` first)
+      fun LinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
       fun CircularProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color(),
                                     strokeWidth: Dp = 0.dp) {}
       fun SelectBox(value: String, onValueChange: (String) -> Unit, options: List<String>, modifier: Modifier = Modifier,

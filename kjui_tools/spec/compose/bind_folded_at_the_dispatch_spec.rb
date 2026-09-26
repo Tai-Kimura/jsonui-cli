@@ -4,6 +4,8 @@ require 'compose/compose_builder'
 require 'core/bind_fold'
 require 'core/attribute_validator'
 require 'json'
+require_relative '../support/kotlin_compiler'
+require_relative '../support/compose_stub_universe'
 
 # `bind` is folded into the attribute it stands for on the node a built-in
 # component draws — its style merged, its responsive branch resolved — at the
@@ -64,6 +66,23 @@ RSpec.describe 'kjui codegen: bind folded at the dispatch' do
     end
   end
 
+  # With no value and no bind — and with a static one — every section the
+  # table names still draws (a reference to the removed `bind` read was left
+  # in the Slider and raised NameError for a Slider without a value).
+  it 'draws each section with no value, and with a static one' do
+    [
+      { 'type' => 'Switch' }, { 'type' => 'Toggle' }, { 'type' => 'CheckBox' }, { 'type' => 'Check' },
+      { 'type' => 'Slider' }, { 'type' => 'Segment', 'items' => %w[x y] }, { 'type' => 'Progress' },
+      { 'type' => 'SelectBox', 'items' => %w[x y] }, { 'type' => 'SelectBox', 'selectItemType' => 'Date' },
+      { 'type' => 'Radio', 'options' => %w[x y] }, { 'type' => 'TextField' }, { 'type' => 'TextView' }
+    ].each do |node|
+      expect { emit.call(node) }.not_to raise_error, node.inspect
+      static = JsonUIShared::BindFold.attributes_for(node['type'], node).first
+      value = { 'selectedIndex' => 1, 'value' => 0.5, 'progress' => 0.5 }.fetch(static, static == 'isOn' ? true : 'x')
+      expect { emit.call(node.merge(static => value)) }.not_to raise_error, "#{node.inspect} #{static}"
+    end
+  end
+
   # Each responsive branch is folded as it is drawn: a branch that gives the
   # Switch its own value draws it, and the other branch draws the binding.
   it 'folds each responsive branch as it is drawn' do
@@ -102,6 +121,31 @@ RSpec.describe 'kjui codegen: bind folded at the dispatch' do
     expect(validator.warnings.join("\n")).to include("has invalid value 'date'. Valid values: Normal, Date")
     date = emit.call(node.merge('selectItemType' => 'Date'))
     expect(date).to include('DateSelectBox(', 'value = data.b,')
+  end
+
+  # The folded nodes draw Kotlin that compiles: a lone bind on a Switch, a
+  # Slider and a Progress, and a style's lone bind on a Date SelectBox, bound
+  # through the attribute each folds to.
+  it 'draws Kotlin that compiles for folded nodes' do
+    merged = lambda do |c|
+      c['styles'].fetch(c['node']['style']).merge(c['node']).reject { |k, _| k == 'style' }
+    end
+    date = JSON.parse(File.read(vectors))['style_cases'].first
+    code = [
+      emit.call('type' => 'Switch', 'bind' => '@{on}'),
+      emit.call('type' => 'Slider', 'bind' => '@{level}'),
+      emit.call('type' => 'Progress', 'bind' => '@{done}'),
+      emit.call(merged.call(date))
+    ].join("\n")
+    expect(code).to include('data.on', 'data.level', 'data.done', 'data.day')
+    expect(<<~KOTLIN).to compile_as_kotlin
+      #{ComposeStubUniverse.common_stages(code)}
+      class Data(val on: Boolean = false, val level: Float = 0f, val done: Float = 0f, val day: String = "")
+      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      fun screen(data: Data, viewModel: ViewModel) {
+      #{code}
+      }
+    KOTLIN
   end
 
   it 'hands an app component (component_mappings) its node as written' do
