@@ -15,7 +15,9 @@ One source of truth per facet:
 
   swift_generated   sjui_tools/lib/swiftui/converter_factory.rb   ``when '...'``
   kotlin_generated  kjui_tools/lib/compose/compose_builder.rb     ``when '...'``
-  react             rjui_tools/lib/react/react_generator.rb       ``CONVERTERS``
+  react             rjui_tools/lib/react/converters/converter_table.rb  ``ConverterTable.table``
+                    (the root's and every child's, one table from jsonui-cli 1.9.0;
+                    until then react_generator.rb's ``CONVERTERS``, the root's)
   swift_dynamic     SwiftJsonUI Sources/.../Dynamic/DynamicComponentBuilder.swift
   kotlin_dynamic    KotlinJsonUI library-dynamic/.../DynamicView.kt
 
@@ -45,7 +47,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 METADATA = REPO_ROOT / "shared" / "core" / "component_metadata.json"
 SJUI_FACTORY = REPO_ROOT / "sjui_tools" / "lib" / "swiftui" / "converter_factory.rb"
 KJUI_BUILDER = REPO_ROOT / "kjui_tools" / "lib" / "compose" / "compose_builder.rb"
-RJUI_GENERATOR = REPO_ROOT / "rjui_tools" / "lib" / "react" / "react_generator.rb"
+RJUI_CONVERTER_TABLE = REPO_ROOT / "rjui_tools" / "lib" / "react" / "converters" / "converter_table.rb"
 
 
 def _sibling_repo(env_var: str, name: str) -> Path | None:
@@ -168,10 +170,12 @@ def kjui_codegen_types() -> set[str]:
 
 
 def rjui_converter_map() -> dict[str, str]:
-    """``'Type' => Converters::Klass`` entries of the CONVERTERS literal."""
-    body = RJUI_GENERATOR.read_text(encoding="utf-8").split("CONVERTERS = {", 1)[1]
+    """``'Type' => Klass`` entries of ConverterTable.table's literal — the hash
+    after ``def table``'s requires, up to its ``}.freeze``."""
+    body = RJUI_CONVERTER_TABLE.read_text(encoding="utf-8").split("def table", 1)[1]
+    body = body.split("{\n", 1)[1]
     body = _ruby_code_lines(body.split("}.freeze", 1)[0])
-    return dict(re.findall(r"'(\w+)'\s*=>\s*Converters::(\w+)", body))
+    return dict(re.findall(r"'(\w+)'\s*=>\s*(?:Converters::)?(\w+)", body))
 
 
 def rjui_supports(component: str, table: dict[str, str]) -> bool:
