@@ -373,7 +373,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
       expect(code).to include('data.onClick?("submitButton")')
     end
 
-    it 'uses default button id when no id specified' do
+    # No id: the viewId is the drawn type and the node's position
+    # (JsonUIShared::LayoutPath.view_id) — on its own, the root `0`. It was
+    # `button` for every id-less Button (4f's ruling, 1.9.0).
+    it 'hands an id-less button its position as the viewId' do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
         'onClick' => { 'name' => 'onClick', 'class' => '((Event) -> Void)?' }
       }
@@ -387,7 +390,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
       converter = described_class.new(component)
       code = converter.convert
 
-      expect(code).to include('data.onClick?("button")')
+      expect(code).to include('data.onClick?("button_0")')
     end
   end
 end

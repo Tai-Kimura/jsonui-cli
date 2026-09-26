@@ -10,7 +10,9 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
 
         def convert
-          id = @component['id'] || 'selectBox'
+          # The box's name — its handlers' viewId and SelectBoxView's id:
+          # the id, else its drawn type and position (view_id).
+          id = view_id
           prompt = @component['prompt'] || @component['hint'] || @component['placeholder']
           selectItemType = @component['selectItemType'] || 'Normal'
           items = @component['items'] || []
