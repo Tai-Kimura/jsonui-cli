@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/image_accessibility_helper'
@@ -35,9 +36,22 @@ module KjuiTools
           content_description = Helpers::ImageAccessibilityHelper.content_description(json_data, 'Profile Image', required_imports)
           code += "\n" + indent("contentDescription = #{content_description},", depth + 1)
           
-          # Content scale - typically Crop for circular images
-          required_imports&.add(:content_scale)
-          code += "\n" + indent("contentScale = ContentScale.Crop,", depth + 1)
+          # contentMode, as on Image (CircleImage is an Image spelling —
+          # type_synonyms.json render_as — and follows its contentMode, default
+          # fit, attribute_semantics.json#image; 4f ruling, 2026-09-26). This
+          # emitted ContentScale.Crop for every mode, so a CircleImage drew
+          # cropped on Android and fit on iOS and web. No contentMode: nothing
+          # is emitted and Compose's own default (Fit) draws, as for Image.
+          if json_data['contentMode']
+            required_imports&.add(:content_scale)
+            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode']))
+              code += "\n" + indent("contentScale = #{scale},", depth + 1)
+            end
+            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode']))
+              required_imports&.add(:alignment)
+              code += "\n" + indent("alignment = #{alignment},", depth + 1)
+            end
+          end
           
           # Build modifiers for circular shape
           modifiers = []

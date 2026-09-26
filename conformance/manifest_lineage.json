@@ -5,7 +5,7 @@
     "humanWarning": "Append-only. Each key is the sha256 a runner records as manifestHash; the value says which fixture tree and id set that manifest described. The gate uses it to tell a manifest that DRIFTED (prose in the SSoT) from one whose fixtures MOVED — only the second needs the pictures drawn again."
   },
   "manifests": {
-    "08560b8527039bb8360a56a07724952ecb2e683c1095375592f382075692ddda": {
+    "02692651a4edb74d9ffe17a771c5c89dfb5eca1e25c84c57e3509deda7214491": {
       "version": 1,
       "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
       "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
@@ -15,15 +15,15 @@
       "fixtures": "a5ea58d7efe17b2bae4907b2ba667e1088d4a17611071fe2c97f38b71802744d",
       "ids": "51baf35438fa73882fa25ddec2bd7c7034b4e18cbc347aaf42548debfa667e74"
     },
-    "123805ab9241f08475a8c6b08058071450472015e92cb1993d0189fc652cafb6": {
-      "version": 1,
-      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
-      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
-    },
     "12aaf1a593923d3ead934bed1f995e65fc32eb6d07c3f55c1288b7f55f03b077": {
       "version": 1,
       "fixtures": "953eec704e8a6e0b7cc411f30814d9025a9648059bbd24af5e73920c4b54c4fc",
       "ids": "f1dab35ffcf80688d5e0417775a0e0c6bc35cf87d9e07f642cad10688b08c2a1"
+    },
+    "15b73fc49b95820d5c3333758d3d63f9bc1ca2bcc9af6b98b091dcbc0d0afba2": {
+      "version": 1,
+      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
+      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
     },
     "1e6b5ccf11e1b7da23e9cfb5b23c881e9a9109002696c003d146e6536d77a585": {
       "version": 1,
@@ -55,30 +55,15 @@
       "fixtures": "953eec704e8a6e0b7cc411f30814d9025a9648059bbd24af5e73920c4b54c4fc",
       "ids": "f1dab35ffcf80688d5e0417775a0e0c6bc35cf87d9e07f642cad10688b08c2a1"
     },
-    "604c26302a23d112be3b5744407d29bf7245c17aea35d4b57d8fa22eb9256c31": {
-      "version": 1,
-      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
-      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
-    },
     "637846524a5b861a3484053e410f0d4503fcaba32f2e118cdb11707b104bbc4e": {
       "version": 1,
       "fixtures": "953eec704e8a6e0b7cc411f30814d9025a9648059bbd24af5e73920c4b54c4fc",
       "ids": "f1dab35ffcf80688d5e0417775a0e0c6bc35cf87d9e07f642cad10688b08c2a1"
     },
-    "652eeb478796ad7cb481b403c1449014dd7cedbbdef17f8901264c1f5a8db99a": {
-      "version": 1,
-      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
-      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
-    },
     "675435f0259b5577b8a2088e671970247b96d5c8b37e1e99f5c41f4f123c02e2": {
       "version": 1,
       "fixtures": "3395a1467baefaf251c317688ecea33dc42e35b1082f5787eeba756af9614dcc",
       "ids": "1a19a4641ff120418bf4acf2f8a9487542222f16beeecfb34f78440712da4bb8"
-    },
-    "8a7052f887760764dba01147638d4dc971748607c46a7d1a5ea905d8d91dde14": {
-      "version": 1,
-      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
-      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
     },
     "c4c53bd4e300385d4ffcd9865b64ad30e6640b67e36e3a93c73fc9724a553665": {
       "version": 1,

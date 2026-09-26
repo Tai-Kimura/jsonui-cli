@@ -6,6 +6,7 @@ require 'json'
 require 'fileutils'
 require 'digest'
 require 'pty'
+require 'rbconfig'
 
 # `rjui g view / component / collection` against the disk: each command runs
 # on a new project, every file it made is then EDITED (a layout re-serialised,
@@ -94,7 +95,14 @@ RSpec.describe 'rjui g view / component / collection keep the files the app wrot
   # written), or [:terminal, typed] (a pseudo-terminal). Returns [output, rc],
   # rc :timeout when the run was killed after run_limit seconds.
   def self.run_rjui(dir, args, stdin: '')
-    cmd = ['ruby', File.join(dir, 'rjui_tools', 'bin', 'rjui'), *args]
+    # RbConfig.ruby, not `ruby`: the rjui under test runs on the interpreter
+    # running this spec. `ruby` from PATH is rbenv's choice — RBENV_VERSION,
+    # else the .ruby-version above the child's cwd (a tmpdir: none), else the
+    # global — so the 2.6 leg ran the tool on 3.2.2 or on 2.6 depending on the
+    # shell it was launched from (measured 2026-09-26 on sjui's spec of this
+    # name: with RBENV_VERSION set its children ran 3.2.2 and its 2.6-only
+    # failures vanished; unset, they ran 2.6 and failed on the 3.2.2 leg too).
+    cmd = [RbConfig.ruby, File.join(dir, 'rjui_tools', 'bin', 'rjui'), *args]
     out = +''
     rc = nil
     if stdin.is_a?(Array)

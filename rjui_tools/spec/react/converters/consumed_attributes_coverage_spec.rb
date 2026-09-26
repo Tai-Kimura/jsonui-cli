@@ -59,6 +59,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       scrollDirection
       scrollEnabled
       scrollTo
+      sectionSpacing
       sections
       showsHorizontalScrollIndicator
       showsVerticalScrollIndicator
