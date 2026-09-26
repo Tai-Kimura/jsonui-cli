@@ -4,6 +4,7 @@ require_relative 'base_view_converter'
 require_relative 'responsive_helper'
 require_relative '../../core/responsive_resolver'
 require_relative '../../core/string_literals'
+require_relative '../../core/attribute_types'
 
 module SjuiTools
   module SwiftUI
@@ -421,11 +422,7 @@ module SjuiTools
                     property_name = extract_property_name(@component['items'])
                     if property_name
                       is_optional = is_property_optional?(property_name)
-                      if is_optional
-                        add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                      else
-                        add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                      end
+                      add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                       indent do
                         lanes = horizontal_lanes
                         open_horizontal_lanes(lanes)
@@ -875,11 +872,7 @@ module SjuiTools
               property_name = extract_property_name(@component['items'])
               if property_name
                 is_optional = is_property_optional?(property_name)
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                else
-                  add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                end
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                 indent do
                   lanes = horizontal_lanes
                   open_horizontal_lanes(lanes)
@@ -1051,11 +1044,7 @@ module SjuiTools
               property_name = extract_property_name(@component['items'])
               if cell_class_name && property_name
                 is_optional = is_property_optional?(property_name)
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                else
-                  add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                end
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                 indent do
                   add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                   indent do
@@ -1218,11 +1207,7 @@ module SjuiTools
               property_name = extract_property_name(@component['items'])
               if cell_class_name && property_name
                 is_optional = is_property_optional?(property_name)
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                else
-                  add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                end
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                 indent do
                   add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                   indent do
@@ -1722,6 +1707,57 @@ module SjuiTools
           add_line "}"
         end
 
+        # Collection.items is a CollectionDataSource or an array (4f ruling,
+        # 2026-09-26). A class-list Collection (no `sections`) whose items
+        # property the layout DECLARES a list — `Array`, `[T]`
+        # (AttributeTypes.list_element) — is one section: every element with
+        # cellClasses[0], on the routes a one-section data source draws. Any
+        # other declaration, or none, is the canonical CollectionDataSource.
+        # Until jsonui-cli 1.9.0 every class-list route read `.sections`, which
+        # an array does not have (swiftc: "value of type '[Any]' has no member
+        # 'sections'").
+        def legacy_items_list_element(property_name)
+          return nil unless property_name && @data_properties.is_a?(Array)
+
+          prop = @data_properties.find { |p| p.is_a?(Hash) && p['name'] == property_name }
+          JsonUIShared::AttributeTypes.list_element(prop && prop['class'])
+        end
+
+        # The cells of a class-list Collection as a `[[String: Any]]?` —
+        # what the cell view's model reads (`init(data: Any)`, setData reads a
+        # dictionary). A list of the cell's own Data (`[<Cell>Data]`) becomes
+        # its dictionaries; an untyped list (`Array` = [Any]) is read element
+        # by element as dictionaries. A list of any other type is named: its
+        # elements are no dictionary, so its cells draw with no data.
+        def legacy_array_cells_expr(property_name, is_optional)
+          element = legacy_items_list_element(property_name)
+          cell_view = extract_view_name((@component['cellClasses'] || []).first)
+          own_data = cell_view && cell_view.sub(/View\z/, 'Data')
+          if element.any? || element.name != own_data
+            unless element.any?
+              warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: items '#{property_name}' is a list of " \
+                   "#{element.name}; a cell reads its own #{own_data || 'Data'} or a dictionary, so its cells draw with no data."
+            end
+            conversion = 'compactMap({ $0 as? [String: Any] })'
+          else
+            conversion = 'map({ $0.toDictionary() })'
+          end
+          is_optional ? "data.#{property_name}?.#{conversion}" : "Optional(data.#{property_name}.#{conversion})"
+        end
+
+        # The `if let` binding of `cellsData` for a one-section route
+        # (horizontal, flow): the first data section's cells, or the declared
+        # list's.
+        def legacy_first_cells_binding(property_name, is_optional)
+          return "cellsData = #{legacy_array_cells_expr(property_name, is_optional)}" if legacy_items_list_element(property_name)
+
+          if is_optional
+            "dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data"
+          else
+            "cellsData = data.#{property_name}.sections.first?.cells?.data"
+          end
+        end
+
         # `items` is declared ["array", "binding"]; the data source is the
         # binding. An array names no data and is set aside, as kjui and rjui
         # set it aside — until 1.8.121 it reached `start_with?` and raised
@@ -1742,7 +1778,10 @@ module SjuiTools
           # Check if items property is specified (e.g., "@{items}")
           property_name = extract_property_name(@component['items'])
           
-          if property_name
+          if property_name && legacy_items_list_element(property_name)
+            # A declared list: one section (legacy_items_list_element).
+            generate_legacy_array_cells(property_name)
+          elsif property_name
             # Use section-based rendering
             generate_collection_content_sections(property_name)
           else
@@ -1751,6 +1790,29 @@ module SjuiTools
           end
         end
         
+        # Every cell of a declared list, with the single declared cellClass —
+        # the every-section routes' (List, grid, lazy:none) one section.
+        def generate_legacy_array_cells(property_name)
+          cell_view = single_declared_cell_view
+          unless cell_view
+            add_line "// No single cellClass — nothing rendered (several need sections[].cell)"
+            return
+          end
+
+          add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+          indent do
+            vars = open_cell_foreach('cellsData')
+            indent do
+              add_line "#{cell_view}(data: #{vars[:data_var]})"
+              generate_cell_identity(vars[:index_var])
+              apply_cell_frame(grid: columns_is_multi?)
+              apply_cell_item_identifier(vars[:index_var])
+            end
+            add_line "}"
+          end
+          add_line "}"
+        end
+
         def generate_collection_content_legacy(cell_class_name, id)
           if cell_class_name
             # Extract the original class name from the cell classes

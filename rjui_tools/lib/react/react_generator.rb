@@ -202,6 +202,11 @@ module RjuiTools
         # attribute lookup path for L1-normalized layouts.
         @config['_layout_normalized'] = Core::Normalization.canonicalized?(json)
 
+        # The layout's declared data classes, raw (`name => class`): the
+        # class-list Collection reads its `items` by what the property
+        # declares (CollectionConverter#legacy_items_list_element).
+        @config['_data_classes'] = declared_data_classes(json)
+
         jsx_content = convert_component(json)
 
         generate_component_file(component_name, jsx_content, json,
@@ -1279,6 +1284,20 @@ module RjuiTools
         end
 
         false
+      end
+
+      # Every `data` declaration in this layout's own tree, raw: name => class.
+      def declared_data_classes(json, found = {})
+        case json
+        when Hash
+          if json['data'].is_a?(Array)
+            json['data'].each { |d| found[d['name']] ||= d['class'] if d.is_a?(Hash) && d['name'].is_a?(String) }
+          end
+          json.each_value { |v| declared_data_classes(v, found) if v.is_a?(Hash) || v.is_a?(Array) }
+        when Array
+          json.each { |v| declared_data_classes(v, found) }
+        end
+        found
       end
 
       # Extract data from JSON - search for data-only elements in children (recursively)

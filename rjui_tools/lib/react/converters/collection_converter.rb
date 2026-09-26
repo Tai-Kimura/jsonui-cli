@@ -2,6 +2,7 @@
 
 require_relative 'base_converter'
 require_relative '../component_name'
+require_relative '../../core/attribute_types'
 
 module RjuiTools
   module React
@@ -559,6 +560,21 @@ module RjuiTools
           " id={`#{collection_id}_item_${#{index_var}}`}"
         end
 
+        # The class-list shape — `cellClasses` (with `headerClasses` /
+        # `footerClasses`), `items` and no `sections` — drawn as sjui codegen
+        # draws it (the route table kjui codegen and both Dynamic renderers
+        # follow, 4f ruling 2026-09-26), from the data's own sections:
+        #
+        #   vertical (list, grid, lazy:none)   every data section; header before, footer after
+        #   horizontal, flow                   the first data section; no header / footer
+        #   horizontal paging                  nothing
+        #
+        # A header / footer is its view with no data. Until jsonui-cli 1.9.0
+        # the cells mapped `items` itself as an array — `data.rows?.map(…)`,
+        # which a CollectionDataSource (the type every face gives a Collection's
+        # items) does not have: tsc TS2339 "Property 'map' does not exist on
+        # type 'CollectionDataSource'" (measured on 798f6e64, 2026-09-26) — and
+        # the header and footer were drawn on every route.
         def generate_legacy_content(indent)
           lines = []
 
@@ -571,51 +587,107 @@ module RjuiTools
           footer_view = extract_view_name(footer_classes.first) if footer_classes.any?
 
           items_binding = extract_collection_binding(attributes['items'])
+          # An items property declared as a list (`Array`, `[T]`) is one
+          # section — the cells mapped over it, as this path has always drawn
+          # it (4f ruling, 2026-09-26, Collection.items: a CollectionDataSource
+          # or an array). Its header, footer and cells are written as they
+          # were, on every route.
+          return legacy_array_content(indent, cell_view, header_view, footer_view, items_binding) if legacy_items_list_element
 
-          # Header — its view with no data, as sjui and kjui draw it. It was
-          # handed `<items>?.header`, a field no item source has: the items
-          # here are the cells' array, and CollectionDataSource keeps a header
-          # per section (tsc on a declared array: TS2339; measured on
-          # 46a54fc3, 2026-09-26). The footer likewise.
-          lines << "#{indent_str(indent)}<#{header_view} />" if header_view
+          paging = horizontal_collection? && attributes['paging'] == true
+          first_only = flow_collection? || horizontal_collection?
+          edges = !paging && !first_only
 
-          # Cells placeholder
-          if cell_view
-            if items_binding
-              # Add type annotation for TypeScript
-              item_type = config['typescript'] ? ": #{cell_view}Data" : ''
+          lines << "#{indent_str(indent)}<#{header_view} />" if header_view && edges
+
+          if cell_view && items_binding && !paging
+            cast = config['typescript'] ? " as unknown as #{cell_view}Data" : ''
+            if first_only
               lanes = horizontal_lanes
               if lanes
                 lines << horizontal_lanes_open(lanes, indent)
                 indent += 2
               end
-              lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index: number) => ("
-              # Same wrapper contract as the section path: the key rides the
-              # outermost element of the map.
-              if (cell_size = cell_size_style)
-                lines << "#{indent_str(indent + 2)}<div key={index} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
-                lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"
-                lines << "#{indent_str(indent + 2)}</div>"
-              else
-                lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
-              end
+              lines << "#{indent_str(indent)}{(#{items_binding}?.sections?.[0]?.cells?.data ?? []).map((cellData, cellIndex) => ("
+              lines.concat(legacy_cell_lines(cell_view, 'cellIndex', "cellData#{cast}", indent + 2))
               lines << "#{indent_str(indent)}))}"
               if lanes
                 indent -= 2
                 lines << "#{indent_str(indent)}</div>"
               end
             else
-              lines << "#{indent_str(indent)}{/* Add items prop to render cells */}"
-              lines << "#{indent_str(indent)}<#{cell_view} />"
+              lines << "#{indent_str(indent)}{(#{items_binding}?.sections ?? []).map((section, sectionIndex) =>"
+              lines << "#{indent_str(indent + 2)}(section.cells?.data ?? []).map((cellData, cellIndex) => ("
+              lines.concat(legacy_cell_lines(cell_view, '`${sectionIndex}_${cellIndex}`', "cellData#{cast}", indent + 4))
+              lines << "#{indent_str(indent + 2)}))"
+              lines << "#{indent_str(indent)})}"
+            end
+          elsif cell_view && !items_binding
+            lines << "#{indent_str(indent)}{/* Add items prop to render cells */}"
+            lines << "#{indent_str(indent)}<#{cell_view} />"
+          elsif !cell_view
+            lines << "#{indent_str(indent)}{/* No cellClasses specified */}"
+          end
+
+          lines << "#{indent_str(indent)}<#{footer_view} />" if footer_view && edges
+
+          lines.join("\n")
+        end
+
+        # The element type of the list the class-list `items` binds (the
+        # layout's own `data` declaration, AttributeTypes.list_element), or
+        # nil — a CollectionDataSource, or no declaration (the canonical
+        # CollectionDataSource).
+        def legacy_items_list_element
+          items = attributes['items']
+          return nil unless items.is_a?(String) && (name = items[/\A@\{\s*([A-Za-z_]\w*)\s*\}\z/, 1])
+
+          JsonUIShared::AttributeTypes.list_element((config['_data_classes'] || {})[name])
+        end
+
+        # A class-list Collection whose items are a list: every item with
+        # cellClasses[0], the header before and the footer after — what this
+        # path wrote until jsonui-cli 1.9.0, kept as it was.
+        def legacy_array_content(indent, cell_view, header_view, footer_view, items_binding)
+          lines = []
+          lines << "#{indent_str(indent)}<#{header_view} />" if header_view
+          if cell_view
+            item_type = config['typescript'] ? ": #{cell_view}Data" : ''
+            lanes = horizontal_lanes
+            if lanes
+              lines << horizontal_lanes_open(lanes, indent)
+              indent += 2
+            end
+            lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index: number) => ("
+            if (cell_size = cell_size_style)
+              lines << "#{indent_str(indent + 2)}<div key={index} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
+              lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"
+              lines << "#{indent_str(indent + 2)}</div>"
+            else
+              lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
+            end
+            lines << "#{indent_str(indent)}))}"
+            if lanes
+              indent -= 2
+              lines << "#{indent_str(indent)}</div>"
             end
           else
             lines << "#{indent_str(indent)}{/* No cellClasses specified */}"
           end
-
-          # Footer (see the header)
           lines << "#{indent_str(indent)}<#{footer_view} />" if footer_view
-
           lines.join("\n")
+        end
+
+        # One class-list cell; the key rides the outermost element of the map
+        # (the section path's wrapper contract).
+        def legacy_cell_lines(cell_view, key_expr, data_expr, indent)
+          if (cell_size = cell_size_style)
+            ["#{indent_str(indent)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>",
+             "#{indent_str(indent + 2)}<#{cell_view}#{cell_item_id_attr('cellIndex')} data={#{data_expr}} />",
+             "#{indent_str(indent)}</div>"]
+          else
+            ["#{indent_str(indent)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={#{data_expr}} />"]
+          end
         end
 
         # The component a class reference names — the same name the import

@@ -10,10 +10,10 @@ require 'core/layout_validator'
 # With `items` and no `sections`, a single cellClass renders every item;
 # several cellClasses need `sections[].cell` to assign them."
 #
-# The web face already did the first half — `generate_legacy_content` takes
-# `cell_classes.first` and maps it over the items binding, the same meaning
-# kjui gives it. iOS was the outlier (it emitted a debug placeholder) and has
-# been brought here rather than the reverse.
+# The web face takes `cell_classes.first` for every item. It mapped it over
+# `items` as an array until jsonui-cli 1.9.0; the items are a
+# CollectionDataSource, and the cells now come from its sections, as on sjui
+# and kjui (collection_classes_and_page_change_spec.rb has the route table).
 #
 # What this file pins on the web side is that the behaviour is DECLARED, not
 # incidental: the emit stays, and the several-cellClasses case is refused by
@@ -35,9 +35,9 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
       expect(result).to include('<ItemCard')
     end
 
-    it 'maps it over the items binding' do
+    it "maps it over the items' data sections" do
       result = convert(base.merge('cellClasses' => ['ItemCard']))
-      expect(result).to match(/\?\.map\(\(item/)
+      expect(result).to include('(data.rows?.sections ?? []).map((section, sectionIndex) =>')
     end
   end
 
@@ -91,9 +91,9 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
       ambient = <<~TS
         interface ItemCardData { readonly title?: string }
         declare const ItemCard: (props: {
-          key?: number; id?: string; data: ItemCardData
+          key?: string | number; id?: string; data: ItemCardData
         }) => JSX.Element;
-        declare const data: { rows?: ItemCardData[] };
+        declare const data: { rows?: { sections: { cells?: { data: unknown[] } }[] } };
       TS
 
       expect(<<~TSX).to compile_as_typescript.with_ambient(ambient)
