@@ -32,6 +32,15 @@ module SjuiTools
           require_relative '../../swiftui/converter_factory'
           JsonUIShared::TypeSynonyms.app_types = SwiftUI::ConverterFactory.custom_types
 
+          # What Debug (SwiftJsonUI Dynamic) draws for the app's own
+          # components, against what this build draws: named, not changed.
+          require_relative '../../swiftui/app_component_dynamic_check'
+          require_relative '../../swiftui/generators/adapter_generator'
+          SwiftUI::AppComponentDynamicCheck.warnings(
+            SwiftUI::Generators::AdapterGenerator.allocate.send(:get_adapter_directory),
+            mappings: SwiftUI::ConverterFactory.custom_types
+          ).each { |line| Core::Logger.warn line }
+
           # Store validation results
           @validation_warnings = []
           @validation_errors = 0
