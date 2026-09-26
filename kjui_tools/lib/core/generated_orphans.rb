@@ -184,6 +184,35 @@ module JsonUIShared
       Result.new(removed: removed, kept: kept, skipped: nil)
     end
 
+    # Files an output of this run REPLACES — the same file written under
+    # another name (rjui: a project whose `typescript` changed writes
+    # `Home.jsx` where it wrote `Home.tsx`; both answer the same import, so
+    # the old one is not harmless). `pairs` is [[old, current]]. The old file
+    # is deleted only when the current one exists and `owned` says the old
+    # one is the generator's (by default rule 2 above, the @generated
+    # sentinel — a face passes the ownership test its own refresh of that
+    # file uses); otherwise it is kept and named. A pair whose current file
+    # is missing is left alone: nothing replaces it yet.
+    REPLACED_WARNING = 'the file named after it replaces it, but it is not marked as the generator\'s, ' \
+                       'so it was not deleted — delete it (or move what you changed into the new one) by hand'
+
+    def sweep_replaced(pairs, owned: nil)
+      owned ||= method(:generated?)
+      removed = []
+      kept = []
+      pairs.each do |old, current|
+        next unless File.file?(old) && File.file?(current)
+
+        if owned.call(old)
+          File.delete(old)
+          removed << [old, current]
+        else
+          kept << [old, current]
+        end
+      end
+      Result.new(removed: removed, kept: kept, skipped: nil)
+    end
+
     # The lines a build prints for a sweep: every deleted file and every kept
     # one by name, one per line.
     def report_lines(result, base: nil)
