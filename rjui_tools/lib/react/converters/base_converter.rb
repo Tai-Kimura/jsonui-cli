@@ -2385,19 +2385,19 @@ module RjuiTools
             klass = build_partial_class(partial)
             parts << "className: '#{klass}'" unless klass.empty?
 
-            if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
-              # Same contract as every other handler site: a handler is a
-              # selector (string|array), not a binding. The error marker is
-              # kept as an inline comment so it survives into the emitted
-              # object literal instead of vanishing.
-              expr = onclick_selector_expr(partial['onclick'])
-              parts << if expr.nil?
-                         '/* ERROR: onclick requires selector format (string) */'
-                       elsif partial['onclick'].is_a?(Array)
-                         "onClick: #{expr}"
-                       else
-                         "onClick: #{add_viewmodel_data_prefix(partial['onclick'])}"
-                       end
+            # The range's handler (TapAccessibility.range_handler): onClick,
+            # the canonical binding, first — which this dropped — then onclick,
+            # its selector alias.
+            kind, value = JsonUIShared::TapAccessibility.range_handler(partial)
+            if kind == :binding
+              parts << "onClick: #{extract_binding_property(value)}"
+            elsif kind == :selector
+              expr = onclick_selector_expr(value)
+              parts << (value.is_a?(Array) ? "onClick: #{expr}" : "onClick: #{add_viewmodel_data_prefix(value)}")
+            elsif JsonUIShared::TapAccessibility.handler?(partial['onclick'])
+              # A selector written as a binding: kept as an inline comment so
+              # it survives into the emitted object literal instead of vanishing.
+              parts << '/* ERROR: onclick requires selector format (string) */'
             end
 
             "{ #{parts.join(', ')} }"

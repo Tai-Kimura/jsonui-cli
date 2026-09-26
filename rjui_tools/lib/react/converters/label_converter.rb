@@ -715,7 +715,7 @@ module RjuiTools
           classes.concat(text_decoration_classes(underline: partial['underline'],
                                                  strikethrough: partial['strikethrough'],
                                                  element_level: false))
-          classes << 'cursor-pointer' if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
+          classes << 'cursor-pointer' if JsonUIShared::TapAccessibility.range_handler(partial)
           classes.reject { |c| c.nil? || c.empty? }.join(' ')
         end
 

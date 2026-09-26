@@ -114,10 +114,11 @@ module SjuiTools
                       add_line "backgroundColor: #{bg_color},"
                     end
 
-                    # Add onClick as closure (SwiftUI uses onClick, not onclick)
-                    if JsonUIShared::TapAccessibility.handler?(partial['onClick'])
-                      method_name = extract_binding_property(partial['onClick'])
-                      add_line "onClick: { data.#{method_name}?() },"
+                    # The range's handler (TapAccessibility.range_handler): onClick,
+                    # the canonical binding, first, then onclick, its selector
+                    # alias — which this dropped.
+                    if (call = range_handler_call(partial))
+                      add_line "onClick: { #{call} },"
                     end
 
                     # Remove trailing comma from last item

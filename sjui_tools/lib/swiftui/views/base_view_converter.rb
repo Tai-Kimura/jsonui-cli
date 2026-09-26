@@ -1384,6 +1384,17 @@ module SjuiTools
         # Every one of these was called with no argument whatever it took: a
         # `((String) -> Void)?` handler did not compile, while a Button's and a
         # control's onClick were handed the viewId (get_event_handler_invocation).
+        # The call a partialAttributes range makes, or nil: its onClick binding
+        # (`data.x?()`), else each name of its onclick selector, as a
+        # selector tap calls them (no_value_call).
+        def range_handler_call(range)
+          kind, value = JsonUIShared::TapAccessibility.range_handler(range)
+          return nil unless kind
+          return "data.#{extract_binding_property(value)}?()" if kind == :binding
+
+          JsonUIShared::TapAccessibility.handler_values(value).map { |n| no_value_call(to_camel_case(n)) }.join('; ')
+        end
+
         def no_value_call(name)
           return "data.#{name.chomp(':')}?(self)" if name.end_with?(':')
 
