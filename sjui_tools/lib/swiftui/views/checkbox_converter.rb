@@ -134,7 +134,7 @@ module SjuiTools
             # fallback: a CheckBox with both called only onValueChange.
             handler_attr = @component['onValueChange'] || @component['action'] || @component['onValueChanged']
             calls = []
-            calls << get_event_handler_invocation(handler_attr, id, 'newValue') if handler_attr && is_binding?(handler_attr)
+            calls << get_event_handler_invocation(handler_attr, view_id, 'newValue') if handler_attr && is_binding?(handler_attr)
             click = operation_click_call
             calls << click if click
             add_line "onValueChanged: { newValue in #{calls.join('; ')} }" if calls.any?

@@ -745,7 +745,7 @@
     "bind": {
       "type": "binding",
       "binding_direction": "two-way",
-      "description": "Two-way binding for the component's primary value — Switch/Check isOn, Slider value, Segment selectedIndex, SelectBox selectedValue, Progress progress, Table items. An alternative spelling to each component's own value attribute, which takes precedence when both are set. `primaryValue` lists, per section, the attribute `bind` stands for (first) and the other spellings of that value: the layout normalizer rewrites a lone `bind` to the first, and drops `bind` with a warning when any of them is set.",
+      "description": "Two-way binding for the component's primary value — Switch/Check isOn, Slider value, Segment selectedIndex, SelectBox selectedValue, Progress progress. An alternative spelling to each component's own value attribute, which takes precedence when both are set. Not a Collection's data source (Table is a Collection): that is `items`, and the validator says so. `primaryValue` lists, per section, the attribute `bind` stands for (first) and the other spellings of that value: the layout normalizer rewrites a lone `bind` to the first, and drops `bind` with a warning when any of them is set.",
       "primaryValue": {
         "Switch": ["isOn", "value", "checked"],
         "CheckBox": ["isOn", "checked"],
@@ -3982,11 +3982,8 @@
       }
     },
     "items": {
-      "type": [
-        "array",
-        "binding"
-      ],
-      "description": "Data source binding"
+      "type": "binding",
+      "description": "Data source binding (@{…}). A binding only: the array form was declared and drawn by no platform (codegen or Dynamic) and used by no face, so it was taken out on 2026-09-26; a literal array is named by the validator."
     },
     "keyboardAvoidance": {
       "type": "boolean",
@@ -3995,13 +3992,15 @@
     },
     "setTargetAsDelegate": {
       "type": "boolean",
-      "description": "Set target as delegate",
-      "platform": "swift"
+      "description": "Set target as delegate (UIKit: SJUICollectionView reads it; the SwiftUI paths have no delegate to set)",
+      "platform": "swift",
+      "mode": "uikit"
     },
     "setTargetAsDataSource": {
       "type": "boolean",
-      "description": "Set target as data source",
-      "platform": "swift"
+      "description": "Set target as data source (UIKit: SJUICollectionView reads it; the SwiftUI paths have no data source to set)",
+      "platform": "swift",
+      "mode": "uikit"
     },
     "columnCount": {
       "type": "number",

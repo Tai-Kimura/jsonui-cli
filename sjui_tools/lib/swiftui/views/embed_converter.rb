@@ -42,7 +42,9 @@ module SjuiTools
             return generated_code
           end
 
-          embed_id = @component['id'] || 'embed'
+          # The embed's name in its events — a viewId: the id, else its drawn
+          # type and position (view_id), `embed` for every id-less one before.
+          embed_id = view_id
           navigation_mode = @component['navigationMode'] || 'delegate'
           isolated = navigation_mode == 'isolated'
           params = @component['params'] || {}

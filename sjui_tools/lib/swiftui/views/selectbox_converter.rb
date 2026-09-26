@@ -2,6 +2,7 @@
 
 require_relative 'base_view_converter'
 require_relative '../helpers/string_manager_helper'
+require_relative '../../core/binding_validator_core'
 
 module SjuiTools
   module SwiftUI
@@ -10,7 +11,9 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
 
         def convert
-          id = @component['id'] || 'selectBox'
+          # The box's name — its handlers' viewId and SelectBoxView's id:
+          # the id, else its drawn type and position (view_id).
+          id = view_id
           prompt = @component['prompt'] || @component['hint'] || @component['placeholder']
           selectItemType = @component['selectItemType'] || 'Normal'
           items = @component['items'] || []
@@ -173,8 +176,10 @@ module SjuiTools
                     add_line "data.#{selected_date_prop} = newValue"
                   end
                   if has_handler
-                    handler_call = get_event_handler_invocation(@component['onValueChange'], id, 'newValue')
-                    add_line handler_call
+                    # The date's string; by the handler's declared parameters
+                    # (pick_invocation) — no index for a date, and a handler
+                    # declared to take one is not called.
+                    add_line pick_invocation(@component['onValueChange'], id, nil)
                   end
                   add_line click if click
                 end
@@ -270,9 +275,9 @@ module SjuiTools
             end
 
             # A normal picker reports the pick through the same closure, after
-            # SelectBoxView has written the selection: onValueChange, with the
-            # value of what is bound — the index for a bound selectedIndex, the
-            # item otherwise — then the declared onClick. Last, as the
+            # SelectBoxView has written the selection: onValueChange, with what
+            # its declared parameters ask for (pick_invocation) — then the
+            # declared onClick. Last, as the
             # parameter is. The bound selection was observed with
             # `.onChange(of:)` instead, which ran after the click and for the
             # view model's writes too, and an unbound one was reported by
@@ -282,7 +287,8 @@ module SjuiTools
               handler = @component['onValueChange']
               if handler && is_binding?(handler)
                 index_prop = extract_binding_property(@component['selectedIndex']) if is_binding?(@component['selectedIndex'])
-                calls << get_event_handler_invocation(handler, id, index_prop ? "data.#{index_prop}" : 'newValue')
+                index_expr = index_prop ? "data.#{index_prop}" : "(#{items_expression(items)}.firstIndex(of: newValue) ?? -1)"
+                calls << pick_invocation(handler, id, index_expr, index_bound: !index_prop.nil?)
               end
               calls << click if click
               if calls.any?
@@ -342,6 +348,45 @@ module SjuiTools
         end
 
         private
+
+        # onValueChange's call for a pick, by the parameters the data declares
+        # for it (4f's ruling on control-onclick-is-called-differently-on-every-
+        # path, 1.9.0): one String — the picked item (`newValue`, the item
+        # SelectBoxView reports), even with selectedIndex bound; one Int — the
+        # item's index; a String then an Int — the viewId and the index; two
+        # Strings — the viewId and the item; none — no argument. The index is
+        # the bound selectedIndex, else the item's place in `items`; a date has
+        # none, and a handler declared to take one — `(Int)`, `(String, Int)` —
+        # is not called: an `// ERROR:` comment keeps its place, and the build
+        # says it (BindingValidatorCore.date_pick_handler_problem; 4f's ruling,
+        # 1.9.0). It was handed the date string for its Int, which does not
+        # compile. Any other declaration (an Event type, none at all) keeps the
+        # generic reading: the viewId where it takes one, and the index where
+        # selectedIndex is bound, else the item. It was the generic reading
+        # for every type, whose `(String` pattern also caught a lone String: a
+        # `((String) -> Void)?` handler was handed the viewId and the index —
+        # two arguments to a one-argument closure, which does not compile.
+        def pick_invocation(handler, id, index_expr, index_bound: false)
+          name = extract_binding_property(handler) || handler
+          klass = ColorHelper.data_definitions.dig(name, 'class').to_s
+          if index_expr.nil? && (problem = JsonUIShared::BindingValidatorCore.date_pick_handler_problem(klass))
+            return "// ERROR: SelectBox.onValueChange #{name} is not called: #{problem}"
+          end
+
+          viewid = swift_string_literal(id.to_s)
+          case JsonUIShared::BindingValidatorCore.closure_parameters(klass)
+          when ['String'] then "data.#{name}?(newValue)"
+          when ['Int'] then "data.#{name}?(#{index_expr})"
+          when %w[String Int] then "data.#{name}?(#{viewid}, #{index_expr})"
+          when %w[String String] then "data.#{name}?(#{viewid}, newValue)"
+          when [] then "data.#{name}?()"
+          else generic_pick(handler, id, index_expr, index_bound)
+          end
+        end
+
+        def generic_pick(handler, id, index_expr, index_bound)
+          get_event_handler_invocation(handler, id, index_bound ? index_expr : 'newValue')
+        end
 
         # The declared selection. `selectedItem` and `selectedValue` are the
         # same two-way selection under two spellings, and `selectedItem`

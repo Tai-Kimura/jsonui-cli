@@ -249,7 +249,7 @@ module SjuiTools
           # onTextChange handler - called when text changes
           # onTextChange (camelCase) -> binding format only (@{functionName})
           if @component['onTextChange'] && is_binding?(@component['onTextChange'])
-            handler_call = get_event_handler_invocation(@component['onTextChange'], id, 'newValue')
+            handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
             indent_str = "    " * (@indent_level + 1)
             # Guard: only call callback when value actually changed (prevent feedback loop)
             @modifier_bag.append(:on_text_change, ".onChange(of: #{binding_path}) { oldValue, newValue in\n#{indent_str}guard oldValue != newValue else { return }\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}")

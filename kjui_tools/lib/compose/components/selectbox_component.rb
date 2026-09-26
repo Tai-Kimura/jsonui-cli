@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/binding_expression'
+require_relative '../../core/binding_validator_core'
 require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
@@ -381,11 +382,15 @@ module KjuiTools
           handler = json_data['onValueChange']
           method = Helpers::ModifierBuilder.extract_binding_property(handler)
           klass = Helpers::ResourceResolver.data_definitions.dig(method, 'class').to_s
-          params = klass[/\A\(*\s*\(([^()]*)\)\s*->/, 1]&.split(',')&.map { |t| t.strip.delete_suffix('?') }
+          # The shared reading of a closure type and the shared date check
+          # (JsonUIShared::BindingValidatorCore, the validator's own).
+          params = JsonUIShared::BindingValidatorCore.closure_parameters(klass)&.map { |t| t.delete_suffix('?') }
           id = JsonUIShared::StringLiterals.kotlin(view_id)
-          if is_date_picker && [%w[String Int], ['Int']].include?(params)
+          if is_date_picker && (problem = JsonUIShared::BindingValidatorCore.date_pick_handler_problem(klass))
+            # Not called; the same sentence sjui writes, in a block comment
+            # (parse-safe in any position of the lambda).
             return [nil, "/* #{Helpers::ModifierBuilder.comment_text(
-              "ERROR: a date SelectBox has no index: declare onValueChange as (String) or (String, String) — #{method} is not called"
+              "ERROR: SelectBox.onValueChange #{method} is not called: #{problem}"
             )} */"]
           end
           case params

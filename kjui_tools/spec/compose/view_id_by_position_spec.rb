@@ -158,7 +158,7 @@ RSpec.describe 'kjui codegen: viewId by position' do
         expect(code).to include(call), code
       else
         expect(code).not_to include('data.pick?.invoke'), code
-        expect(code).to include('/* ERROR: a date SelectBox has no index: declare onValueChange as (String) or (String, String)')
+        expect(code).to include('/* ERROR: SelectBox.onValueChange pick is not called: a date SelectBox has no index: declare onValueChange as (String) or (String, String) */')
       end
       "class DateData#{i}(val day: String = \"\", val pick: (#{klass})? = null)\n" \
         "fun date#{i}(data: DateData#{i}, viewModel: ViewModel) {\n#{code}\n}"

@@ -133,19 +133,11 @@ module SjuiTools
           # asset. Removed per the 51-E ruling (SSoT unchanged; the alias was
           # already declared).
 
-          # onClick handler (canTap is optional, onClick alone is sufficient;
-          # `canTap: false` and a stopped interaction are no tap —
-          # register_click_lines, which replaces this line for every other
-          # gate, emits none for them)
-          if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick']) &&
-             !tap_shut?
-            handler_call = get_event_handler_invocation(@component['onClick'], @component['id'] || 'image')
-            on_click_lines = [
-              ".contentShape(Rectangle())",
-              build_on_tap_gesture(handler_call)
-            ] + tap_accessibility_lines
-            @modifier_bag.register(:on_click, on_click_lines)
-          end
+          # onClick: the tap every type takes (register_click_lines, through
+          # apply_modifiers). This converter registered its own before it —
+          # replaced by that one, but for `enabled: false`, where the shared
+          # one emits none and this one stayed: a disabled Image still tapped,
+          # on this path only.
 
           # What VoiceOver reads for the image: its alt, nothing, or (an image
           # operating a control with no alt) the asset name as before.
@@ -201,10 +193,6 @@ module SjuiTools
           end
         end
 
-        def build_on_tap_gesture(handler_call)
-          indent_str = "    " * (@indent_level + 1)
-          ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}"
-        end
         private
 
         # highlightSrc — the image shown while the view is pressed.
