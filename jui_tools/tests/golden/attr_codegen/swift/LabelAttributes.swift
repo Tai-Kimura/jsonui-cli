@@ -6,7 +6,7 @@ import Foundation
 
 /// Typed attribute extraction for the `Label` component.
 /// Shared attributes are available via `common`.
-/// Overrides the common definition of: `shadow` (use the property on this struct).
+/// Overrides the common definition of: `bind`, `shadow` (use the property on this struct).
 public struct LabelAttributes {
     public enum TextTransform: String {
         case none = "none"

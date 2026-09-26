@@ -13,6 +13,7 @@ from jui_cli.generators.attr_codegen.model import (
     AttrKind,
     Attribute,
     SkippedAttr,
+    bind_value_attributes,
     build_model,
     classify_attr,
     default_definitions_path,
@@ -354,6 +355,50 @@ class RealDefinitionsTests(unittest.TestCase):
         for comp in self.model.all_components():
             for attr in comp.attrs:
                 self.assertIsInstance(attr.kind, AttrKind)
+
+
+class BindValueCasesTest(unittest.TestCase):
+    """``common.bind.primaryValue`` for the runtimes' generated
+    ``JsonUIBindPrimaryValue`` (model.bind_value_cases, rendered by the Swift
+    and Kotlin emitters). It must answer what shared/core/bind_fold.rb's
+    ``attributes_for`` answers — the codegen and the validator read that — so
+    it runs the same cases: bind_fold_vectors.json ``attributes_for_cases``."""
+
+    VECTORS = default_definitions_path().parent / "bind_fold_vectors.json"
+
+    def test_the_real_table_answers_every_shared_case(self):
+        model = load_model()
+        cases = json.loads(self.VECTORS.read_text(encoding="utf-8"))["attributes_for_cases"]
+        self.assertGreater(len(cases), 5)
+        for case in cases:
+            with self.subTest(case["name"]):
+                self.assertEqual(
+                    bind_value_attributes(model.bind_value_cases, case["type"], case["node"]),
+                    case["expect"],
+                )
+
+    def test_an_alias_answers_as_its_section_unless_the_table_names_it(self):
+        data = {
+            "common": {"bind": {"type": "binding", "primaryValue": {
+                "Switch": ["isOn"], "Toggle": ["value"], "CheckBox": ["checked"],
+            }}},
+            "Switch": {}, "CheckBox": {},
+            "Toggle": {"_alias_of": "Switch"}, "Check": {"_alias_of": "CheckBox"},
+        }
+        cases = build_model(data).bind_value_cases
+        self.assertEqual(bind_value_attributes(cases, "Check", {}), ["checked"])
+        self.assertEqual(bind_value_attributes(cases, "Toggle", {}), ["value"], "its own entry wins")
+        self.assertEqual([c.labels for c in cases], [("CheckBox", "Check"), ("Switch",), ("Toggle",)])
+
+    def test_a_malformed_entry_is_left_out(self):
+        data = {"common": {"bind": {"type": "binding", "primaryValue": {
+            "A": "text",
+            "B": [1],
+            "C": {"by": "kind", "whenAbsent": "missing", "lists": {"x": ["y"]}},
+            "D": {"by": "kind", "whenAbsent": "x", "lists": {"x": ["y"], "z": "w"}},
+            "E": ["ok"],
+        }}}}
+        self.assertEqual([c.labels for c in build_model(data).bind_value_cases], [("E",)])
 
 
 if __name__ == "__main__":

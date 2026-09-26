@@ -10,7 +10,7 @@ module JsonUI
   module Generated
     # Typed attribute extraction for the `Text` component.
     # Component alias of `Label` — full clone of the canonical table (the runtime selects tables by raw spelling).
-    # Overrides the common definition of: `shadow`.
+    # Overrides the common definition of: `bind`, `shadow`.
     module TextAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`

@@ -130,6 +130,25 @@ class Component:
     alias_of: str | None = None
 
 
+@dataclass(frozen=True)
+class BindValueCase:
+    """One entry of ``common.bind.primaryValue``: the attributes ``bind``
+    stands for on a node of the section (and of the sections whose
+    ``_alias_of`` names it), the first being where a lone ``bind`` goes.
+
+    A list entry fills ``values``. An object entry ``{by, whenAbsent, lists}``
+    fills ``by``, ``lists`` (each named value's list, the ``whenAbsent`` one
+    left out) and ``when_absent`` (the list for ``node[by]`` absent, bound, or
+    a value the lists do not name — compared as written).
+    """
+
+    labels: tuple[str, ...]
+    values: tuple[str, ...] = ()
+    by: str | None = None
+    lists: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    when_absent: tuple[str, ...] = ()
+
+
 @dataclass
 class AttrModel:
     """The whole definitions file, classified and sorted (deterministic)."""
@@ -140,6 +159,8 @@ class AttrModel:
     #: distinct keyword sets used by DIMENSION attrs (sorted tuples)
     dimension_keyword_sets: list[tuple[str, ...]]
     source: str = "shared/core/attribute_definitions.json"
+    #: ``common.bind.primaryValue``, resolved (BindValueCase), by section
+    bind_value_cases: tuple[BindValueCase, ...] = ()
 
     def all_components(self) -> list[Component]:
         """``common`` first, then components alphabetically."""
@@ -241,7 +262,78 @@ def build_model(data: dict[str, Any]) -> AttrModel:
         components=components,
         skipped=sorted(skipped, key=lambda s: (s.component, s.name)),
         dimension_keyword_sets=keyword_sets,
+        bind_value_cases=bind_value_cases(common_section, components),
     )
+
+
+def _string_list(value: Any) -> tuple[str, ...] | None:
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        return None
+    return tuple(value)
+
+
+def bind_value_cases(
+    common_section: dict[str, Any], components: list[Component]
+) -> tuple[BindValueCase, ...]:
+    """``common.bind.primaryValue`` resolved for the runtimes' generated
+    ``JsonUIBindPrimaryValue`` (the same reading as shared/core/bind_fold.rb's
+    ``attributes_for``, which the codegen and the validator use).
+
+    A section is matched as written; an ``_alias_of`` section the table does
+    not name answers as the section it names, so it is baked in as another
+    label (one hop, the model's own ``alias_of``). A malformed entry is left
+    out: that section answers ``[]``, and ``bind`` is not folded there.
+    """
+    bind = common_section.get("bind")
+    table = bind.get("primaryValue") if isinstance(bind, dict) else None
+    if not isinstance(table, dict):
+        return ()
+    aliases: dict[str, list[str]] = {}
+    for comp in components:
+        if comp.alias_of and comp.name not in table:
+            aliases.setdefault(comp.alias_of, []).append(comp.name)
+    cases: list[BindValueCase] = []
+    for section in sorted(table):
+        labels = (section, *sorted(aliases.get(section, [])))
+        entry = table[section]
+        values = _string_list(entry)
+        if values is not None:
+            cases.append(BindValueCase(labels=labels, values=values))
+            continue
+        if not isinstance(entry, dict):
+            continue
+        by, when_absent, lists = entry.get("by"), entry.get("whenAbsent"), entry.get("lists")
+        if not (isinstance(by, str) and isinstance(when_absent, str) and isinstance(lists, dict)):
+            continue
+        resolved = {k: _string_list(v) for k, v in lists.items()}
+        if any(v is None for v in resolved.values()) or when_absent not in resolved:
+            continue
+        cases.append(BindValueCase(
+            labels=labels,
+            by=by,
+            lists=tuple((k, resolved[k]) for k in sorted(resolved) if k != when_absent),
+            when_absent=resolved[when_absent],
+        ))
+    return tuple(cases)
+
+
+def bind_value_attributes(
+    cases: tuple[BindValueCase, ...], type_name: Any, node: Any
+) -> list[str]:
+    """What the generated ``JsonUIBindPrimaryValue`` answers for a node of
+    ``type_name`` — the reference the emitters render and the vectors
+    (shared/core/bind_fold_vectors.json ``attributes_for_cases``) check."""
+    for case in cases:
+        if type_name not in case.labels:
+            continue
+        if case.by is None:
+            return list(case.values)
+        kind = node.get(case.by) if isinstance(node, dict) else None
+        for value, attrs in case.lists:
+            if kind == value:
+                return list(attrs)
+        return list(case.when_absent)
+    return []
 
 
 def classify_attr(

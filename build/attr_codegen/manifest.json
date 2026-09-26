@@ -7,6 +7,7 @@
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
+    "kotlin/BindPrimaryValue.kt": "57e527947308548ccc7bfb8aaea3ae4204123adcc2f426a6531805cd1d0a33fb",
     "kotlin/BlurAttributes.kt": "947ae9d7852b7235ee56985ee3abf6191eaa44badbd17918157a8e5291bb1c38",
     "kotlin/ButtonAttributes.kt": "3d9eb1fae8fcd47752034758737331ed7fc34879edc09b67a6166eed071410af",
     "kotlin/CheckAttributes.kt": "bb5433460fc0c85f13f5bc80069facd8e74f4d8fab4f054f1f5e048090c58905",
@@ -71,6 +72,7 @@
     "ruby/view_attributes.rb": "a0f3ec599bf7bb3b7d32af1245821537c6d9594b58ebfbe5b73da714e429b155",
     "ruby/web_attributes.rb": "984822088f35af4526da7f50b2e90582e508fdd4083383f8914258b39e9148b5",
     "swift/AttrCodegenSupport.swift": "3774292b88eed4a1656faab95c6056272cbc8d69b3c3d92d1261d5a7cbda7277",
+    "swift/BindPrimaryValue.swift": "ed3d6967833246f95a785f733c488bbf91f7761c295033e5b2e70dfc662ebc2c",
     "swift/BlurAttributes.swift": "8197deaa5eb279e5b7b89f169c298a421617d6e0aade3a663d8d19efafdc5317",
     "swift/ButtonAttributes.swift": "6f89e068f7d3968c140bd0c929f4eb96e694fb0e7653a1a1e4f6cb9fa7ca248c",
     "swift/CheckAttributes.swift": "a7d8d79c5c365caa1ce5be6918d33d789fac3ae6bbd97d6ca21458f0527983cd",
