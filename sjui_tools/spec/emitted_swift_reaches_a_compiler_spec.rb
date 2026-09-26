@@ -65,17 +65,18 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'swiftui/scrolling_cell_index' => 'which layouts render in a scrolling collection (an index of JSON)',
     'swiftui/binding/binding_handler_registry' => 'picks a handler; emits nothing itself',
     'swiftui/views/attribute_vocabulary' => 'reads the SSoT vocabulary',
-    'uikit/json_loader' => 'loads and validates layout JSON',
-    'uikit/json_loader_config' => 'reads ignore sets from config',
-    'uikit/json_analyzer' => 'validates layout JSON'
+    'uikit/json_loader_config' => 'reads ignore sets from config'
   }.freeze
+  # Until 1.8.121 this list also held uikit/json_loader and uikit/json_analyzer
+  # as "loads and validates layout JSON" — both write the Binding's Swift (the
+  # data variables and initializer, `func invalidate…`, the `weak var`
+  # outlets). Their specs were in only by the markers' spelling.
   NOT_SWIFT_DIRS = ['uikit/tools/', 'uikit/xcode_project/destroyers/'].freeze # project-file surgery
   SWIFT_LIB = Dir.glob(File.join(LIB, '{swiftui,uikit}', '**', '*.rb'))
                  .map { |f| f.sub("#{LIB}/", '').sub(/\.rb\z/, '') }
                  .reject { |f| NOT_SWIFT.key?(f) || NOT_SWIFT_DIRS.any? { |d| f.start_with?(d) } }.freeze
   NOT_SWIFT_CONSTANTS = %w[BuildCacheManager IncludeExpander StyleLoader ViewRegistry CollectionCellIndex
-                           ScrollingCellIndex BindingHandlerRegistry AttributeVocabulary JsonLoader
-                           JsonLoaderConfig JsonAnalyzer].freeze
+                           ScrollingCellIndex BindingHandlerRegistry AttributeVocabulary JsonLoaderConfig].freeze
 
   def self.emits_swift?(body)
     requires = body.scan(/^\s*require(?:_relative)?\s+['"]([^'"]+)['"]/).flatten
@@ -108,6 +109,7 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'cli/commands/convert_spec.rb' => "p4 — #{UNCONVERTED}",
     'cli/commands/destroy_spec.rb' => "p4 — #{UNCONVERTED}",
     'cli/commands/generate_spec.rb' => "p4 — #{UNCONVERTED}",
+    'cli/commands/watch_spec.rb' => '— checks which build the watch command starts; the loader is a double, and no Swift is written',
     'core/resources/color_manager_spec.rb' => "p4 — #{UNCONVERTED}",
     'core/resources/string_manager_plural_spec.rb' => "p4 — #{UNCONVERTED}",
     'core/resources/string_manager_spec.rb' => "p4 — #{UNCONVERTED}",
@@ -213,7 +215,6 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'uikit/handlers/text_view_binding_handler_spec.rb' => "p2 — #{UNCONVERTED}",
     'uikit/import_module_manager_spec.rb' => "p2 — #{UNCONVERTED}",
     'uikit/json_analyzer_spec.rb' => "p4 — #{UNCONVERTED}",
-    'uikit/json_loader_spec.rb' => "p4 — #{UNCONVERTED}",
     'uikit/string_module_spec.rb' => "p3 — #{UNCONVERTED}",
     'uikit/ui_control_event_manager_spec.rb' => "p2 — #{UNCONVERTED}",
     'uikit/view_binding_handler_factory_spec.rb' => "p2 — #{UNCONVERTED}",
@@ -264,6 +265,18 @@ RSpec.describe 'emitted Swift reaches a compiler' do
       rel if EMIT_MARKERS.any? { |m| File.read(path).include?(m) }
     end.compact
     expect(by_marker - emit_specs(root).map(&:first)).to be_empty
+  end
+
+  # A spec is in by what it loads and describes, whatever it spells: the UIKit
+  # loader and analyzer write the Binding's Swift, so their specs stay in with
+  # every marker taken out. Red until 1.8.121 for the loader's spec, which the
+  # two NOT_SWIFT entries above left in by its `expect(output` alone.
+  it 'keeps the UIKit loader and analyzer specs in without their markers' do
+    %w[uikit/json_loader_spec.rb uikit/json_analyzer_spec.rb].each do |rel|
+      stripped = EMIT_MARKERS.reduce(File.read(File.join(root, rel))) { |body, marker| body.gsub(marker, 'expect(value') }
+      expect(EMIT_MARKERS.none? { |marker| stripped.include?(marker) }).to be(true), rel
+      expect(self.class.emits_swift?(stripped)).to be(true), rel
+    end
   end
 
   it 'has no spec asserting emitted Swift that neither compiles nor is listed' do

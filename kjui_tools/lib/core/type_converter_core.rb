@@ -32,11 +32,11 @@ module JsonUIShared
   #
   # Unified 2026-08-02 (W3-2, file 7). Divergences resolved toward the
   # correct side:
-  #   - escape_string actually escapes backslashes now. All three tools
-  #     carried `gsub('\\', '\\\\')`, which in a gsub REPLACEMENT string
-  #     means "backslash" — a no-op that emitted lone backslashes into
-  #     generated Swift/Kotlin/TS string literals (invalid source). The
-  #     block form sidesteps the replacement-escape trap
+  #   - escape_string escaped backslashes with the block form (all three
+  #     tools had carried the no-op `gsub('\\', '\\\\')`). It and
+  #     format_string_value were removed in 1.8.121: their one caller,
+  #     TypeConverter.format_value, had no caller in any tool — the Data
+  #     models write strings through StringLiterals (string_literals.rb)
   #   - the event-handler introspection API (extract_function_parameter_types,
   #     event_handler_mode, expects_value?/expects_event?) was sjui-only;
   #     it reasons about JSON-side types, so it is platform-neutral and
@@ -507,29 +507,6 @@ module JsonUIShared
           "#{source}: data '#{normalized['name']}' defaultValue is given for #{given.join(', ')} " \
           "but not #{self::LANGUAGE} — #{self::LANGUAGE} gets #{answer}"
         )
-      end
-
-      def format_string_value(value)
-        str = value.to_s
-        # Handle already quoted strings
-        if str.start_with?('"') && str.end_with?('"')
-          str
-        elsif str.start_with?("'") && str.end_with?("'")
-          # Convert single quotes to double quotes
-          inner = str[1..-2]
-          "\"#{escape_string(inner)}\""
-        else
-          "\"#{escape_string(str)}\""
-        end
-      end
-
-      # Escape a string for embedding in a generated string literal.
-      # The backslash pass uses the BLOCK form: in a gsub replacement
-      # string, '\\\\' collapses back to a single backslash (a no-op all
-      # three tools shipped for years, emitting lone backslashes into
-      # generated source). The block form takes the text literally.
-      def escape_string(str)
-        str.gsub('\\') { '\\\\' }.gsub('"', '\\"')
       end
     end
   end

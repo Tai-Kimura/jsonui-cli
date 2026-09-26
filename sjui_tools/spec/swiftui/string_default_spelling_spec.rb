@@ -165,6 +165,67 @@ RSpec.describe 'a String defaultValue reads the same on every sjui path' do
     end
   end
 
+  # A String? default reads as a String's, and none stays nil
+  # (vectors['optionalStrings']). Until 1.8.121 a String? default was written
+  # as it stood, as code: `var probe: String? = Hello`.
+  describe 'a String? default' do
+    declared = lambda do |spelling|
+      prop = { 'name' => 'probe', 'class' => 'String?' }
+      prop['defaultValue'] = spelling unless spelling.nil?
+      prop
+    end
+    optional_paths = {
+      'SwiftUI data model' => lambda { |spelling|
+        updater = SjuiTools::SwiftUI::DataModelUpdater.allocate
+        updater.instance_variable_set(:@mode, 'swiftui')
+        no_strings.(updater)
+        line = updater.send(:generate_data_content, 'Probe', [declared.(spelling)])[/^ *var probe: String\? = .*$/]
+        line && line[/= (.*)$/, 1]
+      },
+      'UIKit data variable' => lambda { |spelling|
+        loader = SjuiTools::UIKit::JsonLoader.allocate
+        loader.instance_variable_set(:@json_analyzer, Struct.new(:data_sets, :partial_bindings).new([declared.(spelling)], []))
+        string_manager = Object.new
+        string_manager.define_singleton_method(:string_registered?) { |_| false }
+        loader.instance_variable_set(:@string_manager, string_manager)
+        loader.define_singleton_method(:check_data_passed_to_partials) { |_| false }
+        loader.define_singleton_method(:check_data_bound_to_collection) { |_| false }
+        line = loader.send(:generate_data_variables, { super_binding: 'Binding' })[/^ *var probe: String\?.*$/]
+        line && (line[/= (.*)$/, 1] || 'nil')
+      }
+    }
+
+    optional_paths.each do |path_name, emit|
+      it "#{path_name}: every String? row reads back as its text, or nil (swiftc)" do
+        unless system('which swiftc > /dev/null 2>&1')
+          raise 'swiftc is not on PATH in CI' if ENV['CI']
+
+          skip 'swiftc is not on PATH: the round trip is UNMEASURED here'
+        end
+        optional_rows = vectors['optionalStrings']
+        emitted = optional_rows.map { |row| emit.(row['spelling']) }
+        expect(emitted).to all(be_a(String))
+        program = "extension String { func localized() -> String { self } }\n" +
+                  emitted.each_with_index.map do |e, i|
+                    "let v#{i}: String? = #{e}\nprint(v#{i}.map { \"\\(Array($0.unicodeScalars.map { $0.value }))\" } ?? \"nil\")"
+                  end.join("\n")
+        got = Dir.mktmpdir do |dir|
+          File.write(File.join(dir, 'main.swift'), "#{program}\n")
+          out, err, status = Open3.capture3('swiftc', '-o', File.join(dir, 'main'), File.join(dir, 'main.swift'))
+          raise "does not compile:\n#{err}#{out}\n#{program}" unless status.success?
+
+          Open3.capture3(File.join(dir, 'main')).first.lines.map(&:strip)
+        end
+        aggregate_failures do
+          optional_rows.each_with_index do |row, i|
+            want = row['text'].nil? ? 'nil' : row['text'].codepoints.to_s.delete(' ')
+            expect(got[i].delete(' ')).to eq(want), "#{row['name']}: #{row['spelling'].inspect} was written #{emitted[i]}"
+          end
+        end
+      end
+    end
+  end
+
   # A value written per platform ({ "swift": …, "kotlin": … }): the one
   # this platform gets, or — when the layout gives it none — the class's
   # vocabulary value and a WARNING naming the layout, the property and the
