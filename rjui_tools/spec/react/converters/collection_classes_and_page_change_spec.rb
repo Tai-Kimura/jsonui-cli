@@ -220,6 +220,8 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
   it 'draws a Collection from `items` only: `bind` is not its data source' do
     bound = generate([{ 'type' => 'Collection', 'id' => 'list', 'cellClasses' => ['row_cell'], 'bind' => '@{rows}' }])
     expect(bound).not_to include('data.rows')
-    expect(bound).to include('<RowCell />') # the cell, with no data source to map
+    # No items: no cell (4f ruling 2026-09-26, round 5); until jsonui-cli
+    # 1.9.0 this drew `<RowCell />`, a cell with no data.
+    expect(bound).not_to include('<RowCell')
   end
 end

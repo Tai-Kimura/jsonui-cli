@@ -458,9 +458,16 @@ module RjuiTools
           content_lines = []
 
           if sections.any?
-            # Section-based rendering
-            sections.each_with_index do |section, section_index|
-              content_lines << generate_section_content(section, section_index, items_binding, indent)
+            # Section-based rendering. No `items`: nothing to draw the
+            # sections from — no header, cell or footer, as sjui and kjui
+            # codegen draw. Until jsonui-cli 1.9.0 this wrote each section's
+            # header and footer reading `?.sections` off nothing
+            # (`data={?.sections?.[0]?.header || {}}`, which is not JSX) and
+            # one cell with no data.
+            if items_binding
+              sections.each_with_index do |section, section_index|
+                content_lines << generate_section_content(section, section_index, items_binding, indent)
+              end
             end
           else
             # Legacy cellClasses-based rendering
@@ -534,10 +541,6 @@ module RjuiTools
               indent -= 2
               lines << "#{indent_str(indent)}</div>"
             end
-          elsif cell_view
-            # Placeholder for static content
-            lines << "#{indent_str(indent)}{/* Cells for section #{section_index} */}"
-            lines << "#{indent_str(indent)}<#{cell_view} />"
           end
 
           # Footer
@@ -569,7 +572,9 @@ module RjuiTools
         #   horizontal, flow                   the first data section; no header / footer
         #   horizontal paging                  nothing
         #
-        # A header / footer is its view with no data. Until jsonui-cli 1.9.0
+        # A header / footer is its view with no data. No `items`: no cell
+        # (the shared LayoutValidator names it) — until jsonui-cli 1.9.0 this
+        # path drew one cell with no data, on every route. Until jsonui-cli 1.9.0
         # the cells mapped `items` itself as an array — `data.rows?.map(…)`,
         # which a CollectionDataSource (the type every face gives a Collection's
         # items) does not have: tsc TS2339 "Property 'map' does not exist on
@@ -622,9 +627,6 @@ module RjuiTools
               lines << "#{indent_str(indent + 2)}))"
               lines << "#{indent_str(indent)})}"
             end
-          elsif cell_view && !items_binding
-            lines << "#{indent_str(indent)}{/* Add items prop to render cells */}"
-            lines << "#{indent_str(indent)}<#{cell_view} />"
           elsif !cell_view
             lines << "#{indent_str(indent)}{/* No cellClasses specified */}"
           end

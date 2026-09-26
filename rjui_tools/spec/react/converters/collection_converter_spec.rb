@@ -206,7 +206,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
     context 'cell class name conversion' do
       context 'with CollectionViewCell suffix' do
         it 'keeps the PascalCase name the import uses' do
-          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCollectionViewCell'] })
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCollectionViewCell'], 'items' => '@{rows}' })
           result = converter.convert
           expect(result).to include('<ProductCollectionViewCell ')
           expect(result).not_to include('ProductView')
@@ -215,7 +215,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
 
       context 'with Cell suffix' do
         it 'keeps the PascalCase name the import uses' do
-          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCell'] })
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCell'], 'items' => '@{rows}' })
           result = converter.convert
           expect(result).to include('<ProductCell ')
           expect(result).not_to include('ProductCellView')
@@ -224,7 +224,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
 
       context 'with path-based reference' do
         it 'converts to PascalCase' do
-          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['components/product_item'] })
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['components/product_item'], 'items' => '@{rows}' })
           result = converter.convert
           expect(result).to include('ProductItem')
         end
