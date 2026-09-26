@@ -47,7 +47,7 @@ module RjuiTools
       # have their own definitions section map to their own module; the
       # remaining converter-supported spellings map to the module of the
       # component the converter treats them as (mirrors
-      # BaseConverter#get_converter_class / ReactGenerator::CONVERTERS).
+      # the one converter table, react/converters/converter_table.rb).
       TYPE_MODULES = {
         'View' => GENERATED::ViewAttributes,
         'SafeAreaView' => GENERATED::SafeAreaViewAttributes,

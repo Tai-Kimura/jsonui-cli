@@ -1462,70 +1462,10 @@ module RjuiTools
           extension_converters = config['_extension_converters'] || {}
           return extension_converters[type] if extension_converters[type]
 
-          require_relative 'view_converter'
-          require_relative 'label_converter'
-          require_relative 'button_converter'
-          require_relative 'image_converter'
-          require_relative 'text_field_converter'
-          require_relative 'text_view_converter'
-          require_relative 'scroll_view_converter'
-          require_relative 'collection_converter'
-          require_relative 'toggle_converter'
-          require_relative 'slider_converter'
-          require_relative 'segment_converter'
-          require_relative 'radio_converter'
-          require_relative 'progress_converter'
-          require_relative 'indicator_converter'
-          require_relative 'select_box_converter'
-          require_relative 'include_converter'
-          require_relative 'icon_label_converter'
-          require_relative 'gradient_view_converter'
-          require_relative 'blur_converter'
-          require_relative 'circle_view_converter'
-          require_relative 'web_converter'
-          require_relative 'switch_converter'
-          require_relative 'network_image_converter'
-          require_relative 'tab_view_converter'
-
-          {
-            'View' => ViewConverter,
-            'SafeAreaView' => ViewConverter,
-            'Label' => LabelConverter,
-            'Text' => LabelConverter,
-            'Button' => ButtonConverter,
-            'Image' => ImageConverter,
-            'CircleImage' => ImageConverter,
-            'NetworkImage' => NetworkImageConverter,
-            'TextField' => TextFieldConverter,
-            # EditText / Input are aliases for TextField (attribute_definitions
-            # `_alias_of: TextField`)
-            'EditText' => TextFieldConverter,
-            'Input' => TextFieldConverter,
-            'TextView' => TextViewConverter,
-            'Scroll' => ScrollViewConverter,
-            'ScrollView' => ScrollViewConverter,
-            'Collection' => CollectionConverter,
-            'Table' => CollectionConverter,
-            'Switch' => SwitchConverter,
-            'Toggle' => ToggleConverter,
-            'CheckBox' => ToggleConverter,
-            'Check' => ToggleConverter,
-            'Checkbox' => ToggleConverter,
-            'Slider' => SliderConverter,
-            'Segment' => SegmentConverter,
-            'Radio' => RadioConverter,
-            'Progress' => ProgressConverter,
-            'Indicator' => IndicatorConverter,
-            'SelectBox' => SelectBoxConverter,
-            'Include' => IncludeConverter,
-            'IconLabel' => IconLabelConverter,
-            'GradientView' => GradientViewConverter,
-            'Blur' => BlurConverter,
-            'CircleView' => CircleViewConverter,
-            'Web' => WebConverter,
-            'TabView' => TabViewConverter,
-            'Embed' => EmbedConverter
-          }[type] || ViewConverter
+          # The one table (converter_table.rb), which the root dispatch
+          # reads too.
+          require_relative 'converter_table'
+          ConverterTable.table[type] || ViewConverter
         end
 
         def indent_str(indent)
