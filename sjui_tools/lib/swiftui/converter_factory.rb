@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'drawn_types'
 require_relative 'views/label_converter'
 require_relative 'views/button_converter'
 require_relative 'views/view_converter'
@@ -188,7 +189,7 @@ module SjuiTools
           Views::ImageConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'NetworkImage'
           Views::NetworkImageConverter.new(component, indent_level, action_manager, @binding_registry)
-        when 'Scroll', 'ScrollView'
+        when *DrawnTypes::SCROLL_VIEW
           Views::ScrollViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'TextView'
           Views::TextViewConverter.new(component, indent_level, action_manager, @binding_registry)
@@ -216,7 +217,7 @@ module SjuiTools
         # direct one. `table_converter.rb` was a scaffold, not an
         # implementation — with no binding it emitted ten literal
         # `Text("Row \(index)")` rows (50 §4 / A2 ②).
-        when 'Table', 'Collection'
+        when *DrawnTypes::COLLECTION
           Views::CollectionConverter.new(component, indent_level, action_manager, @binding_registry, @data_properties)
         when 'SelectBox'
           Views::SelectBoxConverter.new(component, indent_level, action_manager, @binding_registry)

@@ -4,6 +4,7 @@ require 'json'
 require 'set'
 require_relative '../core/screen_index'
 require_relative '../core/enum_spelling'
+require_relative 'drawn_types'
 
 module SjuiTools
   module SwiftUI
@@ -73,7 +74,7 @@ module SjuiTools
       end
 
       def self.vertically_scrolling_collection?(node)
-        return false unless node['type'].to_s.casecmp('collection').zero?
+        return false unless DrawnTypes::COLLECTION.include?(node['type'])
         return false if node['lazy'] == 'none'
 
         !horizontal?(node)

@@ -88,5 +88,18 @@ RSpec.describe KjuiTools::CLI::Commands::Build do
                  { 'type' => 'View', 'sections' => [{ 'cell' => 'not_a_cell' }] })
       expect(build.instance_variable_get(:@collection_cells)).to be_empty
     end
+
+    # A type name is its declared spelling (1.9.0): the spellings the
+    # converter factory draws as a Collection — Collection and Table, as
+    # written — and no other.
+    it 'takes the factory\'s Table, and not a collection spelled in another case' do
+      build.instance_variable_set(:@collection_cells, [])
+      build.send(:collect_collection_cells,
+                 { 'type' => 'View', 'child' => [
+                   { 'type' => 'Table', 'sections' => [{ 'cell' => 't_cell' }] },
+                   { 'type' => 'collection', 'sections' => [{ 'cell' => 'lower_cell' }] }
+                 ] })
+      expect(build.instance_variable_get(:@collection_cells)).to eq(%w[t_cell])
+    end
   end
 end

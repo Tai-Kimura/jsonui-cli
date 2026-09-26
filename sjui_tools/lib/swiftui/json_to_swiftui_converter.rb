@@ -110,7 +110,7 @@ module SjuiTools
       # In-tree containers that scroll their content. A Collection is not
       # here: its cells are other layout files, not `child` nodes, so a
       # Collection never has in-tree descendants to mark.
-      SCROLLING_ANCESTOR_TYPES = %w[scroll scrollview].freeze
+      SCROLLING_ANCESTOR_TYPES = DrawnTypes::SCROLL_VIEW
       SCROLLING_ANCESTOR_KEY = Views::BaseViewConverter::SCROLLING_ANCESTOR_KEY
       COLLECTION_CELL_ROOT_KEY = Views::BaseViewConverter::COLLECTION_CELL_ROOT_KEY
 
@@ -163,7 +163,7 @@ module SjuiTools
         # layout) is inside for everything below it.
         inside ||= component[SCROLLING_ANCESTOR_KEY] == true
         component[SCROLLING_ANCESTOR_KEY] = true if inside
-        inside ||= SCROLLING_ANCESTOR_TYPES.include?(component['type'].to_s.downcase)
+        inside ||= SCROLLING_ANCESTOR_TYPES.include?(component['type'])
         child_data = component['child'] || component['children']
         children = child_data.is_a?(Array) ? child_data : [child_data]
         children.each { |child| mark_scrolling_ancestors(child, inside) }
@@ -575,7 +575,7 @@ module SjuiTools
         end
 
         # Warn if Collection has items binding but no sections defined
-        if component['type']&.downcase == 'collection' && component['items'] && (!component['sections'] || component['sections'].empty?)
+        if DrawnTypes::COLLECTION.include?(component['type']) && component['items'] && (!component['sections'] || component['sections'].empty?)
           loc = hierarchy || 'root'
           puts "\e[33m⚠️  [SJUI Warning] [#{@current_validation_file} #{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering.\e[0m"
         end
@@ -590,7 +590,7 @@ module SjuiTools
         # declares `items`. Naming it here is what the old fallback owed:
         # silence produced a file that failed at build with an error pointing
         # at the generated line rather than at the layout.
-        if component['type']&.downcase == 'collection' &&
+        if DrawnTypes::COLLECTION.include?(component['type']) &&
            !component['items'] &&
            (!(component['sections'] || []).empty? || !(component['cellClasses'] || []).empty?)
           loc = hierarchy || 'root'

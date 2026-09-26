@@ -3,6 +3,7 @@
 require 'optparse'
 require 'fileutils'
 require_relative '../../core/config_manager'
+require_relative '../../swiftui/drawn_types'
 require_relative '../../core/project_finder'
 require_relative '../../core/logger'
 require_relative '../../core/resources_manager'
@@ -291,7 +292,7 @@ module SjuiTools
                                          hierarchy: hierarchy)
 
           # Warn if Collection has items binding but no sections defined
-          if json_data['type']&.downcase == 'collection' && json_data['items'] && (!json_data['sections'] || json_data['sections'].empty?)
+          if SwiftUI::DrawnTypes::COLLECTION.include?(json_data['type']) && json_data['items'] && (!json_data['sections'] || json_data['sections'].empty?)
             loc = hierarchy || 'root'
             warnings << "⚠️  [#{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering."
           end
@@ -303,7 +304,7 @@ module SjuiTools
           end
 
           # Warn if ScrollView has multiple child views (should wrap in a single View container)
-          if json_data['type']&.downcase&.match?(/^(scrollview|scroll)$/)
+          if SwiftUI::DrawnTypes::SCROLL_VIEW.include?(json_data['type'])
             child_data = json_data['child'] || json_data['children'] || []
             child_data = [child_data] unless child_data.is_a?(Array)
             ui_children = child_data.select { |c| c.is_a?(Hash) && (c['type'] || c['include']) }

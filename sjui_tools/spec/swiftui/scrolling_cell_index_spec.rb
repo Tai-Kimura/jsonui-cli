@@ -134,3 +134,36 @@ RSpec.describe SjuiTools::SwiftUI::ScrollingCellIndex do
     end
   end
 end
+
+# A type name is its declared spelling, case and all (jsonui-cli 1.9.0). The
+# passes that look for a Collection or a ScrollView before anything is drawn
+# read the spellings the converter factory draws (DrawnTypes), so a node the
+# factory does not draw as one ("collection") is not treated as one first —
+# and the factory's Table is.
+RSpec.describe 'sjui: the pre-passes read the spellings the factory draws' do
+  require 'swiftui/collection_cell_index'
+
+  it 'a Collection is Collection or Table, as written' do
+    index = SjuiTools::SwiftUI::ScrollingCellIndex
+    cells = SjuiTools::SwiftUI::CollectionCellIndex
+    %w[Collection Table].each do |type|
+      expect(index.vertically_scrolling_collection?('type' => type)).to be(true), type
+      expect(cells.collection?('type' => type)).to be(true), type
+    end
+    %w[collection COLLECTION List].each do |type|
+      expect(index.vertically_scrolling_collection?('type' => type)).to be(false), type
+      expect(cells.collection?('type' => type)).to be(false), type
+    end
+  end
+
+  it 'marks what is under a Scroll or ScrollView, as written, and not under a scrollview' do
+    marked = lambda do |type|
+      tree = { 'type' => type, 'child' => [{ 'type' => 'Label', 'text' => 'k' }] }
+      SjuiTools::SwiftUI::JsonToSwiftUIConverter.new.send(:mark_scrolling_ancestors, tree)
+      tree['child'].first[SjuiTools::SwiftUI::JsonToSwiftUIConverter::SCROLLING_ANCESTOR_KEY] == true
+    end
+    expect(marked.call('ScrollView')).to be(true)
+    expect(marked.call('Scroll')).to be(true)
+    expect(marked.call('scrollview')).to be(false)
+  end
+end
