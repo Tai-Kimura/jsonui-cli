@@ -68,13 +68,17 @@ RSpec.describe 'sjui g converter: a prop the converter does not write' do
         name = "Unwritten#{kase.to_s.capitalize}#{i}"
         node = { 'type' => name }
         node['v'] = value_for(type, kase) unless kase == :absent
+        # What it printed through sjui's warning logger (not stubbed for
+        # this; stdout captured) — since 1.8.121's fourth round the line goes
+        # there, "WARNING: [sjui] …", not to stderr through a bare `warn`.
         said = StringIO.new
-        saved = $stderr
+        saved = $stdout
         call = begin
-          $stderr = said
+          allow(SjuiTools::Core::Logger).to receive(:warn).and_call_original
+          $stdout = said
           converter_for(name, key => type).new(node, 0, nil, nil, nil, nil).convert
         ensure
-          $stderr = saved
+          $stdout = saved
         end
         scaffold = SjuiTools::SwiftUI::Generators::SwiftComponentGenerator
                    .new(name, is_container: false, attributes: { key => type }, command: 'spec').send(:swift_template)
