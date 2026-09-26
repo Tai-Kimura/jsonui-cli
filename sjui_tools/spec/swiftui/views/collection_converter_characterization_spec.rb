@@ -106,9 +106,13 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('if data.items.sections.count > 1 {')
       expect(code).to include('let section = data.items.sections[1]')
       expect(code).to include('ACellView(data: cellData).equatable()')
-      expect(code).to include('BCellView(data: cellData).equatable()')
+      # Section 1's ForEach ids are its own (round 8): repeating section 0's
+      # offsets, a lazy stack dropped its cells.
+      expect(code).to include('ForEach(cellsData.enumerated().map { IdentifiedCellItem(id: "1:\\($0.offset)", index: $0.offset, data: $0.element) }) { cell in')
+      expect(code).to include('BCellView(data: cell.data).equatable()')
       expect(code).to include('.frame(height: 44, alignment: .topLeading)')
       expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cellIndex)")')
+      expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cell.index)")')
     end
   end
 
@@ -270,7 +274,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('if data.rows.sections.count > 1 {')
       expect(code).to include('let section = data.rows.sections[1]')
       expect(code).to include('ACellView(data: cellData).equatable()')
-      expect(code).to include('BCellView(data: cellData).equatable()')
+      expect(code).to include('BCellView(data: cell.data).equatable()')
     end
 
     # These were bare siblings of the LazyVGrid until 1.8.121, so the
