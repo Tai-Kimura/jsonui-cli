@@ -41,7 +41,6 @@ RSpec.describe 'kjui: a range\'s handler in either spelling' do
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(emits.join("\n"))}
       class RangeData(val onTerms: (() -> Unit)? = null, val onA: (() -> Unit)? = null, val onB: (() -> Unit)? = null)
-      object LocalTextStyle { val current: TextStyle = TextStyle() }
       val TextStyle.fontFamily: FontFamily? get() = null
       val TextStyle.fontWeight: FontWeight? get() = null
       val TextStyle.fontStyle: FontStyle? get() = null
