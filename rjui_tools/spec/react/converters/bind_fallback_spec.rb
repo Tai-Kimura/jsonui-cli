@@ -39,12 +39,17 @@ RSpec.describe 'bind as the primary value binding' do
     end
   end
 
-  it 'wires bind to the item source on Collection' do
+  # Not on a Collection (ruled 2026-09-26): rjui was the one path that read
+  # `bind` as the items — sjui, kjui and both Dynamic renderers never did — so
+  # a Collection bound that way drew on web only. `items` is its data source;
+  # the shared validator warns on `bind` there (ticket
+  # collection-attributes-declared-but-not-drawn-on-some-paths).
+  it 'does not read bind as the item source on Collection' do
     result = convert(
       RjuiTools::React::Converters::CollectionConverter,
       { 'class' => 'Collection', 'bind' => '@{rows}', 'sections' => [{ 'cell' => 'RowCell' }] }
     )
-    expect(result).to include('data.rows')
+    expect(result).not_to include('data.rows')
   end
 
   # The component's own value attribute is the primary spelling; `bind` is only
