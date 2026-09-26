@@ -128,7 +128,6 @@ RSpec.describe 'kjui: a Label\'s links stop with userInteractionEnabled' do
       #{stubs}
       class LinkData(val onTerms: (() -> Unit)? = null, val onTap: (() -> Unit)? = null,
                      val u: Boolean? = null, val a: Boolean? = null)
-      object LocalTextStyle { val current: TextStyle = TextStyle() }
       val TextStyle.fontFamily: FontFamily? get() = null
       val TextStyle.fontWeight: FontWeight? get() = null
       val TextStyle.fontStyle: FontStyle? get() = null

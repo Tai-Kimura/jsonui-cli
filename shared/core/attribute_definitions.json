@@ -2565,7 +2565,7 @@
         "string",
         "binding"
       ],
-      "description": "Image source name (can be data binding)"
+      "description": "Image source name (can be data binding). On web it is passed to `<img src>` as a path, since web has no asset catalog, so a bare image name belongs in srcName there (rjui warns)."
     },
     "srcName": {
       "type": [
