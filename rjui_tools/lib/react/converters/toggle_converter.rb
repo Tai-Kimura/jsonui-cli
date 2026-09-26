@@ -128,7 +128,7 @@ module RjuiTools
           handler = attributes['onValueChange']
           if handler && has_binding?(handler)
             prop = extract_binding_property(handler)
-            return " onChange={(e) => #{prop}?.(e.target.checked)}"
+            return operation_attr('onChange', '(e)', "#{prop}?.(e.target.checked)")
           end
 
           # Auto-generate onChange from isOn/checked binding property
@@ -137,10 +137,12 @@ module RjuiTools
           if is_on && has_binding?(is_on)
             property_name = extract_raw_binding_property(is_on)
             handler_name = "on#{capitalize_first(property_name)}Change"
-            return " onChange={(e) => data.#{handler_name}?.(e.target.checked)}"
+            return operation_attr('onChange', '(e)', "data.#{handler_name}?.(e.target.checked)")
           end
 
-          ''
+          # No own write-back: the checkbox still toggles, and that is the
+          # operation a declared onClick is called from.
+          operation_attr('onChange', '(e)', nil)
         end
 
         def capitalize_first(str)
