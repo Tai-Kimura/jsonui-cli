@@ -62,7 +62,8 @@ module SjuiTools
                           # path renders it) — .constant("") dropped it and the
                           # field opened empty showing its placeholder. Local
                           # @State keeps the field editable, matching UIKit.
-                          state_name = "#{to_camel_case(@component['id'] || 'textField')}Text"
+                          # No id: its position (position_name), not camelCased.
+                          state_name = @component['id'] ? "#{to_camel_case(@component['id'])}Text" : "#{position_name('textField')}Text"
                           @state_variables << "@State private var #{state_name}: String = #{swift_string_literal(@component['text'])}"
                           "$#{state_name}"
                         else
@@ -240,7 +241,9 @@ module SjuiTools
           needs_focus_state = @component['id'] || focus_handlers.any? || blur_handlers.any? ||
                               clear_button_needs_focus?
           if needs_focus_state
-            field_id = to_camel_case(@component['id'] || 'field')
+            # No id: its position (position_name), not camelCased — `field`
+            # was every id-less field's focus.
+            field_id = @component['id'] ? to_camel_case(@component['id']) : position_name('field')
             focus_var = "#{field_id}IsFocused"
 
             @state_variables ||= []

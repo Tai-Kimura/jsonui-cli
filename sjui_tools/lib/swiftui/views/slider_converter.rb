@@ -46,8 +46,9 @@ module SjuiTools
             add_line "Slider(value: #{operation_binding(binding_var, nil, value_call)}, in: #{min_expr}...#{max_expr}#{editing_click})"
           else
             # Create @State variable name
-            state_var = "sliderValue#{@component['id'] || ''}"
-            state_var = state_var.gsub(/[^a-zA-Z0-9]/, '')
+            # No id: its position (position_name) — `sliderValue` alone was
+            # every id-less Slider's name.
+            state_var = @component['id'] ? "sliderValue#{@component['id']}".gsub(/[^a-zA-Z0-9]/, '') : "#{position_name('slider')}Value"
             
             # Add state variable to requirements
             add_state_variable(state_var, "Double", value_prop.to_s)

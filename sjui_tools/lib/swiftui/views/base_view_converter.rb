@@ -12,6 +12,7 @@ require_relative 'modifier_bag'
 require_relative '../binding/binding_handler_registry'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/layout_path'
 require_relative '../../core/string_literals'
 require_relative '../helpers/string_manager_helper'
 
@@ -996,6 +997,22 @@ module SjuiTools
           end
           body << click if click
           "SwiftUI.Binding(get: { #{binding_expr}.wrappedValue }, set: { newValue in #{body.join('; ')} })"
+        end
+
+        # The name a node without an `id` is given where it needs one — its
+        # view-local state, a Radio's value: `<kind>_<path>`, the node's
+        # position in the layout (shared/core/layout_path.rb, stamped on the
+        # include-expanded, style-merged tree before conversion): the same on
+        # every build and unique within the view. The per-kind fixed name it
+        # replaces (`toggle`, `radio`, …) was the same for every id-less node
+        # of a kind, so two of them shared one state or did not compile
+        # (ticket sjui-codegen-state-declarations-collide-by-name). A node
+        # converted on its own, with no tree stamped around it, is its own
+        # root. The path is used as it is: the `_` between its numbers keeps
+        # two positions apart (camelCasing `0_1_11` and `0_11_1` gives `0111`
+        # for both).
+        def position_name(kind)
+          "#{kind}_#{@component[JsonUIShared::LayoutPath::KEY] || '0'}"
         end
 
         # A handler call that a component makes from its own operation — a

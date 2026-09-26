@@ -9,7 +9,10 @@ module SjuiTools
       class RadioConverter < BaseViewConverter
         include SjuiTools::SwiftUI::Helpers::FontHelper
         def convert
-          id = @component['id'] || 'radio'
+          # No id: the Radio's position (position_name) — its value in a group
+          # and the name of its selection. `radio` was every id-less Radio's
+          # value, so the id-less Radios of a group were one option.
+          id = @component['id'] || position_name('radio')
           # `items` is declared ["array", "binding"]: an array is the options,
           # written out one by one; a binding is a list the data holds, drawn
           # with ForEach — what KotlinJsonUI's dynamic renderer does with it.
@@ -34,7 +37,8 @@ module SjuiTools
             if @component['selectedValue'] && is_binding?(@component['selectedValue'])
               selection_binding = "data.#{extract_binding_property(@component['selectedValue'])}"
             else
-              state_var = "selected#{id.split('_').map(&:capitalize).join}"
+              # No id: its position, not camelCased (the path keeps its `_`).
+              state_var = @component['id'] ? "selected#{id.split('_').map(&:capitalize).join}" : "selected#{position_name('Radio')}"
               # A LITERAL selectedValue names the option that starts selected.
               # Only the bound spelling was read here, so a written-out
               # selection opened the group with nothing chosen — the web
@@ -118,6 +122,17 @@ module SjuiTools
             # and wins over this option's own `checked` — it is the group-level
             # statement.
             seed = static_selection || (checked_literal ? swift_string_literal(radio_value) : '""')
+            # The group's seed, taken from every Radio of the group before
+            # conversion (RadioConverter.scan_groups): each Radio declares the
+            # group's selection with it, so the declarations are one line
+            # whatever order the Radios come in. Each Radio's own seed — the
+            # checked one's value beside the others' "" — did not compile
+            # together ("invalid redeclaration of 'selectedGrp'").
+            # Only on a stamped tree: the seeds are the tree's that was
+            # stamped last, and a Radio converted on its own is not in it.
+            if JsonUIShared::LayoutPath.stamped?(@component)
+              seed = RadioConverter.group_seeds.dig(state_var, :seed) || seed
+            end
             add_state_variable(state_var, "String", seed)
 
             # A BOUND checked/isOn cannot seed the @State declaration — a
@@ -272,6 +287,52 @@ module SjuiTools
         def add_state_variable(name, type, default_value)
           @state_variables ||= []
           @state_variables << "@State private var #{name}: #{type} = #{default_value}"
+        end
+
+        # The selection a group of single Radios shares — its state variable,
+        # the group it is for, and its seed — for every group in a view,
+        # keyed by the variable: set by JsonToSwiftUIConverter from the
+        # whole (stamped) tree before conversion; read by each Radio of the
+        # group, and by the view's declarations, which declare it once.
+        def self.group_seeds=(seeds)
+          Thread.current[:sjui_radio_group_seeds] = seeds
+        end
+
+        def self.group_seeds
+          Thread.current[:sjui_radio_group_seeds] || {}
+        end
+
+        # The groups of single Radios (no `items`) in a tree, in tree order.
+        # A group's seed is the first literal selectedValue one of its Radios
+        # declares (the group-level statement), else the value of its first
+        # literally `checked` (or `isOn`) Radio — its `value`, else its id,
+        # else its position — else "". Two groups whose names give one
+        # variable (`a_b`, `aB`) are one variable: `variable_groups` lists the
+        # group names per variable, so the view can refuse it.
+        def self.scan_groups(tree)
+          seeds = {}
+          walk = lambda do |node|
+            return unless node.is_a?(Hash)
+
+            if node['type'] == 'Radio' && !node.key?('items')
+              group = node['group'] || 'defaultGroup'
+              var = "selected#{group.to_s.split('_').map(&:capitalize).join}"
+              entry = (seeds[var] ||= { groups: [], seed: nil, selected: nil, checked: nil })
+              entry[:groups] << group unless entry[:groups].include?(group)
+              selected = node['selectedValue']
+              if entry[:selected].nil? && !selected.nil? && !(selected.is_a?(String) && selected.match?(/\A@\{.*\}\z/m))
+                entry[:selected] = JsonUIShared::StringLiterals.swift(selected.to_s)
+              end
+              if entry[:checked].nil? && (node['checked'] == true || node['isOn'] == true)
+                value = node['value'] || node['id'] || "radio_#{node[JsonUIShared::LayoutPath::KEY] || '0'}"
+                entry[:checked] = JsonUIShared::StringLiterals.swift(value.to_s)
+              end
+            end
+            JsonUIShared::LayoutPath.children(node).each { |child| walk.call(child) }
+          end
+          walk.call(tree)
+          seeds.each_value { |e| e[:seed] = e[:selected] || e[:checked] || '""' }
+          seeds
         end
       end
     end

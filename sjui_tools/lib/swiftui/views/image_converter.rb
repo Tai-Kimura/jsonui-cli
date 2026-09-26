@@ -169,7 +169,8 @@ module SjuiTools
           max_zoom = @component['maxZoom']
           return unless min_zoom || max_zoom
 
-          id_part = to_camel_case(@component['id'] || 'image')
+          # No id: its position (position_name), not camelCased.
+          id_part = @component['id'] ? to_camel_case(@component['id']) : position_name('image')
           state_var = "#{id_part}ZoomScale"
           @state_variables << "@State private var #{state_var}: CGFloat = 1.0"
           lower = min_zoom || 1.0
@@ -217,7 +218,8 @@ module SjuiTools
           highlight = @component['highlightSrc']
           return if highlight.nil?
 
-          state_var = "#{(@component['id'] || 'image').gsub(/[^A-Za-z0-9]/, '_')}IsPressed"
+          # No id: its position (position_name).
+          state_var = "#{@component['id'] ? @component['id'].gsub(/[^A-Za-z0-9]/, '_') : position_name('image')}IsPressed"
           @state_variables ||= []
           @state_variables << "@State private var #{state_var} = false"
 
