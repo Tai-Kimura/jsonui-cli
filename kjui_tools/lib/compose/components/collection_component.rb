@@ -200,8 +200,8 @@ module KjuiTools
 
           required_imports&.add(:shape)
           mods = []
-          mods << ".width(#{json_data['cellWidth']}.dp)" if json_data['cellWidth']
-          mods << ".height(#{json_data['cellHeight']}.dp)" if json_data['cellHeight']
+          mods << ".width(#{Helpers::BoundValue.dp(json_data['cellWidth'])})" if json_data['cellWidth']
+          mods << ".height(#{Helpers::BoundValue.dp(json_data['cellHeight'])})" if json_data['cellHeight']
           "Box(modifier = Modifier#{mods.join}.clipToBounds()) {"
         end
 
@@ -368,15 +368,15 @@ module KjuiTools
 
           if content_padding
             if content_padding.is_a?(Array) && content_padding.length == 4
-              code += "\n" + indent("contentPadding = PaddingValues(top = #{content_padding[0]}.dp, start = #{content_padding[1]}.dp, bottom = #{content_padding[2]}.dp, end = #{content_padding[3]}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(content_padding[0])}, start = #{Helpers::BoundValue.dp(content_padding[1])}, bottom = #{Helpers::BoundValue.dp(content_padding[2])}, end = #{Helpers::BoundValue.dp(content_padding[3])}),", depth + 1)
             elsif content_padding.is_a?(Numeric)
-              code += "\n" + indent("contentPadding = PaddingValues(#{content_padding}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(content_padding)}),", depth + 1)
             end
           elsif inset_horizontal || inset_vertical
             # Use insetHorizontal and/or insetVertical
             h_inset = inset_horizontal || 0
             v_inset = inset_vertical || 0
-            code += "\n" + indent("contentPadding = PaddingValues(horizontal = #{h_inset}.dp, vertical = #{v_inset}.dp),", depth + 1)
+            code += "\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(h_inset)}, vertical = #{Helpers::BoundValue.dp(v_inset)}),", depth + 1)
           elsif (safe_inset = Helpers::ContentInsetHelper.safe_area_padding(
                    json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal))
             # A DECLARED numeric contentPadding/insets wins: the author named
@@ -407,23 +407,23 @@ module KjuiTools
             # never spaced until jsonui-cli 1.9.0.
             if (along = horizontal_scroll_spacing(json_data))
               required_imports&.add(:arrangement)
-              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{along}.dp),", depth + 1)
+              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(along)}),", depth + 1)
             end
             # Lanes only where there are several (a bound count is the
             # sentinel 2 here): one row has nothing between it.
             if columns > 1 && (between = horizontal_lane_spacing(json_data))
               required_imports&.add(:arrangement)
-              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{between}.dp),", depth + 1)
+              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(between)}),", depth + 1)
             end
           elsif line_spacing || column_spacing
             required_imports&.add(:arrangement)
             # Vertical scroll: lineSpacing = vertical spacing between rows,
             # columnSpacing = horizontal spacing between columns
             if line_spacing
-              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{line_spacing}.dp),", depth + 1)
+              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(line_spacing)}),", depth + 1)
             end
             if column_spacing
-              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{column_spacing}.dp),", depth + 1)
+              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(column_spacing)}),", depth + 1)
             end
           end
 
@@ -577,7 +577,7 @@ module KjuiTools
             if %w[insetgrouped sidebar].include?(chrome_style)
               modifiers << ".padding(horizontal = 16.dp)"
               corner = chrome_style == 'insetgrouped' ? 12 : 8
-              modifiers << ".clip(RoundedCornerShape(#{corner}.dp))"
+              modifiers << ".clip(RoundedCornerShape(#{Helpers::BoundValue.dp(corner)}))"
             end
             surface = chrome_style == 'sidebar' ? 'surfaceContainerLow' : 'surfaceContainer'
             modifiers << ".background(MaterialTheme.colorScheme.#{surface})"
@@ -822,7 +822,7 @@ module KjuiTools
               end
               spacing = json_data['columnSpacing'] || json_data['itemSpacing']
               required_imports&.add(:arrangement) if spacing
-              row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{spacing}.dp)" : 'modifier = Modifier.fillMaxWidth()'
+              row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)})" : 'modifier = Modifier.fillMaxWidth()'
               code += "\n" + indent("classListCells.chunked(#{count}).forEach { rowCells ->", depth)
               code += "\n" + indent("Row(#{row_args}) {", depth + 1)
               code += "\n" + indent("rowCells.forEach { (sectionIndex, cellIndex, currentCellData) ->", depth + 2)
@@ -940,7 +940,7 @@ module KjuiTools
                 # resolved at runtime; reflect that in the comment instead
                 # of printing the sentinel (~= 2) which would be misleading.
                 section_columns_comment = columns_binding && !section['columns'] ? columns_info[:expr] : section_columns
-                code += "\n" + indent("// Section #{index + 1}: #{cell_view_name} (#{section_columns_comment} columns)", depth + 1)
+                code += "\n" + indent("// Section #{index + 1}: #{Helpers::ModifierBuilder.comment_text(cell_view_name)} (#{Helpers::ModifierBuilder.comment_text(section_columns_comment)} columns)", depth + 1)
                 if use_hoisted
                   # `section#{index}` is hoisted; just guard null.
                   code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
@@ -952,7 +952,7 @@ module KjuiTools
                 if section['header']
                   header_view_name = section['header']
                   header_class = cell_class_name(header_view_name)
-                  code += "\n" + indent("// Section #{index + 1} Header: #{header_view_name}", depth + 2)
+                  code += "\n" + indent("// Section #{index + 1} Header: #{Helpers::ModifierBuilder.comment_text(header_view_name)}", depth + 2)
                   code += "\n" + indent("#{section_var}.header?.let { headerData ->", depth + 2)
                   code += "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth + 3)
                   code += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{header_view_name}_header_#{index}_\${viewModel.hashCode()}\")", depth + 4)
@@ -1049,7 +1049,7 @@ module KjuiTools
                 if section['footer']
                   footer_view_name = section['footer']
                   footer_class = cell_class_name(footer_view_name)
-                  code += "\n" + indent("// Section #{index + 1} Footer: #{footer_view_name}", depth + 2)
+                  code += "\n" + indent("// Section #{index + 1} Footer: #{Helpers::ModifierBuilder.comment_text(footer_view_name)}", depth + 2)
                   code += "\n" + indent("#{section_var}.footer?.let { footerData ->", depth + 2)
                   code += "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth + 3)
                   code += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{footer_view_name}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 4)
@@ -1174,7 +1174,7 @@ module KjuiTools
           code += indent("HorizontalPager(", depth)
           code += "\n" + indent("state = pagerState", depth + 1)
           if page_spacing
-            code += ",\n" + indent("pageSpacing = #{page_spacing}.dp", depth + 1)
+            code += ",\n" + indent("pageSpacing = #{Helpers::BoundValue.dp(page_spacing)}", depth + 1)
           end
           if modifiers.any?
             code += "," + Helpers::ModifierBuilder.format(modifiers, depth)
@@ -1438,8 +1438,8 @@ module KjuiTools
           per_section = items_bound && (sections.count { |section| section['cell'] } > 1 ||
                                         sections.any? { |section| section['header'] || section['footer'] })
           container = per_section ? 'Column' : 'FlowRow'
-          flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp), " \
-                              "verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)"
+          flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(h_spacing)}), " \
+                              "verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(v_spacing)})"
 
           outer_depth = depth
           if flow_scrolls_if_parent_bounded?(json_data)
@@ -1464,9 +1464,9 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           end
           unless per_section
-            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
+            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(h_spacing)}),", depth + 1)
           end
-          code += (per_section ? ",\n" : "\n") + indent("verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)", depth + 1)
+          code += (per_section ? ",\n" : "\n") + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(v_spacing)})", depth + 1)
           code += "\n" + indent(") {", depth)
 
           items_property = json_data['items']
@@ -1632,7 +1632,7 @@ module KjuiTools
           code += Helpers::ModifierBuilder.format(modifiers, depth)
           if line_spacing
             required_imports&.add(:arrangement)
-            code += ",\n" + indent("verticalArrangement = Arrangement.spacedBy(#{line_spacing}.dp)", depth + 1)
+            code += ",\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(line_spacing)})", depth + 1)
           end
           code += "\n" + indent(") {", depth)
 
@@ -1657,7 +1657,7 @@ module KjuiTools
               section_var = use_val_if ? "section#{index}" : 'section'
               cell_data_var = use_val_if ? "cellData#{index}" : 'cellData'
 
-              code += "\n" + indent("// Section #{index + 1}: #{cell_view_name}", depth + 1)
+              code += "\n" + indent("// Section #{index + 1}: #{Helpers::ModifierBuilder.comment_text(cell_view_name)}", depth + 1)
               if use_val_if
                 code += "\n" + indent("val #{section_var} = #{sections_access(property_name)}.getOrNull(#{index})", depth + 1)
                 code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
@@ -1713,7 +1713,7 @@ module KjuiTools
               if per_row
                 spacing = json_data['columnSpacing'] || json_data['itemSpacing']
                 required_imports&.add(:arrangement) if spacing
-                row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{spacing}.dp)" : 'modifier = Modifier.fillMaxWidth()'
+                row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)})" : 'modifier = Modifier.fillMaxWidth()'
                 code += "\n" + indent("#{data_access}.chunked(#{per_row}).forEachIndexed { rowIndex, rowCells ->", depth + 3)
                 code += "\n" + indent("Row(#{row_args}) {", depth + 4)
                 code += "\n" + indent("rowCells.indices.forEach { columnIndex ->", depth + 5)
@@ -1780,7 +1780,7 @@ module KjuiTools
           code += Helpers::ModifierBuilder.format(modifiers, depth)
           if column_spacing
             required_imports&.add(:arrangement)
-            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{column_spacing}.dp)", depth + 1)
+            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(column_spacing)})", depth + 1)
           end
           code += "\n" + indent(") {", depth)
 
@@ -1798,7 +1798,7 @@ module KjuiTools
               cell_class = cell_class_name(cell_view_name)
               cell_id_prop = json_data['cellIdProperty']
 
-              code += "\n" + indent("// Section #{index + 1}: #{cell_view_name}", depth + 1)
+              code += "\n" + indent("// Section #{index + 1}: #{Helpers::ModifierBuilder.comment_text(cell_view_name)}", depth + 1)
               code += "\n" + indent("#{sections_access(property_name)}.getOrNull(#{index})?.let { section ->", depth + 1)
               code += "\n" + indent("section.cells?.let { cellData ->", depth + 2)
               code += "\n" + indent("cellData.data.forEachIndexed { cellIndex, _ ->", depth + 3)
@@ -1957,7 +1957,7 @@ module KjuiTools
             if %w[insetgrouped sidebar].include?(chrome_style)
               modifiers << ".padding(horizontal = 16.dp)"
               corner = chrome_style == 'insetgrouped' ? 12 : 8
-              modifiers << ".clip(RoundedCornerShape(#{corner}.dp))"
+              modifiers << ".clip(RoundedCornerShape(#{Helpers::BoundValue.dp(corner)}))"
             end
             surface = chrome_style == 'sidebar' ? 'surfaceContainerLow' : 'surfaceContainer'
             modifiers << ".background(MaterialTheme.colorScheme.#{surface})"
@@ -2038,7 +2038,7 @@ module KjuiTools
           code += "\n" + indent("axis = #{axis_kotlin},", depth + 1)
           code += "\n" + indent("modifier = #{modifier_lines},", depth + 1)
           if spacing_value
-            code += "\n" + indent("spacing = #{spacing_value}.dp,", depth + 1)
+            code += "\n" + indent("spacing = #{Helpers::BoundValue.dp(spacing_value)},", depth + 1)
           end
           if user_scroll_enabled_expr != 'true'
             code += "\n" + indent("userScrollEnabled = #{user_scroll_enabled_expr},", depth + 1)
@@ -2047,8 +2047,8 @@ module KjuiTools
             code += "\n" + indent("contentPadding = #{content_padding_expr},", depth + 1)
           end
           if is_horizontal && inset_horizontal.to_i > 0
-            code += "\n" + indent("insetLeading = #{inset_horizontal}.dp,", depth + 1)
-            code += "\n" + indent("insetTrailing = #{inset_horizontal}.dp,", depth + 1)
+            code += "\n" + indent("insetLeading = #{Helpers::BoundValue.dp(inset_horizontal)},", depth + 1)
+            code += "\n" + indent("insetTrailing = #{Helpers::BoundValue.dp(inset_horizontal)},", depth + 1)
           end
           if reverse_layout
             code += "\n" + indent("reverseLayout = true,", depth + 1)
@@ -2076,14 +2076,14 @@ module KjuiTools
         def self.collection_stack_content_padding_expr(json_data, is_horizontal:)
           content_padding = json_data['contentPadding'] || json_data['insets']
           if content_padding.is_a?(Array) && content_padding.length == 4
-            "PaddingValues(top = #{content_padding[0]}.dp, start = #{content_padding[1]}.dp, bottom = #{content_padding[2]}.dp, end = #{content_padding[3]}.dp)"
+            "PaddingValues(top = #{Helpers::BoundValue.dp(content_padding[0])}, start = #{Helpers::BoundValue.dp(content_padding[1])}, bottom = #{Helpers::BoundValue.dp(content_padding[2])}, end = #{Helpers::BoundValue.dp(content_padding[3])})"
           elsif content_padding.is_a?(Numeric)
-            "PaddingValues(#{content_padding}.dp)"
+            "PaddingValues(#{Helpers::BoundValue.dp(content_padding)})"
           else
             inset_h = json_data['insetHorizontal']
             inset_v = json_data['insetVertical']
             if inset_h || inset_v
-              "PaddingValues(horizontal = #{inset_h || 0}.dp, vertical = #{inset_v || 0}.dp)"
+              "PaddingValues(horizontal = #{Helpers::BoundValue.dp(inset_h || 0)}, vertical = #{Helpers::BoundValue.dp(inset_v || 0)})"
             else
               # Same precedence as the grid path: a declared numeric padding
               # wins, and only when none is declared does
@@ -2137,12 +2137,12 @@ module KjuiTools
             next unless cell_view_name
             cell_class = cell_class_name(cell_view_name)
 
-            out += "\n" + indent("// Section #{index + 1}: #{cell_view_name}", depth)
+            out += "\n" + indent("// Section #{index + 1}: #{Helpers::ModifierBuilder.comment_text(cell_view_name)}", depth)
             out += "\n" + indent("if (section#{index} != null) {", depth)
 
             if section['header']
               header_class = cell_class_name(section['header'])
-              out += "\n" + indent("// Section #{index + 1} Header: #{section['header']}", depth + 1)
+              out += "\n" + indent("// Section #{index + 1} Header: #{Helpers::ModifierBuilder.comment_text(section['header'])}", depth + 1)
               out += "\n" + indent("section#{index}.header?.let { headerData ->", depth + 1)
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 3)
@@ -2216,7 +2216,7 @@ module KjuiTools
 
             if section['footer']
               footer_class = cell_class_name(section['footer'])
-              out += "\n" + indent("// Section #{index + 1} Footer: #{section['footer']}", depth + 1)
+              out += "\n" + indent("// Section #{index + 1} Footer: #{Helpers::ModifierBuilder.comment_text(section['footer'])}", depth + 1)
               out += "\n" + indent("section#{index}.footer?.let { footerData ->", depth + 1)
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 3)
@@ -2252,7 +2252,7 @@ module KjuiTools
             next unless cell_view_name
             cell_class = cell_class_name(cell_view_name)
 
-            out += "\n" + indent("// Section #{index + 1}: #{cell_view_name}", depth)
+            out += "\n" + indent("// Section #{index + 1}: #{Helpers::ModifierBuilder.comment_text(cell_view_name)}", depth)
             out += "\n" + indent("if (section#{index} != null) {", depth)
 
             if section['header']
@@ -2316,7 +2316,7 @@ module KjuiTools
 
             if section['footer']
               footer_class = cell_class_name(section['footer'])
-              out += "\n" + indent("// Section #{index + 1} Footer: #{section['footer']}", depth + 1)
+              out += "\n" + indent("// Section #{index + 1} Footer: #{Helpers::ModifierBuilder.comment_text(section['footer'])}", depth + 1)
               out += "\n" + indent("section#{index}.footer?.let { footerData ->", depth + 1)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 2)
               out += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 2)

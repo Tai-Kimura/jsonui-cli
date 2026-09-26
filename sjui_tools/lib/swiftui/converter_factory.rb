@@ -27,6 +27,9 @@ require_relative 'views/tab_view_converter'
 require_relative 'views/embed_converter'
 require_relative 'view_registry'
 
+require_relative '../core/bind_fold'
+require_relative '../core/logger'
+require_relative '../core/attribute_validator'
 module SjuiTools
   module SwiftUI
     class ConverterFactory
@@ -141,6 +144,14 @@ module SjuiTools
             # Fall through to standard converters
           end
         end
+
+        # `bind` folded into the attribute it stands for (JsonUIShared::BindFold)
+        # on the node a built-in converter draws — its style merged
+        # (StyleLoader, before conversion) — after the app's own converters
+        # were asked; an app's converter gets its node as written. The layout
+        # normalizer leaves a node with a style or responsive overrides to
+        # this fold.
+        component = JsonUIShared::BindFold.fold(component, component_type)
 
         case component_type
         when 'Label', 'Text'
@@ -270,9 +281,16 @@ module SjuiTools
       end
     end
 
+    # A type this tool draws nothing for: named in the build and on the
+    # placeholder in the validator's sentence
+    # (JsonUIShared::AttributeValidatorCore.unknown_component_type_message).
+    # The placeholder said "Unsupported component: <type>", in no other
+    # path's words.
     class DefaultConverter < Views::BaseViewConverter
       def convert
-        add_line "Text(\"Unsupported component: #{@component['type']}\")"
+        sentence = SjuiTools::Core::AttributeValidator.new(:swiftui).unknown_component_type_message(@component['type'].to_s)
+        SjuiTools::Core::Logger.warn(sentence)
+        add_line "Text(#{sentence.to_json})"
         add_modifier_line ".foregroundColor(.red)"
 
         apply_modifiers

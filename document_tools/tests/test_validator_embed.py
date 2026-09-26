@@ -203,16 +203,17 @@ class EmbedNavigationMode(unittest.TestCase):
         errs = _errors_at(result, "structure.embeds[0].navigationMode")
         self.assertTrue(errs, "expected error on invalid navigationMode")
 
-    def test_isolated_navigation_mode_is_rejected_in_v1(self):
-        # 'isolated' is deferred to v1.5; v1 accepts 'delegate' only.
+    def test_isolated_navigation_mode_is_accepted(self):
+        # The Layout SSoT's Embed.navigationMode is delegate / isolated, and
+        # the spec's is the same list from jsonui-cli 1.9.0 (it was
+        # 'delegate' only, "isolated deferred to v1.5").
         spec = _base_spec(
             [{"regionId": "detailPane", "screen": "order_detail",
               "navigationMode": "isolated"}]
         )
         result = SpecValidator().validate_data(spec)
         errs = _errors_at(result, "structure.embeds[0].navigationMode")
-        self.assertTrue(errs,
-                        "expected error on 'isolated' navigationMode (v1)")
+        self.assertFalse(errs, errs)
 
     def test_default_navigation_mode_omitted_is_ok(self):
         spec = _base_spec(

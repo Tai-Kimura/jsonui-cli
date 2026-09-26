@@ -121,7 +121,7 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
       expect(result).to include('data.onToggle?.invoke("mySwitch", newValue)')
     end
 
-    it 'uses default switch id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onToggle' => { 'name' => 'onToggle', 'class' => '((Event) -> Unit)?' }
       }
@@ -134,7 +134,7 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
       result = described_class.generate(json_data, 0, required_imports)
 
       # Should use default 'switch' as viewId
-      expect(result).to include('data.onToggle?.invoke("switch", newValue)')
+      expect(result).to include('data.onToggle?.invoke("switch_0", newValue)')
     end
 
   # labelPosition was read by nobody in the Compose codegen while the Dynamic

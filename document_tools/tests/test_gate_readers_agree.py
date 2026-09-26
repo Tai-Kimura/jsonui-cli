@@ -20,6 +20,14 @@ goes through every reader this tree has, and they must agree:
                   no layout is a WARNING when LAYOUT_ID_GATE_FROM is on, else
                   INFO — plus the notice (test_tools; U8 (5)). It reads the
                   spec validator's literal, so it is patched there
+  initial values  `jui verify --fail-on-diff`: counts an initial value a spec
+                  declares that its layout does not carry when
+                  INITIAL_VALUE_GATE_FROM is on, and names the release before
+                  (jui_tools; jsonui-cli 1.9.0)
+  initial value types  the spec validator: an initial value that does not read
+                  as its type is a WARNING when INITIAL_VALUE_TYPE_GATE_FROM
+                  is on, else INFO — plus the notice (document_tools;
+                  jsonui-cli 1.9.0)
 
 The three `shared_core` loaders that find the module must stay one loader
 in three copies: a copy that diverged would be a second way to find it.
@@ -140,6 +148,30 @@ def _reader_include_prefix(literal, version, monkeypatch):
     return state == "on", state == "announce"
 
 
+def _reader_initial_values(literal, version, monkeypatch):
+    """`jui verify`'s count of initial values under --fail-on-diff."""
+    from jui_cli.commands import verify_cmd
+    monkeypatch.setattr(verify_cmd, "INITIAL_VALUE_GATE_FROM", literal)
+    state = verify_cmd.initial_value_gate_state(version)
+    return state == "on", state == "announce"
+
+
+def _reader_initial_value_types(literal, version, monkeypatch):
+    """The spec validator on one Array whose initial value is prose."""
+    monkeypatch.setattr(validator_mod, "_running_version", lambda: version)
+    monkeypatch.setattr(validator_mod, "INITIAL_VALUE_TYPE_GATE_FROM", literal)
+    result = validator_mod.SpecValidator().validate_data({
+        "type": "screen_spec", "version": "1.0",
+        "metadata": {"name": "Home", "displayName": "H", "description": "d"},
+        "structure": {"components": [], "layout": {"root": "r", "children": []}},
+        "stateManagement": {"uiVariables": [{"name": "items", "type": "[String]", "description": "d",
+                                             "defaultValue": "a list of words"}]}})
+    warned = any("is not a value of" in m.message for m in result.warnings)
+    announced = any(m.message.startswith("from jsonui-cli") and "initial value" in m.message
+                    for m in result.infos)
+    return warned, announced
+
+
 def _reader_test_element_ids(literal, version, monkeypatch, tmp_path):
     """`jsonui-test validate` on one test naming an id no layout has."""
     import jsonui_test_cli
@@ -180,6 +212,10 @@ def test_every_reader_gives_the_tables_answer(literal, version, state, gates, an
                                                                      monkeypatch)),
         "test element ids": (state, *_reader_test_element_ids(literal, version, monkeypatch,
                                                                tmp_path)),
+        "initial values (jui verify)": (state, *_reader_initial_values(literal, version,
+                                                                      monkeypatch)),
+        "initial value types (spec validator)": (state, *_reader_initial_value_types(literal, version,
+                                                                                    monkeypatch)),
     }
     assert answers == {name: (state, gates, announces) for name in answers}, answers
 

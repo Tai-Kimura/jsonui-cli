@@ -99,6 +99,24 @@ module JsonUIShared
     CHILDREN_DECLARATION = '_children'
     NO_CHILDREN = 'none'
 
+    # The sentence a node of a type the tool cannot draw is named with (4f's
+    # ruling, jsonui-cli 1.9.0): the type as written, and — when it matches a
+    # type the tool draws but for its case — that type. Type names are
+    # matched as written, as the SSoT spells them. One sentence: the kjui /
+    # sjui / rjui codegen write it where they draw nothing, and KotlinJsonUI
+    # Dynamic holds the same one in its library.
+    UNKNOWN_COMPONENT_TYPE = "Unknown component type '%<written>s'"
+    UNKNOWN_COMPONENT_TYPE_HINT = " — did you mean '%<canonical>s'? Type names are case-sensitive."
+
+    # The sentence for `written`, given the types the tool draws.
+    def self.unknown_component_type_message(written, known_types)
+      message = format(UNKNOWN_COMPONENT_TYPE, written: written)
+      # (not the type itself: a type the validator knows by its definition
+      # that the codegen has no component for reaches the codegen's fallback)
+      canonical = known_types.find { |known| known != written && known.casecmp?(written) }
+      canonical ? message + format(UNKNOWN_COMPONENT_TYPE_HINT, canonical: canonical) : message
+    end
+
     # The project's extension definitions alone, read the way a validator in
     # `mode` reads them (the paths are the platform profile's). For the
     # shared LayoutValidator, which knows the SSoT but not the project.
@@ -151,6 +169,9 @@ module JsonUIShared
 
       return @warnings unless type
 
+      # A type the tool cannot draw
+      check_component_type(type)
+
       # Get valid attributes for this component type
       valid_attrs = get_valid_attributes(type)
 
@@ -178,10 +199,14 @@ module JsonUIShared
             if mode_compatible?(attr_def)
               # Validate attribute value
               validate_attribute(key, value, attr_def, type)
+            elsif attr_def['warn_outside_mode']
+              add_outside_mode_warning(key, attr_def, type)
             else
               # Attribute not supported in current mode - log as info
               add_mode_info(key, attr_def, type)
             end
+          elsif attr_def['warn_outside_mode']
+            add_outside_mode_warning(key, attr_def, type)
           else
             # Attribute for other platform - log as info
             add_platform_info(key, attr_def, type)
@@ -211,6 +236,12 @@ module JsonUIShared
 
       # A text field's declared onClick is not called
       check_text_field_click(merged_component, type)
+
+      # `bind` beside the component's own value attribute
+      check_bind_beside_own_value(merged_component, type)
+
+      # A value attribute of the other kind (a Date SelectBox's selectedValue)
+      check_value_attribute_of_another_kind(merged_component, type)
 
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
@@ -281,6 +312,12 @@ module JsonUIShared
 
     def structural_errors?
       !@structural_errors.empty?
+    end
+
+    # The sentence for a node of `written`, with the types this tool draws —
+    # the codegen says the validator's sentence where it draws nothing.
+    def unknown_component_type_message(written)
+      self.class.unknown_component_type_message(written, known_component_types)
     end
 
     private
@@ -692,6 +729,12 @@ module JsonUIShared
     def validate_nested_object(obj, properties, component_type, path)
       return unless obj.is_a?(Hash)
 
+      # A property's declared `aliases` (a partialAttributes range's `onClick`
+      # declares `onclick`) are accepted as it on an L0 layout, as a node's
+      # own are (expand_aliases); the normalizer folds them, so a normalized
+      # layout carries the canonical name only.
+      properties = expand_aliases(properties) unless @normalized
+
       obj.each do |key, value|
         if properties.key?(key)
           validate_attribute(key, value, properties[key], component_type, path)
@@ -783,6 +826,37 @@ module JsonUIShared
       end
     end
 
+    # The types this tool draws: the SSoT's sections and the project's
+    # extension definitions (@definitions holds both), the type-synonym
+    # spellings, and the extension components the tool's own registry
+    # draws (registered_component_types, the profile's). A registered type
+    # with no attribute definition (a converter and no definition file) is
+    # known: its attributes are checked against the common ones, as before.
+    def known_component_types
+      @known_component_types ||= (
+        @definitions.select { |key, body| body.is_a?(Hash) && key != 'common' && !key.start_with?('_') }.keys +
+        type_synonyms.keys + registered_component_types
+      ).uniq
+    end
+
+    # The extension component types the tool's registry draws — a platform
+    # fact, read by the profile where it reads the registry the tool's
+    # dispatch reads. None by default.
+    def registered_component_types
+      []
+    end
+
+    # A node whose type the tool cannot draw, named by the type (4f's ruling:
+    # "Unknown attribute 'isOn' for component type 'switch'" did not say
+    # that the type was the cause). Nothing is said when there are no SSoT
+    # definitions to know types by (load_definitions names that).
+    def check_component_type(type)
+      return unless @definitions.key?('common')
+      return if known_component_types.include?(type)
+
+      add_warning(self.class.unknown_component_type_message(type, known_component_types))
+    end
+
     # A text field — a section whose `text` the user writes, so its binding
     # is two-way (read from the definitions, not a list of types: TextField
     # and TextView, and every spelling that maps to them) — does not call a
@@ -801,6 +875,66 @@ module JsonUIShared
       return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
 
       add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
+    end
+
+    # `bind` is an alternative spelling of the component's own value
+    # attribute, "which takes precedence when both are set" (SSoT
+    # common.bind; `primaryValue` lists, per section, the attributes that are
+    # that value). The layout normalizer drops such a `bind` with this same
+    # sentence; this is it for a layout the normalizer did not fold
+    # (normalizeLayouts false, a tool run on its own).
+    def check_bind_beside_own_value(component, type)
+      return unless component.key?('bind')
+
+      section = map_type_to_definition(type)
+      values = bind_value_attributes(section, component)
+      return unless values.is_a?(Array)
+
+      own = values.find { |key| component.key?(key) }
+      return unless own
+
+      value = component[own]
+      shown = value.is_a?(String) ? value : JSON.generate(value)
+      add_warning("'bind: #{component['bind']}' is ignored: '#{own}: #{shown}' is the #{section}'s value")
+    end
+
+    # A section whose value depends on another attribute (a `primaryValue`
+    # object — SelectBox by selectItemType): the attributes of the
+    # `whenAbsent` kind that are not this node's value are read by no path. A
+    # Date SelectBox's value is selectedDate (4f's ruling, jsonui-cli 1.9.0);
+    # sjui read it alone, while the kjui codegen, rjui and KotlinJsonUI
+    # Dynamic fell back to selectedItem / selectedValue / selectedIndex, each
+    # to a different few.
+    def check_value_attribute_of_another_kind(component, type)
+      section = map_type_to_definition(type)
+      entry = @definitions.dig('common', 'bind', 'primaryValue', section)
+      return unless entry.is_a?(Hash) && entry['lists'].is_a?(Hash)
+
+      own = bind_value_attributes(section, component) || []
+      kind = component[entry['by']]
+      return unless kind.is_a?(String) && entry['lists'].key?(kind) && kind != entry['whenAbsent']
+
+      Array(entry['lists'][entry['whenAbsent']]).each do |attr|
+        next if own.include?(attr) || !component.key?(attr)
+
+        add_warning("'#{attr}' has no effect on a #{kind} #{section} — its value is #{own.first}")
+      end
+    end
+
+    # The attributes `bind` stands for on a section (common.bind
+    # primaryValue): a list, or — for a section whose value depends on
+    # another attribute — the object's list for the node's value of it
+    # (`lists[node[by]]`, else `lists[whenAbsent]`). nil for a section the
+    # table does not map.
+    def bind_value_attributes(section, component)
+      entry = @definitions.dig('common', 'bind', 'primaryValue', section)
+      return entry if entry.is_a?(Array)
+      return nil unless entry.is_a?(Hash) && entry['lists'].is_a?(Hash)
+
+      kind = component[entry['by']]
+      kind = entry['whenAbsent'] unless kind.is_a?(String) && entry['lists'].key?(kind)
+      list = entry['lists'][kind]
+      list.is_a?(Array) ? list : nil
     end
 
     # A flow Collection: `layout` (or `orientation`) flow or one of its alias
@@ -1197,6 +1331,17 @@ module JsonUIShared
       current_mode_str = @mode.to_s.capitalize
 
       add_info("Attribute '#{attr_name}' in '#{component_type}' is for #{mode_str} mode (current: #{current_mode_str})")
+    end
+
+    # An attribute declared `warn_outside_mode` is read by its mode alone, and
+    # a layout that writes it elsewhere expects something that does not
+    # happen — so it is named, a WARNING, not the usual INFO:
+    # `touchDisabledState` is UIKit's hit-test mode, and SwiftUI read any
+    # value of it as "stop everything" until jsonui-cli 1.9.0.
+    def add_outside_mode_warning(attr_name, attr_def, component_type)
+      modes = Array(attr_def['mode']).map { |m| m == 'uikit' ? 'UIKit' : m.capitalize }
+      add_warning("Attribute '#{attr_name}' in '#{component_type}' is #{modes.join('/')} only — " \
+                  "#{attr_def['description']}")
     end
 
     # Add info for platform-specific attribute (not an error, just informational)

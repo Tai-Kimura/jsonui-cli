@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'set'
+
 module JsonUIShared
   # Whether a screen reader is told a tappable is a button — one rule for the
   # sjui and kjui codegen (the Dynamic runtimes of both libraries implement
@@ -123,6 +125,22 @@ module JsonUIShared
         !stops?(node) && TAP_KEYS.any? { |key| handler?(node[key]) }
     end
 
+    # A control: a declared interactive type that is operated where it is —
+    # its value, its selection, its text, its action — not a container
+    # (STOP_CONTAINER_TYPES). A stop takes its operation without a tap on it:
+    # a hit-test stop keeps a touch out, and a screen reader's activation, a
+    # keyboard, an accessibility service's click still reach it (measured:
+    # VoiceOver switched a Switch inside `userInteractionEnabled: false`,
+    # jsonui-cli 1.9.0). So annotate! marks it as it marks a tap, and the
+    # codegen stops its operation and its reading as a control.
+    def control?(node)
+      node.is_a?(Hash) && INTERACTIVE_TYPES.include?(node['type']) && !STOP_CONTAINER_TYPES.include?(node['type'])
+    end
+
+    # The interactive types that hold the operated things rather than being
+    # one: a stop on them reaches what they hold.
+    STOP_CONTAINER_TYPES = %w[TabView ScrollView Collection Table TableView RecyclerView Web Embed].freeze
+
     # `userInteractionEnabled: false`: the node and everything in it take no
     # interaction.
     def stops?(node)
@@ -165,6 +183,27 @@ module JsonUIShared
       !value.nil? && !(value.respond_to?(:empty?) && value.empty?)
     end
 
+    # A partialAttributes range's handler, as [:binding, value] or
+    # [:selector, value], or nil. `onClick` is the canonical spelling and
+    # `onclick` its alias (attribute_definitions.json, the range's `onClick`
+    # `aliases`): the normalizer folds `onclick` into `onClick`, so onClick
+    # holds either a binding or — folded — a method name, a selector. A raw
+    # layout's `onclick` is read too, onClick first (4f ruling, jsonui-cli
+    # 1.9.0; the Dynamic runtimes read the same).
+    def range_handler(range)
+      return nil unless range.is_a?(Hash)
+
+      %w[onClick onclick].each do |key|
+        value = range[key]
+        next unless handler?(value)
+
+        names = handler_values(value)
+        return [:binding, value] if value.is_a?(String) && value.match?(/\A@\{.*\}\z/m)
+        return [:selector, value] if names.none? { |v| v.start_with?('@{') }
+      end
+      nil
+    end
+
     def linked_text?(node)
       return false unless TEXT_TYPES.include?(node['type'])
 
@@ -180,16 +219,22 @@ module JsonUIShared
     # disabled. `canTap` gates the tap, not the long press. A handler is what
     # `handler?` says it is — an empty or blank value names no method, here as
     # for a tap (this read "any value" before: a blank long press counted).
-    def long_press?(node)
-      node.is_a?(Hash) && node['enabled'] != false && handler?(node[LONG_PRESS_KEY])
+    # `userInteractionEnabled: false` stops it as it stops a tap — on the
+    # node, or on a node around it (`stopped`): the runtimes stop the long
+    # press, the pan and the pinch with the tap. A binding keeps it: the gate
+    # opens at run time, where the emitters gate the gesture on it.
+    def long_press?(node, stopped = false)
+      node.is_a?(Hash) && !stopped && !stops?(node) && node['enabled'] != false && handler?(node[LONG_PRESS_KEY])
     end
 
     # A node a user can operate on its own, inside a tappable. `stopped`: a
-    # node around it has `userInteractionEnabled: false`, so its own tap is
-    # none (its type still says whether it is a control).
+    # node around it has `userInteractionEnabled: false`, so its own tap, its
+    # long press and its links are none — the flag on the node itself too, for
+    # the links: a stopped Label's link spans do not open (the Linkable Label
+    # ticket). Its type still says whether it is a control.
     def operable?(node, stopped = false)
-      interactive_type?(node['type']) || (!stopped && tappable?(node)) || long_press?(node) ||
-        linked_text?(node)
+      interactive_type?(node['type']) || (!stopped && tappable?(node)) || long_press?(node, stopped) ||
+        (!stopped && !stops?(node) && linked_text?(node))
     end
 
     # Something inside `node` (not itself) a user can operate on its own.
@@ -211,19 +256,95 @@ module JsonUIShared
       'combine'
     end
 
+    # The handlers a stop around a node takes away with its tap: a long
+    # press, a pan, a pinch (the runtimes stop them with the tap).
+    GESTURE_KEYS = %w[onLongPress onPan onPinch].freeze
+
     # Writes SHAPE_KEY on every tappable of an include-expanded tree, and on
-    # every tap inside a node that stops or gates interaction, STOPPED_KEY /
-    # GATES_KEY.
+    # every node with a tap or a gesture, and every control, inside a node
+    # that stops or gates interaction, STOPPED_KEY / GATES_KEY — on a Label
+    # with links of its own too (linked_text?): its links are taps the flag
+    # stops, a range's handler and a link `linkable` detects alike, and the
+    # Label may have no onClick for the keys to ride on (4f ruling, jsonui-cli 1.9.0).
     def annotate!(root)
       walk(root) do |node, stopped, gates|
         value = shape(node, stopped)
         node[SHAPE_KEY] = value if value
-        next unless TAP_KEYS.any? { |key| handler?(node[key]) }
+        next unless (TAP_KEYS + GESTURE_KEYS).any? { |key| handler?(node[key]) } || linked_text?(node) || control?(node)
 
         node[STOPPED_KEY] = true if stopped
         node[GATES_KEY] = gates unless gates.empty?
       end
       root
+    end
+
+    # Layouts a node draws in a view of their own, where annotate! does not
+    # reach: a Collection's cells, headers and footers, an Embed's screen, a
+    # TabView tab's view. A stop around them reaches them at run time instead
+    # — the stopping node hands it down (SwiftUI's environment, Compose's
+    # CompositionLocal) and the drawn view's taps read it.
+    COLLECTION_TYPES = %w[collection table].freeze
+    REFERENCE_KEYS = %w[cell header footer].freeze
+    REFERENCE_LIST_KEYS = %w[cellClasses headerClasses footerClasses].freeze
+
+    # The names of the layouts `node` itself draws elsewhere.
+    def drawn_elsewhere(node)
+      return [] unless node.is_a?(Hash)
+
+      refs = []
+      type = node['type'].to_s.downcase
+      if COLLECTION_TYPES.include?(type)
+        ([node] + Array(node['sections']).select { |s| s.is_a?(Hash) }).each do |holder|
+          REFERENCE_KEYS.each { |key| refs << holder[key] }
+        end
+        REFERENCE_LIST_KEYS.each do |key|
+          Array(node[key]).each { |item| refs << (item.is_a?(Hash) ? item['className'] : item) }
+        end
+      elsif type == 'embed'
+        refs << node['screen']
+      elsif type == 'tabview'
+        Array(node['tabs']).each { |tab| refs << tab['view'] if tab.is_a?(Hash) }
+      end
+      refs.select { |r| r.is_a?(String) && !r.empty? && !r.start_with?('@{') }.uniq
+    end
+
+    # Whether `node` or a node inside it draws a layout elsewhere.
+    def draws_elsewhere?(node)
+      return false unless node.is_a?(Hash)
+
+      drawn_elsewhere(node).any? || children(node).any? { |c| draws_elsewhere?(c) }
+    end
+
+    # Whether `node` hands a stop down to what it draws elsewhere: its
+    # `userInteractionEnabled` is false or a binding, and something inside
+    # it (itself included) is drawn in a view of its own.
+    def hands_stop_down?(node)
+      (stops?(node) || !interaction_binding(node).nil?) && draws_elsewhere?(node)
+    end
+
+    # The layouts a stop can reach: those drawn elsewhere by a node inside
+    # (or at) a node whose `userInteractionEnabled` is false or bound, in any
+    # of `trees` ({ key => layout tree }), and — the whole layout being under
+    # the stop — every layout those draw, and so on. The block maps a
+    # reference name to a key of `trees` (the tool's screen id for it).
+    def stoppable_layouts(trees, &key_of)
+      key_of ||= ->(name) { name }
+      reached = Set.new
+      pending = []
+      trees.each_value do |tree|
+        walk(tree) do |node, stopped, gates|
+          inside = stopped || !gates.empty? || stops?(node) || !interaction_binding(node).nil?
+          drawn_elsewhere(node).each { |ref| pending << key_of.call(ref) } if inside
+        end
+      end
+      until pending.empty?
+        key = pending.shift
+        next if reached.include?(key)
+
+        reached << key
+        walk(trees[key]) { |node| drawn_elsewhere(node).each { |ref| pending << key_of.call(ref) } } if trees[key]
+      end
+      reached
     end
 
     # Yields each node with what the nodes around it (not itself) say:

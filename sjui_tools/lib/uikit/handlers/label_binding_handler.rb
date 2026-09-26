@@ -75,12 +75,15 @@ module SjuiTools
                 end
               end
             end
-            # Handle onClick/onclick binding in partialAttributes
-            onclick_key = pa.key?("onClick") ? "onClick" : (pa.key?("onclick") ? "onclick" : nil)
-            # "@{}" names no method (TapAccessibility.handler?): it emitted `handler: )`.
-            if onclick_key && pa[onclick_key].is_a?(String) && pa[onclick_key].start_with?("@{") &&
-               JsonUIShared::TapAccessibility.handler?(pa[onclick_key])
-              t = pa[onclick_key].sub(/^@\{/, "").sub(/\}$/, "").gsub(/'/, "\"")
+            # The range's handler (TapAccessibility.range_handler — the rule
+            # the UIKit label reads at run time, SwiftJsonUI
+            # PartialRangeHandler): onClick first, then onclick, its alias,
+            # each a binding or a name. A binding gets its closure here; a
+            # name is the selector the label performs. "@{}" names no method:
+            # it emitted `handler: )`.
+            kind, handler = JsonUIShared::TapAccessibility.range_handler(pa)
+            if kind == :binding
+              t = handler.sub(/^@\{/, "").sub(/\}$/, "").gsub(/'/, "\"")
               # Set closure-based onclick handler using setPartialAttributeOnClick
               @binding_content << "        #{view_name}?.setPartialAttributeOnClick(at: #{pa_index}, handler: #{t})\n"
             end

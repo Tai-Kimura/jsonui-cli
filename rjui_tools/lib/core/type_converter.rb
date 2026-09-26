@@ -253,7 +253,7 @@ module RjuiTools
           else
             # Color name - validate against colors.json and warn if not found
             unless color_exists?(value)
-              warn "[TypeConverter] Warning: Color '#{value}' is not defined in colors.json"
+              report_warning("Color '#{value}' is not defined in colors.json")
             end
             # Keep as CSS color name
             "\"#{value}\""

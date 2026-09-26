@@ -183,17 +183,32 @@ module RjuiTools
         # font classes rather than adding to them.
         def build_class_attr
           base = build_class_name
+          # A bound userInteractionEnabled: `pointer-events-none` while it is
+          # false, on every shape (plain, hint, linkable, partialAttributes) —
+          # the tap rule's gate, as a View takes it (build_responsive_class_attr).
+          # Only the literal `false` reached the Label; a binding was dropped,
+          # so its taps and its links answered whatever the value was (4f
+          # ruling, jsonui-cli 1.9.0).
+          gate = interaction_class_expression
           highlight = highlight_classes
-          return " className=\"#{base}\"" if highlight.empty?
+          return class_literal(base, gate) if highlight.empty?
 
           condition = selected_condition
-          return " className=\"#{base}\"" if condition.nil?
+          return class_literal(base, gate) if condition.nil?
 
           swapped = (base.split(/\s+/) - overridden_font_classes + highlight).join(' ')
           # A literal `selected: true` needs no runtime branch.
-          return " className=\"#{swapped}\"" if condition == 'true'
+          return class_literal(swapped, gate) if condition == 'true'
+
+          return " className={#{condition} ? `#{swapped} #{gate}` : `#{base} #{gate}`}" if gate
 
           " className={#{condition} ? \"#{swapped}\" : \"#{base}\"}"
+        end
+
+        # The className of one class list, with the bound gate appended when
+        # there is one (a template literal — the static list stays a string).
+        def class_literal(classes, gate)
+          gate ? " className={`#{classes} #{gate}`}" : " className=\"#{classes}\""
         end
 
         # Classes for the highlight state, from `highlightAttributes` or, when
@@ -700,7 +715,7 @@ module RjuiTools
           classes.concat(text_decoration_classes(underline: partial['underline'],
                                                  strikethrough: partial['strikethrough'],
                                                  element_level: false))
-          classes << 'cursor-pointer' if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
+          classes << 'cursor-pointer' if JsonUIShared::TapAccessibility.range_handler(partial)
           classes.reject { |c| c.nil? || c.empty? }.join(' ')
         end
 

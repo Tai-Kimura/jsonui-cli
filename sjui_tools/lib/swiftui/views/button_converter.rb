@@ -121,10 +121,15 @@ module SjuiTools
 
                     # Add onClick as closure (SwiftUI uses onClick, not onclick)
                     # onClick (camelCase) -> binding format only (@{functionName})
-                    if JsonUIShared::TapAccessibility.handler?(partial['onClick']) && is_binding?(partial['onClick'])
+                    # The range's handler (TapAccessibility.range_handler): onClick
+                    # first, then onclick, its selector alias — which this dropped.
+                    kind, value = JsonUIShared::TapAccessibility.range_handler(partial)
+                    if kind == :binding
                       # For partial click, no value to pass
-                      handler_call = get_event_handler_invocation(partial['onClick'], view_id, nil)
+                      handler_call = get_event_handler_invocation(value, view_id, nil)
                       add_line "onClick: { #{handler_call} },"
+                    elsif kind == :selector
+                      add_line "onClick: { #{range_handler_call(partial)} },"
                     end
 
                     # Remove trailing comma from last item
@@ -349,7 +354,7 @@ module SjuiTools
           apply_confirmation_dialog_to_bag
           apply_alert_to_bag
 
-          # userInteractionEnabled / touchDisabledState
+          # userInteractionEnabled
           register_hit_test_gate
 
           generated_code

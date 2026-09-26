@@ -160,6 +160,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
     skipped_external: list[str] = []
     data_orphans: list[tuple[str, list[tuple[str, str]]]] = []
     initial_values: list[str] = []
+    # The project's strings table: a layout's String initial value may be a
+    # strings key, and the value it stands for is what the app shows.
+    from .lint_strings_cmd import LintStringsSetupError, StringsTable, default_strings_path
+    try:
+        strings_table = StringsTable.load(default_strings_path(config_mgr))
+    except LintStringsSetupError as e:
+        print(f"NOTE: initial values compared without the strings table: {e}")
+        strings_table = StringsTable({})
     unregistered_types: "OrderedDict[str, list[str]]" = OrderedDict()
     for sf in spec_files:
         if sf.resolve() in sub_spec_paths:
@@ -194,7 +202,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
         # every screen spec with a layout on disk, an externally authored
         # one too: its data section is still the spec's to declare.
         initial_values.extend(_initial_value_findings(
-            sf, screen_spec, actual_path, Path(layouts_root), config_mgr.project_root))
+            sf, screen_spec, actual_path, Path(layouts_root), config_mgr.project_root,
+            strings=strings_table))
 
         # Skip specs whose layout is authored externally (layoutFile mode
         # with no components). Generating would produce an empty stub,
@@ -317,11 +326,16 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "regeneration is idempotent."
         )
 
+    value_gate = initial_value_gate_state()
     if initial_values:
+        counted = {
+            "on": "counted by `--fail-on-diff`",
+            "announce": (f"reported only — from jsonui-cli {INITIAL_VALUE_GATE_FROM} "
+                         f"`--fail-on-diff` counts these"),
+        }.get(value_gate, "reported only — `--fail-on-diff` does not count these")
         print(
             f"\n**WARNING: {len(initial_values)} initial value(s) a spec declares that "
-            f"its layout does not carry** (reported only — `--fail-on-diff` does not "
-            f"count these):"
+            f"its layout does not carry** ({counted}):"
         )
         for line in initial_values:
             print(f"- {line}")
@@ -372,6 +386,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     coverage_gap = bool(coverage.missing_specs or coverage.missing_layouts)
     if args.fail_on_diff and (
         any(r.has_diff for r in results) or data_orphans or api_drift
+        or (initial_values and value_gate == "on")
         or (require_coverage and coverage_gap)
     ):
         return 1
@@ -532,6 +547,32 @@ def _coverage_lines(coverage, require_coverage) -> list[str]:
 # there is exactly one.
 from ..core.spec_kind import describes_a_screen as _describes_a_screen  # noqa: E402
 from ..core.layout_data import initial_value_key, layout_data_entries  # noqa: E402
+
+#: The release from which `--fail-on-diff` counts an initial value a spec
+#: declares that its layout does not carry. Below it the lines are a WARNING
+#: and one line names the release — faces holding `--fail-on-diff` green get
+#: a release to clear them in (measured 2026-09-26: 3 of 4 faces' gates run
+#: verify with it). A literal read by shared/core/gate_versions like every
+#: `*_GATE_FROM`: "withdrawn" or anything that is not a release number never
+#: gates.
+INITIAL_VALUE_GATE_FROM: str | None = "1.9.1"
+
+
+def initial_value_gate_state(version: str | None = None, literal: str | None = None) -> str:
+    """`on` (counted by --fail-on-diff), `announce` (a release is named, not
+    reached) or `off` (undeclared, withdrawn, unreadable, or no gate_versions
+    to read it with). *version* defaults to this toolchain's, *literal* to
+    INITIAL_VALUE_GATE_FROM."""
+    from ..version import toolchain_version
+
+    gates = shared_core.load("gate_versions")
+    if gates is None:
+        return "off"
+    literal = INITIAL_VALUE_GATE_FROM if literal is None else literal
+    version = toolchain_version() if version is None else version
+    if gates.gate_is_on(version, literal):
+        return "on"
+    return "announce" if gates.gate_state(literal) == "release" else "off"
 
 
 @dataclass
@@ -834,7 +875,7 @@ def _diff_data_section(
 
 
 def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_root: Path,
-                            project_root: Path) -> list[str]:
+                            project_root: Path, strings=None) -> list[str]:
     """One line per initial value a spec declares that its layout does not
     carry: the variable, both values, both files.
 
@@ -846,6 +887,13 @@ def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_r
     spellings of one value agree (layout_data.initial_value_key). A layout
     entry that gives no defaultValue, or no entry of that name, does not carry
     the value either.
+
+    A String value that is a strings key stands for its text: the layout's
+    "home_title" and the spec's "Hello" agree when strings.json holds Hello
+    there, and a full key and the bare key of one entry agree (the
+    table's own resolution — lint-strings' StringsTable; a bare key resolves
+    in the sections the layout owns). A line that disagrees after resolving
+    says so: `has "…" (strings: "…")`.
 
     Until jsonui-cli 1.9.0 nothing compared them: `_diff_data_section` reads names, in
     one direction, and a value the spec declared and the layout dropped went
@@ -866,6 +914,26 @@ def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_r
                 targets.append((f"structure.collection.{slot.kind}.uiVariables", slot.ui_variables,
                                 layouts_root / f"{slot_layout_ref(coll.id, slot)}.json"))
 
+    from .lint_strings_cmd import namespace_candidates
+
+    def agree(spec_value, layout_value, klass, own) -> bool:
+        if initial_value_key(layout_value, klass) == initial_value_key(spec_value, klass):
+            return True
+        if strings is None or not (isinstance(spec_value, str) and isinstance(layout_value, str)):
+            return False
+        le, se = strings.entry(layout_value, own), strings.entry(spec_value, own)
+        return bool((le and se and le == se)
+                    or (le and spec_value in strings.texts(*le))
+                    or (se and layout_value in strings.texts(*se)))
+
+    def shown(value, own) -> str:
+        text = json.dumps(value, ensure_ascii=False)
+        entry = strings.entry(value, own) if strings is not None and isinstance(value, str) else None
+        if entry:
+            texts = sorted(strings.texts(*entry))
+            text += f" (strings: {', '.join(json.dumps(x, ensure_ascii=False) for x in texts) or 'no text'})"
+        return text
+
     out: list[str] = []
     for where, variables, path in targets:
         declared = [v for v in variables if v.default is not None]
@@ -878,9 +946,13 @@ def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_r
         entries: dict[str, list[dict]] = {}
         for e in layout_data_entries(layout):
             entries.setdefault(e["name"], []).append(e)
+        try:
+            own = namespace_candidates(str(Path(path).resolve().relative_to(Path(layouts_root).resolve())))
+        except ValueError:
+            own = namespace_candidates(Path(path).name)
         for var in declared:
             head = (f"{rel(spec_file)}: {where} '{var.name}' is "
-                    f"{json.dumps(var.default, ensure_ascii=False)} — {rel(path)}")
+                    f"{shown(var.default, own)} — {rel(path)}")
             found = entries.get(var.name, [])
             if not found:
                 out.append(f"{head} declares no data entry '{var.name}'")
@@ -890,8 +962,8 @@ def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_r
                 on = f" (platform {e['platform']})" if isinstance(e.get("platform"), str) else ""
                 if "defaultValue" not in e:
                     out.append(f"{head} gives it no defaultValue{on}")
-                elif initial_value_key(e["defaultValue"], klass) != initial_value_key(var.default, klass):
-                    out.append(f"{head} has {json.dumps(e['defaultValue'], ensure_ascii=False)}{on}")
+                elif not agree(var.default, e["defaultValue"], klass, own):
+                    out.append(f"{head} has {shown(e['defaultValue'], own)}{on}")
     return out
 
 

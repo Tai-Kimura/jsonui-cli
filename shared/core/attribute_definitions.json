@@ -745,7 +745,25 @@
     "bind": {
       "type": "binding",
       "binding_direction": "two-way",
-      "description": "Two-way binding for the component's primary value — Switch/Check isOn, Slider value, Segment selectedIndex, SelectBox selectedValue, Progress progress. An alternative spelling to each component's own value attribute, which takes precedence when both are set. Not a Collection's data source (Table is a Collection): that is `items`, and the validator says so."
+      "description": "Two-way binding for the component's primary value — Switch/Check isOn, Slider value, Segment selectedIndex, SelectBox selectedValue (a Date SelectBox: selectedDate), Progress progress, Radio selectedValue, TextField/TextView text. An alternative spelling to each component's own value attribute, which takes precedence when both are set; it is folded on the node a renderer draws, after its style is merged and its responsive branch resolved (shared/core/bind_fold.rb), so a value a style gives counts as set. Not a Collection's data source (Table is a Collection): that is `items`, and the validator says so. `primaryValue` lists, per section, the attribute `bind` stands for (first) and the other spellings of that value: the layout normalizer rewrites a lone `bind` to the first, and drops `bind` with a warning when any of them is set. A section whose value depends on another attribute gives an object instead of a list: `by` names that attribute, `lists` the list for each of its values, and `whenAbsent` the value to take when it is not set (SelectBox by selectItemType: a Date SelectBox's value is selectedDate, and its selectedValue / selectedItem / selectedIndex are read by no path — the validator names each).",
+      "primaryValue": {
+        "Switch": ["isOn", "value", "checked"],
+        "CheckBox": ["isOn", "checked"],
+        "Slider": ["value"],
+        "Segment": ["selectedIndex"],
+        "SelectBox": {
+          "by": "selectItemType",
+          "whenAbsent": "Normal",
+          "lists": {
+            "Normal": ["selectedValue", "selectedItem", "selectedIndex"],
+            "Date": ["selectedDate"]
+          }
+        },
+        "Progress": ["progress"],
+        "Radio": ["selectedValue"],
+        "TextField": ["text"],
+        "TextView": ["text"]
+      }
     },
     "include": {
       "type": "string",
@@ -944,8 +962,16 @@
     },
     "touchDisabledState": {
       "type": "string",
-      "description": "Touch disable mode",
-      "platform": "swift"
+      "enum": [
+        "none",
+        "onlyMe",
+        "viewsWithoutTouchEnabled",
+        "viewsWithoutInList"
+      ],
+      "description": "The hit-test mode of SJUIView (UIKit). none — as usual; onlyMe — the view itself lets a touch through to what is behind it, its subviews still take theirs; viewsWithoutTouchEnabled — only subviews with isUserInteractionEnabled take a touch; viewsWithoutInList — only the subviews whose id is in touchEnabledViewIds do. SwiftUI, Compose and web do not read it: to stop a view and everything in it, use userInteractionEnabled: false.",
+      "platform": "swift",
+      "mode": "uikit",
+      "warn_outside_mode": true
     },
     "touchEnabledViewIds": {
       "type": "array",
@@ -1207,7 +1233,7 @@
         "string",
         "binding"
       ],
-      "description": "Text content (can be data binding, supports interpolation). PLAIN TEXT: markdown is not interpreted, so \"[label](/path)\", \"**bold**\" and backticks render literally, brackets and all. To emphasise or link part of the string, use partialAttributes ('range' plus font/color/underline, and 'onclick' for a tappable span). Rendering real markdown is out of scope for Label — write a custom component."
+      "description": "Text content (can be data binding, supports interpolation). PLAIN TEXT: markdown is not interpreted, so \"[label](/path)\", \"**bold**\" and backticks render literally, brackets and all. To emphasise or link part of the string, use partialAttributes ('range' plus font/color/underline, and 'onClick' for a tappable span). Rendering real markdown is out of scope for Label — write a custom component."
     },
     "hint": {
       "type": "string",
@@ -1394,7 +1420,7 @@
         "boolean",
         "binding"
       ],
-      "description": "Enable URL/phone detection. Auto-links BARE http(s) URLs and phone numbers found in the text. It does not parse markdown, and relative paths are deliberately never linked: a path like \"/guides/x\" only means something to a web router, so linkifying it would produce a control that is dead on iOS and Android. Express a cross-document reference with partialAttributes 'range' + 'onclick', where the handler performs the navigation itself — including scrolling to the target position, which an href cannot express on mobile anyway."
+      "description": "Enable URL/phone detection. Auto-links BARE http(s) URLs and phone numbers found in the text. It does not parse markdown, and relative paths are deliberately never linked: a path like \"/guides/x\" only means something to a web router, so linkifying it would produce a control that is dead on iOS and Android. Express a cross-document reference with partialAttributes 'range' + 'onClick', where the handler performs the navigation itself — including scrolling to the target position, which an href cannot express on mobile anyway."
     },
     "textShadow": {
       "type": [
@@ -1450,7 +1476,7 @@
     },
     "partialAttributes": {
       "type": "array",
-      "description": "Partial text styling: apply font/size/color/underline/shadow to a substring selected by 'range' (a [start, end] pair, a text pattern, or a binding), and optionally make it tappable with 'onclick'. This is the supported way to get emphasis or a link inside a Label, since 'text' is plain text and markdown is not interpreted, and it is the portable way to express a cross-reference: the handler navigates (and scrolls to the target) in host code, so the same layout works everywhere, where a URL-based link would only work on web. All three platforms resolve partials at RUNTIME against the resolved string, so a pattern range and a localized or bound 'text' both work. Semantics, identical across platforms and verified against each runtime: an array range is [start, end) with the end exclusive; a string range is the FIRST occurrence and the partial is skipped (not an error) when the pattern is absent; a range that is out of bounds or inverted is skipped; partials apply in declaration order and MERGE where they overlap, later declarations winning per property.",
+      "description": "Partial text styling: apply font/size/color/underline/shadow to a substring selected by 'range' (a [start, end] pair, a text pattern, or a binding), and optionally make it tappable with 'onClick' (alias 'onclick'). This is the supported way to get emphasis or a link inside a Label, since 'text' is plain text and markdown is not interpreted, and it is the portable way to express a cross-reference: the handler navigates (and scrolls to the target) in host code, so the same layout works everywhere, where a URL-based link would only work on web. All three platforms resolve partials at RUNTIME against the resolved string, so a pattern range and a localized or bound 'text' both work. Semantics, identical across platforms and verified against each runtime: an array range is [start, end) with the end exclusive; a string range is the FIRST occurrence and the partial is skipped (not an error) when the pattern is absent; a range that is out of bounds or inverted is skipped; partials apply in declaration order and MERGE where they overlap, later declarations winning per property.",
       "items": {
         "type": "object",
         "properties": {
@@ -1529,13 +1555,10 @@
             ],
             "description": "Range [start, end], text pattern string, or binding expression"
           },
-          "onclick": {
-            "type": "string",
-            "description": "Click handler for this range (selector-based, lowercase)"
-          },
           "onClick": {
-            "type": "binding",
-            "description": "Click handler for this range (camelCase) - binding only (@{functionName})"
+            "type": ["binding", "string"],
+            "aliases": ["onclick"],
+            "description": "Click handler for this range: a binding (@{functionName}), or the method's name. `onclick` is its alias — the selector spelling, a method name — and the normalizer folds it here (both set: onClick is kept); a raw layout's `onclick` is read the same way on every platform. A name is called as the component's `onclick` selector calls it; a binding as its `onClick` does."
           }
         }
       }
@@ -2448,7 +2471,7 @@
     },
     "partialAttributes": {
       "type": "array",
-      "description": "Partial text styling: apply font/size/color/underline/shadow to a substring selected by 'range' (a [start, end] pair, a text pattern, or a binding), and optionally make it tappable with 'onclick'. This is the supported way to get emphasis or a link inside a Label, since 'text' is plain text and markdown is not interpreted, and it is the portable way to express a cross-reference: the handler navigates (and scrolls to the target) in host code, so the same layout works everywhere, where a URL-based link would only work on web. All three platforms resolve partials at RUNTIME against the resolved string, so a pattern range and a localized or bound 'text' both work. Semantics, identical across platforms and verified against each runtime: an array range is [start, end) with the end exclusive; a string range is the FIRST occurrence and the partial is skipped (not an error) when the pattern is absent; a range that is out of bounds or inverted is skipped; partials apply in declaration order and MERGE where they overlap, later declarations winning per property. Declared from the implementation, which already read it: sjui button_converter.rb:68-129 (plan 51-E).",
+      "description": "Partial text styling: apply font/size/color/underline/shadow to a substring selected by 'range' (a [start, end] pair, a text pattern, or a binding), and optionally make it tappable with 'onClick' (alias 'onclick'). This is the supported way to get emphasis or a link inside a Label, since 'text' is plain text and markdown is not interpreted, and it is the portable way to express a cross-reference: the handler navigates (and scrolls to the target) in host code, so the same layout works everywhere, where a URL-based link would only work on web. All three platforms resolve partials at RUNTIME against the resolved string, so a pattern range and a localized or bound 'text' both work. Semantics, identical across platforms and verified against each runtime: an array range is [start, end) with the end exclusive; a string range is the FIRST occurrence and the partial is skipped (not an error) when the pattern is absent; a range that is out of bounds or inverted is skipped; partials apply in declaration order and MERGE where they overlap, later declarations winning per property. Declared from the implementation, which already read it: sjui button_converter.rb:68-129 (plan 51-E).",
       "items": {
         "type": "object",
         "properties": {
@@ -2527,13 +2550,10 @@
             ],
             "description": "Range [start, end], text pattern string, or binding expression"
           },
-          "onclick": {
-            "type": "string",
-            "description": "Click handler for this range (selector-based, lowercase)"
-          },
           "onClick": {
-            "type": "binding",
-            "description": "Click handler for this range (camelCase) - binding only (@{functionName})"
+            "type": ["binding", "string"],
+            "aliases": ["onclick"],
+            "description": "Click handler for this range: a binding (@{functionName}), or the method's name. `onclick` is its alias — the selector spelling, a method name — and the normalizer folds it here (both set: onClick is kept); a raw layout's `onclick` is read the same way on every platform. A name is called as the component's `onclick` selector calls it; a binding as its `onClick` does."
           }
         }
       }
@@ -2545,7 +2565,7 @@
         "string",
         "binding"
       ],
-      "description": "Image source name (can be data binding)"
+      "description": "Image source name (can be data binding). On web it is passed to `<img src>` as a path, since web has no asset catalog, so a bare image name belongs in srcName there (rjui warns)."
     },
     "srcName": {
       "type": [
@@ -3074,7 +3094,7 @@
     },
     "onValueChange": {
       "type": "binding",
-      "description": "Value change handler - binding only (@{functionName}). The handler receives the new value of the selection binding, the same on every platform: with selectedIndex bound it is the Int index (declare ((Int) -> Void)?, or ((String, Int) -> Void)? for viewId + index); with selectedItem / selectedValue bound it is the String item (declare ((String, String) -> Void)? for viewId + item). A lone (String) parameter is read as the viewId, not the item. (() -> Void)? receives nothing and the ViewModel reads the bound value back."
+      "description": "Value change handler - binding only (@{functionName}). The handler receives the new value of the selection binding, the same on every platform: with selectedIndex bound it is the Int index (declare ((Int) -> Void)?, or ((String, Int) -> Void)? for viewId + index); with selectedItem / selectedValue bound it is the String item (declare ((String, String) -> Void)? for viewId + item). A lone (String) parameter is the selected item as a String, with selectedIndex bound too; the viewId comes only as the first of two parameters. (() -> Void)? receives nothing and the ViewModel reads the bound value back."
     },
     "onValueChanged": {
       "type": "binding",

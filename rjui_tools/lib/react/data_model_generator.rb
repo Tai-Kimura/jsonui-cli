@@ -4,7 +4,10 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/tap_accessibility'
+require_relative '../core/bind_fold'
+require_relative '../core/logger'
 require_relative '../core/binding_validator_core'
+require_relative '../core/node_keys'
 require_relative '../core/config_manager'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
@@ -103,7 +106,10 @@ module RjuiTools
             begin
               @project_type_map = JSON.parse(File.read(path)).fetch('types', {})
             rescue JSON::ParserError => e
-              warn "[DataModelGenerator] Warning: failed to parse #{path}: #{e.message}"
+              # Through rjui's warning logger ("[WARN] "): every custom type
+              # then falls back to its bare name, which a warning count has
+              # to see (a bare `warn` on stderr until jsonui-cli 1.9.0).
+              RjuiTools::Core::Logger.warn "[DataModelGenerator] failed to parse #{path}: #{e.message}"
             end
             break
           end
@@ -351,10 +357,9 @@ module RjuiTools
 
       # Extract value bindings from components (Switch, Slider, SelectBox, TextField, TextView, etc.)
       # These are the bound values like @{notificationsEnabled} in Switch isOn attribute
-      # `bind` is the alternative spelling for a component's primary value
-      # binding (see BaseConverter#with_bind_fallback). It has to register here
-      # too, or a layout that uses only `bind` gets JSX referencing a Data
-      # property the model never declared.
+      # `bind` is folded into the attribute it stands for before it is read
+      # (JsonUIShared::BindFold, as at the converter dispatch), so a layout
+      # that uses only `bind` registers the property it binds.
       # The report-back handler a value binding derives. SelectBox and the
       # TextField family derive `on<Prop>Change`; Radio and Segment derive
       # `set<Prop>`. The convention rides on the binding (recorded by
@@ -369,10 +374,14 @@ module RjuiTools
       def extract_value_bindings(json_data, bindings = {})
         if json_data.is_a?(Hash)
           component_type = json_data['type']
+          # the node the converter draws: `bind` folded into the attribute it
+          # stands for (JsonUIShared::BindFold), as at the dispatch — so a
+          # layout that uses only `bind` registers the property under it
+          json_data = JsonUIShared::BindFold.fold(json_data, component_type)
 
           # Switch, Toggle - isOn/checked/value binding (boolean)
           if %w[Switch Toggle].include?(component_type)
-            is_on = json_data['isOn'] || json_data['checked'] || json_data['value'] || json_data['bind']
+            is_on = json_data['isOn'] || json_data['checked'] || json_data['value']
             if is_on.is_a?(String) && is_on.start_with?('@{') && is_on.end_with?('}')
               property_name = is_on[2...-1]
               bindings[property_name] = { type: 'boolean', defaultValue: false }
@@ -381,7 +390,7 @@ module RjuiTools
 
           # CheckBox, Check - isOn/checked binding (boolean)
           if %w[CheckBox Check].include?(component_type)
-            is_on = json_data['isOn'] || json_data['checked'] || json_data['bind']
+            is_on = json_data['isOn'] || json_data['checked']
             if is_on.is_a?(String) && is_on.start_with?('@{') && is_on.end_with?('}')
               property_name = is_on[2...-1]
               bindings[property_name] = { type: 'boolean', defaultValue: false }
@@ -390,7 +399,7 @@ module RjuiTools
 
           # Slider - value binding (number)
           if component_type == 'Slider'
-            value = json_data['value'] || json_data['bind']
+            value = json_data['value']
             if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
               property_name = value[2...-1]
               bindings[property_name] = { type: 'number', defaultValue: 0 }
@@ -413,7 +422,7 @@ module RjuiTools
           # the convention travels with the binding rather than being assumed
           # by the emit loop.
           if %w[Radio Segment SelectBox].include?(component_type)
-            value = json_data['value'] || json_data['bind']
+            value = json_data['value']
             if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
               property_name = value[2...-1]
               bindings[property_name] = { type: 'string', defaultValue: '""' }
@@ -490,7 +499,7 @@ module RjuiTools
 
           # TextField - text binding (string)
           if component_type == 'TextField'
-            text = json_data['text'] || json_data['bind']
+            text = json_data['text']
             if text.is_a?(String) && text.start_with?('@{') && text.end_with?('}')
               property_name = text[2...-1]
               bindings[property_name] = { type: 'string', defaultValue: '""' }
@@ -499,7 +508,7 @@ module RjuiTools
 
           # TextView - text binding (string)
           if component_type == 'TextView'
-            text = json_data['text'] || json_data['bind']
+            text = json_data['text']
             if text.is_a?(String) && text.start_with?('@{') && text.end_with?('}')
               property_name = text[2...-1]
               bindings[property_name] = { type: 'string', defaultValue: '""' }
@@ -527,7 +536,8 @@ module RjuiTools
           # Check for data section
           if json_data['data'] && json_data['data'].is_a?(Array)
             # Extract from root element OR data-only elements (no type, just data key)
-            should_extract = is_root || json_data.keys == ['data'] || (json_data.keys - ['data', 'type']).empty?
+            written = Core::NodeKeys.written(json_data)
+            should_extract = is_root || written == ['data'] || (written - ['data', 'type']).empty?
             if should_extract
               json_data['data'].each do |data_item|
                 if data_item.is_a?(Hash)

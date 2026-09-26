@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -53,7 +54,7 @@ RSpec.describe 'an Embed event that names no handler, through sjui build' do
       'type' => 'View', 'id' => 'detail_root', 'width' => 'matchParent', 'height' => 'matchParent',
       'child' => [{ 'type' => 'Label', 'id' => 'detail_title', 'text' => 'x', 'width' => 'wrapContent', 'height' => 'wrapContent' }]
     ))
-    @log, @status = Open3.capture2e('ruby', File.join(tool, 'bin', 'sjui'), 'build', chdir: @dir)
+    @log, @status = Open3.capture2e(RbConfig.ruby, File.join(tool, 'bin', 'sjui'), 'build', chdir: @dir)
     @log = @log.gsub(/\e\[[0-9;]*m/, '')
   end
 

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'core/resources/color_manager'
+require 'rbconfig'
 require 'json'
 require 'tmpdir'
 require 'open3'
@@ -144,7 +145,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
                       'height' => 'wrapContent', 'text' => 'x', 'fontColor' => layout_color }]
       ))
       FileUtils.ln_s(File.join(LEDGER_REPO_ROOT, 'sjui_tools'), File.join(dir, 'sjui_tools'))
-      log, = Open3.capture2e('ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
+      log, = Open3.capture2e(RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
       [dir, JSON.parse(File.read(File.join(res, 'defined_colors.json'))), log]
     end
 
@@ -194,7 +195,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       before = File.mtime(path)
 
       sleep 1.1
-      Open3.capture2e('ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
+      Open3.capture2e(RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
 
       expect(File.mtime(path)).to eq(before)
     ensure

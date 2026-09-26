@@ -149,7 +149,8 @@ module RjuiTools
           style_attr_for(@dynamic_styles)
         end
 
-        def build_onclick_attr
+        # BaseConverter#build_onclick_attr adds the keyboard's button to it.
+        def click_attr
           return '' unless attributes['canTap'] || attributes['onclick'] || attributes['onClick']
 
           # An empty or blank handler is no handler (TapAccessibility.handler?).

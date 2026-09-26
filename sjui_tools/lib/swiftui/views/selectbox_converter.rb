@@ -338,8 +338,9 @@ module SjuiTools
             @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
-          # enabled (`.disabled`, outermost), userInteractionEnabled and
-          # touchDisabledState. Only the last two were registered: SelectBoxView
+          # enabled (`.disabled`, outermost) and userInteractionEnabled. Only
+          # the flag was registered (with touchDisabledState, which SwiftUI no
+          # longer reads — UIKit's hit-test mode): SelectBoxView
           # takes no `enabled`, so `enabled: false` still opened the picker and
           # took a pick (SwiftJsonUI ConformanceHost OnClickProbeUITests).
           register_interaction_gates

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -73,7 +74,7 @@ RSpec.describe 'an undefined colour token on Compose' do
   end
 
   def build(dir)
-    Open3.capture2e('ruby', File.join(dir, 'kjui_tools', 'bin', 'kjui'), 'build', chdir: dir)
+    Open3.capture2e(RbConfig.ruby, File.join(dir, 'kjui_tools', 'bin', 'kjui'), 'build', chdir: dir)
   end
 
   def emitted(dir)

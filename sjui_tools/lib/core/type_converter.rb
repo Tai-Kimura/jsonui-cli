@@ -293,7 +293,7 @@ module SjuiTools
           else
             # Color name from colors.json (e.g., "medium_gray", "deep_blue")
             unless color_exists?(value)
-              warn "[TypeConverter] Warning: Color '#{value}' is not defined in colors.json"
+              report_warning("Color '#{value}' is not defined in colors.json")
             end
 
             # ColorManager generates camelCase property names (medium_gray -> mediumGray)

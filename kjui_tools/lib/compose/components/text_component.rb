@@ -250,7 +250,7 @@ module KjuiTools
 
           if highlight_line_height && always_highlighted
             required_imports&.add(:text_style)
-            style_parts << "lineHeight = #{highlight_line_height}.sp"
+            style_parts << "lineHeight = #{Helpers::BoundValue.sp(highlight_line_height)}"
           elsif highlight_line_height
             required_imports&.add(:text_style)
             base_line_height = if json_data['lineHeightMultiple']
@@ -266,7 +266,7 @@ module KjuiTools
                              # TextUnit.Unspecified is how Compose says "use the
                              # font's own line height".
                              required_imports&.add(:text_unit)
-                             "lineHeight = if (#{highlight_condition}) #{highlight_line_height}.sp else TextUnit.Unspecified"
+                             "lineHeight = if (#{highlight_condition}) #{Helpers::BoundValue.sp(highlight_line_height)} else TextUnit.Unspecified"
                            end
           elsif hint && hint_condition && hint[:line_height_multiple]
             # The hint bag's lineHeightMultiple resolves against the hint's
@@ -289,7 +289,7 @@ module KjuiTools
                              "lineHeight = (if (#{hint_condition}) #{hint_line_height} else #{hint_base_line_height}).sp"
                            else
                              required_imports&.add(:text_unit)
-                             "lineHeight = if (#{hint_condition}) #{hint_line_height}.sp else TextUnit.Unspecified"
+                             "lineHeight = if (#{hint_condition}) #{Helpers::BoundValue.sp(hint_line_height)} else TextUnit.Unspecified"
                            end
           elsif json_data['lineHeightMultiple']
             required_imports&.add(:text_style)
@@ -326,9 +326,11 @@ module KjuiTools
           # Add testTag and contentDescription for UI testing
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
-          # Get visibility info (but don't add to modifiers, will be handled by wrapper)
-          visibility_result = Helpers::ModifierBuilder.build_visibility(json_data, required_imports)
-          modifiers.concat(visibility_result[:modifiers]) if visibility_result[:modifiers].any?
+          # Visibility is the wrapper's (VisibilityHelper); this call registers its
+          # imports. Its modifier — the alpha — is not taken here: it sat right
+          # after the test tag, before the margins, size and offset. The alpha
+          # is in its View slot below, after the offset.
+          Helpers::ModifierBuilder.build_visibility(json_data, required_imports)
 
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
 
@@ -344,6 +346,7 @@ module KjuiTools
           #    wrapContentHeight for `gravity: center` vertical centering)
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
 
           # 3. Shadow before background
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
@@ -357,9 +360,9 @@ module KjuiTools
           if json_data['edgeInset']
             insets = json_data['edgeInset']
             if insets.is_a?(Array) && insets.length == 4
-              modifiers << ".padding(top = #{insets[0]}.dp, end = #{insets[1]}.dp, bottom = #{insets[2]}.dp, start = #{insets[3]}.dp)"
+              modifiers << ".padding(top = #{Helpers::BoundValue.dp(insets[0])}, end = #{Helpers::BoundValue.dp(insets[1])}, bottom = #{Helpers::BoundValue.dp(insets[2])}, start = #{Helpers::BoundValue.dp(insets[3])})"
             elsif insets.is_a?(Numeric)
-              modifiers << ".padding(#{insets}.dp)"
+              modifiers << ".padding(#{Helpers::BoundValue.dp(insets)})"
             end
           end
           # padding/paddings for Label = internal padding (after background)
@@ -377,7 +380,7 @@ module KjuiTools
           # equivalent for the body face).
           if (line_offset = decoration_line_offset(json_data['underline'])) && line_offset != 0
             required_imports&.add(:graphics_layer)
-            modifiers << ".graphicsLayer { translationY = -#{line_offset}.dp.toPx() }"
+            modifiers << ".graphicsLayer { translationY = -#{Helpers::BoundValue.dp(line_offset)}.toPx() }"
           end
 
           # Format modifiers
@@ -698,6 +701,10 @@ module KjuiTools
           linkable_state = Helpers::BoundValue.bool(json_data['linkable'])
           linkable_expr = linkable_state == :on ? 'true' : (linkable_state == :off ? 'false' : linkable_state)
           code += "\n" + indent("linkable = #{linkable_expr},", depth + 1)
+          # userInteractionEnabled stops the links too (links_enabled_expression).
+          if (links = Helpers::ModifierBuilder.links_enabled_expression(json_data))
+            code += "\n" + indent("linksEnabled = #{links},", depth + 1)
+          end
 
           # Build style
           style_parts = []
@@ -734,15 +741,27 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # alpha and shadow, declared on `common`, were dropped on this branch
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, Label).
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The Label's tap stage, as every other Label branch takes it
+          # (build_clickable: onClick / onclick, canTap, enabled, the tap rule's
+          # role, and the userInteractionEnabled pointer blocker). This branch
+          # took none — the Label's onClick was dropped, and a touch on a
+          # detected link went through `false`. A tap on a link calls the link
+          # only; a tap elsewhere calls the Label's onClick (measured on an API
+          # 35 emulator: the two do not compete; 4f ruling, jsonui-cli 1.9.0).
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
 
           # Handle edgeInset for text-specific padding
           if json_data['edgeInset']
             insets = json_data['edgeInset']
             if insets.is_a?(Array) && insets.length == 4
-              modifiers << ".padding(top = #{insets[0]}.dp, end = #{insets[1]}.dp, bottom = #{insets[2]}.dp, start = #{insets[3]}.dp)"
+              modifiers << ".padding(top = #{Helpers::BoundValue.dp(insets[0])}, end = #{Helpers::BoundValue.dp(insets[1])}, bottom = #{Helpers::BoundValue.dp(insets[2])}, start = #{Helpers::BoundValue.dp(insets[3])})"
             elsif insets.is_a?(Numeric)
-              modifiers << ".padding(#{insets}.dp)"
+              modifiers << ".padding(#{Helpers::BoundValue.dp(insets)})"
             end
           else
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
@@ -846,15 +865,11 @@ module KjuiTools
             if decoration_on?(attr['strikethrough'])
               code += "\n" + indent("strikethrough = true,", depth + 3)
             end
-            # Handle click events for partial attributes
-            # onclick (lowercase) -> selector format (string only)
-            # onClick (camelCase) -> binding format only (@{functionName})
-            # An empty or blank handler is no handler (TapAccessibility.handler?).
-            if JsonUIShared::TapAccessibility.handler?(attr['onclick'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onclick'], is_camel_case: false)
-              code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
-            elsif JsonUIShared::TapAccessibility.handler?(attr['onClick'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onClick'], is_camel_case: true)
+            # The range's handler (TapAccessibility.range_handler): onClick, the
+            # canonical binding, first, then onclick, its selector alias. This
+            # took onclick first.
+            if (kind, value = JsonUIShared::TapAccessibility.range_handler(attr))
+              handler_call = Helpers::ModifierBuilder.get_event_handler_call(value, is_camel_case: kind == :binding, view_id: Helpers::ModifierBuilder.view_id(json_data))
               code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
             else
               code += "\n" + indent("onClick = null", depth + 3)
@@ -875,6 +890,10 @@ module KjuiTools
           end
 
           code += "\n" + indent("),", depth + 1)
+          # userInteractionEnabled stops the ranges' taps too (links_enabled_expression).
+          if (links = Helpers::ModifierBuilder.links_enabled_expression(json_data))
+            code += "\n" + indent("linksEnabled = #{links},", depth + 1)
+          end
 
           # Build modifiers
           modifiers = []
@@ -886,6 +905,12 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # alpha, shadow and the background (its border and corner clip),
+          # declared on `common`, were dropped on this branch
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, Label).
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
@@ -923,182 +948,6 @@ module KjuiTools
 
           # Wrap with VisibilityWrapper if needed
           Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
-        end
-
-        # Legacy AnnotatedString path retained for backward compat with any
-        # caller that explicitly drives this helper. The two helpers above are
-        # the ones routed from `.generate`.
-        def self.generate_with_partial_attributes(json_data, depth, required_imports, parent_type)
-          required_imports&.add(:annotated_string)
-          required_imports&.add(:link_annotation)
-          required_imports&.add(:remember_state)
-
-          text = json_data['text'] || ''
-          partial_attrs = json_data['partialAttributes']
-
-          # Build AnnotatedString as a variable first
-          code = indent("val annotatedText = buildAnnotatedString {", depth)
-          code += "\n" + indent("append(\"#{escape_string(text)}\")", depth + 1)
-
-          # Apply partial attributes
-          partial_attrs.each do |attr|
-            range = attr['range']
-            next unless range && range.is_a?(Array) && range.length == 2
-
-            start_idx = range[0]
-            end_idx = range[1]
-
-            # Build SpanStyle for this range
-            span_styles = []
-
-            if attr['fontColor']
-              color_resolved = Helpers::ResourceResolver.process_color(attr['fontColor'], required_imports)
-              span_styles << "color = #{color_resolved}"
-            end
-
-            if attr['fontSize']
-              span_styles << "fontSize = #{attr['fontSize']}.sp"
-            end
-
-            if attr['fontWeight']
-              required_imports&.add(:font_weight)
-              span_styles << "fontWeight = #{Helpers::FontSpecHelper.weight_literal_for(attr['fontWeight'])}"
-            end
-
-            if attr['background']
-              background_resolved = Helpers::ResourceResolver.process_color(attr['background'], required_imports)
-              span_styles << "background = #{background_resolved}"
-            end
-
-            if attr['underline']
-              required_imports&.add(:text_decoration)
-              span_styles << "textDecoration = TextDecoration.Underline"
-            end
-
-            if attr['strikethrough']
-              required_imports&.add(:text_decoration)
-              span_styles << "textDecoration = TextDecoration.LineThrough"
-            end
-
-            if span_styles.any?
-              code += "\n" + indent("addStyle(", depth + 1)
-              code += "\n" + indent("style = SpanStyle(#{span_styles.join(', ')}),", depth + 2)
-              code += "\n" + indent("start = #{start_idx},", depth + 2)
-              code += "\n" + indent("end = #{end_idx}", depth + 2)
-              code += "\n" + indent(")", depth + 1)
-            end
-
-            # Add clickable annotation if onclick/onClick is specified.
-            # `onclick` is ["string", "array"]; an array names handlers to
-            # call in order, and calling `match?` on it raised instead
-            # (same family as get_event_handler_call, plan 49 lane C).
-            click_handler = attr['onclick'] || attr['onClick']
-            if click_handler
-              # Extract each method name from binding format if needed
-              names = (click_handler.is_a?(Array) ? click_handler : [click_handler]).map do |h|
-                h = h.to_s
-                (h.match(/^@\{(.+)\}$/) || [nil, h.gsub(':', '')])[1]
-              end
-              listener_calls = names.map { |n| "viewModel.handlePartialClick(\"#{n}\")" }.join('; ')
-              code += "\n" + indent("addLink(", depth + 1)
-              code += "\n" + indent("LinkAnnotation.Clickable(", depth + 2)
-              code += "\n" + indent("tag = \"CLICKABLE\",", depth + 3)
-              code += "\n" + indent("linkInteractionListener = { #{listener_calls} }", depth + 3)
-              code += "\n" + indent("),", depth + 2)
-              code += "\n" + indent("start = #{start_idx},", depth + 2)
-              code += "\n" + indent("end = #{end_idx}", depth + 2)
-              code += "\n" + indent(")", depth + 1)
-            end
-          end
-
-          code += "\n" + indent("}", depth)
-          code += "\n"
-
-          # Render with Text — clicks are handled by the LinkAnnotations above
-          # (ClickableText is deprecated).
-          code += indent("Text(", depth)
-          code += "\n" + indent("text = annotatedText", depth + 1)
-
-          # Add style (fontSize, color, etc. for the whole text) — the return
-          # value carries its own leading comma.
-          style_code = build_text_style(json_data, depth + 1, required_imports)
-          if style_code
-            code += style_code
-          end
-
-          # Build modifiers
-          modifiers = []
-          # id testTag first, via the shared ModifierBuilder (single source of
-          # truth every other component uses) so a partial-attributes node is
-          # findable by By.res(id) — parity with iOS accessibilityIdentifier.
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
-          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
-
-          code += ","
-          if modifiers.any?
-            code += Helpers::ModifierBuilder.format(modifiers, depth)
-          else
-            code += "\n" + indent("modifier = Modifier", depth + 1)
-          end
-
-          code += "\n" + indent(")", depth)
-
-          # Wrap with VisibilityWrapper if needed
-          Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
-        end
-
-        # Build a TextStyle(...) literal for callers (e.g. the partial-attributes Text) that
-        # need a TextStyle expression rather than separate Text(...) args.
-        # Routes font fields through Configuration.Font.resolve(FontSpec(...)).
-        def self.build_text_style(json_data, depth, required_imports)
-          style_parts = []
-
-          if json_data['fontColor']
-            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
-            style_parts << "color = #{color_value}" if color_value
-          end
-
-          if json_data['fontSize'] || json_data['font'] || json_data['fontWeight'] || json_data['fontFamily']
-            font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
-            var_name = next_resolved_var
-            # Inline the resolve into the caller code by emitting a `.also { ... }`-style
-            # expression isn't possible in TextStyle args; instead, callers that consume
-            # this method should emit the resolve block themselves. To keep
-            # backward-compat we emit a flat TextStyle(...) without resolved font here.
-            # Concrete callers (PartialAttributesText, partial-attributes Text) construct their
-            # own resolve block.
-            style_parts << "fontSize = #{json_data['fontSize']}.sp" if json_data['fontSize']
-            if json_data['fontFamily']
-              required_imports&.add(:font_family)
-              style_parts << "fontFamily = FontFamily(Font(R.font.#{json_data['fontFamily'].to_s.gsub('-', '_').gsub(' ', '_').downcase}))"
-            end
-            font_value = json_data['font'] || json_data['fontWeight']
-            if font_value && Helpers::FontSpecHelper.weight_name?(font_value)
-              required_imports&.add(:font_weight)
-              style_parts << "fontWeight = #{Helpers::FontSpecHelper.weight_literal_for(font_value)}"
-            elsif font_value && !json_data['fontFamily']
-              # `font` holds a custom family name when not a weight.
-              required_imports&.add(:font_family)
-              style_parts << "fontFamily = FontFamily(Font(R.font.#{font_value.to_s.gsub('-', '_').downcase}))"
-            end
-          end
-
-          if json_data['textAlign']
-            required_imports&.add(:text_align)
-            align = compose_text_align(json_data['textAlign'])
-            style_parts << "textAlign = #{align}" if align
-          end
-
-          if style_parts.any?
-            required_imports&.add(:text_style)
-            return ",\n" + indent("style = TextStyle(#{style_parts.join(', ')})", depth)
-          end
-
-          nil
         end
 
         # The inside of a Kotlin string literal — the one escaper (`$`

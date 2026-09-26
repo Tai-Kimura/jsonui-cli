@@ -1,0 +1,20 @@
+{
+  "_description": "The one sentence a node of a type the tool cannot draw is named with (4f's ruling, jsonui-cli 1.9.0; JsonUIShared::AttributeValidatorCore.unknown_component_type_message, and KotlinJsonUI Dynamic's own constant, held to this table from a byte-identical copy). `known` is the types the tool draws; `written` the node's type as written; `expect` the sentence. Type names are matched as written: a spelling that matches a known type only when case is ignored is offered that type.",
+  "cases": [
+    { "name": "a spelling in another case is offered the declared one",
+      "written": "switch", "known": ["Label", "Switch", "SelectBox"],
+      "expect": "Unknown component type 'switch' — did you mean 'Switch'? Type names are case-sensitive." },
+    { "name": "every letter's case counts",
+      "written": "SELECTBOX", "known": ["Label", "Switch", "SelectBox"],
+      "expect": "Unknown component type 'SELECTBOX' — did you mean 'SelectBox'? Type names are case-sensitive." },
+    { "name": "a type no path draws is named alone",
+      "written": "Nope", "known": ["Label", "Switch", "SelectBox"],
+      "expect": "Unknown component type 'Nope'" },
+    { "name": "a registered type is offered like a declared one",
+      "written": "headerMenu", "known": ["Label", "HeaderMenu"],
+      "expect": "Unknown component type 'headerMenu' — did you mean 'HeaderMenu'? Type names are case-sensitive." },
+    { "name": "a type known by its definition but drawn by nothing is not offered itself",
+      "written": "DrawerContent", "known": ["Label", "DrawerContent"],
+      "expect": "Unknown component type 'DrawerContent'" }
+  ]
+}

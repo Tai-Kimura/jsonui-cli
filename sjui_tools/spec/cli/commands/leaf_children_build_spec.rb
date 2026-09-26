@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -61,7 +62,7 @@ RSpec.describe 'a leaf given children, through sjui build' do
       ['Leaf', [], { 'JUI_SKIP_EXISTING' => '1' }],
       ['Grown', ['--no-container', '--force']], ['Grown', ['--container', '--force']]
     ].map do |component, args, env = {}|
-      Open3.capture2e(env, 'ruby', File.join(tool, 'bin', 'sjui'), 'g', 'converter', component,
+      Open3.capture2e(env, RbConfig.ruby, File.join(tool, 'bin', 'sjui'), 'g', 'converter', component,
                       '--attributes', 'title:String', *args, chdir: @dir)
     end
 
@@ -86,7 +87,7 @@ RSpec.describe 'a leaf given children, through sjui build' do
 
     @ledger = File.join(@dir, 'stage-failures.json')
     @log, @status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => @ledger },
-                                    'ruby', File.join(tool, 'bin', 'sjui'), 'build', chdir: @dir)
+                                    RbConfig.ruby, File.join(tool, 'bin', 'sjui'), 'build', chdir: @dir)
     @log = @log.gsub(/\e\[[0-9;]*m/, '')
   end
 

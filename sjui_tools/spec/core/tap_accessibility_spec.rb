@@ -59,4 +59,15 @@ RSpec.describe JsonUIShared::TapAccessibility do
       end
     end
   end
+
+  # operable? reads the node's own flag for its links, as tappable? and
+  # long_press? read it for the tap and the press. holds_a_control? folds a
+  # child's flag into `stopped` before it asks, so no vector reaches this
+  # clause; asked about a node with no stop around it, the answer is the same.
+  it "operable?: a Label's links under its own flag are none, asked with no stop around" do
+    linked = { 'type' => 'Label', 'text' => 'see https://example.com', 'linkable' => true }
+    expect(described_class.operable?(linked)).to be(true)
+    expect(described_class.operable?(linked.merge('userInteractionEnabled' => false))).to be(false)
+    expect(described_class.operable?(linked.merge('userInteractionEnabled' => '@{u}'))).to be(true)
+  end
 end

@@ -1527,7 +1527,7 @@ module SjuiTools
           else
             source_expr = data_source_expr
             if auto_tracking && cell_id_property.nil?
-              warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: " \
+              SjuiTools::Core::Logger.warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: " \
                    'autoChangeTrackingId is true but cellIdProperty is not set; ignoring.'
             end
           end

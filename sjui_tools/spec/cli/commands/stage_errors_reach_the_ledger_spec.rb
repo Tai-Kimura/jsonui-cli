@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -74,7 +75,7 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
   def build(dir)
     ledger = File.join(dir, 'ledger.json')
     File.delete(ledger) if File.exist?(ledger)
-    log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => ledger }, 'ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
+    log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => ledger }, RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
     [log.gsub(/\e\[[0-9;]*m/, ''), status.exitstatus, File.exist?(ledger) ? JSON.parse(File.read(ledger)) : []]
   end
 
@@ -175,7 +176,10 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       layout(dir, 'home', 'style' => 'broken')
       File.write(File.join(dir, NAME, 'Styles', 'broken.json'), '{ "fontSize": ')
       log, exit_code, entries = build(dir)
-      expect(log).to match(%r{Error parsing style file '[^']*/Styles/broken\.json': unexpected end of input})
+      # The parser's own words follow the file: they are the json gem's, and
+      # differ by Ruby (2.6's json: "767: unexpected token at …"; 3.2's:
+      # "unexpected end of input") — the leg runs the tool on its own ruby.
+      expect(log).to match(%r{Error parsing style file '[^']*/Styles/broken\.json': \S})
       expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
       expect(Dir.glob(File.join(dir, '**', 'HomeBinding.swift'))).not_to be_empty # the layout was still built
     end

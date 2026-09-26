@@ -43,7 +43,7 @@ module KjuiTools
           if color
             args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
           end
-          args << "fontSize = #{size}.sp" if size
+          args << "fontSize = #{Helpers::BoundValue.sp(size)}" if size
           if (weight = font_weight_for(font))
             required_imports&.add(:font_weight)
             args << "fontWeight = #{weight}"
@@ -56,7 +56,15 @@ module KjuiTools
             # class; the dynamic component mirrors this exactly).
             required_imports&.add(:local_text_style)
             base_size = size || json_data['fontSize'] || 16
-            args << "style = LocalTextStyle.current.copy(lineHeight = #{format_sp(base_size.to_f * multiple.to_f)}.sp)"
+            line_height_sp = if Helpers::BoundValue.bound?(base_size) || Helpers::BoundValue.bound?(multiple)
+                               # `"@{v}".to_f` is 0.0: a bound size or multiple froze the
+                               # line height at 0.sp. Lifted into the emit instead.
+                               "(#{Helpers::BoundValue.float(base_size, fallback: 16)} * " \
+                                 "#{Helpers::BoundValue.float(multiple, fallback: 1)}).sp"
+                             else
+                               "#{format_sp(base_size.to_f * multiple.to_f)}.sp"
+                             end
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{line_height_sp})"
           end
 
           return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1
@@ -118,12 +126,14 @@ module KjuiTools
           # TextFieldState-based API (Compose BOM 2026.03.00+)
           required_imports&.add(:text_field_state)
           required_imports&.add(:launched_effect)
-          state_var = "textFieldState_#{json_data['id'] || 'textview'}"
+          # Named by the node's id, else its position (view_id): the fixed
+          # `textview` gave two id-less TextViews in one scope the same `val`.
+          state_var = "textFieldState_#{Helpers::ModifierBuilder.view_id(json_data)}"
           code += indent("val #{state_var} = rememberTextFieldState(initialText = #{value})", depth) + "\n"
 
           if has_data_binding
             variable = extract_variable_name(json_data['text'])
-            view_id = json_data['id'] || 'textview'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             # Sync external → state
             code += indent("LaunchedEffect(#{value}) { if (#{state_var}.text.toString() != #{value}) #{state_var}.edit { replace(0, length, #{value}) } }", depth) + "\n"
             # Sync state → external
@@ -138,7 +148,7 @@ module KjuiTools
               code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) viewModel.updateData(mapOf(\"#{variable}\" to newValue)) }", depth) + "\n"
             end
           elsif json_data['onTextChange']
-            view_id = json_data['id'] || 'textview'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             if Helpers::ModifierBuilder.is_binding?(json_data['onTextChange'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
               code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); #{handler_call} }", depth) + "\n"
@@ -228,9 +238,9 @@ module KjuiTools
               # flexible: height adjusts to content within min/max bounds
               min_h = json_data['minHeight'] || json_data['height'] || 24
               if json_data['maxHeight']
-                textfield_modifiers << ".heightIn(min = #{min_h}.dp, max = #{json_data['maxHeight']}.dp)"
+                textfield_modifiers << ".heightIn(min = #{Helpers::BoundValue.dp(min_h)}, max = #{Helpers::BoundValue.dp(json_data['maxHeight'])})"
               else
-                textfield_modifiers << ".heightIn(min = #{min_h}.dp)"
+                textfield_modifiers << ".heightIn(min = #{Helpers::BoundValue.dp(min_h)})"
               end
             elsif json_data['height']
               if json_data['height'] == 'matchParent'
@@ -238,7 +248,7 @@ module KjuiTools
               elsif json_data['height'] == 'wrapContent'
                 textfield_modifiers << ".wrapContentHeight()"
               else
-                textfield_modifiers << ".height(#{json_data['height']}.dp)"
+                textfield_modifiers << ".height(#{Helpers::BoundValue.dp(json_data['height'])})"
               end
             else
               # Default height for text area
@@ -287,9 +297,9 @@ module KjuiTools
             elsif json_data['flexible']
               min_h = json_data['minHeight'] || json_data['height'] || 24
               if json_data['maxHeight']
-                modifiers << ".heightIn(min = #{min_h}.dp, max = #{json_data['maxHeight']}.dp)"
+                modifiers << ".heightIn(min = #{Helpers::BoundValue.dp(min_h)}, max = #{Helpers::BoundValue.dp(json_data['maxHeight'])})"
               else
-                modifiers << ".heightIn(min = #{min_h}.dp)"
+                modifiers << ".heightIn(min = #{Helpers::BoundValue.dp(min_h)})"
               end
             elsif json_data['height']
               if json_data['height'] == 'matchParent'
@@ -297,7 +307,7 @@ module KjuiTools
               elsif json_data['height'] == 'wrapContent'
                 modifiers << ".wrapContentHeight()"
               else
-                modifiers << ".height(#{json_data['height']}.dp)"
+                modifiers << ".height(#{Helpers::BoundValue.dp(json_data['height'])})"
               end
             else
               # Default height for text area
@@ -395,7 +405,7 @@ module KjuiTools
 
           # Max lines for TextView
           if json_data['maxLines']
-            code += "\n" + indent("maxLines = #{json_data['maxLines']},", depth + 1)
+            code += "\n" + indent("maxLines = #{Helpers::BoundValue.int_arg(json_data['maxLines'], fallback: 1)},", depth + 1)
           else
             # Default to multiple lines
             code += "\n" + indent("maxLines = Int.MAX_VALUE,", depth + 1)
@@ -507,7 +517,7 @@ module KjuiTools
           # Note: Compose TextField hides placeholder by default when there's text
           # This is primarily for when you want different behavior
           if json_data.key?('hideOnFocused')
-            code += "\n" + indent("// hideOnFocused = #{json_data['hideOnFocused']}", depth + 1)
+            code += "\n" + indent("// hideOnFocused = #{Helpers::ModifierBuilder.comment_text(json_data['hideOnFocused'])}", depth + 1)
           end
 
           # Enabled state (boolean value context: supports `??` default and
