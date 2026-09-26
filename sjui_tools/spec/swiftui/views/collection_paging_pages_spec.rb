@@ -117,6 +117,35 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     SWIFT
   end
 
+  # The pager without its iOS-only page style, type-checked where the suite's
+  # compile arm runs (the macOS SDK has TabView(selection:) but no `.page`):
+  # the tag arithmetic and the Int selection.
+  it 'the emitted Swift type-checks, the page style aside', :swift_compile do
+    list_node = { 'type' => 'Collection', 'id' => 'l', 'layout' => 'horizontal', 'paging' => true, 'items' => '@{list}',
+                  'currentPage' => '@{page}', 'cellClasses' => ['ACell'] }
+    codes = [convert('sections' => PAGING_FOUR_SECTIONS),
+             convert('sections' => PAGING_FOUR_SECTIONS.values_at(0, 2), 'cellIdProperty' => 'id'),
+             convert('cellClasses' => ['ACell']),
+             described_class.new(list_node, 0, nil, nil, [{ 'name' => 'list', 'class' => '[ACellData]', 'defaultValue' => '[]' }]).convert.to_s]
+    styled = codes.map { |code| code.lines.reject { |l| l.include?('.tabViewStyle(.page(') }.join }
+    expect(styled.join).not_to include('.page(')
+    expect(<<~SWIFT).to compile_as_swift
+      #{EmittedSwift::COLLECTION_DATA_SOURCE_STUB}
+      #{cell_view_stub('ACellView', 'BCellView', 'CCellView')}
+      struct IdentifiedCellItem: Identifiable { let id: String; let index: Int; let data: [String: Any] }
+      struct ACellData { var title = ""; func toDictionary() -> [String: Any] { ["title": title] } }
+      struct TestData { var rows: CollectionDataSource? = nil; var list: [ACellData] = []; var page: Int = 0 }
+      struct EmittedHost: View {
+          @State var data = TestData()
+          var body: some View {
+              VStack {
+      #{styled.join("\n")}
+              }
+          }
+      }
+    SWIFT
+  end
+
   # The paging style is iOS's: type-checked against the iOS simulator SDK
   # (the macOS one has no `.page`), with the selection bound to an Int.
   describe 'the emitted Swift type-checks for iOS', :swift_compile do
