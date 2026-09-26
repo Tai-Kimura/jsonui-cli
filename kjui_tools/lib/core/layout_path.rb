@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module JsonUIShared
   # A node's position in its layout, as a name — for a node that needs a name
   # the layout does not give it (kjui: a Radio item's value; sjui: a stateful
@@ -42,6 +44,54 @@ module JsonUIShared
 
     def stamped?(node)
       node.is_a?(Hash) && node.key?(KEY)
+    end
+
+    # The name a node's handlers are handed as its viewId: its `id`, else
+    # `<type>_<path>` — the type the renderer draws the node as (drawn_type),
+    # its first letter lowercased, and the node's position: `switch_0_1`,
+    # `checkBox_0_2`, `selectBox_0_3`, `textField_0_4`, `view_0_5`; a Radio's
+    # `radio_0_2_1` is the same name. 4f's ruling (on
+    # sjui-codegen-state-declarations-collide-by-name, 1.9.0): the viewId of an
+    # id-less node was a per-kind word that differed per path (`toggle`,
+    # `switch`, `selectBox`, `selectbox`, `""`), the same for every node of a
+    # kind. `path` defaults to the node's stamp, else `0` (its own root).
+    def view_id(node, path = nil)
+      return node['id'] if node['id']
+
+      type = drawn_type(node['type'].to_s)
+      "#{type[0].to_s.downcase}#{type[1..]}_#{path || node[KEY] || '0'}"
+    end
+
+    # The type a renderer draws a spelling as. A stand-in, by the same rule,
+    # for JsonUIShared::TypeSynonyms.drawn_type (40's helper, not on rel yet —
+    # replace this with it when it lands): a section of
+    # attribute_definitions.json that names `_alias_of` draws as that section
+    # (Toggle → Switch, EditText → TextField, Check → CheckBox); a synonym in
+    # type_synonyms.json draws as its `render_as`, else its `canonical`
+    # section (Picker → SelectBox, Text → Label, CircleImage → CircleImage);
+    # any other spelling — a declared section, an app's own component — as it
+    # is written. Both tables sit beside this file in every copy.
+    def drawn_type(type)
+      alias_of = definitions.dig(type, '_alias_of')
+      return alias_of if alias_of.is_a?(String)
+
+      entry = synonyms[type]
+      return entry['render_as'] || entry['canonical'] if entry.is_a?(Hash)
+
+      type
+    end
+
+    def definitions
+      @definitions ||= read_table('attribute_definitions.json')
+    end
+
+    def synonyms
+      @synonyms ||= (read_table('type_synonyms.json')['synonyms'] || {})
+    end
+
+    def read_table(name)
+      path = File.join(__dir__, name)
+      File.exist?(path) ? JSON.parse(File.read(path, encoding: 'UTF-8')) : {}
     end
 
     # The child list positions count over: `child` then `children`, every
