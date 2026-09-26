@@ -124,6 +124,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # Shadow: alpha → shadow, the slot every other component uses. The
+          # outline is the button's own — the declared cornerRadius, or the
+          # default radius the `shape =` argument below draws.
+          shadow_shape = json_data['cornerRadius'] ? nil : 'RoundedCornerShape(Configuration.Button.defaultCornerRadius.dp)'
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_shape))
           # onLongPress: Button's own inner .clickable consumes the down event
           # in the Main pass, so the detector must watch the Initial pass
           # (see ModifierBuilder.build_long_pressable). combinedClickable on

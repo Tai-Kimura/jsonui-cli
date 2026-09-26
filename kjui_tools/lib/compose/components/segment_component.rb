@@ -151,6 +151,21 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → border → corner clip: the View slots between alpha and
+          # padding. All three are declared on `common` and were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
+          # background is the Segment's containerColor above, so the border and
+          # the clip come without it — the clip rounds that colour too, since
+          # the component draws it inside this chain. There is no click here:
+          # the declared onClick is called from each Tab's own selection
+          # (operation_click_call). The Segment carries the tag and each Tab
+          # the `enabled`, so the Segment takes `disabled()` for a UI test to
+          # read.
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_border_and_clip(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
@@ -220,6 +235,11 @@ module KjuiTools
               else
                 # No action if selectedIndex is a static value with no binding
                 code += "\n" + indent("// Static selected index", depth + 3) unless seeded
+              end
+              # The declared onClick, from the tab's own selection, after it
+              # (ModifierBuilder.operation_click_call).
+              if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
+                code += "\n" + indent(click, depth + 3)
               end
               
               code += "\n" + indent("},", depth + 2)
