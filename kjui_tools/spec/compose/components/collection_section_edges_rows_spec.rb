@@ -178,6 +178,10 @@ RSpec.describe 'kjui codegen: a header or footer is a full-width row, the view a
     end
   end
 
+  it 'every route compiles (the compile arm; the run below compiles it again to run it)' do
+    expect(program(EDGE_ROWS_ROUTES.transform_values { |extra| emit(extra) })).to compile_as_kotlin
+  end
+
   it 'on every route that draws a header or footer: each in a full-width row, the view not filled' do
     drawn = run(EDGE_ROWS_ROUTES.transform_values { |extra| emit(extra) })
     # The lazy body, then (after `/`) the eager one.
