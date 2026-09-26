@@ -48,6 +48,21 @@ RSpec.describe 'unknown component type' do
     expect(got).to eq(cases.map { |c| [c['name'], c['expect']] })
   end
 
+  # The case_only rows other paths compare their sentence with (SwiftJsonUI
+  # Dynamic, byte for byte) are this validator's words, written by
+  # UnknownTypeCaseRows: committed as it writes them now.
+  it 'holds the case_only rows as the validator writes them' do
+    require_relative '../support/unknown_type_case_rows'
+    skip 'shared vectors not present in this layout' unless File.exist?(UnknownTypeCaseRows::VECTORS)
+
+    expect(File.read(UnknownTypeCaseRows::VECTORS, encoding: 'UTF-8')).to eq(UnknownTypeCaseRows.render),
+                                                                           'regenerate: ruby -r ./kjui_tools/spec/support/unknown_type_case_rows ' \
+                                                                           "-e 'UnknownTypeCaseRows.write!'"
+    section = JSON.parse(File.read(UnknownTypeCaseRows::VECTORS, encoding: 'UTF-8'))['case_only']
+    expect(section['rows'].size).to be > 200
+    expect(section['not_drawn']['swift_dynamic']).not_to be_empty # the declaration the Swift arm derives its exclusions from
+  end
+
   # The candidate comes from TypeSynonyms.case_only_match, the one search
   # every caller asks (4f's ruling: the validator had a search of its own).
   # Byte for byte the sentence its own search made, over what it is asked:
