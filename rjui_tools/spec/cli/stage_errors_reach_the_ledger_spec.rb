@@ -99,12 +99,14 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
   end
 
-  it 'a style that is not there is still said to be not found (the other side of the line above)' do
+  # Ruled after counting the faces: 2167 style references, 0 to no file —
+  # so a missing one is a stage that did not complete.
+  it 'a style that is not there: said, and in the ledger once (every loader that meets it agrees on the file)' do
     dir = project
     layout(dir, 'home', 'style' => 'absent')
     log, exit_code, entries = build(dir)
     expect(log).to include("Style file 'absent' not found")
-    expect([exit_code, entries]).to eq([0, []])
+    expect_incomplete(log, exit_code, entries, 'styles', 'absent.json', 'was not found')
   end
 
   it 'no layouts yet: not a failure, but what an earlier stage could not do still reaches the ledger' do
@@ -186,6 +188,18 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
         expect(converter.send(:load_style, 'broken')).to be_nil
         expect(JsonUI::StageFailures.entries.map { |e| e[:stage] }).to eq(['styles'])
         expect(JsonUI::StageFailures.entries.first[:message]).to include(File.join(File.realpath(dir), 'broken.json')).or include(File.join(dir, 'broken.json'))
+      end
+    end
+
+    # The build merges styles before the converters run, so no build reaches
+    # this path with a missing style; a converter used on its own does.
+    it "the converters' own style loader names a style that is not there" do
+      require_relative '../../lib/react/converters/base_converter'
+      Dir.mktmpdir('rjui_style') do |dir|
+        converter = RjuiTools::React::Converters::BaseConverter.new({ 'type' => 'Label' }, { 'styles_directory' => dir })
+        expect(converter.send(:load_style, 'absent')).to be_nil
+        expect(JsonUI::StageFailures.entries.map { |e| e[:stage] }).to eq(['styles'])
+        expect(JsonUI::StageFailures.entries.first[:message]).to include('absent.json was not found')
       end
     end
   end

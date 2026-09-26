@@ -156,6 +156,14 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       expect(Dir.glob(File.join(dir, '**', 'HomeBinding.swift'))).not_to be_empty # the layout was still built
     end
 
+    it 'a style that is not there: in the ledger, as on SwiftUI' do
+      dir = project('uikit')
+      layout(dir, 'home', 'style' => 'absent')
+      log, exit_code, entries = build(dir)
+      expect(log).to include('Style file not found:')
+      expect_incomplete(log, exit_code, entries, 'styles', 'absent.json', 'was not found')
+    end
+
     it 'a Layouts directory that is not there: a named failure, and not created' do
       %w[uikit swiftui].each do |mode|
         dir = project(mode)
@@ -208,12 +216,14 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
     end
 
-    it 'a style that is not there is still said to be not found (the other side of the line above)' do
+    # Ruled after counting the faces: 2167 style references, 0 to no file —
+    # so a missing one is a stage that did not complete, not a warning only.
+    it 'a style that is not there: said, and in the ledger once' do
       dir = project('swiftui')
       layout(dir, 'home', 'style' => 'absent')
       log, exit_code, entries = build(dir)
       expect(log).to include("Style file 'absent' not found")
-      expect([exit_code, entries]).to eq([0, []])
+      expect_incomplete(log, exit_code, entries, 'styles', 'absent.json', 'was not found', 'drawn without it')
     end
 
     it 'no layouts yet: not a failure, but what an earlier stage could not do still reaches the ledger' do

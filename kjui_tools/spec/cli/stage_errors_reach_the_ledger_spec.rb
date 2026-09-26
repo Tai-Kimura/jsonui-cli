@@ -159,12 +159,18 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     expect(log).to include('Build finished with 1 stage(s) incomplete — see above')
   end
 
-  it 'a style that is not there: said, as sjui and rjui say it (it was drawn without it and nothing printed)' do
+  # Ruled after counting the faces: 2167 style references, 0 to no file —
+  # so a missing one is a stage that did not complete. Until 1.8.121 kjui
+  # drew the node without it and printed nothing.
+  it 'a style that is not there: said, and in the ledger once' do
     dir = project
-    layout(dir, 'home', 'style' => 'absent')
+    File.write(File.join(dir, SRC, 'assets/Layouts/home.json'), JSON.generate(
+      'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent',
+      'child' => %w[a b].map { |id| { 'type' => 'Label', 'id' => id, 'text' => id, 'style' => 'absent' } }
+    ))
     log, exit_code, entries = build(dir)
     expect(log).to include("Style file 'absent' not found: ")
-    expect([exit_code, entries]).to eq([0, []])
+    expect_incomplete(log, exit_code, entries, 'styles', 'absent.json', 'was not found')
   end
 
   it 'attribute_definitions.json missing (a copy that left its link dangling): in the ledger once' do
