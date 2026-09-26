@@ -9,7 +9,7 @@ require_relative '../../support/kotlin_compiler'
 # time, a literal `false` jumps (`scrollToItem`), absent or `true` animates
 # (the declared default, "default: true"). sjui calls `scrollProxy.scrollTo`
 # outside `withAnimation` for a literal false and rjui passes `false` to
-# scrollCollectionToItem. Until 1.8.121 (measured on 8e4ea3ea, 2026-09-26)
+# scrollCollectionToCell. Until 1.8.121 (measured on 8e4ea3ea, 2026-09-26)
 # kjui read only the binding, so a literal false still animated on both
 # paths. Ticket collection-attributes-declared-but-not-drawn-on-some-paths.
 #
@@ -74,7 +74,13 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
         fun rememberLazyListState(): LazyListState = LazyListState()
     } } } }
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
-    class Data(val target: Int? = null, val animated: Boolean = true)
+    // The items the scroll resolves a cell in (jsonui-cli 1.9.0: scrollTo
+    // names a cell, collection_scroll_to_cell_spec.rb).
+    class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
+    class CollectionDataSection(val header: Any? = null, val footer: Any? = null, val cells: CellData? = null) {
+        class CellData(val data: List<Map<String, Any>>)
+    }
+    class Data(val target: Int? = null, val animated: Boolean = true, val rows: CollectionDataSource? = null)
   KOTLIN
 
   # A bound Bool declared without a default is `Boolean?` in the data model
@@ -91,7 +97,7 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
       expect(block).to include('(data.animated ?: false)'), block
       "@Composable fun nullable#{index}(data: NullableData) {\n#{block}}"
     end
-    expect("#{SCROLL_ANIMATED_STUBS}\nclass NullableData(val target: Int? = null, val animated: Boolean? = null)\n" \
+    expect("#{SCROLL_ANIMATED_STUBS}\nclass NullableData(val target: Int? = null, val animated: Boolean? = null, val rows: CollectionDataSource? = null)\n" \
            "#{functions.join("\n\n")}\n").to compile_as_kotlin
   end
 
