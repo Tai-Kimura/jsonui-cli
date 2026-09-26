@@ -55,8 +55,42 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         expect(gaps(convert(extra.merge('lineSpacing' => 0, 'columnSpacing' => 0, 'itemSpacing' => 5)))).to eq(%w[0 0 0])
       end
 
-      it 'sectionSpacing (lineSpacing\'s alias, as an unnormalised layout spells it) spaces the blocks' do
-        expect(gaps(convert(extra.merge('sectionSpacing' => 12, 'lineSpacing' => 4)))).to eq(%w[0 4 12])
+      # sectionSpacing is lineSpacing's alias (SSoT `aliases`), as an
+      # unnormalised layout may spell it: alone it is lineSpacing; with both,
+      # the canonical lineSpacing wins (4f ruling 2026-09-26, round 6 — the
+      # blocks took sectionSpacing until jsonui-cli 1.9.0).
+      it 'sectionSpacing alone is lineSpacing: the lines and the blocks' do
+        expect(gaps(convert(extra.merge('sectionSpacing' => 12)))).to eq(%w[0 12 12])
+      end
+
+      it 'sectionSpacing and lineSpacing: the canonical lineSpacing wins' do
+        expect(gaps(convert(extra.merge('sectionSpacing' => 12, 'lineSpacing' => 4)))).to eq(%w[0 4 4])
+      end
+    end
+  end
+
+  # The alias on the other routes: the rows (vertical stack, grid) and the
+  # scroll axis (horizontal) read lineSpacing, else sectionSpacing — until
+  # jsonui-cli 1.9.0 the vertical and grid routes did not read the alias.
+  describe 'sectionSpacing on the other routes' do
+    LINE_ALIAS_ROUTES = {
+      'stack' => [{}, /^\s*spacing: (\S+),$/],
+      'grid' => [{ 'columns' => 2 }, /LazyVGrid\(columns: .*, spacing: (\S+)\) \{/],
+      'lazy:none' => [{ 'lazy' => 'none' }, /VStack\(alignment: \.\w+, spacing: (\S+)\) \{/],
+      'horizontal' => [{ 'layout' => 'horizontal' }, /^\s*spacing: (\S+),$/]
+    }.freeze
+
+    def line_gap(extra, pattern)
+      code = described_class.new({ 'type' => 'Collection', 'id' => 'rows', 'items' => '@{rows}',
+                                   'sections' => [{ 'cell' => 'ACell' }] }.merge(extra)).convert.to_s
+      code[pattern, 1] || raise("no spacing in:\n#{code}")
+    end
+
+    LINE_ALIAS_ROUTES.each do |route, (extra, pattern)|
+      it "#{route}: sectionSpacing alone spaces the rows; with lineSpacing, lineSpacing does" do
+        expect(line_gap(extra.merge('sectionSpacing' => 12), pattern)).to eq('12')
+        expect(line_gap(extra.merge('sectionSpacing' => 12, 'lineSpacing' => 4), pattern)).to eq('4')
+        expect(line_gap(extra.merge('itemSpacing' => 6), pattern)).to eq('6')
       end
     end
   end

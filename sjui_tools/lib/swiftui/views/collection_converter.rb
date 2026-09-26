@@ -110,7 +110,7 @@ module SjuiTools
         end
 
         def grid_row_spacing
-          @component['lineSpacing'] || @component['itemSpacing'] || 0
+          line_spacing_value || @component['itemSpacing'] || 0
         end
 
         # A horizontal Collection (4f ruling, 2026-09-26, the rule SwiftJsonUI
@@ -139,7 +139,7 @@ module SjuiTools
         # columnSpacing, else itemSpacing, else 0. The single-lane stack read
         # itemSpacing, then columnSpacing, then lineSpacing.
         def horizontal_scroll_spacing
-          @component['lineSpacing'] || @component['sectionSpacing'] || @component['itemSpacing'] || 0
+          line_spacing_value || @component['itemSpacing'] || 0
         end
 
         def horizontal_lane_spacing
@@ -504,7 +504,7 @@ module SjuiTools
                       end
 
                       # Grid for cells
-                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
+                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
                       indent do
                         if cell_view_name
                           add_line "if let cellsData = section.cells?.data {"
@@ -555,7 +555,7 @@ module SjuiTools
                   apply_header_footer_padding
                 end
                 
-                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
+                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
                 indent do
                   generate_collection_content(cell_class_name, id)
                 end
@@ -788,7 +788,7 @@ module SjuiTools
           elsif is_horizontal
             generate_non_lazy_horizontal(has_sections, cell_class_name)
           elsif has_sections && columns == 1
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
             indent do
@@ -798,7 +798,7 @@ module SjuiTools
             apply_insets_only
           elsif columns == 1 && !has_sections
             # Legacy single column without sections — plain VStack with ForEach
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
             indent do
@@ -893,7 +893,7 @@ module SjuiTools
 
           if has_sections
             property_name = extract_property_name(@component['items'])
-            section_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            section_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{section_spacing}) {"
             indent do
@@ -983,18 +983,28 @@ module SjuiTools
 
         # A flow's three gaps (attribute_semantics.json -> collectionSpacing):
         # between cells on a line columnSpacing, else itemSpacing; between
-        # lines lineSpacing, else itemSpacing; between the section blocks as
-        # between lines (sectionSpacing is lineSpacing's alias). 0 when none
-        # is declared, a declared 0 included. Until jsonui-cli 1.9.0 each
-        # undeclared gap was 8, and the section blocks did not fall back to
-        # itemSpacing.
+        # lines lineSpacing (line_spacing_value), else itemSpacing; between
+        # the section blocks as between lines. 0 when none is declared, a
+        # declared 0 included. Until jsonui-cli 1.9.0 each undeclared gap was
+        # 8, and the section blocks did not fall back to itemSpacing.
         def collection_flow_spacing
-          line = @component['lineSpacing'] || @component['itemSpacing'] || 0
+          line = line_spacing_value || @component['itemSpacing'] || 0
           {
             cells: @component['columnSpacing'] || @component['itemSpacing'] || 0,
             lines: line,
-            sections: @component['sectionSpacing'] || line
+            sections: line
           }
+        end
+
+        # lineSpacing as declared: `sectionSpacing` is its alias (SSoT
+        # `aliases`), read when lineSpacing is absent — an unnormalised layout
+        # may spell it either way. With both, the canonical lineSpacing wins
+        # (4f ruling 2026-09-26, round 6), as SwiftJsonUI Dynamic's typed
+        # attribute reads it. Until jsonui-cli 1.9.0 the flow's section
+        # blocks took sectionSpacing over lineSpacing, and the vertical and
+        # grid routes did not read the alias at all.
+        def line_spacing_value
+          @component.key?('lineSpacing') ? @component['lineSpacing'] : @component['sectionSpacing']
         end
 
         def generate_non_lazy_flow(has_sections)
@@ -2090,7 +2100,7 @@ module SjuiTools
         def collection_stack_view_params(axis:)
           if axis == :vertical
             shows_indicators = @component['showsVerticalScrollIndicator'] != false
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             alignment_param = "horizontalAlignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}"
           else
             shows_indicators = @component['showsHorizontalScrollIndicator'] != false
