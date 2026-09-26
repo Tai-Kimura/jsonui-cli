@@ -1269,6 +1269,19 @@ module KjuiTools
           modifiers.concat(padding_modifiers) unless flow_scrolls_if_parent_bounded?(json_data)
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
+          # A flow per section: with two or more sections that draw cells,
+          # each section's cells wrap in a FlowRow of their own, one under the
+          # other, spaced by the line spacing (its alias sectionSpacing) — as
+          # sjui draws a FlowLayout per section in a VStack. One FlowRow held
+          # every section, so section 2 continued section 1's last row
+          # (measured on 6bdb6aba, 2026-09-26). The node's own modifiers stay
+          # on the outer container, a Column then.
+          items_bound = json_data['items'].is_a?(String) && json_data['items'].match?(/@\{([^}]+)\}/)
+          per_section = items_bound && sections.count { |section| section['cell'] } > 1
+          container = per_section ? 'Column' : 'FlowRow'
+          flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp), " \
+                              "verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)"
+
           outer_depth = depth
           if flow_scrolls_if_parent_bounded?(json_data)
             # matchParent: the node's own modifiers (address, size, background,
@@ -1282,17 +1295,19 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth)
             code += "\n" + indent(") {", depth)
             depth += 1
-            code += "\n" + indent("FlowRow(", depth)
+            code += "\n" + indent("#{container}(", depth)
             code += "\n" + indent("modifier = (if (constraints.hasBoundedHeight) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth())", depth + 1)
             padding_modifiers.each { |mod| code += "\n" + indent(indent(mod, 1), depth + 1) }
             code += "\n" + indent(indent(FLOW_OVERFLOW_MODIFIER, 1), depth + 1)
           else
             modifiers << FLOW_OVERFLOW_MODIFIER
-            code = indent("FlowRow(", depth)
+            code = indent("#{container}(", depth)
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           end
-          code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
-          code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)", depth + 1)
+          unless per_section
+            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
+          end
+          code += (per_section ? ",\n" : "\n") + indent("verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)", depth + 1)
           code += "\n" + indent(") {", depth)
 
           items_property = json_data['items']
@@ -1317,6 +1332,8 @@ module KjuiTools
               section_var = use_val_if ? "section#{index}" : 'section'
               cell_data_var = use_val_if ? "cellData#{index}" : 'cellData'
 
+              # The loop's depth: one deeper inside the section's own FlowRow.
+              ld = per_section ? depth + 4 : depth + 3
               if use_val_if
                 code += "\n" + indent("val #{section_var} = #{sections_access(property_name)}.getOrNull(#{index})", depth + 1)
                 code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
@@ -1324,19 +1341,21 @@ module KjuiTools
                 code += "\n" + indent("if (#{cell_data_var} != null) {", depth + 2)
                 required_imports&.add(:remember_state)
                 code += "\n" + indent("val enrichedData#{index} = remember(#{cell_data_var}.data) { com.kotlinjsonui.utils.CellIdGenerator.enrichCellIds(#{cell_data_var}.data, \"#{cell_id_property}\") }", depth + 3)
-                code += "\n" + indent("enrichedData#{index}.forEachIndexed { cellIndex, item ->", depth + 3)
+                code += "\n" + indent("FlowRow(modifier = Modifier.fillMaxWidth(), #{flow_arrangements}) {", depth + 3) if per_section
+                code += "\n" + indent("enrichedData#{index}.forEachIndexed { cellIndex, item ->", ld)
               else
                 code += "\n" + indent("#{sections_access(property_name)}.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
                 code += "\n" + indent("#{section_var}.cells?.let { #{cell_data_var} ->", depth + 2)
-                code += "\n" + indent("#{cell_data_var}.data.forEachIndexed { cellIndex, item ->", depth + 3)
+                code += "\n" + indent("FlowRow(modifier = Modifier.fillMaxWidth(), #{flow_arrangements}) {", depth + 3) if per_section
+                code += "\n" + indent("#{cell_data_var}.data.forEachIndexed { cellIndex, item ->", ld)
               end
 
               if cell_id_property
-                code += "\n" + indent("val cellId = (item[\"cellId\"] as? String) ?: (item[\"#{cell_id_property}\"] as? String) ?: cellIndex.toString()", depth + 4)
-                code += "\n" + indent("key(cellId) {", depth + 4)
-                inner_depth = depth + 5
+                code += "\n" + indent("val cellId = (item[\"cellId\"] as? String) ?: (item[\"#{cell_id_property}\"] as? String) ?: cellIndex.toString()", ld + 1)
+                code += "\n" + indent("key(cellId) {", ld + 1)
+                inner_depth = ld + 2
               else
-                inner_depth = depth + 4
+                inner_depth = ld + 1
               end
 
               cell_class = cell_class_name(cell_view_name)
@@ -1355,10 +1374,11 @@ module KjuiTools
               code += "\n" + indent(")", inner_depth)
 
               if cell_id_property
-                code += "\n" + indent("}", depth + 4)
+                code += "\n" + indent("}", ld + 1)
               end
 
-              code += "\n" + indent("}", depth + 3)
+              code += "\n" + indent("}", ld)
+              code += "\n" + indent("}", depth + 3) if per_section
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
             end
