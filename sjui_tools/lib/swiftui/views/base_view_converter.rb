@@ -975,15 +975,27 @@ module SjuiTools
           gated_handler_call(calls.join('; '))
         end
 
-        # A control's binding with `call` after each of the control's own
-        # writes — the user's operation; the view model's change never goes
-        # through the control's binding. The binding itself when there is no
-        # call.
-        def operation_binding(binding_expr, call)
-          return binding_expr if call.nil?
+        # A control's binding that reports the user's operation after each of
+        # the control's own writes: `value_call` (onValueChange, on
+        # `newValue`) when the write changed the value, then `click`
+        # (operation_click_call). The view model's change never goes through
+        # the control's binding, so it reports nothing — 4f's ruling: the
+        # control's update, then onValueChange, then onClick, all from the
+        # user's operation, as kjui calls them. The bound controls observed
+        # the value with `.onChange(of:)` instead, which ran on the next update
+        # — after the click — and for the view model's writes too; the unbound
+        # ones observed `data.<state>`, a property the Data struct does not
+        # have, and did not compile. The binding itself when there is no call.
+        def operation_binding(binding_expr, click, value_call = nil)
+          return binding_expr if click.nil? && value_call.nil?
 
-          "SwiftUI.Binding(get: { #{binding_expr}.wrappedValue }, " \
-            "set: { #{binding_expr}.wrappedValue = $0; #{call} })"
+          body = ["#{binding_expr}.wrappedValue = newValue"]
+          if value_call
+            body.unshift("let changed = newValue != #{binding_expr}.wrappedValue")
+            body << "if changed { #{value_call} }"
+          end
+          body << click if click
+          "SwiftUI.Binding(get: { #{binding_expr}.wrappedValue }, set: { newValue in #{body.join('; ')} })"
         end
 
         # A handler call that a component makes from its own operation — a
