@@ -460,4 +460,16 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       KOTLIN
     end
   end
+
+  # fontSize is declared on Radio; the options of an `items` group drew the
+  # colour only — the single radio's label reads both (label_font_args).
+  describe 'the options of an items group take fontSize' do
+    it 'draws each option label with the declared size and colour' do
+      code = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a b],
+                                        'fontSize' => 18, 'fontColor' => '#FF0000' }, 0, Set.new)
+      expect(code.scan(/Text\("[ab]", color = [^\n]*fontSize = 18\.sp\)/).size).to eq(2)
+      bare = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a] }, 0, Set.new)
+      expect(bare).to include('Text("a", color = Color.Black)')
+    end
+  end
 end

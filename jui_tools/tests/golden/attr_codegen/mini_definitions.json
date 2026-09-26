@@ -66,6 +66,20 @@
       ],
       "description": "Hide view"
     },
+    "gravity": {
+      "type": [
+        "string",
+        "array"
+      ],
+      "enum": [
+        "top",
+        "bottom",
+        "left",
+        "right",
+        "center"
+      ],
+      "description": "One value or a list of them (element vocabulary)."
+    },
     "bind": {
       "type": "binding",
       "description": "Two-way binding for the component's primary value (mini fixture of common.bind.primaryValue).",
@@ -145,6 +159,64 @@
     "shadow": {
       "type": "object",
       "description": "Label-specific shadow override (object only)"
+    },
+    "insetEdges": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "top",
+          "bottom",
+          "leading",
+          "trailing"
+        ]
+      },
+      "description": "A list of declared edges (item vocabulary)."
+    },
+    "underline": {
+      "type": [
+        "boolean",
+        "object"
+      ],
+      "properties": {
+        "lineStyle": {
+          "type": "string",
+          "enum": [
+            "Single",
+            "Double",
+            "None"
+          ]
+        }
+      },
+      "description": "An object with an enum inside (nested vocabulary)."
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "textAlign": {
+            "type": "string",
+            "enum": [
+              "Left",
+              "Right"
+            ]
+          },
+          "underline": {
+            "type": "object",
+            "properties": {
+              "lineStyle": {
+                "type": "string",
+                "enum": [
+                  "Single",
+                  "None"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "description": "A list of objects with enums inside (nested vocabulary through items)."
     }
   },
   "Text": {

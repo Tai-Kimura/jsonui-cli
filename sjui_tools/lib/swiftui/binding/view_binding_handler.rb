@@ -140,8 +140,15 @@ module SjuiTools
           # emitting for.
           when 'tintColor'
             ".tint(#{get_swiftui_color(value)})"
+          # tapBackground and highlightBackground are states, not the
+          # background: a Button draws them pressed (StateAwareButtonView), a
+          # node with a tap pressed (base_view_converter#background_line), a
+          # View while `highlighted` holds (apply_highlighted_to_bag), each
+          # reading the bound spelling itself. This emitted `.background(…)`
+          # into the background slot, which replaced the node's background
+          # with the pressed colour at rest, permanently.
           when 'tapBackground', 'highlightBackground'
-            ".background(#{get_swiftui_color(value)})"
+            nil
           # Border attributes are NOT handled here, for the reasons padding
           # is not (above): `BaseViewConverter#border_overlay` owns the whole
           # rule — what summons a border, what colour it falls back to, and

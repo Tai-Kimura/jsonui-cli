@@ -5,6 +5,7 @@ require_relative '../helpers/visibility_helper'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -392,9 +393,9 @@ module KjuiTools
 
           # Text alignment
           highlight_align = if highlight && highlight_condition
-                              compose_text_align(highlight[:text_align])
+                              compose_text_align(highlight[:text_align], 'Label', %w[highlightAttributes textAlign])
                             end
-          base_align = compose_text_align(json_data['textAlign'])
+          base_align = compose_text_align(json_data['textAlign'], json_data['type'])
 
           if highlight_align && always_highlighted
             required_imports&.add(:text_align)
@@ -409,7 +410,7 @@ module KjuiTools
             )
           elsif json_data['textAlign']
             required_imports&.add(:text_align)
-            if (align = compose_text_align(json_data['textAlign']))
+            if (align = compose_text_align(json_data['textAlign'], json_data['type']))
               component_code += ",\n" + indent("textAlign = #{align}", depth + 1)
             end
           elsif json_data['centerHorizontal']
@@ -481,7 +482,7 @@ module KjuiTools
           # value untouched — matches the original silent-skip semantics
           # for those modes.
           if json_data['lineBreakMode']
-            case json_data['lineBreakMode'].downcase
+            case JsonUIShared::EnumSpelling.lowered(json_data['lineBreakMode'], 'Label', 'lineBreakMode')
             when 'clip'
               overflow_value = 'TextOverflow.Clip'
             when 'tail', 'word'
@@ -551,7 +552,10 @@ module KjuiTools
         # ruling keeps open on every platform.
         def self.decoration_on?(value)
           return false if value.nil? || value == false
-          return value['lineStyle'].to_s.casecmp('none') != 0 if value.is_a?(Hash) && value.key?('lineStyle')
+          # `lineStyle` by its declared spelling (Label.underline / .strikethrough
+          # .lineStyle — the same four, Single / Double / Thick / None), case and
+          # all (1.9.0): an undeclared one is the default, a single line.
+          return JsonUIShared::EnumSpelling.lowered(value['lineStyle'], 'Label', %w[underline lineStyle]) != 'none' if value.is_a?(Hash) && value.key?('lineStyle')
 
           true
         end
@@ -564,7 +568,7 @@ module KjuiTools
         def self.decoration_line_expression(value, required_imports, fallback_color_expr)
           return nil unless value.is_a?(Hash) && decoration_on?(value)
 
-          style = value['lineStyle'].to_s.downcase
+          style = JsonUIShared::EnumSpelling.lowered(value['lineStyle'], 'Label', %w[underline lineStyle]).to_s
           style = 'single' unless %w[double thick].include?(style)
           spelling = value['color']
           has_color = !(spelling.nil? || spelling.to_s.empty?)
@@ -592,14 +596,18 @@ module KjuiTools
           'left' => 'TextAlign.Start'
         }.freeze
 
-        def self.compose_text_align(value)
+        # *section*: the node's type — Button declares Left / Center / Right
+        # only.
+        # *attribute*: a path for the highlight's own declaration
+        # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        def self.compose_text_align(value, section = 'Label', attribute = 'textAlign')
           return nil unless value.is_a?(String)
 
           # A static value outside the vocabulary still emits nothing; a bound
           # one needs an exhaustive `else` for the `when` to compile, and
           # `Unspecified` is Compose's own "no opinion" value.
           Helpers::BoundValue.enum(value, TEXT_ALIGN_MAPPING,
-                                   bound_default: 'TextAlign.Unspecified', lowercase: true)
+                                   bound_default: 'TextAlign.Unspecified', declared: [section || 'Label', attribute])
         end
 
         # `textShadow` is `{ color:, blur:, offset: [x, y] }` (a bare string is
@@ -721,7 +729,7 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            align = compose_text_align(json_data['textAlign'])
+            align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
           end
 
@@ -934,7 +942,7 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            align = compose_text_align(json_data['textAlign'])
+            align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
           end
 

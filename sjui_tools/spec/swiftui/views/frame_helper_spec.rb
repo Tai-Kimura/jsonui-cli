@@ -3,12 +3,17 @@
 require 'swiftui/views/frame_helper'
 require 'swiftui/views/template_helper'
 require 'swiftui/views/modifier_bag'
+require 'swiftui/views/color_helper'
 
 RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
   let(:helper_class) do
     Class.new do
       include SjuiTools::SwiftUI::Views::FrameHelper
       include SjuiTools::SwiftUI::Views::TemplateHelper
+      # size_to_swiftui is ColorHelper's — the host takes the real one rather
+      # than a copy written here (the copy returned numbers where the method
+      # returns their string form).
+      include SjuiTools::SwiftUI::Views::ColorHelper
 
       attr_accessor :component
 
@@ -36,14 +41,6 @@ RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
         lines
       end
 
-      def size_to_swiftui(size)
-        case size
-        when 'matchParent' then '.infinity'
-        when 'wrapContent' then nil
-        when Integer, Float then size
-        else size
-        end
-      end
     end
   end
 

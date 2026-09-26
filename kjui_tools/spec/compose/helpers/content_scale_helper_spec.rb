@@ -40,7 +40,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ContentScaleHelper do
 
   it 'treats fill and scaleToFill as the stretch' do
     expect(described.scale_expression('fill')).to eq('ContentScale.FillBounds')
-    expect(described.scale_expression('scaletofill')).to eq('ContentScale.FillBounds')
+    expect(described.scale_expression('ScaleToFill')).to eq('ContentScale.FillBounds')
   end
 
   it 'draws the positional modes unscaled' do

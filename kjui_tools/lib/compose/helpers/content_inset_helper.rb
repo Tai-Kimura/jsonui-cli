@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'bound_value'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -40,7 +41,7 @@ module KjuiTools
         # PaddingValues expression, or nil when nothing should be emitted.
         # `horizontal:` picks the axis for `scrollableAxes`.
         def safe_area_padding(value, horizontal: false)
-          case value.to_s.downcase
+          case JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior')
           when 'always', 'automatic'
             FULL
           when 'scrollableaxes'
@@ -59,7 +60,7 @@ module KjuiTools
           return [] unless adjusts?(value)
 
           keys = %i[window_insets]
-          keys << :window_insets_sides if value.to_s.downcase == 'scrollableaxes'
+          keys << :window_insets_sides if JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior') == 'scrollableaxes'
           keys
         end
       end

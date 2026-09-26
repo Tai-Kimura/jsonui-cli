@@ -8,6 +8,8 @@ package com.kotlinjsonui.dynamic.generated
 data class CommonAttributes(
     /** Two-way binding for the component's primary value (mini fixture of common.bind.primaryValue). */
     val bind: AttrValue<Any>? = null,
+    /** One value or a list of them (element vocabulary). [accepts: string | array] */
+    val gravity: Any? = null,
     /** Hide view */
     val hidden: AttrValue<Boolean>? = null,
     /** Unique identifier for the component */
@@ -29,14 +31,22 @@ data class CommonAttributes(
         GONE("gone");
 
         companion object {
-            /** Case-insensitive match against the declared values. */
-            fun from(raw: String): Visibility? = when (raw.lowercase()) {
+            /** Every spelling this attribute accepts, as declared (values and valueAliases keys) — case-sensitive. */
+            val declaredSpellings: List<String> = listOf("visible", "invisible", "gone")
+
+            /** The declared spelling, case and all (4f's ruling, 1.9.0). */
+            fun from(raw: String): Visibility? = when (raw) {
                 "visible" -> VISIBLE
                 "invisible" -> INVISIBLE
                 "gone" -> GONE
                 else -> null
             }
         }
+    }
+
+    object Gravity {
+        /** The spellings each value of `gravity` is declared as — it holds one or a list of them, so it has no enum type of its own — case-sensitive. */
+        val declaredSpellings: List<String> = listOf("top", "bottom", "left", "right", "center")
     }
 
     companion object {
@@ -46,6 +56,7 @@ data class CommonAttributes(
          */
         val declaredAttributes: Set<String> = setOf(
             "bind",
+            "gravity",
             "hidden",
             "id",
             "onClick",
@@ -74,6 +85,7 @@ data class CommonAttributes(
          */
         fun parse(json: Map<String, Any?>, canonicalOnly: Boolean = false): CommonAttributes = CommonAttributes(
             bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind")),
+            gravity = AttrCoerce.lookup(json, "gravity"),
             hidden = AttrCoerce.attrValue(AttrCoerce.lookup(json, "hidden")) { AttrCoerce.boolean(it) },
             id = AttrCoerce.string(AttrCoerce.lookup(json, "id")),
             onClick = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "onClick")),
@@ -88,7 +100,8 @@ data class CommonAttributes(
             (raw as? String)?.let { s ->
                 Visibility.from(s)?.let { return AttrEnum.Known(it) }
             }
-            AttrWarnings.emit("common.visibility: unknown enum value '$raw'")
+            val near = (raw as? String)?.let { s -> Visibility.declaredSpellings.firstOrNull { it.equals(s, ignoreCase = true) } }
+            AttrWarnings.emit("common.visibility: unknown enum value '$raw'" + (near?.let { " — did you mean '$it'?" } ?: ""))
             return AttrEnum.Unknown(raw)
         }
     }

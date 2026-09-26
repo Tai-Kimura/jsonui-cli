@@ -40,7 +40,7 @@ module SjuiTools
             end
             
             # iconPosition
-            case iconPosition.downcase
+            case JsonUIShared::EnumSpelling.lowered(iconPosition, 'IconLabel', 'iconPosition')
             when 'top'
               add_line "iconPosition: .top,"
             when 'right'

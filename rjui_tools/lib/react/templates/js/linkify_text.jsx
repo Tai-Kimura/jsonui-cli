@@ -56,7 +56,8 @@ export const LinkifyText = React.forwardRef(({
   tabIndex,
   onKeyDown,
   "data-testid": dataTestid,
-  "data-tag": dataTag
+  "data-tag": dataTag,
+  linkColor
 }, ref) => (
   // whitespace-pre-line preserves newlines carried by bound values — the
   // literal path used to lose them too, so both shapes get it here.
@@ -75,12 +76,12 @@ export const LinkifyText = React.forwardRef(({
   >
     {segment(text).map((seg, i) => {
     if (seg.kind === "url") {
-      return <a key={i} href={seg.value} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+      return <a key={i} href={seg.value} target="_blank" rel="noopener noreferrer" className={LINK_CLASS} style={linkColor ? { color: linkColor } : void 0}>
             {seg.value}
           </a>;
     }
     if (seg.kind === "phone") {
-      return <a key={i} href={telHref(seg.value)} className={LINK_CLASS}>
+      return <a key={i} href={telHref(seg.value)} className={LINK_CLASS} style={linkColor ? { color: linkColor } : void 0}>
             {seg.value}
           </a>;
     }

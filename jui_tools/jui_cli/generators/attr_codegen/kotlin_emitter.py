@@ -28,11 +28,13 @@ from ...core.comment_safety import sanitize_block_comment
 from ...core.type_mapper import TypeMapper
 from .model import Attribute, AttrKind, AttrModel, Component, format_default, merged_alias_map
 from .swift_emitter import (
+    _nested_tree,
     _pascal,
     _split_words,
     dimension_type_name,
+    declared_spellings,
     enum_cases,
-    enum_ci_cases,
+    enum_exact_cases,
 )
 
 PACKAGE = "com.kotlinjsonui.dynamic.generated"
@@ -379,6 +381,12 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
     for attr in enums:
         parts.extend(_enum_decl(attr))
         parts.append("")
+    for attr in (a for a in comp.attrs if a.element_spellings):
+        parts.extend(_element_spellings_decl(attr))
+        parts.append("")
+    for attr in (a for a in comp.attrs if a.nested_spellings):
+        parts.extend(_nested_spellings_decl(attr))
+        parts.append("")
 
     parts.append("    companion object {")
     parts.extend(_metadata_decls(comp, model))
@@ -460,7 +468,7 @@ def _metadata_decls(comp: Component, model: AttrModel) -> list[str]:
 
 
 def _enum_decl(attr: Attribute) -> list[str]:
-    """Kotlin enum with a case-insensitive `from(raw)` mapping.
+    """Kotlin enum with a `from(raw)` mapping by the declared spelling.
 
     Legacy value spellings that merge into one entry after identifier
     derivation (e.g. `"flow"` / `"Flow"`) all map to the same entry in
@@ -477,11 +485,15 @@ def _enum_decl(attr: Attribute) -> list[str]:
     lines += [
         "",
         "        companion object {",
-        "            /** Case-insensitive match against the declared values. */",
-        f"            fun from(raw: String): {type_name}? = when (raw.lowercase()) {{",
+        "            /** Every spelling this attribute accepts, as declared (values and valueAliases keys) — case-sensitive. */",
+        "            val declaredSpellings: List<String> = listOf("
+        + ", ".join(_kotlin_str(v) for v in declared_spellings(attr.enum_values, attr.value_alias_map)) + ")",
+        "",
+        "            /** The declared spelling, case and all (4f's ruling, 1.9.0). */",
+        f"            fun from(raw: String): {type_name}? = when (raw) {{",
     ]
-    for name, lowered in enum_ci_cases(attr.enum_values, _entry_name, attr.value_alias_map):
-        rendered = ", ".join(_kotlin_str(v) for v in lowered)
+    for name, spellings in enum_exact_cases(attr.enum_values, _entry_name, attr.value_alias_map):
+        rendered = ", ".join(_kotlin_str(v) for v in spellings)
         lines.append(f"                {rendered} -> {name}")
     lines += [
         "                else -> null",
@@ -492,9 +504,40 @@ def _enum_decl(attr: Attribute) -> list[str]:
     return lines
 
 
+def _element_spellings_decl(attr: Attribute) -> list[str]:
+    """The declared spellings of the values an attribute with no enum type
+    of its own holds (one value or a list of them)."""
+    return [
+        f"    object {_pascal(attr.name)} {{",
+        f"        /** The spellings each value of `{attr.name}` is declared as — it holds one or a list of them, so it has no enum type of its own — case-sensitive. */",
+        "        val declaredSpellings: List<String> = listOf("
+        + ", ".join(_kotlin_str(v) for v in attr.element_spellings) + ")",
+        "    }",
+    ]
+
+
+def _nested_spellings_decl(attr: Attribute) -> list[str]:
+    """The enums declared inside an object-typed attribute, as nested
+    objects: `Underline.LineStyle.declaredSpellings`."""
+    def emit(name: str, node: dict, indent: str) -> list[str]:
+        lines = [f"{indent}object {_pascal(name)} {{"]
+        if "__spellings__" in node:
+            where, spellings = node["__spellings__"]
+            lines.append(f"{indent}    /** The spellings `{where}` is declared as — case-sensitive. */")
+            lines.append(f"{indent}    val declaredSpellings: List<String> = listOf({', '.join(_kotlin_str(v) for v in spellings)})")
+        for key, child in node.items():
+            if key != "__spellings__":
+                lines.extend(emit(key, child, indent + "    "))
+        lines.append(f"{indent}}}")
+        return lines
+
+    return emit(attr.name, _nested_tree(attr), "    ")
+
+
 def _enum_parse_func(attr: Attribute) -> list[str]:
-    """Lenient enum parse: case-insensitive match; unknown values warn and
-    pass through as [AttrEnum.Unknown] (never dropped)."""
+    """Lenient enum parse: the declared spelling; unknown values warn — with
+    the declared spelling a value differs from in case only — and pass
+    through as [AttrEnum.Unknown] (never dropped)."""
     type_name = _pascal(attr.name)
     return [
         f"        private fun parse{type_name}(raw: Any?): AttrEnum<{type_name}>? {{",
@@ -502,7 +545,8 @@ def _enum_parse_func(attr: Attribute) -> list[str]:
         "            (raw as? String)?.let { s ->",
         f"                {type_name}.from(s)?.let {{ return AttrEnum.Known(it) }}",
         "            }",
-        f"            AttrWarnings.emit(\"{attr.context}: unknown enum value '$raw'\")",
+        f"            val near = (raw as? String)?.let {{ s -> {type_name}.declaredSpellings.firstOrNull {{ it.equals(s, ignoreCase = true) }} }}",
+        f"            AttrWarnings.emit(\"{attr.context}: unknown enum value '$raw'\" + (near?.let {{ \" — did you mean '$it'?\" }} ?: \"\"))",
         "            return AttrEnum.Unknown(raw)",
         "        }",
     ]

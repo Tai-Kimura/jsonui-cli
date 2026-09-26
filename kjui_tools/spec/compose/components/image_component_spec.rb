@@ -27,15 +27,15 @@ RSpec.describe KjuiTools::Compose::Components::ImageComponent do
       expect(result).to include('.size(100.dp, 50.dp)')
     end
 
-    it 'generates Image with contentMode aspectFill' do
-      json_data = { 'type' => 'Image', 'src' => 'icon_home', 'contentMode' => 'aspectFill' }
+    it 'generates Image with contentMode AspectFill' do
+      json_data = { 'type' => 'Image', 'src' => 'icon_home', 'contentMode' => 'AspectFill' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('contentScale = ContentScale.Crop')
       expect(required_imports).to include(:content_scale)
     end
 
-    it 'generates Image with contentMode aspectFit' do
-      json_data = { 'type' => 'Image', 'src' => 'icon_home', 'contentMode' => 'aspectFit' }
+    it 'generates Image with contentMode AspectFit' do
+      json_data = { 'type' => 'Image', 'src' => 'icon_home', 'contentMode' => 'AspectFit' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('contentScale = ContentScale.Fit')
     end

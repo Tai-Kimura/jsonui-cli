@@ -32,14 +32,11 @@ module KjuiTools
             code = indent("LinearProgressIndicator(", depth)
             code += "\n" + indent("progress = { #{value} },", depth + 1)
           else
-            # Indeterminate progress
-            style = json_data['style'] || 'linear'
-            
-            if style == 'circular' || style == 'large'
-              code = indent("CircularProgressIndicator(", depth)
-            else
-              code = indent("LinearProgressIndicator(", depth)
-            end
+            # Indeterminate progress — a bar, as the determinate one is.
+            # `style` is the style file's name (common.style), not a shape:
+            # Progress declares none, and a style named `circular` / `large`
+            # drew a spinner here while every other path drew a bar.
+            code = indent("LinearProgressIndicator(", depth)
           end
           
           # Build modifiers

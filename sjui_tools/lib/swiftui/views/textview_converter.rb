@@ -303,6 +303,9 @@ module SjuiTools
 
           # Apply margins (external spacing)
           apply_margins
+          # opacity / shadow / clipToBounds / offset / hidden, as apply_modifiers
+          # draws them for every other type.
+          apply_common_decorations
 
           # Apply other modifiers
           alpha_value = attr_with_alias('opacity', 'alpha')
@@ -407,7 +410,7 @@ module SjuiTools
         # Shared spellings with TextField's `input` mapping; UIKit's
         # UIKeyboardType names on the left, SwiftUI's on the right.
         def keyboard_type_to_swiftui(value)
-          case value.to_s.downcase.gsub(/[^a-z]/, '')
+          case JsonUIShared::EnumSpelling.lowered(value, 'TextView', 'keyboardType').to_s.gsub(/[^a-z]/, '')
           when 'default' then '.default'
           when 'number', 'numberpad', 'decimal', 'decimalpad' then '.decimalPad'
           when 'numeric', 'phone', 'phonepad' then '.phonePad'

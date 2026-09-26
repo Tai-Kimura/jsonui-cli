@@ -80,7 +80,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::IconLabelConverter do
       end
 
       it 'handles right position' do
-        component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'right' }
+        component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'Right' }
         converter = described_class.new(component)
         code = converter.convert
 
@@ -88,15 +88,24 @@ RSpec.describe SjuiTools::SwiftUI::Views::IconLabelConverter do
       end
 
       it 'handles top position' do
-        component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'top' }
+        component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'Top' }
         converter = described_class.new(component)
         code = converter.convert
 
         expect(code).to include('iconPosition: .top')
       end
 
+      # IconLabel.iconPosition declares Left / Right / Top / Bottom: a value
+      # is its declared spelling (4f's ruling, 1.9.0) — 'right' is declared
+      # in no case and falls to the default, as an unknown value does.
+      it 'takes the declared spelling only: a lowercase right is the default' do
+        component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'right' }
+        code = described_class.new(component).convert
+        expect(code).not_to include('iconPosition: .right')
+      end
+
       it 'handles bottom position' do
-        component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'bottom' }
+        component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'Bottom' }
         converter = described_class.new(component)
         code = converter.convert
 

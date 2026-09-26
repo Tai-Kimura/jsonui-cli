@@ -3,7 +3,6 @@
 require 'json'
 require 'fileutils'
 require 'set'
-require_relative 'helpers/tint_helper'
 require_relative '../core/config_manager'
 require_relative '../core/project_finder'
 require_relative '../core/logger'
@@ -29,6 +28,7 @@ require_relative 'helpers/modifier_builder'
 require_relative 'helpers/safe_area_edges'
 require_relative 'helpers/resource_resolver'
 require_relative 'helpers/visibility_helper'
+require_relative 'helpers/code_indent'
 require_relative 'helpers/responsive_helper'
 require_relative 'helpers/section_extractor'
 require_relative 'components/text_component'
@@ -406,7 +406,7 @@ module KjuiTools
           # path), so without this the `visibility: "@{...}"` binding on a
           # responsive Embed is silently dropped. Wrap the whole if/else
           # chain in one VisibilityWrapper, mirroring sjui's single wrapper.
-          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type), depth)
+          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type), depth)
         end
 
         # Collection + responsive: same inline treatment as Embed. The
@@ -423,7 +423,7 @@ module KjuiTools
           # carrying `visibility: "@{...}"` (e.g. a grid/list display toggle)
           # would otherwise render unconditionally on Android while iOS
           # honors it. Wrap the inline if/else chain in one VisibilityWrapper.
-          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type), depth)
+          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type), depth)
         end
 
         # Check for responsive component — delegate to responsive generation
@@ -473,7 +473,7 @@ module KjuiTools
         # path applies and `visibility: "@{...}"` on an Embed node actually
         # gates rendering.
         unless %w[View ScrollView GradientView CircleView Blur TabView].include?(component_type)
-          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 
         provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
@@ -619,9 +619,9 @@ module KjuiTools
         return code unless JsonUIShared::TapAccessibility.children(json_data).empty?
 
         @required_imports&.add(:local_interaction_stopped)
-        Helpers::TintHelper.pad("LocalInteractionStopped.current.let { #{Helpers::ModifierBuilder::INTERACTION_CAPTURE} ->", depth) + "\n" +
-          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
-          Helpers::TintHelper.pad('}', depth)
+        Helpers::CodeIndent.pad("LocalInteractionStopped.current.let { #{Helpers::ModifierBuilder::INTERACTION_CAPTURE} ->", depth) + "\n" +
+          Helpers::CodeIndent.shift(code.rstrip, 1) + "\n" +
+          Helpers::CodeIndent.pad('}', depth)
       end
 
       # A node whose `userInteractionEnabled` is false or bound, holding a
@@ -645,9 +645,9 @@ module KjuiTools
                    else
                      "LocalInteractionStopped.current || !#{Helpers::ModifierBuilder.conjunct(Helpers::ModifierBuilder.boolean_expression(value))}"
                    end
-        Helpers::TintHelper.pad("CompositionLocalProvider(LocalInteractionStopped provides (#{provided})) {", depth) + "\n" +
-          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
-          Helpers::TintHelper.pad('}', depth)
+        Helpers::CodeIndent.pad("CompositionLocalProvider(LocalInteractionStopped provides (#{provided})) {", depth) + "\n" +
+          Helpers::CodeIndent.shift(code.rstrip, 1) + "\n" +
+          Helpers::CodeIndent.pad('}', depth)
       end
 
       # Embed + responsive: emit an inline if/else chain that calls
@@ -974,10 +974,10 @@ module KjuiTools
         return code if modifiers.empty?
 
         @required_imports&.add(:box)
-        Helpers::TintHelper.pad('Box(', depth) + Helpers::ModifierBuilder.format(modifiers, depth) + "\n" +
-          Helpers::TintHelper.pad(') {', depth) + "\n" +
-          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
-          Helpers::TintHelper.pad('}', depth)
+        Helpers::CodeIndent.pad('Box(', depth) + Helpers::ModifierBuilder.format(modifiers, depth) + "\n" +
+          Helpers::CodeIndent.pad(') {', depth) + "\n" +
+          Helpers::CodeIndent.shift(code.rstrip, 1) + "\n" +
+          Helpers::CodeIndent.pad('}', depth)
       end
 
       # What a type no case takes emits. A type this tool draws nothing for:
@@ -1036,7 +1036,7 @@ module KjuiTools
 
           # Wrap with VisibilityWrapper if visibility binding is specified
           if json_data
-            code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
+            code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
           end
 
           code

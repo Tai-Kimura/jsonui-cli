@@ -40,7 +40,7 @@ module RjuiTools
 
           layout = attributes['orientation'] || attributes['layout'] ||
                    attributes['scrollDirection'] || 'vertical'
-          layout.to_s.downcase == 'horizontal'
+          JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout') == 'horizontal'
         end
 
         # layout: flow — wrapping layout, packed to the top-left. Unified
@@ -50,7 +50,7 @@ module RjuiTools
         # of the same thing is a wrapping flex row.
         def flow_collection?
           layout = attributes['orientation'] || attributes['layout'] || ''
-          %w[flow leftaligned].include?(layout.to_s.downcase)
+          %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
         end
 
         # A horizontal Collection (4f ruling, 2026-09-26; the rule sjui
@@ -423,7 +423,7 @@ module RjuiTools
           style = attributes['listStyle']
           return [] unless style.is_a?(String) && !style.empty?
 
-          chrome = LIST_STYLE_CHROME[style.downcase] || LIST_STYLE_CHROME['plain']
+          chrome = LIST_STYLE_CHROME[JsonUIShared::EnumSpelling.lowered(style, 'Collection', 'listStyle')] || LIST_STYLE_CHROME['plain']
           chrome + separator_classes
         end
 

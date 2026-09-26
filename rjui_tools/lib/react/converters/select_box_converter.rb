@@ -683,7 +683,7 @@ module RjuiTools
           disabled_attr = build_disabled_attr
 
           # Determine input type from datePickerMode
-          date_picker_mode = attributes['datePickerMode']&.downcase
+          date_picker_mode = JsonUIShared::EnumSpelling.lowered(attributes['datePickerMode'], 'SelectBox', 'datePickerMode')
           input_type = case date_picker_mode
                        when 'time' then 'time'
                        when 'datetime', 'dateandtime' then 'datetime-local'
@@ -814,7 +814,7 @@ module RjuiTools
         # the field takes focus (HTMLInputElement.showPicker). The wheel styles
         # have no web analogue and fall through to the native control.
         def build_date_picker_style_attr
-          style = attributes['datePickerStyle'].to_s.downcase
+          style = JsonUIShared::EnumSpelling.lowered(attributes['datePickerStyle'], 'SelectBox', 'datePickerStyle').to_s
           return '' unless %w[graphical inline].include?(style)
 
           ' onFocus={(e) => e.currentTarget.showPicker?.()}'

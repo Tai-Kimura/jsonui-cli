@@ -15,7 +15,7 @@ module RjuiTools
           onclick_attr = build_onclick_attr
 
           text = convert_text_binding(attributes['text'] || '')
-          icon_position = (attributes['iconPosition'] || 'Left').downcase
+          icon_position = JsonUIShared::EnumSpelling.lowered(attributes['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
           icon_src = get_icon_src
           icon_style = build_icon_style
 
@@ -144,7 +144,7 @@ module RjuiTools
           end
 
           # Icon margin
-          icon_position = (attributes['iconPosition'] || 'Left').downcase
+          icon_position = JsonUIShared::EnumSpelling.lowered(attributes['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
           # 5 is the cross-platform canonical default (IconLabelView.swift and
           # both mobile dynamic converters) — 4 was an rjui-only deviation.
           margin = attributes['iconMargin'] || attributes['spacing'] || 5

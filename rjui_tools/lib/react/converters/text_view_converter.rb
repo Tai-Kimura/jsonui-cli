@@ -71,7 +71,7 @@ module RjuiTools
           elsif (resize_expr = bound_value_expr(resize))
             dynamic_styles['resize'] = resize_expr
           else
-            classes << RESIZE_UTILITIES.fetch(resize.to_s.downcase, 'resize')
+            classes << RESIZE_UTILITIES.fetch(JsonUIShared::EnumSpelling.lowered(resize, 'TextView', 'resize').to_s, 'resize')
           end
 
           # Scrollable
@@ -148,6 +148,10 @@ module RjuiTools
           if attributes['cornerRadius']
             @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
           end
+
+          # tintColor is the cursor's colour here (the accent of the operable
+          # parts — 1.9.0), as on iOS (.tint) and on the TextField.
+          @dynamic_styles['caretColor'] = color_style_expr(attributes['tintColor']) if attributes['tintColor']
 
           # lineBreakMode — same truncation mapping as Label (a textarea shows
           # its own scrollbar rather than truncating, so this only matters for
@@ -314,7 +318,7 @@ module RjuiTools
 
         # UIKeyboardType spellings -> the HTML inputmode vocabulary.
         def map_keyboard_type(value)
-          case value.to_s.downcase.sub(/^uikeyboardtype/, '')
+          case JsonUIShared::EnumSpelling.lowered(value, 'TextView', 'keyboardType')
           when 'numberpad', 'number', 'numbersandpunctuation' then 'numeric'
           when 'decimalpad', 'decimal' then 'decimal'
           when 'phonepad', 'phone' then 'tel'

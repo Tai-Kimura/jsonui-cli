@@ -3,6 +3,7 @@
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative 'constraintlayout_component'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -311,7 +312,7 @@ module KjuiTools
         def self.alignment_as_gravity(alignment)
           return nil unless alignment.is_a?(String)
 
-          ALIGNMENT_GRAVITY[alignment.downcase]
+          ALIGNMENT_GRAVITY[JsonUIShared::EnumSpelling.lowered(alignment, 'common', 'alignment')]
         end
 
         def self.add_gravity_settings(layout, gravity, depth, json_data = {})

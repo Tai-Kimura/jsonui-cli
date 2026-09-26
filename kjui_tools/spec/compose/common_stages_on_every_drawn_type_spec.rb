@@ -224,6 +224,68 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     end
   end
 
+  # tapBackground is the background while pressed, on every node with a tap
+  # (onClick) and on a Button (jsonui-cli 1.9.0). It was read only as the
+  # colour `highlighted` swaps in (`tapBackground ?: highlightBackground`), so a
+  # node without `highlighted` never drew it. Now a type with a click draws it
+  # in its background slot (ModifierBuilder.background_stage), the press
+  # watched by a pointerInput that consumes nothing. A Button draws its own
+  # (ButtonComponent); a control and a text field have no tap. Web is left out:
+  # its page covers its background.
+  describe 'tapBackground' do
+    pressed_red = 'if (isPressed) Color(android.graphics.Color.parseColor("#FF0000"))'
+    label = [{ 'type' => 'Label', 'text' => 'c' }]
+    tappable = {
+      'View' => { 'child' => label }, 'Label' => { 'text' => 'x' }, 'Image' => base['Image'],
+      'NetworkImage' => base['NetworkImage'], 'CircleImage' => base['CircleImage'], 'Progress' => {}, 'Indicator' => {},
+      'ScrollView' => base['ScrollView'], 'SafeAreaView' => base['SafeAreaView'], 'Collection' => base['Collection'],
+      'TabView' => base['TabView'], 'Embed' => base['Embed'], 'GradientView' => base['GradientView'], 'Blur' => {},
+      'IconLabel' => base['IconLabel']
+    }
+    no_tap = %w[Button Switch CheckBox Radio Slider SelectBox Segment Toggle TextField TextView]
+
+    # In the type's own background slot — before the click on most, after it
+    # on a Blur, whose scrim follows its click. The watch consumes nothing, so
+    # the order does not decide what the click or a scroll sees.
+    it 'is the pressed background of every type with a click' do
+      tappable.each do |type, extra|
+        code = emit.call({ 'type' => type, 'onClick' => '@{onTap}', 'tapBackground' => '#FF0000' }.merge(extra))
+        expect(code).to include(pressed_red), "#{type}: #{code}"
+        expect(code).to include('awaitFirstDown(requireUnconsumed = false)'), type
+      end
+    end
+
+    it 'is drawn on no node without a click, under canTap false, disabled, nor on a Button, a control or a text field' do
+      tappable.each do |type, extra|
+        [{}, { 'onClick' => '@{onTap}', 'canTap' => false }, { 'onClick' => '@{onTap}', 'enabled' => false }].each do |gate|
+          code = emit.call({ 'type' => type, 'tapBackground' => '#FF0000' }.merge(extra, gate))
+          expect(code).not_to include('isPressed'), "#{type} #{gate}"
+        end
+      end
+      no_tap.each do |type|
+        code = emit.call({ 'type' => type, 'onClick' => '@{onTap}', 'tapBackground' => '#FF0000' }.merge(base[type] || {}))
+        expect(code).not_to include('isPressed'), type
+      end
+    end
+
+    it 'holds the press to the gates of the click' do
+      code = emit.call('type' => 'Label', 'text' => 'x', 'onClick' => '@{onTap}', 'canTap' => '@{gate}',
+                       'tapBackground' => '#FF0000')
+      expect(code).to include('if (isPressed && (data.gate ?: false)) Color(')
+    end
+
+    # highlighted swaps in highlightBackground; tapBackground is not that
+    # colour. Pressed, it replaces whichever background the View has.
+    it 'is not the colour `highlighted` swaps in' do
+      rest = emit.call('type' => 'View', 'highlighted' => true, 'background' => '#0000FF', 'tapBackground' => '#FF0000',
+                       'child' => label)
+      expect(rest).not_to include('#FF0000')
+      both = emit.call('type' => 'View', 'onClick' => '@{onTap}', 'highlighted' => '@{h}', 'highlightBackground' => '#00FF00',
+                       'tapBackground' => '#FF0000', 'child' => label)
+      expect(both).to include("#{pressed_red} else if (data.h) Color(android.graphics.Color.parseColor(\"#00FF00\"))")
+    end
+  end
+
   # A shadow inside a clip is cut away with it: the shadow sits outside every
   # clip of the chain (CircleImage's circle, and the corner clip).
   it 'puts every shadow outside the clips' do
@@ -396,6 +458,16 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     compiled = base.map { |type, extra| [type, { 'type' => type }.merge(extra)] }.to_h
     compiled.merge!(variants.slice('Switch with a label', 'CheckBox with a label', 'CheckBox with icons',
                                    'Radio options', 'Radio items'))
+    # the pressed background (tapBackground on a type with a click, which the
+    # `enabled: false` and `userInteractionEnabled: false` stages would take
+    # away), gated
+    compiled['View with a pressed colour'] = { 'type' => 'View', 'tapBackground' => '#FF0000', 'canTap' => '@{gate}',
+                                               'child' => [{ 'type' => 'Label', 'text' => 'c' }],
+                                               '-' => %w[enabled userInteractionEnabled] }
+    compiled['CircleImage with a pressed colour'] = { 'type' => 'CircleImage', 'srcName' => 'ic_star_filled',
+                                                      'tapBackground' => '#FF0000', '-' => %w[enabled userInteractionEnabled] }
+    compiled['Blur with a pressed colour'] = { 'type' => 'Blur', 'tapBackground' => '#FF0000',
+                                               '-' => %w[enabled userInteractionEnabled] }
     # the TextField / TextView bases reach their margins branch with every
     # stage; these reach the other one
     compiled['TextField without margins'] = { 'type' => 'TextField', 'text' => '@{t}', '-' => %w[margins] }
@@ -407,12 +479,13 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     end
     emitted = functions.join("\n\n")
     expect(emitted.scan('.dropShadow(').size).to be >= compiled.size
+    expect(emitted.scan('isPressed = true').size).to be >= 3
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(emitted)}
       class Data(
           val onTap: (() -> Unit)? = null, val onOther: (() -> Unit)? = null,
           val t: String = "", val nIsFocused: Boolean = false,
-          val sel: String = "", val selectedRadiogroup: String = ""
+          val sel: String = "", val selectedRadiogroup: String = "", val gate: Boolean? = null
       )
       class ViewModel { fun updateData(values: Map<String, Any?>) {} }
       #{emitted}

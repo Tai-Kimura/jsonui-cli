@@ -2,6 +2,7 @@
 
 require_relative 'value_expression_helper'
 require_relative 'attribute_vocabulary'
+require_relative '../../core/enum_spelling'
 
 module SjuiTools
   module SwiftUI
@@ -88,28 +89,30 @@ module SjuiTools
           'url' => '.URL'
         }.freeze
 
-        def text_alignment_to_swiftui(alignment)
-          TEXT_ALIGNMENTS[alignment.to_s.downcase] || '.leading'
+        # *attribute*: a path for a textAlign declared inside an object
+        # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        def text_alignment_to_swiftui(alignment, attribute = 'textAlign')
+          TEXT_ALIGNMENTS[JsonUIShared::EnumSpelling.lowered(alignment, @component && @component['type'], attribute)] || '.leading'
         end
 
         def bound_text_alignment(value)
-          bound_enum(value, vocabulary('textAlign', TEXT_ALIGNMENTS),
+          bound_enum(value, declared_vocabulary('textAlign', TEXT_ALIGNMENTS), exact: true,
                      default: '.leading', type: 'TextAlignment')
         end
 
         def input_to_keyboard_type(input)
-          KEYBOARD_TYPES[input.to_s.downcase] || '.default'
+          KEYBOARD_TYPES[JsonUIShared::EnumSpelling.lowered(input, @component && @component['type'], 'input')] || '.default'
         end
 
         def bound_keyboard_type(value)
-          bound_enum(value, vocabulary('input', KEYBOARD_TYPES),
+          bound_enum(value, declared_vocabulary('input', KEYBOARD_TYPES), exact: true,
                      default: '.default', type: 'UIKeyboardType')
         end
 
         # Unknown values warn instead of silently degrading to `.none`
         # (sjui-textfield-contenttype-newpassword-not-mapped).
         def map_content_type(type)
-          mapped = CONTENT_TYPES[type.to_s.downcase]
+          mapped = CONTENT_TYPES[JsonUIShared::EnumSpelling.lowered(type, 'TextField', 'contentType')]
           return mapped if mapped
 
           puts "Warning: unknown contentType '#{type}' — emitting .textContentType(.none); add a mapping if this is a canonical value"
@@ -120,7 +123,7 @@ module SjuiTools
         # leaves the lookup Optional: an unrecognised value at run time turns
         # the autofill hint off, which is what `.none` means statically.
         def bound_content_type(value)
-          bound_enum(value, vocabulary('contentType', CONTENT_TYPES),
+          bound_enum(value, declared_vocabulary('contentType', CONTENT_TYPES), exact: true,
                      default: nil, type: 'UITextContentType')
         end
 
@@ -140,7 +143,10 @@ module SjuiTools
         # library grows the styled parameters.
         def line_decoration?(face)
           return false if face.nil? || face == false
-          return face['lineStyle'].to_s.downcase != 'none' if face.is_a?(Hash)
+          # `lineStyle` by its declared spelling (Label.underline / .strikethrough
+          # .lineStyle — the same four, Single / Double / Thick / None), case and
+          # all (1.9.0): an undeclared one is the default, a single line.
+          return JsonUIShared::EnumSpelling.lowered(face['lineStyle'], 'Label', %w[underline lineStyle]) != 'none' if face.is_a?(Hash)
 
           true
         end
@@ -168,7 +174,7 @@ module SjuiTools
           return nil unless face.is_a?(Hash)
           return nil unless line_decoration?(face)
 
-          args = ["lineStyle: #{DECORATION_LINE_STYLES[face['lineStyle'].to_s.downcase] || '.single'}"]
+          args = ["lineStyle: #{DECORATION_LINE_STYLES[JsonUIShared::EnumSpelling.lowered(face['lineStyle'], 'Label', %w[underline lineStyle]).to_s] || '.single'}"]
           args << "color: #{get_swiftui_color(face['color'])}" if face['color']
           args << "lineOffset: #{face['lineOffset']}" if line_offset && face['lineOffset']
 
@@ -182,6 +188,14 @@ module SjuiTools
         # binding never passes through it.
         def vocabulary(attribute, mapping)
           AttributeVocabulary.widen(@component && @component['type'] || 'View', attribute, mapping)
+        end
+
+        # The same table keyed by each spelling the SSoT declares, as written —
+        # what a run-time lookup of a bound value matches (bound_enum exact:).
+        def declared_vocabulary(attribute, mapping)
+          widened = vocabulary(attribute, mapping)
+          JsonUIShared::EnumSpelling.declared(@component && @component['type'] || 'View', attribute)
+                                    .map { |spelling| (literal = widened[spelling.downcase]) && [spelling, literal] }.compact.to_h
         end
       end
     end

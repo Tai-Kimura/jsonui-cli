@@ -485,7 +485,7 @@ module SjuiTools
         # `.autocorrectionDisabled` are the SwiftUI spellings.
         def apply_text_input_traits
           if (cap = @component['autocapitalizationType'])
-            resolved = case cap.to_s.downcase
+            resolved = case JsonUIShared::EnumSpelling.lowered(cap, 'TextField', 'autocapitalizationType')
                        when 'none' then '.never'
                        when 'words' then '.words'
                        when 'sentences' then '.sentences'
@@ -503,7 +503,7 @@ module SjuiTools
           # value (`jui conformance codegen-effect` C2/presence-only on ios).
           # Not emitting is how "the platform decides" is spelled.
           if (corr = @component['autocorrectionType'])
-            case corr.to_s.downcase
+            case JsonUIShared::EnumSpelling.lowered(corr, 'TextField', 'autocorrectionType')
             when 'default'
               # nothing: SwiftUI's own default stands
             when 'no', 'none', 'false', 'off'

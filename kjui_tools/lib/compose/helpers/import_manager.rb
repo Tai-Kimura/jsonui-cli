@@ -119,6 +119,16 @@ module KjuiTools
                                  "import androidx.compose.ui.input.pointer.PointerEventPass",
                                  "import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException",
                                  "import androidx.compose.ui.input.pointer.pointerInput"],
+            # tapBackground on a node with a click: the watched press
+            # (ModifierBuilder.background_stage).
+            pressed_background: ["import androidx.compose.foundation.gestures.awaitEachGesture",
+                                 "import androidx.compose.foundation.gestures.awaitFirstDown",
+                                 "import androidx.compose.foundation.gestures.waitForUpOrCancellation",
+                                 "import androidx.compose.runtime.getValue",
+                                 "import androidx.compose.runtime.mutableStateOf",
+                                 "import androidx.compose.runtime.remember",
+                                 "import androidx.compose.runtime.setValue",
+                                 "import androidx.compose.ui.input.pointer.pointerInput"],
             # onPan drag detector (ModifierBuilder.build_pannable).
             pan_gesture: ["import androidx.compose.foundation.gestures.detectDragGestures",
                           "import androidx.compose.ui.geometry.Offset",

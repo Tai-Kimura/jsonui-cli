@@ -2,6 +2,7 @@
 
 require_relative '../view_binding_handler'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/enum_spelling'
 
 module SjuiTools
   module UIKit
@@ -48,10 +49,17 @@ module SjuiTools
           @reset_text_views[view_name] = {} if @reset_text_views[view_name].nil?
         when "textAlign"
           @binding_content << "        let #{view_name}ParagraphStyle = (#{view_name}?.attributes[NSAttributedString.Key.paragraphStyle] as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()\n"
-          @binding_content << "        switch #{value}.lowercased() {\n"
-          @binding_content << "        case \"left\": #{view_name}ParagraphStyle.alignment = .left\n"
-          @binding_content << "        case \"center\": #{view_name}ParagraphStyle.alignment = .center\n"
-          @binding_content << "        case \"right\": #{view_name}ParagraphStyle.alignment = .right\n"
+          # The bound value is matched as written, against each spelling
+          # Label.textAlign declares: a value is its declared spelling, case
+          # and all (1.9.0). Without the definitions, lowercased as before.
+          unjudged = JsonUIShared::EnumSpelling.definitions.empty?
+          @binding_content << "        switch #{value}#{unjudged ? '.lowercased()' : ''} {\n"
+          { 'left' => '.left', 'center' => '.center', 'right' => '.right' }.each do |lowered, alignment|
+            spellings = unjudged ? [lowered] : JsonUIShared::EnumSpelling.declared('Label', 'textAlign').select { |s| s.downcase == lowered }
+            next if spellings.empty?
+
+            @binding_content << "        case #{spellings.map { |s| "\"#{s}\"" }.join(', ')}: #{view_name}ParagraphStyle.alignment = #{alignment}\n"
+          end
           @binding_content << "        default: break\n"
           @binding_content << "        }\n"
           @binding_content << "        #{view_name}?.attributes[NSAttributedString.Key.paragraphStyle] = #{view_name}ParagraphStyle\n"
