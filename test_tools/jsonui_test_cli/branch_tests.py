@@ -6,7 +6,7 @@ declarations-p2-design.md). The generator is deliberately mechanical:
   arrange = baseline -> branch baseline -> condition witnesses -> when.data
             + fetch stub serving named mock scenarios per declared endpoint
   act     = await vm.<method>(args from when.arg via spec param order)
-            + settle() to drain fire-and-forget fetches
+            + settleQuiet() to wait out fire-and-forget fetches
   assert  = the branch's `then` entries, nothing more
 
 Everything between the spec and the emitted test is declared vocabulary:
@@ -838,6 +838,12 @@ def _scenario_body(scenario: dict) -> str:
 
 #: `mock serve` sleeps `min(delayMs, 30000)`; the runtimes cap it the same.
 DELAY_CAP_MS = 30000
+
+#: What a generated web row awaits after building the harness and after the
+#: act: the runtime's quiet wait. Not `settle`: a hand-written test calls that
+#: as it did when settle counted turns (`settle()` = ten turns, no quiet
+#: window), and a row claims its absences over the quiet window.
+WEB_ROW_WAIT = "settleQuiet"
 
 #: How long a runtime's settle waits, with no request in flight, after one
 #: last arrived or was answered — the window a row's "not called" and "no
@@ -1850,7 +1856,7 @@ def _expected_ops(when: dict, then: dict) -> list[str]:
     routes `then` says nothing about (the reach check below), and the ones
     `then` says were "called" or reads the `.request` of. The runtimes'
     settleUntilAnswered waits until the recorder has each since `mark()`
-    (settle({ rec, expect }) on web) and nothing is in flight, so a request
+    (settleQuiet({ rec, expect }) on web) and nothing is in flight, so a request
     the view model sends late is waited for rather than read as never sent —
     and, EXPECT_MS after the act with nothing in flight, named. Not for a
     control row: what it observes is the call's absence."""
@@ -2151,7 +2157,8 @@ def render_test_file(
     lines.append("  ROW_TIMEOUT_MS, apiOriginsOf, installFetchMock, partialMismatches, "
                  + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
                  + ("" if red else "reportUnmatched, ")
-                 + "reportEarlierRowCalls, reportUnmatchedForeign, resolveString, seedState, settle,\n  type RouteSpec,")
+                 + "reportEarlierRowCalls, reportUnmatchedForeign, resolveString, seedState, "
+                 + WEB_ROW_WAIT + ",\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
     # The harness may export `apiOrigins` (P2e(a), v4.19): the app's API
@@ -2257,7 +2264,7 @@ def _render_branch(
     for cname, cvalue in row.conditions:
         out.append(f"      await arrangeCondition({_ts(cname)}, {_ts(cvalue)});")
     out.append("      const h = createHarness();")
-    out.append("      await settle();")
+    out.append(f"      await {WEB_ROW_WAIT}();")
     if state:
         out.append(f"      h.setState({_ts(state)});")
     if seed:
@@ -2281,8 +2288,8 @@ def _render_branch(
     # condition changes the outcome" when it does not, and the
     # condition_without_effect notice is not printed.
     expected = [] if row.control_of else _expected_ops(when, then)
-    out.append(f"      await settle({{ rec, expect: [{', '.join(_ts(o) for o in expected)}] }});" if expected
-               else "      await settle();")
+    out.append(f"      await {WEB_ROW_WAIT}({{ rec, expect: [{', '.join(_ts(o) for o in expected)}] }});" if expected
+               else f"      await {WEB_ROW_WAIT}();")
 
     # Reach, before the `then` assertions: a route that was never called
     # makes every data assertion below ambiguous, and reporting the cause
@@ -2612,10 +2619,9 @@ export const SETTLE_DELAY_BUDGET_MS = DELAY_CAP_MS + 1000;
  * default (5000 ms) would end a row that waits for its work first — with
  * "Test timed out", naming nothing. */
 export const ROW_TIMEOUT_MS = 2 * SETTLE_DELAY_BUDGET_MS + 5000;
-/** How many polls `settle()` and `settle({ rec, expect })` make at the least
- * — what `settle()` drained when it counted turns (ten macrotask turns). The
- * quiet window takes longer than this on its own unless the event loop is
- * held up. */
+/** How many macrotask turns `settle()` drains — its default when it counted
+ * turns — and the fewest polls settleQuiet makes: the quiet window takes
+ * longer than this on its own unless the event loop is held up. */
 const DEFAULT_SETTLE_TURNS = 10;
 /** How many polls in a row may read the same time before `settle` stops and
  * names the clock. Each poll sleeps 5 ms on a timer that runs, so 200 are
@@ -2957,33 +2963,19 @@ export function partialMismatches(
     : [`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`];
 }
 
-/** Wait until the work the act started has landed.
+/** Wait until the work the act started has landed — the call a hand-written
+ * test makes, as it did when settle counted turns (`settle(turns = 10)`).
  *
- * `settle()` and `settle({ rec, expect })` — what a generated row calls —
- * wait for no request in flight, QUIET_MS since a request last arrived or
- * was answered, and — given `until` — every op in `until.expect` (the row's
- * `when` routes, its `called`, its `.request`) recorded by `until.rec` since
- * `mark()`. Draining in 5 ms slices lets fire-and-forget chains and timers
- * run in between; any activity starts the quiet over, so a chain however
- * deep is waited for as long as each link follows within QUIET_MS.
+ * `settle()` and `settle(turns)` do what they did then: drain `turns`
+ * macrotask turns (ten without a number), wait for every response a
+ * `delayMs` is holding back, drain again after each arrival, and fail by
+ * name past SETTLE_DELAY_BUDGET_MS. No quiet window: a test that asked for
+ * ten turns takes about ten turns, not QUIET_MS more — under vitest's
+ * default 5000 ms timeout a test that settles a dozen times would not
+ * survive QUIET_MS a call.
  *
- * It used to drain ten macrotask turns and look only at responses a
- * `delayMs` held back: a chain deeper than ten turns, or a view model that
- * thought a moment before its next request, was read half done — a `then`
- * red, or worse, an undeclared call not yet recorded when `unexpectedOps`
- * was checked, a vacuous green.
- *
- * It never stops quietly: stopping would let `then` read the state before
- * the work landed. An expected op still not called once the pipeline is idle
- * and EXPECT_MS have passed since the act fails naming it; work still in
- * flight past SETTLE_DELAY_BUDGET_MS fails naming what was in flight.
- *
- * `settle(turns)` is the call from when settle counted turns (`settle(turns
- * = 10)`), and does what it did then: drain `turns` macrotask turns, wait for
- * every response a `delayMs` is holding back, drain again after each
- * arrival, and fail by name past SETTLE_DELAY_BUDGET_MS — no quiet window,
- * so a hand-written test that asked for N turns takes about N turns, not
- * QUIET_MS more. A generated row never calls it.
+ * `settle({ rec, expect })` is `settleQuiet({ rec, expect })`, the form a
+ * generated row called before it called settleQuiet.
  *
  * Every form measures on the clock and the timer taken when this module
  * loaded (`realClock`, `sleep`), so a test that freezes Date — or fakes
@@ -2995,8 +2987,34 @@ export function settle(
 export async function settle(
   arg?: number | { rec: { countFor(op: string): number }; expect: string[] }
 ): Promise<void> {
-  if (typeof arg === "number") return settleTurns(arg);
-  return settleQuiet(typeof arg === "object" && arg !== null ? arg : undefined, DEFAULT_SETTLE_TURNS);
+  if (typeof arg === "object" && arg !== null) return waitForQuiet(arg, DEFAULT_SETTLE_TURNS);
+  return settleTurns(typeof arg === "number" ? arg : DEFAULT_SETTLE_TURNS);
+}
+
+/** Wait until the work the act started has landed, over a window — what a
+ * generated row calls: no request in flight, QUIET_MS since a request last
+ * arrived or was answered, and — given `until` — every op in `until.expect`
+ * (the row's `when` routes, its `called`, its `.request`) recorded by
+ * `until.rec` since `mark()`. Draining in 5 ms slices lets fire-and-forget
+ * chains and timers run in between; any activity starts the quiet over, so a
+ * chain however deep is waited for as long as each link follows within
+ * QUIET_MS.
+ *
+ * A fixed drain of ten turns that looked only at responses a `delayMs` held
+ * back — `settle()` — reads a chain deeper than ten turns, or a view model
+ * that thinks a moment before its next request, half done: a `then` red, or
+ * worse, an undeclared call not yet recorded when `unexpectedOps` is
+ * checked, a vacuous green. A row claims every absence over this window.
+ *
+ * It never stops quietly: stopping would let `then` read the state before
+ * the work landed. An expected op still not called once the pipeline is idle
+ * and EXPECT_MS have passed since the act fails naming it; work still in
+ * flight past SETTLE_DELAY_BUDGET_MS fails naming what was in flight. Its
+ * failures start `settle:`, as they did when a row called `settle`. */
+export function settleQuiet(
+  until?: { rec: { countFor(op: string): number }; expect: string[] }
+): Promise<void> {
+  return waitForQuiet(until, DEFAULT_SETTLE_TURNS);
 }
 
 /** The error for a clock that read the same time while the timer ran. */
@@ -3011,11 +3029,11 @@ function clockStoodStill(across: string): Error {
   );
 }
 
-/** `settle()` / `settle({ rec, expect })`: the quiet window, and at least
- * `minPolls` polls — each a macrotask turn — so the ten turns `settle()`
- * drained when it counted turns have run even when the quiet window passes
- * sooner (an event loop held up by synchronous work). */
-async function settleQuiet(
+/** settleQuiet's wait: the quiet window, and at least `minPolls` polls —
+ * each a macrotask turn — so the ten turns `settle()` drains have run even
+ * when the quiet window passes sooner (an event loop held up by synchronous
+ * work). */
+async function waitForQuiet(
   until: { rec: { countFor(op: string): number }; expect: string[] } | undefined,
   minPolls: number
 ): Promise<void> {
@@ -3054,15 +3072,15 @@ async function settleQuiet(
   }
 }
 
-/** `settle(turns)`, as it was when settle counted turns: drain `turns`
- * macrotask turns so fire-and-forget promise chains reach their terminal
- * state, and wait for every response a scenario's `delayMs` is holding back,
- * draining again after each arrival (the view model may send a request of
- * its own once one lands). Past SETTLE_DELAY_BUDGET_MS it throws, naming how
- * long it waited: stopping quietly would let `then` read the state before
- * the responses arrived. What changed is only what it reads the time from
- * and sleeps on — `realClock` and `sleep` — and that a clock standing still
- * is named (STALLED_TURNS) rather than looped on. */
+/** `settle()` / `settle(turns)`, as it was when settle counted turns: drain
+ * `turns` macrotask turns so fire-and-forget promise chains reach their
+ * terminal state, and wait for every response a scenario's `delayMs` is
+ * holding back, draining again after each arrival (the view model may send
+ * a request of its own once one lands). Past SETTLE_DELAY_BUDGET_MS it
+ * throws, naming how long it waited: stopping quietly would let `then` read
+ * the state before the responses arrived. What changed is only what it
+ * reads the time from and sleeps on — `realClock` and `sleep` — and that a
+ * clock standing still is named (STALLED_TURNS) rather than looped on. */
 async function settleTurns(turns: number): Promise<void> {
   const started = realClock.now();
   let last = started;

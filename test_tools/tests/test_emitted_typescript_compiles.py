@@ -197,11 +197,12 @@ class TestTheTurnsArgumentOf1_8_120TypeChecks:
     TS2345 (ticket test-branch-runtime-web-settle-loops-forever-under-a-
     frozen-date-and-drops-the-turns-argument: 85 of them on one consumer).
     The runtime declares both forms again. Compiled, beside the generated
-    row's form and a harness that hands the runtime's settle on as its own
-    member, because an overload that accepts one caller can reject another.
+    row's calls — `settleQuiet`, exported and typed — and a harness that hands
+    the runtime's settle on as its own member, because an overload that
+    accepts one caller can reject another.
     """
 
-    _CALLER = '''import { installFetchMock, settle } from "./jsonui-branch-runtime";
+    _CALLER = '''import { installFetchMock, settle, settleQuiet } from "./jsonui-branch-runtime";
 
 // The calls a hand-written test made against 1.8.120's `settle(turns = 10)`.
 export async function writtenAgainst1_8_120(n: number): Promise<void> {
@@ -215,9 +216,11 @@ export async function writtenAgainst1_8_120(n: number): Promise<void> {
   await settle(n);
 }
 
-// The generated row's call.
+// The generated row's calls, and the one a 1.9.0 row made.
 export async function generatedRow(): Promise<void> {
   const rec = installFetchMock([], {});
+  await settleQuiet();
+  await settleQuiet({ rec, expect: ["op"] });
   await settle({ rec, expect: ["op"] });
 }
 
@@ -228,9 +231,9 @@ export const harness: { settle(): Promise<void> } = { settle };
     _NUMERIC_CALLS = 7
     _TURNS_OVERLOAD = "export function settle(turns?: number): Promise<void>;\n"
 
-    def _check(self, tmp_path, runtime: str) -> subprocess.CompletedProcess:
+    def _check(self, tmp_path, runtime: str, caller: str | None = None) -> subprocess.CompletedProcess:
         (tmp_path / "jsonui-branch-runtime.ts").write_text(runtime, encoding="utf-8")
-        (tmp_path / "caller.ts").write_text(self._CALLER, encoding="utf-8")
+        (tmp_path / "caller.ts").write_text(caller or self._CALLER, encoding="utf-8")
         return subprocess.run(
             [str(_tsc()), *_TSC_ARGS, "jsonui-branch-runtime.ts", "caller.ts"],
             cwd=tmp_path, capture_output=True, text=True)
@@ -238,6 +241,21 @@ export const harness: { settle(): Promise<void> } = { settle };
     def test_every_form_compiles(self, tmp_path):
         done = self._check(tmp_path, bt.RUNTIME_TS)
         assert done.returncode == 0, done.stdout + done.stderr
+
+    def test_settle_quiet_takes_no_number(self, tmp_path):
+        """Typed, not only exported: a number is settle's, and handed to
+        settleQuiet it is the compiler's error, not a TypeError at run time."""
+        caller = self._CALLER + "\nexport const wrong = settleQuiet(20);\n"
+        done = self._check(tmp_path, bt.RUNTIME_TS, caller)
+        errors = [line for line in (done.stdout + done.stderr).splitlines() if "error TS" in line]
+        assert len(errors) == 1 and "TS2345: Argument of type 'number' is not assignable" in errors[0], errors
+
+    def test_control_without_the_export_the_rows_import_fails(self, tmp_path):
+        exported = "export function settleQuiet(\n"
+        assert bt.RUNTIME_TS.count(exported) == 1
+        done = self._check(tmp_path, bt.RUNTIME_TS.replace(exported, "function settleQuiet(\n"))
+        errors = [line for line in (done.stdout + done.stderr).splitlines() if "error TS" in line]
+        assert len(errors) == 1 and "TS2459" in errors[0] and "'settleQuiet'" in errors[0], errors
 
     def test_control_without_the_turns_form_each_numeric_call_is_ts2345(self, tmp_path):
         """1.9.0's signature, put back: the consumer's error, once per numeric

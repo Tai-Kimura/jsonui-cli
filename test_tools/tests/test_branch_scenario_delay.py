@@ -69,7 +69,7 @@ CONTROL_DELAY_MS = 20000
 
 # ---------------------------------------------------------------- web ----
 
-_TS_PROBE = '''import { installFetchMock, settle } from "./runtime.ts";
+_TS_PROBE = '''import { installFetchMock, settleQuiet } from "./runtime.ts";
 
 const scenarios = { ok: { status: 200, body: {} }, slow: { status: 200, body: {}, delayMs: %(delay)d } };
 const ROUTES: any[] = [
@@ -86,7 +86,7 @@ void fetch("https://x.test/a").then(() => order.push("a"));
 setTimeout(() => void fetch("https://x.test/b").then(() => order.push("b")), gap);
 await new Promise((resolve) => setTimeout(resolve, gap + 10));
 try {
-  await settle();
+  await settleQuiet();
   console.log(`ORDER ${order.join(",")}`);
 } catch (e) {
   console.log(`THROWN ${(e as Error).message}`);
@@ -145,14 +145,14 @@ def test_web_control_a_settle_that_does_not_wait_reads_before_the_arrival(tmp_pa
     assert "ORDER" in got and "a" not in got["ORDER"].split(","), got
 
 
-_WEB_CHAIN = '''import { installFetchMock, settle } from "./runtime.ts";
+_WEB_CHAIN = '''import { installFetchMock, settleQuiet } from "./runtime.ts";
 const ROUTES: any[] = [{ op: "a", method: "GET", pattern: "^/a$", scenario: "slow",
   scenarios: { slow: { status: 200, body: {}, delayMs: 100 } } }];
 const rec = installFetchMock(ROUTES);
 // Each arrival sends the next request: a chain of delays.
 const next = (): void => { void fetch("https://x.test/a").then(next); };
 next();
-try { await settle(); console.log("RETURNED"); }
+try { await settleQuiet(); console.log("RETURNED"); }
 catch (e) { console.log(`THROWN ${(e as Error).message}`); }
 rec.restore();
 process.exit(0);
