@@ -227,7 +227,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
   describe '.build_responsive_modifiers (regression: sjui-responsive-maxwidth-centerhorizontal-not-applied)' do
     it 'emits .frame(maxWidth:) when attrs has maxWidth' do
       modifiers = described_class.build_responsive_modifiers({ 'maxWidth' => 480 }, nil)
-      expect(modifiers).to eq(['.frame(maxWidth: 480)'])
+      # A responsive container's bounds frame: its content at top | start
+      # with gravity omitted (inner_frame_alignment, container; jsonui-cli
+      # 1.9.0 — until then no alignment, and SwiftUI centred it).
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .topLeading)'])
     end
 
     it 'emits .frame(maxWidth: .infinity, alignment: .center) for centerHorizontal alone' do
@@ -247,7 +250,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
         { 'minWidth' => 100, 'maxWidth' => 400, 'minHeight' => 50, 'maxHeight' => 200 }, nil
       )
       expect(modifiers).to eq(
-        ['.frame(minWidth: 100, maxWidth: 400, minHeight: 50, maxHeight: 200)']
+        ['.frame(minWidth: 100, maxWidth: 400, minHeight: 50, maxHeight: 200, alignment: .topLeading)']
       )
     end
 
@@ -303,11 +306,13 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .center)'])
     end
 
-    it 'gravity: "left" emits .leading inner alignment' do
+    it 'gravity: "left" emits a start inner alignment, the unnamed axis at the top' do
       modifiers = described_class.build_responsive_modifiers(
         { 'maxWidth' => 320, 'centerHorizontal' => true, 'gravity' => 'left' }, nil
       )
-      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .leading)'])
+      # a container's unnamed axis is top (gravityDefaults; jsonui-cli 1.9.0 —
+      # until then `.leading`, the vertical centred)
+      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .topLeading)'])
     end
 
     it 'gravity: "bottom|right" emits .bottomTrailing inner alignment' do

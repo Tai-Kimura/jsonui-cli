@@ -52,12 +52,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::FrameHelper do
     expect(emit({ 'type' => 'Image', 'srcName' => 'a', 'width' => 200, 'height' => 44 })).to include('.frame(width: 200, height: 44)')
   end
 
-  it 'control: a container and a Label keep top | start for the axis the gravity does not name' do
+  it 'control: a container keeps top | start for the axis the gravity does not name' do
     view = emit({ 'type' => 'View', 'orientation' => 'vertical', 'width' => 'matchParent', 'height' => 44, 'gravity' => 'left',
                   'child' => [{ 'type' => 'Label', 'text' => 'a' }] })
     expect(view).to include('.frame(minHeight: 44, idealHeight: 44, maxHeight: 44, alignment: .topLeading)')
+    # A Label follows its own vertical rule (label_vertical_spec.rb): centred
+    # unless its gravity names the vertical, and start across.
     label = emit({ 'type' => 'Label', 'text' => 'a', 'width' => 200, 'height' => 44, 'gravity' => 'left' })
-    expect(label).to include('.frame(width: 200, height: 44, alignment: .topLeading)')
+    expect(label).to include('.frame(width: 200, height: 44, alignment: .leading)')
   end
 
   it 'type-checks the leaf alignments it emits', :swift_compile do
