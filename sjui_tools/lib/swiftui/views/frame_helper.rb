@@ -109,6 +109,23 @@ module SjuiTools
             # Without maxWidth, wrapContent needs fixedSize to prevent expansion
             width_is_wrap = @component['width'].nil? || @component['width'].to_s.downcase == 'wrapcontent' || @component['width'].to_s.downcase == 'wrap_content'
             height_is_wrap = @component['height'].nil? || @component['height'].to_s.downcase == 'wrapcontent' || @component['height'].to_s.downcase == 'wrap_content'
+
+            # A wrapContent axis with a max sizes to its content, capped by the
+            # max (the user's ruling, 2026-09-27): `.frame(maxWidth:)` takes
+            # the width it is offered up to the max, so a wrapContent chip
+            # with maxWidth 160 and the text "chip" was 160 wide on iOS where
+            # Compose drew 57dp and the web 58px. contentFit (SwiftJsonUI
+            # 10.29.0, CollectionContentFit) gives the view its ideal size on
+            # that axis — the frame's, which is the content's clamped to the
+            # max — capped by the parent: a longer text still wraps at the max.
+            # Not an axis a weight gives the node (the weighted stack sizes it).
+            weighted = @component['weight']
+            if width_is_wrap && content_cap?(max_width) && !(weighted || @component['widthWeight'])
+              @modifier_bag.append(:frame_constraints, '.contentFit(.horizontal)')
+            end
+            if height_is_wrap && content_cap?(max_height) && !(weighted || @component['heightWeight'])
+              @modifier_bag.append(:frame_constraints, '.contentFit(.vertical)')
+            end
             # Only need fixedSize when wrapContent WITHOUT max constraint
             # maxWidth already constrains the width, so fixedSize(horizontal) would prevent wrapping
             needs_h_fixed = width_is_wrap && !max_width
@@ -119,6 +136,14 @@ module SjuiTools
               @modifier_bag.register(:fixed_size, ".fixedSize(horizontal: #{h_fixed}, vertical: #{v_fixed})")
             end
           end
+        end
+
+        # A max that caps a wrapContent axis: a number or a binding, not
+        # matchParent (which fills).
+        def content_cap?(value)
+          return false if value.nil?
+
+          !%w[matchparent match_parent .infinity].include?(value.to_s.downcase)
         end
 
         def apply_frame_size

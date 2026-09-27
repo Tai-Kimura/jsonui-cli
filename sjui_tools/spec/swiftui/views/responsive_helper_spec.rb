@@ -225,12 +225,15 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
   end
 
   describe '.build_responsive_modifiers (regression: sjui-responsive-maxwidth-centerhorizontal-not-applied)' do
+    # These branches declare no width or height, so a numeric max caps a
+    # wrapContent axis: the frame is followed by `.contentFit(...)`, the
+    # content's size capped by the max (jsonui-cli 1.9.0; wrap_max_content_fit_spec.rb).
     it 'emits .frame(maxWidth:) when attrs has maxWidth' do
       modifiers = described_class.build_responsive_modifiers({ 'maxWidth' => 480 }, nil)
       # A responsive container's bounds frame: its content at top | start
       # with gravity omitted (inner_frame_alignment, container; jsonui-cli
       # 1.9.0 — until then no alignment, and SwiftUI centred it).
-      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .topLeading)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .topLeading)', '.contentFit(.horizontal)'])
     end
 
     it 'emits .frame(maxWidth: .infinity, alignment: .center) for centerHorizontal alone' do
@@ -242,7 +245,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       modifiers = described_class.build_responsive_modifiers(
         { 'maxWidth' => 480, 'centerHorizontal' => true }, nil
       )
-      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)', '.contentFit(.horizontal)'])
     end
 
     it 'emits maxHeight and minWidth/minHeight when present' do
@@ -250,7 +253,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
         { 'minWidth' => 100, 'maxWidth' => 400, 'minHeight' => 50, 'maxHeight' => 200 }, nil
       )
       expect(modifiers).to eq(
-        ['.frame(minWidth: 100, maxWidth: 400, minHeight: 50, maxHeight: 200, alignment: .topLeading)']
+        ['.frame(minWidth: 100, maxWidth: 400, minHeight: 50, maxHeight: 200, alignment: .topLeading)', '.contentFit(.horizontal)', '.contentFit(.vertical)']
       )
     end
 
@@ -279,14 +282,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       modifiers = described_class.build_responsive_modifiers(
         { 'maxWidth' => 480, 'alignLeft' => true }, nil
       )
-      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)', '.contentFit(.horizontal)'])
     end
 
     it 'emits alignment: .center for alignRight + numeric maxWidth (no gravity)' do
       modifiers = described_class.build_responsive_modifiers(
         { 'maxWidth' => 480, 'alignRight' => true }, nil
       )
-      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 480, alignment: .center)', '.contentFit(.horizontal)'])
     end
 
     it 'does not auto-fall back to .infinity for alignLeft alone (only center* does)' do
@@ -303,7 +306,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       modifiers = described_class.build_responsive_modifiers(
         { 'maxWidth' => 320, 'alignLeft' => true, 'gravity' => 'center' }, nil
       )
-      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .center)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .center)', '.contentFit(.horizontal)'])
     end
 
     it 'gravity: "left" emits a start inner alignment, the unnamed axis at the top' do
@@ -312,7 +315,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       )
       # a container's unnamed axis is top (gravityDefaults; jsonui-cli 1.9.0 —
       # until then `.leading`, the vertical centred)
-      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .topLeading)'])
+      expect(modifiers).to eq(['.frame(maxWidth: 320, alignment: .topLeading)', '.contentFit(.horizontal)'])
     end
 
     it 'gravity: "bottom|right" emits .bottomTrailing inner alignment' do
@@ -321,7 +324,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
         nil
       )
       expect(modifiers).to eq(
-        ['.frame(maxWidth: 320, maxHeight: 200, alignment: .bottomTrailing)']
+        ['.frame(maxWidth: 320, maxHeight: 200, alignment: .bottomTrailing)', '.contentFit(.horizontal)', '.contentFit(.vertical)']
       )
     end
   end

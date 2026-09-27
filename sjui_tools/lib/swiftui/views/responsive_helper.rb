@@ -395,7 +395,14 @@ module SjuiTools
           alignment = inner_frame_alignment(attrs, true)
           frame_args << "alignment: #{alignment}" if alignment
 
-          [".frame(#{frame_args.join(', ')})"]
+          # A wrapContent axis with a numeric max sizes to its content, capped
+          # by the max (FrameHelper#apply_frame_constraints, the user's ruling
+          # of 2026-09-27).
+          modifiers = [".frame(#{frame_args.join(', ')})"]
+          wraps = ->(size) { size.nil? || %w[wrapcontent wrap_content].include?(size.to_s.downcase) }
+          modifiers << '.contentFit(.horizontal)' if wraps.call(attrs['width']) && numeric_dimension?(attrs['maxWidth'])
+          modifiers << '.contentFit(.vertical)' if wraps.call(attrs['height']) && numeric_dimension?(attrs['maxHeight'])
+          modifiers
         end
 
         # True when the value is a finite numeric dimension (Number or
