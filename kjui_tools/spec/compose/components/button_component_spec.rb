@@ -36,7 +36,27 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       expect(text.({ 'width' => 'wrapContent', 'textAlign' => 'Left' })).not_to include('fillMaxWidth()')
       expect(text.({ 'textAlign' => 'Left' })).not_to include('Modifier.fillMaxWidth()')
       expect(text.({ 'width' => 200 })).not_to include('Modifier.fillMaxWidth()')
-      expect(text.({ 'width' => 200, 'textAlign' => 'Left', 'image' => 'ic_x' })).not_to include('modifier = Modifier.fillMaxWidth()')
+      # Beside an icon the Text itself does not fill: the Row does (round 18).
+      beside = text.({ 'width' => 200, 'textAlign' => 'Left', 'image' => 'ic_x' })
+      expect(beside).not_to include("modifier = Modifier.fillMaxWidth()\n")
+      expect(beside.scan('Modifier.fillMaxWidth()').size).to eq(1)
+    end
+
+    # Round 18 (4f ruling 2026-09-27): with an icon, the icon and the text
+    # move together — the Row takes a button's own width and textAlign
+    # arranges the pair, as iOS places the group.
+    it "places an icon button's icon and text together by textAlign" do
+      row = lambda do |json|
+        out = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'image' => 'ic_x', 'width' => 200 }.merge(json), 0, required_imports)
+        out[/Row\((.*?)\) \{/, 1]
+      end
+      expect(row.({ 'textAlign' => 'Left' })).to eq('modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.CenterVertically')
+      expect(row.({ 'textAlign' => 'Right' })).to include('horizontalArrangement = Arrangement.End')
+      expect(row.({ 'textAlign' => 'Center' })).to include('horizontalArrangement = Arrangement.Center')
+      expect(row.({})).to eq('verticalAlignment = Alignment.CenterVertically')
+      expect(row.({ 'textAlign' => 'Left', 'width' => 'wrapContent' })).to eq('verticalAlignment = Alignment.CenterVertically')
+      out = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'image' => 'ic_x', 'width' => 200, 'textAlign' => 'Right' }, 0, required_imports)
+      expect(out.scan('Modifier.fillMaxWidth()').size).to eq(1), out
     end
 
     it 'generates basic Button component' do
