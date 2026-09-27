@@ -88,10 +88,36 @@ class GlassShapeVocabularyIsOneList(unittest.TestCase):
 
         source = GLASS_SWIFT.read_text(encoding="utf-8")
         listed = re.search(r"knownShapeSpellings\s*=\s*\[(.*?)\]", source, re.S)
-        self.assertIsNotNone(listed, "knownShapeSpellings not found in SJUIGlass.swift")
+        if listed is not None:
+            # A hand-written list (SwiftJsonUI before 10.29.0): lower-case, as it
+            # compared lower-cased input.
+            library = sorted(re.findall(r'"([^"]+)"', listed.group(1)))
+            self.assertEqual(library, sorted(v.lower() for v in enum))
+            return
 
-        library = sorted(re.findall(r'"([^"]+)"', listed.group(1)))
-        self.assertEqual(library, sorted(v.lower() for v in enum))
+        # SwiftJsonUI 10.29.0 derives the list from its generated table, so the
+        # agreement is only as good as that table: read it and compare it with the
+        # declaration as written, case and all (the 1.9.0 spelling rule). Until
+        # this branch existed, the master push of 10.29.0 turned this arm red on
+        # a library that had removed the hand-written list (2026-09-28).
+        derived = re.search(r"knownShapeSpellings\s*=\s*CommonAttributes\.Glass\.Shape\.declaredSpellings\b", source)
+        self.assertIsNotNone(
+            derived,
+            "SJUIGlass.swift names knownShapeSpellings neither as a list nor as "
+            "CommonAttributes.Glass.Shape.declaredSpellings",
+        )
+        table_path = (
+            _swift_repo / "Sources" / "SwiftJsonUI" / "Classes" / "SwiftUI" / "Dynamic"
+            / "Generated" / "Attributes" / "CommonAttributes.swift"
+        )
+        self.assertTrue(table_path.exists(), f"the generated table is not there: {table_path}")
+        table = table_path.read_text(encoding="utf-8")
+        glass = re.search(r"enum Glass\b.*?enum Shape\s*\{(.*?)\n\s*\}", table, re.S)
+        self.assertIsNotNone(glass, "Glass.Shape not found in the generated CommonAttributes.swift")
+        spelled = re.search(r"declaredSpellings\s*:\s*\[String\]\s*=\s*\[(.*?)\]", glass.group(1), re.S)
+        self.assertIsNotNone(spelled, "Glass.Shape.declaredSpellings not found in the generated table")
+        library = sorted(re.findall(r'"([^"]+)"', spelled.group(1)))
+        self.assertEqual(library, sorted(enum))
 
     @unittest.skipUnless(GLASS_SWIFT is not None, "SwiftJsonUI checkout not found")
     def test_both_sides_carry_the_parameterised_rounded_form(self) -> None:
