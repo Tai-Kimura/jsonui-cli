@@ -433,14 +433,17 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         expect(streaming_pos).to be < location_pos
         expect(location_pos).to be < message_pos
 
-        # eagerContent retains natural JSON order (Column emits top→bottom
-        # naturally and has no reverseLayout flag).
+        # eagerContent is emitted in the same order: the vertical EAGER
+        # container draws reverseLayout as the lazy list does, laying its
+        # content out from the bottom up (CollectionStack's ReversedColumn; 4f
+        # ruling 2026-09-27, round 13). It kept JSON order, and the EAGER
+        # column drew no reverseLayout, until jsonui-cli 1.9.0.
         eager_block = result.split('eagerContent = {', 2).last
         e_message_pos   = eager_block.index('// Section 1: MessageCell')
         e_location_pos  = eager_block.index('// Section 2: LocationPromptBubble')
         e_streaming_pos = eager_block.index('// Section 3: StreamingCell')
-        expect(e_message_pos).to be < e_location_pos
-        expect(e_location_pos).to be < e_streaming_pos
+        expect(e_streaming_pos).to be < e_location_pos
+        expect(e_location_pos).to be < e_message_pos
       end
 
       it 'preserves natural section order when reverseLayout is false/absent' do

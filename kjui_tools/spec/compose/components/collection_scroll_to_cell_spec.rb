@@ -58,8 +58,10 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
     class Dp
     val Int.dp: Dp get() = Dp()
-    interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {} } }
-    class Arrangement { companion object { fun spacedBy(space: Dp): Arrangement = Arrangement() } }
+    interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {}
+        val Bottom = object : Alignment { override fun toString() = "Bottom" }; val End = object : Alignment { override fun toString() = "End" } } }
+    // What an arrangement packs to (null: the start), as the grid records it.
+    class Arrangement(val alignment: Alignment? = null) { companion object { fun spacedBy(space: Dp, alignment: Alignment? = null): Arrangement = Arrangement(alignment) } }
     object GridCells { class Fixed(val count: Int) }
     class GridItemSpan(val span: Int)
     class LazyGridItemSpanScope(val maxLineSpan: Int, val maxCurrentLineSpan: Int)
@@ -73,6 +75,9 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         val items = mutableListOf<String>()
         fun sizeOf(item: String) = if (item == "H" || item == "F") 10 else 28
         var scrolledTo = -1
+        // The last scroll modifier's `enabled` (the user's scrolling), and where a grid packs.
+        var userScroll: Boolean? = null
+        var packed: String? = null
         var offset = 0
         val logs = mutableListOf<String>()
         val effects = mutableListOf<suspend () -> Unit>()
@@ -140,16 +145,20 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     }
     fun LazyVerticalGrid(columns: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
                          horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
-                         content: LazyGridScope.() -> Unit) { LazyGridScope().content() }
+                         content: LazyGridScope.() -> Unit) { Drawn.packed = verticalArrangement?.alignment?.toString(); LazyGridScope().content() }
     enum class CollectionStackMode { LAZY, EAGER, NONE;
         companion object { fun fromJson(value: Any?) = when (value) { "eager" -> EAGER; "none" -> NONE; else -> LAZY } } }
     enum class CollectionStackAxis { VERTICAL, HORIZONTAL }
     // The lazy content under LAZY; the eager content (the cells composed in
     // order, each recording its place) under EAGER and NONE.
+    // A reversed vertical EAGER container lays its cells out from the bottom
+    // up (CollectionStack's ReversedColumn, KotlinJsonUI 2.42.0): Positions.
     fun CollectionStack(mode: CollectionStackMode, axis: CollectionStackAxis, modifier: Modifier = Modifier, spacing: Dp? = null,
-                        reverseLayout: Boolean = false, lazyState: LazyListState? = null, eagerScrollState: ScrollState? = null,
-                        lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
-        if (mode == CollectionStackMode.LAZY) LazyListScope().lazyContent() else eagerContent()
+                        userScrollEnabled: Boolean = true, reverseLayout: Boolean = false, lazyState: LazyListState? = null,
+                        eagerScrollState: ScrollState? = null, lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
+        Drawn.userScroll = userScrollEnabled
+        if (mode == CollectionStackMode.LAZY) LazyListScope().lazyContent()
+        else { Positions.reversed = reverseLayout && axis == CollectionStackAxis.VERTICAL && mode == CollectionStackMode.EAGER; eagerContent() }
     }
     fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: () -> Unit) { content() }
     inline fun <reified T : Any> viewModel(key: String? = null): T = T::class.java.getDeclaredConstructor().newInstance()
@@ -171,7 +180,8 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         suspend fun scrollToPage(page: Int) { Drawn.scrolledTo = page }
     }
     fun rememberPagerState(pageCount: () -> Int) = remember { PagerState(pageCount) }
-    fun HorizontalPager(state: PagerState, modifier: Modifier = Modifier, pageContent: (Int) -> Unit) {
+    fun HorizontalPager(state: PagerState, modifier: Modifier = Modifier, userScrollEnabled: Boolean = true, pageContent: (Int) -> Unit) {
+        Drawn.userScroll = userScrollEnabled
         repeat(state.pageCount()) { page -> Drawn.record { pageContent(page) } }
     }
 
@@ -188,11 +198,15 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         override fun localPositionOf(sourceCoordinates: androidx.compose.ui.layout.LayoutCoordinates, relativeToSource: androidx.compose.ui.geometry.Offset) =
             ((sourceCoordinates as FlowCoordinates).y - y).toFloat().let { androidx.compose.ui.geometry.Offset(it, it) }
     }
-    object Positions { var next = 0 }
+    // Reversed (a vertical EAGER container under reverseLayout, resting at
+    // its bottom in a 100 viewport): the k-th cell laid out at 100 - 28 k.
+    object Positions { var next = 0; var reversed = false; var k = 0 }
     fun Modifier.onGloballyPositioned(onGloballyPositioned: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit): Modifier {
+        if (Positions.reversed) { Positions.k++; onGloballyPositioned(FlowCoordinates(100 - 28 * Positions.k)); return this }
         onGloballyPositioned(FlowCoordinates(Positions.next)); Positions.next += 28; return this
     }
-    class ScrollState { val viewportSize = 100; val value = 0
+    fun Modifier.then(other: Modifier): Modifier = this
+    class ScrollState { val viewportSize = 100; val value = 0; val maxValue = 1000
         suspend fun animateScrollTo(value: Int) { Drawn.scrolledTo = value }
         suspend fun scrollTo(value: Int) { Drawn.scrolledTo = value } }
     fun Modifier.wrapContentHeight(): Modifier = this
@@ -205,7 +219,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     class MeasureScope { fun layout(width: Int, height: Int, placementBlock: () -> Unit): MeasureResult = MeasureResult() }
     fun Modifier.layout(measure: MeasureScope.(Measurable, androidx.compose.ui.unit.Constraints) -> MeasureResult): Modifier = this
     fun rememberScrollState() = remember { ScrollState() }
-    fun Modifier.verticalScroll(state: ScrollState): Modifier = this
+    fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier { Drawn.userScroll = enabled; return this }
     fun Modifier.requiredHeight(height: Dp): Modifier = this
     fun Modifier.wrapContentHeight(align: Alignment, unbounded: Boolean = false): Modifier = this
     fun Column(modifier: Modifier = Modifier, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
@@ -319,7 +333,22 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'stackReversedAnchorTop' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), {}, [''], nil],
       'stackReversedAnchorCenter' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'center')), {}, [''], nil],
       'gridReversedAnchor' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil],
-      'gridReversedAnchorTop' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), { grid: true }, [''], nil]
+      'gridReversedAnchorTop' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), { grid: true }, [''], nil],
+      # Round 13 (4f rulings 2026-09-27): the reversed vertical EAGER container,
+      # scrollEnabled false, a bound `lazy` NONE on a wrapContent Column, a
+      # short reversed grid.
+      'eagerReversed' => [emit(node('lazy' => 'eager', 'reverseLayout' => true)), {}, [6, 0]],
+      'eagerReversedTop' => [emit(node('lazy' => 'eager', 'reverseLayout' => true, 'scrollAnchor' => 'top')), {}, [6]],
+      'eagerReversedAnchorTop' => [emit(node('lazy' => 'eager', 'reverseLayout' => true, 'defaultScrollAnchor' => 'top')), {}, [''], nil],
+      'eagerReversedAnchorBottom' => [emit(node('lazy' => 'eager', 'reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'eagerLocked' => [emit(node('lazy' => 'eager', 'scrollEnabled' => false)), {}, [6]],
+      'flowLocked' => [emit(node('layout' => 'flow', 'height' => 100, 'scrollEnabled' => false)), {}, [6]],
+      'wrapLocked' => [emit(node('height' => 'wrapContent', 'scrollEnabled' => false)), {}, [6]],
+      'pagerLocked' => [emit(pager_node('scrollEnabled' => false)), { grid: true }, [6]],
+      'wrapBound' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}')), { mode: 'lazy' }, [6]],
+      'wrapBoundNone' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}')), { mode: 'none' }, [6]],
+      'gridReversedSpaced' => [emit(grid_node('reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]],
+      'gridSpaced' => [emit(grid_node('lineSpacing' => 4)), { grid: true }, [0]]
     }
   end
 
@@ -340,18 +369,19 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
      <<~KOTLIN
        // One composition, then its effects — as a frame does.
        fun frame(value: Any?, compose: (Any?) -> Unit) {
-           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0
+           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0; Positions.reversed = false; Positions.k = 0
            compose(value)
            val effects = Drawn.effects.toList(); Drawn.effects.clear()
            kotlinx.coroutines.runBlocking { effects.forEach { it() } }
        }
        fun run(label: String, first: String?, target: Any?, compose: (Any?) -> Unit) {
            Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Drawn.logs.clear(); Drawn.duplicate = null
+           Drawn.userScroll = null; Drawn.packed = null
            if (first != null) frame(first, compose)
            frame(target, compose)
            val at = Drawn.items.getOrNull(Drawn.scrolledTo) ?: "none"
            println(label + " => " + at + " @" + Drawn.scrolledTo + " offset " + Drawn.offset + " logs " + Drawn.logs.size +
-               " of " + Drawn.items.joinToString(" ") + " | duplicate key " + Drawn.duplicate)
+               " of " + Drawn.items.joinToString(" ") + " | user " + Drawn.userScroll + " packed " + Drawn.packed + " | duplicate key " + Drawn.duplicate)
        }
        fun main() {
        #{calls.join("\n")}
@@ -438,11 +468,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     (lines[label] or raise "no run for #{label}: #{lines.keys.inspect}").split(' ').first
   end
 
-  # `route target` => { at:, index:, offset:, logs: }
+  # `route target` => { at:, index:, offset:, logs:, user:, packed: }
   def read(lines, label)
     line = lines[label] or raise "no run for #{label}: #{lines.keys.inspect}"
     at, index, offset, logs = line.match(/\A(\S+) @(-?\d+) offset (-?\d+) logs (\d+)/).captures
-    { at: at, index: index.to_i, offset: offset.to_i, logs: logs.to_i }
+    user, packed = line.match(/\| user (\S+) packed (\S+) \|/).captures
+    { at: at, index: index.to_i, offset: offset.to_i, logs: logs.to_i, user: user, packed: packed }
   end
 
   it 'an Int is a cell counted across the sections; a key the first cell that has it, on the stack and the grid' do
@@ -564,6 +595,42 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(read(lines, 'stackReversedAnchorCenter ').values_at(:at, :index)).to eq(['B0', 1]), lines.inspect
     expect(read(lines, 'gridReversedAnchor ')[:index]).to eq(-1), lines.inspect
     expect(read(lines, 'gridReversedAnchorTop ')[:at]).to eq('A4'), lines.inspect
+  end
+
+  # Round 13 (4f rulings 2026-09-27).
+  it 'the reversed vertical EAGER container draws reverseLayout: it rests at its bottom, a scroll counts from there' do
+    lines = run_emitted(routes)
+    # Emitted last-first (B's cells, then A's), laid out from the bottom: B0
+    # at 72, B1 at 44 … A0 at -68 … A4 at -180 in the 100 viewport, resting
+    # at value 0. scrollTo 6 (B1) bottom-anchored: its end to 100 — 28 up;
+    # 0 (A0): 140 up. Top-anchored B1 (44 to 0) is past the rest: 0.
+    expect([6, 0].map { |t| read(lines, "eagerReversed #{t}")[:index] }).to eq([28, 140]), lines.inspect
+    expect(read(lines, 'eagerReversedTop 6')[:index]).to eq(0), lines.inspect
+    # defaultScrollAnchor: top, reversed, goes to the visual top — the last
+    # cell emitted, A4, to the start edge (the bottom): 252 up; bottom is
+    # where it rests and moves nothing.
+    expect(read(lines, 'eagerReversedAnchorTop ')[:index]).to eq(252), lines.inspect
+    expect(read(lines, 'eagerReversedAnchorBottom ')[:index]).to eq(-1), lines.inspect
+  end
+
+  it 'scrollEnabled false stops the user only: the container keeps its scroll and a scrollTo still moves it' do
+    lines = run_emitted(routes)
+    { 'eagerLocked 6' => 124, 'flowLocked 6' => 124, 'wrapLocked 6' => 124, 'pagerLocked 6' => 6 }.each do |label, to|
+      expect(read(lines, label).values_at(:index, :user)).to eq([to, 'false']), "#{label}: #{lines[label]}"
+    end
+    expect(read(lines, 'flow 6')[:user]).to eq('true'), lines.inspect
+  end
+
+  it 'a bound `lazy` that is NONE at run time does not scroll the wrapContent Column' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'wrapBound 6')[:index]).to eq(124), lines.inspect
+    expect(read(lines, 'wrapBoundNone 6')[:index]).to eq(-1), lines.inspect
+  end
+
+  it 'a short reversed grid with lineSpacing packs to its bottom; unreversed, to its top' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'gridReversedSpaced 0')[:packed]).to eq('Bottom'), lines.inspect
+    expect(read(lines, 'gridSpaced 0')[:packed]).to eq('null'), lines.inspect
   end
 
   it "no two items of a lazy list share a key — two sections', or two cells of one section" do

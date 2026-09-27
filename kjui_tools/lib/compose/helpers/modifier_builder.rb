@@ -228,10 +228,16 @@ module KjuiTools
             # Collection does (it was always Lazy here, whatever it drew).
             # Collection emits a non-Lazy fallback when `lazy: "none"` or when
             # vertical + `height: wrapContent`. Flow layout uses FlowRow
-            # (non-Lazy). Paging horizontal uses HorizontalPager which IS
-            # SubcomposeLayout-based. Everything else is Lazy.
+            # (non-Lazy) — but a flow whose height is matchParent or bound, with
+            # `lazy` in effect, is a BoxWithConstraints (collection_component
+            # flow_scrolls_if_parent_bounded?), a SubcomposeLayout: under an
+            # IntrinsicSize.Min parent it threw "Asking for intrinsic
+            # measurements of SubcomposeLayout layouts is not supported"
+            # (measured on the Android codegen host, 4f round 13). Paging
+            # horizontal uses HorizontalPager which IS SubcomposeLayout-based.
+            # Everything else is Lazy.
             layout = node['layout'] || node['orientation'] || 'vertical'
-            return false if layout == 'flow'
+            return flow_takes_box_with_constraints?(node) if %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
             return false if node['lazy'] == 'none'
             return false if layout != 'horizontal' && node['height'] == 'wrapContent'
             return true
@@ -240,6 +246,18 @@ module KjuiTools
           # `child` then `children`, as every other walk of the tree reads them
           # (JsonUIShared::LayoutPath.children); only `child` was scanned.
           subcompose_descendant?(%w[child children].flat_map { |key| node[key].is_a?(Hash) ? [node[key]] : Array(node[key]) })
+        end
+
+        # The flow Collection's BoxWithConstraints arm (collection_component
+        # flow_scrolls_if_parent_bounded?): `lazy` in effect, a height that is
+        # not a number (nor a numeric maxHeight), and matchParent or bound.
+        def self.flow_takes_box_with_constraints?(node)
+          return false if node['lazy'] == 'none'
+
+          finite = ->(value) { value.is_a?(Numeric) || (value.is_a?(String) && value.match?(/\A\d+(\.\d+)?\z/)) }
+          return false if finite.call(node['height']) || finite.call(node['maxHeight'])
+
+          node['height'] == 'matchParent' || is_binding?(node['height'])
         end
 
         def self.child_dimension(child, axis)

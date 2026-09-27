@@ -425,6 +425,33 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       expect(result[:code]).to include('.fillMaxHeight()')
     end
 
+    # A matchParent flow is a BoxWithConstraints (a SubcomposeLayout): an
+    # IntrinsicSize.Min Row around it threw "Asking for intrinsic measurements
+    # of SubcomposeLayout layouts is not supported" on the device (4f round
+    # 13). A flow of a numeric height is a FlowRow and keeps the Row's
+    # intrinsic height.
+    it 'skips IntrinsicSize.Min on Row when a descendant flow Collection takes the BoxWithConstraints arm' do
+      json_data = {
+        'type' => 'View',
+        'orientation' => 'horizontal',
+        'height' => 'wrapContent',
+        'child' => [
+          { 'type' => 'View', 'height' => 'matchParent' },
+          { 'type' => 'Collection', 'layout' => 'flow', 'height' => 'matchParent', 'items' => '@{rows}' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).not_to include('IntrinsicSize')
+      expect(result[:code]).to include('.fillMaxHeight()')
+      numeric = json_data.merge('child' => [json_data['child'][0], json_data['child'][1].merge('height' => 120)])
+      expect(described_class.generate(numeric, 0, required_imports)[:code]).to include('.height(IntrinsicSize.Min)')
+      none = json_data.merge('child' => [json_data['child'][0], json_data['child'][1].merge('lazy' => 'none')])
+      expect(described_class.generate(none, 0, required_imports)[:code]).to include('.height(IntrinsicSize.Min)')
+      # A numeric maxHeight is the flow's own bound: the FlowRow arm, no box.
+      capped = json_data.merge('child' => [json_data['child'][0], json_data['child'][1].merge('maxHeight' => 200)])
+      expect(described_class.generate(capped, 0, required_imports)[:code]).to include('.height(IntrinsicSize.Min)')
+    end
+
     it 'still injects IntrinsicSize.Min when a descendant Collection has lazy:none (non-Lazy fallback)' do
       json_data = {
         'type' => 'View',
