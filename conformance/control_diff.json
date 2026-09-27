@@ -2735,8 +2735,7 @@
     {
       "fixture": "common/effectStyle__prominent",
       "platforms": [
-        "android",
-        "web"
+        "android"
       ]
     },
     {
