@@ -29,6 +29,16 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
   end
 
   describe 'extension definitions loading' do
+    # The validator reads extension definitions under Dir.pwd, so each example
+    # runs in a directory of its own. It wrote them under the working
+    # directory the suite was started in — inside this checkout
+    # (kjui_tools/kjui_tools/lib/...), where every other process running the
+    # suite from here reads the same Dir.pwd-based path: a validator built in
+    # another shard during the example knew TestCustomComponent.
+    around do |example|
+      Dir.mktmpdir('validator_extensions') { |dir| Dir.chdir(dir) { example.run } }
+    end
+
     # Use Dir.pwd-based path since that's what the validator uses
     let(:extensions_dir) do
       File.join(Dir.pwd, 'kjui_tools', 'lib', 'compose', 'components', 'extensions', 'attribute_definitions')
@@ -1495,12 +1505,10 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
 
   # NEW: Tests for style merging
   describe 'Style merging validation' do
-    let(:styles_dir) { File.join(Dir.pwd, 'spec', 'fixtures', 'styles') }
-
     before(:all) do
-      # Create test styles directory and files
-      @styles_dir = File.join(Dir.pwd, 'spec', 'fixtures', 'styles')
-      FileUtils.mkdir_p(@styles_dir)
+      # Create test styles directory and files — a directory of their own
+      # (they were written into this checkout's spec/fixtures/styles)
+      @styles_dir = Dir.mktmpdir('validator_styles')
 
       # Create a test style file
       File.write(File.join(@styles_dir, 'TestStyle.json'), JSON.pretty_generate({
@@ -1524,7 +1532,7 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
     end
 
     after(:all) do
-      FileUtils.rm_rf(File.join(Dir.pwd, 'spec', 'fixtures', 'styles'))
+      FileUtils.rm_rf(@styles_dir)
     end
 
     context 'with style reference' do

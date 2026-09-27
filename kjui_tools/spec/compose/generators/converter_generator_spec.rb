@@ -9,8 +9,25 @@ require 'json'
 
 RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
   let(:temp_dir) { Dir.mktmpdir('converter_gen_test') }
+  # Where the scaffold lands: the example's own directory. The generator
+  # writes into the tool copy it runs from (extensions_dir, checked as a path
+  # below), and the examples let it: they wrote component_mappings.rb, the
+  # converters and their attribute definitions into this checkout's
+  # lib/compose/components/extensions and removed them after. Every other
+  # process running the suite from this checkout — the other shards of a
+  # parallel run — reads that directory on each ComposeBuilder.new
+  # (custom_component_types requires component_mappings.rb when it exists):
+  # caught between the mapping and its converter it raised LoadError, or
+  # NameError where the converter file was there and empty, and a spec that
+  # rescues what an emit raises counted it as the node's own
+  # (bound_values_reach_the_kotlin_spec: TextField "gained"
+  # safeAreaInsetPositions, seed 27479 on c2755186).
+  let(:ext_dir) { File.join(temp_dir, 'tool', 'lib', 'compose', 'components', 'extensions') }
 
-  before do
+  before do |example|
+    unless example.metadata[:reads_the_tool_path]
+      allow_any_instance_of(described_class).to receive(:extensions_dir).and_return(ext_dir)
+    end
     @original_dir = Dir.pwd
     Dir.chdir(temp_dir)
     allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({
@@ -27,6 +44,12 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
   after do
     Dir.chdir(@original_dir)
     FileUtils.rm_rf(temp_dir)
+  end
+
+  it 'puts the scaffold in the tool copy it runs from (lib/compose/components/extensions)', :reads_the_tool_path do
+    tool_lib = File.expand_path('../../../lib', __dir__)
+    expect(described_class.new('TestCard').send(:extensions_dir))
+      .to eq(File.join(tool_lib, 'compose', 'components', 'extensions'))
   end
 
   describe '#initialize' do
@@ -211,16 +234,13 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       it 'creates initial mappings file' do
         generator.send(:create_initial_mappings_file)
 
-        extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
+        extensions_dir = ext_dir
         mappings_file = File.expand_path(File.join(extensions_dir, 'component_mappings.rb'))
 
         expect(File.exist?(mappings_file)).to be true
         content = File.read(mappings_file)
         expect(content).to include('COMPONENT_MAPPINGS')
         expect(content).to include('TestCard')
-
-        # Cleanup
-        FileUtils.rm_f(mappings_file)
       end
     end
   end
@@ -258,22 +278,10 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       allow($stdin).to receive(:gets).and_return('n')
     end
 
-    after do
-      # Clean up generated files
-      extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
-      extensions_dir = File.expand_path(extensions_dir)
-
-      FileUtils.rm_f(File.join(extensions_dir, 'my_custom_card_component.rb'))
-      FileUtils.rm_f(File.join(extensions_dir, 'component_mappings.rb'))
-
-      definitions_dir = File.join(extensions_dir, 'attribute_definitions')
-      FileUtils.rm_f(File.join(definitions_dir, 'MyCustomCard.json'))
-    end
-
     it 'generates attribute definition file' do
       generator.generate
 
-      extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
+      extensions_dir = ext_dir
       definitions_dir = File.join(extensions_dir, 'attribute_definitions')
       definition_file = File.expand_path(File.join(definitions_dir, 'MyCustomCard.json'))
 
@@ -309,7 +317,7 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
 
       generator_with_binding.generate
 
-      extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
+      extensions_dir = ext_dir
       definitions_dir = File.join(extensions_dir, 'attribute_definitions')
       definition_file = File.expand_path(File.join(definitions_dir, 'BindingCard.json'))
 
@@ -321,11 +329,6 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       expect(definition_content['BindingCard']).to have_key('userName')
       expect(definition_content['BindingCard']).not_to have_key('@userName')
       expect(definition_content['BindingCard']).to have_key('staticValue')
-
-      # Cleanup
-      FileUtils.rm_f(File.join(extensions_dir, 'binding_card_component.rb'))
-      FileUtils.rm_f(File.join(extensions_dir, 'component_mappings.rb'))
-      FileUtils.rm_f(definition_file)
     end
 
     # Since 1.8.121 the file is written with no attributes too: it is where the
@@ -340,19 +343,11 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       allow_any_instance_of(KjuiTools::Compose::Generators::DynamicComponentGenerator).to receive(:generate)
       allow($stdin).to receive(:gets).and_return('n')
 
-      extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
+      extensions_dir = ext_dir
       definitions_dir = File.join(extensions_dir, 'attribute_definitions')
       definition_file = File.expand_path(File.join(definitions_dir, 'SimpleCard.json'))
-      begin
-        generator_no_attrs.generate
-        expect(JSON.parse(File.read(definition_file))['SimpleCard'].keys).to contain_exactly('child', 'children')
-      ensure
-        # Written into the tool's own tree: cleaned whether or not the
-        # expectation holds (a failure here used to leave it behind).
-        FileUtils.rm_f(definition_file)
-        FileUtils.rm_f(File.join(extensions_dir, 'simple_card_component.rb'))
-        FileUtils.rm_f(File.join(extensions_dir, 'component_mappings.rb'))
-      end
+      generator_no_attrs.generate
+      expect(JSON.parse(File.read(definition_file))['SimpleCard'].keys).to contain_exactly('child', 'children')
     end
   end
 
@@ -368,27 +363,11 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       allow($stdin).to receive(:gets).and_return('n')
     end
 
-    after do
-      # Cleanup
-      extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
-      extensions_dir = File.expand_path(extensions_dir)
-
-      FileUtils.rm_f(File.join(extensions_dir, 'status_badge_component.rb'))
-      FileUtils.rm_f(File.join(extensions_dir, 'component_mappings.rb'))
-
-      definitions_dir = File.join(extensions_dir, 'attribute_definitions')
-      FileUtils.rm_f(File.join(definitions_dir, 'StatusBadge.json'))
-    end
-
     it 'creates converter files' do
-      # Clean up any existing files first
-      extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
-      extensions_dir = File.expand_path(extensions_dir)
+      extensions_dir = ext_dir
       status_badge_file = File.join(extensions_dir, 'status_badge_component.rb')
       mappings_file = File.join(extensions_dir, 'component_mappings.rb')
-
-      FileUtils.rm_f(status_badge_file)
-      FileUtils.rm_f(mappings_file)
+      expect(File.exist?(mappings_file)).to be false
 
       # Run generator
       generator.generate
