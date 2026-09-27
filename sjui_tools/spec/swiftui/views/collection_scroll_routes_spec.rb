@@ -267,6 +267,51 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # defaultScrollAnchor likewise — where a horizontal Collection starts (4f
+  # ruling 2026-09-27). Until jsonui-cli 1.9.0 a horizontal Collection's was
+  # not passed to its CollectionStackView at all: it started at its leading
+  # edge whatever the anchor said (measured on the codegen host,
+  # ScrollRouteProbeUITests' eighth page).
+  describe "a horizontal Collection's defaultScrollAnchor" do
+    HSECTION = { 'sections' => [{ 'cell' => 'ACell' }], 'layout' => 'horizontal' }.freeze
+
+    it 'is the leading edge, the middle or the trailing edge along the scroll axis, bound or not' do
+      { 'top' => '.leading', 'center' => '.center', 'bottom' => '.trailing' }.each do |anchor, point|
+        code, = emit(HSECTION.merge('defaultScrollAnchor' => anchor, 'scrollTo' => nil), [])
+        expect(code).to include("axis: .horizontal,\n")
+        expect(code).to include("defaultScrollAnchor: #{point}"), anchor
+      end
+      bound, = emit(HSECTION.merge('defaultScrollAnchor' => '@{start}', 'scrollTo' => nil), [])
+      expect(bound).to include('defaultScrollAnchor: data.start == "bottom" ? .trailing : data.start == "center" ? .center : .leading')
+    end
+
+    it 'control: a vertical Collection keeps .top / .center / .bottom' do
+      { 'top' => '.top', 'center' => '.center', 'bottom' => '.bottom' }.each do |anchor, point|
+        code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'defaultScrollAnchor' => anchor, 'scrollTo' => nil }, [])
+        expect(code).to include("defaultScrollAnchor: #{point}"), anchor
+      end
+      grid, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'columns' => 2, 'defaultScrollAnchor' => 'bottom', 'scrollTo' => nil }, [])
+      expect(grid).to include('.defaultScrollAnchor(.bottom)')
+    end
+
+    it 'type-checks: a horizontal Collection with each anchor and a bound one', :swift_compile do
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB + cell_view_stub('ACellView')
+      views = ['top', 'center', 'bottom', '@{start}'].each_with_index.map do |anchor, i|
+        code, = emit(HSECTION.merge('defaultScrollAnchor' => anchor, 'scrollTo' => nil, 'id' => "hstart#{i}"), [])
+        <<~SWIFT
+          struct HStart#{i}Data { var rows: CollectionDataSource? = nil; var start: String = "" }
+          struct HStart#{i}: View {
+              @State var data = HStart#{i}Data()
+              var body: some View {
+          #{code.lines.map { |l| "        #{l}" }.join}
+              }
+          }
+        SWIFT
+      end
+      expect("#{EmittedSwift::LIBRARY_STUBS}\n#{stubs}\n#{views.join("\n")}").to compile_as_swift
+    end
+  end
+
   describe 'an Int with cellIdProperty: the declared class decides' do
     SECTIONED = { 'sections' => [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell' }] }.freeze
     KEYED = { 'cellIdProperty' => 'key' }.freeze
