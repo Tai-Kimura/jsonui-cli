@@ -732,6 +732,23 @@ each arrival, so `then` reads the state after they landed; past 31000 ms
 (one capped delay and a margin) it fails the test by name, with how long it
 waited. A screen with no `delayMs` generates what it did.
 
+### Web: `settle` and `settleQuiet`
+
+The web runtime (`tests/unit/generated/jsonui-branch-runtime.ts`) exports two
+waits. A generated row calls `settleQuiet()` after building the harness and
+after the act, and `settleQuiet({ rec, expect: [...] })` when the row expects
+ops: it returns once no request is in flight and nothing arrived or was
+answered for 400 ms (and, given `expect`, the recorder has each op), so a
+row's absences are claimed over that window. A hand-written test's `settle()`
+and `settle(n)` do what they did in 1.8.120: drain ten (or n) macrotask turns
+and wait for every delayed response — no quiet window, so each call takes
+about as long as its turns. `settle({ rec, expect })` is `settleQuiet({ rec,
+expect })`. Both measure on the clock and the timer the runtime takes when it
+loads, so a test that freezes `Date` (`vi.useFakeTimers({ toFake: ["Date"]
+})`, `vi.setSystemTime`) or fakes every timer after importing it does not stop
+them; a clock frozen before the import, with `setTimeout` left real, fails the
+wait by name. Every failure starts `settle:`.
+
 ### Requests no route declares
 
 A request during act that matches no declared route is answered 599 by the

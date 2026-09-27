@@ -12,9 +12,10 @@ through 1.8.121's rel, ee0bec5c) with the think chain below: web 0/50 links,
 iOS 21/50, Android 13/50; web with setTimeout(0) between links 10/15 and
 10/40; `unexpectedOps` [] every time.
 
-Now `settle` returns once nothing is in flight and QUIET_MS (declared, 400)
-has passed since a request last arrived or was answered; any activity starts
-the quiet over. A row that expects ops (its `when` routes, its `called`, its
+Now a generated row's wait — `settle()` on iOS and Android, the runtime's
+`settleQuiet` on web — returns once nothing is in flight and QUIET_MS
+(declared, 400) has passed since a request last arrived or was answered; any
+activity starts the quiet over. A row that expects ops (its `when` routes, its `called`, its
 `.request`) is also waited for until the recorder has each — once nothing is
 in flight, up to EXPECT_MS (declared, 10000) after the act, and then it
 fails naming them.
@@ -44,11 +45,14 @@ when settle ran, so a test that froze Date (`vi.useFakeTimers({ toFake:
 ["Date"] })` + `vi.setSystemTime`, the usual way to pin "today") made every
 settle loop until the runner's own timeout, naming nothing; and 1.8.120's
 `settle(turns)` threw a TypeError, the number read as `until`. The runtime
-now takes its clock (performance.now) and its timer when it loads, and takes
-the number again. Those arms run the pinned vitest with the fakes the way a
-test installs them — inside the case, and before the runtime is imported —
-and each part of the change has a control that takes it out and must turn
-its own cases red, and only those.
+now takes its clock (performance.now) and its timer when it loads; the
+window a row waits over is `settleQuiet`, what the generated rows call; and
+`settle()` / `settle(n)` — what a hand-written test calls — do what they did
+in 1.8.120 again: drain the turns (ten without a number) and wait for the
+delayed responses, with no quiet window. Those arms run the pinned vitest
+with the fakes the way a test installs them — inside the case, and before
+the runtime is imported — and each part of the change has a control that
+takes it out and must turn its own cases red, and only those.
 """
 from __future__ import annotations
 
@@ -99,7 +103,7 @@ def _without_the_quiet(runtime: str, declaration: str, zero: str) -> str:
 
 # ---------------------------------------------------------------- web ----
 
-_TS_CHAIN = '''import { installFetchMock, settle } from "./runtime.ts";
+_TS_CHAIN = '''import { installFetchMock, settleQuiet } from "./runtime.ts";
 const ok = { status: 200, body: {} };
 const ROUTES: any[] = [
   { op: "link", method: "GET", pattern: "^/link$", scenario: "ok", scenarios: { ok } },
@@ -117,7 +121,7 @@ void (async () => {
   await hop(); await fetch("https://x.test/late"); vm.done = true;
 })();
 const started = Date.now();
-try { await settle(); } catch (e) { console.log(`THROWN ${(e as Error).message}`); }
+try { await settleQuiet(); } catch (e) { console.log(`THROWN ${(e as Error).message}`); }
 console.log(`LINKS ${vm.links}`);
 console.log(`DONE ${vm.done}`);
 console.log(`UNEXPECTED ${JSON.stringify(rec.unexpectedOps(["link"]))}`);
@@ -126,7 +130,7 @@ rec.restore();
 process.exit(0);
 '''
 
-_TS_FIRST = '''import { installFetchMock, settle } from "./runtime.ts";
+_TS_FIRST = '''import { installFetchMock, settleQuiet } from "./runtime.ts";
 const ROUTES: any[] = [{ op: "first", method: "GET", pattern: "^/first$", scenario: "ok",
   scenarios: { ok: { status: 200, body: {} } } }];
 const after = Number(process.argv[2]), expecting = process.argv[3] === "expect";
@@ -135,7 +139,7 @@ rec.mark();
 // The view model: one request, `after` ms after the act.
 setTimeout(() => void fetch("https://x.test/first"), after);
 const started = Date.now();
-try { await (expecting ? settle({ rec, expect: ["first"] }) : settle()); }
+try { await (expecting ? settleQuiet({ rec, expect: ["first"] }) : settleQuiet()); }
 catch (e) { console.log(`THROWN ${(e as Error).message}`); }
 console.log(`COUNT ${rec.countFor("first")}`);
 console.log(`WAITED ${Date.now() - started}`);
@@ -479,9 +483,12 @@ export function must(got: string, want: string | RegExp): void {
 '''.replace("STILL_MS", str(STILL_MS)).replace("< QUIET_MS", f"< {bt.QUIET_MS}").replace(
     "(QUIET_MS ms)", f"({bt.QUIET_MS} ms)")
 
+
 #: Faked inside each case, after the runtime was imported — the usual place.
+#: The settle() cases run before any delayed response lands in this file:
+#: settle(turns) reads the module-wide time of the last one.
 _CLOCK_AFTER_IMPORT_TS = r'''import { it, vi, afterEach } from "vitest";
-import { installFetchMock, settle, type RouteSpec } from "./generated/jsonui-branch-runtime";
+import { installFetchMock, settle, settleQuiet, type RouteSpec } from "./generated/jsonui-branch-runtime";
 import * as short from "./generated/short-budget-runtime";
 import { TODAY, must, outcome, timed } from "./race";
 
@@ -498,21 +505,33 @@ const FAKES: Record<string, () => void> = {
   "every timer": () => { vi.useFakeTimers(); vi.setSystemTime(TODAY); },
 };
 const REAL = (): void => {};
+const CLOCKS: [string, () => void][] = [["real clock", REAL],
+  ...Object.entries(FAKES).map(([fake, install]): [string, () => void] => [`fake: ${fake}`, install])];
 
 function route(op: string, delayMs?: number): RouteSpec {
   const ok = delayMs === undefined ? { status: 200, body: {} } : { status: 200, body: {}, delayMs };
   return { op, method: "GET", pattern: `^/${op}$`, scenario: "ok", scenarios: { ok } };
 }
 
+// The generated row's wait: the quiet window, on a clock the fake leaves alone.
 for (const [fake, install] of Object.entries(FAKES)) {
-  it(`settle() returns — fake: ${fake}`, async () => {
+  it(`settleQuiet() returns — fake: ${fake}`, async () => {
     install();
     const rec = installFetchMock([], {}, null, fake);
-    try { must(await outcome(settle()), "returned"); } finally { rec.restore(); }
+    try { must(await outcome(settleQuiet()), "returned"); } finally { rec.restore(); }
   }, 10000);
 }
 
-// The 1.8.120 call, a number of turns: what it did then — no quiet window.
+// A hand-written test's settle(): 1.8.120's ten turns — no quiet window.
+for (const [clock, install] of CLOCKS) {
+  it(`settle() returns within QUIET_MS — ${clock}`, async () => {
+    install();
+    const rec = installFetchMock([], {}, null, "no-arg");
+    try { must(await timed(settle()), "returned within QUIET_MS"); } finally { rec.restore(); }
+  }, 10000);
+}
+
+// The 1.8.120 call with a number of turns: what it did then — no quiet window.
 for (const turns of [2, 20, 40]) {
   it(`settle(${turns}) returns within QUIET_MS — real clock`, async () => {
     const rec = installFetchMock([], {}, null, "turns");
@@ -540,27 +559,30 @@ for (const [clock, install] of [["real clock", REAL], ["fake: Date", FAKES["Date
   }, 10000);
 }
 
-// A generated row's form: wait for the op the row expects.
-it("settle({ rec, expect }) returns once the op is called — fake: Date", async () => {
-  FAKES["Date"]();
-  const rec = installFetchMock([route("first")], {}, null, "expect");
-  rec.mark();
-  setTimeout(() => void fetch("https://x.test/first"), 100);
-  try {
-    must(await outcome(settle({ rec, expect: ["first"] })), "returned");
-    must(`called ${rec.countFor("first")}`, "called 1");
-  } finally { rec.restore(); }
-}, 10000);
+// A generated row's form: wait for the op the row expects — through
+// settleQuiet, and through settle({ rec, expect }), what a 1.9.0 row called.
+for (const [name, wait] of [["settleQuiet", settleQuiet], ["settle", settle]] as const) {
+  it(`${name}({ rec, expect }) returns once the op is called — fake: Date`, async () => {
+    FAKES["Date"]();
+    const rec = installFetchMock([route("first")], {}, null, "expect");
+    rec.mark();
+    setTimeout(() => void fetch("https://x.test/first"), 100);
+    try {
+      must(await outcome(wait({ rec, expect: ["first"] })), "returned");
+      must(`called ${rec.countFor("first")}`, "called 1");
+    } finally { rec.restore(); }
+  }, 10000);
+}
 
-// A delayed response stays on the timer the test drives; settle, on the real
-// one, waits until the test has delivered it.
+// A delayed response stays on the timer the test drives; settleQuiet, on the
+// real one, waits until the test has delivered it.
 it("a delayed response is waited for once the test advances its timers — fake: every timer", async () => {
   FAKES["every timer"]();
   const rec = installFetchMock([route("slow", 200)], {}, null, "delayed");
   let arrived = false;
   void fetch("https://x.test/slow").then(() => { arrived = true; });
   try {
-    const settled = outcome(settle());
+    const settled = outcome(settleQuiet());
     await vi.advanceTimersByTimeAsync(200);
     must(await settled, "returned");
     must(`arrived ${arrived}`, "arrived true");
@@ -568,14 +590,14 @@ it("a delayed response is waited for once the test advances its timers — fake:
 }, 10000);
 
 // The named failures still fire on a frozen Date.
-it("past the budget, settle fails by name — fake: Date", async () => {
+it("past the budget, settleQuiet fails by name — fake: Date", async () => {
   FAKES["Date"]();
   const rec = short.installFetchMock([route("a", SHORT_CAP_MS)], {}, null, "budget");
   let going = true;
   const next = (): void => { if (going) void fetch("https://x.test/a").then(next); };
   next();
   try {
-    must(await outcome(short.settle()),
+    must(await outcome(short.settleQuiet()),
       /^threw: settle: still busy after \d+ ms — \d+ request\(s\) in flight \(budget SHORT_BUDGET_MS ms/);
   } finally { going = false; rec.restore(); }
 }, 10000);
@@ -585,7 +607,7 @@ it("an expected op never called fails by name at EXPECT_MS — fake: Date", asyn
   const rec = short.installFetchMock([route("first")], {}, null, "never");
   rec.mark();
   try {
-    must(await outcome(short.settle({ rec, expect: ["first"] })),
+    must(await outcome(short.settleQuiet({ rec, expect: ["first"] })),
       /^threw: settle: the row expects first, never called within EXPECT_MS \(SHORT_EXPECT_MS ms\)/);
   } finally { rec.restore(); }
 }, 10000);
@@ -612,12 +634,12 @@ import { TODAY, must, outcome } from "./race";
 
 vi.useFakeTimers({ toFake: ["Date"] });
 vi.setSystemTime(TODAY);
-const { installFetchMock, settle } = await import("./generated/jsonui-branch-runtime");
+const { installFetchMock, settleQuiet } = await import("./generated/jsonui-branch-runtime");
 afterAll(() => { vi.useRealTimers(); });
 
-it("settle() returns — Date frozen before the runtime was imported", async () => {
+it("settleQuiet() returns — Date frozen before the runtime was imported", async () => {
   const rec = installFetchMock([], {}, null, "date-before-import");
-  try { must(await outcome(settle()), "returned"); } finally { rec.restore(); }
+  try { must(await outcome(settleQuiet()), "returned"); } finally { rec.restore(); }
 }, 10000);
 '''
 
@@ -628,13 +650,13 @@ _CLOCK_BOTH_BEFORE_IMPORT_TS = r'''import { it, vi, afterAll } from "vitest";
 import { must, outcome } from "./race";
 
 vi.useFakeTimers({ toFake: ["Date", "performance"] });
-const { installFetchMock, settle } = await import("./generated/jsonui-branch-runtime");
+const { installFetchMock, settle, settleQuiet } = await import("./generated/jsonui-branch-runtime");
 afterAll(() => { vi.useRealTimers(); });
 
-it("settle() names the clock — Date and performance frozen before the runtime was imported", async () => {
+it("settleQuiet() names the clock — Date and performance frozen before the runtime was imported", async () => {
   const rec = installFetchMock([], {}, null, "clock-before-import");
   try {
-    must(await outcome(settle(), STILL_BEFORE_IMPORT_MS),
+    must(await outcome(settleQuiet(), STILL_BEFORE_IMPORT_MS),
       /^threw: settle: the clock it measures with \(performance\.now, taken when this runtime loaded\) read the same time across 200 polls/);
   } finally { rec.restore(); }
 }, STILL_BEFORE_IMPORT_MS + 10000);
@@ -651,27 +673,31 @@ it("settle(20) names the clock after a delayed response — Date and performance
 '''.replace("STILL_BEFORE_IMPORT_MS", str(STILL_BEFORE_IMPORT_MS))
 
 _FAKES = ("Date", "Date, setInterval, clearInterval", "setSystemTime alone", "every timer")
-#: settle() / settle({ rec, expect }) on a frozen clock: pass only if their
-#: windows run while the test's clock stands.
-_FROZEN = [*(f"settle() returns — fake: {f}" for f in _FAKES),
+#: The quiet wait on a frozen clock: passes only if its window runs while the
+#: test's clock stands.
+_FROZEN = [*(f"settleQuiet() returns — fake: {f}" for f in _FAKES),
+           "settleQuiet({ rec, expect }) returns once the op is called — fake: Date",
            "settle({ rec, expect }) returns once the op is called — fake: Date"]
 _DELAYED = "a delayed response is waited for once the test advances its timers — fake: every timer"
-_NAMED = ["past the budget, settle fails by name — fake: Date",
+_NAMED = ["past the budget, settleQuiet fails by name — fake: Date",
           "an expected op never called fails by name at EXPECT_MS — fake: Date"]
-#: settle(turns): back to what it did in 1.8.120.
+#: settle() and settle(turns): back to what they did in 1.8.120.
+_NO_ARG_FAST = [f"settle() returns within QUIET_MS — {c}" for c in ("real clock", *(f"fake: {f}" for f in _FAKES))]
 _TURNS_FAST = [*(f"settle({n}) returns within QUIET_MS — real clock" for n in (2, 20, 40)),
                "settle(20) returns within QUIET_MS — fake: Date"]
 _DELIVERY_REAL = "settle(20) waits for a delayed response in flight — real clock"
 _DELIVERY_DATE = "settle(20) waits for a delayed response in flight — fake: Date"
 _TURNS_BUDGET = "settle(20) past the budget fails by name — fake: Date"
-_DATE_BEFORE = "settle() returns — Date frozen before the runtime was imported"
-_BOTH_BEFORE = "settle() names the clock — Date and performance frozen before the runtime was imported"
+_DATE_BEFORE = "settleQuiet() returns — Date frozen before the runtime was imported"
+_BOTH_BEFORE = "settleQuiet() names the clock — Date and performance frozen before the runtime was imported"
 _TURNS_BOTH_BEFORE = ("settle(20) names the clock after a delayed response — Date and performance "
                       "frozen before the runtime was imported")
-_CLOCK_CASES = [*_FROZEN, *_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _DELAYED, *_NAMED,
+_CLOCK_CASES = [*_FROZEN, *_NO_ARG_FAST, *_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _DELAYED, *_NAMED,
                 _TURNS_BUDGET, _DATE_BEFORE, _BOTH_BEFORE, _TURNS_BOTH_BEFORE]
 
-_NUMBER_TO_TURNS = "  if (typeof arg === \"number\") return settleTurns(arg);\n"
+#: How settle sends a call without an object — to settleTurns, ten turns when
+#: it is not given a number.
+_TO_TURNS = "  return settleTurns(typeof arg === \"number\" ? arg : DEFAULT_SETTLE_TURNS);\n"
 
 #: Each part of the change, taken out: (the line as it is, the line without it).
 _PARTS = {
@@ -681,13 +707,15 @@ _PARTS = {
     # 1.9.0's timer: the global setTimeout, looked up when settle sleeps.
     "timer": [("const loadedSetTimeout = globalThis.setTimeout;\n",
                "const loadedSetTimeout = (callback: () => void, ms: number) => globalThis.setTimeout(callback, ms);\n")],
-    # 1.9.0's reading of a number: the quiet path's `until`.
-    "until": [(_NUMBER_TO_TURNS,
-               "  if (typeof arg === \"number\") return settleQuiet(arg as any, DEFAULT_SETTLE_TURNS);\n")],
-    # The first cut of this fix: a number goes to the quiet window, with a
-    # floor of that many polls.
-    "quiet-for-numbers": [(_NUMBER_TO_TURNS,
-                           "  if (typeof arg === \"number\") return settleQuiet(undefined, arg);\n")],
+    # 1.9.0's settle: anything but an object is `until` for the quiet wait —
+    # a number throws, and settle() is the quiet window.
+    "until": [(_TO_TURNS, "  return waitForQuiet(arg as any, DEFAULT_SETTLE_TURNS);\n")],
+    # 99492ffa: a number goes to the quiet window, with a floor of that many polls.
+    "quiet-for-numbers": [(_TO_TURNS, "  return typeof arg === \"number\" ? waitForQuiet(undefined, arg) : "
+                                      "settleTurns(DEFAULT_SETTLE_TURNS);\n")],
+    # d5808b85: settle() goes to the quiet window.
+    "quiet-for-no-arg": [(_TO_TURNS, "  return typeof arg === \"number\" ? settleTurns(arg) : "
+                                     "waitForQuiet(undefined, DEFAULT_SETTLE_TURNS);\n")],
     # settle(turns) without its wait for delayed responses.
     "no-deliveries": [("    if (pendingDeliveries.size === 0 && lastDeliveryAt < drainStarted) return;\n",
                        "    return;\n")],
@@ -748,31 +776,37 @@ def test_web_settle_runs_its_windows_under_a_fake_clock_and_takes_a_number_again
 _STOOD = "OUTCOME threw: settle: the clock it measures with (Date.now, taken when this runtime loaded) read the same time across "
 _WAITING = "OUTCOME still waiting after "
 _TYPE_ERROR = "OUTCOME threw: Cannot read properties of undefined (reading 'filter')"
+_SLOW = "OUTCOME returned in "
 
 
 @pytest.mark.parametrize("parts, red", [
     # 1.9.0's clock: every case on a frozen clock that has to measure time
     # fails — named by the stall guards, which now stand between that
-    # regression and a loop. settle(20) on a frozen Date with nothing
-    # delayed still returns: 1.8.120's did too.
+    # regression and a loop. settle() and settle(20) on a frozen Date with
+    # nothing delayed still return: 1.8.120's did too.
     (("clock",), {**dict.fromkeys([*_FROZEN, _DELAYED, *_NAMED, _DATE_BEFORE, _BOTH_BEFORE], _STOOD + "200 polls"),
                   **dict.fromkeys([_DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE], _STOOD + "200 macrotask turns")}),
     # ...and without the guards: the reported failure, neither returned nor threw.
     (("clock", "guard"), dict.fromkeys([*_FROZEN, _DELAYED, *_NAMED, _DATE_BEFORE, _BOTH_BEFORE,
                                         _DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE], _WAITING)),
-    # 1.9.0's timer: settle's own sleep on a timer only the test advances.
-    (("timer",), dict.fromkeys(["settle() returns — fake: every timer", _DELAYED],
+    # 1.9.0's timer: the waits' own sleep on a timer only the test advances.
+    (("timer",), dict.fromkeys(["settleQuiet() returns — fake: every timer", _DELAYED,
+                                "settle() returns within QUIET_MS — fake: every timer"],
                                f"OUTCOME still waiting after {STILL_MS} ms")),
-    # 1.9.0's reading of a number: the TypeError the 1.8.120 callers got.
-    (("until",), dict.fromkeys([*_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE],
-                               _TYPE_ERROR)),
-    # A number sent through the quiet window: QUIET_MS more on every call,
-    # and the quiet path's budget and stall messages, not settle(turns)'s.
-    (("quiet-for-numbers",), {**dict.fromkeys(_TURNS_FAST, "OUTCOME returned in "),
+    # 1.9.0's settle: a number is the TypeError the 1.8.120 callers got, and
+    # settle() is the quiet window, QUIET_MS on every call.
+    (("until",), {**dict.fromkeys([*_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE],
+                                  _TYPE_ERROR),
+                  **dict.fromkeys(_NO_ARG_FAST, _SLOW)}),
+    # A number sent through the quiet window (99492ffa): QUIET_MS more on
+    # every call, and the quiet path's budget and stall messages.
+    (("quiet-for-numbers",), {**dict.fromkeys(_TURNS_FAST, _SLOW),
                               _TURNS_BUDGET: "OUTCOME threw: settle: still busy after ",
                               _TURNS_BOTH_BEFORE: "OUTCOME threw: settle: the clock it measures with "
                                                   "(performance.now, taken when this runtime loaded) read "
                                                   "the same time across 200 polls"}),
+    # settle() sent through the quiet window (d5808b85): QUIET_MS on every call.
+    (("quiet-for-no-arg",), dict.fromkeys(_NO_ARG_FAST, _SLOW)),
     # settle(turns) that does not wait for a delayed response.
     (("no-deliveries",), {_DELIVERY_REAL: "OUTCOME arrived false", _DELIVERY_DATE: "OUTCOME arrived false",
                           _TURNS_BUDGET: "OUTCOME returned", _TURNS_BOTH_BEFORE: "OUTCOME returned"}),
@@ -782,16 +816,16 @@ _TYPE_ERROR = "OUTCOME threw: Cannot read properties of undefined (reading 'filt
     # No stall guards: the clock frozen before the import loops again.
     (("guard",), dict.fromkeys([_BOTH_BEFORE, _TURNS_BOTH_BEFORE],
                                f"OUTCOME still waiting after {STILL_BEFORE_IMPORT_MS} ms")),
-], ids=["clock", "clock-and-guard", "timer", "until", "quiet-for-numbers", "no-deliveries",
-        "date-clock", "guard"])
+], ids=["clock", "clock-and-guard", "timer", "until", "quiet-for-numbers", "quiet-for-no-arg",
+        "no-deliveries", "date-clock", "guard"])
 def test_web_control_each_part_taken_out_turns_its_own_cases_red(tmp_path, parts, red):
     got = _clock_cases(tmp_path, _without(*parts))
     assert sorted(name for name, (state, _) in got.items() if state != "passed") == sorted(red), got
     assert {name: got[name][1][:len(says)] for name, says in red.items()} == red, got
 
 
-_TS_TURNS = '''import { installFetchMock, settle } from "./runtime.ts";
-const turns = process.argv[2] === "none" ? undefined : Number(process.argv[2]);
+_TS_TURNS = '''import { installFetchMock, settle, settleQuiet } from "./runtime.ts";
+const arg = process.argv[2];
 const held = Number(process.argv[3]);
 const rec = installFetchMock([], {});
 // The view model: holds the event loop for `held` ms, then a chain of
@@ -799,24 +833,100 @@ const rec = installFetchMock([], {});
 let hops = 0;
 const hop = (): void => { hops += 1; if (hops < 100000) setTimeout(hop, 0); };
 setTimeout(() => { const t = Date.now(); while (Date.now() - t < held) { /* held */ } hop(); }, 0);
-await (turns === undefined ? settle() : settle(turns));
+await (arg === "quiet" ? settleQuiet() : arg === "none" ? settle() : settle(Number(arg)));
 console.log(`HOPS ${hops}`);
 rec.restore();
 process.exit(0);
 '''
 
 
-@pytest.mark.parametrize("arg, turns", [("20", 20), ("40", 40), ("none", 10)])
+@pytest.mark.parametrize("arg, turns", [("20", 20), ("40", 40), ("none", 10), ("quiet", 10)])
 def test_web_settle_lets_at_least_its_turns_run_when_the_quiet_passes_sooner(tmp_path, arg, turns):
     """What a 1.8.120 caller counted on: `settle(n)` ran n macrotask turns
     before it returned, `settle()` ten. Here the quiet window has passed by
-    settle's first poll (the event loop was held up past it): settle(n)
-    drains its n turns as it did, and settle() keeps polling to ten."""
+    the first poll (the event loop was held up past it): settle drains its
+    turns as it did, and settleQuiet keeps polling to ten."""
     got = _node(tmp_path, bt.RUNTIME_TS, _TS_TURNS, arg, str(HELD_MS))
     assert int(got["HOPS"]) >= turns, got
 
 
-@pytest.mark.parametrize("part, arg, turns", [("floor", "none", 10), ("one-turn", "20", 20)])
+@pytest.mark.parametrize("part, arg, turns", [("floor", "quiet", 10), ("one-turn", "20", 20),
+                                              ("one-turn", "none", 10)])
 def test_web_control_without_the_floor_the_turns_do_not_all_run(tmp_path, part, arg, turns):
     got = _node(tmp_path, _without(part), _TS_TURNS, arg, str(HELD_MS))
     assert int(got["HOPS"]) < turns, got
+
+
+# ------------------------------------------ web, the generated rows' wait ----
+
+#: A view model that finishes its work this long after the act, with no
+#: request after it: inside the quiet window a row waits over, far past the
+#: ten turns settle() drains.
+LATE_MS = bt.QUIET_MS // 2
+
+_TICKER_SPEC = {
+    "type": "screen_spec", "metadata": {"name": "ticker"},
+    "dataFlow": {"viewModel": {"methods": [{"name": "tick"}]}},
+    "branchContracts": {"methods": {"tick": {"branches": [{"when": {}, "then": {"data.status": "ticked"}}]}}},
+}
+
+_TICKER_HARNESS = '''import { applyDeclaredKeys } from "../generated/jsonui-branch-runtime";
+class TickerViewModel {
+  status = "idle";
+  async tick() { setTimeout(() => { this.status = "ticked"; }, LATE_MS); }
+}
+export function createHarness() {
+  const vm = new TickerViewModel();
+  return {
+    vm,
+    setState(state: Record<string, unknown>) { applyDeclaredKeys(vm, state); },
+    readField(name: string) { return (vm as any)[name]; },
+    expectTransition(_d: string) {},
+    resolveString(key: string) { return key; },
+  };
+}
+'''.replace("LATE_MS", str(LATE_MS))
+
+
+def _ticker(root: Path) -> Path:
+    import json
+
+    from tests import test_branch_notices_reach_agent_runs as n
+    n._write(root / "jui.config.json", json.dumps({"spec_directory": "docs/screens/json", "platforms": ["web"]}))
+    n._write(root / "docs/screens/json/ticker.spec.json", json.dumps(_TICKER_SPEC))
+    report = bt.generate_branch_tests("ticker", root, platform="web", config_platforms=["web"])
+    n._write(root / "tests/unit/branch-harness/ticker.ts", _TICKER_HARNESS)
+    n._runner_files(root)
+    return report.test_file
+
+
+def _waits(text: str) -> list[str]:
+    """Every settle-family call the generated file makes, and what it imports."""
+    import re
+    return sorted(set(re.findall(r"\b(settle\w*)\(", text))) + sorted(
+        set(re.findall(r"\b(settle\w*),\n  type RouteSpec", text)))
+
+
+def test_web_generated_rows_wait_with_settle_quiet(tmp_path):
+    text = _ticker(tmp_path / "p").read_text(encoding="utf-8")
+    assert _waits(text) == ["settleQuiet", "settleQuiet"], text
+    assert text.count("      await settleQuiet();\n") == 2, text
+
+
+def test_web_control_rows_emitting_settle_would_call_the_turns(tmp_path, monkeypatch):
+    monkeypatch.setattr(bt, "WEB_ROW_WAIT", "settle")
+    text = _ticker(tmp_path / "p").read_text(encoding="utf-8")
+    assert _waits(text) == ["settle", "settle"], text
+
+
+def test_web_a_generated_row_reads_the_state_after_the_quiet_window(tmp_path):
+    test_file = _ticker(tmp_path / "p")
+    run, tests = _vitest(tmp_path / "p")
+    assert [s for _, s, _ in tests] == ["passed"], (tests, test_file.read_text(encoding="utf-8"))
+
+
+def test_web_control_a_row_that_called_settle_reads_it_half_done(tmp_path, monkeypatch):
+    monkeypatch.setattr(bt, "WEB_ROW_WAIT", "settle")
+    _ticker(tmp_path / "p")
+    run, tests = _vitest(tmp_path / "p")
+    assert [(s, m) for _, s, m in tests] == [("failed", "expected 'idle' to deeply equal 'ticked'")], tests
