@@ -37,6 +37,20 @@ module SjuiTools
           self.current_namespaces = []
         end
 
+        # The layout's sections for the conversion of that layout only: the
+        # namespaces found before it are put back after (the enclosing
+        # layout's, or none). Until jsonui-cli 1.9.0 a conversion announced
+        # its layout and left it, so whatever converted next without
+        # announcing one (a converter called on its own, another spec)
+        # resolved strings with the last layout's sections.
+        def self.for_layout(json_file_path)
+          found = current_namespaces
+          begin_layout(json_file_path)
+          yield
+        ensure
+          self.current_namespaces = found
+        end
+
         def self.layout_relative_path(json_file_path)
           source_path = Core::ProjectFinder.get_full_source_path
           return File.basename(json_file_path.to_s) if source_path.nil?

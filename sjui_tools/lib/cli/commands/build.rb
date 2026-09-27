@@ -440,8 +440,12 @@ module SjuiTools
           source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
           layouts_dir = File.join(source_path, config['layouts_directory'] || 'Layouts')
           view_dir = File.join(source_path, config['view_directory'] || 'View')
-          # Every include path resolves from the layouts root (U8).
+          # Every include path resolves from the layouts root (U8) — this
+          # build's, for this build only: the `ensure` below puts back the one
+          # it found.
           require_relative '../../swiftui/include_expander'
+          previous_layouts_root = SjuiTools::SwiftUI::IncludeExpander.layouts_root
+          layouts_root_set = true
           SjuiTools::SwiftUI::IncludeExpander.layouts_root = layouts_dir
 
           # Initialize cache manager
@@ -840,6 +844,16 @@ module SjuiTools
           # code is left alone deliberately, as on the other faces: `jui build`
           # turns the ledger into the non-zero exit.
           JsonUI::StageFailures.conclude(Core::Logger, 'SwiftUI build completed!')
+        ensure
+          # The layouts root is a process-wide setting of the include
+          # expander. Until jsonui-cli 1.9.0 a build set it and left it, so
+          # whatever ran next in the same process — another project's build,
+          # a lone `convert`, a spec — resolved its includes from this
+          # project's Layouts ("Include file not found: <this build's
+          # Layouts>/part.json": build_spec before json_to_swiftui_converter_spec,
+          # state_names_are_unique_spec or the layouts-root spec, on a seed
+          # that ordered them so).
+          SjuiTools::SwiftUI::IncludeExpander.layouts_root = previous_layouts_root if layouts_root_set
         end
 
         # Where a layout's GeneratedView (and its variants') is written:
