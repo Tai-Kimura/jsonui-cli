@@ -60,11 +60,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     val Int.dp: Dp get() = Dp(this)
     interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {}
         val Bottom = object : Alignment { override fun toString() = "Bottom" }; val End = object : Alignment { override fun toString() = "End" }
-        val CenterHorizontally = object : Alignment { override fun toString() = "CenterHorizontally" } } }
+        val CenterHorizontally = object : Alignment { override fun toString() = "CenterHorizontally" }
+        val CenterVertically = object : Alignment { override fun toString() = "CenterVertically" } } }
     // What an arrangement packs to (null: the start), as the grid records it.
     class Arrangement(val alignment: Alignment? = null) { companion object { fun spacedBy(space: Dp, alignment: Alignment? = null): Arrangement = Arrangement(alignment)
         fun aligned(alignment: Alignment): Arrangement = Arrangement(alignment)
-        val Bottom = Arrangement(Alignment.Bottom) } }
+        val Bottom = Arrangement(Alignment.Bottom); val Center = Arrangement(Alignment.CenterVertically) } }
     // Content padding (round 15): the values, top,start,bottom,end, recorded
     // in the modifier chain where the padding is applied (Drawn.chain).
     class PaddingValues(val top: Int, val start: Int, val bottom: Int, val end: Int) { override fun toString() = "$top.$start.$bottom.$end" }
@@ -72,6 +73,18 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun PaddingValues(horizontal: Dp = Dp(), vertical: Dp = Dp()) = PaddingValues(vertical.v, horizontal.v, vertical.v, horizontal.v)
     fun PaddingValues(start: Dp = Dp(), top: Dp = Dp(), end: Dp = Dp(), bottom: Dp = Dp()) = PaddingValues(top.v, start.v, bottom.v, end.v)
     fun Modifier.padding(values: PaddingValues): Modifier { Drawn.chain += "pad($values)"; return this }
+    // The safe area (round 16): a status bar of 24 and a navigation bar of 48,
+    // as insets are, left / top / right / bottom; a container's contentPadding
+    // is recorded as cp(top.start.bottom.end).
+    enum class WindowInsetsSides { Vertical, Horizontal }
+    class WindowInsets(val l: Int, val t: Int, val r: Int, val b: Int) {
+        companion object { val safeDrawing = WindowInsets(0, 24, 0, 48) }
+        fun only(sides: WindowInsetsSides) = if (sides == WindowInsetsSides.Vertical) WindowInsets(0, t, 0, b) else WindowInsets(l, 0, r, 0)
+        fun add(o: WindowInsets) = WindowInsets(l + o.l, t + o.t, r + o.r, b + o.b)
+        fun asPaddingValues() = PaddingValues(t, l, b, r)
+    }
+    fun WindowInsets(left: Dp = Dp(), top: Dp = Dp(), right: Dp = Dp(), bottom: Dp = Dp()) = WindowInsets(left.v, top.v, right.v, bottom.v)
+    fun contentPadded(values: PaddingValues?) { values?.let { Drawn.chain += "cp($it)" } }
     object GridCells { class Fixed(val count: Int) }
     class GridItemSpan(val span: Int)
     class LazyGridItemSpanScope(val maxLineSpan: Int, val maxCurrentLineSpan: Int)
@@ -157,11 +170,13 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     }
     fun LazyVerticalGrid(columns: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
                          horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
-                         content: LazyGridScope.() -> Unit) { Drawn.packed = verticalArrangement?.alignment?.toString(); LazyGridScope().content() }
+                         contentPadding: PaddingValues? = null,
+                         content: LazyGridScope.() -> Unit) { Drawn.packed = verticalArrangement?.alignment?.toString(); contentPadded(contentPadding); LazyGridScope().content() }
     // Along its axis, a horizontal grid packs by its horizontalArrangement.
     fun LazyHorizontalGrid(rows: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
                            horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
-                           content: LazyGridScope.() -> Unit) { Drawn.packed = horizontalArrangement?.alignment?.toString(); LazyGridScope().content() }
+                           contentPadding: PaddingValues? = null,
+                           content: LazyGridScope.() -> Unit) { Drawn.packed = horizontalArrangement?.alignment?.toString(); contentPadded(contentPadding); LazyGridScope().content() }
     enum class CollectionStackMode { LAZY, EAGER, NONE;
         companion object { fun fromJson(value: Any?) = when (value) { "eager" -> EAGER; "none" -> NONE; else -> LAZY } } }
     enum class CollectionStackAxis { VERTICAL, HORIZONTAL }
@@ -172,10 +187,13 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun CollectionStack(mode: CollectionStackMode, axis: CollectionStackAxis, modifier: Modifier = Modifier, spacing: Dp? = null,
                         userScrollEnabled: Boolean = true, reverseLayout: Boolean = false, lazyState: LazyListState? = null,
                         eagerScrollState: ScrollState? = null, contentAtBottom: Boolean = false, rowContentAlignment: Alignment? = null,
+                        columnContentAlignment: Alignment? = null, contentPadding: PaddingValues? = null,
                         lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
         Drawn.userScroll = userScrollEnabled
         if (contentAtBottom) Drawn.packed = "Bottom"
         rowContentAlignment?.let { Drawn.packed = it.toString() }
+        columnContentAlignment?.let { Drawn.packed = it.toString() }
+        contentPadded(contentPadding)
         if (mode == CollectionStackMode.LAZY) LazyListScope().lazyContent()
         else { Positions.reversed = reverseLayout && axis == CollectionStackAxis.VERTICAL && mode == CollectionStackMode.EAGER; eagerContent() }
     }
@@ -396,7 +414,28 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'hgrid' => [emit(grid_node('layout' => 'horizontal')), { grid: true }, [0]],
       'hgridBottom' => [emit(grid_node('layout' => 'horizontal', 'defaultScrollAnchor' => 'bottom')), { grid: true }, [0]],
       'hgridCenterSpaced' => [emit(grid_node('layout' => 'horizontal', 'defaultScrollAnchor' => 'center', 'lineSpacing' => 4)), { grid: true }, [0]],
-      'hgridReversedSpaced' => [emit(grid_node('layout' => 'horizontal', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]]
+      'hgridReversedSpaced' => [emit(grid_node('layout' => 'horizontal', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 16: insets read as paddings are, in each declared form; the
+      # insets added to the safe area; a short vertical list centred.
+      'padArray' => [emit(node('insets' => [8, 16, 4, 2])), {}, [0]],
+      'padString' => [emit(node('insets' => '8|16|4|2')), {}, [0]],
+      'padTwo' => [emit(node('insets' => '8|16')), {}, [0]],
+      'padTwoArray' => [emit(node('insets' => [8, 16])), {}, [0]],
+      'padOne' => [emit(node('insets' => [6])), {}, [0]],
+      'padThree' => [emit(node('insets' => '1|2|3')), {}, [0]],
+      'gridPadArray' => [emit(grid_node('insets' => [8, 16, 4, 2])), { grid: true }, [0]],
+      'wrapPadString' => [emit(node('height' => 'wrapContent', 'insets' => '8|16|4|2')), {}, [0]],
+      'safeInsets' => [emit(node('insetVertical' => 8, 'insetHorizontal' => 16, 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'safeInsetsAxes' => [emit(grid_node('insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'scrollableAxes')), { grid: true }, [0]],
+      'safeOnly' => [emit(node('contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'safeNever' => [emit(node('insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'never')), {}, [0]],
+      'safeDeclared' => [emit(node('insets' => [8, 0, 0, 0], 'insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'safeMalformed' => [emit(node('insets' => '1|2|3', 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'stackCenterV' => [emit(node('defaultScrollAnchor' => 'center')), {}, [0]],
+      'eagerCenterV' => [emit(node('lazy' => 'eager', 'defaultScrollAnchor' => 'center')), {}, [0]],
+      'gridCenterV' => [emit(grid_node('defaultScrollAnchor' => 'center')), { grid: true }, [0]],
+      'gridCenterVSpaced' => [emit(grid_node('defaultScrollAnchor' => 'center', 'lineSpacing' => 4)), { grid: true }, [0]],
+      'gridReversedCenterVSpaced' => [emit(grid_node('defaultScrollAnchor' => 'center', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]]
     }
   end
 
@@ -712,6 +751,39 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'hgridBottom 0' => 'End', 'hgridCenterSpaced 0' => 'CenterHorizontally',
       # The start where nothing moves it; the end, reversed (round 13).
       'row 0' => 'null', 'rowTop 0' => 'null', 'hgrid 0' => 'null', 'hgridReversedSpaced 0' => 'End' }.each do |label, packed|
+      expect(read(lines, label)[:packed]).to eq(packed), "#{label}: #{lines[label]}"
+    end
+  end
+
+  # Round 16 (4f rulings 2026-09-27).
+  it 'insets are read as paddings are: 1, 2 or 4 values, an array or a |-separated string; four are [top, right, bottom, left]' do
+    lines = run_emitted(routes)
+    # cp(top.start.bottom.end): [8, 16, 4, 2] is top 8, right (end) 16, bottom 4, left (start) 2.
+    { 'padArray 0' => 'cp(8.2.4.16)', 'padString 0' => 'cp(8.2.4.16)', 'padTwo 0' => 'cp(8.16.8.16)', 'padTwoArray 0' => 'cp(8.16.8.16)',
+      'padOne 0' => 'cp(6.6.6.6)', 'gridPadArray 0' => 'cp(8.2.4.16)', 'wrapPadString 0' => 'scroll,pad(8.2.4.16)',
+      # Three values are no form: nothing.
+      'padThree 0' => '-' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
+    end
+  end
+
+  it 'insetHorizontal / insetVertical are added to the safe area, as iOS adds them; a declared insets still wins' do
+    lines = run_emitted(routes)
+    # The stubs' safe area: top 24, bottom 48.
+    { 'safeInsets 0' => 'cp(32.16.56.16)', 'safeInsetsAxes 0' => 'cp(32.0.56.0)', 'safeOnly 0' => 'cp(24.0.48.0)',
+      'safeNever 0' => 'cp(8.0.8.0)', 'safeDeclared 0' => 'cp(8.0.0.0)',
+      # An insets no form takes declares nothing: the safe area applies.
+      'safeMalformed 0' => 'cp(24.0.48.0)' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
+    end
+  end
+
+  it 'a short vertical list with defaultScrollAnchor center sits in the middle — the stack, LAZY and EAGER, and the grid' do
+    lines = run_emitted(routes)
+    { 'stackCenterV 0' => 'CenterVertically', 'eagerCenterV 0' => 'CenterVertically', 'gridCenterV 0' => 'CenterVertically',
+      'gridCenterVSpaced 0' => 'CenterVertically', 'gridReversedCenterVSpaced 0' => 'CenterVertically',
+      # Controls: bottom and none, unchanged.
+      'stackBottom 0' => 'Bottom', 'stack 0' => 'null', 'gridSpaced 0' => 'null' }.each do |label, packed|
       expect(read(lines, label)[:packed]).to eq(packed), "#{label}: #{lines[label]}"
     end
   end

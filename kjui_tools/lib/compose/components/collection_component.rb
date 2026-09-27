@@ -727,6 +727,16 @@ module KjuiTools
         # iOS draws a short row at its leading edge / middle / trailing edge by
         # the anchor (4f ruling 2026-09-27, round 15; measured on sjui codegen
         # and SwiftJsonUI Dynamic); every Compose row sat at its start.
+        # A vertical list with defaultScrollAnchor center whose content is
+        # shorter than the list sits in its middle, as iOS draws it (4f ruling
+        # 2026-09-27, round 16; measured round 15 on sjui codegen and
+        # SwiftJsonUI Dynamic): 'Alignment.CenterVertically', or nil — the top,
+        # the bottom under reverseLayout or a bottom anchor (content_at_bottom?).
+        # It sat at the top (the bottom when reversed) until jsonui-cli 1.9.0.
+        def self.column_content_alignment(json_data)
+          'Alignment.CenterVertically' if json_data['defaultScrollAnchor'] == 'center'
+        end
+
         def self.row_content_alignment(json_data)
           case json_data['defaultScrollAnchor']
           when 'center' then 'Alignment.CenterHorizontally'
@@ -820,7 +830,7 @@ module KjuiTools
           # grid emitter and the CollectionStack emitter, and the inset can
           # come out of either. Registering inside one of them is how half a
           # feature ships (plan 49 lane C, #4).
-          Helpers::ContentInsetHelper.imports_for(json_data['contentInsetAdjustmentBehavior'])
+          Helpers::ContentInsetHelper.imports_for(json_data['contentInsetAdjustmentBehavior'], insets: adds_insets_to_safe_area?(json_data))
                                      .each { |k| required_imports&.add(k) }
 
           # Check if sections are defined
@@ -942,31 +952,13 @@ module KjuiTools
             end
           end
 
-          # Content padding
-          # Support contentPadding, insets (array or number), insetHorizontal, insetVertical
-          content_padding = json_data['contentPadding'] || json_data['insets']
-          inset_horizontal = json_data['insetHorizontal']
-          inset_vertical = json_data['insetVertical']
-
-          if content_padding
-            if content_padding.is_a?(Array) && content_padding.length == 4
-              code += "\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(content_padding[0])}, start = #{Helpers::BoundValue.dp(content_padding[1])}, bottom = #{Helpers::BoundValue.dp(content_padding[2])}, end = #{Helpers::BoundValue.dp(content_padding[3])}),", depth + 1)
-            elsif content_padding.is_a?(Numeric)
-              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(content_padding)}),", depth + 1)
-            end
-          elsif inset_horizontal || inset_vertical
-            # Use insetHorizontal and/or insetVertical
-            h_inset = inset_horizontal || 0
-            v_inset = inset_vertical || 0
-            code += "\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(h_inset)}, vertical = #{Helpers::BoundValue.dp(v_inset)}),", depth + 1)
-          elsif (safe_inset = Helpers::ContentInsetHelper.safe_area_padding(
-                   json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal))
-            # A DECLARED numeric contentPadding/insets wins: the author named
-            # an exact value, and this attribute only says "clear the system
-            # bars" — it cannot also mean "and discard the number I wrote".
-            # `never` emits nothing, which is Compose's own default, so
-            # existing screens do not move (plan 49 lane C, #4).
-            code += "\n" + indent("contentPadding = #{safe_inset},", depth + 1)
+          # Content padding: contentPadding / insets, insetHorizontal /
+          # insetVertical, the safe area — the one reading the stack path takes
+          # (collection_stack_content_padding_expr). This path read its own
+          # copy until jsonui-cli 1.9.0: the four values in another order, and
+          # no string form.
+          if (padding_expr = collection_stack_content_padding_expr(json_data, is_horizontal: is_horizontal))
+            code += "\n" + indent("contentPadding = #{padding_expr},", depth + 1)
           end
           
           # Item spacing
@@ -1012,9 +1004,10 @@ module KjuiTools
               required_imports&.add(:arrangement)
               code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(between)}),", depth + 1)
             end
-          elsif content_at_bottom?(json_data) && !line_spacing
+          elsif (content_at_bottom?(json_data) || column_content_alignment(json_data)) && !line_spacing
             required_imports&.add(:arrangement)
-            code += "\n" + indent("verticalArrangement = Arrangement.Bottom,", depth + 1)
+            along = column_content_alignment(json_data) ? 'Arrangement.Center' : 'Arrangement.Bottom'
+            code += "\n" + indent("verticalArrangement = #{along},", depth + 1)
             if column_spacing
               code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(column_spacing)}),", depth + 1)
             end
@@ -1028,7 +1021,10 @@ module KjuiTools
             # spacedBy alone packed it to the top. Not reversed, defaultScrollAnchor
             # bottom puts short content at the bottom too, as iOS draws it (round 14).
             if line_spacing
-              line_arg = json_data['reverseLayout'] == true || content_at_bottom?(json_data) ? ', Alignment.Bottom' : ''
+              line_arg = if (centered = column_content_alignment(json_data)) then ", #{centered}"
+                         elsif json_data['reverseLayout'] == true || content_at_bottom?(json_data) then ', Alignment.Bottom'
+                         else ''
+                         end
               required_imports&.add(:alignment) unless line_arg.empty?
               code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(line_spacing)}#{line_arg}),", depth + 1)
             end
@@ -2803,6 +2799,13 @@ module KjuiTools
             code += "\n" + indent("// Requires KotlinJsonUI >= 2.42.0 (CollectionStack contentAtBottom)", depth + 1)
             code += "\n" + indent("contentAtBottom = true,", depth + 1)
           end
+          # A short vertical list sits in the middle for a center anchor, on the
+          # LAZY and EAGER containers (column_content_alignment, round 16).
+          if !is_horizontal && (column_alignment = column_content_alignment(json_data))
+            required_imports&.add(:alignment)
+            code += "\n" + indent("// Requires KotlinJsonUI >= 2.42.0 (CollectionStack columnContentAlignment)", depth + 1)
+            code += "\n" + indent("columnContentAlignment = #{column_alignment},", depth + 1)
+          end
           # A short row sits where defaultScrollAnchor says, on the LAZY and
           # EAGER rows (row_content_alignment, round 15).
           if is_horizontal && (row_alignment = row_content_alignment(json_data))
@@ -2841,33 +2844,69 @@ module KjuiTools
           expr ? ".padding(#{expr})" : nil
         end
 
+        # The values of a contentPadding / insets declaration as the SSoT's
+        # Collection.insets declares them, or nil: a number, or 1, 2 or 4 values
+        # — an array, or a string separated by `|` (whitespace and commas too) —
+        # read as `paddings` reads them: one, every side; two, [vertical,
+        # horizontal]; four, [top, right, bottom, left]. KotlinJsonUI Dynamic
+        # reads the same (parseCollectionPadding). Until jsonui-cli 1.9.0 this
+        # read four values as [top, left, bottom, right], only an array of
+        # four, and no string (4f ruling 2026-09-27, round 16).
+        def self.content_padding_values(value)
+          values = case value
+                   when Numeric then [value]
+                   when Array then value
+                   when String then value.split(/[|\s,]+/).map { |v| Float(v, exception: false) }.compact
+                   end
+          values if values && [1, 2, 4].include?(values.length)
+        end
+
+        # PaddingValues of those values (content_padding_values), right and
+        # left as end and start.
+        def self.content_padding_expr(values)
+          dp = ->(v) { Helpers::BoundValue.dp(v.is_a?(Float) && v == v.floor ? v.to_i : v) }
+          case values.length
+          when 1 then "PaddingValues(#{dp.(values[0])})"
+          when 2 then "PaddingValues(horizontal = #{dp.(values[1])}, vertical = #{dp.(values[0])})"
+          else "PaddingValues(top = #{dp.(values[0])}, start = #{dp.(values[3])}, bottom = #{dp.(values[2])}, end = #{dp.(values[1])})"
+          end
+        end
+
         # PaddingValues expression for CollectionStack.contentPadding, or nil to
         # use the default (zero padding).
         def self.collection_stack_content_padding_expr(json_data, is_horizontal:)
-          content_padding = json_data['contentPadding'] || json_data['insets']
-          if content_padding.is_a?(Array) && content_padding.length == 4
-            "PaddingValues(top = #{Helpers::BoundValue.dp(content_padding[0])}, start = #{Helpers::BoundValue.dp(content_padding[1])}, bottom = #{Helpers::BoundValue.dp(content_padding[2])}, end = #{Helpers::BoundValue.dp(content_padding[3])})"
-          elsif content_padding.is_a?(Numeric)
-            "PaddingValues(#{Helpers::BoundValue.dp(content_padding)})"
+          declared = [json_data['contentPadding'], json_data['insets']].lazy.map { |v| content_padding_values(v) }.find(&:itself)
+          if declared
+            content_padding_expr(declared)
           else
+            # A declared contentPadding / insets wins over the safe area (plan
+            # 49 lane C, #4). Without one, insetHorizontal / insetVertical are
+            # ADDED to the safe area `contentInsetAdjustmentBehavior` asks
+            # for, as iOS adds them (ContentInsetHelper.safe_area_padding; 4f
+            # ruling 2026-09-27, round 16) — they replaced it until jsonui-cli
+            # 1.9.0. Both of Collection's emitters go through this one method
+            # (the grid path and the stack path, chosen by
+            # `single_column_sections?`).
             inset_h = json_data['insetHorizontal']
             inset_v = json_data['insetVertical']
-            if inset_h || inset_v
+            safe = Helpers::ContentInsetHelper.safe_area_padding(
+              json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal,
+                                                           inset_horizontal: inset_h, inset_vertical: inset_v
+            )
+            if safe
+              safe
+            elsif inset_h || inset_v
               "PaddingValues(horizontal = #{Helpers::BoundValue.dp(inset_h || 0)}, vertical = #{Helpers::BoundValue.dp(inset_v || 0)})"
-            else
-              # Same precedence as the grid path: a declared numeric padding
-              # wins, and only when none is declared does
-              # `contentInsetAdjustmentBehavior` get to ask for the safe-area
-              # inset. Both of Collection's emitters go through this one
-              # method now — the grid path and the stack path are chosen by
-              # `single_column_sections?`, and a change that reaches only one
-              # of them reaches roughly half the collections in a project
-              # (plan 49 lane C, #4).
-              Helpers::ContentInsetHelper.safe_area_padding(
-                json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal
-              )
             end
           end
+        end
+
+        # Whether insetHorizontal / insetVertical are added to a safe area
+        # (collection_stack_content_padding_expr): no contentPadding / insets
+        # the reader takes, and an inset declared.
+        def self.adds_insets_to_safe_area?(json_data)
+          !(json_data['insetHorizontal'] || json_data['insetVertical']).nil? &&
+            [json_data['contentPadding'], json_data['insets']].none? { |v| content_padding_values(v) }
         end
 
         # Emit cell ForEach inside LazyListScope. Single-column so no GridItemSpan.
