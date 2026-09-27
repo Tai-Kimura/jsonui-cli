@@ -220,11 +220,11 @@ module SjuiTools
                     @modifier_bag.append(:frame_size, ".frame(maxWidth: #{width_param})")
                   end
                 end
-                @modifier_bag.append(:frame_size, ".frame(minHeight: #{height_param}, idealHeight: #{height_param}, maxHeight: #{height_param})")
+                @modifier_bag.append(:frame_size, ".frame(minHeight: #{height_param}, idealHeight: #{height_param}, maxHeight: #{height_param}#{single_axis_alignment})")
               elsif height_value == '.infinity'
                 # Split into two frame calls for fixed width with maxHeight
-                @modifier_bag.append(:frame_size, ".frame(width: #{width_param})")
-                @modifier_bag.append(:frame_size, ".frame(maxHeight: #{height_param})")
+                @modifier_bag.append(:frame_size, ".frame(width: #{width_param}#{single_axis_alignment})")
+                @modifier_bag.append(:frame_size, ".frame(maxHeight: #{height_param}#{single_axis_alignment})")
               else
                 ga = gravity_to_frame_alignment
                 if ga
@@ -253,17 +253,35 @@ module SjuiTools
                   frame_alignment = label_frame_alignment
                   @modifier_bag.append(:frame_size, ".frame(width: #{width_param}, alignment: #{frame_alignment})")
                 else
-                  @modifier_bag.append(:frame_size, ".frame(width: #{width_param})")
+                  @modifier_bag.append(:frame_size, ".frame(width: #{width_param}#{single_axis_alignment})")
                 end
               end
             elsif height_value
               if height_value == '.infinity'
-                @modifier_bag.append(:frame_size, ".frame(maxHeight: #{height_param})")
+                @modifier_bag.append(:frame_size, ".frame(maxHeight: #{height_param}#{single_axis_alignment})")
               else
-                @modifier_bag.append(:frame_size, ".frame(minHeight: #{height_param}, idealHeight: #{height_param}, maxHeight: #{height_param})")
+                @modifier_bag.append(:frame_size, ".frame(minHeight: #{height_param}, idealHeight: #{height_param}, maxHeight: #{height_param}#{single_axis_alignment})")
               end
             end
           end
+        end
+
+        # `, alignment: <gravity alignment>` for a frame that sizes ONE axis of
+        # a container (or of a node with a declared gravity) — a fixed size,
+        # or a matchParent height with no fixed width — else ''. The
+        # user's ruling of 2026-09-27: iOS puts content smaller than such a
+        # frame at top | start (gravityDefaults), as Compose (Column / Box)
+        # and the web (flex-start) do; a declared center* gravity still
+        # centres. Until jsonui-cli 1.9.0 these frames carried no alignment,
+        # so SwiftUI centred the content on that axis — a 60pt-tall
+        # matchParent View drew a 20pt label 19pt down. A Label keeps its own
+        # text alignment (label_frame_alignment), and a leaf with no gravity
+        # its content channel (gravity_to_frame_alignment is nil there).
+        def single_axis_alignment
+          return '' if @component['type'] == 'Label'
+
+          ga = gravity_to_frame_alignment
+          ga ? ", alignment: #{ga}" : ''
         end
 
         # gravityからSwiftUI frame alignmentを取得
