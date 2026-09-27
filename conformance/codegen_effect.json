@@ -1,5 +1,36 @@
 {
   "schemaVersion": 1,
   "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
-  "entries": []
+  "entries": [
+    {
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "kjui_tools: ticket kjui-indicator-style-loses-to-a-declared-wrapcontent, for the release after 1.9.0",
+      "reason": "indicatorStyle is declared for Compose from 1.9.0 (before, swift only, so android was not probed). kjui lets any declared width / height beat the style's size, and the fixture's Indicator declares wrapContent, so large and small both draw the default spinner; iOS and web read the style there. Not a change from 1.8.120: the same rule decided the legacy `style` size. Found after the 1.9.0 freeze; the user's ruling sends such differences to the next release.",
+      "note": "Fix: a wrapContent width / height is the content's size, and the style sets the content's size — only a length should win."
+    },
+    {
+      "component": "common",
+      "attribute": "tintColor",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "kjui_tools: ticket kjui-a-containers-tintcolor-reaches-no-descendant-control, for the release after 1.9.0",
+      "reason": "Ruling f5e6a502 (1.9.0): tintColor is the accent of the operable parts, never the text colour, so kjui dropped the LocalContentColor wrapper that coloured descendant text. A View has no operable part of its own, so Android now emits nothing for it; sjui emits .tint, which reaches a descendant control. Found after the 1.9.0 freeze; the user's ruling sends it to the next release.",
+      "note": "Fix: hand a container's tint down to the controls below it (their own tintColor wins), as .tint does on iOS."
+    },
+    {
+      "component": "common",
+      "attribute": "tintColor",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "kjui_tools: ticket kjui-a-containers-tintcolor-reaches-no-descendant-control, for the release after 1.9.0",
+      "reason": "The bound form of the same: with nothing emitted for a View's tintColor, the binding has nowhere to go (see the C0 row).",
+      "note": "Goes with the C0 row."
+    }
+  ]
 }
