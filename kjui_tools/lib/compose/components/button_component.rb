@@ -315,7 +315,17 @@ module KjuiTools
           # emitted on its own so a text-only button keeps its previous
           # output byte for byte.
           if has_image && show_text
-            code += "\n" + indent("Row(verticalAlignment = Alignment.CenterVertically) {", depth + 1)
+            # The icon and the text move together, placed across the button by
+            # textAlign (4f ruling 2026-09-27, round 18; measured on iOS: the
+            # icon + text group at the start / end / middle of a 200pt
+            # button): the Row takes the button's width and arranges the pair.
+            # It sat in the middle whatever textAlign said.
+            row_args = 'verticalAlignment = Alignment.CenterVertically'
+            if (arrangement = icon_row_arrangement(json_data))
+              required_imports&.add(:arrangement)
+              row_args = "modifier = Modifier.fillMaxWidth(), horizontalArrangement = #{arrangement}, #{row_args}"
+            end
+            code += "\n" + indent("Row(#{row_args}) {", depth + 1)
             code += "\n" + build_icon_code(json_data, image_name, depth + 2, required_imports,
                                            decorative: true, spacer_after: true)
             code += "\n" + build_text_code(json_data, text, depth + 2, required_imports)
@@ -440,6 +450,21 @@ module KjuiTools
             align_arg +
             "\n" + text_arg_lines +
             "\n" + indent(")", depth)
+        end
+
+        # textAlign as the icon row's arrangement (the pair's place), or nil:
+        # no textAlign, or a button with no width of its own.
+        ICON_ROW_ARRANGEMENT = {
+          'left' => 'Arrangement.Start',
+          'center' => 'Arrangement.Center',
+          'right' => 'Arrangement.End'
+        }.freeze
+
+        def self.icon_row_arrangement(json_data)
+          return nil unless json_data['textAlign'] && bounded_width?(json_data)
+
+          Helpers::BoundValue.enum(json_data['textAlign'], ICON_ROW_ARRANGEMENT,
+                                   bound_default: 'Arrangement.Center', declared: [json_data['type'] || 'Button', 'textAlign'])
         end
 
         # Whether the button has a width of its own: a declared width that is
