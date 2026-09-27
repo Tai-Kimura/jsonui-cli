@@ -171,3 +171,120 @@ def test_a_subscription_the_later_row_triggers_is_not_told_apart(tmp_path):
     outcome, message = _one(tests, "idle")
     assert outcome == "failed" and "api.createOrder: this row says not-called" in message, tests
     assert said == [], said
+
+
+# ------------------------------------ an install without a row name ----
+#
+# A hand-written test calls installFetchMock(routes) — no row name, as when
+# there was no such argument — and 1.9.0 entered a row for it all the same.
+# Re-installed in a helper after an await, the row went to the helper's
+# continuation; the caller kept the first install's, and its next request, to
+# the install that replaced it, was answered 599 "from an earlier row" and not
+# counted (a consumer: 2 of 820 red; the 1.8.120 runtime green). An unnamed
+# install is the global mock again; a named one — a generated row — keeps its
+# row. One case per file: the runtime is loaded once per file, so no row a
+# case entered reaches another.
+
+_REINSTALL_HEAD = '''import { it } from "vitest";
+import { installFetchMock } from "../generated/jsonui-branch-runtime";
+const route = (status: number): any => ({ op: "postX", method: "POST", pattern: "^/api/x$",
+  scenario: "s", scenarios: { s: { status, body: {} } } });
+function must(got: string, want: string): void { if (got !== want) throw new Error(`OUTCOME ${got}`); }
+async function read(rec: any): Promise<string> {
+  const res = await fetch("/api/x", { method: "POST" });
+  return `status ${res.status} counted ${rec.countFor("postX")} earlier ${JSON.stringify(rec.earlierRowCalls())}`;
+}
+'''
+
+#: (file, case, body, what it must read). NAME is the row name, "" for none.
+_REINSTALL_CASES = {
+    "helper-after-await": ('''
+it("an unnamed install re-installed in a helper after an await answers its caller", async () => {
+  let rec = installFetchMock([route(200)]);
+  async function reinstall() { await Promise.resolve(); rec.restore(); rec = installFetchMock([route(429)]); }
+  try { await reinstall(); must(await read(rec), "status 429 counted 1 earlier []"); } finally { rec.restore(); }
+});
+'''),
+    "in-the-body": ('''
+it("an unnamed install re-installed in the test body answers it", async () => {
+  let rec = installFetchMock([route(200)]);
+  await Promise.resolve(); rec.restore(); rec = installFetchMock([route(429)]);
+  try { must(await read(rec), "status 429 counted 1 earlier []"); } finally { rec.restore(); }
+});
+'''),
+    "helper-no-await": ('''
+it("an unnamed install re-installed in a helper with no await answers its caller", async () => {
+  let rec = installFetchMock([route(200)]);
+  async function reinstall() { rec.restore(); rec = installFetchMock([route(429)]); }
+  try { await reinstall(); must(await read(rec), "status 429 counted 1 earlier []"); } finally { rec.restore(); }
+});
+'''),
+    "first-in-helper": ('''
+it("an unnamed first install in a helper after an await answers its caller", async () => {
+  let rec: any;
+  async function install() { await Promise.resolve(); rec = installFetchMock([route(429)]); }
+  try { await install(); must(await read(rec), "status 429 counted 1 earlier []"); } finally { rec.restore(); }
+});
+'''),
+    "named-helper-after-await": ('''
+it("a named install re-installed in a helper after an await: its caller is the first row's", async () => {
+  let rec = installFetchMock([route(200)], {}, null, "row 1");
+  async function reinstall() { await Promise.resolve(); rec.restore(); rec = installFetchMock([route(429)], {}, null, "row 2"); }
+  try {
+    await reinstall();
+    must(await read(rec), 'status 599 counted 0 earlier ["POST /api/x from \\\\"row 1\\\\""]');
+  } finally { rec.restore(); }
+});
+'''),
+}
+_REPRO = "an unnamed install re-installed in a helper after an await answers its caller"
+_NAMED = "a named install re-installed in a helper after an await: its caller is the first row's"
+
+#: The line the controls take out, and what they put back.
+_ISOLATED = '  const isolated = row !== "";\n'
+
+
+def _reinstall_project(root: Path, isolated: str | None = None) -> Path:
+    runtime = bt.RUNTIME_TS
+    if isolated is not None:
+        assert runtime.count(_ISOLATED) == 1
+        runtime = runtime.replace(_ISOLATED, f"  const isolated = {isolated};\n")
+    n._write(root / "tests/unit/generated/jsonui-branch-runtime.ts", runtime)
+    for name, body in _REINSTALL_CASES.items():
+        n._write(root / f"tests/unit/reinstall/{name}.test.ts", _REINSTALL_HEAD + body)
+    n._runner_files(root)
+    return root
+
+
+def test_an_unnamed_install_is_the_global_mock_and_a_named_one_keeps_its_row(tmp_path):
+    tests, said = _run(_reinstall_project(tmp_path / "p"))
+    assert len(tests) == len(_REINSTALL_CASES), tests
+    assert {k: v[0] for k, v in tests.items()} == dict.fromkeys(tests, "passed"), tests
+
+
+def test_control_an_unnamed_install_that_enters_a_row_is_the_reported_599(tmp_path):
+    """1.9.0's unnamed install, put back: it enters a row and reads rows."""
+    tests, _ = _run(_reinstall_project(tmp_path / "p", isolated="true"))
+    red = {k: v[1] for k, v in tests.items() if v[0] != "passed"}
+    assert red == {_REPRO: 'OUTCOME status 599 counted 0 earlier ["POST /api/x from an earlier row"]'}, tests
+
+
+def test_control_a_named_install_without_its_row_counts_the_caller(tmp_path):
+    tests, _ = _run(_reinstall_project(tmp_path / "p", isolated="false"))
+    red = {k: v[1] for k, v in tests.items() if v[0] != "passed"}
+    assert red == {_NAMED: "OUTCOME status 429 counted 1 earlier []"}, tests
+
+
+@pytest.mark.parametrize("carrier", ["timer", "task"])
+def test_control_generated_rows_without_their_rows_isolated_the_later_row_is_red(tmp_path, carrier):
+    """The generated rows are named installs: take their isolation out and
+    an earlier row's late call fails the later row's not-called again."""
+    root = _project(tmp_path / "p", NOT_CALLED, carrier)
+    runtime = root / "tests/unit/generated/jsonui-branch-runtime.ts"
+    text = runtime.read_text(encoding="utf-8")
+    assert text.count(_ISOLATED) == 1
+    runtime.write_text(text.replace(_ISOLATED, "  const isolated = false;\n"), encoding="utf-8")
+    tests, said = _run(root)
+    outcome, message = _one(tests, "idle")
+    assert outcome == "failed" and "api.createOrder: this row says not-called" in message, tests
+    assert said == [], said

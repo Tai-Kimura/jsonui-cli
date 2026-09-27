@@ -749,6 +749,13 @@ loads, so a test that freezes `Date` (`vi.useFakeTimers({ toFake: ["Date"]
 them; a clock frozen before the import, with `setTimeout` left real, fails the
 wait by name. Every failure starts `settle:`.
 
+`installFetchMock(routes)` without a row name — a hand-written test's call —
+is one global mock, as in 1.8.120: every request goes to the install in place,
+wherever it was started, so a test may re-install it anywhere (in a helper,
+after an await). A generated row passes its name, and its install keeps the
+row apart: a request an earlier row's view model starts after its row ended
+is answered 599, not counted, and named (`earlier_row_call`).
+
 ### Requests no route declares
 
 A request during act that matches no declared route is answered 599 by the
