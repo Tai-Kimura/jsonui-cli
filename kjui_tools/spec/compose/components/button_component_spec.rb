@@ -22,6 +22,23 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
   end
 
   describe '.generate' do
+    # 4f ruling 2026-09-27, round 17: a Button's text is placed across it by
+    # textAlign, centre by default. The content Row of a Material Button
+    # centres a wrap-width Text, so TextAlign.Start / End drew it in the
+    # middle: the Text takes the button's width when the button has one of its
+    # own (a declared width that is not wrapContent, or a weight) — not a
+    # wrap-width button, which filling would stretch, and not beside an icon.
+    it 'lets textAlign place the text across a button of a width of its own' do
+      text = ->(json) { described_class.generate({ 'type' => 'Button', 'text' => 'Go' }.merge(json), 0, required_imports) }
+      expect(text.({ 'width' => 200, 'textAlign' => 'Left' })).to include('textAlign = TextAlign.Start').and include('modifier = Modifier.fillMaxWidth()')
+      expect(text.({ 'width' => 'matchParent', 'textAlign' => 'Right', 'fontSize' => 14 })).to include('modifier = Modifier.fillMaxWidth()')
+      expect(text.({ 'weight' => 1, 'textAlign' => 'Center' })).to include('modifier = Modifier.fillMaxWidth()')
+      expect(text.({ 'width' => 'wrapContent', 'textAlign' => 'Left' })).not_to include('fillMaxWidth()')
+      expect(text.({ 'textAlign' => 'Left' })).not_to include('Modifier.fillMaxWidth()')
+      expect(text.({ 'width' => 200 })).not_to include('Modifier.fillMaxWidth()')
+      expect(text.({ 'width' => 200, 'textAlign' => 'Left', 'image' => 'ic_x' })).not_to include('modifier = Modifier.fillMaxWidth()')
+    end
+
     it 'generates basic Button component' do
       json_data = { 'type' => 'Button', 'text' => 'Click Me' }
       result = described_class.generate(json_data, 0, required_imports)

@@ -348,6 +348,34 @@ module KjuiTools
           parent_orientation == 'Row' ? :width : :height
         end
 
+        # Where a Label's text sits in a frame taller than it (4f ruling
+        # 2026-09-27, round 17; attribute_semantics.json gravityDefaults ->
+        # leafOwnFrameChannel): its gravity's vertical part — top, bottom, or
+        # the middle for center / centerVertical — and the middle when the
+        # gravity names none, as iOS places it (measured by subagent 4 on
+        # sjui codegen and SwiftJsonUI Dynamic). `.wrapContentHeight(align =
+        # …)` for the Label's chain to append inside its background and
+        # padding, or nil: top, or no frame of its own along the height (a
+        # height that wraps its text). Compose's Text has no vertical
+        # alignment; until jsonui-cli 1.9.0 a numeric height drew the text at
+        # the top whatever the gravity.
+        def self.label_vertical_alignment(json_data, parent_type)
+          height = json_data['height']
+          own_frame = (!height.nil? && height != 'wrapContent') || json_data['minHeight'] ||
+                      json_data['heightWeight'] || (parent_type == 'Column' && json_data['weight'])
+          return nil unless own_frame
+
+          gravity = json_data['gravity']
+          parts = (gravity.is_a?(Array) ? gravity : gravity.to_s.split('|')).map do |g|
+            JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity')
+          end.compact
+          align = if parts.include?('bottom') then 'Alignment.Bottom'
+                  elsif parts.include?('top') && !(parts & %w[center centervertical center_vertical centerinparent center_in_parent]).any? then nil
+                  else 'Alignment.CenterVertically'
+                  end
+          align && ".wrapContentHeight(align = #{align})"
+        end
+
         def self.build_size(json_data, parent_type = nil, required_imports = nil)
           modifiers = []
           weight_axis = weighted_axis(json_data, parent_type)
@@ -458,52 +486,18 @@ module KjuiTools
           # Same outside-in argument applies to height: heightIn must be
           # before fillMaxHeight / height.
           #
-          # Label/Text vertical glyph alignment: Compose `Text` has no vertical
-          # text-align, so whenever a Label fills a taller area (minHeight,
-          # height:matchParent, or a vertical-container weight) and its gravity
-          # asks for vertical center/bottom, we pair the fill with
-          # `.wrapContentHeight(align = ...)` to move the glyphs within the filled
-          # area — matching iOS `.frame(alignment: .center)`.
-          # Regression: kjui-label-gravity-center-not-vertically-centered
-          #             (extends the original minHeight-only handling).
-          is_label = json_data['type'] == 'Label' || json_data['type'] == 'Text'
-          label_valign = nil
-          if is_label && json_data['gravity']
-            gravity_parts = if json_data['gravity'].is_a?(Array)
-                              json_data['gravity'].map { |g| JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity') }.compact
-                            else
-                              json_data['gravity'].to_s.split('|').map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') }.compact
-                            end
-            if gravity_parts.include?('bottom')
-              label_valign = 'Alignment.Bottom'
-            elsif gravity_parts.include?('center') ||
-                  gravity_parts.include?('centervertical') ||
-                  gravity_parts.include?('center_vertical') ||
-                  gravity_parts.include?('centerinparent') ||
-                  gravity_parts.include?('center_in_parent')
-              label_valign = 'Alignment.CenterVertically'
-            end
-          end
-
-          valign_emitted = false
-          if label_valign && json_data['minHeight']
-            # minHeight + vertical gravity: defaultMinSize floor + wrapContentHeight.
-            modifiers << ".defaultMinSize(minHeight = #{BoundValue.dp(json_data['minHeight'])})"
-            modifiers << ".wrapContentHeight(align = #{label_valign})"
-            valign_emitted = true
-            # `maxHeight` (if any) is still applied below as a normal heightIn.
-            if json_data['maxHeight']
-              modifiers << ".heightIn(max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
-            end
-          end
+          # A Label's text is placed vertically in a frame taller than it by
+          # its gravity — label_vertical_alignment, applied by the Label's own
+          # chain inside its background and padding (4f ruling 2026-09-27,
+          # round 17). It was paired with the height here, before the
+          # background, so a Label with a minHeight drew its background only
+          # as tall as its text; and a numeric height was not paired at all.
 
           # Same explicit-size rule as the width axis: a declared numeric
           # height wins over the heightIn bounds (mirror of the dynamic
           # `.height(N).heightIn(...)` chain, where the bound is inert).
           height_constraint =
-            if valign_emitted
-              nil # handled above (defaultMinSize + optional heightIn(max))
-            elsif json_data['minHeight'] && json_data['maxHeight']
+            if json_data['minHeight'] && json_data['maxHeight']
               ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])}, max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
             elsif json_data['minHeight']
               ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])})"
@@ -548,11 +542,6 @@ module KjuiTools
             fills_height = true
           end
 
-          # Pair the height-fill with wrapContentHeight(align) so a centered/
-          # bottom Label actually moves its glyphs within the filled area.
-          if label_valign && fills_height && !valign_emitted
-            modifiers << ".wrapContentHeight(align = #{label_valign})"
-          end
           
           # Aspect ratio. A bound side cannot be divided in Ruby (`"@{w}".to_f`
           # is 0.0, and 0/0 is NaN), so the division moves into the emit.

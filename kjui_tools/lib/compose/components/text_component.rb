@@ -368,6 +368,13 @@ module KjuiTools
           end
           # padding/paddings for Label = internal padding (after background)
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          # The text sits in a taller frame by its gravity, inside the background
+          # and the padding (label_vertical_alignment; 4f ruling 2026-09-27, round 17).
+          valign = Helpers::ModifierBuilder.label_vertical_alignment(json_data, parent_type)
+          if valign
+            required_imports&.add(:alignment)
+            modifiers << valign
+          end
 
           if line_state_var
             args = ["#{line_state_var}"]
@@ -773,6 +780,13 @@ module KjuiTools
             end
           else
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+            # The text sits in a taller frame by its gravity, inside the background
+            # and the padding (label_vertical_alignment; 4f ruling 2026-09-27, round 17).
+            valign = Helpers::ModifierBuilder.label_vertical_alignment(json_data, parent_type)
+            if valign
+              required_imports&.add(:alignment)
+              modifiers << valign
+            end
           end
 
           if modifiers.any?
@@ -921,6 +935,13 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          # The text sits in a taller frame by its gravity, inside the background
+          # and the padding (label_vertical_alignment; 4f ruling 2026-09-27, round 17).
+          valign = Helpers::ModifierBuilder.label_vertical_alignment(json_data, parent_type)
+          if valign
+            required_imports&.add(:alignment)
+            modifiers << valign
+          end
 
           if modifiers.any?
             code += Helpers::ModifierBuilder.format(modifiers, depth)

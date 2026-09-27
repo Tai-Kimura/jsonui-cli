@@ -226,6 +226,34 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
     end
 
+    # Round 17 (4f ruling 2026-09-27): the text sits in its frame by its
+    # gravity INSIDE the background and the padding — the last size step of
+    # the chain — so the background fills the frame (a minHeight chip's was
+    # only as tall as its text) and a numeric height centres too (its text
+    # sat at the top whatever the gravity).
+    it 'places the text inside the background and the padding, by the gravity, the middle by default' do
+      chip = described_class.generate({ 'type' => 'Label', 'text' => 'c', 'minHeight' => 36, 'height' => 'wrapContent',
+                                        'paddings' => [5, 16], 'background' => '#FFFFFF', 'gravity' => 'center' }, 0, required_imports)
+      lines = chip.lines.map(&:strip)
+      order = ['.heightIn(min = 36.dp)', '.background(', '.padding(vertical = 5.dp, horizontal = 16.dp)',
+               '.wrapContentHeight(align = Alignment.CenterVertically)'].map { |m| lines.index { |l| l.start_with?(m) } }
+      expect(order.compact.size).to eq(4), chip
+      expect(order).to eq(order.sort), chip
+      digit = described_class.generate({ 'type' => 'Label', 'text' => '8', 'width' => 44, 'height' => 56, 'gravity' => 'center' }, 0, required_imports)
+      expect(digit.lines.map(&:strip).last(2).first).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+      plain = described_class.generate({ 'type' => 'Label', 'text' => '8', 'width' => 44, 'height' => 56 }, 0, required_imports)
+      expect(plain).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
+      top = described_class.generate({ 'type' => 'Label', 'text' => '8', 'width' => 44, 'height' => 56, 'gravity' => 'top' }, 0, required_imports)
+      expect(top).not_to include('wrapContentHeight(align')
+    end
+
+    it 'places the text of a linkable Label and of one with partialAttributes the same way' do
+      base = { 'type' => 'Label', 'text' => '8 http://a.b', 'width' => 44, 'height' => 56, 'gravity' => 'bottom' }
+      linkable = described_class.generate(base.merge('linkable' => true), 0, required_imports)
+      partial = described_class.generate(base.merge('partialAttributes' => [{ 'range' => [0, 1], 'fontColor' => '#FF0000' }]), 0, required_imports)
+      [linkable, partial].each { |out| expect(out).to include('.wrapContentHeight(align = Alignment.Bottom)') }
+    end
+
     it 'generates text with max lines' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'lines' => 2 }
       result = described_class.generate(json_data, 0, required_imports)
