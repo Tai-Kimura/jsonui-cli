@@ -270,11 +270,14 @@ module SjuiTools
             # Add textAlignment (default to .leading). A binding is not one of
             # the spellings `text_alignment_to_swiftui` switches on, so it hit
             # the else branch and froze every bound alignment to .leading.
+            # Without textAlign, the lines follow the horizontal part of
+            # gravity (label_horizontal, the SSoT's Label.textAlign); until
+            # jsonui-cli 1.9.0 they were always at the start then.
             alignment = if @component['textAlign']
                           bound_text_alignment(@component['textAlign']) ||
                             text_alignment_to_swiftui(@component['textAlign'])
                         else
-                          '.leading'
+                          { 'center' => '.center', 'trailing' => '.trailing' }[label_horizontal] || '.leading'
                         end
             add_line "textAlignment: #{alignment},"
 
@@ -379,15 +382,9 @@ module SjuiTools
 
             if parent_orientation == 'horizontal'
               # In horizontal stack with weight - fill width
-              # Add alignment based on textAlign
-              frame_alignment = case JsonUIShared::EnumSpelling.lowered(@component['textAlign'], 'Label', 'textAlign')
-              when 'center'
-                '.center'
-              when 'right', 'trailing'
-                '.trailing'
-              else
-                '.leading'
-              end
+              # Add alignment by the Label rule (label_horizontal: textAlign,
+              # else gravity's horizontal part, else the start)
+              frame_alignment = { 'center' => '.center', 'trailing' => '.trailing' }[label_horizontal] || '.leading'
               @modifier_bag.append(:frame_size, ".frame(maxWidth: .infinity, alignment: #{frame_alignment})")
               @skip_frame_width = true  # Prevent frame_helper from adding duplicate maxWidth
             elsif parent_orientation == 'vertical'

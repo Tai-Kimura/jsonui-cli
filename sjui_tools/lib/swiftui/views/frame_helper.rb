@@ -250,10 +250,19 @@ module SjuiTools
                 @modifier_bag.append(:frame_size, ".frame(minHeight: #{height_param}, idealHeight: #{height_param}, maxHeight: #{height_param}#{single_axis_alignment})")
               elsif height_value == '.infinity'
                 # Split into two frame calls for fixed width with maxHeight
-                @modifier_bag.append(:frame_size, ".frame(width: #{width_param}#{single_axis_alignment})")
+                # (a Label's width frame places its text across by the
+                # Label rule, label_horizontal)
+                width_alignment = label_node? ? ", alignment: #{label_frame_alignment}" : single_axis_alignment
+                @modifier_bag.append(:frame_size, ".frame(width: #{width_param}#{width_alignment})")
                 @modifier_bag.append(:frame_size, ".frame(maxHeight: #{height_param}#{single_axis_alignment})")
               else
-                ga = gravity_to_frame_alignment
+                # A Label: its text by the Label rule on both axes - across,
+                # textAlign, else gravity's horizontal part, else the start;
+                # down, label_vertical. Until jsonui-cli 1.9.0 this took
+                # gravity_to_frame_alignment, which read no textAlign, and gave
+                # no alignment when gravity was omitted: a 200 x 44 label with
+                # neither drew its text in the middle.
+                ga = label_node? ? label_frame_alignment(both_infinity: true) : gravity_to_frame_alignment
                 if ga
                   @modifier_bag.append(:frame_size, ".frame(width: #{width_param}, height: #{height_param}, alignment: #{ga})")
                 else
@@ -275,8 +284,11 @@ module SjuiTools
                   end
                 end
               else
-                # For labels, add alignment to honor textAlign and gravity
-                if @component['type'] == 'Label' && (@component['textAlign'] || @component['gravity'])
+                # A Label: its text across by the Label rule (label_horizontal)
+                # - always, so one with neither textAlign nor gravity is at the
+                # start. Until jsonui-cli 1.9.0 it took no alignment then and
+                # SwiftUI drew the text in the middle of the fixed width.
+                if @component['type'] == 'Label'
                   frame_alignment = label_frame_alignment
                   @modifier_bag.append(:frame_size, ".frame(width: #{width_param}, alignment: #{frame_alignment})")
                 else
@@ -408,6 +420,37 @@ module SjuiTools
           label_vertical_named || 'center'
         end
 
+        # Where a Label's text sits across its frame: textAlign's position,
+        # else the horizontal its gravity names (left / right /
+        # centerHorizontal, center), else the start - 'leading', 'center' or
+        # 'trailing' (the SSoT's Label.textAlign, 4f ruling 2026-09-27). A
+        # bound textAlign is textAlign's (its value is not known here: the
+        # start). Until jsonui-cli 1.9.0 a Label's gravity did not place its
+        # text across a frame wider than it, and one with neither sat in the
+        # middle of a fixed width.
+        def label_horizontal
+          text_align = @component['textAlign']
+          if text_align
+            return case JsonUIShared::EnumSpelling.lowered(text_align, @component['type'], 'textAlign')
+                   when 'center' then 'center'
+                   when 'right', 'trailing' then 'trailing'
+                   else 'leading'
+                   end
+          end
+
+          gravity = @component['gravity']
+          return 'leading' if gravity.nil?
+
+          parts = gravity.is_a?(Array) ? gravity.map(&:to_s) : gravity.to_s.split('|')
+          named = parts.map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') }.compact
+          # center / centerHorizontal first, then right, then left - the
+          # order rjui's TailwindMapper.map_label_gravity reads them in.
+          return 'center' if (named & %w[center centerhorizontal center_horizontal]).any?
+          return 'trailing' if (named & %w[right end]).any?
+
+          'leading'
+        end
+
         # The vertical a Label's gravity names — 'top', 'bottom', 'center'
         # (centerVertical / center) — or nil.
         def label_vertical_named
@@ -471,12 +514,8 @@ module SjuiTools
           # change.
           v = both_infinity ? label_vertical : (label_vertical_named || 'top')
 
-          # textAlignから横位置を取得
-          h = case JsonUIShared::EnumSpelling.lowered(text_align, @component['type'], 'textAlign')
-              when 'center' then 'center'
-              when 'right', 'trailing' then 'trailing'
-              else 'leading'
-              end
+          # 横位置: the Label rule (label_horizontal)
+          h = label_horizontal
 
           map = {
             %w[top leading] => '.topLeading',
