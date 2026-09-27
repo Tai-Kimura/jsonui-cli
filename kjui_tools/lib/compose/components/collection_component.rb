@@ -720,6 +720,20 @@ module KjuiTools
           json_data['defaultScrollAnchor'] == 'bottom' && json_data['reverseLayout'] != true
         end
 
+        # Where a horizontal list whose content is shorter than the row sits
+        # along it, as a Compose Alignment.Horizontal, or nil for the start
+        # (the end under reverseLayout, which the lazy containers already
+        # take): defaultScrollAnchor center — its middle; bottom — its end.
+        # iOS draws a short row at its leading edge / middle / trailing edge by
+        # the anchor (4f ruling 2026-09-27, round 15; measured on sjui codegen
+        # and SwiftJsonUI Dynamic); every Compose row sat at its start.
+        def self.row_content_alignment(json_data)
+          case json_data['defaultScrollAnchor']
+          when 'center' then 'Alignment.CenterHorizontally'
+          when 'bottom' then 'Alignment.End'
+          end
+        end
+
         def self.default_scroll_anchor?(json_data, non_lazy: false)
           anchor = non_lazy ? (%w[center bottom].include?(json_data['defaultScrollAnchor'].to_s) || resting_default_anchor(json_data)) : resting_default_anchor(json_data)
           return false unless anchor
@@ -975,11 +989,22 @@ module KjuiTools
             # never spaced until jsonui-cli 1.9.0.
             # A short reversed grid sits at its end, as the reversed list does
             # (4f ruling 2026-09-27, round 13; spacedBy alone packs to the start).
+            # A short grid sits where defaultScrollAnchor says (row_content_alignment,
+            # round 15); with no spacing the grid's own default is the start,
+            # the end when reversed.
+            row_alignment = row_content_alignment(json_data)
             if (along = horizontal_scroll_spacing(json_data))
               required_imports&.add(:arrangement)
-              along_arg = json_data['reverseLayout'] == true ? ', Alignment.End' : ''
+              along_arg = if row_alignment then ", #{row_alignment}"
+                          elsif json_data['reverseLayout'] == true then ', Alignment.End'
+                          else ''
+                          end
               required_imports&.add(:alignment) unless along_arg.empty?
               code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(along)}#{along_arg}),", depth + 1)
+            elsif row_alignment
+              required_imports&.add(:arrangement)
+              required_imports&.add(:alignment)
+              code += "\n" + indent("horizontalArrangement = Arrangement.aligned(#{row_alignment}),", depth + 1)
             end
             # Lanes only where there are several (a bound count is the
             # sentinel 2 here): one row has nothing between it.
@@ -2029,6 +2054,12 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           padding_modifiers = Helpers::ModifierBuilder.build_padding(json_data)
+          # contentPadding / insets pad the cells, after the node's padding and
+          # inside the scroll where the flow scrolls (4f ruling 2026-09-27,
+          # round 15), as KotlinJsonUI Dynamic's flow pads them. A flow applied
+          # none until jsonui-cli 1.9.0.
+          content_padding = non_lazy_content_padding(json_data, is_horizontal: false)
+          padding_modifiers += [content_padding] if content_padding
           modifiers.concat(padding_modifiers) unless flow_scrolls_if_parent_bounded?(json_data)
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
@@ -2305,6 +2336,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          # contentPadding / insets pad the cells, inside the scroll where the
+          # Column scrolls (4f ruling 2026-09-27, round 15), as KotlinJsonUI
+          # Dynamic's Column and the lazy routes pad them. Until jsonui-cli
+          # 1.9.0 the wrapContent and `lazy: none` Columns applied none.
+          content_padding = non_lazy_content_padding(json_data, is_horizontal: false)
           if scroll_within_bounds
             required_imports&.add(:vertical_scroll)
             required_imports&.add(:layout_modifier)
@@ -2321,6 +2357,7 @@ module KjuiTools
               modifiers << scroll
             end
           end
+          modifiers << content_padding if content_padding
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # Spacing
@@ -2477,6 +2514,10 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          # contentPadding / insets pad the cells (round 15), as KotlinJsonUI
+          # Dynamic's Row pads them; this Row applied none until jsonui-cli 1.9.0.
+          content_padding = non_lazy_content_padding(json_data, is_horizontal: true)
+          modifiers << content_padding if content_padding
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # Along the scroll axis (horizontal_scroll_spacing); this read
@@ -2762,6 +2803,13 @@ module KjuiTools
             code += "\n" + indent("// Requires KotlinJsonUI >= 2.42.0 (CollectionStack contentAtBottom)", depth + 1)
             code += "\n" + indent("contentAtBottom = true,", depth + 1)
           end
+          # A short row sits where defaultScrollAnchor says, on the LAZY and
+          # EAGER rows (row_content_alignment, round 15).
+          if is_horizontal && (row_alignment = row_content_alignment(json_data))
+            required_imports&.add(:alignment)
+            code += "\n" + indent("// Requires KotlinJsonUI >= 2.42.0 (CollectionStack rowContentAlignment)", depth + 1)
+            code += "\n" + indent("rowContentAlignment = #{row_alignment},", depth + 1)
+          end
           if lazy_state
             code += "\n" + indent("lazyState = collectionStackState,", depth + 1)
           end
@@ -2783,6 +2831,14 @@ module KjuiTools
 
           code += "\n" + indent(")", depth)
           code
+        end
+
+        # `.padding(…)` of the content padding for a container that is not a
+        # lazy list (the non-lazy Column and Row, the flow), or nil: the same
+        # PaddingValues the lazy routes take (collection_stack_content_padding_expr).
+        def self.non_lazy_content_padding(json_data, is_horizontal:)
+          expr = collection_stack_content_padding_expr(json_data, is_horizontal: is_horizontal)
+          expr ? ".padding(#{expr})" : nil
         end
 
         # PaddingValues expression for CollectionStack.contentPadding, or nil to

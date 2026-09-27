@@ -56,13 +56,22 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun Modifier.fillMaxSize(): Modifier = this
     class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
     fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
-    class Dp
-    val Int.dp: Dp get() = Dp()
+    class Dp(val v: Int = 0)
+    val Int.dp: Dp get() = Dp(this)
     interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {}
-        val Bottom = object : Alignment { override fun toString() = "Bottom" }; val End = object : Alignment { override fun toString() = "End" } } }
+        val Bottom = object : Alignment { override fun toString() = "Bottom" }; val End = object : Alignment { override fun toString() = "End" }
+        val CenterHorizontally = object : Alignment { override fun toString() = "CenterHorizontally" } } }
     // What an arrangement packs to (null: the start), as the grid records it.
     class Arrangement(val alignment: Alignment? = null) { companion object { fun spacedBy(space: Dp, alignment: Alignment? = null): Arrangement = Arrangement(alignment)
+        fun aligned(alignment: Alignment): Arrangement = Arrangement(alignment)
         val Bottom = Arrangement(Alignment.Bottom) } }
+    // Content padding (round 15): the values, top,start,bottom,end, recorded
+    // in the modifier chain where the padding is applied (Drawn.chain).
+    class PaddingValues(val top: Int, val start: Int, val bottom: Int, val end: Int) { override fun toString() = "$top.$start.$bottom.$end" }
+    fun PaddingValues(all: Dp) = PaddingValues(all.v, all.v, all.v, all.v)
+    fun PaddingValues(horizontal: Dp = Dp(), vertical: Dp = Dp()) = PaddingValues(vertical.v, horizontal.v, vertical.v, horizontal.v)
+    fun PaddingValues(start: Dp = Dp(), top: Dp = Dp(), end: Dp = Dp(), bottom: Dp = Dp()) = PaddingValues(top.v, start.v, bottom.v, end.v)
+    fun Modifier.padding(values: PaddingValues): Modifier { Drawn.chain += "pad($values)"; return this }
     object GridCells { class Fixed(val count: Int) }
     class GridItemSpan(val span: Int)
     class LazyGridItemSpanScope(val maxLineSpan: Int, val maxCurrentLineSpan: Int)
@@ -79,6 +88,8 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         // The last scroll modifier's `enabled` (the user's scrolling), and where a grid packs.
         var userScroll: Boolean? = null
         var packed: String? = null
+        // The scroll and padding modifiers, in the order the chain applies them.
+        val chain = mutableListOf<String>()
         var offset = 0
         val logs = mutableListOf<String>()
         val effects = mutableListOf<suspend () -> Unit>()
@@ -147,6 +158,10 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun LazyVerticalGrid(columns: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
                          horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
                          content: LazyGridScope.() -> Unit) { Drawn.packed = verticalArrangement?.alignment?.toString(); LazyGridScope().content() }
+    // Along its axis, a horizontal grid packs by its horizontalArrangement.
+    fun LazyHorizontalGrid(rows: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
+                           horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
+                           content: LazyGridScope.() -> Unit) { Drawn.packed = horizontalArrangement?.alignment?.toString(); LazyGridScope().content() }
     enum class CollectionStackMode { LAZY, EAGER, NONE;
         companion object { fun fromJson(value: Any?) = when (value) { "eager" -> EAGER; "none" -> NONE; else -> LAZY } } }
     enum class CollectionStackAxis { VERTICAL, HORIZONTAL }
@@ -156,10 +171,11 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     // up (CollectionStack's ReversedColumn, KotlinJsonUI 2.42.0): Positions.
     fun CollectionStack(mode: CollectionStackMode, axis: CollectionStackAxis, modifier: Modifier = Modifier, spacing: Dp? = null,
                         userScrollEnabled: Boolean = true, reverseLayout: Boolean = false, lazyState: LazyListState? = null,
-                        eagerScrollState: ScrollState? = null, contentAtBottom: Boolean = false,
+                        eagerScrollState: ScrollState? = null, contentAtBottom: Boolean = false, rowContentAlignment: Alignment? = null,
                         lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
         Drawn.userScroll = userScrollEnabled
         if (contentAtBottom) Drawn.packed = "Bottom"
+        rowContentAlignment?.let { Drawn.packed = it.toString() }
         if (mode == CollectionStackMode.LAZY) LazyListScope().lazyContent()
         else { Positions.reversed = reverseLayout && axis == CollectionStackAxis.VERTICAL && mode == CollectionStackMode.EAGER; eagerContent() }
     }
@@ -222,11 +238,15 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     class MeasureScope { fun layout(width: Int, height: Int, placementBlock: () -> Unit): MeasureResult = MeasureResult() }
     fun Modifier.layout(measure: MeasureScope.(Measurable, androidx.compose.ui.unit.Constraints) -> MeasureResult): Modifier = this
     fun rememberScrollState() = remember { ScrollState() }
-    fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier { Drawn.userScroll = enabled; return this }
+    fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier { Drawn.userScroll = enabled; Drawn.chain += "scroll"; return this }
     fun Modifier.requiredHeight(height: Dp): Modifier = this
     fun Modifier.wrapContentHeight(align: Alignment, unbounded: Boolean = false): Modifier = this
     fun Column(modifier: Modifier = Modifier, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
     fun FlowRow(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    fun Row(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    // The matchParent flow's box, measured with a bounded height.
+    class BoxWithConstraintsScope { val constraints = androidx.compose.ui.unit.Constraints(0, 100, 0, 100) }
+    fun BoxWithConstraints(modifier: Modifier = Modifier, content: BoxWithConstraintsScope.() -> Unit) { BoxWithConstraintsScope().content() }
     fun key(vararg keys: Any?, block: () -> Unit) { block() }
   KOTLIN
 
@@ -356,7 +376,27 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'stackBottom' => [emit(node('defaultScrollAnchor' => 'bottom')), {}, [0]],
       'stackBottomReversed' => [emit(node('defaultScrollAnchor' => 'bottom', 'reverseLayout' => true)), {}, [0]],
       'gridBottom' => [emit(grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [0]],
-      'gridBottomSpaced' => [emit(grid_node('defaultScrollAnchor' => 'bottom', 'lineSpacing' => 4)), { grid: true }, [0]]
+      'gridBottomSpaced' => [emit(grid_node('defaultScrollAnchor' => 'bottom', 'lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 15: contentPadding / insets on the containers that are not lazy
+      # lists; a short horizontal list where defaultScrollAnchor says.
+      'wrapInset' => [emit(node('height' => 'wrapContent', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'wrapBoundInset' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}', 'insets' => [12, 0, 6, 0])), { mode: 'lazy' }, [0]],
+      'wrapBoundNoneInset' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}', 'insets' => [12, 0, 6, 0])), { mode: 'none' }, [0]],
+      'noneInset' => [emit(node('lazy' => 'none', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'noneRowInset' => [emit(node('lazy' => 'none', 'layout' => 'horizontal', 'insetHorizontal' => 16)), {}, [0]],
+      'flowInset' => [emit(node('layout' => 'flow', 'height' => 100, 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'flowParentInset' => [emit(node('layout' => 'flow', 'height' => 'matchParent', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'flowNoneInset' => [emit(node('layout' => 'flow', 'lazy' => 'none', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'row' => [emit(node('layout' => 'horizontal')), {}, [0]],
+      'rowTop' => [emit(node('layout' => 'horizontal', 'defaultScrollAnchor' => 'top')), {}, [0]],
+      'rowBottom' => [emit(node('layout' => 'horizontal', 'defaultScrollAnchor' => 'bottom')), {}, [0]],
+      'rowCenter' => [emit(node('layout' => 'horizontal', 'defaultScrollAnchor' => 'center')), {}, [0]],
+      'rowEagerBottom' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'defaultScrollAnchor' => 'bottom')), {}, [0]],
+      'rowEagerCenter' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'defaultScrollAnchor' => 'center')), {}, [0]],
+      'hgrid' => [emit(grid_node('layout' => 'horizontal')), { grid: true }, [0]],
+      'hgridBottom' => [emit(grid_node('layout' => 'horizontal', 'defaultScrollAnchor' => 'bottom')), { grid: true }, [0]],
+      'hgridCenterSpaced' => [emit(grid_node('layout' => 'horizontal', 'defaultScrollAnchor' => 'center', 'lineSpacing' => 4)), { grid: true }, [0]],
+      'hgridReversedSpaced' => [emit(grid_node('layout' => 'horizontal', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]]
     }
   end
 
@@ -377,7 +417,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
      <<~KOTLIN
        // One composition, then its effects — as a frame does.
        fun frame(value: Any?, compose: (Any?) -> Unit) {
-           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0; Positions.reversed = false; Positions.k = 0
+           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0; Positions.reversed = false; Positions.k = 0; Drawn.chain.clear()
            compose(value)
            val effects = Drawn.effects.toList(); Drawn.effects.clear()
            kotlinx.coroutines.runBlocking { effects.forEach { it() } }
@@ -389,7 +429,8 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
            frame(target, compose)
            val at = Drawn.items.getOrNull(Drawn.scrolledTo) ?: "none"
            println(label + " => " + at + " @" + Drawn.scrolledTo + " offset " + Drawn.offset + " logs " + Drawn.logs.size +
-               " of " + Drawn.items.joinToString(" ") + " | user " + Drawn.userScroll + " packed " + Drawn.packed + " | duplicate key " + Drawn.duplicate)
+               " of " + Drawn.items.joinToString(" ") + " | user " + Drawn.userScroll + " packed " + Drawn.packed +
+               " chain " + Drawn.chain.joinToString(",").ifEmpty { "-" } + " | duplicate key " + Drawn.duplicate)
        }
        fun main() {
        #{calls.join("\n")}
@@ -476,12 +517,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     (lines[label] or raise "no run for #{label}: #{lines.keys.inspect}").split(' ').first
   end
 
-  # `route target` => { at:, index:, offset:, logs:, user:, packed: }
+  # `route target` => { at:, index:, offset:, logs:, user:, packed:, chain: }
   def read(lines, label)
     line = lines[label] or raise "no run for #{label}: #{lines.keys.inspect}"
     at, index, offset, logs = line.match(/\A(\S+) @(-?\d+) offset (-?\d+) logs (\d+)/).captures
-    user, packed = line.match(/\| user (\S+) packed (\S+) \|/).captures
-    { at: at, index: index.to_i, offset: offset.to_i, logs: logs.to_i, user: user, packed: packed }
+    user, packed, chain = line.match(/\| user (\S+) packed (\S+) chain (\S+) \|/).captures
+    { at: at, index: index.to_i, offset: offset.to_i, logs: logs.to_i, user: user, packed: packed, chain: chain }
   end
 
   it 'an Int is a cell counted across the sections; a key the first cell that has it, on the stack and the grid' do
@@ -650,6 +691,29 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     # A reversed stack packs to its bottom in the library already (reverseLayout).
     expect(read(lines, 'stackBottomReversed 0')[:packed]).to eq('null'), lines.inspect
     expect(read(lines, 'stack 0')[:packed]).to eq('null'), lines.inspect
+  end
+
+  # Round 15 (4f rulings 2026-09-27).
+  it 'contentPadding / insets pad the cells of the containers that are not lazy lists — inside the scroll where they scroll' do
+    lines = run_emitted(routes)
+    # insets [12, 0, 6, 0]: top 12, bottom 6 (the stubs print top.start.bottom.end).
+    { 'wrapInset 0' => 'scroll,pad(12.0.6.0)', 'wrapBoundInset 0' => 'scroll,pad(12.0.6.0)', 'wrapBoundNoneInset 0' => 'pad(12.0.6.0)',
+      'noneInset 0' => 'pad(12.0.6.0)', 'noneRowInset 0' => 'pad(0.16.0.16)', 'flowInset 0' => 'scroll,pad(12.0.6.0)',
+      'flowParentInset 0' => 'scroll,pad(12.0.6.0)', 'flowNoneInset 0' => 'pad(12.0.6.0)',
+      # Nothing declared, nothing padded.
+      'wrap 0' => 'scroll', 'flow 0' => 'scroll' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
+    end
+  end
+
+  it 'a short horizontal list sits where defaultScrollAnchor says: bottom its end, center its middle — the stack, LAZY and EAGER, and the grid' do
+    lines = run_emitted(routes)
+    { 'rowBottom 0' => 'End', 'rowCenter 0' => 'CenterHorizontally', 'rowEagerBottom 0' => 'End', 'rowEagerCenter 0' => 'CenterHorizontally',
+      'hgridBottom 0' => 'End', 'hgridCenterSpaced 0' => 'CenterHorizontally',
+      # The start where nothing moves it; the end, reversed (round 13).
+      'row 0' => 'null', 'rowTop 0' => 'null', 'hgrid 0' => 'null', 'hgridReversedSpaced 0' => 'End' }.each do |label, packed|
+      expect(read(lines, label)[:packed]).to eq(packed), "#{label}: #{lines[label]}"
+    end
   end
 
   it "no two items of a lazy list share a key — two sections', or two cells of one section" do
