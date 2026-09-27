@@ -221,3 +221,193 @@ def test_the_line_names_the_release_and_the_gate_counts_from_it(project, monkeyp
     rc, said = _verify(fail_on_diff=True)
     assert rc == 0 and "`--fail-on-diff` does not count these" in said, said
 
+
+
+# ---- an include's entries, under the include id's prefix ---------------------
+#
+# sjui / kjui expand an include into the screen before they read its data
+# (data_model_updater_core.rb `expand_includes`): the included layout's entries
+# are the screen's Data properties, named with the include id as a camelCase
+# prefix. Until jsonui-cli 1.9.1 this check did not open an include, and a spec
+# declaring the prefixed name was told the layout declares no such entry.
+
+def _screen_with(project: Path, variables: list[dict], child: list) -> None:
+    """An externally authored screen whose layout is *child* (plus a label)."""
+    _write(project / "specs/home.spec.json", {
+        "type": "screen_spec", "version": "1.0",
+        "metadata": {"name": "Home", "displayName": "H", "description": "d", "layoutFile": "home"},
+        "structure": {"components": [], "layout": {}}, "stateManagement": {"uiVariables": variables}})
+    _write(project / "layouts/home.json",
+           {"type": "View", "child": [*child, {"type": "Label", "id": "title_label"}]})
+
+
+def _part(project: Path, name: str, tree: dict) -> None:
+    _write(project / f"layouts/{name}.json", tree)
+
+
+def _card(project: Path) -> None:
+    _part(project, "parts/card", {"type": "View", "child": [
+        {"data": [{"name": "title", "class": "String", "defaultValue": ""},
+                  {"name": "item_count", "class": "Int", "defaultValue": 0}]},
+        {"type": "Label", "id": "card_label", "text": "@{title}"}]})
+
+
+def test_an_includes_entry_is_read_under_the_include_ids_prefix(project):
+    _card(project)
+    _screen_with(project, [_var("cardTitle", "String", defaultValue=""),
+                           _var("cardItemCount", "Int", defaultValue=0)],
+                 [{"include": "parts/card", "id": "card"}])
+    said = _verify()[1]
+    assert "initial value(s)" not in said, said
+
+
+def test_an_includes_entry_with_another_value_is_still_named(project):
+    _card(project)
+    _screen_with(project, [_var("cardTitle", "String", defaultValue="x")],
+                 [{"include": "parts/card", "id": "card"}])
+    said = _verify()[1]
+    assert ("- specs/home.spec.json: stateManagement.uiVariables 'cardTitle' is \"x\" — "
+            "layouts/home.json has \"\" (in include 'parts/card')") in said, said
+
+
+def test_the_raw_name_inside_an_include_with_an_id_is_not_a_screen_entry(project):
+    """`title` is `cardTitle` in the screen's Data type — the unprefixed name
+    is not there on iOS or Android."""
+    _card(project)
+    _screen_with(project, [_var("title", "String", defaultValue="")],
+                 [{"include": "parts/card", "id": "card"}])
+    assert "'title' is \"\" — layouts/home.json declares no data entry 'title'" in _verify()[1]
+
+
+def test_an_include_without_an_id_adds_no_prefix(project):
+    """No prefix, and so no camelCase either: `item_count` stays as written."""
+    _card(project)
+    _screen_with(project, [_var("title", "String", defaultValue=""),
+                           _var("item_count", "Int", defaultValue=3)],
+                 [{"include": "parts/card"}])
+    said = _verify()[1]
+    assert "'title'" not in said, said
+    assert "'item_count' is 3 — layouts/home.json has 0 (in include 'parts/card')" in said, said
+
+
+def test_a_nested_include_takes_both_prefixes(project):
+    """`header` inside `card`: the inner entry is `cardHeaderCaption`; an
+    include without an id inside it passes `card` on."""
+    _part(project, "parts/header", {"type": "View", "data": [
+        {"name": "caption", "class": "String", "defaultValue": "c"}]})
+    _part(project, "parts/card", {"type": "View", "child": [
+        {"include": "parts/header", "id": "header"}, {"include": "parts/header"}]})
+    _screen_with(project, [_var("cardHeaderCaption", "String", defaultValue="c"),
+                           _var("cardCaption", "String", defaultValue="other")],
+                 [{"include": "parts/card", "id": "card"}])
+    said = _verify()[1]
+    assert "'cardHeaderCaption'" not in said, said
+    assert ("'cardCaption' is \"other\" — layouts/home.json has \"c\" (in include "
+            "'parts/header')") in said, said
+
+
+def test_an_include_nodes_own_data_takes_its_prefix(project):
+    _card(project)
+    _screen_with(project, [_var("cardNote", "String", defaultValue="n")],
+                 [{"include": "parts/card", "id": "card",
+                   "data": [{"name": "note", "class": "String", "defaultValue": "n"}]}])
+    assert "initial value(s)" not in _verify()[1]
+
+
+def test_a_missing_include_does_not_stop_the_check_and_is_named(project):
+    """The tools stop the build ("Include file not found"). verify compares
+    what it can read, and a variable it did not find names the include it
+    could not read — counted, not excused: the value is not shown carried."""
+    _screen_with(project, [_var("goneTitle", "String", defaultValue=""),
+                           _var("own", "Int", defaultValue=1)],
+                 [{"data": [{"name": "own", "class": "Int", "defaultValue": 2}]},
+                  {"include": "parts/gone", "id": "gone"}])
+    rc, said = _verify()
+    assert "'own' is 1 — layouts/home.json has 2" in said, said
+    assert ("'goneTitle' is \"\" — layouts/home.json declares no data entry 'goneTitle' — "
+            "include(s) not read: 'parts/gone' (not found)") in said, said
+    assert "2 initial value(s)" in said and rc == 0, said
+
+
+def test_an_include_cycle_does_not_stop_the_check_and_is_named(project):
+    _part(project, "parts/loop_a", {"type": "View", "child": [
+        {"data": [{"name": "title", "class": "String", "defaultValue": "a"}]},
+        {"include": "parts/loop_b", "id": "next"}]})
+    _part(project, "parts/loop_b", {"type": "View", "child": [
+        {"include": "parts/loop_a", "id": "back"}]})
+    _screen_with(project, [_var("loopTitle", "String", defaultValue="a"),
+                           _var("loopNextBackTitle", "String", defaultValue="a")],
+                 [{"include": "parts/loop_a", "id": "loop"}])
+    said = _verify()[1]
+    assert "'loopTitle'" not in said, said
+    assert ("'loopNextBackTitle' is \"a\" — layouts/home.json declares no data entry "
+            "'loopNextBackTitle' — include(s) not read: 'parts/loop_a' (cycle)") in said, said
+
+
+def test_a_layout_including_itself_is_a_cycle_at_the_first_step(project):
+    """The file verify read is one the include is inside: it is not expanded
+    once more first, so its own entry is not also there as `selfOwn`."""
+    _screen_with(project, [_var("selfOwn", "Int", defaultValue=1)],
+                 [{"data": [{"name": "own", "class": "Int", "defaultValue": 1}]},
+                  {"include": "home", "id": "self"}])
+    said = _verify()[1]
+    assert ("'selfOwn' is 1 — layouts/home.json declares no data entry 'selfOwn' — "
+            "include(s) not read: 'home' (cycle)") in said, said
+
+
+def test_a_value_nothing_carries_is_still_named_beside_includes(project):
+    """Control: following includes adds the entries they carry and nothing
+    else — a name no file declares is reported as before, with no note."""
+    _card(project)
+    _screen_with(project, [_var("cardSubtitle", "String", defaultValue="")],
+                 [{"include": "parts/card", "id": "card"}])
+    said = _verify()[1]
+    assert ("'cardSubtitle' is \"\" — layouts/home.json declares no data entry 'cardSubtitle'\n"
+            in said), said
+
+
+def test_the_data_orphan_check_does_not_open_an_include(project):
+    """The orphan check reads the file regeneration writes: an entry an
+    included layout declares is not that file's to drop (layout_data)."""
+    _card(project)
+    _write(project / "specs/home.spec.json", {
+        "type": "screen_spec", "version": "1.0",
+        "metadata": {"name": "Home", "displayName": "H", "description": "d"},
+        "structure": {"components": [{"id": "title_label", "type": "Label", "description": "t"}],
+                      "layout": {"root": "root", "children": ["title_label"]}},
+        "stateManagement": {"uiVariables": []}})
+    _write(project / "layouts/home.json", {"type": "View", "child": [
+        {"include": "parts/card", "id": "card"}, {"type": "Label", "id": "title_label"}]})
+    said = _verify()[1]
+    assert "data-section entries not declared" not in said, said
+
+
+# ---- two spellings the platform tools do NOT emit as one value ----------------
+#
+# Measured on jsonui-cli 1.9.0 (53ddb54d) by generating each tool's Data model
+# from one layout (sjui / kjui / rjui data model updaters, Ruby 3.3.1):
+#
+#   class CollectionDataSource   sjui                        kjui                      rjui
+#   "CollectionDataSource()"     = CollectionDataSource()    = CollectionDataSource()  new CollectionDataSource()
+#   "[]"                         = []                        = CollectionDataSource()  []
+#   (no defaultValue)            ? = nil                     ? = null                  undefined
+#   class [OptionRow], none      ? = nil                     ? = null                  undefined
+#
+# sjui's `= []` is not a CollectionDataSource (SwiftJsonUI declares no array
+# literal for it) and rjui's `[]` is a plain array, so the two spellings are
+# one value on one platform of three; and an entry with no defaultValue starts
+# as nil / null / undefined on all three, not as an empty list. Both stay
+# reported until the tools agree.
+
+def test_an_empty_data_source_and_an_empty_list_are_not_one_value(project):
+    _external(project, [_var("options", "Array(OptionRow)", defaultValue="[]")],
+              {"data": [{"name": "options", "class": "CollectionDataSource",
+                         "defaultValue": "CollectionDataSource()"}]})
+    assert "'options' is \"[]\" — layouts/home.json has \"CollectionDataSource()\"" in _verify()[1]
+
+
+@pytest.mark.parametrize("klass", ["[OptionRow]", "CollectionDataSource"])
+def test_an_entry_without_a_default_value_does_not_carry_an_empty_list(project, klass):
+    _external(project, [_var("options", "Array(OptionRow)", defaultValue=[])],
+              {"data": [{"name": "options", "class": klass}]})
+    assert "'options' is [] — layouts/home.json gives it no defaultValue" in _verify()[1]

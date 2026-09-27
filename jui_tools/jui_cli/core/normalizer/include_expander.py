@@ -5,6 +5,14 @@ Port of ``sjui_tools/lib/swiftui/include_expander.rb``. A node
 of ``<layouts_dir>/foo.json`` (style-merged), with the parent's ``id``
 propagated as a camelCase prefix to all descendant ``id``s and
 ``@{binding}`` references.
+
+An include the expander cannot expand — its file is not there, does not
+parse, or is one the node is already inside (a cycle) — leaves the node in
+place without its ``include``. sjui / kjui stop the build on the first two
+("Include file not found", a JSON parse error) and recurse on a cycle until
+the stack runs out. A caller that passes ``unresolved`` is told of each one
+there; a cycle is otherwise an :class:`IncludeCycleError`, so it is never cut
+silently.
 """
 from __future__ import annotations
 
@@ -19,19 +27,52 @@ from .style_merger import StyleMerger
 BINDING_RE = re.compile(r"@\{([^}]+)\}")
 
 
+class IncludeCycleError(RecursionError):
+    """An include of a layout the node is already inside.
+
+    Until jsonui-cli 1.9.1 the expander recursed on one until Python's limit
+    (a RecursionError, which this is, so a caller that caught that still
+    does); sjui / kjui do the same until the stack runs out (SystemStackError).
+    This stops at the first repeat and names the chain."""
+
+    def __init__(self, chain: list[str]):
+        self.chain = chain
+        super().__init__("include cycle: " + " -> ".join(chain))
+
+
 class IncludeExpander:
     def __init__(self, layouts_dir: Path, style_merger: StyleMerger):
         self._layouts_dir = layouts_dir
         self._style_merger = style_merger
 
-    def expand(self, node: Any, id_prefix: str | None = None) -> Any:
+    def expand(self, node: Any, id_prefix: str | None = None, *,
+               unresolved: list | None = None, inside: tuple = ()) -> Any:
+        """*node* with every include replaced as sjui / kjui replace it.
+
+        *inside*: the layout files (resolved paths) whose content *node*
+        already is — the caller may name the file *node* comes from, so an
+        include of that file is a cycle at the first step. *unresolved*, when
+        given, receives ``(reference, reason)`` for every include left
+        unexpanded: ``"not found"``, ``"unreadable"`` or ``"cycle"``."""
         if not isinstance(node, dict):
             return node
 
         if "include" in node:
-            included = self._load_include(node["include"])
+            ref = node["include"]
+            path = self._include_path(ref)
+            if path in inside:
+                if unresolved is None:
+                    raise IncludeCycleError(
+                        [self._name(p) for p in inside[inside.index(path):]] + [self._name(path)])
+                included = None
+            else:
+                included = self._load_include(ref)
             if included is None:
-                # File missing — drop the include field and continue.
+                if unresolved is not None:
+                    reason = ("cycle" if path in inside
+                              else "not found" if not path.exists() else "unreadable")
+                    unresolved.append((str(ref), reason))
+                # Not expanded — drop the include field and continue.
                 node = {k: v for k, v in node.items() if k != "include"}
             else:
                 included = self._style_merger.resolve(included)
@@ -52,7 +93,8 @@ class IncludeExpander:
                         included[key] = value
 
                 expanded = _apply_id_prefix(included, new_prefix)
-                return self.expand(expanded, new_prefix)
+                return self.expand(expanded, new_prefix, unresolved=unresolved,
+                                   inside=inside + (path,))
 
         # Apply prefix to this node's own id
         if id_prefix and "id" in node and isinstance(node["id"], str):
@@ -68,13 +110,30 @@ class IncludeExpander:
         if child_key:
             value = node[child_key]
             if isinstance(value, list):
-                node[child_key] = [self.expand(c, id_prefix) for c in value]
+                node[child_key] = [self.expand(c, id_prefix, unresolved=unresolved, inside=inside)
+                                   for c in value]
             elif isinstance(value, dict):
-                node[child_key] = self.expand(value, id_prefix)
+                node[child_key] = self.expand(value, id_prefix, unresolved=unresolved, inside=inside)
             if child_key == "children":
                 node["child"] = node.pop("children")
 
         return node
+
+    def _include_path(self, include_path: Any) -> Path:
+        """The file an include reference names, resolved — the identity a
+        cycle is found by, so `a` and `sub/../a` are one file."""
+        path = self._layouts_dir / f"{include_path}.json"
+        try:
+            return path.resolve()
+        except (OSError, RuntimeError):
+            return path
+
+    def _name(self, path: Path) -> str:
+        """*path* as an include names it (relative to the layouts root)."""
+        try:
+            return str(path.relative_to(Path(self._layouts_dir).resolve()).with_suffix(""))
+        except ValueError:
+            return str(path)
 
     def _load_include(self, include_path: str) -> dict[str, Any] | None:
         """Resolve an include reference relative to the layouts root.
@@ -87,9 +146,12 @@ class IncludeExpander:
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
+                tree = json.load(f)
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return None
+        # A layout is an object; anything else is as unreadable as bad JSON
+        # (it failed further on, reading the include node's keys into it).
+        return tree if isinstance(tree, dict) else None
 
 
 def _to_camel_case(s: str) -> str:
