@@ -141,11 +141,16 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun LazyVerticalGrid(columns: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
                          horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
                          content: LazyGridScope.() -> Unit) { LazyGridScope().content() }
-    enum class CollectionStackMode { LAZY, EAGER, NONE }
+    enum class CollectionStackMode { LAZY, EAGER, NONE;
+        companion object { fun fromJson(value: Any?) = when (value) { "eager" -> EAGER; "none" -> NONE; else -> LAZY } } }
     enum class CollectionStackAxis { VERTICAL, HORIZONTAL }
+    // The lazy content under LAZY; the eager content (the cells composed in
+    // order, each recording its place) under EAGER and NONE.
     fun CollectionStack(mode: CollectionStackMode, axis: CollectionStackAxis, modifier: Modifier = Modifier, spacing: Dp? = null,
-                        reverseLayout: Boolean = false, lazyState: LazyListState? = null,
-                        lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) { LazyListScope().lazyContent() }
+                        reverseLayout: Boolean = false, lazyState: LazyListState? = null, eagerScrollState: ScrollState? = null,
+                        lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
+        if (mode == CollectionStackMode.LAZY) LazyListScope().lazyContent() else eagerContent()
+    }
     fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: () -> Unit) { content() }
     inline fun <reified T : Any> viewModel(key: String? = null): T = T::class.java.getDeclaredConstructor().newInstance()
     class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
@@ -157,7 +162,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2)
+    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy")
 
     // The pager composes each page in turn; the page it was asked for is the scroll.
     class PagerState(val pageCount: () -> Int) {
@@ -173,20 +178,32 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     // The flow: a column of FlowRows. Each laid-out node is 28 below the one
     // positioned before it, in composition order — the scrolled content
     // first, then the cells — which is enough to say WHICH cell's place a
-    // scroll read; where Compose lays them out is the device arm's.
+    // scroll read; where Compose lays them out is the device arm's. The same
+    // for the non-lazy containers (the EAGER CollectionStack, the
+    // wrapContent Column): their viewport, then their cells; along x too, for
+    // a row (28 wide, 28 to the right of the one before).
     class FlowCoordinates(val y: Int) : androidx.compose.ui.layout.LayoutCoordinates {
         override val isAttached = true
-        override val size = IntSize(60, 28)
+        override val size = IntSize(28, 28)
         override fun localPositionOf(sourceCoordinates: androidx.compose.ui.layout.LayoutCoordinates, relativeToSource: androidx.compose.ui.geometry.Offset) =
-            androidx.compose.ui.geometry.Offset(0f, ((sourceCoordinates as FlowCoordinates).y - y).toFloat())
+            ((sourceCoordinates as FlowCoordinates).y - y).toFloat().let { androidx.compose.ui.geometry.Offset(it, it) }
     }
     object Positions { var next = 0 }
     fun Modifier.onGloballyPositioned(onGloballyPositioned: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit): Modifier {
         onGloballyPositioned(FlowCoordinates(Positions.next)); Positions.next += 28; return this
     }
-    class ScrollState { val viewportSize = 100
+    class ScrollState { val viewportSize = 100; val value = 0
         suspend fun animateScrollTo(value: Int) { Drawn.scrolledTo = value }
         suspend fun scrollTo(value: Int) { Drawn.scrolledTo = value } }
+    fun Modifier.wrapContentHeight(): Modifier = this
+    fun Modifier.fillMaxHeight(): Modifier = this
+    // The wrapContent Column's bounding layout step: compiled, not run (the
+    // device arm measures what it does).
+    class Placeable(val width: Int, val height: Int) { fun place(x: Int, y: Int) {} }
+    interface Measurable { fun measure(constraints: androidx.compose.ui.unit.Constraints): Placeable }
+    class MeasureResult
+    class MeasureScope { fun layout(width: Int, height: Int, placementBlock: () -> Unit): MeasureResult = MeasureResult() }
+    fun Modifier.layout(measure: MeasureScope.(Measurable, androidx.compose.ui.unit.Constraints) -> MeasureResult): Modifier = this
     fun rememberScrollState() = remember { ScrollState() }
     fun Modifier.verticalScroll(state: ScrollState): Modifier = this
     fun Modifier.requiredHeight(height: Dp): Modifier = this
@@ -210,7 +227,15 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     'Log.kt' => "package android.util\nobject Log { fun w(tag: String, msg: String): Int { stubs.Drawn.logs += msg; return 0 } }\n",
     'Layout.kt' => "package androidx.compose.ui.layout\ninterface LayoutCoordinates { val isAttached: Boolean; val size: stubs.IntSize\n" \
                    "    fun localPositionOf(sourceCoordinates: LayoutCoordinates, relativeToSource: androidx.compose.ui.geometry.Offset): androidx.compose.ui.geometry.Offset }\n",
-    'Geometry.kt' => "package androidx.compose.ui.geometry\nclass Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n"
+    'Geometry.kt' => "package androidx.compose.ui.geometry\nclass Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n",
+    # The non-lazy containers' scroll (round 12): a frame passes at once.
+    'Foundation.kt' => "package androidx.compose.foundation\nfun rememberScrollState() = stubs.remember { stubs.ScrollState() }\n",
+    'Runtime.kt' => "package androidx.compose.runtime\nsuspend fun <R> withFrameNanos(onFrame: (Long) -> R): R = onFrame(0L)\n",
+    'Unit.kt' => "package androidx.compose.ui.unit\nenum class LayoutDirection { Ltr, Rtl }\n" \
+                 "class Constraints(val minWidth: Int, val maxWidth: Int, val minHeight: Int, val maxHeight: Int) {\n" \
+                 "    val hasBoundedHeight get() = maxHeight != Int.MAX_VALUE\n" \
+                 "    companion object { fun fitPrioritizingWidth(minWidth: Int, maxWidth: Int, minHeight: Int, maxHeight: Int) = Constraints(minWidth, maxWidth, minHeight, maxHeight) } }\n",
+    'Direction.kt' => "package androidx.compose.ui.platform\nobject LocalLayoutDirection { val current = androidx.compose.ui.unit.LayoutDirection.Ltr }\n"
   }.freeze
 
   # Section A: header, cells A0…A4 (keys k0…k4), footer; section B: header,
@@ -273,7 +298,28 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'pager' => [emit(pager_node), { grid: true }, [0, 6, 9, 10]],
       'pagerKeys' => [emit(pager_node('cellIdProperty' => 'key')), { grid: true }, %w[k3 x2 0#77]],
       'flow' => [emit(node('layout' => 'flow', 'height' => 100)), {}, [0, 6]],
-      'flowKeys' => [emit(node('layout' => 'flow', 'height' => 100, 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]]
+      'flowKeys' => [emit(node('layout' => 'flow', 'height' => 100, 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]],
+      # Round 12 (4f rulings 2026-09-27): the EAGER CollectionStack, declared
+      # and bound; the wrapContent Column; defaultScrollAnchor under
+      # reverseLayout.
+      'eager' => [emit(node('lazy' => 'eager')), {}, [0, 6, 9, -1]],
+      'eagerKeys' => [emit(node('lazy' => 'eager', 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77 nothing]],
+      'eagerCenter' => [emit(node('lazy' => 'eager', 'scrollAnchor' => 'center')), {}, [6]],
+      'eagerTop' => [emit(node('lazy' => 'eager', 'scrollAnchor' => 'top')), {}, [6]],
+      'eagerInitial' => [emit(node('lazy' => 'eager')), {}, [6], nil],
+      'eagerAnchor' => [emit(node('lazy' => 'eager', 'defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'eagerRow' => [emit(node('lazy' => 'eager', 'layout' => 'horizontal')), {}, [6]],
+      'eagerBound' => [emit(node('lazy' => '@{mode}', 'cellIdProperty' => 'key')), { mode: 'eager' }, [6, '3#77']],
+      'eagerBoundLazy' => [emit(node('lazy' => '@{mode}', 'cellIdProperty' => 'key')), { mode: 'lazy' }, [6, '3#77']],
+      'wrap' => [emit(node('height' => 'wrapContent')), {}, [0, 6]],
+      'wrapKeys' => [emit(node('height' => 'wrapContent', 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]],
+      'wrapAnchor' => [emit(node('height' => 'wrapContent', 'defaultScrollAnchor' => 'center')), {}, [''], nil],
+      'wrapNone' => [emit(node('height' => 'wrapContent', 'lazy' => 'none')), {}, [6]],
+      'stackReversedAnchor' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'stackReversedAnchorTop' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), {}, [''], nil],
+      'stackReversedAnchorCenter' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'center')), {}, [''], nil],
+      'gridReversedAnchor' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil],
+      'gridReversedAnchorTop' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), { grid: true }, [''], nil]
     }
   end
 
@@ -282,10 +328,11 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     calls = routes.flat_map do |name, (_, options, targets, *first)|
       first = first.empty? ? '' : first.first
       targets.map do |target|
-        sections = data_sections(**options)
+        sections = data_sections(**options.except(:mode))
+        mode = options[:mode] ? ", mode = \"#{options[:mode]}\"" : ''
         first_arg = first.nil? ? 'null' : "\"#{first}\""
         target_arg = target.is_a?(Integer) ? target.to_s : "\"#{target}\""
-        "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value), Any()) }"
+        "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value#{mode}), Any()) }"
       end
     end
     ["import stubs.*\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
@@ -360,8 +407,14 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
                    .gsub('android.content.pm.ApplicationInfo.', 'ApplicationInfo.')
                    .gsub('android.util.Log.', 'Log.')
                    .gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
-                   .gsub('androidx.compose.ui.geometry.Offset', 'Offset') +
-      "\n" + KJ_SCROLL_STUBS.sub("package stubs\n", '').gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates').gsub('androidx.compose.ui.geometry.Offset', 'Offset') +
+                   .gsub('androidx.compose.ui.geometry.Offset', 'Offset')
+                   .gsub('androidx.compose.foundation.rememberScrollState()', 'rememberScrollState()')
+                   .gsub('androidx.compose.runtime.withFrameNanos', 'withFrameNanos')
+                   .gsub('androidx.compose.ui.unit.Constraints', 'Constraints')
+                   .gsub('androidx.compose.ui.platform.LocalLayoutDirection', 'LocalLayoutDirection')
+                   .gsub('androidx.compose.ui.unit.LayoutDirection', 'LayoutDirection') +
+      "\n" + KJ_SCROLL_STUBS.sub("package stubs\n", '').gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
+                            .gsub('androidx.compose.ui.geometry.Offset', 'Offset').gsub('androidx.compose.ui.unit.Constraints', 'Constraints') +
       "fun rememberLazyListState() = remember { LazyListState() }\n" +
       KJ_SCROLL_QUALIFIED['CellIdGenerator.kt'].sub("package com.kotlinjsonui.utils\n", '') +
       "object LocalContext { val current = Context() }\nclass Context { val applicationInfo = ApplicationInfo() }\n" \
@@ -369,7 +422,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       "object Log { fun w(tag: String, msg: String): Int = 0 }\n" \
       "interface LayoutCoordinates { val isAttached: Boolean; val size: IntSize\n" \
       "    fun localPositionOf(sourceCoordinates: LayoutCoordinates, relativeToSource: Offset): Offset }\n" \
-      "class Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n"
+      "class Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n" \
+      "suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R = onFrame(0L)\n" \
+      "enum class LayoutDirection { Ltr, Rtl }\nobject LocalLayoutDirection { val current = LayoutDirection.Ltr }\n" \
+      "class Constraints(val minWidth: Int, val maxWidth: Int, val minHeight: Int, val maxHeight: Int) {\n" \
+      "    val hasBoundedHeight get() = maxHeight != Int.MAX_VALUE\n" \
+      "    companion object { fun fitPrioritizingWidth(minWidth: Int, maxWidth: Int, minHeight: Int, maxHeight: Int) = Constraints(minWidth, maxWidth, minHeight, maxHeight) } }\n"
   end
 
   it 'every route compiles (the compile arm; the run below compiles it again to run it)' do
@@ -456,6 +514,56 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     # on a flow (no lazy item).
     expect([0, 6].map { |t| read(lines, "flow #{t}")[:index] }).to eq([0, 124]), lines.inspect
     expect(%w[k3 x2 0#77].map { |t| read(lines, "flowKeys #{t}")[:index] }).to eq([40, 152, -1]), lines.inspect
+  end
+
+  # Round 12 (4f rulings 2026-09-27). In the stubs a non-lazy container's
+  # viewport is laid out first, then its cells, each 28 below the last: cell
+  # n at 28 (n + 1), in a 100 viewport scrolled to 0. What the scroll asks
+  # for is the scroll position — bottom-anchored (the default) 28 (n + 1) - 72.
+  it 'the EAGER CollectionStack scrolls to the cell by the rule — an Int the counted cell, a String a key, landed by scrollAnchor, on a change' do
+    lines = run_emitted(routes)
+    # 0 → A0 (28 - 72, the top: 0); 6 → B1 (196 - 72); 9 → B4; -1 nowhere.
+    expect([0, 6, 9, -1].map { |t| read(lines, "eager #{t}")[:index] }).to eq([0, 124, 208, -1]), lines.inspect
+    # k3 is A3's key (and B0's): A3, 112 - 72; x2 is B2's: 224 - 72. The
+    # legacy "0#77" names no cell here — the container has no lazy item —
+    # and nothing is said.
+    expect(%w[k3 x2 0#77 nothing].map { |t| read(lines, "eagerKeys #{t}").values_at(:index, :logs) }).to eq([[40, 0], [152, 0], [-1, 0], [-1, 0]]), lines.inspect
+    expect(read(lines, 'eagerCenter 6')[:index]).to eq(160), lines.inspect   # 196 - 36
+    expect(read(lines, 'eagerTop 6')[:index]).to eq(196), lines.inspect
+    expect(read(lines, 'eagerInitial 6')[:index]).to eq(-1), lines.inspect   # the value it composes with
+    expect(read(lines, 'eagerRow 6')[:index]).to eq(124), lines.inspect      # along x
+  end
+
+  it "a bound `lazy` decides at run time: EAGER scrolls its cells, LAZY its items (and reads the legacy form)" do
+    lines = run_emitted(routes)
+    expect(%w[6 3#77].map { |t| read(lines, "eagerBound #{t}").values_at(:index, :logs) }).to eq([[124, 0], [-1, 0]]), lines.inspect
+    expect(%w[6 3#77].map { |t| read(lines, "eagerBoundLazy #{t}").values_at(:at, :logs) }).to eq([['B1', 0], ['A2', 1]]), lines.inspect
+  end
+
+  it 'the wrapContent Column scrolls to the cell by the rule; `lazy: none` scrolls nowhere' do
+    lines = run_emitted(routes)
+    expect([0, 6].map { |t| read(lines, "wrap #{t}")[:index] }).to eq([0, 124]), lines.inspect
+    expect(%w[k3 x2 0#77].map { |t| read(lines, "wrapKeys #{t}")[:index] }).to eq([40, 152, -1]), lines.inspect
+    expect(read(lines, 'wrapNone 6')[:index]).to eq(-1), lines.inspect
+  end
+
+  it 'defaultScrollAnchor on a non-lazy container: the middle or last cell at its top edge, once the cells arrive' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'eagerAnchor ')[:index]).to eq(280), lines.inspect    # B4, the tenth cell: 28 × 10
+    expect(read(lines, 'wrapAnchor ')[:index]).to eq(168), lines.inspect     # center: B0, the sixth: 28 × 6
+  end
+
+  it 'defaultScrollAnchor under reverseLayout: bottom is where the list rests, top the cell drawn at the visual top' do
+    lines = run_emitted(routes)
+    # The reversed stack emits B first: H B0 … B4 H A0 … A4 F. bottom moves
+    # nothing (until jsonui-cli 1.9.0 it went to B4, item 5 — the visual
+    # top); top goes to the last cell emitted, A4 (item 11); center is the
+    # middle cell, B0.
+    expect(read(lines, 'stackReversedAnchor ')[:index]).to eq(-1), lines.inspect
+    expect(read(lines, 'stackReversedAnchorTop ').values_at(:at, :index)).to eq(['A4', 11]), lines.inspect
+    expect(read(lines, 'stackReversedAnchorCenter ').values_at(:at, :index)).to eq(['B0', 1]), lines.inspect
+    expect(read(lines, 'gridReversedAnchor ')[:index]).to eq(-1), lines.inspect
+    expect(read(lines, 'gridReversedAnchorTop ')[:at]).to eq('A4'), lines.inspect
   end
 
   it "no two items of a lazy list share a key — two sections', or two cells of one section" do

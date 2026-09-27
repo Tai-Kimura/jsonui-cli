@@ -6,6 +6,7 @@ require 'tmpdir'
 require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../../lib/compose/generators/cell_generator'
 require_relative '../../support/kotlin_compiler'
+require_relative '../../support/compose_bounded_scroll_stubs'
 
 # Declared `sections` of more than one column: a grid per section on every
 # route — each section's cells start a row of their own, as sjui codegen and
@@ -26,7 +27,7 @@ require_relative '../../support/kotlin_compiler'
 RSpec.describe 'kjui codegen: a grid per section' do
   def emit(node)
     %i[info debug warn].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
-    KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, Set.new, nil)
+    ComposeBoundedScrollStubs.unqualify(KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, Set.new, nil))
   end
 
   def node(extra = {})
@@ -125,6 +126,10 @@ RSpec.describe 'kjui codegen: a grid per section' do
     }
     class Data(val rows: CollectionDataSource? = null, val cols: Int = 2)
     fun cells(name: String, n: Int) = CollectionDataSection.CellData(name, List(n) { mapOf<String, Any>("i" to it) })
+    class ScrollState
+    fun rememberScrollState(): ScrollState = ScrollState()
+    fun Modifier.verticalScroll(state: ScrollState): Modifier = this
+    #{ComposeBoundedScrollStubs::KOTLIN}
   KOTLIN
 
   # case name => [Kotlin sections, the lines expected]
