@@ -2479,6 +2479,62 @@ export function apiOriginsOf(harnessModule: unknown): string[] | null {
     : null;
 }
 
+/** The clock and the timer `settle` measures with — its polls, its quiet
+ * window, both budgets, and when the fetch stub last saw a request — taken
+ * once, when this module loads, and never looked up again.
+ *
+ * A test freezes the clock to pin "today": `vi.useFakeTimers({ toFake:
+ * ["Date"] })` and `vi.setSystemTime`, or `vi.setSystemTime` alone. Read
+ * through `Date.now()` each time settle looked, as it once was, the quiet
+ * window and both budgets measured 0 ms however long it waited, and every
+ * settle under a frozen Date looped until the runner's own timeout, naming
+ * nothing — on one consumer, 590 hand-written tests "Test timed out in
+ * 5000ms". A test that fakes setTimeout as well (`vi.useFakeTimers()`) left
+ * settle's own sleep on a timer only the test advances. Faking replaces the
+ * global (`Date`, `performance`, `setTimeout`); a function taken from it
+ * before that stays the real one.
+ *
+ * `performance.now`, not `Date.now`. Both are real when the fake comes after
+ * the import, the usual case. They differ when it comes BEFORE this module
+ * loads (a `setupFiles` entry): `toFake: ["Date"]` and `vi.setSystemTime`
+ * leave `performance` alone, so the clock taken here is still real, where a
+ * `Date.now` taken here would be the frozen one. `vi.useFakeTimers()` with
+ * no `toFake` fakes both, and setTimeout with them (the vitest this was
+ * measured on fakes every timer API it finds but nextTick and
+ * queueMicrotask): the clock and the timer taken here are then both the
+ * test's — they move together when the test advances them, and stand still
+ * until it does, as the settle that counted turns did on any faked
+ * setTimeout. And it is monotonic: a wall-clock adjustment during a run
+ * moves neither window. `Date.now` only where there is no `performance`.
+ *
+ * What is left is a clock that stands still while the timer runs — a fake of
+ * `performance` (or of `Date`, where there is no `performance`) installed
+ * before this module loads, with setTimeout real. settle names that rather
+ * than looping (STALLED_POLLS).
+ *
+ * A scenario's `delayMs` stays on the global setTimeout, looked up when the
+ * request is made, as it always was: the response's arrival is the world the
+ * test drives, and a test that fakes setTimeout delivers it by advancing its
+ * clock — settle, on the real one, waits until it has. */
+function loadedClock(): { now: () => number; name: string } {
+  const perf = (globalThis as any).performance;
+  if (perf && typeof perf.now === "function") {
+    const now: () => number = perf.now;
+    return { now: () => now.call(perf), name: "performance.now" };
+  }
+  const now: () => number = Date.now;
+  return { now: () => now.call(Date), name: "Date.now" };
+}
+const realClock: { now: () => number; name: string } = loadedClock();
+const loadedSetTimeout = globalThis.setTimeout;
+
+/** Resolve after `ms`, on the timer taken when this module loaded. */
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    loadedSetTimeout(resolve, ms);
+  });
+}
+
 /** Stub globalThis.fetch: serve each route's (possibly overridden) named
  * scenario and record request bodies. Unmatched paths get an unmistakable
  * 599 so incidental un-declared calls surface instead of hanging. */
@@ -2546,6 +2602,16 @@ export const SETTLE_DELAY_BUDGET_MS = DELAY_CAP_MS + 1000;
  * default (5000 ms) would end a row that waits for its work first — with
  * "Test timed out", naming nothing. */
 export const ROW_TIMEOUT_MS = 2 * SETTLE_DELAY_BUDGET_MS + 5000;
+/** How many polls `settle` makes at the least, when it is not given a number
+ * — what `settle()` drained when it counted turns (ten macrotask turns). The
+ * quiet window takes longer than this on its own unless the event loop is
+ * held up. */
+const DEFAULT_SETTLE_TURNS = 10;
+/** How many polls in a row may read the same time before `settle` stops and
+ * names the clock. Each poll sleeps 5 ms on a timer that runs, so 200 are
+ * about a second at the least; a clock that runs reads a new value well
+ * within that, even at a resolution a browser coarsens to tens of ms. */
+const STALLED_POLLS = 200;
 
 /** The scenario's `delayMs` in ms — 0 when absent or not a positive number,
  * at most DELAY_CAP_MS. */
@@ -2563,7 +2629,7 @@ export function installFetchMock(
   const calls: RecordedCall[] = [];
   const compiled = routes.map((r) => ({ ...r, re: new RegExp(r.pattern) }));
   const own = apiOrigins === null ? null : new Set(apiOrigins.map((o) => new URL(o).origin));
-  const mine: Traffic = { inFlight: 0, lastActivityAt: Date.now(), row, earlier: [] };
+  const mine: Traffic = { inFlight: 0, lastActivityAt: realClock.now(), row, earlier: [] };
   traffic = mine;
   rowContext?.enterWith(mine);
 
@@ -2588,7 +2654,7 @@ export function installFetchMock(
     }
     // In flight from here to the Response handed back, delayed or not.
     mine.inFlight += 1;
-    mine.lastActivityAt = Date.now();
+    mine.lastActivityAt = realClock.now();
     try {
       // P2e(a), v4.19: a relative URL is the app's; an absolute one is when its
       // origin is in `apiOrigins`, or — none declared — cannot be told apart and
@@ -2649,7 +2715,7 @@ export function installFetchMock(
       );
     } finally {
       mine.inFlight -= 1;
-      mine.lastActivityAt = Date.now();
+      mine.lastActivityAt = realClock.now();
     }
   }) as typeof fetch;
 
@@ -2884,18 +2950,50 @@ export function partialMismatches(
  * It never stops quietly: stopping would let `then` read the state before
  * the work landed. An expected op still not called once the pipeline is idle
  * and EXPECT_MS have passed since the act fails naming it; work still in
- * flight past SETTLE_DELAY_BUDGET_MS fails naming what was in flight. */
-export async function settle(
+ * flight past SETTLE_DELAY_BUDGET_MS fails naming what was in flight.
+ *
+ * Every window here is measured on the clock and the timer taken when this
+ * module loaded (`realClock`, `sleep`), so a test that freezes Date — or
+ * fakes every timer — after importing it does not stop them.
+ *
+ * `settle(turns)` is the call from when settle counted turns (`settle(turns
+ * = 10)`), and still accepted: no expectations, as `settle()`, and it returns
+ * only after at least `turns` polls — each one a macrotask turn (a timer), at
+ * least as long as the setTimeout(0) turn it drained then — so a chain a
+ * caller counted on N turns to finish has had them even when the quiet window
+ * passes sooner (an event loop held up by synchronous work). Without a number
+ * it is that default, ten. */
+export function settle(turns?: number): Promise<void>;
+export function settle(
   until?: { rec: { countFor(op: string): number }; expect: string[] }
+): Promise<void>;
+export async function settle(
+  arg?: number | { rec: { countFor(op: string): number }; expect: string[] }
 ): Promise<void> {
-  const started = Date.now();
-  for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    const now = Date.now();
+  const until = typeof arg === "object" && arg !== null ? arg : undefined;
+  const turns = typeof arg === "number" && Number.isFinite(arg) ? arg : DEFAULT_SETTLE_TURNS;
+  const started = realClock.now();
+  let last = started;
+  let stalled = 0;
+  for (let polls = 1; ; polls += 1) {
+    await sleep(5);
+    const now = realClock.now();
+    stalled = now === last ? stalled + 1 : 0;
+    last = now;
+    if (stalled >= STALLED_POLLS) {
+      const faked = realClock.name === "Date.now" ? "Date" : "performance";
+      throw new Error(
+        `settle: the clock it measures with (${realClock.name}, taken when this runtime loaded) read ` +
+          `the same time across ${STALLED_POLLS} polls of 5 ms — a fake of ${faked} was installed ` +
+          "before this runtime was imported (a setupFiles entry, say) and setTimeout was left real, " +
+          "so neither the quiet window nor a budget can ever pass. Install the fake in the test, " +
+          `after the import, or leave ${faked} out of its toFake`
+      );
+    }
     const missing = until ? until.expect.filter((op) => until.rec.countFor(op) === 0) : [];
     const quiet = traffic.inFlight === 0 && now - Math.max(traffic.lastActivityAt, started) >= QUIET_MS;
-    if (quiet && missing.length === 0) return;
-    const waited = now - started;
+    if (quiet && missing.length === 0 && polls >= turns) return;
+    const waited = Math.floor(now - started);
     if (quiet && waited >= EXPECT_MS) {
       // A call an earlier row's view model started may be the one this row
       // expected by name: it landed, and was not counted (installFetchMock).
