@@ -760,11 +760,12 @@ RSpec.describe 'backlog closure group 2 (web)' do
     expect(icon).to include("textShadow: '0px 1px 2px var(--color-dark_red)'")
   end
 
+  # Per edge, so it adds to a declared insets (collection_insets_additive_spec).
   it 'Collection: insetVertical becomes vertical content padding' do
     r = RjuiTools::React::Converters::CollectionConverter.new(
       { 'type' => 'Collection', 'insetVertical' => 16, 'items' => '@{rows}' }, config
     ).convert
-    expect(r).to include('py-[16px]')
+    expect(r).to include('pt-[16px] pb-[16px]')
   end
 
   it 'common.indexAbove degrades to z 1, and an explicit zIndex wins' do

@@ -45,7 +45,9 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       hideSeparator
       horizontalScroll
       id
+      insetHorizontal
       insetVertical
+      insets
       itemSpacing
       items
       layout
