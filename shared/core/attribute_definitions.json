@@ -4040,7 +4040,7 @@
         "center",
         "bottom"
       ],
-      "description": "Initial scroll position anchor (iOS 17+). Sets where the scroll view starts. On Compose (kjui codegen and KotlinJsonUI Dynamic) it is applied once, when the list first has cells, by scrolling to the middle (center) or last (bottom) CELL counted as scrollTo counts them - across the drawn sections, headers, footers and grid fillers not counted (4f ruling 2026-09-27, round 11); until jsonui-cli 1.9.0 it counted the first data section only and scrolled to that lazy item index. Under reverseLayout a list rests at its visual bottom, so top and bottom trade places, as they do for scrollAnchor (4f ruling 2026-09-27, round 12 - where iOS lands, which draws the same order from content anchored at its bottom): bottom is where the list rests and moves nothing; top goes to the cell drawn at the visual top, the last one the content emits. Until jsonui-cli 1.9.0 bottom went to the last cell, which a reversed list draws at its visual top. A container that is not a lazy list (the EAGER one, the wrapContent Column) draws no reverseLayout: there the middle or last cell goes to its top edge (round 12). On a horizontal Collection, top / center / bottom mean the start / centre / end along the scroll axis, in reading direction, on every platform (4f ruling 2026-09-27)."
+      "description": "Initial scroll position anchor (iOS 17+). Sets where the scroll view starts. On Compose (kjui codegen and KotlinJsonUI Dynamic) it is applied once, when the list first has cells, by scrolling to the middle (center) or last (bottom) CELL counted as scrollTo counts them - across the drawn sections, headers, footers and grid fillers not counted (4f ruling 2026-09-27, round 11); until jsonui-cli 1.9.0 it counted the first data section only and scrolled to that lazy item index. Under reverseLayout a list rests at its visual bottom, so top and bottom trade places, as they do for scrollAnchor (4f ruling 2026-09-27, round 12 - where iOS lands, which draws the same order from content anchored at its bottom): bottom is where the list rests and moves nothing; top goes to the cell drawn at the visual top, the last one the content emits. Until jsonui-cli 1.9.0 bottom went to the last cell, which a reversed list draws at its visual top. A container that is not a lazy list and draws no reverseLayout (the wrapContent Column, the horizontal EAGER one) takes the middle or last cell to its top edge (round 12); the vertical EAGER one draws reverseLayout and follows the lazy list (round 13). It sets the initial position only: how a list keeps its position when its data changes with no scrollTo is each platform's own - iOS keeps the anchored edge, Compose keeps the first visible item - so to follow new content, send scrollTo (4f ruling 2026-09-27, round 13). On a horizontal Collection, top / center / bottom mean the start / centre / end along the scroll axis, in reading direction, on every platform (4f ruling 2026-09-27)."
     },
     "scrollAnimated": {
       "type": "boolean",
@@ -4056,7 +4056,7 @@
     },
     "reverseLayout": {
       "type": "boolean",
-      "description": "Reverse the layout direction of the Collection grid. When true, section order in the generated code is also reversed so that JSON definition order (index 0 first) matches the visual top-to-bottom order on iOS (which does not support reverseLayout). Compose's reverseLayout then flips the entire list so index 0 appears at the bottom.",
+      "description": "Reverse the layout direction of the Collection grid. When true, section order in the generated code is also reversed so that JSON definition order (index 0 first) matches the visual top-to-bottom order on iOS (which does not support reverseLayout). Compose's reverseLayout then flips the entire list so index 0 appears at the bottom. A reversed list whose content is shorter than its viewport sits at its bottom (its end, horizontally) - where iOS draws such a list, bottom-anchored - and the vertical EAGER container draws reverseLayout as the lazy list does (its first cell at the bottom, resting there), on both Compose paths (4f rulings 2026-09-27, round 13; jsonui-cli 1.9.0). Until then a short reversed list sat at its top and EAGER drew no reverseLayout. The Column of a wrapContent or `lazy: none` Collection and the horizontal EAGER container draw no reverseLayout.",
       "mode": "compose"
     },
     "scrollEnabled": {
@@ -4064,7 +4064,7 @@
         "boolean",
         "binding"
       ],
-      "description": "Enable/disable scrolling (binding supported)"
+      "description": "Enable/disable scrolling (binding supported). It stops the user's scrolling only: a programmatic scroll (scrollTo, defaultScrollAnchor) still moves the Collection, as iOS's scrollDisabled does, on every route with a scroll container of its own (4f ruling 2026-09-27, round 13; jsonui-cli 1.9.0). Until then Compose's EAGER container dropped its scroll with it (kjui codegen), KotlinJsonUI Dynamic read it on the grids only, and neither Compose path read it on the flow, the pager or the single-lane row."
     },
     "onItemAppear": {
       "type": [
