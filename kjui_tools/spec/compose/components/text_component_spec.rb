@@ -240,11 +240,25 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(order.compact.size).to eq(4), chip
       expect(order).to eq(order.sort), chip
       digit = described_class.generate({ 'type' => 'Label', 'text' => '8', 'width' => 44, 'height' => 56, 'gravity' => 'center' }, 0, required_imports)
-      expect(digit.lines.map(&:strip).last(2).first).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+      modifiers = digit.lines.map(&:strip).select { |l| l.start_with?('.') }
+      expect(modifiers.last.chomp(',')).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
       plain = described_class.generate({ 'type' => 'Label', 'text' => '8', 'width' => 44, 'height' => 56 }, 0, required_imports)
       expect(plain).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
       top = described_class.generate({ 'type' => 'Label', 'text' => '8', 'width' => 44, 'height' => 56, 'gravity' => 'top' }, 0, required_imports)
       expect(top).not_to include('wrapContentHeight(align')
+    end
+
+    # Round 17, item 7 (4f ruling 2026-09-27): without textAlign, a Label's
+    # text is placed across a frame wider than it by its gravity's horizontal
+    # part; textAlign still wins, and a wrapContent width is the text's own.
+    it 'places the text across a wider frame by the gravity when no textAlign is declared' do
+      align = ->(json) { described_class.generate({ 'type' => 'Label', 'text' => '4' }.merge(json), 0, required_imports)[/textAlign = (TextAlign\.\w+)/, 1] }
+      expect(align.({ 'width' => 32, 'gravity' => 'right' })).to eq('TextAlign.End')
+      expect(align.({ 'width' => 'matchParent', 'gravity' => %w[top centerHorizontal] })).to eq('TextAlign.Center')
+      expect(align.({ 'width' => 32, 'gravity' => 'right', 'textAlign' => 'left' })).to eq('TextAlign.Start')
+      expect(align.({ 'width' => 'wrapContent', 'gravity' => 'center' })).to be_nil
+      expect(align.({ 'width' => 32, 'gravity' => 'left' })).to be_nil
+      expect(align.({ 'width' => 32, 'gravity' => 'right', 'linkable' => true, 'text' => '4 http://a.b' })).to eq('TextAlign.End')
     end
 
     it 'places the text of a linkable Label and of one with partialAttributes the same way' do

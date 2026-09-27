@@ -420,6 +420,9 @@ module KjuiTools
             if (align = compose_text_align(json_data['textAlign'], json_data['type']))
               component_code += ",\n" + indent("textAlign = #{align}", depth + 1)
             end
+          elsif (gravity_align = gravity_text_align(json_data))
+            required_imports&.add(:text_align)
+            component_code += ",\n" + indent("textAlign = #{gravity_align}", depth + 1)
           elsif json_data['centerHorizontal']
             required_imports&.add(:text_align)
             component_code += ",\n" + indent("textAlign = TextAlign.Center", depth + 1)
@@ -607,6 +610,28 @@ module KjuiTools
         # only.
         # *attribute*: a path for the highlight's own declaration
         # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        # Where a Label's text sits across a frame wider than it when it
+        # declares no textAlign: by its gravity's horizontal part — the end for
+        # right, the middle for center / centerHorizontal (4f ruling 2026-09-27,
+        # round 17; the web draws it so and iOS follows). nil otherwise (the
+        # start), and for a Label of wrapContent width, which is its text's
+        # width. It sat at the start whatever the gravity. KotlinJsonUI Dynamic
+        # places it the same (DynamicTextComponent.gravityTextAlign).
+        def self.gravity_text_align(json_data)
+          width = json_data['width']
+          own_width = (!width.nil? && !%w[wrapContent wrap_content].include?(width.to_s)) ||
+                      json_data['minWidth'] || json_data['widthWeight'] || json_data['weight']
+          return nil unless own_width
+
+          gravity = json_data['gravity']
+          parts = (gravity.is_a?(Array) ? gravity : gravity.to_s.split('|')).map do |g|
+            JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity')
+          end.compact
+          if parts.include?('right') then 'TextAlign.End'
+          elsif (parts & %w[center centerhorizontal center_horizontal centerinparent center_in_parent]).any? then 'TextAlign.Center'
+          end
+        end
+
         def self.compose_text_align(value, section = 'Label', attribute = 'textAlign')
           return nil unless value.is_a?(String)
 
@@ -738,6 +763,9 @@ module KjuiTools
             required_imports&.add(:text_align)
             align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
+          elsif (align = gravity_text_align(json_data))
+            required_imports&.add(:text_align)
+            style_parts << "textAlign = #{align}"
           end
 
           if style_parts.any?
@@ -965,6 +993,9 @@ module KjuiTools
             required_imports&.add(:text_align)
             align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
+          elsif (align = gravity_text_align(json_data))
+            required_imports&.add(:text_align)
+            style_parts << "textAlign = #{align}"
           end
 
           if style_parts.any?
