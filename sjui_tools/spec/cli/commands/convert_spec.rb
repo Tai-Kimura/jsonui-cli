@@ -6,6 +6,11 @@ RSpec.describe SjuiTools::CLI::Commands::Convert do
   let(:command) { described_class.new }
   let(:temp_dir) { Dir.mktmpdir('convert_test') }
 
+  # A conversion looks up the project's layouts root (ProjectFinder, which
+  # keeps the source directory it found): this spec's, not the next one's.
+  before(:context) { @kept = ProcessStateGuard.keep(SjuiTools::Core::ProjectFinder) }
+  after(:context) { ProcessStateGuard.put_back(@kept) }
+
   after do
     FileUtils.rm_rf(temp_dir)
   end
@@ -120,6 +125,30 @@ RSpec.describe SjuiTools::CLI::Commands::Convert do
       allow(converter).to receive(:convert_file).and_return('output.swift')
 
       expect { command.send(:convert_json_to_swiftui, input_file, nil) }.to output(/Converting.*to SwiftUI/).to_stdout
+    end
+
+    # A conversion under a project's Layouts resolves includes from that
+    # root while it runs, and puts back the one it found (jsonui-cli 1.9.0;
+    # until then it left its own set for whatever ran next in the process).
+    it 'puts back the include expander\'s layouts root it found' do
+      require 'swiftui/json_to_swiftui_converter'
+      layouts = File.join(temp_dir, 'Layouts')
+      FileUtils.mkdir_p(layouts)
+      file = File.join(layouts, 'screen.json')
+      File.write(file, '{"type": "View"}')
+      allow(SjuiTools::Core::ConfigManager).to receive(:load_config).and_return({ 'layouts_directory' => 'Layouts' })
+      allow(SjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return(temp_dir)
+      converter = instance_double(SjuiTools::SwiftUI::JsonToSwiftUIConverter)
+      allow(SjuiTools::SwiftUI::JsonToSwiftUIConverter).to receive(:new).and_return(converter)
+      during = nil
+      allow(converter).to receive(:convert_file) { during = SjuiTools::SwiftUI::IncludeExpander.layouts_root; 'out.swift' }
+      found = SjuiTools::SwiftUI::IncludeExpander.layouts_root
+      SjuiTools::SwiftUI::IncludeExpander.layouts_root = '/found/before/the/conversion'
+      expect { command.send(:convert_json_to_swiftui, file, nil) }.to output(/Conversion complete/).to_stdout
+      expect(during).to eq(File.expand_path(layouts))
+      expect(SjuiTools::SwiftUI::IncludeExpander.layouts_root).to eq('/found/before/the/conversion')
+    ensure
+      SjuiTools::SwiftUI::IncludeExpander.layouts_root = found
     end
 
     it 'handles conversion errors' do

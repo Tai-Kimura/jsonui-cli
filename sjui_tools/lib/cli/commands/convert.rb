@@ -110,6 +110,8 @@ module SjuiTools
             nil
           end
           if layouts_dir && File.expand_path(input_file).start_with?(layouts_dir + File::SEPARATOR)
+            previous_layouts_root = SwiftUI::IncludeExpander.layouts_root
+            layouts_root_set = true
             SwiftUI::IncludeExpander.layouts_root = layouts_dir
           end
 
@@ -122,6 +124,9 @@ module SjuiTools
           puts "Error during conversion: #{e.message}"
           puts e.backtrace if ENV['DEBUG']
           exit 1
+        ensure
+          # This conversion's root, for this conversion only (as a build's).
+          SwiftUI::IncludeExpander.layouts_root = previous_layouts_root if layouts_root_set
         end
       end
     end

@@ -3,6 +3,11 @@
 require 'swiftui/helpers/string_manager_helper'
 
 RSpec.describe SjuiTools::SwiftUI::Helpers::StringManagerHelper do
+  # Examples here announce layouts (current_namespaces): put the helper back
+  # as found, so no later spec resolves strings with these sections.
+  before(:context) { @kept = ProcessStateGuard.keep(described_class) }
+  after(:context) { ProcessStateGuard.put_back(@kept) }
+
   # Create a test class that includes the helper
   let(:helper_instance) do
     Class.new do

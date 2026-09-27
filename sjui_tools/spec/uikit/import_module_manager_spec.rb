@@ -3,6 +3,11 @@
 require 'uikit/import_module_manager'
 
 RSpec.describe SjuiTools::UIKit::ImportModuleManager do
+  # add_type_import_mapping writes the class-wide table: put it back, so no
+  # later spec imports CustomModule for a CustomView.
+  before(:context) { @kept = ProcessStateGuard.keep(described_class) }
+  after(:context) { ProcessStateGuard.put_back(@kept) }
+
   describe '.add_type_import_mapping' do
     it 'adds a new type import mapping' do
       described_class.add_type_import_mapping('CustomView', 'CustomModule')
