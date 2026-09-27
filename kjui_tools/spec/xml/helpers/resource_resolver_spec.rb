@@ -3,6 +3,14 @@
 require 'xml/helpers/resource_resolver'
 
 RSpec.describe KjuiTools::Xml::Helpers::ResourceResolver do
+  # Each example starts from an empty cache, and the process-wide cache is put
+  # back after this file (spec/support/process_state_guard.rb). Clearing before
+  # each example left whatever the file's last example filled: on an order that
+  # ends with a process_color example (seeds 7 and 3556) the file left
+  # @colors_data and @defined_colors_data at {} where there had been nothing.
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(described_class) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   before do
     described_class.clear_cache
   end
