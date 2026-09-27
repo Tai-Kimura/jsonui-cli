@@ -40,14 +40,15 @@ RSpec.describe SjuiTools::SwiftUI::SectionBounder do
 
   # The property the consumer's view_semantic_fingerprint.py checks: splitting
   # may only MOVE content lines between functions and add call scaffolding —
-  # the multiset of content lines is invariant.
+  # the multiset of content lines is invariant. A cut below a binding scope
+  # declares and passes typed parameters (`func f(section: T)`, `f(section: section)`).
   def content_lines(text)
     text.split("\n").map(&:strip).reject do |l|
       l.empty? ||
-        l.match?(/\A[{}()\[\],]+\z/) ||                       # pure structure
-        l.match?(/\A@ViewBuilder private func \w+\(\) -> some View \{\z/) ||
-        l.match?(/\A(view: )?AnyView\(\w+\(\)\)[,)]*\z/) ||    # call scaffolding
-        l.end_with?('AnyView(')                                # split-open line
+        l.match?(/\A[{}()\[\],]+\z/) ||                            # pure structure
+        l.match?(/\A@ViewBuilder private func \w+\([^()]*\) -> some View \{\z/) ||
+        l.match?(/\A(view: )?AnyView\(\w+\([^()]*\)\)[,)]*\z/) ||    # call scaffolding
+        l.end_with?('AnyView(')                                     # split-open line
     end
   end
 
@@ -224,13 +225,16 @@ RSpec.describe SjuiTools::SwiftUI::SectionBounder do
 
     it 'records a waiver instead of silently shipping an uncuttable violation' do
       # Nested control flow (binding frames) all the way down: no safe cut.
+      # Each `if let` binds a name of no known type that the leaf reads, so
+      # no `if` below the first lifts whole (a spine of plain `if`s does: the
+      # if at the budget, below).
       lines = []
-      10.times { |i| lines << ('    ' * i) + "if data.flag#{i} {" }
-      lines << ('    ' * 10) + 'Text("deep")'
+      10.times { |i| lines << ('    ' * i) + "if let v#{i} = data.flag#{i} {" }
+      lines << ('    ' * 10) + "Text(\"#{(0...10).map { |i| "\\(v#{i})" }.join}\")"
       9.downto(0) { |i| lines << ('    ' * i) + '}' }
       _call, functions = bounder.bound(lines.join("\n"))
       expect(bounder.waivers).not_to be_empty
-      expect(functions).to include('Text("deep")') # still emitted
+      expect(functions).to include('Text("\\(v0)') # still emitted
     end
   end
 
@@ -296,13 +300,141 @@ RSpec.describe SjuiTools::SwiftUI::SectionBounder do
       expect(content_lines(functions)).to eq(content_lines(body))
     end
 
-    it 'still waives when no container encloses the deep point at all' do
+    # The `if`s bind names of no known type that the leaf reads: no container
+    # to cut, and no `if` below the first that lifts whole (a spine of plain
+    # `if`s is cut by the last pass, the if at the budget).
+    it 'still waives when no container encloses the deep point and no if lifts whole' do
       lines = []
-      7.times { |i| lines << ('    ' * i) + "if data.flag#{i} {" }
-      lines << ('    ' * 7) + 'Text("deep")'
+      7.times { |i| lines << ('    ' * i) + "if let v#{i} = data.flag#{i} {" }
+      lines << ('    ' * 7) + "Text(\"#{(0...7).map { |i| "\\(v#{i})" }.join}\")"
       6.downto(0) { |i| lines << ('    ' * i) + '}' }
       bounder.bound(lines.join("\n"))
       expect(bounder.waivers.map { |w| w.to_a.last }).to include('no safe cut point')
+    end
+  end
+
+  # ---- the if at the budget ---------------------------------------------------
+  #
+  # jsonui-cli 1.9.0 (reported 2026-09-28, two consumer apps): four list
+  # screens printed "depth 7 … no safe cut" where 1.8.120 printed none. Each is
+  # a keyed Collection (cellIdProperty) with a regular-size-class variant, so
+  # its function is the size-class switch, and the compact route below it is
+  # the collection skeleton: a multi-line CollectionStackView initializer (its
+  # `) {` has no line to carry), `if count > 0`, `if let cellsData`, and the
+  # keyed loop, whose ids closure (`let ids: [AnyHashable] = { … items.map {
+  # cell in if … { … } } }()`) reaches two levels below where the loop's
+  # closure was. No container from the budget inward or outward, and
+  # pass_if_block lifts only the outermost `if` — the switch, the whole body.
+  # The last pass lifts the `if` at the budget instead: the `if let`, with
+  # `section` passed typed.
+  describe 'the if at the budget' do
+    def keyed_switch_body
+      <<~'SWIFT'
+        if horizontalSizeClass == .regular {
+            AnyView(regularRoute())
+        } else {
+            CollectionStackView(
+                mode: .lazy,
+                axis: .vertical,
+                spacing: 12
+            ) {
+                if data.rows.sections.count > 0 {
+                    let section = data.rows.sections[0]
+                    if let cellsData = section.cells?.data {
+                        let items = cellsData.enumerated().map { index, data in
+                            IdentifiedCellItem(id: (data["cellId"] as? String) ?? "\(index)", index: index, data: data)
+                        }
+                        let ids: [AnyHashable] = {
+                            var seen = Set<String>()
+                            return items.map { cell in
+                                if let key = (cell.data["cellId"] as? String), seen.insert(key).inserted { return AnyHashable([AnyHashable(0), AnyHashable(key)]) }
+                                return AnyHashable(IndexPath(item: cell.index, section: 0))
+                            }
+                        }()
+                        ForEach(zip(ids, items).map { pair in (id: pair.0, cell: pair.1) }, id: \.id) { item in
+                            let cell = item.cell
+                            RowCellView(data: cell.data).equatable()
+                                .accessibilityIdentifier("rows_item_\(cell.index)")
+                        }
+                    }
+                }
+            }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+      SWIFT
+    end
+
+    def if_spine(levels)
+      lines = []
+      levels.times { |i| lines << ('    ' * i) + "if data.flag#{i} {" }
+      lines << ('    ' * levels) + 'Text("deep")'
+      (levels - 1).downto(0) { |i| lines << ('    ' * i) + '}' }
+      lines.join("\n")
+    end
+
+    it 'lifts the if let of a keyed collection under a size-class switch, with its section typed' do
+      body = keyed_switch_body
+      expect(described_class.max_brace_depth(body.split("\n"))).to eq(7)
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      fns = emitted_functions(functions)
+      expect(fns.size).to eq(2), functions
+      # emitted_functions counts the `func … {` line: a body at BODY_DEPTH_MAX measures one more.
+      expect(fns.map { |f| f[:depth] }).to eq([described_class::BODY_DEPTH_MAX, described_class::BODY_DEPTH_MAX + 1])
+      root, lifted = fns
+      expect(lifted[:text].lines[0]).to include("private func #{lifted[:name]}(section: CollectionDataSection) -> some View {")
+      expect(lifted[:text].lines[1].strip).to eq('if let cellsData = section.cells?.data {')
+      expect(root[:text]).to match(/let section = data\.rows\.sections\[0\]\n\s*AnyView\(#{lifted[:name]}\(section: section\)\)\n\s*\}\n\s*\}\n\s*\.frame/)
+      # Put back at its call site, the lifted body is the body again, line for line.
+      inlined = root[:text].sub(/^\s*AnyView\(#{lifted[:name]}\(section: section\)\)$/) { lifted[:text].lines[1..-2].join.chomp }
+      expect(content_lines(inlined)).to eq(content_lines(body))
+    end
+
+    # From the budget outward: the parent keeps the levels above the budget
+    # and the child the rest, in one cut. Outermost first would lift the
+    # second `if` and peel one level per function (flag1, then flag2, …).
+    it 'cuts a spine of plain ifs once, at the budget' do
+      _call, functions = bounder.bound(if_spine(7))
+      expect(bounder.waivers).to be_empty
+      fns = emitted_functions(functions)
+      expect(fns.size).to eq(2), functions
+      expect(fns[1][:text].lines[1].strip).to eq("if data.flag#{described_class::BODY_DEPTH_MAX - 1} {")
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::BODY_DEPTH_MAX + 1
+    end
+
+    it 'leaves a body that is over the cutting budget but not over the waiver bound exactly as it was' do
+      body = if_spine(described_class::BODY_DEPTH_HARD)
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      expect(emitted_functions(functions).size).to eq(1)
+      expect(content_lines(functions)).to eq(content_lines(body))
+    end
+
+    # A closure with parameters is a :scope, like a ForEach's content, but
+    # `.onChange { _, value in` runs statements: an `if` lifted out of it
+    # into a @ViewBuilder function would not compile. Only an `if` whose
+    # every enclosing level is a View container or another `if` is lifted.
+    it 'never lifts an if out of a modifier closure' do
+      body = <<~'SWIFT'
+        if data.shown {
+            Text("row")
+                .onChange(of: data.value) { _, newValue in
+                    if data.first {
+                        if data.second {
+                            if data.third {
+                                withAnimation {
+                                    data.apply()
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+      SWIFT
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers.map { |w| w.to_a.last }).to eq(['no safe cut point'])
+      expect(emitted_functions(functions).size).to eq(1)
+      expect(content_lines(functions)).to eq(content_lines(body))
     end
   end
 

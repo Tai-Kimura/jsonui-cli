@@ -337,14 +337,16 @@ module SjuiTools
             pass_chain_cut(chunk, frames) ||
             pass_if_block(chunk, frames) ||
             pass_container_children(chunk, frames) ||
-            pass_outward_chain_cut(chunk, frames)
+            pass_outward_chain_cut(chunk, frames) ||
+            pass_if_at_budget(chunk, frames)
         else
           # Lines-only violation: distribute children; chain cuts last.
           pass_anyview_slots(chunk, frames) ||
             pass_container_children(chunk, frames) ||
             pass_chain_cut(chunk, frames) ||
             pass_if_block(chunk, frames) ||
-            pass_outward_chain_cut(chunk, frames)
+            pass_outward_chain_cut(chunk, frames) ||
+            pass_if_at_budget(chunk, frames)
         end
       end
 
@@ -744,15 +746,72 @@ module SjuiTools
         return false unless deep_idx
 
         # Outermost enclosing `if` frame of the deep point.
-        target = frames[deep_idx].find do |f|
-          next false unless f.kind == :scope
-          line = items[f.open_index]
-          line.is_a?(String) && self.class.strip_noise(line).strip.start_with?('if ')
-        end
+        target = frames[deep_idx].find { |f| if_statement?(items, f) }
         return false unless target
-        return false unless statement_cuttable?(frames[target.open_index])
 
-        open_idx = target.open_index
+        lift_if_statement(chunk, frames, target.open_index)
+      end
+
+      # ---- pass 6: the `if` at the budget ------------------------------------
+      #
+      # The last resort after pass_outward_chain_cut, and like it only for a
+      # body that would otherwise be waived. pass_if_block lifts the OUTERMOST
+      # `if` of the deep point and gives up when that `if` is the whole body:
+      # the size-class switch a responsive Collection emits,
+      # `if horizontalSizeClass == .regular { … } else { … }`, spans its
+      # function. Below it the compact route is the collection skeleton —
+      # `CollectionStackView(` (a multi-line initializer, whose `) {` has no
+      # self-contained line to carry) > `if count > 0` > `if let cellsData` —
+      # with no container inward or outward. jsonui-cli 1.9.0's keyed loop
+      # ids, `let ids: [AnyHashable] = { … items.map { cell in if … { … } } }()`,
+      # sit two levels below where the loop's closure was, so list screens of
+      # this shape came out depth 7 and waived (reported 2026-09-28).
+      #
+      # So here the enclosing `if` statements are searched from the budget
+      # outward (as pass_outward_chain_cut does for containers), and the first
+      # that lifts whole moves into its own function: taken at the budget
+      # (the same frame pass_chain_cut aims at), the parent keeps the levels
+      # above it and the child the rest — 3 and 4 for that skeleton — where
+      # pass_if_block's outermost-first order would peel one level per
+      # function. Only an `if` whose every enclosing level is a View
+      # container or another `if` — a ViewBuilder statement position. A
+      # closure with parameters is a :scope too, but `.onChange { _, value in`
+      # is imperative: an `if` lifted out of it would be statements in a
+      # ViewBuilder function. By the same rule this pass lifts nothing under
+      # a `ScrollViewReader { scrollProxy in`: the scrollTo routes keep the
+      # cuts they had.
+      def pass_if_at_budget(chunk, frames)
+        depth, lines = measure(chunk)
+        return false unless depth > BODY_DEPTH_HARD || lines > BODY_LINES_MAX
+
+        items = chunk.items
+        deep_idx = deepest_line_index(items)
+        return false unless deep_idx
+
+        enclosing = frames[deep_idx].select { |f| %i[container scope].include?(f.kind) }
+        return false if enclosing.empty?
+
+        budget_index = [BODY_DEPTH_MAX - 1, enclosing.size - 1].min
+        enclosing[0..budget_index].reverse_each do |f|
+          next unless if_statement?(items, f)
+          next unless frames[f.open_index].all? { |outer| outer.kind == :container || if_statement?(items, outer) }
+          return true if lift_if_statement(chunk, frames, f.open_index)
+        end
+        false
+      end
+
+      def if_statement?(items, frame)
+        return false unless frame.kind == :scope
+        line = items[frame.open_index]
+        line.is_a?(String) && self.class.strip_noise(line).strip.start_with?('if ')
+      end
+
+      # Moves the whole `if` statement opened at `open_idx` — its if/else
+      # chain — into a child function. false when it cannot move whole.
+      def lift_if_statement(chunk, frames, open_idx)
+        items = chunk.items
+        return false unless statement_cuttable?(frames[open_idx])
+
         # matching_close walks the whole if/else chain: `} else {` is
         # brace-balanced, so the count returns to zero only at the final `}`.
         close_idx = matching_close(items, open_idx, '{', '}')
