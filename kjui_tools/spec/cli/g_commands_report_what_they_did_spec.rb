@@ -11,7 +11,7 @@ require 'fileutils'
 # new project and on a run again over the same files with stdin closed
 # (Compose mode; the XML mode is frozen).
 #
-# Until 1.8.121 (measured on 1b80b5ba + the reporting fixes, 2026-09-26): run
+# Until 1.9.0 (measured on 1b80b5ba + the reporting fixes, 2026-09-26): run
 # again, `g view` said "Generated Compose view:" with its five files when it
 # wrote none (and with --force, which it does not read); `g partial`
 # "Generated partial:" after "File already exists"; `g collection`
@@ -79,7 +79,7 @@ RSpec.describe 'what kjui g view / partial / collection / adapter say they did, 
   after(:all) { @runs.values.flatten(1).map(&:last).uniq.each { |dir| FileUtils.rm_rf(dir) } }
 
   # The file a line names (resolved in the project), or nil. A path may start
-  # with "./" (g adapter's lines): until 1.8.121's second round the pattern
+  # with "./" (g adapter's lines): until 1.9.0's second round the pattern
   # began after the dot, read "/app/…" from the filesystem root, found nothing,
   # and no adapter line was ever checked — the count floor this example had
   # did not show it.
@@ -128,7 +128,7 @@ RSpec.describe 'what kjui g view / partial / collection / adapter say they did, 
       end
     end
     # Every file the first run names is named again by the run over it. A
-    # count floor (20 lines) stood here until 1.8.121's second round, which
+    # count floor (20 lines) stood here until 1.9.0's second round, which
     # prints one line for a file kept off a terminal where the prompt printed
     # two — the count measured the wording, not the coverage.
     aggregate_failures do

@@ -995,7 +995,7 @@ def _layout_candidates(
     is reported, not replaced by a guess. Without it, two derivations that need
     no table: the spec's file name, and ``metadata.name`` in snake_case.
 
-    Until 1.8.121 a third candidate came from a table of one downstream app's
+    Until 1.9.0 a third candidate came from a table of one downstream app's
     screen names (spec stem -> layout name), consulted in every project and
     after a declared layoutFile that did not exist. Measured 2026-09-26 on the
     faces that app has: no screen spec resolved only through it (97 screen

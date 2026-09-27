@@ -27,7 +27,7 @@ require 'rbconfig'
 # step fails (a raise, or add_file answering :failed) leaves the tree as it was
 # and exits non-zero.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26): SwiftUI `g collection`
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26): SwiftUI `g collection`
 # overwrote all five files on every run (closed stdin and --skip-existing
 # too); UIKit `g view` overwrote the ViewController and the layout; `g view`
 # refused both flags ("invalid option", exit 1); `g partial`, `g collection`
@@ -371,7 +371,7 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
   end
 
   # SwiftUI `g collection` writes where `g view` does under the same config
-  # (the directories `sjui build` reads). Until 1.8.121 it wrote View/,
+  # (the directories `sjui build` reads). Until 1.9.0 it wrote View/,
   # Layouts/, Data/, ViewModel/ whatever the config said.
   describe 'g collection under a config that names its own directories' do
     it 'writes into the directories g view writes into' do

@@ -9,7 +9,7 @@ module JsonUIShared
   # Canonical copy in shared/core/string_literals.rb; the per-tool copies under
   # <tool>/lib/core/ stay byte-identical (each tool's shared_core_mirror_spec).
   #
-  # Until 1.8.121 each helper escaped for itself, and over 30 helpers plus 70
+  # Until 1.9.0 each helper escaped for itself, and over 30 helpers plus 70
   # inline writers disagreed (2026-09-26): Kotlin's `$` was escaped almost
   # nowhere (`"Pay $x"` became a template); in Swift `gsub('\\', '\\\\')`
   # does not double a backslash (a gsub replacement reads `\\` as one `\`), so
@@ -97,7 +97,7 @@ module JsonUIShared
     #             when they do not read as JSON, the text between the quotes
     #   '…'       the text between the quotes, as written
     # `jui g project` does not write the quoted spellings.
-    # Until 1.8.121 the three read `"Test"` three ways: Kotlin and TS as
+    # Until 1.9.0 the three read `"Test"` three ways: Kotlin and TS as
     # `Test`, Swift as `""Test""` (not Swift) — then as `"Test"` with its
     # quotes; `'it''s'` became invalid TS, and a bare `Say "hi"` was written
     # unescaped into TS (ticket

@@ -34,7 +34,7 @@ module JsonUIShared
   # correct side:
   #   - escape_string escaped backslashes with the block form (all three
   #     tools had carried the no-op `gsub('\\', '\\\\')`). It and
-  #     format_string_value were removed in 1.8.121: their one caller,
+  #     format_string_value were removed in 1.9.0: their one caller,
   #     TypeConverter.format_value, had no caller in any tool — the Data
   #     models write strings through StringLiterals (string_literals.rb)
   #   - the event-handler introspection API (extract_function_parameter_types,

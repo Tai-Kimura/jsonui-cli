@@ -42,7 +42,7 @@ def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
     converter_parser.add_argument("--attributes", help="Attributes (key:type,...)")
     # Three states, as in each platform tool: --container, --no-container, or
     # neither (the tool's default — a content slot drawn when the layout
-    # gives children). Until 1.8.121 only --container crossed, so a leaf
+    # gives children). Until 1.9.0 only --container crossed, so a leaf
     # could not be scaffolded through jui at all.
     converter_parser.add_argument("--container", dest="container", action="store_const",
                                   const=True, default=None, help="Container component")
@@ -1153,7 +1153,7 @@ def _container_from_slots(slots) -> bool | None:
     Until that is settled a leaf is scaffolded by asking for one:
     ``jui g converter <Name> --no-container``. ``--all`` keeps it one: None
     passes neither flag, and a tool run with neither keeps what the
-    component's definition already declares (until 1.8.121 it wrote the
+    component's definition already declares (until 1.9.0 it wrote the
     default back over the leaf, and the build stopped refusing its children).
     """
     items = slots.get("items") if isinstance(slots, dict) else None

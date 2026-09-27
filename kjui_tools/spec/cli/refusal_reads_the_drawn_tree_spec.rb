@@ -9,7 +9,7 @@ require 'fileutils'
 # The shared refusal (a leaf given children, several cellClasses without
 # sections, a binding the declaration refuses) reads the tree a layout DRAWS —
 # styles merged, includes expanded — and a partial is checked on its own.
-# Until 1.8.121 sjui and kjui read a layout before its includes were
+# Until 1.9.0 sjui and kjui read a layout before its includes were
 # expanded: a leaf given children inside an included layout was drawn with
 # its children dropped and nothing refused, on every build; kjui's cached
 # build checked a partial that its fresh build skipped. rjui converts each

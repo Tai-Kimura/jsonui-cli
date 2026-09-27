@@ -104,7 +104,7 @@ module SjuiTools
         # "used for both grid spacing and list item spacing"): between cells
         # columnSpacing, else itemSpacing; between rows lineSpacing, else
         # itemSpacing. The non-lazy grid used columnSpacing between rows as
-        # well until 1.8.121.
+        # well until 1.9.0.
         def grid_cell_spacing
           @component['columnSpacing'] || @component['itemSpacing'] || 0
         end
@@ -2429,7 +2429,7 @@ module SjuiTools
 
         # `items` is declared ["array", "binding"]; the data source is the
         # binding. An array names no data and is set aside, as kjui and rjui
-        # set it aside — until 1.8.121 it reached `start_with?` and raised
+        # set it aside — until 1.9.0 it reached `start_with?` and raised
         # NoMethodError (ticket kjui-codegen-table-crashes-on-an-items-array).
         def extract_property_name(items_property)
           return nil unless items_property.is_a?(String)

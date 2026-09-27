@@ -14,7 +14,7 @@ module KjuiTools
       #   clip(circle) → clip(cornerRadius) → border(circle) → background →
       #   clickable → padding
       #
-      # Until 1.8.121 the codegen had no case for it: a CircleView fell to the
+      # Until 1.9.0 the codegen had no case for it: a CircleView fell to the
       # custom-component lookup and emitted `// TODO: Implement component
       # type: CircleView`, while Dynamic drew it (component_metadata.json
       # declared kotlin_generated false and kotlin_dynamic true).

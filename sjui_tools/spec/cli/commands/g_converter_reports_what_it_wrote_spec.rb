@@ -14,7 +14,7 @@ require 'fileutils'
 # SwiftUI mode (converter, Swift view, Dynamic adapter, mappings, definition)
 # and UIKit mode (binding handler, definition, config).
 #
-# Until 1.8.121 (measured on 1b80b5ba, 2026-09-26) every run ended
+# Until 1.9.0 (measured on 1b80b5ba, 2026-09-26) every run ended
 # "Successfully generated converter", "Converter file created at:
 # views/extensions/Probe_converter.rb" (the file is probe_converter.rb, under
 # sjui_tools/lib/swiftui/views/extensions) and "Mappings file updated with …"
@@ -68,7 +68,7 @@ RSpec.describe 'what sjui g converter says it wrote, against the disk' do
     said.gsub(/\e\[[0-9;]*m/, '')
   end
 
-  # The answers typed on a pseudo-terminal, then end-of-file: since 1.8.121
+  # The answers typed on a pseudo-terminal, then end-of-file: since 1.9.0
   # the prompt is shown only on a terminal (a "y" on a pipe is not read).
   def on_terminal(cmd, dir, answers)
     said = +''

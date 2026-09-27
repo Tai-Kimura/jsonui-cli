@@ -26,7 +26,7 @@ require 'rbconfig'
 # --force); both flags are accepted by every command; the files and the
 # Dynamic layout name `g collection` writes are the ones `kjui build` uses.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26): `g view` parsed --force
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26): `g view` parsed --force
 # and did not read it, and refused --skip-existing ("invalid option", exit 1);
 # `g partial`, `g collection` and `g adapter` parsed neither (the files were
 # kept under --force, the adapter still asked under --skip-existing); `g
@@ -280,7 +280,7 @@ RSpec.describe 'kjui g view / partial / collection / adapter keep the files the 
     # The Dynamic-mode layout name: the GeneratedView's `layoutName` is the
     # one `kjui build` writes when it rewrites the file (the path under
     # Layouts/), and the ViewModel's jsonFileName is the same path, as `g
-    # view` writes it. Until 1.8.121 the scaffold said "product_cell" (ticket
+    # view` writes it. Until 1.9.0 the scaffold said "product_cell" (ticket
     # dynamic-layout-name-drops-the-subdirectory-of-a-nested-cell).
     it 'g collection my_products/product_cell: the Dynamic layout name is the one kjui build writes' do
       Dir.mktmpdir('kjui_g_cell_dynamic') do |dir|

@@ -98,7 +98,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::AdapterGenerator do
       it 'prompts for overwrite' do
         generator = described_class.new('Existing')
         allow($stdin).to receive(:gets).and_return('n')
-        allow($stdin).to receive(:tty?).and_return(true) # asked only on a terminal since 1.8.121
+        allow($stdin).to receive(:tty?).and_return(true) # asked only on a terminal since 1.9.0
         expect { generator.generate }.to output(/already exists/).to_stdout
       end
     end
@@ -148,7 +148,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::AdapterGenerator do
   # The value a bound attribute falls back to when the layout names no
   # binding — the shared table's (lib/core/attribute_types.rb), the one the
   # component and its preview use; this generator kept its own list until
-  # 1.8.121 (Float was 0.0 of a Float the component declared as Double).
+  # 1.9.0 (Float was 0.0 of a Float the component declared as Double).
   describe 'a bound attribute\'s fallback' do
     let(:generator) { described_class.new('Test') }
 
@@ -279,7 +279,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::AdapterGenerator do
     end
 
     # `!!`: the component declares `Binding<CustomModel>`, so the adapter
-    # hands it one — it passed `Binding<CustomModel?>` until 1.8.121.
+    # hands it one — it passed `Binding<CustomModel?>` until 1.9.0.
     it 'keeps a `!!` model type non-optional, falling back to .mock' do
       code = generator.send(:generate_binding_extraction, 'model', 'CustomModel!!')
       expect(code).to include('SwiftUI.Binding<CustomModel>')

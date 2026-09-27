@@ -331,7 +331,7 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       expect(definition_content['BindingCard']).to have_key('staticValue')
     end
 
-    # Since 1.8.121 the file is written with no attributes too: it is where the
+    # Since 1.9.0 the file is written with no attributes too: it is where the
     # build reads whether the component takes children (child / children for
     # the default). Until then a component with no attributes had none.
     # Ticket sjui-leaf-custom-component-cannot-reject-children.

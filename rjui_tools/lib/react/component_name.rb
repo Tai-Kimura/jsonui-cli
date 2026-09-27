@@ -10,7 +10,7 @@ module RjuiTools
     # One rule for the three places that spell the name: the import
     # (ReactGenerator#extract_included_components), the cell Data type
     # (ReactGenerator#extract_collection_cell_types) and the JSX element
-    # (CollectionConverter#extract_view_name). Until 1.8.121 the JSX side ran
+    # (CollectionConverter#extract_view_name). Until 1.9.0 the JSX side ran
     # its own UIKit-migration heuristics — `HeaderCell` became
     # `<HeaderCellView/>` under `import HeaderCell …`, which tsc refuses
     # (ticket collection-attributes-declared-but-not-drawn-on-some-paths).

@@ -17,7 +17,7 @@ require_relative '../../support/kotlin_compiler'
 #
 # The composable declares a default for every parameter, so these calls
 # compile and the prop keeps it — what the converter now says, naming the
-# value. Until 1.8.121 it said "the prop keeps its default" on all three
+# value. Until 1.9.0 it said "the prop keeps its default" on all three
 # tools, which on sjui was false (ticket
 # sjui-unwritten-non-optional-prop-does-not-compile); the sentence is one,
 # from lib/core/attribute_types.rb, and says what happens on each face.
@@ -69,7 +69,7 @@ RSpec.describe 'kjui g converter: a prop the converter does not write' do
             node = { 'type' => name }
             node['v'] = value_for(type, kase) unless kase == :absent
             # What it printed through kjui's warning logger (not stubbed for
-            # this; stdout captured) — since 1.8.121's fourth round the line
+            # this; stdout captured) — since 1.9.0's fourth round the line
             # goes there, "⚠️  [kjui] …", not to stderr through a bare `warn`.
             said = StringIO.new
             saved = $stdout

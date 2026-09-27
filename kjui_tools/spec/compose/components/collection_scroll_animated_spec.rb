@@ -9,7 +9,7 @@ require_relative '../../support/kotlin_compiler'
 # time, a literal `false` jumps (`scrollToItem`), absent or `true` animates
 # (the declared default, "default: true"). sjui calls `scrollProxy.scrollTo`
 # outside `withAnimation` for a literal false and rjui passes `false` to
-# scrollCollectionToCell. Until 1.8.121 (measured on 8e4ea3ea, 2026-09-26)
+# scrollCollectionToCell. Until 1.9.0 (measured on 8e4ea3ea, 2026-09-26)
 # kjui read only the binding, so a literal false still animated on both
 # paths. Ticket collection-attributes-declared-but-not-drawn-on-some-paths.
 #

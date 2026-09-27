@@ -63,7 +63,7 @@ RSpec.describe JsonUIShared::ConverterGeneratorCore do
       expect(decide({}, stdin: '')).to be false
     end
 
-    # Until 1.8.121 the prompt read any stdin: a pipe held open and never
+    # Until 1.9.0 the prompt read any stdin: a pipe held open and never
     # written (an MCP server's child, an agent's shell) waited forever.
     it 'keeps it without asking or reading when stdin is not a terminal, and says so with --force' do
       expect(decide({}, stdin: untouchable_stdin)).to be false

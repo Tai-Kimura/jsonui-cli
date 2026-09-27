@@ -51,7 +51,7 @@ module JsonUI
       # The closing line of a build: the success line only when nothing
       # failed. One sentence for every face — the UIKit and Compose builds
       # said they completed directly under the list of what had not until
-      # 1.8.121 (ticket uikit-build-reports-success-after-a-binding-error).
+      # 1.9.0 (ticket uikit-build-reports-success-after-a-binding-error).
       # The exit code is left alone, as above: `jui build` turns the ledger
       # into the non-zero exit.
       def conclude(logger, success_line)
@@ -98,7 +98,7 @@ module JsonUI
         existing = [] unless existing.is_a?(Array)
         # Only what this process has not written yet: `sjui build --mode all`
         # reports at the end of the UIKit stage and again at the end of the
-        # SwiftUI one, and until 1.8.121 the second report wrote the first
+        # SwiftUI one, and until 1.9.0 the second report wrote the first
         # one's entries again — one unparseable colors.json was two stages
         # in `jui build`'s count.
         written = @written || 0

@@ -40,10 +40,10 @@ module SjuiTools
             puts "Debug: Original partial name: '#{partial_name}'"
             
             # 1. Partial JSONファイルの作成 — through the one overwrite
-            # decision the generate commands share (until 1.8.121 --force and
+            # decision the generate commands share (until 1.9.0 --force and
             # --skip-existing were not read here).
             # The transaction's record says what this run created: what a
-            # failed Xcode step deletes (until 1.8.121 this generator had no
+            # failed Xcode step deletes (until 1.9.0 this generator had no
             # rollback: the new layout stayed, out of the project).
             @txn = ScaffoldTransaction.new(@project_file_path)
             record = @txn.record
@@ -63,7 +63,7 @@ module SjuiTools
             # 3. Bindingファイルの生成
             generate_binding_file
             
-            # The counts, from the record (until 1.8.121 "Successfully
+            # The counts, from the record (until 1.9.0 "Successfully
             # generated partial" and "File created" followed "Partial JSON
             # file already exists" — ticket kjui-g-view-reports-what-it-did-not-do).
             puts
@@ -171,7 +171,7 @@ module SjuiTools
               loader.start_analyze
               
               # The loader says per file what it wrote, and names a file it
-              # could not — until 1.8.121 this line claimed success after
+              # could not — until 1.9.0 this line claimed success after
               # such an error.
               puts "Binding generation ran: its lines above say what it wrote"
             rescue => e

@@ -6,7 +6,7 @@ require 'swiftui/converter_factory'
 # `items` is declared ["array", "binding"] on Collection (whose alias Table
 # is) and on Radio. Each declared shape through the SwiftUI codegen.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) a Collection or Table
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) a Collection or Table
 # given an array raised NoMethodError (`start_with?` on an Array) on each of
 # the 12 routes that read it, and a Radio given a binding raised
 # NoMethodError (`any?` on a String): the build went down on a declared

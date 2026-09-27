@@ -56,10 +56,10 @@ module SjuiTools
             puts "Generating collection cell: #{camel_cell_name} in #{camel_view_folders.join('/')}"
 
             # Both files through the one overwrite decision the generate
-            # commands share (until 1.8.121 --force and --skip-existing were
+            # commands share (until 1.9.0 --force and --skip-existing were
             # not read here). The transaction's record also says what this run
             # created: what a failed Xcode step deletes — both files, not only
-            # the one whose step failed (until 1.8.121 a failure adding the
+            # the one whose step failed (until 1.9.0 a failure adding the
             # layout left the cell this run had created, and its entry in the
             # project), with the folders the run made and project.pbxproj put
             # back as it was.
@@ -85,7 +85,7 @@ module SjuiTools
             generate_binding_file(camel_cell_name)
 
             # The counts, from the record — each file has been said as it was
-            # decided (until 1.8.121 "Successfully generated" and "Files
+            # decided (until 1.9.0 "Successfully generated" and "Files
             # created:" after a run that kept both — ticket
             # kjui-g-view-reports-what-it-did-not-do).
             puts
@@ -184,7 +184,7 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               # View/フォルダ名/Collection のグループ構造で追加
               folders = view_folder_names.is_a?(Array) ? view_folder_names : [view_folder_names]
               group_path = "View/#{folders.join('/')}/Collection"
-              # Said as add_file did it (until 1.8.121 "Added …" followed
+              # Said as add_file did it (until 1.9.0 "Added …" followed
               # "File already in project").
               result = @xcode_manager.add_file(file_path, group_path)
               @txn.check!([[file_path, result]])
@@ -278,7 +278,7 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               loader.start_analyze
               
               # The loader says what it wrote, and names a file it could not
-              # (until 1.8.121 this line claimed success after such an error).
+              # (until 1.9.0 this line claimed success after such an error).
               puts "Binding generation ran: its lines above say what it wrote"
             rescue => e
               puts "Warning: Could not generate binding file: #{e.message}"

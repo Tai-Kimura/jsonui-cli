@@ -11,7 +11,7 @@ require_relative '../support/typescript_compiler'
 # scrollCollectionToCell (scrollCollectionToItem until jsonui-cli 1.9.0). A literal false jumps, absent or true animates (the
 # declared default), and a binding decides at run time — true only when the
 # bound value is true, the reading sjui (`(data.x ?? false)`) and kjui
-# (`(data.x ?: false)`) give an unset bound value. Until 1.8.121 (measured on
+# (`(data.x ?: false)`) give an unset bound value. Until 1.9.0 (measured on
 # 46a54fc3, 2026-09-26) a binding was read as `true`: the collection animated
 # whatever the data said. Ticket
 # collection-attributes-declared-but-not-drawn-on-some-paths.

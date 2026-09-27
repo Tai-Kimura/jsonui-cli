@@ -10,7 +10,7 @@ require 'swiftui/generators/converter_generator'
 # converter writes it, typechecked with swiftc against the component
 # scaffolded from the same attribute.
 #
-# Until 1.8.121 (measured on 1b80b5ba + the literal-null fix, 2026-09-26) the
+# Until 1.9.0 (measured on 1b80b5ba + the literal-null fix, 2026-09-26) the
 # component's init declared a default only for optional parameters, so every
 # such call for a non-optional prop — `String` as `Row!!`, 21 of 31 types —
 # failed with "missing argument for parameter 'v'", while the converter said
@@ -69,7 +69,7 @@ RSpec.describe 'sjui g converter: a prop the converter does not write' do
         node = { 'type' => name }
         node['v'] = value_for(type, kase) unless kase == :absent
         # What it printed through sjui's warning logger (not stubbed for
-        # this; stdout captured) — since 1.8.121's fourth round the line goes
+        # this; stdout captured) — since 1.9.0's fourth round the line goes
         # there, "WARNING: [sjui] …", not to stderr through a bare `warn`.
         said = StringIO.new
         saved = $stdout

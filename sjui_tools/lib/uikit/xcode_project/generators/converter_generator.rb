@@ -45,7 +45,7 @@ module SjuiTools
             definition_written = create_attribute_definition_file
 
             # What the run did — each file has said its own line with its
-            # path. Until 1.8.121 this said "Successfully generated", "Binding
+            # path. Until 1.9.0 this said "Successfully generated", "Binding
             # handler created at: …", "Attribute definition created at: …" and
             # "Config file updated …" whatever the run had done (ticket
             # g-converter-reports-files-it-did-not-write).
@@ -119,7 +119,7 @@ module SjuiTools
             content = JSON.pretty_generate(config)
             before = File.exist?(config_path) ? File.read(config_path) : nil
             File.write(config_path, content)
-            # What changed in it, said: until 1.8.121 "Updated" when it was
+            # What changed in it, said: until 1.9.0 "Updated" when it was
             # written back as it was.
             @logger.info(if before.nil?
                            "Created #{config_path} with custom_view_types['#{@component_pascal_case}']"

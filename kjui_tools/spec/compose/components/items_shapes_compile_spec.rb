@@ -7,7 +7,7 @@ require_relative '../../support/kotlin_compiler'
 # `items` is declared ["array", "binding"] on Collection (whose alias Table
 # is) and on Radio. Every declared shape, through the Compose codegen.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) a Table given an array
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) a Table given an array
 # raised NoMethodError (`.match` on an Array) — kjui drew Table with its own
 # TableComponent, where the type-synonym canon, sjui and rjui draw it as a
 # Collection — and a Radio given a binding raised NoMethodError (`each` on a

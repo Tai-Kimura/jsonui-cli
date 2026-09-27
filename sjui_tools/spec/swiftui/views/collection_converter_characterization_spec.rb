@@ -277,7 +277,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('BCellView(data: cell.data).equatable()')
     end
 
-    # These were bare siblings of the LazyVGrid until 1.8.121, so the
+    # These were bare siblings of the LazyVGrid until 1.9.0, so the
     # Collection's modifiers attached to the footer
     # (collection_non_lazy_grid_edges_spec.rb).
     it 'grid with legacy header/footer classes: header, LazyVGrid and footer in one VStack' do

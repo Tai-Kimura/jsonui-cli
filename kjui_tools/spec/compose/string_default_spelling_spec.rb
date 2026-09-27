@@ -19,7 +19,7 @@ require_relative '../support/kotlin_compiler'
 # computed by default_text; each path's output is compiled with kotlinc and
 # RUN on the JVM, and must read back as it.
 #
-# Until 1.8.121 a `"…"` default was passed through as written, so a `$` in
+# Until 1.9.0 a `"…"` default was passed through as written, so a `$` in
 # it became a template and `\/` did not compile; the strings.xml key was
 # looked up with the same text. Ticket codegen-string-literals-are-not-
 # escaped-for-the-target-language, remaining 1.
@@ -127,7 +127,7 @@ RSpec.describe 'a String defaultValue reads the same on every kjui path' do
   end
 
   # A String? default reads as a String's, and none stays null
-  # (vectors['optionalStrings']). Until 1.8.121 a String? default was written
+  # (vectors['optionalStrings']). Until 1.9.0 a String? default was written
   # as it stood, as code: `var probe: String? = Hello`.
   it 'the Data class field of a String?: every row reads back as its text, or null (kotlinc + JVM)' do
     if (reason = KotlinCompiler.unavailable_reason)
@@ -174,7 +174,7 @@ RSpec.describe 'a String defaultValue reads the same on every kjui path' do
   # A value written per platform ({ "swift": …, "kotlin": … }): the one
   # this platform gets, or — when the layout gives it none — the class's
   # vocabulary value and a WARNING naming the layout, the property and the
-  # platform (ruling 2026-09-26). Until 1.8.121 the Hash went on as the
+  # platform (ruling 2026-09-26). Until 1.9.0 the Hash went on as the
   # value, and rjui wrote `"{"swift"=>"eager", "kotlin"=>"lazy"}"`.
   describe 'a defaultValue written per platform' do
     converter = KjuiTools::Core::TypeConverter

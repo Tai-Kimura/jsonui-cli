@@ -67,7 +67,7 @@ module KjuiTools
           # Each file through the one overwrite decision the generate
           # commands share: an existing one is the app's — kept unless
           # --force (or "y" at the prompt); a closed stdin and --skip-existing
-          # keep it. Each is said as it is decided. Until 1.8.121 --force was
+          # keep it. Each is said as it is decided. Until 1.9.0 --force was
           # parsed and not read, and --skip-existing was "invalid option"
           # (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
           json_file = File.join(json_path, "#{json_file_name}.json")
@@ -98,7 +98,7 @@ module KjuiTools
           # Update MainActivity if --root option is specified
           activity_updated = update_main_activity(view_class_name, package_name) if @options[:root]
 
-          # The counts, from the record (until 1.8.121 a list whatever the run
+          # The counts, from the record (until 1.9.0 a list whatever the run
           # had done — ticket kjui-g-view-reports-what-it-did-not-do).
           core.report_scaffold_record("Compose view #{view_class_name}", record, Core::Logger)
 

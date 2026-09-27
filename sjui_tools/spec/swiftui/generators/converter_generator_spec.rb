@@ -271,7 +271,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
   end
 
   describe '#generate_attribute_definition_file (private)' do
-    # Since 1.8.121 the file is written with no attributes too: it is where the
+    # Since 1.9.0 the file is written with no attributes too: it is where the
     # build reads whether the component takes children (child / children for
     # the default, "_children": "none" for --no-container). Until then a
     # component with no attributes had no definition at all. Ticket
@@ -360,7 +360,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
         file_path = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions', 'MyCard.json')
         content = JSON.parse(File.read(file_path))
 
-        # child / children: the default mode takes children (since 1.8.121).
+        # child / children: the default mode takes children (since 1.9.0).
         expect(content['MyCard'].keys).to contain_exactly('title', 'count', 'price', 'isActive', 'child', 'children')
         expect(content['MyCard']['title']['type']).to eq(['string', 'binding'])
         expect(content['MyCard']['count']['type']).to eq(['number', 'binding'])

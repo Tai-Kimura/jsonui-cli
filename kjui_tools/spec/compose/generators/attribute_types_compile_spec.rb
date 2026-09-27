@@ -17,7 +17,7 @@ require_relative '../../support/kotlin_compiler'
 # (lib/core/attribute_types.rb) — a type added there is compiled here — plus
 # the shapes around it (`T?`, `[T]`, callbacks) and types outside it.
 #
-# Until 1.8.121, of 26 spellings compiled this way 17 did not compile: the
+# Until 1.9.0, of 26 spellings compiled this way 17 did not compile: the
 # composable declared `v: Any = null` for a Long, a callback, a `String?`, a
 # data source…, and the wrapper read Dp / Alignment as text (2026-09-26).
 # Ticket kjui-sjui-converter-attr-types-do-not-compile. sjui's and rjui's

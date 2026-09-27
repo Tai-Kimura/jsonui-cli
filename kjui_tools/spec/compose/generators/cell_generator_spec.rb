@@ -101,7 +101,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
       # The view folder is snake_case too: `kjui build` looks for the cell's
       # Kotlin files under the layout's own (snake_case) subdirectory, and
-      # until 1.8.121 did not find them under views/MyProducts/.
+      # until 1.9.0 did not find them under views/MyProducts/.
       view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/my_products/product_cell/ProductCellView.kt')
       expect(File.exist?(view_path)).to be true
     end

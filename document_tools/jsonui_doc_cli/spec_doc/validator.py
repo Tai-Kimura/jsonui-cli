@@ -106,6 +106,7 @@ class SpecValidationResult:
 #: "0 warnings" as its bar would turn red with no notice (U5). A literal,
 #: read by `shared/core/gate_versions` like every `*_GATE_FROM`:
 #: "withdrawn" or anything that is not a release number never gates.
+#: Announced by v1.8.120 as "1.8.121"; that release shipped as 1.9.0. The literal stays what was announced (check-tag xxxi).
 LAYOUT_ID_GATE_FROM: str | None = "1.8.121"
 
 #: ee's text (design v4.20).

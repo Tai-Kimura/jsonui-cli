@@ -17,7 +17,7 @@ require_relative '../../support/kotlin_compiler'
 # compiled with kotlinc against the composable scaffolded from the same
 # attributes (types only; Compose is a stub).
 #
-# Until 1.8.121 the converter kept its own spellings: a `Float` got `1.5`
+# Until 1.9.0 the converter kept its own spellings: a `Float` got `1.5`
 # (Kotlin wants `1.5f`), a list got Ruby's `["a", "b"]`, a map `{"a"=>1}`, a
 # `String?` its text without quotes, and a string with a `$` became a
 # template. Ticket converter-literal-props-do-not-compile.
@@ -124,7 +124,7 @@ RSpec.describe 'kjui g converter: a literal the layout gives a prop' do
   # every tool writes a null for — the ones sjui's Swift scaffold declares
   # optional (the shared table's swift_type, the declaration, not the
   # question the converter asks) — and every other prop gets nothing and a
-  # line naming it; the composable's default stands. Until 1.8.121 a `Row!!`
+  # line naming it; the composable's default stands. Until 1.9.0 a `Row!!`
   # model got `null` here without a word while sjui refused it. Ticket
   # converter-writes-nil-for-a-forced-model-prop.
   describe 'a JSON null' do
@@ -164,7 +164,7 @@ RSpec.describe 'kjui g converter: a literal the layout gives a prop' do
           expect(said).to include("the layout's nil is not a #{type} literal"), "#{type}: #{said.inspect}"
         end
         # Printed through kjui's warning logger, with its prefix, where a
-        # warning count finds it. Until 1.8.121's fourth round the converter
+        # warning count finds it. Until 1.9.0's fourth round the converter
         # said it with a bare `warn`: stderr, no prefix, and a count of the
         # build's warnings saw none of them.
         lines = rows.flat_map { |_, _, said, _, _| said.lines }.grep(/\[kjui\] /)

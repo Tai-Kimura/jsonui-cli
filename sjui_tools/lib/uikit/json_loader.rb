@@ -188,7 +188,7 @@ module SjuiTools
             # Restore backup if generation failed
             @binding_file_manager.restore_backup(binding_info[:backup_file_path], binding_info[:binding_file_path])
             # Continue with next file instead of stopping completely — and
-            # say so at the end. Until 1.8.121 this line scrolled past and the
+            # say so at the end. Until 1.9.0 this line scrolled past and the
             # run ended "Build completed successfully!" with nothing in the
             # ledger, so `jui build` exited 0 (ticket
             # uikit-build-reports-success-after-a-binding-error). The layout
@@ -284,7 +284,7 @@ module SjuiTools
                         elsif value_str.start_with?('"') && value_str.end_with?('"')
                           # A literal in JSON's escapes (StringLiterals.default_text),
                           # written as Swift: passed through as written until
-                          # 1.8.121, where `\(x)` interpolated
+                          # 1.9.0, where `\(x)` interpolated
                           default_value = JsonUIShared::StringLiterals.swift(JsonUIShared::StringLiterals.default_text(value_str))
                         else
                           # No quotes - treat as localization key
@@ -533,7 +533,7 @@ module SjuiTools
                 content << "    #{modifier} #{data_name}: #{data["class"]}#{type_suffix}\n"
               end
             else
-              # A String? default is text too (written as code until 1.8.121)
+              # A String? default is text too (written as code until 1.9.0)
               if data["class"].to_s.chomp("?") == "String"
                 # For string values, handle various quote patterns
                 value_str = data["defaultValue"].to_s
@@ -549,7 +549,7 @@ module SjuiTools
                   default_value = JsonUIShared::StringLiterals.swift(inner_content)
                 elsif value_str.start_with?('"') && value_str.end_with?('"')
                   # A literal in JSON's escapes (StringLiterals.default_text),
-                  # written as Swift: passed through as written until 1.8.121,
+                  # written as Swift: passed through as written until 1.9.0,
                   # where `\(x)` interpolated
                   default_value = JsonUIShared::StringLiterals.swift(JsonUIShared::StringLiterals.default_text(value_str))
                 else

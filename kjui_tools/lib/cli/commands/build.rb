@@ -169,7 +169,7 @@ module KjuiTools
           files.each do |json_file|
             # A cached screen's variant files are cached with it, and are
             # checked with it, as the conversion loop checks them. Until
-            # 1.8.121 only the base was: a variant that a component change
+            # 1.9.0 only the base was: a variant that a component change
             # made invalid (a Box made a leaf, the layout files untouched)
             # was neither refused nor named on a cached run — sjui printed
             # "all cached" and exited 0 (measured 2026-09-26).
@@ -219,7 +219,7 @@ module KjuiTools
           end
 
           # The tree the layout draws, as the builder reads it: styles
-          # merged, includes expanded (until 1.8.121 the includes were not,
+          # merged, includes expanded (until 1.9.0 the includes were not,
           # so a violation inside one was never seen here). A copy: the
           # expander rewrites the tree it is given.
           require_relative '../../compose/include_expander'
@@ -327,7 +327,7 @@ module KjuiTools
           layouts_dir = File.join(source_path, source_directory, config['layouts_directory'] || 'assets/Layouts')
 
           # A Layouts directory that is not there is a named failure, as on
-          # rjui and sjui — until 1.8.121 it was "No JSON files found" and
+          # rjui and sjui — until 1.9.0 it was "No JSON files found" and
           # exit 0, the answer an empty directory gets (ticket
           # uikit-build-reports-success-after-a-binding-error).
           unless Dir.exist?(layouts_dir)
@@ -619,7 +619,7 @@ module KjuiTools
           require_relative '../../core/stage_failures'
           JsonUI::StageFailures.report!(Core::Logger)
 
-          # Until 1.8.121 "Compose build completed!" came directly under the
+          # Until 1.9.0 "Compose build completed!" came directly under the
           # list of stages that had not (ticket
           # uikit-build-reports-success-after-a-binding-error).
           JsonUI::StageFailures.conclude(Core::Logger, 'Compose build completed!')

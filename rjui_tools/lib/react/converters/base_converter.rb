@@ -1441,7 +1441,7 @@ module RjuiTools
         # Switch / Toggle / CheckBox after the value, a Radio after the
         # selection, a Segment after the tab, a Slider when the change is
         # finished, a SelectBox after the selection. None of them gets a
-        # plain onClick (build_onclick_attr): until 1.8.121 none called it.
+        # plain onClick (build_onclick_attr): until 1.9.0 none called it.
         #
         # nil when the node declares no handler, or `canTap: false` closes
         # the gate; `if (gate) { … }` for a bound canTap. `enabled: false`

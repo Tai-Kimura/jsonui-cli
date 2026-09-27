@@ -208,7 +208,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
     end
 
     # The element is named as the import names it (React::ComponentName).
-    # Until 1.8.121 these two asserted UIKit-migration renames —
+    # Until 1.9.0 these two asserted UIKit-migration renames —
     # ProductCollectionViewCell → ProductView, ProductCell → ProductCellView —
     # which the import never made, so the file named a component it had not
     # imported (collection_classes_and_page_change_spec.rb, tsc TS2304).

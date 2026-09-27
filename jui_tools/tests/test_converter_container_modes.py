@@ -2,9 +2,9 @@
 
 Three states, as each tool parses them: --container, --no-container (a leaf:
 the build refuses a layout that gives it children), or neither (the tool's
-default, a content slot drawn when children are given). Until 1.8.121 jui
+default, a content slot drawn when children are given). Until 1.9.0 jui
 had no --no-container, so a leaf could not be scaffolded through jui at all.
-`--from` still reads an empty `slots.items` as the default in 1.8.121 (see
+`--from` still reads an empty `slots.items` as the default in 1.9.0 (see
 _container_from_slots for the measurement). Ticket
 sjui-leaf-custom-component-cannot-reject-children.
 """
@@ -68,7 +68,7 @@ class ContainerFlagTest(unittest.TestCase):
 class SlotsDeclareTheModeTest(unittest.TestCase):
     def test_the_mapping(self):
         self.assertIs(_container_from_slots({"items": [{"name": "content"}]}), True)
-        # Not yet a leaf in 1.8.121 — measured to break a face's Android build.
+        # Not yet a leaf in 1.9.0 — measured to break a face's Android build.
         self.assertIsNone(_container_from_slots({"items": [], "notes": "a leaf"}))
         self.assertIsNone(_container_from_slots(None))
         self.assertIsNone(_container_from_slots({}))

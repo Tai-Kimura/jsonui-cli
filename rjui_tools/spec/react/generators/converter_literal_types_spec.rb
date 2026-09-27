@@ -16,7 +16,7 @@ require_relative '../../support/typescript_compiler'
 # one answer on the three tools). The one difference is a type outside the
 # vocabulary: `any` in TypeScript, so its JSON value is written.
 #
-# Until 1.8.121 (measured on 1b80b5ba + the literal-null fix, 2026-09-26)
+# Until 1.9.0 (measured on 1b80b5ba + the literal-null fix, 2026-09-26)
 # rjui wrote literals through its own path and checked none: a `false` was
 # dropped without a word, `"abc"` for an Int became `{abc}` (TS2304), "yes"
 # for a Bool `{true}`, a number for a String its text, a callback's string

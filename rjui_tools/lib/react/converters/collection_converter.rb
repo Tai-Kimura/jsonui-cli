@@ -131,7 +131,7 @@ module RjuiTools
         # The page-change callback (`onValueChange`, alias `onPageChanged`):
         # a paging Collection's, called with the page index when the page the
         # user scrolled to changes — what sjui's TabView onChange and kjui's
-        # pager snapshotFlow call. Until 1.8.121 rjui read it nowhere, so the
+        # pager snapshotFlow call. Until 1.9.0 rjui read it nowhere, so the
         # callback never fired on web (ticket
         # collection-attributes-declared-but-not-drawn-on-some-paths).
         def page_change_handler

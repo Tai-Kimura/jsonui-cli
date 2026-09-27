@@ -32,7 +32,7 @@ require 'fileutils'
 #      pass refused them; that path is not reached here any more)
 #   5  nothing changed: plain is converted again, as a refused layout
 # and a cached screen's variant (`variant@regular`, a Box with a child) is
-# checked with it: at 4 it is refused on the cached run too. Until 1.8.121 the
+# checked with it: at 4 it is refused on the cached run too. Until 1.9.0 the
 # cached pass read the base alone, and sjui printed "all cached" with nothing
 # named (kjui re-converts every screen with variants, so it named it).
 #

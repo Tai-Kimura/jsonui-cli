@@ -69,7 +69,7 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
   EMIT_MARKERS_KT = ['expect(code)', 'expect(kotlin', 'expect(out'].freeze
   COMPILE_MARKER_KT = 'compile_as_kotlin'
   LIB_KT = File.expand_path('../lib', __dir__)
-  # core/resources/color_manager writes ColorManager.kt. Until 1.8.121 it was
+  # core/resources/color_manager writes ColorManager.kt. Until 1.9.0 it was
   # outside this list, and its spec was in only by the markers' spelling.
   EMITTING_LIB_KT = (Dir.glob(File.join(LIB_KT, 'compose', '{components,generators,helpers}', '*.rb')) +
                      %w[compose/compose_builder.rb compose/data_model_updater.rb
@@ -213,7 +213,7 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
 
   # A spec is in by what it loads and describes, whatever it spells: the
   # color manager writes ColorManager.kt, so its spec stays in with every
-  # marker taken out. Red until 1.8.121, when the file was outside
+  # marker taken out. Red until 1.9.0, when the file was outside
   # EMITTING_LIB_KT and the spec was in by its markers alone.
   it 'keeps the color manager spec in without its markers' do
     rel = 'core/resources/color_manager_spec.rb'

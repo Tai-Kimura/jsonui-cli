@@ -17,7 +17,7 @@ module SjuiTools
       SCREEN_MARKER_MIN_LIBRARY_VERSION = '10.8.1'
 
       # A generated view the build could not update keeps the previous
-      # build's body — the layout's change is not in the app. Until 1.8.121
+      # build's body — the layout's change is not in the app. Until 1.9.0
       # that was an "Error:" line above "SwiftUI build completed!" (ticket
       # uikit-build-reports-success-after-a-binding-error).
       def not_updated(swift_file_path, why)

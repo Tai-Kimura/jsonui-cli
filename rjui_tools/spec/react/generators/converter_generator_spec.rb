@@ -151,7 +151,7 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     def generate_in(tmp, options, stdin: '')
       gen = RjuiTools::React::Generators::ReactComponentGenerator.new('Card', { attributes: {} }.merge(options), {})
       original_stdin = $stdin
-      # An answer is typed on a terminal: since 1.8.121 a stdin that is not a
+      # An answer is typed on a terminal: since 1.9.0 a stdin that is not a
       # terminal is not read (an empty one stands for a closed pipe).
       $stdin = StringIO.new(stdin)
       $stdin.define_singleton_method(:tty?) { true } unless stdin.empty?
@@ -211,7 +211,7 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
       expect(out).not_to include('Created component file')
     end
 
-    # "Overwrote", not "Created", since 1.8.121: the file was there (ticket
+    # "Overwrote", not "Created", since 1.9.0: the file was there (ticket
     # g-converter-reports-files-it-did-not-write).
     it 'says Overwrote when it replaced the file' do
       [[{ force: true }, ''], [{}, "y\n"]].each do |options, answer|
@@ -274,7 +274,7 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
   end
 
   # The literal path (the converter scaffold's format_literal, through the
-  # shared JsonUIShared::AttributeTypes.ts_literal since 1.8.121 — ticket
+  # shared JsonUIShared::AttributeTypes.ts_literal since 1.9.0 — ticket
   # rjui-literal-props-are-not-checked-against-the-type). These examples
   # pinned the old emit_literal_branch's text; they now run the converter it
   # writes and hold the same intents.

@@ -25,7 +25,7 @@ require 'rbconfig'
 # --force); both flags are accepted by every command; an option a command does
 # not declare, and a missing name, are one line and exit 1.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26): `g view` and `g component`
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26): `g view` and `g component`
 # ended in an OptionParser::InvalidOption stack trace on --force and on
 # --skip-existing; `g collection` ignored both; a missing name said so and
 # exited 0.

@@ -46,7 +46,7 @@ module KjuiTools
           create_dynamic_initializers
 
           # Only when it wrote the adapter: a kept one has said "Skipped
-          # existing" / "Kept existing". Until 1.8.121 this line followed
+          # existing" / "Kept existing". Until 1.9.0 this line followed
           # either way (ticket kjui-g-view-reports-what-it-did-not-do).
           @logger.success "Successfully generated adapter: #{@adapter_class_name}" if written
           @logger.info "Don't forget to call DynamicComponentInitializer.initialize() in your app initialization."
@@ -124,7 +124,7 @@ REGISTRATION
             else_clause = $2
             "#{existing}\n#{new_registration}#{else_clause}"
           end
-          # Said: until 1.8.121 a registry without this `when` was written
+          # Said: until 1.9.0 a registry without this `when` was written
           # back unchanged and reported as updated (the sub! went unchecked).
           unless added
             @logger.warn "Could not register '#{@name}' in #{registry_file}: it has no " \
@@ -263,7 +263,7 @@ REGISTRATION
               File.write(debug_file, updated)
               @logger.info "Updated DynamicComponentInitializer (debug): #{debug_file} sets Configuration.customComponentTypes"
             else
-              # Said too (until 1.8.121 a run that found it said nothing of it).
+              # Said too (until 1.9.0 a run that found it said nothing of it).
               @logger.info "Unchanged DynamicComponentInitializer (debug): #{debug_file} exists"
             end
           else
@@ -284,7 +284,7 @@ REGISTRATION
 
           # Only create if it doesn't exist yet
           if File.exist?(release_file)
-            # Said too (until 1.8.121 a run that found it said nothing of it).
+            # Said too (until 1.9.0 a run that found it said nothing of it).
             @logger.info "Unchanged DynamicComponentInitializer (release): #{release_file} exists"
           else
             File.write(release_file, generate_release_initializer_content)

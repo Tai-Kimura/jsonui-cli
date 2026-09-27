@@ -25,7 +25,7 @@ import os
 #: The types an image is drawn as. A node is an image when the type it is
 #: drawn as (drawn_type below) is one of them: Img, ImageView, AsyncImage,
 #: NetworkImageView, CircleImageView and every other spelling the table gives
-#: them. Until 1.8.121 this was a list of spellings from component_metadata
+#: them. Until 1.9.0 this was a list of spellings from component_metadata
 #: .json's `aliases`, which named neither AsyncImage nor NetworkImageView.
 IMAGE_TYPES = frozenset({"Image", "CircleImage", "NetworkImage"})
 

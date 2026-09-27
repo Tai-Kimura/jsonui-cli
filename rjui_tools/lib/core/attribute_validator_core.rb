@@ -91,10 +91,10 @@ module JsonUIShared
     # The shared LayoutValidator refuses a layout that gives such a component
     # children (check_leaf_children). It is a declaration because the absence
     # of `child` / `children` already means something else: definitions
-    # written before 1.8.121 declare no child for the default mode either,
+    # written before 1.9.0 declare no child for the default mode either,
     # and those components draw the children they are given.
     #
-    # A string, not `false`: validators before 1.8.121 read every entry here
+    # A string, not `false`: validators before 1.9.0 read every entry here
     # as a Hash, and `false['required']` raised on every node of that type —
     # measured on 1.8.120 — where a string is passed over the way the SSoT's
     # own `_comment` entries are.
@@ -421,7 +421,7 @@ module JsonUIShared
       else
         puts "\e[31m[#{log_tag} Error] attribute_definitions.json not found at #{definitions_path}\e[0m"
         # Every attribute is then checked against no definitions. Named at
-        # the end of the build, once — until 1.8.121 this line was all, and
+        # the end of the build, once — until 1.9.0 this line was all, and
         # the build ended in its success line (ticket
         # uikit-build-reports-success-after-a-binding-error).
         begin
@@ -554,7 +554,7 @@ module JsonUIShared
     # spellings checked against the common attributes only. An empty table
     # read in silence would do that and say nothing; this says it.
     #
-    # Until 1.8.121 each case raised, and each tool carried the raise its own
+    # Until 1.9.0 each case raised, and each tool carried the raise its own
     # way (measured on 46a54fc3, 2026-09-26, two layouts): a missing file —
     # sjui exit 1, kjui every layout failed with exit 1, rjui one entry per
     # layout; a file that is not JSON — sjui (SwiftUI) "build completed!" with

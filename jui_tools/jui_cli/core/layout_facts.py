@@ -45,6 +45,7 @@ from pathlib import Path
 #: spelling and prints one line announcing the release. A literal read by
 #: shared/core/gate_versions like every `*_GATE_FROM`; jui decides and hands
 #: rjui the answer (JSONUI_INCLUDE_ID_PREFIX) — rjui reads no literal.
+#: Announced by v1.8.120 as "1.8.121"; that release shipped as 1.9.0. The literal stays what was announced (check-tag xxxi).
 INCLUDE_ID_PREFIX_GATE_FROM: str | None = "1.8.121"
 
 #: One `@{...}` occurrence, as the Ruby validator scans for it.

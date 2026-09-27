@@ -123,7 +123,7 @@ module KjuiTools
         end
 
         # The mode, as the composable and the Dynamic wrapper read it (see
-        # KotlinComponentGenerator#kotlin_template). Until 1.8.121 this
+        # KotlinComponentGenerator#kotlin_template). Until 1.9.0 this
         # template never read it and always decided from the layout, so a
         # --container call without children omitted the lambda its
         # composable requires, and a --no-container call with children passed

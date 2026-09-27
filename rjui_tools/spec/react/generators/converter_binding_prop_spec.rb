@@ -13,7 +13,7 @@ require_relative '../../support/typescript_compiler'
 # of every other prop (the shared ts_literal; a value of another kind named).
 # Type-checked with tsc --strict.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) the component declared
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) the component declared
 # `@v?: …`, which is not TypeScript (TS1131) — 50 of 50 calls failed — and the
 # converter read `json['@v']`, which no layout has, so the prop was dropped
 # whatever the layout gave it. Ticket
@@ -48,7 +48,7 @@ RSpec.describe 'rjui g converter: a binding attribute' do
         node = { 'type' => name }
         node['v'] = value unless kase == :absent
         # Printed through rjui's warning logger ("[WARN] ", stdout; the
-        # logger is not stubbed in before(:all)) — from 1.8.121 the line goes
+        # logger is not stubbed in before(:all)) — from 1.9.0 the line goes
         # there, not to stderr through a bare `warn`.
         said = StringIO.new
         saved = $stdout

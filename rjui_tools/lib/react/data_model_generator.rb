@@ -1026,7 +1026,7 @@ module RjuiTools
 
         # The text the layout's spelling means ('' / "…" / '…' / bare,
         # StringLiterals.default_text), as a TS literal, for a String and a
-        # String? alike. Until 1.8.121 a quoted spelling passed through as
+        # String? alike. Until 1.9.0 a quoted spelling passed through as
         # written (`'it''s'` was not TS), a bare one was quoted unescaped,
         # and a String? default was written as it stood, as code. A value
         # that is not a String (a dictionary given to a String property)

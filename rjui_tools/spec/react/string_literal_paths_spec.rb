@@ -19,7 +19,7 @@ require 'react/helpers/font_spec_helper'
 # or attribute through esbuild's JSX transform, a JS literal as is), in ONE
 # process for the whole table: the value must be the text.
 #
-# Before 1.8.121 the paths escaped for themselves, and two gsub traps hid in
+# Before 1.9.0 the paths escaped for themselves, and two gsub traps hid in
 # them: `gsub('\\', '\\\\')` does not double a backslash, and in a
 # replacement STRING "\\`" is the text before the match — LabelConverter
 # turned It`s {one} C:\new into ItIts and a newline. Ticket

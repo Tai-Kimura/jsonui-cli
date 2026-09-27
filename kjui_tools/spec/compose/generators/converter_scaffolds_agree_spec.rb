@@ -14,7 +14,7 @@ require_relative '../../support/kotlin_compiler'
 # component takes a content lambda: the composable, the converter that calls
 # it from generated views, and the Dynamic wrapper that calls it in Debug.
 #
-# Until 1.8.121 each read the mode its own way — the composable `!= false`,
+# Until 1.9.0 each read the mode its own way — the composable `!= false`,
 # the wrapper truthy, the converter not at all — and two combinations did
 # not compile (measured on e1a85ca2 with kotlinc): the default's wrapper
 # called its composable without the content it required, and a --container

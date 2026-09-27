@@ -80,7 +80,7 @@ module SjuiTools
         # escaped (a caller that escaped first would get it escaped twice).
         def get_text_with_string_manager(text_content, warnings: true)
           # The text between the quotes every caller puts around it (or a
-          # `'…'` pair around the whole). Only that pair: until 1.8.121 every
+          # `'…'` pair around the whole). Only that pair: until 1.9.0 every
           # `"` in the text was removed (and a `'` next to a line break), so
           # `Say "hi"` was looked up as `Say hi` — missing the value the
           # extractor stored, or finding a DIFFERENT text that lacks them.

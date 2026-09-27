@@ -11,7 +11,7 @@ require 'fileutils'
 # .outside_warning, the one sentence of all three tools) names the type the
 # scaffold declares, and says "kept" when the run wrote no scaffold.
 #
-# Until 1.8.121 (measured on f16f3a11, 2026-09-26) `Row!!` — sjui's "not
+# Until 1.9.0 (measured on f16f3a11, 2026-09-26) `Row!!` — sjui's "not
 # optional" mark — was named "Row? in Swift" while the component and the
 # adapter declared `Row`; and a run that kept the existing scaffold
 # (--skip-existing) said "it is scaffolded as …" of files it had not

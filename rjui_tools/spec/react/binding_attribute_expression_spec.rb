@@ -17,7 +17,7 @@ require 'react/converters/tab_view_converter'
 require 'core/binding_validator'
 
 # An attribute holding a binding is written as ONE JavaScript expression
-# (BaseConverter#attribute_expression). Until 1.8.121 these sites took
+# (BaseConverter#attribute_expression). Until 1.9.0 these sites took
 # convert_binding's JSX-child form (`https://x/{data.id}.png`) and removed
 # every brace to make an expression — text around a binding became code
 # (`https://x/data.id.png`), a literal brace was lost, and IconLabel's icon,

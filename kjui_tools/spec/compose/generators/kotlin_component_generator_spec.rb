@@ -82,7 +82,7 @@ RSpec.describe KjuiTools::Compose::Generators::KotlinComponentGenerator do
         expect(generator.send(:map_type_to_kotlin, 'color')).to eq('Color')
       end
 
-      # Dp / Size / Alignment left the vocabulary in 1.8.121: their scaffold never
+      # Dp / Size / Alignment left the vocabulary in 1.9.0: their scaffold never
       # compiled as a pair (the wrapper read them as text), and no face used
       # them. Outside the vocabulary a type is `Any? = null`, which compiles,
       # and `g converter` names it (ticket kjui-sjui-converter-attr-types-do-not-compile).

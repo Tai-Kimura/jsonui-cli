@@ -6,7 +6,7 @@ require 'swiftui/views/collection_converter'
 # `lazy: "none"`, more than one column): one VStack holds the header, the grid
 # and the footer, and the Collection's own modifiers apply to it — as the
 # single-column non-lazy route draws them and as SwiftJsonUI Dynamic does
-# (91b932b). Until 1.8.121 (measured on aad4c8c4, 2026-09-26) the three were
+# (91b932b). Until 1.9.0 (measured on aad4c8c4, 2026-09-26) the three were
 # emitted as siblings, so the Collection was three views in its parent and
 # its background, identifier and frame attached to the footer.
 RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do

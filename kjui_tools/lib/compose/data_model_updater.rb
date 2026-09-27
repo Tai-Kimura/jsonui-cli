@@ -436,7 +436,7 @@ module KjuiTools
         when 'String', 'String?'
           # The text the layout's spelling means ('' / "…" / '…' / bare,
           # StringLiterals.default_text), written as a Kotlin literal. A
-          # `"…"` default was passed through as written until 1.8.121, so a
+          # `"…"` default was passed through as written until 1.9.0, so a
           # `$` in it became a template. TypeConverter's quoted Visibility
           # default (`gone` -> `"gone"`) reads back as `gone` and is written
           # as the same `"gone"`.

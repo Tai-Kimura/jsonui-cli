@@ -85,7 +85,7 @@ module SjuiTools
               json = style_json.merge(json)
             rescue JSON::ParserError => e
               # Named, and drawn without it — as the SwiftUI build does. Until
-              # 1.8.121 the parse error went up uncaught: exit 1 with
+              # 1.9.0 the parse error went up uncaught: exit 1 with
               # "Error: unexpected end of input …" and no file named (ticket
               # uikit-build-reports-success-after-a-binding-error).
               Core::Logger.error "Error parsing style file '#{file_path}': #{e.message}"

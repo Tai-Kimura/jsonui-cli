@@ -153,7 +153,7 @@ module RjuiTools
         # click to a disabled button, so neither the selection nor its
         # handler moves — `enabled: false` stops the operation, the rule the
         # five paths share (ticket control-onclick-is-called-differently-on-
-        # every-path). Until 1.8.121 web read no `enabled` on a TabView and
+        # every-path). Until 1.9.0 web read no `enabled` on a TabView and
         # its tabs switched regardless. A TabView that does not declare it
         # comes out as it did.
         def tab_disabled_attr

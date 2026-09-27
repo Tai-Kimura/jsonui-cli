@@ -6,7 +6,7 @@ require 'swiftui/views/collection_converter'
 # Collection.sections.items.properties.columns), so a section declaring more
 # than one draws as a grid of that many on every vertical route that draws
 # sections — including the routes where the Collection itself is one column.
-# Until 1.8.121 (measured on a22b5182, 2026-09-26) the list-style, lazy and
+# Until 1.9.0 (measured on a22b5182, 2026-09-26) the list-style, lazy and
 # non-lazy single-column routes drew it one cell per row; the section's
 # columns were read only on the grid routes.
 #

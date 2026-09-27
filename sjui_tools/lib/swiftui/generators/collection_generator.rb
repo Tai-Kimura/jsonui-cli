@@ -43,7 +43,7 @@ module SjuiTools
 
           # Each file through the one overwrite decision the generate commands
           # share: an existing one is the app's, kept unless --force (or "y"
-          # at the prompt). Until 1.8.121 this generator wrote all five on
+          # at the prompt). Until 1.9.0 this generator wrote all five on
           # every run — a ViewModel, a view and a layout the app had edited
           # too, with a closed stdin and with --skip-existing (ticket
           # generate-commands-overwrite-edited-files-and-ignore-their-flags).
@@ -265,7 +265,7 @@ module SjuiTools
         end
 
         # Path helpers — under the directories the config names, as `g view`
-        # and `sjui build` use (until 1.8.121 View/, Layouts/, Data/ and
+        # and `sjui build` use (until 1.9.0 View/, Layouts/, Data/ and
         # ViewModel/ whatever the config said: with "layouts_directory":
         # "Screens" the cell's layout landed where the build does not read —
         # measured 2026-09-26, ticket

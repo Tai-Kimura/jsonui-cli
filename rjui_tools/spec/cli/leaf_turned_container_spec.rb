@@ -12,7 +12,7 @@ require 'pty'
 # component spec that gained slots — by a run that KEEPS existing files:
 # --skip-existing, a closed stdin (read as "n"), or an "n" to one prompt.
 #
-# Until 1.8.121 (measured on f16f3a11, 2026-09-26) the definition went back to
+# Until 1.9.0 (measured on f16f3a11, 2026-09-26) the definition went back to
 # `child` / `children` while the kept converter still said
 # `is_container = false`: the build accepted the children and the converter
 # drew the component without them — rc 0, not a word. A kept component .tsx
@@ -59,7 +59,7 @@ RSpec.describe 'a leaf turned back into a container, through rjui g converter an
     FileUtils.mkdir_p(layouts)
 
     # An answer is typed on a pseudo-terminal, then end-of-file: since
-    # 1.8.121 the prompt is shown only on a terminal, and a "y" on a pipe is
+    # 1.9.0 the prompt is shown only on a terminal, and a "y" on a pipe is
     # not an answer (a stdin that is not a terminal is not read).
     rjui = lambda do |component, args, stdin|
       cmd = [RbConfig.ruby, File.join(tool, 'bin', 'rjui'), 'g', 'converter', component, '--attributes', 'title:String', *args]

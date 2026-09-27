@@ -776,7 +776,7 @@ module RjuiTools
         rescue StandardError => e
           Core::Logger.error("Error generating data models: #{e.message}")
           # The stage stops at the first layout it cannot read, so the ones
-          # after it have no Data model either. Until 1.8.121 this ERROR
+          # after it have no Data model either. Until 1.9.0 this ERROR
           # scrolled past "Build completed!" (ticket
           # uikit-build-reports-success-after-a-binding-error).
           JsonUI::StageFailures.record('data models', "the Data models were not generated: #{e.message}")

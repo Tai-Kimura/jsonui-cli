@@ -70,7 +70,7 @@ RSpec.describe 'validation is not cached' do
 
   # Build until the cache skips every layout it may skip, so the examples
   # below measure the cached path rather than a plain repeat build. That is
-  # every layout but sample.json: from 1.8.121 a refused layout is never
+  # every layout but sample.json: from 1.9.0 a refused layout is never
   # cached — it is converted, and refused, again on every build (ticket
   # build-caches-a-refused-layout-as-built) — so a settled run says
   # "Updating 1 of 3 files", not "all cached".

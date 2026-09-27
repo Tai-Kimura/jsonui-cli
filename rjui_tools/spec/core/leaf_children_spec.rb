@@ -90,7 +90,7 @@ RSpec.describe 'a leaf declared in its extension definition' do
   # `g converter` with neither --container nor --no-container — what
   # `jui g converter --all` runs, with or without --skip-existing, for a
   # component spec without slots — keeps what the definition declares; only a
-  # flag changes it. Until 1.8.121 such a run wrote the default back over a
+  # flag changes it. Until 1.9.0 such a run wrote the default back over a
   # leaf, and the build stopped refusing its children while the leaf's
   # scaffold went on dropping them, with no warning (measured 2026-09-26).
   describe 'a run with neither --container nor --no-container' do
@@ -191,7 +191,7 @@ RSpec.describe 'a leaf declared in its extension definition' do
       expect(warnings.grep(/Unknown attribute 'child'/)).to be_empty
     end
 
-    it "keeps \"Unknown attribute 'child'\" where nothing is declared — a definition from before 1.8.121" do
+    it "keeps \"Unknown attribute 'child'\" where nothing is declared — a definition from before 1.9.0" do
       File.write(File.join(@defs_dir, 'Legacy.json'), JSON.generate('Legacy' => { 'title' => { 'type' => 'string' } }))
       layout = { 'type' => 'Legacy', 'id' => 'a', 'title' => 'x', 'child' => [kid] }
       expect(validator.validate(layout).grep(/Unknown attribute 'child' for component type 'Legacy'/).size).to eq(1)
@@ -211,7 +211,7 @@ RSpec.describe 'a leaf declared in its extension definition' do
 
     # The string is ignored even by a validator that reads every entry as a
     # Hash (String#[] answers nil), so it cannot tell the entries apart. A
-    # `false` can: validators before 1.8.121 raised on it for every node.
+    # `false` can: validators before 1.9.0 raised on it for every node.
     # This one counts declarations only.
     it 'counts required attributes over declarations only — a `false` entry neither raises nor counts' do
       title = { 'title' => { 'type' => 'string', 'required' => true } }

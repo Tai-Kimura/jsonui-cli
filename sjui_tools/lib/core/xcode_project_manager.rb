@@ -157,7 +157,7 @@ module SjuiTools
         
         existing = group.files.find { |f| f.path == file_name || f.path == relative_path }
         
-        # Already there: nothing to do, and not an error (until 1.8.121 it
+        # Already there: nothing to do, and not an error (until 1.9.0 it
         # was logged as one, and callers then said "Added …" — ticket
         # kjui-g-view-reports-what-it-did-not-do).
         if existing
@@ -190,7 +190,7 @@ module SjuiTools
 
       # The lines below that say what this class did to the project (a group
       # used, made or removed) are at the level of what they say. Until
-      # 1.8.121 they were all ERROR, so a healthy UIKit build printed
+      # 1.9.0 they were all ERROR, so a healthy UIKit build printed
       # "ERROR: Removing empty group: …" above "Build completed successfully!"
       # — and an ERROR a build prints must be a stage it did not complete
       # (ticket uikit-build-reports-success-after-a-binding-error).
@@ -313,7 +313,7 @@ module SjuiTools
       def add_binding_files(binding_files, project_dir)
         binding_files.each do |file_path|
           # A binding file the project does not compile is a screen that is
-          # not there: the build says so at its end (until 1.8.121 the ERROR
+          # not there: the build says so at its end (until 1.9.0 the ERROR
           # scrolled past a success line — ticket
           # uikit-build-reports-success-after-a-binding-error).
           next unless add_file(file_path, 'Bindings') == :failed

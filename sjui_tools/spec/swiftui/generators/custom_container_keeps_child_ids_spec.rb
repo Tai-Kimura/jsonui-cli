@@ -10,7 +10,7 @@ require 'swiftui/generators/swift_component_generator'
 # id keeps its children's identifiers: it is made an explicit accessibility
 # container before its own identifier, as the built-in containers are.
 #
-# Until 1.8.121 only the built-in types were (ACCESSIBILITY_CONTAINER_TYPES),
+# Until 1.9.0 only the built-in types were (ACCESSIBILITY_CONTAINER_TYPES),
 # so a custom container's id went on bare and SwiftUI pushed it down onto its
 # children — measured in the codegen host (XCUITest, iOS 26.5, 2026-09-25):
 # with one child, the container's id found on the child and the child's own

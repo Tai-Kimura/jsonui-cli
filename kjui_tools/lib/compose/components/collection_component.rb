@@ -197,7 +197,7 @@ module KjuiTools
         # literal `false` jumps (`scrollToItem`); absent or `true` animates,
         # the declared default. sjui calls `scrollProxy.scrollTo` outside
         # `withAnimation` for a literal false and rjui passes `false` to
-        # `scrollCollectionToItem`. Until 1.8.121 only a binding was read here,
+        # `scrollCollectionToItem`. Until 1.9.0 only a binding was read here,
         # so a literal false still animated on both paths (measured on
         # 8e4ea3ea, 2026-09-26; ticket
         # collection-attributes-declared-but-not-drawn-on-some-paths).
@@ -1207,7 +1207,7 @@ module KjuiTools
         #   paging                              nothing
         #
         # A header / footer is its view with its own ViewModel and no item
-        # data, and is drawn whether or not there are items. Until 1.8.121
+        # data, and is drawn whether or not there are items. Until 1.9.0
         # only the lazy routes drew this shape at all, reading the cells as
         # `data.<items>?.get("<cellClass>")` — a map keyed by cell class, which
         # CollectionDataSource is not, so it did not compile — through a

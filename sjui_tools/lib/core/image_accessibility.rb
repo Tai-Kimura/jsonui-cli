@@ -32,7 +32,7 @@ module JsonUIShared
     # The types an image is drawn as. A node is an image when the type it is
     # drawn as (type_synonyms.rb) is one of them: Img, ImageView, AsyncImage,
     # NetworkImageView, CircleImageView and every other spelling the table
-    # gives them. Until 1.8.121 this was a list of spellings, taken from
+    # gives them. Until 1.9.0 this was a list of spellings, taken from
     # component_metadata.json's `aliases`, which named neither AsyncImage nor
     # NetworkImageView: an image spelled so got no role and no INFO.
     IMAGE_TYPES = %w[Image CircleImage NetworkImage].freeze

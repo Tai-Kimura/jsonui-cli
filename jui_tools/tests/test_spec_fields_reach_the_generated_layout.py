@@ -5,13 +5,13 @@
    agents pack's examples use — and `default`, the older one, both reach the
    Layout JSON `data` section; `default` wins when both are given, the
    precedence the pack states (and the other is named when it differs);
-   false / 0 / "" are values. Until 1.8.121 the screen path read
+   false / 0 / "" are values. Until 1.9.0 the screen path read
    `default` only, so `"defaultValue": "gone"` became the type's "" without a
    word (`jui verify` compares data names only), and the cell path's
    `default or defaultValue` let a falsy `default` fall through.
 2. `structure.collection.lazy: false` — declared by the spec schema ("a plain
    VStack/Column/div ... NO scroll container") — reaches the Collection node as
-   the Layout's `"lazy": "none"`; until 1.8.121 it was dropped.
+   the Layout's `"lazy": "none"`; until 1.9.0 it was dropped.
 3. Every field the spec schema declares for the sections extract_screen_spec
    reads is either read by `jui g project` or named below with the reason it
    is not, and who reads it instead — measured by running a spec synthesized

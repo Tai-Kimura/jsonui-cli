@@ -10,7 +10,7 @@ require_relative '../../support/typescript_compiler'
 # vocabulary (lib/core/attribute_types.rb) that sjui and kjui scaffold from,
 # plus `T?`, `[T]`, callbacks and types outside it.
 #
-# Until 1.8.121 rjui compiled every type by turning most of them into `any`
+# Until 1.9.0 rjui compiled every type by turning most of them into `any`
 # without a word — a Long, a Color, `String?`, `[String]` (2026-09-26). Each is
 # asserted to be the table's type here, and the whole set compiled. Ticket
 # kjui-sjui-converter-attr-types-do-not-compile.

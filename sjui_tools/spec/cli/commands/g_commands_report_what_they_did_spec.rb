@@ -12,7 +12,7 @@ require 'fileutils'
 # the same files with stdin closed. SwiftUI mode, and UIKit mode on a real
 # (empty) Xcode project, which it patches.
 #
-# Until 1.8.121 (measured on 1b80b5ba + the reporting fixes, 2026-09-26): run
+# Until 1.9.0 (measured on 1b80b5ba + the reporting fixes, 2026-09-26): run
 # again, `g view` said "Generated SwiftUI view:" with its five files when it
 # wrote none; `g partial` "Generated partial:" after "File already exists";
 # `g adapter` "Successfully generated adapter" after keeping it; UIKit `g view`
@@ -133,7 +133,7 @@ RSpec.describe 'what sjui g view / partial / collection / adapter say they did, 
       end
     end
     # Every file the first run names is named again by the run over it. A
-    # count floor (40 lines) stood here until 1.8.121's second round, which
+    # count floor (40 lines) stood here until 1.9.0's second round, which
     # prints one line for a file kept off a terminal where the prompt printed
     # two — the count measured the wording, not the coverage.
     aggregate_failures do

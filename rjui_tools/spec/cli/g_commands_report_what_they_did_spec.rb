@@ -109,7 +109,7 @@ RSpec.describe 'what rjui g view / component / collection say they did, against 
       end
     end
     # Every file the first run names is named again by the run over it. A
-    # count floor (8 lines) stood here until 1.8.121's second round, which
+    # count floor (8 lines) stood here until 1.9.0's second round, which
     # prints one line for a file kept off a terminal where the prompt printed
     # two — the count measured the wording, not the coverage.
     aggregate_failures do

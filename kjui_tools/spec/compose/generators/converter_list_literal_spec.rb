@@ -17,7 +17,7 @@ require_relative '../../support/kotlin_compiler'
 # either — as in Swift; a bare `Array`'s items are any value, and a nested
 # list is a list. Compiled with kotlinc against the composable.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) every item that was not a
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) every item that was not a
 # vocabulary scalar went out as JSON, so `[Row]` was written
 # (`listOf(mapOf<String, Any?>("k" to "v"))`) while `Row` was refused. Ticket
 # binding-prop-with-a-non-binding-value-does-not-compile.
@@ -60,7 +60,7 @@ RSpec.describe 'kjui g converter: a list literal and the rule its items follow' 
         self.class.values.each_with_index.map do |(type, value), i|
           name = "ListLiteral#{i}"
           # What it printed through kjui's warning logger (not stubbed for
-          # this; stdout captured) — from 1.8.121 the line goes there,
+          # this; stdout captured) — from 1.9.0 the line goes there,
           # "⚠️  [kjui] …", not to stderr through a bare `warn`.
           said = StringIO.new
           saved = $stdout

@@ -269,7 +269,7 @@ def _ui_variable_default(var: dict, where: str) -> Any:
     spec says one thing. Neither is in the spec schema (it declares name /
     type / description / notes). Read by key, so false / 0 / "" are values.
 
-    Until 1.8.121 the screen path (stateManagement.uiVariables) read `default`
+    Until 1.9.0 the screen path (stateManagement.uiVariables) read `default`
     only: `"defaultValue": "gone"` reached the Layout JSON as the type's
     default "" and nothing said so (`jui verify` compares data names only).
     The cell path read `default or defaultValue`, which let a falsy `default`
@@ -384,7 +384,7 @@ def _parse_collection(coll_data: dict) -> CollectionDef:
         generate_cell_layout=bool(cell and cell.generate),
         cell_ui_variables=cell.ui_variables if cell else [],
         cell_event_handlers=cell.event_handlers if cell else [],
-        # Declared by the spec schema, dropped until 1.8.121 (the generated
+        # Declared by the spec schema, dropped until 1.9.0 (the generated
         # Collection was lazy whatever the spec said).
         lazy=coll_data.get("lazy") if isinstance(coll_data.get("lazy"), bool) else None,
         slots=slots,

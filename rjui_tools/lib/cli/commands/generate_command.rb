@@ -18,9 +18,9 @@ module RjuiTools
           @config = Core::ConfigManager.load_config
         end
 
-        # A missing name and an unknown type exit 1 (until 1.8.121 they said
+        # A missing name and an unknown type exit 1 (until 1.9.0 they said
         # the error and exited 0), and an option the command does not declare
-        # is said in one line, exit 1 — until 1.8.121 `g view --force` ended
+        # is said in one line, exit 1 — until 1.9.0 `g view --force` ended
         # in an OptionParser::InvalidOption stack trace (ticket
         # generate-commands-overwrite-edited-files-and-ignore-their-flags).
         def execute
@@ -54,7 +54,7 @@ module RjuiTools
         rescue SystemCallError, IOError => e
           # A write that fails midway (a read-only file, a full disk): said in
           # one line, exit 1, as sjui and kjui do — the files decided before
-          # it have each been said. Until 1.8.121 a stack trace.
+          # it have each been said. Until 1.9.0 a stack trace.
           Core::Logger.error("rjui g #{type}: #{e.message}")
           exit 1
         end
@@ -110,7 +110,7 @@ module RjuiTools
           json_path = File.join(json_dir, "#{json_name}.json")
 
           # Each of the layout, the page and the ViewModel is decided on its
-          # own: until 1.8.121 an existing layout ended the run, and a page or
+          # own: until 1.9.0 an existing layout ended the run, and a page or
           # a ViewModel that was missing beside it was not written.
           options = scaffold_options(options)
 

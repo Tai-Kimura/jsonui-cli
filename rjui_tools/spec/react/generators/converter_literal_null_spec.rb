@@ -16,7 +16,7 @@ require_relative '../../support/typescript_compiler'
 # in the sentence sjui and kjui print. The calls type-check with tsc --strict
 # against the components scaffolded from the same attributes.
 #
-# Until 1.8.121 rjui dropped a null for every type without a word (measured
+# Until 1.9.0 rjui dropped a null for every type without a word (measured
 # on 1b80b5ba, 2026-09-26). Ticket converter-writes-nil-for-a-forced-model-prop.
 RSpec.describe 'rjui g converter: a JSON null the layout gives a prop' do
   EXTENSIONS_NULL = File.expand_path('../../../lib/react/converters/extensions', __dir__)
@@ -95,7 +95,7 @@ RSpec.describe 'rjui g converter: a JSON null the layout gives a prop' do
     expect(rows.count { |_, _, said, _, _| !said.empty? }).to be >= 15
   end
 
-  # Until 1.8.121's fourth round the converter said it with a bare `warn`:
+  # Until 1.9.0's fourth round the converter said it with a bare `warn`:
   # stderr, no prefix, and a count of the build's warnings (jui build's own
   # comment gives the count, jui_tools/jui_cli/commands/build_cmd.py) saw
   # none of them.

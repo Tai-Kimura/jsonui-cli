@@ -241,7 +241,7 @@ module SjuiTools
       end
 
       # True when the tool, a component or the config changed since the last
-      # build — or no digest was recorded (a build before 1.8.121, or --clean).
+      # build — or no digest was recorded (a build before 1.9.0, or --clean).
       def inputs_changed?(digest)
         !File.exist?(@inputs_file) || File.read(@inputs_file).strip != digest
       end

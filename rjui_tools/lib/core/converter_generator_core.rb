@@ -85,7 +85,7 @@ module JsonUIShared
     end
 
     # A file kept by an answer is said, as one kept by --skip-existing is
-    # ("Skipped existing …"): until 1.8.121 an "n" or a closed stdin left the
+    # ("Skipped existing …"): until 1.9.0 an "n" or a closed stdin left the
     # prompt's line open and said nothing, and the run went on to report the
     # file as created (ticket g-converter-reports-files-it-did-not-write).
     def self.overwrite_decision(file_path, options, logger, noun:, exists_label:)
@@ -99,10 +99,10 @@ module JsonUIShared
 
       # Asked only on a terminal. Anything else — a closed stdin, /dev/null,
       # or a pipe that is open and never written (an MCP server's child, an
-      # agent's shell) — keeps the file without reading stdin. Until 1.8.121
+      # agent's shell) — keeps the file without reading stdin. Until 1.9.0
       # the prompt read whatever stdin was: on an open pipe `gets` waited for
       # a line that never came, and the caller hung until its own timeout
-      # (`jui g converter` under the MCP server; after 1.8.121's first round,
+      # (`jui g converter` under the MCP server; after 1.9.0's first round,
       # `g view / partial / collection` too — ticket
       # generate-commands-overwrite-edited-files-and-ignore-their-flags).
       unless interactive_stdin?
@@ -135,7 +135,7 @@ module JsonUIShared
     # decision. The content is built only when it is written. Returns
     # whether it wrote.
     #
-    # Every scaffold writer says it through here: until 1.8.121 each wrote
+    # Every scaffold writer says it through here: until 1.9.0 each wrote
     # its own "Created …" line, which said "Created" for a file it replaced
     # (ticket g-converter-reports-files-it-did-not-write).
     def self.write_scaffold(file_path, options, logger, noun:, label:, exists_label: nil)
@@ -153,7 +153,7 @@ module JsonUIShared
     # UIKit, kjui, rjui) write their scaffold files through write_scaffold too:
     # a file that is there is the app's, and is replaced only with --force (or
     # "y" at the prompt, which is shown only on a terminal); --skip-existing,
-    # JUI_SKIP_EXISTING, "n" and a stdin that is not a terminal keep it. Until 1.8.121 each command decided for itself: sjui
+    # JUI_SKIP_EXISTING, "n" and a stdin that is not a terminal keep it. Until 1.9.0 each command decided for itself: sjui
     # SwiftUI `g collection` and UIKit `g view` rewrote a ViewModel / a
     # ViewController / a layout the app had edited on every run, and the flags
     # were ignored, refused ("invalid option") or a stack trace, command by
@@ -185,7 +185,7 @@ module JsonUIShared
     end
 
     # The files this run created — written, and not there before it. The only
-    # files a rollback may delete: until 1.8.121 sjui UIKit `g view` / `g
+    # files a rollback may delete: until 1.9.0 sjui UIKit `g view` / `g
     # collection` deleted every file they listed when the Xcode step raised,
     # a ViewModel they had kept too.
     def self.created_scaffold_files(record)
@@ -346,7 +346,7 @@ module JsonUIShared
 
       # Said only when it was added: a file without the `#{spec[:const]} = {…}
       # .freeze` this looks for was written back unchanged and reported as
-      # updated until 1.8.121.
+      # updated until 1.9.0.
       unless added
         @logger.warn "Could not add the mapping '#{@name}' to #{mappings_file}: it has no " \
                      "`#{spec[:const]} = { … }.freeze` — add `#{spec[:mapping_line].strip}` by hand"
@@ -374,7 +374,7 @@ module JsonUIShared
     #
     # Called AFTER the scaffold: whether it was written or kept is known only
     # then, and a run that wrote none says "kept" instead of "is scaffolded
-    # as" (until 1.8.121 it was called first and said "is scaffolded as" of
+    # as" (until 1.9.0 it was called first and said "is scaffolded as" of
     # files it went on to keep — ticket converter-attr-types-warning-wording).
     def warn_outside_attribute_types
       kept = typed_scaffold_kept?
@@ -397,7 +397,7 @@ module JsonUIShared
 
     # `--container` / `--no-container` change what a component declares about
     # children; a run with neither keeps the declaration it already has. Until
-    # 1.8.121 a run with neither rewrote the definition in the default form
+    # 1.9.0 a run with neither rewrote the definition in the default form
     # over a leaf's `"_children": "none"` — `jui g converter --all`, with or
     # without --skip-existing, which does not read a leaf from a component
     # spec — and the build stopped refusing the leaf's children while its
@@ -442,7 +442,7 @@ module JsonUIShared
     end
 
     # The run's last line, from the record may_write? keeps: how many of the
-    # files it scaffolds it created, overwrote and kept. Until 1.8.121 the
+    # files it scaffolds it created, overwrote and kept. Until 1.9.0 the
     # run ended "Successfully generated converter" — sjui and kjui adding
     # "Converter file created at: …" and "Mappings file updated with …" —
     # whatever it had done: after --skip-existing, "n" or a closed stdin too,
@@ -469,7 +469,7 @@ module JsonUIShared
     # closed stdin) that are in the leaf form while the definition it is about
     # to write takes children: [[path, what the file does], ...].
     #
-    # Until 1.8.121 a leaf turned back into a container — `--container`, or
+    # Until 1.9.0 a leaf turned back into a container — `--container`, or
     # `jui g converter --from` a spec that gained slots — with its scaffold
     # kept wrote `child` / `children` into the definition while the kept
     # converter went on drawing the component without them: the build
@@ -542,7 +542,7 @@ module JsonUIShared
     #   --no-container                  `"_children": "none"`, a leaf; the
     #                                   shared LayoutValidator refuses a
     #                                   layout that gives it children
-    # Until 1.8.121 only --container declared anything, so the default read
+    # Until 1.9.0 only --container declared anything, so the default read
     # as "no children" to the validator ("Unknown attribute 'child'") while
     # its children were drawn, and a leaf read the same — one sentence for
     # both outcomes. Written for every mode now, attributes or not: a leaf
@@ -550,7 +550,7 @@ module JsonUIShared
     #
     # Written AFTER the scaffold: a run that takes children but kept files in
     # the leaf form writes a leaf (keep_leaf_for_kept_scaffold), and only the
-    # scaffold step knows what it kept. Until 1.8.121 sjui wrote it before.
+    # scaffold step knows what it kept. Until 1.9.0 sjui wrote it before.
     def generate_attribute_definition_file
       has_attributes = @options[:attributes] && !@options[:attributes].empty?
       leaf = @options[:is_container] == false || keep_leaf_for_kept_scaffold
@@ -592,7 +592,7 @@ module JsonUIShared
       File.write(file_path, JSON.pretty_generate(json_content))
 
       # "Rewrote" when it was there (it is rewritten on every run), with the
-      # path written — until 1.8.121 "Created …: attribute_definitions/X.json".
+      # path written — until 1.9.0 "Created …: attribute_definitions/X.json".
       @logger.info "#{existed ? 'Rewrote' : 'Created'} attribute definition file: #{file_path}"
     end
 

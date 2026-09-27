@@ -9,7 +9,7 @@ require 'fileutils'
 # The shared refusal (a leaf given children, several cellClasses without
 # sections, a binding the declaration refuses) reads the tree a layout DRAWS —
 # styles merged, includes expanded — and a partial is checked on its own.
-# Until 1.8.121 sjui and kjui read a layout before its includes were
+# Until 1.9.0 sjui and kjui read a layout before its includes were
 # expanded: a leaf given children inside an included layout was drawn with
 # its children dropped and nothing refused, on every build; kjui's cached
 # build checked a partial that its fresh build skipped. rjui converts each
@@ -98,7 +98,7 @@ RSpec.describe 'the refusal reads the drawn tree, through rjui build' do
   end
 
   # rjui converts each included layout as a component of its own, so it is the
-  # included file that is refused — as it was before 1.8.121.
+  # included file that is refused — as it was before 1.9.0.
   {
     'X1 an included screen layout' => %w[x1_part.json],
     'X2 an included partial' => %w[x2_part.json],

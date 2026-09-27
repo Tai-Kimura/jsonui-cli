@@ -12,7 +12,7 @@ require_relative '../../support/compose_bounded_scroll_stubs'
 # route — each section's cells start a row of their own, as sjui codegen and
 # SwiftJsonUI Dynamic draw them.
 #
-# Until 1.8.121 (measured on d084cfb2, 2026-09-26) the lazy / eager routes held
+# Until 1.9.0 (measured on d084cfb2, 2026-09-26) the lazy / eager routes held
 # every section in one LazyVerticalGrid, so section 2 continued section 1's
 # last row unless a header item sat between; lazy:none and wrapContent drew one
 # cell per row.

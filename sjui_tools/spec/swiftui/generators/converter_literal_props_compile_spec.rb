@@ -12,7 +12,7 @@ require 'swiftui/generators/converter_generator'
 # typechecked with swiftc against the component scaffolded from the same
 # attributes.
 #
-# Until 1.8.121 the converter kept its own spellings: a `String?` or `text`
+# Until 1.9.0 the converter kept its own spellings: a `String?` or `text`
 # prop got its literal without quotes, a map got Ruby's `{"a"=>1}`, and a
 # string with a quote in it closed the literal early. Ticket
 # converter-literal-props-do-not-compile.
@@ -97,7 +97,7 @@ RSpec.describe 'sjui g converter: a literal the layout gives a prop' do
   # A JSON null the layout gives a prop. `nil` is written only where the
   # component the same attributes scaffold declares the prop optional — read
   # back from that Swift, not from the table the converter asks — and every
-  # other prop gets nothing and a line naming it. Until 1.8.121 a `Row!!`
+  # other prop gets nothing and a line naming it. Until 1.9.0 a `Row!!`
   # model (declared `Row`) got `nil`, which swiftc refuses, without a word.
   # Ticket converter-writes-nil-for-a-forced-model-prop.
   describe 'a JSON null' do
@@ -147,7 +147,7 @@ RSpec.describe 'sjui g converter: a literal the layout gives a prop' do
         .to eq(rows.map { |type, *| [type, JsonUIShared::AttributeTypes.takes_null?(type)] })
     end
 
-    # Until 1.8.121's fourth round the converter said it with a bare `warn`:
+    # Until 1.9.0's fourth round the converter said it with a bare `warn`:
     # stderr, no prefix, and a count of the build's warnings saw none of them.
     it "prints each line through sjui's warning logger, with its prefix, where a warning count finds it" do
       lines = null_rows.flat_map { |_, _, _, said, _| said.lines }.grep(/\[sjui\] /)

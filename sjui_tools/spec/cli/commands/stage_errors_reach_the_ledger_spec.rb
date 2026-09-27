@@ -15,7 +15,7 @@ require 'core/config_manager'
 # not end in its success line. One arm per stage of `sjui build` that printed
 # an error and carried on, each made to fail by a real input.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) each of these ended in
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) each of these ended in
 # "Build completed successfully!" / "SwiftUI build completed!" with nothing in
 # the ledger — `jui build` exited 0 — and a healthy UIKit build printed
 # "ERROR: Removing empty group" and "ERROR: Warning: Creating new group" for
@@ -207,7 +207,7 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
     # A type_synonyms.json that is there but cannot be used — not JSON, or not
     # the declared shape — is the same stage failure as a missing one: named,
     # in the ledger once over two layouts, the build carrying on without it.
-    # Until 1.8.121 it raised: the tools said nothing, blamed the layout, or
+    # Until 1.9.0 it raised: the tools said nothing, blamed the layout, or
     # failed every layout (attribute_validator_core.rb#type_synonyms).
     {
       'not JSON' => ['{ "synonyms": ', 'does not parse'],
@@ -292,7 +292,7 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       File.write(File.join(dir, NAME, 'Styles', 'broken.json'), '{ "fontSize": ')
       log, exit_code, entries = build(dir)
       expect(log.scan('Error parsing style file').size).to be >= 2 # the control: met more than once
-      # The file is there: it is not "not found" (it was, after its parse error, until 1.8.121).
+      # The file is there: it is not "not found" (it was, after its parse error, until 1.9.0).
       expect(log).not_to include("Style file 'broken' not found")
       expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
     end

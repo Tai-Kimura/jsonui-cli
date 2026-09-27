@@ -13,7 +13,7 @@ require 'react/react_generator'
 # Toggle / CheckBox after the value, Radio after the selection, Segment after
 # the tab, Slider when the change is finished, SelectBox after the selection.
 # canTap gates the call; `enabled: false` stops the operation, so the call.
-# Until 1.8.121 rjui called it from none of them (the handler's name did not
+# Until 1.9.0 rjui called it from none of them (the handler's name did not
 # appear in the emitted code).
 #
 # Each emitted element is evaluated by node through esbuild's JSX transform
@@ -255,7 +255,7 @@ RSpec.describe 'a control calls its declared onClick from its own operation' do
   end
 
   # A TabView with `enabled: false` switches no tab (the ruling for the five
-  # paths: `enabled: false` stops the operation). Until 1.8.121 web read no
+  # paths: `enabled: false` stops the operation). Until 1.9.0 web read no
   # `enabled` on a TabView, and a click on a tab switched it. The second
   # tab is operated: its button is disabled, and a browser sends no click to
   # a disabled button, so neither the seeded state nor the selection handler

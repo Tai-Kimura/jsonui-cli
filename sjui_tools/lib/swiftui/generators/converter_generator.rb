@@ -54,7 +54,7 @@ module SjuiTools
 
           # The attribute definition, after the scaffold (as on kjui and
           # rjui): a run that takes children but kept a leaf-form adapter or
-          # converter writes a leaf, and names them. Until 1.8.121 it was
+          # converter writes a leaf, and names them. Until 1.9.0 it was
           # written between the mappings and the Swift file, before anything
           # the run kept was known (ticket
           # leaf-turned-container-keeps-its-leaf-scaffold-silently).
@@ -369,7 +369,7 @@ module SjuiTools
               # what kjui and rjui write for the same prop — or, when it is
               # not one this converter can write, named and left to the
               # parameter's default. By key: a `false` is a value too.
-              # Until 1.8.121 every other value was read as a property name,
+              # Until 1.9.0 every other value was read as a property name,
               # `$data.<value>` (`$data.Hi`, `$data.{"a"=>1}`), which swiftc
               # refuses, and a `false` or null was dropped without a word
               # (ticket binding-prop-with-a-non-binding-value-does-not-compile).

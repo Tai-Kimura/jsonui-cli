@@ -93,7 +93,7 @@ module SjuiTools
           # Update App.swift if --root option is specified
           app_updated = update_app_file(view_class_name) if @options[:root]
 
-          # The counts, from the record (until 1.8.121 a list whatever the run
+          # The counts, from the record (until 1.9.0 a list whatever the run
           # had done — ticket kjui-g-view-reports-what-it-did-not-do).
           core.report_scaffold_record("SwiftUI view #{view_class_name}", record, Core::Logger)
 

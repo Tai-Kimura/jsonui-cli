@@ -68,7 +68,7 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'uikit/json_loader_config' => 'reads ignore sets from config',
     'swiftui/app_component_dynamic_check' => "reads the app's Dynamic adapters and names what differs from its converters; writes nothing"
   }.freeze
-  # Until 1.8.121 this list also held uikit/json_loader and uikit/json_analyzer
+  # Until 1.9.0 this list also held uikit/json_loader and uikit/json_analyzer
   # as "loads and validates layout JSON" — both write the Binding's Swift (the
   # data variables and initializer, `func invalidate…`, the `weak var`
   # outlets). Their specs were in only by the markers' spelling.
@@ -271,7 +271,7 @@ RSpec.describe 'emitted Swift reaches a compiler' do
 
   # A spec is in by what it loads and describes, whatever it spells: the UIKit
   # loader and analyzer write the Binding's Swift, so their specs stay in with
-  # every marker taken out. Red until 1.8.121 for the loader's spec, which the
+  # every marker taken out. Red until 1.9.0 for the loader's spec, which the
   # two NOT_SWIFT entries above left in by its `expect(output` alone.
   it 'keeps the UIKit loader and analyzer specs in without their markers' do
     %w[uikit/json_loader_spec.rb uikit/json_analyzer_spec.rb].each do |rel|

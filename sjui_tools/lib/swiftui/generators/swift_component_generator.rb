@@ -197,7 +197,7 @@ module SjuiTools
         # it does on kjui (the composable's defaults) and rjui (optional
         # props): nil for an optional type, the vocabulary's value for any
         # other (the one the Dynamic adapter falls back to). A `T!!` model has
-        # none — the converter says so. Until 1.8.121 only optional
+        # none — the converter says so. Until 1.9.0 only optional
         # parameters had one, and every other call without the prop failed
         # with "missing argument for parameter" (ticket
         # sjui-unwritten-non-optional-prop-does-not-compile).
@@ -237,14 +237,14 @@ module SjuiTools
         end
 
         # Types come from the shared vocabulary (lib/core/attribute_types.rb),
-        # which the Dynamic adapter reads too. Until 1.8.121 this file kept its
+        # which the Dynamic adapter reads too. Until 1.9.0 this file kept its
         # own list: Float became Double here and Float in the adapter, a Long
         # became `Long?` (no such Swift type), and `String?` became `String??`
         # (ticket kjui-sjui-converter-attr-types-do-not-compile).
         # A type outside the vocabulary stays a model type the app declares:
         # optional, or not with the `!!` mark — which the shared table reads
         # (Type#forced) and answers for, so the warning that names the type
-        # names this one (until 1.8.121 this file read `!!` itself and the
+        # names this one (until 1.9.0 this file read `!!` itself and the
         # warning said `Row?` for the `Row` declared here — ticket
         # converter-attr-types-warning-wording).
         def map_to_swift_type(type)

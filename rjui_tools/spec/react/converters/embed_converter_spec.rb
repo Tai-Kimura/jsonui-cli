@@ -98,7 +98,7 @@ RSpec.describe RjuiTools::React::Converters::EmbedConverter do
 
     # An event calls the handler it names on `data`, with the event's
     # payload: a generated component has no ViewModel, and the
-    # `viewModel.<name>(…)` it wrote until 1.8.121 named nothing (ticket
+    # `viewModel.<name>(…)` it wrote until 1.9.0 named nothing (ticket
     # rjui-embed-event-bridge-calls-an-undeclared-view-model).
     context 'events wiring (P2)' do
       it 'emits an eventBridge that dispatches to the data handlers by event name' do

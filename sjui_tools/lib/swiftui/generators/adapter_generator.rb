@@ -38,7 +38,7 @@ module SjuiTools
           update_registration_file(adapter_dir)
           
           # Only when the adapter was written: a kept one has said "Skipped
-          # existing" / "Kept existing" (until 1.8.121 this line followed
+          # existing" / "Kept existing" (until 1.9.0 this line followed
           # either way — ticket g-converter-reports-files-it-did-not-write).
           @logger.success "Successfully generated adapter: #{@adapter_class_name}" if written
           true
@@ -142,7 +142,7 @@ module SjuiTools
               File.write(registration_file, new_content)
               @logger.info "Updated #{registration_file}: registered #{@adapter_class_name}"
             else
-              # Said: until 1.8.121 a file without this list was left as it
+              # Said: until 1.9.0 a file without this list was left as it
               # was without a word.
               @logger.warn "Could not register #{@adapter_class_name} in #{registration_file}: it has no " \
                            "`let adapters: [CustomComponentAdapter] = [ … ]` — add `#{@adapter_class_name}()` by hand"
@@ -275,7 +275,7 @@ module SjuiTools
         # This produces clean one-liners instead of verbose manual @{} parsing
         # One reader per attribute, from the shared vocabulary
         # (lib/core/attribute_types.rb) — the table the component's parameter
-        # types come from, so the two agree for every type. Until 1.8.121 this
+        # types come from, so the two agree for every type. Until 1.9.0 this
         # file kept its own list: Float was read as Float for a Double
         # parameter, Color as Color? for a Color one, `Integer` / `Boolean`
         # became type names (ticket kjui-sjui-converter-attr-types-do-not-compile).
@@ -402,7 +402,7 @@ module SjuiTools
         # A binding attribute (`@name:Type`): the data's Binding when the
         # layout names one, else a constant. `#{name}Value` was read here and
         # declared nowhere, so no adapter with a binding attribute compiled
-        # before 1.8.121.
+        # before 1.9.0.
         def generate_binding_extraction(name, type)
           t = JsonUIShared::AttributeTypes.parse(type)
           model = forced_model(t)

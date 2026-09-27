@@ -188,7 +188,7 @@ module SjuiTools
         # so the shared checks run on each here, on every build, as they do
         # on rjui (which converts partials as components). A cell layout's
         # leaf given children was drawn with them dropped and nothing named
-        # until 1.8.121 (measured 2026-09-26). The shared checks only: the
+        # until 1.9.0 (measured 2026-09-26). The shared checks only: the
         # attribute and binding checks never ran on partials here, and
         # adding them is not this fix.
         def validate_partial_layouts(files)
@@ -221,7 +221,7 @@ module SjuiTools
           files.each do |json_file|
             # A cached screen's variant files are cached with it, and are
             # checked with it, as the conversion loop checks them. Until
-            # 1.8.121 only the base was: a variant that a component change
+            # 1.9.0 only the base was: a variant that a component change
             # made invalid (a Box made a leaf, the layout files untouched)
             # was neither refused nor named on a cached run — sjui printed
             # "all cached" and exited 0 (measured 2026-09-26).
@@ -243,7 +243,7 @@ module SjuiTools
           rescue JSON::ParserError => e
             Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
             # Refused like a layout the checks refuse, so the next build
-            # converts it (and meets the same JSON) — until 1.8.121 it was
+            # converts it (and meets the same JSON) — until 1.9.0 it was
             # an ERROR above "SwiftUI build completed!" (ticket
             # uikit-build-reports-success-after-a-binding-error).
             (@refused_layouts ||= []) << base_file
@@ -273,7 +273,7 @@ module SjuiTools
           end
 
           # The tree the layout draws, as the conversion path reads it:
-          # styles merged, includes expanded (until 1.8.121 the includes were
+          # styles merged, includes expanded (until 1.9.0 the includes were
           # not, so a violation inside one was never seen here).
           shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
             drawn_tree(json_data, json_file), source_path: File.basename(json_file),

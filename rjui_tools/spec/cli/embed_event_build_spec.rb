@@ -10,7 +10,7 @@ require 'fileutils'
 # parent ViewModel. A value that is not a name (`@{name}`, the binding
 # spelling) is not called, and the build says so once per event, in the
 # sentence the three tools share (JsonUIShared::BindingValidatorCore
-# .embed_event_handler_problem). Until 1.8.121 the build said only that
+# .embed_event_handler_problem). Until 1.9.0 the build said only that
 # 'name' was not in data, and the three codegens wrote
 # `viewModel.@{name}(…)`, which does not parse (ticket
 # rjui-embed-event-bridge-calls-an-undeclared-view-model).

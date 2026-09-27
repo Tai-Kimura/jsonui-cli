@@ -8,7 +8,7 @@ require_relative '../../support/typescript_compiler'
 # written out one by one; a binding is a list the data holds, mapped at render
 # time — what KotlinJsonUI's dynamic renderer does with it.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) a bound `items` raised
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) a bound `items` raised
 # NoMethodError (`any?` on a String) and took the build down. Ticket
 # kjui-codegen-table-crashes-on-an-items-array.
 RSpec.describe 'rjui Radio: each declared shape of `items`' do

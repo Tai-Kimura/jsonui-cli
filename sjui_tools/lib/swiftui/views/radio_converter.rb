@@ -16,7 +16,7 @@ module SjuiTools
           # `items` is declared ["array", "binding"]: an array is the options,
           # written out one by one; a binding is a list the data holds, drawn
           # with ForEach — what KotlinJsonUI's dynamic renderer does with it.
-          # Until 1.8.121 a bound `items` raised NoMethodError (`any?` on a
+          # Until 1.9.0 a bound `items` raised NoMethodError (`any?` on a
           # String) and took the build down (ticket
           # kjui-codegen-table-crashes-on-an-items-array).
           raw_items = @component['items']

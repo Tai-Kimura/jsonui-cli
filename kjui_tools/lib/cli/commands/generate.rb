@@ -342,9 +342,9 @@ module KjuiTools
               options[:type] = 'fragment'
             end
             
-            # -f, --force: read by the Compose view generator since 1.8.121
+            # -f, --force: read by the Compose view generator since 1.9.0
             # (before, parsed and ignored: the files were kept whatever it
-            # said). --skip-existing: "invalid option" until 1.8.121.
+            # said). --skip-existing: "invalid option" until 1.9.0.
             opts.on('-f', '--force', 'Overwrite existing scaffold files without asking') do
               options[:force] = true
             end
@@ -358,7 +358,7 @@ module KjuiTools
         end
 
         # --force / --skip-existing, for the commands that take no other
-        # option (partial, collection, adapter). Until 1.8.121 these commands
+        # option (partial, collection, adapter). Until 1.9.0 these commands
         # parsed nothing, so both flags were ignored: `g partial --force` and
         # `g collection --force` kept the files, `g adapter --skip-existing`
         # still asked.

@@ -174,7 +174,7 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     range[node['type']].each { |stage| cell_arm.call(label, node, stage) }
   end
 
-  # CircleView, which the codegen draws from 1.8.121 (it emitted a TODO
+  # CircleView, which the codegen draws from 1.9.0 (it emitted a TODO
   # before): every stage, as a type with no measured range of its own.
   stages.each_key { |stage| cell_arm.call('CircleView', { 'type' => 'CircleView' }, stage) }
 

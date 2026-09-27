@@ -8,7 +8,7 @@ spec's file name, and `metadata.name` in snake_case. A spec that resolves to
 no layout is named with the paths tried and the hint to declare
 `metadata.layoutFile`.
 
-Until 1.8.121 verify also looked a spec's stem up in a table of one
+Until 1.9.0 verify also looked a spec's stem up in a table of one
 downstream app's screen names — in every project, and after a declared
 layoutFile that did not exist. Measured 2026-09-26: no screen spec of that
 app's three faces (97) resolved only through the table. Ticket

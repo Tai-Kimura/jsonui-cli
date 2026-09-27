@@ -25,7 +25,7 @@ module RjuiTools
           # to follow the call unconditionally, so a run that kept the file
           # (--skip-existing, "n", a closed stdin) printed "Skipped existing
           # …" and then "Created component file" for the same untouched file;
-          # until 1.8.121 a replaced file was "Created" too.
+          # until 1.9.0 a replaced file was "Created" too.
           create_component_file
         end
 
@@ -103,7 +103,7 @@ module RjuiTools
           lines << "  className?: string;"
 
           # A binding attribute (`@key`) is the prop `key`: React passes it
-          # one way. Until 1.8.121 it was declared `@key?:`, which is not
+          # one way. Until 1.9.0 it was declared `@key?:`, which is not
           # TypeScript (TS1131) — ticket
           # binding-prop-with-a-non-binding-value-does-not-compile.
           @options[:attributes].each do |key, type|
@@ -128,7 +128,7 @@ module RjuiTools
         end
 
         # From the shared vocabulary (lib/core/attribute_types.rb), the table
-        # sjui and kjui scaffold from. Until 1.8.121 a Long, a CGFloat, a Color,
+        # sjui and kjui scaffold from. Until 1.9.0 a Long, a CGFloat, a Color,
         # `String?` or `[String]` became `any` here without a word (ticket
         # kjui-sjui-converter-attr-types-do-not-compile). `array`, `object`
         # and `hash` keep their old answers.

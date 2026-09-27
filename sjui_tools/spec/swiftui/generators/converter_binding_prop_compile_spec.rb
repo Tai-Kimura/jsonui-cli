@@ -10,7 +10,7 @@ require 'swiftui/generators/converter_generator'
 # value of another kind, null, nothing — typechecked with swiftc against the
 # component scaffolded from the same attribute, in a host whose data has `v`.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) every value that was not
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) every value that was not
 # `@{…}` was read as a property name: `$data.Hi`, `$data.3`,
 # `$data.{"a"=>1}` — 21 of 50 calls did not compile — and a `false` or null
 # was dropped without a word. Now a value that is not a binding is a literal
@@ -53,7 +53,7 @@ RSpec.describe 'sjui g converter: a binding prop and what the layout gives it' d
         node = { 'type' => name }
         node['v'] = value unless kase == :absent
         # What it printed through sjui's warning logger (not stubbed for
-        # this; stdout captured) — from 1.8.121 the line goes there,
+        # this; stdout captured) — from 1.9.0 the line goes there,
         # "WARNING: [sjui] …", not to stderr through a bare `warn`.
         said = StringIO.new
         saved = $stdout

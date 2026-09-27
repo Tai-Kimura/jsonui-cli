@@ -96,7 +96,7 @@ RSpec.describe 'sjui scaffold files honor the overwrite options' do
         expect(kept).to all(be true)
       end
 
-      # Until 1.8.121 the prompt read any stdin, and a pipe held open and
+      # Until 1.9.0 the prompt read any stdin, and a pipe held open and
       # never written (an MCP server's child) waited forever.
       it 'keeps it without reading a stdin that is not a terminal' do
         _, kept = second_run(build, stdin: untouchable_stdin)

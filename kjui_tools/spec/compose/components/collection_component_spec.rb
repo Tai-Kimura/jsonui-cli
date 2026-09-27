@@ -199,7 +199,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
 
       # No items, no cells: the cells come from the data's sections. This
       # emitted `items(0) { … }` around a cell that read an undeclared
-      # `item` until 1.8.121 (collection_class_list_shape_spec.rb has the
+      # `item` until 1.9.0 (collection_class_list_shape_spec.rb has the
       # route table).
       it 'handles no items binding' do
         json_data = {

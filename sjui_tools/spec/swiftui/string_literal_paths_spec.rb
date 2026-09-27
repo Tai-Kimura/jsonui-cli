@@ -16,7 +16,7 @@ require 'swiftui/binding/binding_handler_registry'
 # (lib/core/string_literals.rb); the Localizable.strings writer applies that
 # format's own escapes.
 #
-# Until 1.8.121 each path escaped for itself and most did it wrong: a gsub
+# Until 1.9.0 each path escaped for itself and most did it wrong: a gsub
 # replacement '\\\\' is ONE backslash, so `C:\new \(total)` became a newline
 # and an interpolation; `.inspect` wrote `\#{` and `\e`, which Swift rejects;
 # several escaped `"` only, or nothing at all. The specimen holds each
@@ -234,7 +234,7 @@ RSpec.describe 'author text in generated Swift goes through the shared escaper' 
 
   # The rows above pin text. These are also handed to swiftc as emitted, for
   # the paths whose output type-checks against the shared stubs
-  # (spec/support/swift_compiler.rb, emitted_swift.rb) — the pre-1.8.121
+  # (spec/support/swift_compiler.rb, emitted_swift.rb) — the pre-1.9.0
   # output did not: a raw newline ends a Swift literal.
   it 'writes literals that compile where they stand' do
     [specimen, inspect_specimen].each do |text|

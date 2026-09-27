@@ -45,7 +45,7 @@ RSpec.describe JsonUI::StageFailures do
   end
 
   # `sjui build --mode all` reports after the UIKit stage and again after the
-  # SwiftUI one; until 1.8.121 the second report wrote the first one's
+  # SwiftUI one; until 1.9.0 the second report wrote the first one's
   # entries into the ledger again.
   it 'writes each entry into the ledger once, however many times the build reports' do
     Dir.mktmpdir('ledger') do |dir|

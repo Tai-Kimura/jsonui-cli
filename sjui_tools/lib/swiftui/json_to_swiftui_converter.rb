@@ -509,7 +509,7 @@ module SjuiTools
       # name and is recorded in the stage ledger (the non-zero exit), and
       # the caller writes nothing for it.
       #
-      # Until 1.8.121 this read the layout before its includes were
+      # Until 1.9.0 this read the layout before its includes were
       # expanded: a leaf given children inside an included layout was
       # drawn into this one with its children dropped, and nothing was
       # refused (a partial include: nothing at all; a screen include: only

@@ -15,7 +15,7 @@ require_relative '../../lib/core/stage_failures'
 # an error) and carried on, each made to fail by a real input where one
 # reaches it.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) each of these ended in
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) each of these ended in
 # "✅ Compose build completed!" with nothing in the ledger — and where the
 # ledger did hold an entry (colors.json unparseable), the success line came
 # directly under the list of what had not completed. Ticket
@@ -169,7 +169,7 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
   end
 
   # Ruled after counting the faces: 2167 style references, 0 to no file —
-  # so a missing one is a stage that did not complete. Until 1.8.121 kjui
+  # so a missing one is a stage that did not complete. Until 1.9.0 kjui
   # drew the node without it and printed nothing.
   it 'a style that is not there: said, and in the ledger once' do
     dir = project
@@ -207,7 +207,7 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
   # A type_synonyms.json that is there but cannot be used — not JSON, or not
   # the declared shape — is the same stage failure as a missing one: named,
   # in the ledger once over two layouts, the build carrying on without it.
-  # Until 1.8.121 it raised: the tools said nothing, blamed the layout, or
+  # Until 1.9.0 it raised: the tools said nothing, blamed the layout, or
   # failed every layout (attribute_validator_core.rb#type_synonyms).
   {
     'not JSON' => ['{ "synonyms": ', 'does not parse'],

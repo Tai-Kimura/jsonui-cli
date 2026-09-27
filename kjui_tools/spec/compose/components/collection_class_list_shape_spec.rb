@@ -16,7 +16,7 @@ require_relative '../../support/compose_bounded_scroll_stubs'
 # or without items; paging draws the first data section, a page per cell (4f
 # ruling 2026-09-26, round 6; it drew nothing).
 #
-# Until 1.8.121 (measured on 8e4ea3ea, 2026-09-26) only the lazy grid drew
+# Until 1.9.0 (measured on 8e4ea3ea, 2026-09-26) only the lazy grid drew
 # this shape, as `data.rows?.get("<cellClass>")` through `<cellClass>View(data
 # = …)` — neither compiles against CollectionDataSource and the cell scaffold
 # — with a no-items branch using an undeclared `item`; the horizontal grid

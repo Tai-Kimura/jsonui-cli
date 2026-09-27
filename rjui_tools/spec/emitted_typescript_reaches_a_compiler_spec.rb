@@ -35,7 +35,7 @@ RSpec.describe 'emitted TypeScript reaches a compiler' do
   EMIT_MARKERS_TS = ['expect(code)', 'expect(ts', 'expect(out', 'expect(result)'].freeze
   COMPILE_MARKER_TS = 'compile_as_typescript'
 
-  # WHICH SPECS ARE IN, since 1.8.121: what a spec loads and describes, not
+  # WHICH SPECS ARE IN, since 1.9.0: what a spec loads and describes, not
   # only how it spells its assertions — the rule sjui's and kjui's gates took
   # on 2026-09-25 (kjui-compiler-ratchet-misses-component-specs-that-assert-
   # through-expect-result). Twenty specs sat outside the markers here: five

@@ -64,7 +64,7 @@ module KjuiTools
         end
 
         # The three modes, read the same way by the converter, this composable
-        # and the Dynamic wrapper (until 1.8.121 each read them differently,
+        # and the Dynamic wrapper (until 1.9.0 each read them differently,
         # and two of the combinations did not compile — ticket
         # kjui-converter-scaffolds-disagree-on-content):
         #   --container      content required; the converter always passes it
@@ -188,7 +188,7 @@ module KjuiTools
         end
         
         # Types come from the shared vocabulary (lib/core/attribute_types.rb),
-        # which the Dynamic wrapper reads too: until 1.8.121 this file kept its
+        # which the Dynamic wrapper reads too: until 1.9.0 this file kept its
         # own list, and a Long, a callback, a `String?` or a data source became
         # `v: Any = null`, which is not Kotlin that compiles (ticket
         # kjui-sjui-converter-attr-types-do-not-compile).

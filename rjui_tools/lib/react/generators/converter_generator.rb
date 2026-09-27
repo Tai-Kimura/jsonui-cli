@@ -50,7 +50,7 @@ module RjuiTools
 
           # What the run did, from what it recorded — each file has said its
           # own line above (Created / Overwrote / Skipped / Kept, with its
-          # path). Until 1.8.121: "Successfully generated converter" whatever
+          # path). Until 1.9.0: "Successfully generated converter" whatever
           # it had done (ticket g-converter-reports-files-it-did-not-write).
           report_scaffold
           @logger.info "Converter file: #{converter_file_path}"
@@ -233,7 +233,7 @@ module RjuiTools
           return ['            # No custom attributes'] if @options[:attributes].empty?
 
           # A binding attribute (`@key`) is read from, and passed as, `key`
-          # (until 1.8.121 `json['@key']`, which no layout has).
+          # (until 1.9.0 `json['@key']`, which no layout has).
           @options[:attributes].map do |key, _type|
             key = key.delete_prefix('@')
             "            #{key}_value = json['#{key}']"
@@ -249,7 +249,7 @@ module RjuiTools
             # Binding-aware, and by key, not by value: a `false` the layout
             # gives is a value too. A literal goes through the shared
             # vocabulary (format_literal); one of another kind is not
-            # written, and said — until 1.8.121 `if value` dropped a false
+            # written, and said — until 1.9.0 `if value` dropped a false
             # and every literal was written unchecked (ticket
             # rjui-literal-props-are-not-checked-against-the-type).
             lines << "            if #{key}_value.is_a?(String) && #{key}_value.start_with?('@{') && #{key}_value.end_with?('}')"
@@ -305,7 +305,7 @@ module RjuiTools
         # component declares), and — for a type that takes no null on any
         # tool (JsonUIShared::AttributeTypes.takes_null?: `String`, `[Int]`,
         # `Object`, `Row!!` …) — said, in the sentence the sjui and kjui
-        # converters print for a literal they cannot write. Until 1.8.121 rjui
+        # converters print for a literal they cannot write. Until 1.9.0 rjui
         # dropped it without a word for every type. Ticket
         # converter-writes-nil-for-a-forced-model-prop.
         def null_literal_branch(key, type)

@@ -43,7 +43,7 @@ module SjuiTools
           when 'collection'
             generate_collection(args, mode)
           when 'binding'
-            # Until 1.8.121 this branch read `when 'uikit'`, which no
+            # Until 1.9.0 this branch read `when 'uikit'`, which no
             # subcommand is: `sjui g binding X` did nothing, said nothing and
             # exited 0 (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
             generate_binding(args, mode)
@@ -222,7 +222,7 @@ module SjuiTools
         end
 
         # --force / --skip-existing, for the commands that take no other
-        # option (partial, collection, adapter). Until 1.8.121 these commands
+        # option (partial, collection, adapter). Until 1.9.0 these commands
         # parsed nothing, so both flags were ignored: `g partial --force`
         # kept the file, `g collection --skip-existing` (SwiftUI) overwrote it.
         def parse_overwrite_options(args)

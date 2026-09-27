@@ -38,7 +38,7 @@ module SjuiTools
           elsif style_data.nil?
             # Only a file that is not there. One that is there and did not
             # parse was named with its parse error where it was read; until
-            # 1.8.121 this line followed it and said it was not found
+            # 1.9.0 this line followed it and said it was not found
             # (ticket uikit-build-reports-success-after-a-binding-error).
             puts "Warning: Style file '#{style_name}' not found"
             component.delete('style')

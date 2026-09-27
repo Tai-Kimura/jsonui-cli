@@ -13,7 +13,7 @@ require 'fileutils'
 # closed stdin, --force, "y", and the converter deleted with the rest kept.
 # The component .tsx, the mappings and the definition.
 #
-# Until 1.8.121 (measured on 1b80b5ba, 2026-09-26) every run ended
+# Until 1.9.0 (measured on 1b80b5ba, 2026-09-26) every run ended
 # "Successfully generated converter" — after --skip-existing and a closed
 # stdin too, when it had written nothing but the definition; a replaced file
 # was "Created"; the definition "Created" when it was rewritten. Ticket
@@ -57,7 +57,7 @@ RSpec.describe 'what rjui g converter says it wrote, against the disk' do
     said.gsub(/\e\[[0-9;]*m/, '')
   end
 
-  # The answers typed on a pseudo-terminal, then end-of-file: since 1.8.121
+  # The answers typed on a pseudo-terminal, then end-of-file: since 1.9.0
   # the prompt is shown only on a terminal (a "y" on a pipe is not read).
   def on_terminal(cmd, dir, answers)
     said = +''

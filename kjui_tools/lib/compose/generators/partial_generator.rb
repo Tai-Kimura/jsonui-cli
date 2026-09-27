@@ -43,7 +43,7 @@ module KjuiTools
 
           # Through the one overwrite decision the generate commands share: an
           # existing partial is kept unless --force (or "y" at the prompt).
-          # Until 1.8.121 --force / --skip-existing were not read here.
+          # Until 1.9.0 --force / --skip-existing were not read here.
           json_file = File.join(json_path, "#{json_file_name}.json")
           core = JsonUIShared::ConverterGeneratorCore
           record = core.scaffold_record

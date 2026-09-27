@@ -41,7 +41,7 @@ module SjuiTools
           update_registration_file(adapter_dir)
 
           # Only when it wrote the adapter: a kept one has said "Skipped
-          # existing" / "Kept existing". Until 1.8.121 this line followed
+          # existing" / "Kept existing". Until 1.9.0 this line followed
           # either way (ticket kjui-g-view-reports-what-it-did-not-do).
           @logger.success "Successfully generated adapter: #{@adapter_class_name}" if written
           @logger.info "Don't forget to call CustomComponentRegistration.registerAll() in your app initialization."
@@ -123,7 +123,7 @@ module SjuiTools
               File.write(registration_file, new_content)
               @logger.info "Updated #{registration_file}: registered #{@adapter_class_name}"
             else
-              # Said: until 1.8.121 a file without this list was left as it
+              # Said: until 1.9.0 a file without this list was left as it
               # was without a word.
               @logger.warn "Could not register #{@adapter_class_name} in #{registration_file}: it has no " \
                            "`let adapters: [CustomComponentAdapter] = [ … ]` — add `#{@adapter_class_name}()` by hand"

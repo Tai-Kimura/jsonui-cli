@@ -149,7 +149,7 @@ module JsonUIShared
     #: without sections are.
     #:
     #: Only a DECLARED leaf (`"_children": "none"`, which the generator
-    #: writes). A definition without `child` is not one: before 1.8.121 the
+    #: writes). A definition without `child` is not one: before 1.9.0 the
     #: default mode wrote none either, and those components draw children.
     #: They keep the attribute validator's "Unknown attribute 'child'".
     def check_leaf_children(component, source_path:, extension_definitions:, path: nil)

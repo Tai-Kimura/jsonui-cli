@@ -28,7 +28,7 @@ module KjuiTools
           # The names `kjui build` gives this layout (ComposeBuilder#build_file,
           # #view_subdir_for): the class from the layout's snake_case name in
           # PascalCase, the view folder snake_case under the layout's snake_case
-          # subdirectory. Until 1.8.121 the class was the name as typed
+          # subdirectory. Until 1.9.0 the class was the name as typed
           # (`g collection item_cell` wrote item_cellView.kt / item_cellViewModel.kt)
           # and the folder kept the subdirectory's casing (views/MyProducts/…):
           # the build did not find either, scaffolded a second set of files
@@ -40,7 +40,7 @@ module KjuiTools
           # The layout's name in Dynamic mode: its path under Layouts/, as
           # `kjui build` writes into the GeneratedView (`layoutName =
           # "my_products/product_cell"`) and `g view` into the ViewModel.
-          # Until 1.8.121 the scaffold said "product_cell" until the first
+          # Until 1.9.0 the scaffold said "product_cell" until the first
           # build rewrote it, and the ViewModel kept saying it (ticket
           # dynamic-layout-name-drops-the-subdirectory-of-a-nested-cell).
           layout_reference = snake_subdirectory ? "#{snake_subdirectory}/#{json_file_name}" : json_file_name
@@ -80,7 +80,7 @@ module KjuiTools
           # Each file through the one overwrite decision the generate
           # commands share: an existing one is the app's — kept unless
           # --force (or "y" at the prompt); a closed stdin and --skip-existing
-          # keep it. Until 1.8.121 --force / --skip-existing were not read.
+          # keep it. Until 1.9.0 --force / --skip-existing were not read.
           json_file = File.join(json_path, "#{json_file_name}.json")
           main_kotlin_file = File.join(swift_path, "#{cell_class_name}View.kt")
           generated_kotlin_file = File.join(swift_path, "#{cell_class_name}GeneratedView.kt")
@@ -102,7 +102,7 @@ module KjuiTools
           scaffold.call(data_file, 'data file') { cell_data_content(cell_class_name, package_name) }
           scaffold.call(viewmodel_file, 'ViewModel') { cell_viewmodel_content(cell_class_name, layout_reference, package_name) }
 
-          # The counts, from the record (until 1.8.121 a list whatever the run
+          # The counts, from the record (until 1.9.0 a list whatever the run
           # had done — ticket kjui-g-view-reports-what-it-did-not-do).
           core.report_scaffold_record("collection cell #{cell_class_name}", record, Core::Logger)
           puts ""

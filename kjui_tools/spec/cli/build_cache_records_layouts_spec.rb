@@ -22,7 +22,7 @@ RSpec.describe 'the Compose build cache' do
   let(:repo_root) { File.expand_path('../../..', __dir__) }
 
   # A settled build: healthy and styled cached, sample converted again. From
-  # 1.8.121 a refused layout is never recorded — it is converted, and refused,
+  # 1.9.0 a refused layout is never recorded — it is converted, and refused,
   # again on every build (ticket build-caches-a-refused-layout-as-built) — so
   # a settled run says "Updating 1 of 3 files", not "all cached".
   def settled

@@ -14,7 +14,7 @@ module SjuiTools
         # the directories it made, and project.pbxproj as it was when the run
         # began (an earlier add_file of the same run may have saved it).
         #
-        # Until 1.8.121 a failure left the tree half-changed and, for one kind
+        # Until 1.9.0 a failure left the tree half-changed and, for one kind
         # of failure, said nothing: `XcodeProjectManager#add_file` rescues its
         # own errors and answers :failed, and the generators went on to "Xcode
         # project: no file added" and exit 0 with the new files on disk and out

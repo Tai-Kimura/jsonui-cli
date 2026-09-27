@@ -57,7 +57,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::SwiftComponentGenerator do
       it 'prompts for overwrite' do
         generator = described_class.new('Existing')
         allow($stdin).to receive(:gets).and_return('n')
-        allow($stdin).to receive(:tty?).and_return(true) # asked only on a terminal since 1.8.121
+        allow($stdin).to receive(:tty?).and_return(true) # asked only on a terminal since 1.9.0
         expect { generator.generate }.to output(/already exists/).to_stdout
       end
     end
@@ -182,7 +182,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::SwiftComponentGenerator do
       expect(generator.send(:map_to_swift_type, 'Color')).to eq('Color')
     end
 
-    # EdgeInsets left the vocabulary in 1.8.121 (with Dp, Size and Alignment:
+    # EdgeInsets left the vocabulary in 1.9.0 (with Dp, Size and Alignment:
     # the component and the adapter never compiled it as a pair). Outside the
     # vocabulary a type is kept optional, like any model type.
     it 'keeps EdgeInsets, outside the vocabulary, optional' do

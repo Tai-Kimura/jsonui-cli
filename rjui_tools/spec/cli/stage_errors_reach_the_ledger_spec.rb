@@ -13,7 +13,7 @@ require_relative '../../lib/core/stage_failures'
 # printed an error and carried on, each made to fail by a real input where
 # one reaches it.
 #
-# Until 1.8.121 (measured on 32785ce8, 2026-09-26) each of these ended in
+# Until 1.9.0 (measured on 32785ce8, 2026-09-26) each of these ended in
 # "[SUCCESS] Build completed!" with nothing in the ledger; a style that did
 # not parse said "Error parsing style file" on one path and nothing at all on
 # the converters' own. Ticket uikit-build-reports-success-after-a-binding-error.
@@ -103,7 +103,7 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     File.write(File.join(dir, 'src/Styles/broken.json'), '{ "fontSize": ')
     log, exit_code, entries = build(dir)
     expect(log).to include('Error parsing style file')
-    # The file is there: it is not "not found" (it was, after its parse error, until 1.8.121).
+    # The file is there: it is not "not found" (it was, after its parse error, until 1.9.0).
     expect(log).not_to include("Style file 'broken' not found")
     expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
   end
@@ -188,7 +188,7 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
   # A type_synonyms.json that is there but cannot be used — not JSON, or not
   # the declared shape — is the same stage failure as a missing one: named,
   # in the ledger once over two layouts, the build carrying on without it.
-  # Until 1.8.121 it raised: the tools said nothing, blamed the layout, or
+  # Until 1.9.0 it raised: the tools said nothing, blamed the layout, or
   # failed every layout (attribute_validator_core.rb#type_synonyms).
   {
     'not JSON' => ['{ "synonyms": ', 'does not parse'],
@@ -245,7 +245,7 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     end
 
     # The converters load a node's style themselves (BaseConverter#load_style);
-    # until 1.8.121 that path returned nil for a style that did not parse and
+    # until 1.9.0 that path returned nil for a style that did not parse and
     # printed nothing.
     it "the converters' own style loader names a style that does not parse" do
       require_relative '../../lib/react/converters/base_converter'

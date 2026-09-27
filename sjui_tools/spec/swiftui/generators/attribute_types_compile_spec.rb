@@ -11,7 +11,7 @@ require 'swiftui/generators/converter_generator'
 # from the shared vocabulary (lib/core/attribute_types.rb), plus `T?`, `[T]`,
 # callbacks, and types outside it that the app declares (AppRow, Date).
 #
-# Until 1.8.121 the component and the adapter kept separate lists and did not
+# Until 1.9.0 the component and the adapter kept separate lists and did not
 # agree: Float was Double in one and Float in the other, Color? was passed for
 # a Color, `Integer` / `Boolean` became type names, and a binding attribute
 # read a variable declared nowhere. Measured against the SwiftJsonUI module

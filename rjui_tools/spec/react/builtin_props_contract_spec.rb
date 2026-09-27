@@ -236,7 +236,7 @@ RSpec.describe 'built-in props contract' do
     end
 
     # The handler as the SSoT declares it (a parent VM method's name). Until
-    # 1.8.121 the bridge called `viewModel.onEmbedClosed(…)`, and a generated
+    # 1.9.0 the bridge called `viewModel.onEmbedClosed(…)`, and a generated
     # web component has `data`, no `viewModel` — TS2304 (ticket
     # rjui-embed-event-bridge-calls-an-undeclared-view-model); this arm was
     # pending under that id until the bridge called `data`.

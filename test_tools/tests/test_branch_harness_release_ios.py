@@ -33,7 +33,7 @@ with JSONUI_REQUIRE_IOS_SIMULATORS=1, where a missing runtime FAILS naming
 itself. The simulators are this run's own (tests/_ios_simulators.py): made
 per run and runtime as jsonui-branch-release-<version>-<pid>-<token>, deleted
 when the module ends, and what a killed run left is swept by the next. Until
-1.8.121 they were one fixed-name device per runtime, found by name and
+1.9.0 they were one fixed-name device per runtime, found by name and
 reused, and two runs at once drove the same device (ticket test-tools-ios-
 simulator-arms-collide-across-concurrent-runs). Shared devices and
 `xcode-select` are never touched — Xcode is whatever DEVELOPER_DIR, else the

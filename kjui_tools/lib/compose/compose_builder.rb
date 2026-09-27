@@ -223,7 +223,7 @@ module KjuiTools
 
           # Process includes - expand inline with ID prefix support (like
           # SwiftJsonUI). BEFORE the shared checks: they read the tree this
-          # layout draws. Until 1.8.121 they read it before its includes were
+          # layout draws. Until 1.9.0 they read it before its includes were
           # expanded, so a leaf given children inside an included layout was
           # drawn here with its children dropped and nothing refused — and a
           # partial was skipped before any check, while a cached build checked
@@ -563,7 +563,7 @@ module KjuiTools
           # No case: nil, and generate_component names it (Spacer, Divider,
           # Triangle, … are neither declared nor a synonym: undeclared, as
           # sjui and rjui name them). kjui drew a Spacer of its own (a fixed
-          # 8dp height) until 1.8.121.
+          # 8dp height) until 1.9.0.
           nil
         end
       end

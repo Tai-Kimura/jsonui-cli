@@ -9,7 +9,7 @@ module JsonUIShared
   # Canonical copy in shared/core/attribute_types.rb; the per-tool copies under
   # <tool>/lib/core/ stay byte-identical (each tool's shared_core_mirror_spec).
   #
-  # Until 1.8.121 each generator kept its own list, and they disagreed: of 26
+  # Until 1.9.0 each generator kept its own list, and they disagreed: of 26
   # type spellings compiled per generator (2026-09-26), kjui's composable and
   # wrapper compiled for 9 (a Long, a callback or `String?` became
   # `v: Any = null`), sjui's component and adapter disagreed on Float, Color,
@@ -128,7 +128,7 @@ module JsonUIShared
     # kept (--skip-existing, "n", a closed stdin) and declare whatever they
     # already did — so it says so, and what a new scaffold would declare.
     #
-    # Until 1.8.121 it named `Row?` in Swift for `Row!!` while sjui's
+    # Until 1.9.0 it named `Row?` in Swift for `Row!!` while sjui's
     # scaffold declared `Row`, and said "it is scaffolded as" when nothing
     # was written (ticket converter-attr-types-warning-wording).
     def outside_warning(attribute, type, kept: false)
@@ -222,7 +222,7 @@ module JsonUIShared
     # scalar first — each converter's own colours and string resources — and
     # nil falls back here.
     #
-    # Until 1.8.121 each converter formatted literals from its own spellings:
+    # Until 1.9.0 each converter formatted literals from its own spellings:
     # a `String?` or `text` literal went out unquoted, a Kotlin Float as a
     # Double, a list or a map as Ruby's inspect. Ticket
     # converter-literal-props-do-not-compile.
@@ -237,7 +237,7 @@ module JsonUIShared
     # all optional in TypeScript, never writes a null and says so for the
     # same types).
     #
-    # Until 1.8.121 this was `nullable`, which a `T!!` model keeps for Kotlin
+    # Until 1.9.0 this was `nullable`, which a `T!!` model keeps for Kotlin
     # and TypeScript: sjui wrote `nil` into its non-optional `Row` argument
     # (swiftc: "'nil' is not compatible with expected argument type 'Row'")
     # and kjui wrote `null`, neither with a word. Ticket
@@ -253,11 +253,11 @@ module JsonUIShared
     # the layout left it out, gave it null, or gave a value it cannot write.
     #   Swift       the default the component's init declares: nil for an
     #               optional type, the vocabulary's value (swift_default)
-    #               for any other since 1.8.121; a `T!!` model has none, and
+    #               for any other since 1.9.0; a `T!!` model has none, and
     #               the call does not compile without it
     #   Kotlin      the composable's default (kotlin_default)
     #   TypeScript  nothing: every prop is optional, and it is undefined
-    # Until 1.8.121 every tool said "the prop keeps its default", and in Swift
+    # Until 1.9.0 every tool said "the prop keeps its default", and in Swift
     # no non-optional parameter had one (swiftc: "missing argument for
     # parameter"). Ticket sjui-unwritten-non-optional-prop-does-not-compile.
     def unwritten_outcome(type, language)
@@ -268,7 +268,7 @@ module JsonUIShared
           'the prop keeps its default (nil)'
         elsif (default = swift_default(t))
           "the prop keeps its default (#{default}), which the component declares — one scaffolded before " \
-            '1.8.121 declares none, and then the call does not compile'
+            '1.9.0 declares none, and then the call does not compile'
         else
           "#{t.raw} has no default in Swift, so the call does not compile"
         end
@@ -325,7 +325,7 @@ module JsonUIShared
         # Each item by the rule a scalar of its type follows — a type outside
         # the vocabulary or a callback takes no literal here either — and a
         # bare `Array`'s items as any value, as swift_literal does. Until
-        # 1.8.121 every item that was not a vocabulary scalar went out as
+        # 1.9.0 every item that was not a vocabulary scalar went out as
         # JSON (`kotlin_any`), so `[Row]` was written while `Row` was refused
         # (ticket binding-prop-with-a-non-binding-value-does-not-compile).
         items = value.map { |v| t.element.any? ? kotlin_any(v) : kotlin_literal(t.element, v, &hook) }
@@ -434,7 +434,7 @@ module JsonUIShared
     # its strings.json keys and template literals); a list's items are
     # written as JSON is, so a list reads as it always has.
     #
-    # Until 1.8.121 rjui wrote literals through its own path and checked
+    # Until 1.9.0 rjui wrote literals through its own path and checked
     # none: a `false` was dropped (`if value`), `"abc"` for an Int became
     # `{abc}`, "yes" for a Bool `{true}`, a number for a String its text, a
     # callback's string `{"x"}` (measured 2026-09-26). Ticket

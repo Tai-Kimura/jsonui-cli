@@ -20,7 +20,7 @@ require 'react/data_model_generator'
 # computed by default_text; the emitted expression is evaluated by node and
 # must read back as it.
 #
-# Until 1.8.121 a quoted spelling passed through as written (`'it''s'` is
+# Until 1.9.0 a quoted spelling passed through as written (`'it''s'` is
 # not TS) and a bare one was quoted without escaping (`"Say "hi""`); the
 # string-table lookup took off a quote at either end on its own. Ticket
 # codegen-string-literals-are-not-escaped-for-the-target-language,
@@ -106,7 +106,7 @@ RSpec.describe 'a String defaultValue reads the same on every rjui path' do
   end
 
   # A String? default reads as a String's, and none stays undefined
-  # (vectors['optionalStrings']). Until 1.8.121 a String? default was written
+  # (vectors['optionalStrings']). Until 1.9.0 a String? default was written
   # as it stood, as code: `probe: Hello`.
   it 'the data default of a String?: every row reads back as its text, or undefined (node)' do
     unless system('which node > /dev/null 2>&1')
@@ -151,7 +151,7 @@ RSpec.describe 'a String defaultValue reads the same on every rjui path' do
   # A value written per platform ({ "swift": …, "kotlin": … }): the one
   # this platform gets, or — when the layout gives it none — the class's
   # vocabulary value and a WARNING naming the layout, the property and the
-  # platform (ruling 2026-09-26). Until 1.8.121 the Hash went on as the
+  # platform (ruling 2026-09-26). Until 1.9.0 the Hash went on as the
   # value, and rjui wrote `"{"swift"=>"eager", "kotlin"=>"lazy"}"`.
   describe 'a defaultValue written per platform' do
     converter = RjuiTools::Core::TypeConverter

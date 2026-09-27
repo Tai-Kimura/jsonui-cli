@@ -65,7 +65,7 @@ module SjuiTools
             # Every file through the one overwrite decision the generate
             # commands share: an existing one is the app's — kept unless
             # --force (or "y" at the prompt); a closed stdin and
-            # --skip-existing keep it. Until 1.8.121 the ViewController and
+            # --skip-existing keep it. Until 1.9.0 the ViewController and
             # the layout were rewritten on every run, edits and all (ticket
             # generate-commands-overwrite-edited-files-and-ignore-their-flags).
             # The transaction's record also says what this run created: the only
@@ -95,7 +95,7 @@ module SjuiTools
             root_updated = is_root && update_app_delegate(camel_name)
 
             # The counts, from the record — each file has been said as it was
-            # decided (until 1.8.121 "Successfully generated:" with every file
+            # decided (until 1.9.0 "Successfully generated:" with every file
             # — ticket kjui-g-view-reports-what-it-did-not-do).
             JsonUIShared::ConverterGeneratorCore.report_scaffold_record("view #{camel_name}", @record, Core::Logger)
             if root_updated
@@ -170,7 +170,7 @@ module SjuiTools
           # The scaffold header, not the DO-NOT-EDIT banner: the layout's
           # handlers are methods on this controller (it is the target
           # UIViewCreator binds them to), so the app writes code here, and
-          # `g view` keeps the file. Until 1.8.121 it carried the banner that
+          # `g view` keeps the file. Until 1.9.0 it carried the banner that
           # says edits are overwritten on the next generation — which they
           # were, by the next `g view`.
           marker_header = Core::GeneratedMarker.scaffold_header(
@@ -308,18 +308,18 @@ module SjuiTools
             end
 
             # A file add_file could not add (it answers :failed after logging
-            # why) fails the run like a raise: until 1.8.121 it went on to
+            # why) fails the run like a raise: until 1.9.0 it went on to
             # "Xcode project: no file added" and exit 0, the new files on disk
             # and out of the project.
             @txn.check!(results)
 
-            # What add_file did, counted: until 1.8.121 "Added files to Xcode
+            # What add_file did, counted: until 1.9.0 "Added files to Xcode
             # project" followed "File already in project" for every file.
             added = results.count { |_, answer| answer == :added }
             puts(added.zero? ? 'Xcode project: no file added' : "Added #{added} file(s) to Xcode project")
           rescue => e
             puts "Error adding files to Xcode project: #{e.message}"
-            # Roll back what this run created, and only that: until 1.8.121
+            # Roll back what this run created, and only that: until 1.9.0
             # every listed file was deleted — a ViewModel the run had kept, a
             # layout and a controller it had just overwritten — so a failure
             # here lost the app's files.
@@ -363,7 +363,7 @@ module SjuiTools
             loader.start_analyze
             
             # The loader says per file what it wrote, and names a file it
-            # could not (ERROR …) — until 1.8.121 this line claimed success
+            # could not (ERROR …) — until 1.9.0 this line claimed success
             # after such an error.
             puts "Binding generation ran: its lines above say what it wrote"
           rescue => e

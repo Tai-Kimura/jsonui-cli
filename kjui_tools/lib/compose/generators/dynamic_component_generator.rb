@@ -108,7 +108,7 @@ module KjuiTools
             else_clause = $2
             "#{existing}\n#{new_registration}#{else_clause}"
           end
-          # Said: until 1.8.121 a registry without this `when` was written
+          # Said: until 1.9.0 a registry without this `when` was written
           # back unchanged and reported as updated.
           unless added
             @logger.warn "Could not register '#{@component_name}' in #{registry_file}: it has no " \
@@ -197,7 +197,7 @@ module KjuiTools
           package_name = config['package_name'] || 'com.example.kotlinjsonui.sample'
 
           # The default mode is a container, as its composable is (it takes a
-          # content lambda): until 1.8.121 this read the default's nil as "no
+          # content lambda): until 1.9.0 this read the default's nil as "no
           # content" and called a composable that requires one — the Debug
           # build did not compile (ticket
           # kjui-converter-scaffolds-disagree-on-content).

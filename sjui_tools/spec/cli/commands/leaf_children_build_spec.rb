@@ -9,7 +9,7 @@ require 'fileutils'
 # A component scaffolded as a leaf (`sjui g converter <Name> --no-container`)
 # that a layout gives children: the build refuses the layout by name.
 #
-# Before 1.8.121 (measured on e1a85ca2) the build exited 0, the children were
+# Before 1.9.0 (measured on e1a85ca2) the build exited 0, the children were
 # not in the generated view, and the only line about it was "Unknown
 # attribute 'child' for component type 'Leaf'" — the same line a component
 # in the DEFAULT mode got while its children WERE drawn. Ticket
@@ -51,7 +51,7 @@ RSpec.describe 'a leaf given children, through sjui build' do
 
     # Leaf is scaffolded twice: with --no-container, then with neither flag
     # and JUI_SKIP_EXISTING=1 — what `jui g converter --all --skip-existing`
-    # runs for a component spec without slots. Until 1.8.121 the second run
+    # runs for a component spec without slots. Until 1.9.0 the second run
     # wrote the default back over the leaf's declaration, and the build
     # stopped refusing its children while its scaffold went on dropping them
     # (measured 2026-09-26). Grown is the control: made a leaf, then run with

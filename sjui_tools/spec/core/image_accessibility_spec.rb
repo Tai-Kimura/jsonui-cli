@@ -54,7 +54,7 @@ RSpec.describe JsonUIShared::ImageAccessibility do
 
     # An image is a node drawn as Image, CircleImage (a render_as target) or
     # NetworkImage — read off the table and the declarations, so a spelling
-    # the table gains is counted without an edit here. Until 1.8.121 the
+    # the table gains is counted without an edit here. Until 1.9.0 the
     # list was component_metadata.json's `aliases` (no AsyncImage, no
     # NetworkImageView).
     it 'counts as an image exactly the spellings drawn as Image, CircleImage or NetworkImage' do
