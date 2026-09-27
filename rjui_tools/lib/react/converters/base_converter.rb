@@ -69,6 +69,12 @@ module RjuiTools
 
         protected
 
+        # True for a converter that reads `insets` / `insetHorizontal` itself
+        # (the Collection); the others take the padding classes above.
+        def owns_insets?
+          false
+        end
+
         # The flex classes a declared gravity maps to. A container's children
         # run along its `orientation` (a column when none is declared); a
         # converter whose element lays out another way maps gravity itself
@@ -175,9 +181,12 @@ module RjuiTools
             static_spacing('paddingInlineEnd', attributes['paddingEnd'])
           )
 
-          # Insets (alternative padding format)
-          classes << TailwindMapper.map_insets(attributes['insets']) if attributes['insets']
-          classes << TailwindMapper.map_inset_horizontal(attributes['insetHorizontal']) if attributes['insetHorizontal']
+          # Insets (alternative padding format). A Collection pads its content
+          # with them itself (CollectionConverter#content_inset_classes).
+          unless owns_insets?
+            classes << TailwindMapper.map_insets(attributes['insets']) if attributes['insets']
+            classes << TailwindMapper.map_inset_horizontal(attributes['insetHorizontal']) if attributes['insetHorizontal']
+          end
 
           # Margin (array format)
           classes << TailwindMapper.map_margin(attributes['margins'])

@@ -25,3 +25,6 @@ screenshots/
 
 # Label gravity probe scratch (scripts/label_gravity_probe.mjs)
 .label-gravity-probe/
+
+# Collection insets probe scratch (scripts/collection_insets_probe.mjs)
+.collection-insets-probe/

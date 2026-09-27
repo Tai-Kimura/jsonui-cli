@@ -11,6 +11,7 @@
     "interaction-stop-probe": "node scripts/interaction_stop_probe.mjs",
     "collection-scroll-probe": "node scripts/collection_scroll_probe.mjs",
     "label-gravity-probe": "node scripts/label_gravity_probe.mjs",
+    "collection-insets-probe": "node scripts/collection_insets_probe.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

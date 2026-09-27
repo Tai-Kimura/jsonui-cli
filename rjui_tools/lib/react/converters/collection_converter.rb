@@ -347,11 +347,9 @@ module RjuiTools
             classes << "pr-[#{right}px]" if right&.positive?
           end
 
-          # insetVertical — vertical content padding (the UIKit content
-          # inset's vertical half).
-          if attributes['insetVertical'].is_a?(Numeric)
-            classes << "py-[#{attributes['insetVertical']}px]"
-          end
+          # The content insets: insets with insetHorizontal / insetVertical,
+          # added per edge (content_inset_classes).
+          classes.concat(content_inset_classes)
 
           # Same web semantics as ScrollView for its shared vocabulary:
           # indicator switches hide the scrollbar, and 'never' inset
@@ -366,6 +364,112 @@ module RjuiTools
 
 
           finalize_classes(classes)
+        end
+
+        # The Collection pads its content with its insets itself
+        # (content_inset_classes), not with BaseConverter's padding classes.
+        def owns_insets?
+          true
+        end
+
+        # The Collection's content insets on its own box — the scroll
+        # container, so the padding is inside the scroll: per edge, the sum of
+        # `insets` (1, 2 or 4 values, an array or a `|` string, read as
+        # `paddings` reads them: one, every side; two, [vertical,
+        # horizontal]; four, [top, right, bottom, left]; any other value pads
+        # nothing), insetHorizontal (left and right) and insetVertical (top
+        # and bottom) — added, no precedence, as iOS and both Compose paths
+        # draw them (the SSoT's Collection.insets). Exact values: an arbitrary
+        # `pt-[30px]`, not a class of Tailwind's spacing scale. A bound value
+        # in the array (a number; unset, 0) makes the four edges inline
+        # styles. Until jsonui-cli 1.9.0 the insets were BaseConverter's
+        # padding classes: rounded to the scale (30 became pt-7, 28px), four
+        # values replaced insetHorizontal / insetVertical (pt-/pr-/pb-/pl-
+        # come after px-/py- in Tailwind's CSS), two values lost to
+        # insetHorizontal, and the string form was not read. On a pager the
+        # snap points keep the insets (scroll-padding on the same edges), so
+        # a page snaps to where the insets put it.
+        def content_inset_classes
+          edges = content_inset_edges
+          return [] unless edges
+
+          classes = []
+          if edges.any? { |e| e.is_a?(String) }
+            styles = paging? ? %w[padding scrollPadding] : %w[padding]
+            styles.each do |base|
+              %w[Top Right Bottom Left].zip(edges).each do |side, e|
+                dynamic_styles["#{base}#{side}"] = e.is_a?(String) ? "`${#{e}}px`" : "'#{css_px(e)}px'"
+              end
+            end
+            return classes
+          end
+
+          %w[t r b l].zip(edges).each do |side, e|
+            next if e.zero?
+
+            classes << "p#{side}-[#{css_px(e)}px]"
+            classes << "scroll-p#{side}-[#{css_px(e)}px]" if paging?
+          end
+          classes
+        end
+
+        # [top, right, bottom, left] — each a number, or a JS expression when
+        # a value of `insets` is bound — or nil when nothing pads.
+        def content_inset_edges
+          edges = parse_collection_insets(attributes['insets']) || [0, 0, 0, 0]
+          h = inset_number(attributes['insetHorizontal'])
+          v = inset_number(attributes['insetVertical'])
+          edges = [add_edge(edges[0], v), add_edge(edges[1], h), add_edge(edges[2], v), add_edge(edges[3], h)]
+          return nil if edges.all? { |e| e.is_a?(Numeric) && e.zero? }
+
+          edges
+        end
+
+        # The declared insets as [top, right, bottom, left], or nil when the
+        # value pads nothing.
+        def parse_collection_insets(value)
+          parts = case value
+                  when Array then value
+                  when String
+                    return nil if value.strip.empty?
+
+                    has_binding?(value) && !value.include?('|') ? [value] : value.split('|', -1)
+                  else return nil
+                  end
+          values = parts.map do |part|
+            expr = has_binding?(part.to_s) ? bound_value_expr(part.to_s) : nil
+            expr ? "(Number(#{expr}) || 0)" : inset_number(part)
+          end
+          return nil if values.empty? || values.any?(&:nil?)
+
+          case values.length
+          when 1 then [values[0]] * 4
+          when 2 then [values[0], values[1], values[0], values[1]]
+          when 4 then values
+          end
+        end
+
+        # One inset value: a number, or a string that is one; else nil.
+        def inset_number(value)
+          number = case value
+                   when Numeric then value
+                   when String then Float(value.strip, exception: false)
+                   end
+          return nil if number.nil? || !number.finite?
+
+          number
+        end
+
+        def add_edge(edge, extra)
+          return edge if extra.nil? || extra.zero?
+          return "(#{edge} + #{css_px(extra)})" if edge.is_a?(String)
+
+          edge + extra
+        end
+
+        # A number as CSS writes it: 30, not 30.0.
+        def css_px(number)
+          number == number.to_i ? number.to_i : number
         end
 
         # The vertical scroll container of the grid routes, as the list and
