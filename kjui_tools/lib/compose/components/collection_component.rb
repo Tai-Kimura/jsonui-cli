@@ -830,7 +830,7 @@ module KjuiTools
           # grid emitter and the CollectionStack emitter, and the inset can
           # come out of either. Registering inside one of them is how half a
           # feature ships (plan 49 lane C, #4).
-          Helpers::ContentInsetHelper.imports_for(json_data['contentInsetAdjustmentBehavior'], insets: adds_insets_to_safe_area?(json_data))
+          Helpers::ContentInsetHelper.imports_for(json_data['contentInsetAdjustmentBehavior'])
                                      .each { |k| required_imports&.add(k) }
 
           # Check if sections are defined
@@ -2652,9 +2652,6 @@ module KjuiTools
           # Content padding
           content_padding_expr = collection_stack_content_padding_expr(json_data, is_horizontal: is_horizontal)
 
-          # Inset spacers (horizontal only)
-          inset_horizontal = json_data['insetHorizontal'] || 0
-
           reverse_layout = json_data['reverseLayout'] == true
 
           # Build outer modifier
@@ -2788,10 +2785,14 @@ module KjuiTools
           if content_padding_expr
             code += "\n" + indent("contentPadding = #{content_padding_expr},", depth + 1)
           end
-          if is_horizontal && inset_horizontal.to_i > 0
-            code += "\n" + indent("insetLeading = #{Helpers::BoundValue.dp(inset_horizontal)},", depth + 1)
-            code += "\n" + indent("insetTrailing = #{Helpers::BoundValue.dp(inset_horizontal)},", depth + 1)
-          end
+          # insetHorizontal rides in contentPadding with everything else
+          # (collection_stack_content_padding_expr): on a row it was also
+          # handed as CollectionStack's insetLeading / insetTrailing, which
+          # replace contentPadding on the LAZY row and stand in for it with
+          # spacers on the EAGER and NONE rows — so insetVertical and the safe
+          # area dropped there, and a spaced EAGER row put its spacing after the
+          # leading spacer too. KotlinJsonUI Dynamic's rows pad by contentPadding
+          # (4f ruling 2026-09-27, round 17).
           if reverse_layout
             code += "\n" + indent("reverseLayout = true,", depth + 1)
           end
@@ -2874,39 +2875,61 @@ module KjuiTools
 
         # PaddingValues expression for CollectionStack.contentPadding, or nil to
         # use the default (zero padding).
+        #
+        # A declared contentPadding / insets, insetHorizontal / insetVertical
+        # and the safe area `contentInsetAdjustmentBehavior` asks for are
+        # ADDED, side by side, as iOS adds them — measured 2026-09-27 on sjui
+        # codegen and SwiftJsonUI Dynamic: insets [8,0,0,0] with insetVertical
+        # 8 at the top of a 62pt safe area put the first cell at 78 (4f
+        # rulings, rounds 16 and 17). Until jsonui-cli 1.9.0 a declared insets
+        # replaced the other two (plan 49 lane C, #4: "the author named an
+        # exact value" — adding keeps it too), and before round 16 the insets
+        # replaced the safe area. Both of Collection's emitters go through this
+        # one method (the grid path and the stack path, chosen by
+        # `single_column_sections?`).
         def self.collection_stack_content_padding_expr(json_data, is_horizontal:)
           declared = [json_data['contentPadding'], json_data['insets']].lazy.map { |v| content_padding_values(v) }.find(&:itself)
-          if declared
-            content_padding_expr(declared)
-          else
-            # A declared contentPadding / insets wins over the safe area (plan
-            # 49 lane C, #4). Without one, insetHorizontal / insetVertical are
-            # ADDED to the safe area `contentInsetAdjustmentBehavior` asks
-            # for, as iOS adds them (ContentInsetHelper.safe_area_padding; 4f
-            # ruling 2026-09-27, round 16) — they replaced it until jsonui-cli
-            # 1.9.0. Both of Collection's emitters go through this one method
-            # (the grid path and the stack path, chosen by
-            # `single_column_sections?`).
-            inset_h = json_data['insetHorizontal']
-            inset_v = json_data['insetVertical']
-            safe = Helpers::ContentInsetHelper.safe_area_padding(
-              json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal,
-                                                           inset_horizontal: inset_h, inset_vertical: inset_v
-            )
-            if safe
-              safe
-            elsif inset_h || inset_v
-              "PaddingValues(horizontal = #{Helpers::BoundValue.dp(inset_h || 0)}, vertical = #{Helpers::BoundValue.dp(inset_v || 0)})"
-            end
-          end
+          inset_h = json_data['insetHorizontal']
+          inset_v = json_data['insetVertical']
+          safe = Helpers::ContentInsetHelper.safe_area_padding(json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal)
+          return safe unless declared || inset_h || inset_v
+
+          own = if declared && !inset_h && !inset_v
+                  content_padding_expr(declared)
+                elsif !declared
+                  "PaddingValues(horizontal = #{Helpers::BoundValue.dp(inset_h || 0)}, vertical = #{Helpers::BoundValue.dp(inset_v || 0)})"
+                end
+          sides = content_padding_sides(declared, inset_h, inset_v)
+          own ||= "PaddingValues(top = #{sides[0]}, start = #{sides[3]}, bottom = #{sides[2]}, end = #{sides[1]})"
+          return own unless safe
+
+          # Added to the safe area side by side, start and end in the layout's
+          # direction.
+          "#{safe}.let { safe -> val dir = androidx.compose.ui.platform.LocalLayoutDirection.current; " \
+            "PaddingValues(start = safe.calculateStartPadding(dir) + #{sides[3]}, top = safe.calculateTopPadding() + #{sides[0]}, " \
+            "end = safe.calculateEndPadding(dir) + #{sides[1]}, bottom = safe.calculateBottomPadding() + #{sides[2]}) }"
         end
 
-        # Whether insetHorizontal / insetVertical are added to a safe area
-        # (collection_stack_content_padding_expr): no contentPadding / insets
-        # the reader takes, and an inset declared.
-        def self.adds_insets_to_safe_area?(json_data)
-          !(json_data['insetHorizontal'] || json_data['insetVertical']).nil? &&
-            [json_data['contentPadding'], json_data['insets']].none? { |v| content_padding_values(v) }
+        # [top, end, bottom, start] as Dp expressions: the declared values
+        # (content_padding_values; right the end, left the start) plus
+        # insetVertical on the top and bottom and insetHorizontal on the start
+        # and end. Numbers are summed here; a binding is its own term.
+        def self.content_padding_sides(declared, inset_h, inset_v)
+          base = case declared&.length
+                 when 1 then [declared[0]] * 4
+                 when 2 then [declared[0], declared[1], declared[0], declared[1]]
+                 when 4 then declared
+                 else [0, 0, 0, 0]
+                 end
+          adds = [inset_v, inset_h, inset_v, inset_h]
+          base.zip(adds).map do |terms|
+            numbers, bound = terms.compact.partition { |t| t.is_a?(Numeric) }
+            total = numbers.sum
+            total = total.to_i if total.is_a?(Float) && total == total.floor
+            parts = bound.map { |b| Helpers::BoundValue.dp(b) }
+            parts << Helpers::BoundValue.dp(total) if total != 0 || parts.empty?
+            parts.join(' + ')
+          end
         end
 
         # Emit cell ForEach inside LazyListScope. Single-column so no GridItemSpan.

@@ -65,8 +65,6 @@ module KjuiTools
             window_insets: ["import androidx.compose.foundation.layout.WindowInsets",
                             "import androidx.compose.foundation.layout.safeDrawing",
                             "import androidx.compose.foundation.layout.asPaddingValues"],
-            # A Collection's insetHorizontal / insetVertical added to the safe area.
-            window_insets_add: "import androidx.compose.foundation.layout.add",
             window_insets_sides: ["import androidx.compose.foundation.layout.WindowInsetsSides",
                                   "import androidx.compose.foundation.layout.only"],
             # `keyboardAvoidancePadding` — the IME's current height, read to

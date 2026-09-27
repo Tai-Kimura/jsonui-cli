@@ -224,60 +224,46 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       expect(result).to include(".aspectRatio(#{ratio}f)")
     end
 
-    # Regression: kjui-label-gravity-center-not-vertically-centered.
-    # Compose `Text` has no vertical text-align, so a height-filling Label with
-    # `gravity: center` must pair the fill with wrapContentHeight(align) to
-    # vertically center its glyphs (iOS `.frame(alignment: .center)` parity).
-    context 'Label vertical gravity centering' do
-      it 'pairs fillMaxHeight with wrapContentHeight(center) for height:matchParent + gravity:center' do
-        json_data = { 'type' => 'Label', 'height' => 'matchParent', 'gravity' => 'center' }
-        result = described_class.build_size(json_data)
-        fill_idx = result.index('.fillMaxHeight()')
-        wrap_idx = result.index('.wrapContentHeight(align = Alignment.CenterVertically)')
-        expect(fill_idx).not_to be_nil
-        expect(wrap_idx).not_to be_nil
-        expect(fill_idx).to be < wrap_idx
+    # A Label's text in a frame taller than it sits by its gravity's vertical
+    # part — top, bottom, the middle for center / centerVertical — and in the
+    # middle when the gravity names none (4f ruling 2026-09-27, round 17;
+    # gravityDefaults -> leafOwnFrameChannel), as iOS places it. The Label's
+    # own chain appends it inside its background and padding
+    # (label_vertical_alignment); build_size no longer pairs it with the
+    # height, which drew a minHeight Label's background only as tall as its
+    # text, and never paired a numeric height (the text sat at the top).
+    # Regression before it: kjui-label-gravity-center-not-vertically-centered.
+    context 'Label vertical placement (label_vertical_alignment)' do
+      def valign(json, parent = nil)
+        described_class.label_vertical_alignment({ 'type' => 'Label' }.merge(json), parent)
       end
 
-      it 'emits wrapContentHeight(center) for a vertical-container weight + gravity:center' do
-        json_data = { 'type' => 'Label', 'weight' => 1, 'gravity' => 'center' }
-        result = described_class.build_size(json_data, 'Column')
-        expect(result).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
+      it 'places the text by the gravity in a frame of its own: numeric, matchParent, minHeight, a vertical weight' do
+        expect(valign({ 'height' => 56, 'gravity' => 'center' })).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+        expect(valign({ 'height' => 'matchParent', 'gravity' => 'center' })).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+        expect(valign({ 'minHeight' => 36, 'gravity' => 'centerVertical' })).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+        expect(valign({ 'weight' => 1, 'gravity' => 'center' }, 'Column')).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+        expect(valign({ 'height' => 56, 'gravity' => 'bottom' })).to eq('.wrapContentHeight(align = Alignment.Bottom)')
+        expect(valign({ 'height' => 56, 'gravity' => %w[top centerHorizontal] })).to be_nil
       end
 
-      it 'does NOT emit wrapContentHeight for a weight in a horizontal (Row) container' do
-        json_data = { 'type' => 'Label', 'weight' => 1, 'gravity' => 'center' }
-        result = described_class.build_size(json_data, 'Row')
+      it 'puts it in the middle when the gravity names no vertical place, or none at all' do
+        expect(valign({ 'height' => 56 })).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+        expect(valign({ 'height' => 'matchParent', 'gravity' => 'left' })).to eq('.wrapContentHeight(align = Alignment.CenterVertically)')
+      end
+
+      it 'does nothing where the frame is the text: wrapContent, undeclared, a weight along a row' do
+        expect(valign({ 'height' => 'wrapContent', 'gravity' => 'center' })).to be_nil
+        expect(valign({ 'gravity' => 'center' })).to be_nil
+        expect(valign({ 'weight' => 1, 'gravity' => 'center' }, 'Row')).to be_nil
+      end
+
+      it 'leaves build_size to the frame: a minHeight is heightIn, and no wrapContentHeight(align) is paired there' do
+        result = described_class.build_size({ 'type' => 'Label', 'minHeight' => 44, 'height' => 'wrapContent', 'gravity' => 'center' })
+        expect(result).to include('.heightIn(min = 44.dp)')
+        expect(result.join).not_to include('defaultMinSize')
         expect(result.join).not_to include('wrapContentHeight(align')
-      end
-
-      it 'uses Alignment.Bottom for gravity:bottom' do
-        json_data = { 'type' => 'Label', 'height' => 'matchParent', 'gravity' => 'bottom' }
-        result = described_class.build_size(json_data)
-        expect(result).to include('.wrapContentHeight(align = Alignment.Bottom)')
-      end
-
-      it 'preserves the minHeight + gravity defaultMinSize/wrapContentHeight pair' do
-        json_data = { 'type' => 'Label', 'minHeight' => 44, 'gravity' => 'center' }
-        result = described_class.build_size(json_data)
-        expect(result).to include('.defaultMinSize(minHeight = 44.dp)')
-        expect(result).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
-        # Only one wrapContentHeight(align) — minHeight path must not double-emit.
-        expect(result.count { |m| m.include?('wrapContentHeight(align') }).to eq(1)
-      end
-
-      it 'does NOT vertically center a non-Label View even with gravity:center' do
-        json_data = { 'type' => 'View', 'height' => 'matchParent', 'gravity' => 'center' }
-        result = described_class.build_size(json_data)
-        expect(result).to include('.fillMaxHeight()')
-        expect(result.join).not_to include('wrapContentHeight(align')
-      end
-
-      it 'does NOT emit wrapContentHeight for a filling Label without gravity' do
-        json_data = { 'type' => 'Label', 'height' => 'matchParent' }
-        result = described_class.build_size(json_data)
-        expect(result).to include('.fillMaxHeight()')
-        expect(result.join).not_to include('wrapContentHeight(align')
+        expect(described_class.build_size({ 'type' => 'View', 'height' => 'matchParent', 'gravity' => 'center' }).join).not_to include('wrapContentHeight(align')
       end
     end
   end

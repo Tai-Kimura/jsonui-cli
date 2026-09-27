@@ -81,12 +81,17 @@ RSpec.describe KjuiTools::Compose::Helpers::ContentInsetHelper do
       end
     end
 
-    it 'lets a declared numeric contentPadding win from every Collection path' do
-      # The author named an exact value; this attribute only says "clear the
-      # system bars", not "and discard the number I wrote".
+    it 'adds a declared numeric contentPadding to the safe area from every Collection path' do
+      # The author named an exact value; this attribute says "clear the
+      # system bars" too — both are kept, added side by side, as iOS adds
+      # them (4f ruling 2026-09-27, round 17). Plan 49 (lane C, #4) let the
+      # number win: "not 'and discard the number I wrote'" — adding keeps it.
       [stack_path, grid_path].each do |base|
         line, = padding_line(base.merge('contentPadding' => 12, 'contentInsetAdjustmentBehavior' => 'always'))
-        expect(line).to eq('contentPadding = PaddingValues(12.dp),')
+        expect(line).to eq('contentPadding = WindowInsets.safeDrawing.asPaddingValues().let { safe -> ' \
+                           'val dir = androidx.compose.ui.platform.LocalLayoutDirection.current; ' \
+                           'PaddingValues(start = safe.calculateStartPadding(dir) + 12.dp, top = safe.calculateTopPadding() + 12.dp, ' \
+                           'end = safe.calculateEndPadding(dir) + 12.dp, bottom = safe.calculateBottomPadding() + 12.dp) },')
       end
     end
   end
