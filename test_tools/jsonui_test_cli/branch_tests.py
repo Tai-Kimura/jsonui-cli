@@ -2479,9 +2479,10 @@ export function apiOriginsOf(harnessModule: unknown): string[] | null {
     : null;
 }
 
-/** The clock and the timer `settle` measures with — its polls, its quiet
- * window, both budgets, and when the fetch stub last saw a request — taken
- * once, when this module loads, and never looked up again.
+/** The clock and the timer `settle` measures with — its polls and turns,
+ * its quiet window, its budgets, and when the fetch stub last saw a request
+ * or a delayed response arrived — taken once, when this module loads, and
+ * never looked up again.
  *
  * A test freezes the clock to pin "today": `vi.useFakeTimers({ toFake:
  * ["Date"] })` and `vi.setSystemTime`, or `vi.setSystemTime` alone. Read
@@ -2510,7 +2511,7 @@ export function apiOriginsOf(harnessModule: unknown): string[] | null {
  * What is left is a clock that stands still while the timer runs — a fake of
  * `performance` (or of `Date`, where there is no `performance`) installed
  * before this module loads, with setTimeout real. settle names that rather
- * than looping (STALLED_POLLS).
+ * than looping (STALLED_POLLS, STALLED_TURNS).
  *
  * A scenario's `delayMs` stays on the global setTimeout, looked up when the
  * request is made, as it always was: the response's arrival is the world the
@@ -2552,6 +2553,15 @@ interface Traffic {
   earlier: string[];
 }
 let traffic: Traffic = { inFlight: 0, lastActivityAt: 0, row: "", earlier: [] };
+
+/** Responses a scenario's `delayMs` is holding back, and when the last of
+ * them arrived — what `settle(turns)` reads, as it did when it was the only
+ * settle: module-wide, not per installFetchMock. A view model often sends its
+ * next request a moment after one lands; between the two nothing is pending,
+ * and a settle that looked only at the count returned in that gap. Never
+ * arrived is -Infinity, below any reading of the clock this runtime took. */
+const pendingDeliveries = new Set<Promise<void>>();
+let lastDeliveryAt = -Infinity;
 
 /** Which row's async context a request was started in: Node's
  * AsyncLocalStorage, reached through process.getBuiltinModule rather than an
@@ -2602,7 +2612,7 @@ export const SETTLE_DELAY_BUDGET_MS = DELAY_CAP_MS + 1000;
  * default (5000 ms) would end a row that waits for its work first — with
  * "Test timed out", naming nothing. */
 export const ROW_TIMEOUT_MS = 2 * SETTLE_DELAY_BUDGET_MS + 5000;
-/** How many polls `settle` makes at the least, when it is not given a number
+/** How many polls `settle()` and `settle({ rec, expect })` make at the least
  * — what `settle()` drained when it counted turns (ten macrotask turns). The
  * quiet window takes longer than this on its own unless the event loop is
  * held up. */
@@ -2612,6 +2622,13 @@ const DEFAULT_SETTLE_TURNS = 10;
  * about a second at the least; a clock that runs reads a new value well
  * within that, even at a resolution a browser coarsens to tens of ms. */
 const STALLED_POLLS = 200;
+/** The same for `settle(turns)`, counted in the macrotask turns it drains
+ * and the waits for a delayed response it makes while the clock reads the
+ * same time. Each takes a millisecond of real time at the least — a turn is
+ * a setTimeout(0), and the event loop's millisecond clock moves at least one
+ * on each — so 200 are 200 ms at the least, longer than any clock that runs
+ * reads the same value. */
+const STALLED_TURNS = 200;
 
 /** The scenario's `delayMs` in ms — 0 when absent or not a positive number,
  * at most DELAY_CAP_MS. */
@@ -2698,7 +2715,14 @@ export function installFetchMock(
           // `settle` waits for it and the arrival order follows the delays.
           const delay = scenarioDelayMs(sc.delayMs);
           if (delay > 0) {
-            await new Promise<void>((resolve) => setTimeout(resolve, delay));
+            const delivered = new Promise<void>((resolve) => setTimeout(resolve, delay));
+            pendingDeliveries.add(delivered);
+            try {
+              await delivered;
+            } finally {
+              pendingDeliveries.delete(delivered);
+              lastDeliveryAt = realClock.now();
+            }
           }
           return new Response(
             sc.body === undefined ? null : JSON.stringify(sc.body),
@@ -2933,13 +2957,15 @@ export function partialMismatches(
     : [`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`];
 }
 
-/** Wait until the work the act started has landed: no request in flight,
- * QUIET_MS since a request last arrived or was answered, and — given
- * `until` — every op in `until.expect` (the row's `when` routes, its
- * `called`, its `.request`) recorded by `until.rec` since `mark()`. Draining
- * in 5 ms slices lets fire-and-forget chains and timers run in between; any
- * activity starts the quiet over, so a chain however deep is waited for as
- * long as each link follows within QUIET_MS.
+/** Wait until the work the act started has landed.
+ *
+ * `settle()` and `settle({ rec, expect })` — what a generated row calls —
+ * wait for no request in flight, QUIET_MS since a request last arrived or
+ * was answered, and — given `until` — every op in `until.expect` (the row's
+ * `when` routes, its `called`, its `.request`) recorded by `until.rec` since
+ * `mark()`. Draining in 5 ms slices lets fire-and-forget chains and timers
+ * run in between; any activity starts the quiet over, so a chain however
+ * deep is waited for as long as each link follows within QUIET_MS.
  *
  * It used to drain ten macrotask turns and look only at responses a
  * `delayMs` held back: a chain deeper than ten turns, or a view model that
@@ -2952,17 +2978,16 @@ export function partialMismatches(
  * and EXPECT_MS have passed since the act fails naming it; work still in
  * flight past SETTLE_DELAY_BUDGET_MS fails naming what was in flight.
  *
- * Every window here is measured on the clock and the timer taken when this
- * module loaded (`realClock`, `sleep`), so a test that freezes Date — or
- * fakes every timer — after importing it does not stop them.
- *
  * `settle(turns)` is the call from when settle counted turns (`settle(turns
- * = 10)`), and still accepted: no expectations, as `settle()`, and it returns
- * only after at least `turns` polls — each one a macrotask turn (a timer), at
- * least as long as the setTimeout(0) turn it drained then — so a chain a
- * caller counted on N turns to finish has had them even when the quiet window
- * passes sooner (an event loop held up by synchronous work). Without a number
- * it is that default, ten. */
+ * = 10)`), and does what it did then: drain `turns` macrotask turns, wait for
+ * every response a `delayMs` is holding back, drain again after each
+ * arrival, and fail by name past SETTLE_DELAY_BUDGET_MS — no quiet window,
+ * so a hand-written test that asked for N turns takes about N turns, not
+ * QUIET_MS more. A generated row never calls it.
+ *
+ * Every form measures on the clock and the timer taken when this module
+ * loaded (`realClock`, `sleep`), so a test that freezes Date — or fakes
+ * every timer — after importing it does not stop them. */
 export function settle(turns?: number): Promise<void>;
 export function settle(
   until?: { rec: { countFor(op: string): number }; expect: string[] }
@@ -2970,8 +2995,30 @@ export function settle(
 export async function settle(
   arg?: number | { rec: { countFor(op: string): number }; expect: string[] }
 ): Promise<void> {
-  const until = typeof arg === "object" && arg !== null ? arg : undefined;
-  const turns = typeof arg === "number" && Number.isFinite(arg) ? arg : DEFAULT_SETTLE_TURNS;
+  if (typeof arg === "number") return settleTurns(arg);
+  return settleQuiet(typeof arg === "object" && arg !== null ? arg : undefined, DEFAULT_SETTLE_TURNS);
+}
+
+/** The error for a clock that read the same time while the timer ran. */
+function clockStoodStill(across: string): Error {
+  const faked = realClock.name === "Date.now" ? "Date" : "performance";
+  return new Error(
+    `settle: the clock it measures with (${realClock.name}, taken when this runtime loaded) read ` +
+      `the same time across ${across} — a fake of ${faked} was installed ` +
+      "before this runtime was imported (a setupFiles entry, say) and setTimeout was left real, " +
+      "so neither the quiet window nor a budget can ever pass. Install the fake in the test, " +
+      `after the import, or leave ${faked} out of its toFake`
+  );
+}
+
+/** `settle()` / `settle({ rec, expect })`: the quiet window, and at least
+ * `minPolls` polls — each a macrotask turn — so the ten turns `settle()`
+ * drained when it counted turns have run even when the quiet window passes
+ * sooner (an event loop held up by synchronous work). */
+async function settleQuiet(
+  until: { rec: { countFor(op: string): number }; expect: string[] } | undefined,
+  minPolls: number
+): Promise<void> {
   const started = realClock.now();
   let last = started;
   let stalled = 0;
@@ -2980,19 +3027,10 @@ export async function settle(
     const now = realClock.now();
     stalled = now === last ? stalled + 1 : 0;
     last = now;
-    if (stalled >= STALLED_POLLS) {
-      const faked = realClock.name === "Date.now" ? "Date" : "performance";
-      throw new Error(
-        `settle: the clock it measures with (${realClock.name}, taken when this runtime loaded) read ` +
-          `the same time across ${STALLED_POLLS} polls of 5 ms — a fake of ${faked} was installed ` +
-          "before this runtime was imported (a setupFiles entry, say) and setTimeout was left real, " +
-          "so neither the quiet window nor a budget can ever pass. Install the fake in the test, " +
-          `after the import, or leave ${faked} out of its toFake`
-      );
-    }
+    if (stalled >= STALLED_POLLS) throw clockStoodStill(`${STALLED_POLLS} polls of 5 ms`);
     const missing = until ? until.expect.filter((op) => until.rec.countFor(op) === 0) : [];
     const quiet = traffic.inFlight === 0 && now - Math.max(traffic.lastActivityAt, started) >= QUIET_MS;
-    if (quiet && missing.length === 0 && polls >= turns) return;
+    if (quiet && missing.length === 0 && polls >= minPolls) return;
     const waited = Math.floor(now - started);
     if (quiet && waited >= EXPECT_MS) {
       // A call an earlier row's view model started may be the one this row
@@ -3012,6 +3050,50 @@ export async function settle(
           ` (budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs of at most ${DELAY_CAP_MS} and a margin)` +
           " — the row's then would read the state before the work landed"
       );
+    }
+  }
+}
+
+/** `settle(turns)`, as it was when settle counted turns: drain `turns`
+ * macrotask turns so fire-and-forget promise chains reach their terminal
+ * state, and wait for every response a scenario's `delayMs` is holding back,
+ * draining again after each arrival (the view model may send a request of
+ * its own once one lands). Past SETTLE_DELAY_BUDGET_MS it throws, naming how
+ * long it waited: stopping quietly would let `then` read the state before
+ * the responses arrived. What changed is only what it reads the time from
+ * and sleeps on — `realClock` and `sleep` — and that a clock standing still
+ * is named (STALLED_TURNS) rather than looped on. */
+async function settleTurns(turns: number): Promise<void> {
+  const started = realClock.now();
+  let last = started;
+  let stalled = 0;
+  let raced = 0;
+  for (;;) {
+    const drainStarted = realClock.now();
+    for (let i = 0; i < turns; i += 1) {
+      await sleep(0);
+    }
+    // Quiet: nothing pending, and nothing landed while draining.
+    if (pendingDeliveries.size === 0 && lastDeliveryAt < drainStarted) return;
+    const now = realClock.now();
+    stalled = now === last ? stalled + turns + raced : 0;
+    last = now;
+    raced = 0;
+    if (stalled >= STALLED_TURNS) throw clockStoodStill(`${STALLED_TURNS} macrotask turns`);
+    const waited = Math.floor(now - started);
+    if (waited >= SETTLE_DELAY_BUDGET_MS) {
+      throw new Error(
+        `settle: delayed responses were still arriving after waiting ${waited} ms ` +
+          `(${pendingDeliveries.size} pending; budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs ` +
+          `of at most ${DELAY_CAP_MS} and a margin) — the row's then would read the state before they arrived`
+      );
+    }
+    if (pendingDeliveries.size > 0) {
+      await Promise.race([
+        Promise.all([...pendingDeliveries]),
+        sleep(SETTLE_DELAY_BUDGET_MS - waited),
+      ]);
+      raced = 1;
     }
   }
 }

@@ -130,7 +130,7 @@ def test_web_the_delay_decides_the_order_and_settle_waits(tmp_path, overrides, o
 
 def _web_without_the_wait(runtime: str) -> str:
     """settle returning after its first slice, whatever is still in flight."""
-    quiet = "    if (quiet && missing.length === 0 && polls >= turns) return;\n"
+    quiet = "    if (quiet && missing.length === 0 && polls >= minPolls) return;\n"
     assert runtime.count(quiet) == 1
     return runtime.replace(quiet, "    return;\n")
 
