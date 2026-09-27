@@ -15,7 +15,9 @@ interface LinkifyTextProps {
   // Common attribute surface the converter can emit onto any component —
   // kept in lockstep with the built-in props contract spec.
   style?: React.CSSProperties;
-  onClick?: () => void;
+  // Handed the click: a tap inside another tap stops it there
+  // (BaseConverter#can_tap_gated_click, jsonui-cli 1.9.1).
+  onClick?: (e: React.MouseEvent<HTMLElement>) => void;
   // A tap the tap rule makes a button (BaseConverter#keyboard_tap_attrs):
   // its role, its tab stop and the keys that click it.
   role?: string;

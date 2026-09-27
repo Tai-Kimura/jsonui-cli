@@ -14,6 +14,7 @@ require 'json'
 require_relative '../core/string_manager_core'
 require_relative '../core/layout_path'
 require_relative 'include_paths'
+require_relative 'nested_taps'
 require_relative '../core/node_keys'
 require_relative 'component_name'
 require_relative 'converters/base_converter'
@@ -214,7 +215,9 @@ module RjuiTools
         # The tap rule's shape of every tap (shared/core/tap_accessibility.rb),
         # which the converters read for the keyboard's button
         # (BaseConverter#keyboard_tap_attrs) — on a copy, after validation.
-        json = JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(json)))
+        # And each tap inside another tap in this file, whose click stops
+        # there (NestedTaps, BaseConverter#can_tap_gated_click).
+        json = NestedTaps.stamp!(JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(json))))
 
         jsx_content = convert_component(json)
 
