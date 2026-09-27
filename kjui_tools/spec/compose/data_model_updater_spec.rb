@@ -7,6 +7,12 @@ require 'fileutils'
 require 'json'
 
 RSpec.describe KjuiTools::Compose::DataModelUpdater do
+  # TypeConverter keeps the project's .jsonui-type-map.json, read from where an
+  # example runs, for the process; put back after this file
+  # (spec/support/process_state_guard.rb).
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(KjuiTools::Core::TypeConverter) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   let(:temp_dir) { Dir.mktmpdir('data_model_test') }
   let(:layouts_dir) { File.join(temp_dir, 'src/main/assets/Layouts') }
   let(:data_dir) { File.join(temp_dir, 'src/main/kotlin/com/example/app/data') }

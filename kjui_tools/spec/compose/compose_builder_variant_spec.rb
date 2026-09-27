@@ -6,6 +6,12 @@ require 'compose/compose_builder'
 # dispatch in the base GeneratedView + <Base><Class>VariantGeneratedView),
 # 06 variant-file track / 06a-design.md D5-D6.
 RSpec.describe KjuiTools::Compose::ComposeBuilder do
+  # TypeConverter keeps the project's .jsonui-type-map.json, read from where an
+  # example runs, for the process; put back after this file
+  # (spec/support/process_state_guard.rb).
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(KjuiTools::Core::TypeConverter) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   let(:temp_dir) { Dir.mktmpdir('compose_builder_variant_test') }
   let(:layouts_dir) { File.join(temp_dir, 'src/main/assets/Layouts') }
   let(:view_dir) { File.join(temp_dir, 'src/main/kotlin/com/example/app/views') }

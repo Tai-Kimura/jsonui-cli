@@ -24,6 +24,12 @@ require_relative '../support/kotlin_compiler'
 # looked up with the same text. Ticket codegen-string-literals-are-not-
 # escaped-for-the-target-language, remaining 1.
 RSpec.describe 'a String defaultValue reads the same on every kjui path' do
+  # TypeConverter keeps the project's .jsonui-type-map.json, read from where an
+  # example runs, for the process; put back after this file
+  # (spec/support/process_state_guard.rb).
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(KjuiTools::Core::TypeConverter) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   # The table every reader is measured with — the three generators here,
   # SwiftJsonUI and KotlinJsonUI's dynamic mode from their vendored copy.
   vectors = JSON.parse(File.read(File.expand_path('../../../shared/core/string_default_vectors.json', __dir__)))

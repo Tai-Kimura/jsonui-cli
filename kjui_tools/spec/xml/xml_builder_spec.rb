@@ -7,6 +7,14 @@ require 'fileutils'
 require 'json'
 
 RSpec.describe KjuiTools::Xml::XmlBuilder do
+  # The XML resource resolver's strings and colors are read from the project an
+  # example runs in and kept for the process; put back after this file
+  # (spec/support/process_state_guard.rb) — xml_builder_spec left
+  # {"main_view_hello" => "Hello"}, which turns a later file's "Hello" into
+  # @string/main_view_hello.
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(KjuiTools::Xml::Helpers::ResourceResolver) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   let(:temp_dir) { Dir.mktmpdir('xml_builder_test') }
   let(:layouts_dir) { File.join(temp_dir, 'src/main/assets/Layouts') }
   let(:output_dir) { File.join(temp_dir, 'src/main/res/layout') }
