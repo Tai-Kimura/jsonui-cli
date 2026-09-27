@@ -27,6 +27,16 @@ import pytest
 from jui_cli.commands.verify_cmd import cmd_verify
 
 
+@pytest.fixture(autouse=True)
+def _runs_as_the_release_before_the_gate(monkeypatch):
+    """Every arm here runs as jsonui-cli 1.9.0, the release before
+    INITIAL_VALUE_GATE_FROM: an arm about the announced line reads the
+    toolchain's version against the gate, so a tree stamped with the gate's
+    release (run-suites' next-stamp leg, 1.9.1) turned two of them red. The
+    arm about the switch moves the gate, not the version."""
+    monkeypatch.setattr("jui_cli.version.toolchain_version", lambda root=None: "1.9.0")
+
+
 def _write(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data), encoding="utf-8")

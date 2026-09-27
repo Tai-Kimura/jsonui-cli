@@ -23,6 +23,17 @@ from jsonui_doc_cli.spec_doc import validator as validator_mod
 from jsonui_doc_cli.spec_doc.validator import SpecValidator
 
 
+@pytest.fixture(autouse=True)
+def _runs_as_the_release_before_the_gate(monkeypatch):
+    """Every arm here runs as jsonui-cli 1.9.0, the release before
+    INITIAL_VALUE_TYPE_GATE_FROM. The INFO arms read the running version
+    against the gate they name, so a tree stamped with the gate's release
+    (run-suites' next-stamp leg, 1.9.1) turned nine of them red that were not
+    about the value. The arm about the switch moves the gate, not the version;
+    the shipped literal is judged by test_the_release_is_the_one_jui_verify_counts_from."""
+    monkeypatch.setattr(validator_mod, "_running_version", lambda: "1.9.0")
+
+
 def _spec(collection=None, variables=None, collections=None):
     structure = {"components": [], "layout": {"root": "r", "children": []}}
     if collection is not None:
