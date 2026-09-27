@@ -395,6 +395,38 @@ module RjuiTools
           "gap-#{closest_padding(spacing)}"
         end
 
+        # A single-run Label's alignment classes: it is a flex ROW, so
+        # `items-*` is its vertical and `justify-*` its horizontal. The
+        # vertical is the one gravity names (top / bottom / centerVertical,
+        # center), else the middle; across, textAlign's position, else the
+        # horizontal gravity names (left / right / centerHorizontal, center),
+        # else the start (no class). LabelConverter and a responsive gravity
+        # override (ResponsiveHelper#responsive_gravity_classes) both read it,
+        # so a size class's gravity lands on the same axes as the base one.
+        def map_label_gravity(gravity, text_align = nil)
+          parts = if gravity.is_a?(Array) then gravity.map(&:to_s)
+                  elsif gravity.nil? then []
+                  else gravity.to_s.split('|')
+                  end
+          tokens = parts.map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') || g.strip.downcase }
+          classes = [if tokens.include?('top') then 'items-start'
+                     elsif tokens.include?('bottom') then 'items-end'
+                     else 'items-center'
+                     end]
+          across = case JsonUIShared::EnumSpelling.lowered(text_align, 'Label', 'textAlign')
+                   when 'center' then 'justify-center'
+                   when 'right' then 'justify-end'
+                   when 'left' then 'justify-start'
+                   else
+                     if (tokens & %w[centerhorizontal center_horizontal center]).any? then 'justify-center'
+                     elsif tokens.include?('right') || tokens.include?('end') then 'justify-end'
+                     elsif tokens.include?('left') || tokens.include?('start') then 'justify-start'
+                     end
+                   end
+          classes << across if across
+          classes
+        end
+
         # Map gravity attribute based on orientation
         # Flexbox behavior:
         # - flex-row (horizontal): items-* controls vertical alignment, justify-* controls horizontal alignment

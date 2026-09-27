@@ -13,10 +13,15 @@
 // the text at the bottom, `bottom` at the bottom end, and `centerVertical` in
 // the middle across as well.
 //
+// A responsive gravity (a size class's override) is mapped the same way, so
+// it lands on the same axes inside its breakpoint; until jsonui-cli 1.9.0 it
+// was mapped as a column's there as well.
+//
 // The probe writes one layout of 200 x 44 labels (and one wrapContent-wide),
 // runs `rjui build` over it (the production codegen), builds it with the
-// host's Vite and React, and in headless Chromium reads where each label's
-// text box sits in the label's box (a DOM Range over the text node). It
+// host's Vite and React, and in headless Chromium — at 400px and at 1100px,
+// the regular size class — reads where each label's text box sits in the
+// label's box (a DOM Range over the text node). It
 // prints one line per label and exits 1 on any that breaks the rule.
 //
 //   --rjui / RJUI_TOOLS_PATH   default: <repo>/rjui_tools
@@ -55,6 +60,10 @@ const CASES = [
   ['wrapBottom', { gravity: 'bottom', width: 'wrapContent' }, 'bottom', 'start'],
   ['fillRight', { gravity: 'right', width: 'matchParent' }, 'middle', 'end'],
   ['wrapHeightRight', { gravity: 'right', height: 'wrapContent' }, 'middle', 'end'],
+  // A size class's gravity replaces the base one, on the same axes: at the
+  // regular width (lg:, 1100px here) these take the second pair.
+  ['respRight', { gravity: 'top', responsive: { regular: { gravity: 'right' } } }, 'top', 'start', 'middle', 'end'],
+  ['respBottom', { gravity: 'left', textAlign: 'center', responsive: { regular: { gravity: 'bottom' } } }, 'middle', 'middle', 'bottom', 'middle'],
 ]
 const LAYOUT = {
   type: 'View', id: 'root', width: 'matchParent', orientation: 'vertical', spacing: 6,
@@ -118,11 +127,14 @@ const server = await preview({ root: WORK, logLevel: 'warn', preview: { port: 41
 const browser = await chromium.launch()
 let failures = 0
 try {
-  const page = await browser.newPage({ viewport: { width: 400, height: 900 } })
+  for (const [viewport, regular] of [[400, false], [1100, true]]) {
+  const page = await browser.newPage({ viewport: { width: viewport, height: 900 } })
   await page.goto(server.resolvedUrls.local[0])
   await page.waitForSelector('#root')
   await page.waitForTimeout(300)
-  for (const [id, extra, wantV, wantH] of CASES) {
+  for (const [id, extra, baseV, baseH, regV, regH] of CASES) {
+    const wantV = regular && regV ? regV : baseV
+    const wantH = regular && regH ? regH : baseH
     const m = await read(page, `lg_${id}`)
     const v = m && { near: 'top', far: 'bottom', middle: 'middle' }[where(m.top, m.bottom)]
     const h = m && (m.left + m.right < 2 ? 'start' : { near: 'start', far: 'end', middle: 'middle' }[where(m.left, m.right)])
@@ -134,10 +146,11 @@ try {
       if (h !== wantH) problems.push(`horizontal ${h}, not ${wantH}`)
     }
     failures += problems.length ? 1 : 0
-    console.log(`LABEL_GRAVITY ${id.padEnd(16)} ${m ? `box ${m.w}x${m.h} text top ${m.top.toFixed(1)} bottom ${m.bottom.toFixed(1)} left ${m.left.toFixed(1)} right ${m.right.toFixed(1)}` : ''}` +
+    console.log(`LABEL_GRAVITY ${String(viewport).padStart(4)}px ${id.padEnd(16)} ${m ? `box ${m.w}x${m.h} text top ${m.top.toFixed(1)} bottom ${m.bottom.toFixed(1)} left ${m.left.toFixed(1)} right ${m.right.toFixed(1)}` : ''}` +
       `${problems.length ? `  <- ${problems.join('; ')}` : ''}`)
   }
   await page.close()
+  }
 } finally {
   await browser.close()
   server.httpServer.close()

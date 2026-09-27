@@ -1003,7 +1003,7 @@
         "centerHorizontal",
         "center"
       ],
-      "description": "Content gravity/alignment. A single value names ONE axis; the axis it does not name falls to the container default (top vertically, start horizontally), so in LTR `left` and `top` both resolve to (start, top) and render identically. Use the array form to name both axes. On a Button and a TextField textAlign owns the horizontal: their gravity positions the content on the vertical axis only (see their textAlign). Full ruling in attribute_semantics.json -> gravityDefaults; do not restate it in toolchain comments."
+      "description": "Content gravity/alignment. A single value names ONE axis; the axis it does not name falls to the container default (top vertically, start horizontally), so in LTR `left` and `top` both resolve to (start, top) and render identically. Use the array form to name both axes. On a Button and a TextField textAlign owns the horizontal: their gravity positions the content on the vertical axis only (see their textAlign). On a Label textAlign places the text across when it is declared; gravity's horizontal part places it only when textAlign is not (see Label.textAlign). Full ruling in attribute_semantics.json -> gravityDefaults; do not restate it in toolchain comments."
     },
     "onAppear": {
       "type": "string",
@@ -1307,7 +1307,7 @@
         "center",
         "right"
       ],
-      "description": "Text alignment (binding supported)"
+      "description": "Where the label's text sits across the label's own width: Left the start, Center the middle, Right the end (binding supported). Without textAlign, the horizontal part of gravity places it (left / right / centerHorizontal, center); without either, the start. Vertically the text sits at the vertical gravity names, else the middle (gravityDefaults -> leafOwnFrameChannel). (4f ruling 2026-09-27: the web draws it so from jsonui-cli 1.9.0; iOS and Compose did not: a 200 x 44 label with gravity right drew its text at the start on SwiftJsonUI Dynamic (measured) and on Compose (kjui's emit is the one it draws with no gravity), and a fixed-width label with neither in the middle on iOS (measured).)"
     },
     "lines": {
       "type": [
@@ -2436,7 +2436,7 @@
         "Center",
         "Right"
       ],
-      "description": "Where the button's text sits across it: Left the start, Center the middle, Right the end; default Center. A Button's text is placed horizontally by textAlign alone - its gravity positions its content only on the vertical axis, the one textAlign does not own (4f ruling 2026-09-27: iOS, Compose and the web each put a Button's text in the middle whatever its gravity; iOS drew Left and Right in the middle too until jsonui-cli 1.9.0 / SwiftJsonUI 10.29.0)."
+      "description": "Where the button's text sits across it: Left the start, Center the middle, Right the end; default Center. A Button's text is placed horizontally by textAlign alone - its gravity positions its content only on the vertical axis, the one textAlign does not own (4f ruling 2026-09-27: iOS, Compose and the web each put a Button's text in the middle whatever its gravity; iOS drew Left and Right in the middle too until jsonui-cli 1.9.0 / SwiftJsonUI 10.29.0). On Compose the text takes the button's width to be placed when the button has a width of its own (declared, not wrapContent, or a weight) - a wrap-width button is its text's width - on kjui codegen and KotlinJsonUI Dynamic alike (round 17; it sat in the middle whatever textAlign said)."
     },
     "config": {
       "type": "object",
@@ -3913,15 +3913,15 @@
         "array",
         "string"
       ],
-      "description": "Content insets: padding around the cells, inside the Collection's scroll - 1, 2 or 4 values, an array or a string separated by `|`, read as `paddings` reads them: one, every side; two, [vertical, horizontal]; four, [top, right, bottom, left] (right the end, left the start); any other value pads nothing. Both Compose paths read it so from jsonui-cli 1.9.0 (4f ruling 2026-09-27, round 16; kjui read four as [top, left, bottom, right], only an array of four and no string, and KotlinJsonUI Dynamic no array of one or two). With insetHorizontal / insetVertical it pads every route's content on Compose - the lazy lists and grids, and from jsonui-cli 1.9.0 the containers that are not lazy lists too: the wrapContent and `lazy: none` Column and Row, the flow and CollectionStack's NONE container, as KotlinJsonUI Dynamic already drew them (4f ruling 2026-09-27, round 15; kjui codegen and CollectionStack applied none there)."
+      "description": "Content insets: padding around the cells, inside the Collection's scroll - 1, 2 or 4 values, an array or a string separated by `|`, read as `paddings` reads them: one, every side; two, [vertical, horizontal]; four, [top, right, bottom, left] (right the end, left the start); any other value pads nothing. A value in the array may be a binding, bound as the data holds it (a number; unset, 0). Both Compose paths read it so from jsonui-cli 1.9.0 (4f rulings 2026-09-27, rounds 16 and 17; kjui read four as [top, left, bottom, right], only an array of four and no string, and KotlinJsonUI Dynamic no array of one or two, nor an array with a binding). It is ADDED to insetHorizontal / insetVertical and to the safe area contentInsetAdjustmentBehavior asks for, side by side, on iOS (measured 2026-09-27 on sjui codegen and SwiftJsonUI Dynamic: insets [8, 0, 0, 0] with insetVertical 8 at the top of a 62pt safe area put the first cell at 78) and on both Compose paths from jsonui-cli 1.9.0 (4f ruling, round 17; a declared insets replaced both until then). With insetHorizontal / insetVertical it pads every route's content on Compose - the lazy lists and grids, and from jsonui-cli 1.9.0 the containers that are not lazy lists too: the wrapContent and `lazy: none` Column and Row, the flow and CollectionStack's NONE container, as KotlinJsonUI Dynamic already drew them (4f ruling 2026-09-27, round 15; kjui codegen and CollectionStack applied none there)."
     },
     "insetHorizontal": {
       "type": "number",
-      "description": "Horizontal inset: padding on the left and right of the cells, inside the Collection's scroll. Added to the safe area contentInsetAdjustmentBehavior asks for, on every platform - as iOS adds its safe area (measured 2026-09-27 on sjui codegen and SwiftJsonUI Dynamic), and on both Compose paths from jsonui-cli 1.9.0 (4f ruling, round 16; kjui dropped the safe area for it, KotlinJsonUI Dynamic dropped it for the safe area). On Compose a declared insets replaces it and the safe area."
+      "description": "Horizontal inset: padding on the left and right of the cells, inside the Collection's scroll. Added to the safe area contentInsetAdjustmentBehavior asks for, on every platform - as iOS adds its safe area (measured 2026-09-27 on sjui codegen and SwiftJsonUI Dynamic), and on both Compose paths from jsonui-cli 1.9.0 (4f ruling, round 16; kjui dropped the safe area for it, KotlinJsonUI Dynamic dropped it for the safe area). A declared insets is added to it too, on iOS and from jsonui-cli 1.9.0 on both Compose paths (round 17; it replaced it). On a horizontal Collection kjui's codegen keeps it in the content padding with the rest (round 17; handed to CollectionStack's insetLeading / insetTrailing, it dropped insetVertical and the safe area there)."
     },
     "insetVertical": {
       "type": "number",
-      "description": "Vertical inset: padding above and below the cells, inside the Collection's scroll. Added to the safe area contentInsetAdjustmentBehavior asks for, on every platform - iOS measured 2026-09-27 on sjui codegen and SwiftJsonUI Dynamic: a Collection at the top of a 62pt safe area with insetVertical 8 put its first cell at 70, `always` alike, and at 8 with `never` - and on both Compose paths from jsonui-cli 1.9.0 (4f ruling, round 16; kjui dropped the safe area for it, KotlinJsonUI Dynamic dropped it for the safe area). On Compose a declared insets replaces it and the safe area."
+      "description": "Vertical inset: padding above and below the cells, inside the Collection's scroll. Added to the safe area contentInsetAdjustmentBehavior asks for, on every platform - iOS measured 2026-09-27 on sjui codegen and SwiftJsonUI Dynamic: a Collection at the top of a 62pt safe area with insetVertical 8 put its first cell at 70, `always` alike, and at 8 with `never` - and on both Compose paths from jsonui-cli 1.9.0 (4f ruling, round 16; kjui dropped the safe area for it, KotlinJsonUI Dynamic dropped it for the safe area). A declared insets is added to it too, on iOS (78 = 62 + 8 + 8) and from jsonui-cli 1.9.0 on both Compose paths (round 17; it replaced it)."
     },
     "contentInsets": {
       "type": [
@@ -3934,7 +3934,7 @@
     },
     "contentInsetAdjustmentBehavior": {
       "type": "string",
-      "description": "Content inset adjustment: whether the cells clear the safe area (the system bars). On iOS the system adjusts by default and `never` stops it. On Compose `always` / `automatic` pad the cells by the safe area, `scrollableAxes` by its sides on the scroll axis, and `never` - or no declaration - by nothing, Compose's own default. The precedence, on both Compose paths: a declared insets (contentPadding) replaces the safe area; insetHorizontal / insetVertical are added to it, as iOS adds them (4f ruling 2026-09-27, round 16; they replaced each other until jsonui-cli 1.9.0)."
+      "description": "Content inset adjustment: whether the cells clear the safe area (the system bars). On iOS the system adjusts by default and `never` stops it. On Compose `always` / `automatic` pad the cells by the safe area, `scrollableAxes` by its sides on the scroll axis, and `never` - or no declaration - by nothing, Compose's own default. There is no precedence: the safe area, a declared insets (contentPadding) and insetHorizontal / insetVertical are all added, side by side, on iOS and on both Compose paths (4f rulings 2026-09-27, rounds 16 and 17; until jsonui-cli 1.9.0 a declared insets replaced the other two there, and insetHorizontal / insetVertical and the safe area replaced each other)."
     },
     "itemWeight": {
       "type": "number",

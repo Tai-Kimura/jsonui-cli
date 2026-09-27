@@ -336,13 +336,6 @@ module RjuiTools
           []
         end
 
-        # The gravity's tokens, lowered to their canonical spelling.
-        def label_gravity_tokens
-          gravity = attributes['gravity']
-          parts = gravity.is_a?(Array) ? gravity.map(&:to_s) : gravity.to_s.split('|')
-          parts.map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') || g.strip.downcase }
-        end
-
         def build_class_name
           classes = [super]
 
@@ -382,26 +375,7 @@ module RjuiTools
             # across as well (measured in Chromium, a 44px-tall label) —
             # gravity_classes below keeps that mapping off.
             classes << 'flex'
-            tokens = label_gravity_tokens
-            classes << if tokens.include?('top') then 'items-start'
-                       elsif tokens.include?('bottom') then 'items-end'
-                       else 'items-center'
-                       end
-
-            # textAlign → justify-* for horizontal alignment within flex
-            case JsonUIShared::EnumSpelling.lowered(attributes['textAlign'], 'Label', 'textAlign')
-            when 'center'
-              classes << 'justify-center'
-            when 'right'
-              classes << 'justify-end'
-            when 'left'
-              classes << 'justify-start'
-            else
-              if (tokens & %w[centerhorizontal center_horizontal center]).any? then classes << 'justify-center'
-              elsif tokens.include?('right') || tokens.include?('end') then classes << 'justify-end'
-              elsif tokens.include?('left') || tokens.include?('start') then classes << 'justify-start'
-              end
-            end
+            classes.concat(TailwindMapper.map_label_gravity(attributes['gravity'], attributes['textAlign']))
           end
 
           # Line clamp for multiple lines

@@ -56,7 +56,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun Modifier.fillMaxSize(): Modifier = this
     class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
     fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
-    class Dp(val v: Int = 0)
+    class Dp(val v: Int = 0) { operator fun plus(o: Dp) = Dp(v + o.v) }
     val Int.dp: Dp get() = Dp(this)
     interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {}
         val Bottom = object : Alignment { override fun toString() = "Bottom" }; val End = object : Alignment { override fun toString() = "End" }
@@ -73,6 +73,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun PaddingValues(horizontal: Dp = Dp(), vertical: Dp = Dp()) = PaddingValues(vertical.v, horizontal.v, vertical.v, horizontal.v)
     fun PaddingValues(start: Dp = Dp(), top: Dp = Dp(), end: Dp = Dp(), bottom: Dp = Dp()) = PaddingValues(top.v, start.v, bottom.v, end.v)
     fun Modifier.padding(values: PaddingValues): Modifier { Drawn.chain += "pad($values)"; return this }
+    // Round 17: a PaddingValues read side by side (the safe area and the
+    // Collection's own padding added in the layout's direction).
+    fun PaddingValues.calculateStartPadding(dir: androidx.compose.ui.unit.LayoutDirection) = Dp(start)
+    fun PaddingValues.calculateEndPadding(dir: androidx.compose.ui.unit.LayoutDirection) = Dp(end)
+    fun PaddingValues.calculateTopPadding() = Dp(top)
+    fun PaddingValues.calculateBottomPadding() = Dp(bottom)
     // The safe area (round 16): a status bar of 24 and a navigation bar of 48,
     // as insets are, left / top / right / bottom; a container's contentPadding
     // is recorded as cp(top.start.bottom.end).
@@ -188,7 +194,9 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
                         userScrollEnabled: Boolean = true, reverseLayout: Boolean = false, lazyState: LazyListState? = null,
                         eagerScrollState: ScrollState? = null, contentAtBottom: Boolean = false, rowContentAlignment: Alignment? = null,
                         columnContentAlignment: Alignment? = null, contentPadding: PaddingValues? = null,
+                        insetLeading: Dp? = null, insetTrailing: Dp? = null,
                         lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
+        insetLeading?.let { Drawn.chain += "lead(${it.v})" }
         Drawn.userScroll = userScrollEnabled
         if (contentAtBottom) Drawn.packed = "Bottom"
         rowContentAlignment?.let { Drawn.packed = it.toString() }
@@ -208,7 +216,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy")
+    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy", val t: Int? = 20)
 
     // The pager composes each page in turn; the page it was asked for is the scroll.
     class PagerState(val pageCount: () -> Int) {
@@ -435,7 +443,16 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'eagerCenterV' => [emit(node('lazy' => 'eager', 'defaultScrollAnchor' => 'center')), {}, [0]],
       'gridCenterV' => [emit(grid_node('defaultScrollAnchor' => 'center')), { grid: true }, [0]],
       'gridCenterVSpaced' => [emit(grid_node('defaultScrollAnchor' => 'center', 'lineSpacing' => 4)), { grid: true }, [0]],
-      'gridReversedCenterVSpaced' => [emit(grid_node('defaultScrollAnchor' => 'center', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]]
+      'gridReversedCenterVSpaced' => [emit(grid_node('defaultScrollAnchor' => 'center', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 17: a declared insets added to insetHorizontal / insetVertical and
+      # the safe area; a binding in the array; a row's insetHorizontal kept
+      # in contentPadding with the rest.
+      'addInsets' => [emit(node('insets' => [8, 0, 0, 0], 'insetVertical' => 8, 'insetHorizontal' => 16)), {}, [0]],
+      'addInsetsSafe' => [emit(node('insets' => [8, 0, 0, 0], 'insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'addInsetsSafeOnly' => [emit(grid_node('insets' => [8, 4, 0, 2], 'contentInsetAdjustmentBehavior' => 'always')), { grid: true }, [0]],
+      'bindInsets' => [emit(node('insets' => ['@{t}', 0, 0, 0], 'insetVertical' => 8)), {}, [0]],
+      'rowInsetH' => [emit(node('layout' => 'horizontal', 'insetHorizontal' => 14, 'insetVertical' => 4)), {}, [0]],
+      'rowInsetHSafe' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'insetHorizontal' => 14, 'contentInsetAdjustmentBehavior' => 'scrollableAxes')), {}, [0]]
     }
   end
 
@@ -532,7 +549,8 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
                    .gsub('androidx.compose.ui.platform.LocalLayoutDirection', 'LocalLayoutDirection')
                    .gsub('androidx.compose.ui.unit.LayoutDirection', 'LayoutDirection') +
       "\n" + KJ_SCROLL_STUBS.sub("package stubs\n", '').gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
-                            .gsub('androidx.compose.ui.geometry.Offset', 'Offset').gsub('androidx.compose.ui.unit.Constraints', 'Constraints') +
+                            .gsub('androidx.compose.ui.geometry.Offset', 'Offset').gsub('androidx.compose.ui.unit.Constraints', 'Constraints')
+                            .gsub('androidx.compose.ui.unit.LayoutDirection', 'LayoutDirection') +
       "fun rememberLazyListState() = remember { LazyListState() }\n" +
       KJ_SCROLL_QUALIFIED['CellIdGenerator.kt'].sub("package com.kotlinjsonui.utils\n", '') +
       "object LocalContext { val current = Context() }\nclass Context { val applicationInfo = ApplicationInfo() }\n" \
@@ -767,11 +785,11 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     end
   end
 
-  it 'insetHorizontal / insetVertical are added to the safe area, as iOS adds them; a declared insets still wins' do
+  it 'insetHorizontal / insetVertical are added to the safe area, as iOS adds them — a declared insets too (round 17)' do
     lines = run_emitted(routes)
     # The stubs' safe area: top 24, bottom 48.
     { 'safeInsets 0' => 'cp(32.16.56.16)', 'safeInsetsAxes 0' => 'cp(32.0.56.0)', 'safeOnly 0' => 'cp(24.0.48.0)',
-      'safeNever 0' => 'cp(8.0.8.0)', 'safeDeclared 0' => 'cp(8.0.0.0)',
+      'safeNever 0' => 'cp(8.0.8.0)', 'safeDeclared 0' => 'cp(40.0.56.0)',
       # An insets no form takes declares nothing: the safe area applies.
       'safeMalformed 0' => 'cp(24.0.48.0)' }.each do |label, chain|
       expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
@@ -785,6 +803,19 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       # Controls: bottom and none, unchanged.
       'stackBottom 0' => 'Bottom', 'stack 0' => 'null', 'gridSpaced 0' => 'null' }.each do |label, packed|
       expect(read(lines, label)[:packed]).to eq(packed), "#{label}: #{lines[label]}"
+    end
+  end
+
+  # Round 17 (4f rulings 2026-09-27).
+  it 'a declared insets is added to insetHorizontal / insetVertical and the safe area; a binding in it binds; a row keeps them all' do
+    lines = run_emitted(routes)
+    # The stubs' safe area: top 24, bottom 48 (horizontal sides 0); t = 20.
+    { 'addInsets 0' => 'cp(16.16.8.16)', 'addInsetsSafe 0' => 'cp(40.0.56.0)', 'addInsetsSafeOnly 0' => 'cp(32.2.48.4)',
+      'bindInsets 0' => 'cp(28.0.8.0)',
+      # A row: insetHorizontal and insetVertical in contentPadding, no insetLeading
+      # / insetTrailing beside it (they replaced it, and dropped the rest).
+      'rowInsetH 0' => 'cp(4.14.4.14)', 'rowInsetHSafe 0' => 'cp(0.14.0.14)' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
     end
   end
 

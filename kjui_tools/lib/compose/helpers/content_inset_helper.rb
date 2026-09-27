@@ -39,33 +39,18 @@ module KjuiTools
         FULL = 'WindowInsets.safeDrawing.asPaddingValues()'
 
         # PaddingValues expression, or nil when nothing should be emitted.
-        # `horizontal:` picks the axis for `scrollableAxes`.
-        #
-        # `inset_horizontal:` / `inset_vertical:` (a Collection's
-        # insetHorizontal / insetVertical) are added to the safe area, as iOS
-        # adds them: measured 2026-09-27 on sjui codegen and SwiftJsonUI
-        # Dynamic, a Collection at the top of the safe area with insetVertical
-        # 8 put its first cell at the safe area's top + 8 (70 of a 62pt safe
-        # area), `always` alike; `never` at 8 (4f ruling, round 16). Until
-        # jsonui-cli 1.9.0 kjui dropped the safe area for them and KotlinJsonUI
-        # Dynamic dropped them for the safe area.
-        def safe_area_padding(value, horizontal: false, inset_horizontal: nil, inset_vertical: nil)
-          insets = case JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior')
-                   when 'always', 'automatic'
-                     'WindowInsets.safeDrawing'
-                   when 'scrollableaxes'
-                     side = horizontal ? 'Horizontal' : 'Vertical'
-                     "WindowInsets.safeDrawing.only(WindowInsetsSides.#{side})"
-                   end
-          return nil unless insets
-          return FULL if insets == 'WindowInsets.safeDrawing' && !inset_horizontal && !inset_vertical
-
-          if inset_horizontal || inset_vertical
-            h = BoundValue.dp(inset_horizontal || 0)
-            v = BoundValue.dp(inset_vertical || 0)
-            insets += ".add(WindowInsets(left = #{h}, top = #{v}, right = #{h}, bottom = #{v}))"
+        # `horizontal:` picks the axis for `scrollableAxes`. A Collection adds
+        # its own content padding to it, side by side
+        # (CollectionComponent.collection_stack_content_padding_expr; 4f
+        # rulings 2026-09-27, rounds 16 and 17).
+        def safe_area_padding(value, horizontal: false)
+          case JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior')
+          when 'always', 'automatic'
+            FULL
+          when 'scrollableaxes'
+            side = horizontal ? 'Horizontal' : 'Vertical'
+            "WindowInsets.safeDrawing.only(WindowInsetsSides.#{side}).asPaddingValues()"
           end
-          "#{insets}.asPaddingValues()"
         end
 
         # True when this declaration asks for an inset the caller has to emit.
@@ -74,13 +59,10 @@ module KjuiTools
         end
 
         # The import keys the emitted text needs, or [] when it emits nothing.
-        # `insets:` — the Collection also declares insetHorizontal /
-        # insetVertical, added to the safe area (safe_area_padding).
-        def imports_for(value, insets: false)
+        def imports_for(value)
           return [] unless adjusts?(value)
 
           keys = %i[window_insets]
-          keys << :window_insets_add if insets
           keys << :window_insets_sides if JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior') == 'scrollableaxes'
           keys
         end

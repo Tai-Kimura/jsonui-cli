@@ -324,7 +324,7 @@ module KjuiTools
             code += "\n" + build_icon_code(json_data, image_name, depth + 1, required_imports,
                                            decorative: false, spacer_after: false)
           else
-            code += "\n" + build_text_code(json_data, text, depth + 1, required_imports)
+            code += "\n" + build_text_code(json_data, text, depth + 1, required_imports, fills: true)
           end
 
           code += "\n" + indent("}", depth)
@@ -402,7 +402,7 @@ module KjuiTools
         # All font attrs (fontFamily/font/fontWeight/fontSize) flow through the unified
         # Configuration.Font.resolve(FontSpec(...)) hook so the app's fontProvider sees
         # the full context.
-        def self.build_text_code(json_data, text, depth, required_imports)
+        def self.build_text_code(json_data, text, depth, required_imports, fills: false)
           font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
           # `textAlign` is declared on Button and no converter read the
           # spelling on either mobile platform (plan 49 lane C:
@@ -411,6 +411,16 @@ module KjuiTools
                   TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'Button')
           required_imports&.add(:text_align) if align
           align_arg = align ? "\n" + indent("textAlign = #{align},", depth + 1) : ''
+          # The text is placed across the button by textAlign (4f ruling
+          # 2026-09-27, round 17; centre by default): the Text takes the
+          # button's width, which the button's content Row centred a wrap-width
+          # Text in, so TextAlign.Start / End drew it in the middle. Only a
+          # button of a width of its own (declared, not wrapContent, or
+          # weighted): a wrap-width one is its text's width, and filling there
+          # would stretch it to its parent. Not beside an icon.
+          if fills && align && bounded_width?(json_data)
+            align_arg += "\n" + indent("modifier = Modifier.fillMaxWidth(),", depth + 1)
+          end
 
           unless font_args[:has_any]
             return indent("Text(#{text})", depth) if align_arg.empty?
@@ -430,6 +440,15 @@ module KjuiTools
             align_arg +
             "\n" + text_arg_lines +
             "\n" + indent(")", depth)
+        end
+
+        # Whether the button has a width of its own: a declared width that is
+        # not wrapContent, or a weight along a row.
+        def self.bounded_width?(json_data)
+          width = json_data['width']
+          return true if json_data['weight'] || json_data['widthWeight']
+
+          !width.nil? && !%w[wrapContent wrap_content].include?(width.to_s)
         end
 
         # An icon-only button has no accessible name unless the icon carries
