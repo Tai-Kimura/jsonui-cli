@@ -391,8 +391,10 @@ module SjuiTools
               @modifier_bag.append(:frame_size, ".frame(maxWidth: .infinity, alignment: #{frame_alignment})")
               @skip_frame_width = true  # Prevent frame_helper from adding duplicate maxWidth
             elsif parent_orientation == 'vertical'
-              # In vertical stack with weight - fill height
-              @modifier_bag.append(:frame_size, ".frame(maxHeight: .infinity)")
+              # In vertical stack with weight - fill height; the text at the
+              # vertical its gravity names, else centre (label_vertical).
+              lv = label_vertical_alignment
+              @modifier_bag.append(:frame_size, ".frame(maxHeight: .infinity#{lv ? ", alignment: #{lv}" : ''})")
             end
           end
 

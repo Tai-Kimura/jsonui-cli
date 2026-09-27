@@ -2747,7 +2747,26 @@ module SjuiTools
             params << "contentInsets: #{insets_expr}"
           end
 
+          # A horizontal eager row fills a declared height, as the lazy row
+          # does (CollectionStackView fillsCrossAxis, SwiftJsonUI 10.29.0):
+          # until jsonui-cli 1.9.0 it was its cells' height — 28pt in a 40pt
+          # frame where the lazy row was 40. Only where the mode can be eager:
+          # a lazy row fills already and a `none` row is sized by its frame.
+          mode_expr = collection_mode_swift_expr
+          if axis != :vertical && fills_cross_axis? && !%w[.lazy .none].include?(mode_expr)
+            params << 'fillsCrossAxis: true'
+          end
+
           params
+        end
+
+        # The Collection's height is declared — a number or matchParent (a
+        # weighted or `distribution: fill` vertical parent has already made it
+        # matchParent). wrapContent, absent, or bound: false. The Dynamic half
+        # is CollectionConverter.fillsHeight.
+        def fills_cross_axis?
+          height = @component['height']
+          height.is_a?(Numeric) || height == 'matchParent'
         end
 
         # defaultScrollAnchor expressed as a UnitPoint? Swift expression. Returns

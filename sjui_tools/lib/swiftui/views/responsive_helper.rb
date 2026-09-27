@@ -392,7 +392,7 @@ module SjuiTools
           # within this frame), NOT responsive `align*` / `center*` flags.
           # The responsive flags drive the outer wrap appended by
           # generate_container_function / generate_leaf_function.
-          alignment = inner_frame_alignment(attrs)
+          alignment = inner_frame_alignment(attrs, true)
           frame_args << "alignment: #{alignment}" if alignment
 
           [".frame(#{frame_args.join(', ')})"]
@@ -518,10 +518,20 @@ module SjuiTools
         # "center"` was emitting `alignment: .leading` on the inner frame
         # and pinning the wrap-content child to the left edge of the
         # bordered area instead of centering it.
-        def self.inner_frame_alignment(attrs)
-          gravity_align = alignment_from_gravity(attrs['gravity'])
+        #
+        # `container` — the node lays out children (FrameHelper's
+        # container_content_node?; a responsive container function's node).
+        # Its unnamed axis, and both axes when gravity is omitted, are top |
+        # start, as the main frame rule (gravity_to_frame_alignment,
+        # gravityDefaults): until jsonui-cli 1.9.0 this frame centred them, so
+        # content smaller than a `minHeight` / `maxWidth` box stood in its
+        # middle. A leaf keeps centre on the unnamed axis (leafOwnFrameChannel)
+        # and no argument when gravity is omitted.
+        def self.inner_frame_alignment(attrs, container = false)
+          gravity_align = alignment_from_gravity(attrs['gravity'], container)
           return gravity_align if gravity_align
           return '.center' if horizontal_alignment_flag?(attrs) || vertical_alignment_flag?(attrs)
+          return '.topLeading' if container
 
           nil
         end
@@ -529,7 +539,7 @@ module SjuiTools
         # @param gravity [String, Array, nil] raw gravity value from JSON
         # @return [String, nil] SwiftUI Alignment literal, or nil if no
         #   recognizable gravity tokens are present
-        def self.alignment_from_gravity(gravity)
+        def self.alignment_from_gravity(gravity, container = false)
           return nil if gravity.nil?
 
           gravities = if gravity.is_a?(Array)
@@ -557,9 +567,10 @@ module SjuiTools
 
           return nil if h.nil? && v.nil?
 
-          # Default the unspecified axis to center (no-op along that axis).
-          h ||= 'center'
-          v ||= 'center'
+          # The unspecified axis: a container's is top | start
+          # (gravityDefaults), a leaf's centre.
+          h ||= container ? 'leading' : 'center'
+          v ||= container ? 'top' : 'center'
 
           case [v, h]
           when %w[top leading] then '.topLeading'

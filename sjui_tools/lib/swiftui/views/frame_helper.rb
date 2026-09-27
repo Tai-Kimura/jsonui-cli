@@ -79,7 +79,9 @@ module SjuiTools
             # For labels and text components, add alignment based on textAlign and gravity
             if frame_params.any?
               if @component['type'] == 'Label'
-                frame_params << "alignment: #{label_frame_alignment}"
+                # A min / max HEIGHT bound is a box taller than the text: the
+                # text's vertical position is the Label rule (label_vertical).
+                frame_params << "alignment: #{label_frame_alignment(both_infinity: !(min_height || max_height).nil?)}"
               else
                 # Non-Label inner frame alignment is `gravity`-driven, NOT
                 # responsive `align*` / `center*` flags. The responsive
@@ -96,7 +98,7 @@ module SjuiTools
                 # maxWidth: N → `.frame(maxWidth: N, alignment: .center)`)
                 # is preserved. If neither, the alignment is omitted and
                 # SwiftUI's implicit `.center` default takes over.
-                alignment = ResponsiveHelper.inner_frame_alignment(@component)
+                alignment = ResponsiveHelper.inner_frame_alignment(@component, container_content_node?)
                 frame_params << "alignment: #{alignment}" if alignment
               end
               @modifier_bag.append(:frame_constraints, ".frame(#{frame_params.join(', ')})")
@@ -278,7 +280,10 @@ module SjuiTools
         # text alignment (label_frame_alignment), and a leaf with no gravity
         # its content channel (gravity_to_frame_alignment is nil there).
         def single_axis_alignment
-          return '' if @component['type'] == 'Label'
+          if @component['type'] == 'Label'
+            lv = label_vertical_alignment
+            return lv ? ", alignment: #{lv}" : ''
+          end
 
           ga = gravity_to_frame_alignment
           ga ? ", alignment: #{ga}" : ''
@@ -342,7 +347,10 @@ module SjuiTools
           # the top of a 44pt frame (a Button's label is centred by
           # StateAwareButtonView itself, before and after).
           cross = centred_cross_axis? ? 'center' : nil
-          v ||= cross || 'top'
+          # A Label's text sits at the centre of a taller box unless its
+          # gravity names the vertical axis (label_vertical); its horizontal
+          # default stays start.
+          v ||= cross || (label_node? ? 'center' : 'top')
           h ||= cross || 'leading'
           map = {
             %w[top leading] => '.topLeading',
@@ -356,6 +364,48 @@ module SjuiTools
             %w[bottom trailing] => '.bottomTrailing'
           }
           map[[v, h]]
+        end
+
+        def label_node?
+          JsonUIShared::TypeSynonyms.drawn_type(@component['type']) == 'Label'
+        end
+
+        # A Label's vertical text position in a box taller than the text: the
+        # vertical its gravity names (top, bottom, centerVertical / center),
+        # else centre — the canon's leafOwnFrameChannel default for "a text
+        # block smaller than its fixed box", as the web draws an omitted
+        # gravity. Until jsonui-cli 1.9.0 this depended on the frame's shape:
+        # a matchParent- or wrapContent-wide Label of height 44 was centred
+        # whatever its gravity (`top` and `bottom` did nothing), a 200 × 44 one
+        # put `left` / `right` at the top, and a matchParent × matchParent or
+        # min-height one with no gravity at the top (ConformanceHost, iOS 26.5).
+        def label_vertical
+          label_vertical_named || 'center'
+        end
+
+        # The vertical a Label's gravity names — 'top', 'bottom', 'center'
+        # (centerVertical / center) — or nil.
+        def label_vertical_named
+          gravity = @component['gravity']
+          return nil if gravity.nil?
+
+          parts = gravity.is_a?(Array) ? gravity.map(&:to_s) : gravity.to_s.split('|')
+          named = parts.map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') }.compact
+          return 'top' if named.include?('top')
+          return 'bottom' if named.include?('bottom')
+          return 'center' if (named & %w[center centervertical center_vertical]).any?
+
+          nil
+        end
+
+        # The alignment a height-only frame of a Label carries: `.top` /
+        # `.bottom`, or nil for centre (SwiftUI's default). Its horizontal half
+        # is the frame's own width, so it does not move the text sideways.
+        def label_vertical_alignment
+          case label_vertical
+          when 'top' then '.top'
+          when 'bottom' then '.bottom'
+          end
         end
 
         # A leaf that is not a Label: the axis its gravity does not name stays
@@ -387,25 +437,14 @@ module SjuiTools
 
         # Label/Text用: textAlignとgravityを組み合わせてframe alignmentを決定
         def label_frame_alignment(both_infinity: false)
-          gravity = @component['gravity']
           text_align = @component['textAlign']
 
-          # gravityから縦位置を取得
-          v = 'top'  # デフォルト
-          if gravity
-            gravities = if gravity.is_a?(Array)
-                          gravity.map { |g| JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity') }.compact
-                        else
-                          gravity.to_s.split('|').map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') }.compact
-                        end
-            gravities.each do |g|
-              case g
-              when 'centervertical', 'center_vertical' then v = 'center'
-              when 'bottom' then v = 'bottom'
-              when 'center' then v = 'center'
-              end
-            end
-          end
+          # The vertical position: in a frame that sizes the height
+          # (`both_infinity`, a min / max height bound) the Label rule —
+          # label_vertical; in one that sizes only the width it does not show,
+          # and the old `top` spelling is kept so those frames' text does not
+          # change.
+          v = both_infinity ? label_vertical : (label_vertical_named || 'top')
 
           # textAlignから横位置を取得
           h = case JsonUIShared::EnumSpelling.lowered(text_align, @component['type'], 'textAlign')

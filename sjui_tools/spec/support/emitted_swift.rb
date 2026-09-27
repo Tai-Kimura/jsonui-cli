@@ -77,6 +77,7 @@ module EmittedSwift
             insetLeading: CGFloat = 0,
             insetTrailing: CGFloat = 0,
             contentInsets: EdgeInsets? = nil,
+            fillsCrossAxis: Bool = false,
             @ViewBuilder content: @escaping () -> Content
         ) { self.content = content }
         var body: some View { content() }
