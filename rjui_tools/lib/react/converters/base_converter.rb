@@ -12,6 +12,7 @@ require_relative '../../core/attribute_validator'
 require_relative '../../core/binding_validator_core'
 require_relative '../../core/type_converter'
 require_relative '../../core/tap_accessibility'
+require_relative '../nested_taps'
 # The one escaper for an author's text in the generated TS/TSX.
 require_relative '../../core/string_literals'
 require_relative '../../core/bind_fold'
@@ -1342,18 +1343,27 @@ module RjuiTools
         # `window.open(…)`. The element's handler takes the event only for a
         # call that hands it on. An array of selectors (`calls` an Array) is a
         # block, one call or several.
+        #
+        # A tap inside another tap (NestedTaps) stops the click first, inside
+        # canTap's gate — a closed gate is no tap, and the click goes on to the
+        # tap around it — unless a call hands the handler the event: then the
+        # handler decides (jsonui-cli 1.9.1).
         def can_tap_gated_click(calls)
           block = calls.is_a?(Array)
           calls = Array(calls)
           value = attributes['canTap']
           return '' if value == false || value == 'false'
 
-          params = calls.any? { |c| c.include?('?.(e)') } ? '(e)' : '()'
+          hands_event = calls.any? { |c| c.include?('?.(e)') }
+          stop = json[NestedTaps::KEY] == true && !hands_event
+          params = hands_event || stop ? '(e)' : '()'
           statements = calls.map { |c| "#{c};" }.join(' ')
+          statements = "e.stopPropagation(); #{statements}" if stop
           if value.is_a?(String) && has_binding?(value)
             gate = extract_binding_property(value)
-            return " onClick={#{params} => { if (#{gate}) #{block && calls.size > 1 ? "{ #{statements} }" : statements} }}"
+            return " onClick={#{params} => { if (#{gate}) #{(block && calls.size > 1) || stop ? "{ #{statements} }" : statements} }}"
           end
+          return " onClick={#{params} => { #{statements} }}" if stop
 
           " onClick={#{params} => #{block ? "{ #{statements} }" : calls.first}}"
         end

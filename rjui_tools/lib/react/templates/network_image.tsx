@@ -38,8 +38,10 @@ interface NetworkImageProps {
   // (onClick binding, bound inline styles, testId/tag data attributes).
   // Every render branch forwards these on its root element so a declaration
   // that passes `jui build` can never fail tsc here
-  // (rjui-network-image-onclick-not-forwarded).
-  onClick?: () => void;
+  // (rjui-network-image-onclick-not-forwarded). It is handed the click: a
+  // tap inside another tap stops it there (BaseConverter#can_tap_gated_click,
+  // jsonui-cli 1.9.1); `() => void` is assignable to it as before.
+  onClick?: (e: React.MouseEvent<HTMLElement>) => void;
   // A tap the tap rule makes a button (BaseConverter#keyboard_tap_attrs):
   // its role, its tab stop and the keys that click it.
   role?: string;
