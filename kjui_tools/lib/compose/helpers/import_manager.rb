@@ -174,6 +174,10 @@ module KjuiTools
             # LazyColumn — "scrolls" is the whole contract, not virtualization.
             vertical_scroll: ["import androidx.compose.foundation.verticalScroll",
                               "import androidx.compose.foundation.rememberScrollState"],
+            # A flow's scrollTo (collection_component flow_scroll_code): the
+            # cells' places in the scrolled content, recorded as they are laid
+            # out.
+            on_globally_positioned: "import androidx.compose.ui.layout.onGloballyPositioned",
             # The matchParent flow arm: scroll decided by the parent's
             # constraints on the device, as the dynamic renderer decides it.
             box_with_constraints: ["import androidx.compose.foundation.layout.BoxWithConstraints",

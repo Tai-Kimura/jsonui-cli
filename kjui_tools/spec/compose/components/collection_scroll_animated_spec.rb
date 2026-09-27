@@ -36,8 +36,13 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
     code[/^( *)val (?:gridState|collectionStackState) = .*?\n\1LaunchedEffect\(.*?\n\1\}\n/m] or raise "no scroll block in\n#{code}"
   end
 
+  # The scroll the value asks for — the first call; since jsonui-cli 1.9.0 a
+  # centre / bottom anchor may follow it with a `scrollToItem` that corrects
+  # the offset once the item's own size is known (anchored_scroll_code).
   def calls(code)
-    scroll_block(code).scan(/\b(animateScrollToItem|scrollToItem)\(/).flatten
+    block = scroll_block(code)
+    main = block.lines.find { |l| l =~ /\b(animateScrollToItem|scrollToItem)\(index/ } or raise "no scroll call in\n#{block}"
+    main.scan(/\b(animateScrollToItem|scrollToItem)\(/).flatten
   end
 
   SCROLL_ANIMATED_PATHS.each_key do |path|
@@ -58,9 +63,16 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
 
   SCROLL_ANIMATED_STUBS = <<~KOTLIN
     annotation class Composable
-    class LayoutInfo { val viewportStartOffset: Int = 0; val viewportEndOffset: Int = 0 }
+    class ItemInfo(val index: Int, val size: Int)
+    class GridItemInfo(val index: Int, val size: IntSize)
+    class IntSize(val width: Int, val height: Int)
+    class LayoutInfo { val viewportStartOffset: Int = 0; val viewportEndOffset: Int = 0; val visibleItemsInfo = listOf<ItemInfo>() }
+    class GridLayoutInfo { val viewportStartOffset: Int = 0; val viewportEndOffset: Int = 0; val visibleItemsInfo = listOf<GridItemInfo>() }
+    class MutableState<T>(var value: T)
+    fun <T> mutableStateOf(value: T) = MutableState(value)
+    fun <T> remember(calculation: () -> T): T = calculation()
     class LazyGridState {
-        val layoutInfo = LayoutInfo()
+        val layoutInfo = GridLayoutInfo()
         suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) {}
         suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) {}
     }
