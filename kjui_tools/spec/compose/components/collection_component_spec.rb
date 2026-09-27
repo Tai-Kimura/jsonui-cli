@@ -136,13 +136,15 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           'items' => { 'name' => 'items', 'class' => 'CollectionDataSource', 'defaultValue' => {} }
         }
         non_null = described_class.generate(anchored, 0, Set.new)
-        expect(non_null).to include('val defaultAnchorCount = data.items.sections.firstOrNull()')
+        # Since jsonui-cli 1.9.0 the anchor counts the drawn sections' cells
+        # (default_scroll_anchor_code): the same decision, in that list.
+        expect(non_null).to include('val defaultAnchorCount = listOf(data.items.sections.getOrNull(0)')
 
         KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
           'items' => { 'name' => 'items', 'class' => 'CollectionDataSource' }
         }
         nullable = described_class.generate(anchored, 0, Set.new)
-        expect(nullable).to include('val defaultAnchorCount = data.items?.sections?.firstOrNull()')
+        expect(nullable).to include('val defaultAnchorCount = listOf(data.items?.sections.orEmpty().getOrNull(0)')
       end
     end
 
@@ -754,14 +756,18 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           )
         end
 
-        it 'scrolls to the last item for bottom' do
+        # The last / middle CELL, counted as scrollTo counts them, scrolled to
+        # as the lazy item that holds it (4f ruling 2026-09-27, round 11; the
+        # run arm is collection_scroll_to_cell_spec).
+        it 'scrolls to the last cell for bottom' do
           result = grid('bottom')
-          expect(result).to include('gridState.scrollToItem(defaultAnchorCount - 1)')
+          expect(result).to include('val cell = defaultAnchorCount - 1')
+          expect(result).to include('if (index >= 0) gridState.scrollToItem(index)')
           expect(result).to include('state = gridState')
         end
 
-        it 'scrolls to the middle item for center' do
-          expect(grid('center')).to include('gridState.scrollToItem(defaultAnchorCount / 2)')
+        it 'scrolls to the middle cell for center' do
+          expect(grid('center')).to include('val cell = defaultAnchorCount / 2')
         end
 
         # Keyed on the count, not Unit: the list is usually empty on the first
@@ -785,7 +791,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         it 'reuses the state scrollTo already created' do
           result = grid('bottom', 'scrollTo' => '@{scrollIndex}')
           expect(result.scan('val gridState = rememberLazyGridState()').length).to eq(1)
-          expect(result).to include('gridState.scrollToItem(defaultAnchorCount - 1)')
+          expect(result).to include('val cell = defaultAnchorCount - 1')
         end
 
         it 'applies on the CollectionStack path too' do
@@ -794,7 +800,8 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
               'defaultScrollAnchor' => 'bottom', 'sections' => [{ 'cell' => 'ItemCell' }] },
             0, required_imports
           )
-          expect(result).to include('collectionStackState.scrollToItem(defaultAnchorCount - 1)')
+          expect(result).to include('val cell = defaultAnchorCount - 1')
+          expect(result).to include('if (index >= 0) collectionStackState.scrollToItem(index)')
           expect(result).to include('lazyState = collectionStackState,')
         end
       end
@@ -809,27 +816,34 @@ end
 # both defaulted to `bottom` — as does the SSoT. Three against one, so the
 # outlier moved: this is a deliberate behaviour change for existing screens.
 RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
+  # A cell to scroll to: a Collection with none draws nothing and, since
+  # jsonui-cli 1.9.0, emits no scroll.
   let(:scrolling) do
-    { 'type' => 'Collection', 'items' => '@{items}', 'scrollTo' => '@{target}' }
+    { 'type' => 'Collection', 'items' => '@{items}', 'scrollTo' => '@{target}', 'cellClasses' => ['RowCell'] }
   end
 
+  # Since jsonui-cli 1.9.0 the offset takes the item's own size — bottom puts
+  # its end at the viewport's end, center its middle at the middle
+  # (anchored_scroll_code; 4f ruling 2026-09-27, round 11). It was the
+  # viewport or half of it, which put the item's top at the bottom edge.
   def anchor_lines(json)
     described_class.generate(json, 0, Set.new, nil)
-                   .lines.select { |l| l =~ /animateScrollToItem|scrollAnchorOffset/ }
+                   .lines.select { |l| l =~ /animateScrollToItem|scrollOffset|scrollViewport/ }
                    .map(&:strip).join(' ')
   end
 
   it 'anchors an undeclared scroll at the bottom, matching ios and web' do
-    expect(anchor_lines(scrolling)).to include('animateScrollToItem(index, scrollAnchorOffset)')
+    expect(anchor_lines(scrolling)).to include('animateScrollToItem(index, scrollOffset(scrollSize))')
     expect(anchor_lines(scrolling)).to include('viewportEndOffset')
+    expect(anchor_lines(scrolling)).to include('{ -(scrollViewport - it) }')
   end
 
   it 'lets an explicit top opt out of the offset entirely' do
     expect(anchor_lines(scrolling.merge('scrollAnchor' => 'top')))
-      .to eq('if (index >= 0) gridState.animateScrollToItem(index)')
+      .to eq('gridState.animateScrollToItem(index)')
   end
 
-  it 'halves the viewport for center' do
-    expect(anchor_lines(scrolling.merge('scrollAnchor' => 'center'))).to include('/ 2)')
+  it 'halves what the viewport has left beside the item for center' do
+    expect(anchor_lines(scrolling.merge('scrollAnchor' => 'center'))).to include('{ -(scrollViewport - it) / 2 }')
   end
 end

@@ -58,18 +58,23 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
     class Dp
     val Int.dp: Dp get() = Dp()
-    interface Alignment { companion object { val TopStart = object : Alignment {} } }
+    interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {} } }
     class Arrangement { companion object { fun spacedBy(space: Dp): Arrangement = Arrangement() } }
     object GridCells { class Fixed(val count: Int) }
     class GridItemSpan(val span: Int)
     class LazyGridItemSpanScope(val maxLineSpan: Int, val maxCurrentLineSpan: Int)
 
-    // What an item's content draws, and the items in the order they were emitted.
+    // What an item's content draws, the items in the order they were emitted
+    // (each 28 high — a header or footer 10), the scroll asked for, and what
+    // was logged.
     object Drawn {
         var mark = StringBuilder()
         fun draw(s: String) { mark.append(s) }
         val items = mutableListOf<String>()
+        fun sizeOf(item: String) = if (item == "H" || item == "F") 10 else 28
         var scrolledTo = -1
+        var offset = 0
+        val logs = mutableListOf<String>()
         val effects = mutableListOf<suspend () -> Unit>()
         fun record(content: () -> Unit) { mark = StringBuilder(); content(); items += mark.toString().ifEmpty { "_" } }
         // A lazy list's item keys, and one two items shared (Compose throws
@@ -78,13 +83,47 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         var duplicate: Any? = null
         fun key(key: ((Int) -> Any)?, count: Int) { key?.let { k -> repeat(count) { i -> k(i).let { if (!keys.add(it)) duplicate = it } } } }
     }
-    class LayoutInfo { val viewportStartOffset = 0; val viewportEndOffset = 100 }
-    class LazyState {
-        val layoutInfo = LayoutInfo()
-        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index }
-        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index }
+    // A composition's positional slots: what remember keeps and the keys a
+    // LaunchedEffect restarts on, across recompositions, as Compose keeps them.
+    object Composition {
+        val slots = mutableListOf<Any?>()
+        var cursor = 0
+        @Suppress("UNCHECKED_CAST")
+        fun <T> slot(init: () -> T): T {
+            if (cursor < slots.size) return slots[cursor++] as T
+            val value = init(); slots += value; cursor++; return value
+        }
     }
-    fun rememberLazyGridState() = LazyState()
+    class Keyed(var key: Any?, var value: Any?)
+    class MutableState<T>(var value: T)
+    fun <T> mutableStateOf(value: T) = MutableState(value)
+    fun <T> remember(calculation: () -> T): T = Composition.slot(calculation)
+    @Suppress("UNCHECKED_CAST")
+    fun <T> remember(key1: Any?, calculation: () -> T): T {
+        val slot = Composition.slot { Keyed(Any(), null) }
+        if (slot.key != key1) { slot.key = key1; slot.value = calculation() }
+        return slot.value as T
+    }
+    fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
+        val slot = Composition.slot { Keyed(Any(), null) }
+        if (slot.key != key1) { slot.key = key1; Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } } }
+    }
+    class ListItemInfo(val index: Int, val size: Int)
+    class ListLayoutInfo(val viewportStartOffset: Int, val viewportEndOffset: Int, val visibleItemsInfo: List<ListItemInfo>)
+    class LazyListState {
+        val layoutInfo get() = ListLayoutInfo(0, 100, Drawn.items.mapIndexed { i, item -> ListItemInfo(i, Drawn.sizeOf(item)) })
+        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+    }
+    class IntSize(val width: Int, val height: Int)
+    class GridItemInfo(val index: Int, val size: IntSize)
+    class GridLayoutInfo(val viewportStartOffset: Int, val viewportEndOffset: Int, val visibleItemsInfo: List<GridItemInfo>)
+    class LazyGridState {
+        val layoutInfo get() = GridLayoutInfo(0, 100, Drawn.items.mapIndexed { i, item -> GridItemInfo(i, IntSize(60, Drawn.sizeOf(item))) })
+        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+    }
+    fun rememberLazyGridState() = remember { LazyGridState() }
     class LazyGridScope {
         fun item(span: (LazyGridItemSpanScope.() -> GridItemSpan)? = null, content: () -> Unit) = Drawn.record(content)
         fun items(count: Int, key: ((Int) -> Any)? = null, span: (LazyGridItemSpanScope.(Int) -> GridItemSpan)? = null, itemContent: (Int) -> Unit) {
@@ -100,18 +139,14 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         }
     }
     fun LazyVerticalGrid(columns: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
-                         horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyState? = null,
+                         horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
                          content: LazyGridScope.() -> Unit) { LazyGridScope().content() }
     enum class CollectionStackMode { LAZY, EAGER, NONE }
     enum class CollectionStackAxis { VERTICAL, HORIZONTAL }
     fun CollectionStack(mode: CollectionStackMode, axis: CollectionStackAxis, modifier: Modifier = Modifier, spacing: Dp? = null,
-                        reverseLayout: Boolean = false, lazyState: LazyState? = null,
+                        reverseLayout: Boolean = false, lazyState: LazyListState? = null,
                         lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) { LazyListScope().lazyContent() }
     fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: () -> Unit) { content() }
-    fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
-        Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } }
-    }
-    inline fun <T> remember(key1: Any?, calculation: () -> T): T = calculation()
     inline fun <reified T : Any> viewModel(key: String? = null): T = T::class.java.getDeclaredConstructor().newInstance()
     class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
     class CollectionDataSection(
@@ -122,23 +157,71 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null, val target: String? = null, val cols: Int = 2)
+    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2)
+
+    // The pager composes each page in turn; the page it was asked for is the scroll.
+    class PagerState(val pageCount: () -> Int) {
+        val currentPage = 0
+        suspend fun animateScrollToPage(page: Int) { Drawn.scrolledTo = page }
+        suspend fun scrollToPage(page: Int) { Drawn.scrolledTo = page }
+    }
+    fun rememberPagerState(pageCount: () -> Int) = remember { PagerState(pageCount) }
+    fun HorizontalPager(state: PagerState, modifier: Modifier = Modifier, pageContent: (Int) -> Unit) {
+        repeat(state.pageCount()) { page -> Drawn.record { pageContent(page) } }
+    }
+
+    // The flow: a column of FlowRows. Each laid-out node is 28 below the one
+    // positioned before it, in composition order — the scrolled content
+    // first, then the cells — which is enough to say WHICH cell's place a
+    // scroll read; where Compose lays them out is the device arm's.
+    class FlowCoordinates(val y: Int) : androidx.compose.ui.layout.LayoutCoordinates {
+        override val isAttached = true
+        override val size = IntSize(60, 28)
+        override fun localPositionOf(sourceCoordinates: androidx.compose.ui.layout.LayoutCoordinates, relativeToSource: androidx.compose.ui.geometry.Offset) =
+            androidx.compose.ui.geometry.Offset(0f, ((sourceCoordinates as FlowCoordinates).y - y).toFloat())
+    }
+    object Positions { var next = 0 }
+    fun Modifier.onGloballyPositioned(onGloballyPositioned: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit): Modifier {
+        onGloballyPositioned(FlowCoordinates(Positions.next)); Positions.next += 28; return this
+    }
+    class ScrollState { val viewportSize = 100
+        suspend fun animateScrollTo(value: Int) { Drawn.scrolledTo = value }
+        suspend fun scrollTo(value: Int) { Drawn.scrolledTo = value } }
+    fun rememberScrollState() = remember { ScrollState() }
+    fun Modifier.verticalScroll(state: ScrollState): Modifier = this
+    fun Modifier.requiredHeight(height: Dp): Modifier = this
+    fun Modifier.wrapContentHeight(align: Alignment, unbounded: Boolean = false): Modifier = this
+    fun Column(modifier: Modifier = Modifier, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    fun FlowRow(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    fun key(vararg keys: Any?, block: () -> Unit) { block() }
   KOTLIN
 
-  # The two stubs a fully-qualified name reaches.
+  # The stubs a fully-qualified name reaches.
   KJ_SCROLL_QUALIFIED = {
-    'Lazy.kt' => "package androidx.compose.foundation.lazy\nfun rememberLazyListState() = stubs.LazyState()\n",
+    'Lazy.kt' => "package androidx.compose.foundation.lazy\nfun rememberLazyListState() = stubs.remember { stubs.LazyListState() }\n",
     # An enrichment that says it ran: "<key>_e".
     'CellIdGenerator.kt' => "package com.kotlinjsonui.utils\nobject CellIdGenerator {\n" \
                             "    fun enrichCellIds(data: List<Map<String, Any>>, primaryKey: String): List<Map<String, Any>> =\n" \
-                            "        data.map { it + (\"cellId\" to \"${it[primaryKey]}_e\") }\n}\n"
+                            "        data.map { it + (\"cellId\" to \"${it[primaryKey]}_e\") }\n}\n",
+    # A debuggable app, and what it logs.
+    'Platform.kt' => "package androidx.compose.ui.platform\nobject LocalContext { val current = android.content.Context() }\n",
+    'Context.kt' => "package android.content\nclass Context { val applicationInfo = android.content.pm.ApplicationInfo() }\n",
+    'ApplicationInfo.kt' => "package android.content.pm\nclass ApplicationInfo { var flags = FLAG_DEBUGGABLE\n    companion object { const val FLAG_DEBUGGABLE = 2 } }\n",
+    'Log.kt' => "package android.util\nobject Log { fun w(tag: String, msg: String): Int { stubs.Drawn.logs += msg; return 0 } }\n",
+    'Layout.kt' => "package androidx.compose.ui.layout\ninterface LayoutCoordinates { val isAttached: Boolean; val size: stubs.IntSize\n" \
+                   "    fun localPositionOf(sourceCoordinates: LayoutCoordinates, relativeToSource: androidx.compose.ui.geometry.Offset): androidx.compose.ui.geometry.Offset }\n",
+    'Geometry.kt' => "package androidx.compose.ui.geometry\nclass Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n"
   }.freeze
 
   # Section A: header, cells A0…A4 (keys k0…k4), footer; section B: header,
   # cells B0…B4 (keys k3 — shared with A — x1…x4). `grid: true` drops A's
   # footer and B's header, so a filler item ends A's part-filled row.
-  def data_sections(grid: false)
-    a = 'cells = CollectionDataSection.CellData("A", List(5) { mapOf<String, Any>("key" to "k$it") })'
+  def data_sections(grid: false, dup: false)
+    a = if dup
+          'cells = CollectionDataSection.CellData("A", listOf("k0", "k1", "k1", "k3", "k4").map { mapOf<String, Any>("key" to it) })'
+        else
+          'cells = CollectionDataSection.CellData("A", List(5) { mapOf<String, Any>("key" to "k$it") })'
+        end
     b = 'cells = CollectionDataSection.CellData("B", listOf("k3", "x1", "x2", "x3", "x4").map { mapOf<String, Any>("key" to it) })'
     edge = 'CollectionDataSection.HeaderFooterData("E", emptyMap())'
     return "listOf(CollectionDataSection(header = #{edge}, #{a}), CollectionDataSection(#{b}))" if grid
@@ -151,44 +234,77 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'sections' => [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell', 'header' => 'HCell' }] }.merge(extra)
   end
 
+  def pager_node(extra = {})
+    { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}', 'layout' => 'horizontal', 'paging' => true,
+      'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }.merge(extra)
+  end
+
   def grid_node(extra = {})
     node('columns' => 2, 'sections' => [{ 'cell' => 'ACell', 'header' => 'HCell' }, { 'cell' => 'BCell' }]).merge(extra)
   end
 
-  # route => [emitted body, grid data?, targets]
+  # route => [emitted body, data options, targets, first]: each target is a
+  # change from `first` (the value the Collection composes with, "" unless
+  # named); a nil first composes once, with the target.
   def routes
-    ints = %w[0 3 6 9 3#77]
-    keys = %w[k3 x2 k1 0#77 nothing]
+    # Integers are Int values; strings are Strings (the class decides what a
+    # value names, round 14).
+    ints = [0, 3, 6, 9, '3#77', -1]
+    keys = ['k3', 'x2', 'k1', '0#77', 'nothing', 3]
     {
-      'stack' => [emit(node), false, ints],
-      'stackReversed' => [emit(node('reverseLayout' => true)), false, ints],
-      'stackKeys' => [emit(node('cellIdProperty' => 'key')), false, keys],
-      'stackEnriched' => [emit(node('cellIdProperty' => 'key', 'autoChangeTrackingId' => true)), false, %w[k3_e x2_e k3]],
-      'grid' => [emit(grid_node), true, ints],
-      'gridReversed' => [emit(grid_node('reverseLayout' => true)), true, ints],
-      'gridBound' => [emit(grid_node('columns' => '@{cols}')), true, ints],
-      'gridKeys' => [emit(grid_node('cellIdProperty' => 'key')), true, keys],
+      'stack' => [emit(node), {}, ints],
+      'stackReversed' => [emit(node('reverseLayout' => true)), {}, ints],
+      'stackKeys' => [emit(node('cellIdProperty' => 'key')), {}, keys],
+      'stackEnriched' => [emit(node('cellIdProperty' => 'key', 'autoChangeTrackingId' => true)), {}, %w[k3_e x2_e k3]],
+      'stackCenter' => [emit(node('scrollAnchor' => 'center')), {}, [6]],
+      'stackTop' => [emit(node('scrollAnchor' => 'top')), {}, [6]],
+      'stackDupKeys' => [emit(node('cellIdProperty' => 'key')), { dup: true }, %w[k1 k3]],
+      'stackInitial' => [emit(node), {}, [6], nil],
+      'stackAnchor' => [emit(node('defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'stackAnchorCenter' => [emit(node('defaultScrollAnchor' => 'center')), {}, [''], nil],
+      'grid' => [emit(grid_node), { grid: true }, ints],
+      'gridReversed' => [emit(grid_node('reverseLayout' => true)), { grid: true }, ints],
+      'gridBound' => [emit(grid_node('columns' => '@{cols}')), { grid: true }, ints],
+      'gridKeys' => [emit(grid_node('cellIdProperty' => 'key')), { grid: true }, keys],
+      'gridDupKeys' => [emit(grid_node('cellIdProperty' => 'key')), { grid: true, dup: true }, %w[k1]],
+      'gridAnchor' => [emit(grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil],
       'classList' => [emit({ 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}', 'columns' => 2,
-                             'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'] }), true, %w[0 6]]
+                             'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'] }), { grid: true }, [0, 6]],
+      'pager' => [emit(pager_node), { grid: true }, [0, 6, 9, 10]],
+      'pagerKeys' => [emit(pager_node('cellIdProperty' => 'key')), { grid: true }, %w[k3 x2 0#77]],
+      'flow' => [emit(node('layout' => 'flow', 'height' => 100)), {}, [0, 6]],
+      'flowKeys' => [emit(node('layout' => 'flow', 'height' => 100, 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]]
     }
   end
 
   def program(routes)
     functions = routes.map { |name, (body, _, _)| "@Composable fun #{name}(data: Data, viewModel: Any) {\n#{body}\n}" }
-    calls = routes.flat_map do |name, (_, grid, targets)|
+    calls = routes.flat_map do |name, (_, options, targets, *first)|
+      first = first.empty? ? '' : first.first
       targets.map do |target|
-        "    run(\"#{name} #{target}\") { #{name}(Data(CollectionDataSource(#{data_sections(grid: grid)}), \"#{target}\"), Any()) }"
+        sections = data_sections(**options)
+        first_arg = first.nil? ? 'null' : "\"#{first}\""
+        target_arg = target.is_a?(Integer) ? target.to_s : "\"#{target}\""
+        "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value), Any()) }"
       end
     end
     ["import stubs.*\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
      functions.join("\n\n"),
      <<~KOTLIN
-       fun run(label: String, compose: () -> Unit) {
-           Drawn.items.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.keys.clear(); Drawn.duplicate = null
-           compose()
-           kotlinx.coroutines.runBlocking { Drawn.effects.forEach { it() } }
+       // One composition, then its effects — as a frame does.
+       fun frame(value: Any?, compose: (Any?) -> Unit) {
+           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0
+           compose(value)
+           val effects = Drawn.effects.toList(); Drawn.effects.clear()
+           kotlinx.coroutines.runBlocking { effects.forEach { it() } }
+       }
+       fun run(label: String, first: String?, target: Any?, compose: (Any?) -> Unit) {
+           Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Drawn.logs.clear(); Drawn.duplicate = null
+           if (first != null) frame(first, compose)
+           frame(target, compose)
            val at = Drawn.items.getOrNull(Drawn.scrolledTo) ?: "none"
-           println(label + " => " + at + " @" + Drawn.scrolledTo + " of " + Drawn.items.joinToString(" ") + " | duplicate key " + Drawn.duplicate)
+           println(label + " => " + at + " @" + Drawn.scrolledTo + " offset " + Drawn.offset + " logs " + Drawn.logs.size +
+               " of " + Drawn.items.joinToString(" ") + " | duplicate key " + Drawn.duplicate)
        }
        fun main() {
        #{calls.join("\n")}
@@ -198,8 +314,17 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
   end
 
   # Compiles and runs the program; `route target => item [@index of items]`.
+  # One compile and run per program: the examples read the same printout
+  # (a compile is ~40 s).
+  KJ_SCROLL_RUNS = {}
+
   def run_emitted(routes)
     skip "compile: #{KotlinCompiler.unavailable_reason}" if KotlinCompiler.unavailable_reason
+
+    KJ_SCROLL_RUNS[program(routes)] ||= compile_and_run(routes)
+  end
+
+  def compile_and_run(routes)
 
     stdlib = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
     coroutines = KotlinCompiler.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
@@ -224,16 +349,27 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
   end
 
   # One file, for the suite's compile ratchet (compile_as_kotlin compiles one
-  # source): the stubs in the file's own package, and the two names the emit
+  # source): the stubs in the file's own package, and the names the emit
   # writes fully qualified reached through stubs of the same simple name.
-  # The run arm below compiles the emit as it is, in four files.
+  # The run arm below compiles the emit as it is, in several files.
   def one_file(routes)
     program(routes).sub("import stubs.*\n", '')
                    .gsub('androidx.compose.foundation.lazy.rememberLazyListState()', 'rememberLazyListState()')
-                   .gsub('com.kotlinjsonui.utils.CellIdGenerator.', 'CellIdGenerator.') +
-      "\n" + KJ_SCROLL_STUBS.sub("package stubs\n", '') +
-      "fun rememberLazyListState() = LazyState()\n" +
-      KJ_SCROLL_QUALIFIED['CellIdGenerator.kt'].sub("package com.kotlinjsonui.utils\n", '')
+                   .gsub('com.kotlinjsonui.utils.CellIdGenerator.', 'CellIdGenerator.')
+                   .gsub('androidx.compose.ui.platform.LocalContext.', 'LocalContext.')
+                   .gsub('android.content.pm.ApplicationInfo.', 'ApplicationInfo.')
+                   .gsub('android.util.Log.', 'Log.')
+                   .gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
+                   .gsub('androidx.compose.ui.geometry.Offset', 'Offset') +
+      "\n" + KJ_SCROLL_STUBS.sub("package stubs\n", '').gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates').gsub('androidx.compose.ui.geometry.Offset', 'Offset') +
+      "fun rememberLazyListState() = remember { LazyListState() }\n" +
+      KJ_SCROLL_QUALIFIED['CellIdGenerator.kt'].sub("package com.kotlinjsonui.utils\n", '') +
+      "object LocalContext { val current = Context() }\nclass Context { val applicationInfo = ApplicationInfo() }\n" \
+      "class ApplicationInfo { var flags = FLAG_DEBUGGABLE\n    companion object { const val FLAG_DEBUGGABLE = 2 } }\n" \
+      "object Log { fun w(tag: String, msg: String): Int = 0 }\n" \
+      "interface LayoutCoordinates { val isAttached: Boolean; val size: IntSize\n" \
+      "    fun localPositionOf(sourceCoordinates: LayoutCoordinates, relativeToSource: Offset): Offset }\n" \
+      "class Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n"
   end
 
   it 'every route compiles (the compile arm; the run below compiles it again to run it)' do
@@ -244,30 +380,91 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     (lines[label] or raise "no run for #{label}: #{lines.keys.inspect}").split(' ').first
   end
 
+  # `route target` => { at:, index:, offset:, logs: }
+  def read(lines, label)
+    line = lines[label] or raise "no run for #{label}: #{lines.keys.inspect}"
+    at, index, offset, logs = line.match(/\A(\S+) @(-?\d+) offset (-?\d+) logs (\d+)/).captures
+    { at: at, index: index.to_i, offset: offset.to_i, logs: logs.to_i }
+  end
+
   it 'an Int is a cell counted across the sections; a key the first cell that has it, on the stack and the grid' do
     lines = run_emitted(routes)
     # The stack's items: H A0 A1 A2 A3 A4 F H B0 … — item 6 is F, item 3 A2.
-    %w[stack stackReversed].each do |route|
-      expect(%w[0 3 6 9 3#77].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B1 B4 A3]), lines.inspect
-    end
+    # The Ints are cells; -1 names none. The String "3#77" is no cell's key
+    # (key = cellId here, and no cell has one): the legacy lazy item 3, A2 on
+    # the stack (B2, reversed), and said.
+    expect([0, 3, 6, 9, '3#77', -1].map { |t| landed(lines, "stack #{t}") }).to eq(%w[A0 A3 B1 B4 A2 none]), lines.inspect
+    expect([0, 3, 6, 9, -1].map { |t| landed(lines, "stackReversed #{t}") }).to eq(%w[A0 A3 B1 B4 none]), lines.inspect
+    expect(read(lines, 'stack 3#77')[:logs]).to eq(1), lines.inspect
     # The grid's items: H A0 … A4 _ B0 … — A4 leaves its row part filled, so a
     # filler precedes B0; item 6 is the filler.
     %w[grid gridReversed gridBound].each do |route|
-      expect(%w[0 3 6 9 3#77].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B1 B4 A3]), lines.inspect
+      expect([0, 3, 6, 9, -1].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B1 B4 none]), lines.inspect
     end
     %w[stackKeys gridKeys].each do |route|
       # k3 is A3's key and B0's: the first section's. "0#77" is no key: read,
       # as before jsonui-cli 1.9.0, as the lazy item index — item 0, the
-      # header. "nothing" scrolls nowhere.
+      # header — and said (4f ruling, round 11). "nothing" scrolls nowhere.
       expect(%w[k3 x2 k1 0#77 nothing].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A3 B2 A1 H none]), lines.inspect
+      expect(%w[k3 0#77 nothing].map { |t| read(lines, "#{route} #{t}")[:logs] }).to eq([0, 1, 0]), lines.inspect
+      # An Int with cellIdProperty is the counted cell — A3 — not a key and
+      # not the lazy item 3 (A2) it was read as until jsonui-cli 1.9.0.
+      expect(read(lines, "#{route} 3").values_at(:at, :logs)).to eq(['A3', 0]), lines.inspect
     end
     # Under autoChangeTrackingId a cell's key is its enriched cellId.
     expect(%w[k3_e x2_e k3].map { |t| landed(lines, "stackEnriched #{t}") }).to eq(%w[A3 B2 none]), lines.inspect
-    # No two items of a lazy list share a key: section B's k3 is "1:k3" (a
-    # shared key took the list down in Compose once both items were composed).
-    expect(lines.select { |_, v| !v.end_with?('| duplicate key null') }).to eq({}), lines.inspect
     # The class-list grid: a header item, then every data section's cells,
     # each drawn with cellClasses[0] (so the second section's cell 1 is A1).
-    expect(%w[0 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A1 @7]]), lines.inspect
+    expect([0, 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A1 @7]]), lines.inspect
+  end
+
+  # Round 11 (4f ruling 2026-09-27).
+  it 'a scroll runs on a change: the value the list first composes with scrolls nowhere' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'stackInitial 6')[:index]).to eq(-1), lines.inspect
+    expect(read(lines, 'stack 6')[:at]).to eq('B1'), lines.inspect
+  end
+
+  it 'scrollAnchor lands the item: bottom its end at the viewport end, center its middle, top its start; reversed, top and bottom trade' do
+    lines = run_emitted(routes)
+    # A cell is 28 high in a 100 viewport.
+    expect(read(lines, 'stack 6')[:offset]).to eq(-72), lines.inspect        # bottom (the default)
+    expect(read(lines, 'grid 6')[:offset]).to eq(-72), lines.inspect
+    expect(read(lines, 'stackCenter 6')[:offset]).to eq(-36), lines.inspect
+    expect(read(lines, 'stackTop 6')[:offset]).to eq(0), lines.inspect
+    expect(read(lines, 'stackReversed 6')[:offset]).to eq(0), lines.inspect  # bottom, reversed: the list's start
+  end
+
+  it 'defaultScrollAnchor counts cells across the sections, as scrollTo does' do
+    lines = run_emitted(routes)
+    # Ten cells: bottom is the last, B4 (item 12, after H A0…A4 F H B0…B3);
+    # center the sixth, B0. The grid: B4 after its filler, item 11.
+    expect(read(lines, 'stackAnchor ').values_at(:at, :index)).to eq(['B4', 12]), lines.inspect
+    expect(read(lines, 'stackAnchorCenter ').values_at(:at, :index)).to eq(['B0', 8]), lines.inspect
+    expect(read(lines, 'gridAnchor ').values_at(:at, :index)).to eq(['B4', 11]), lines.inspect
+  end
+
+  it 'the pager and the flow scroll by the rule too (they read no scrollTo before 1.9.0)' do
+    lines = run_emitted(routes)
+    # A page is a cell: A0…A4 B0…B4. "10" names no page; "0#77" (no key) is
+    # the legacy item index, page 0, and is said.
+    expect([0, 6, 9, 10].map { |t| read(lines, "pager #{t}")[:index] }).to eq([0, 6, 9, -1]), lines.inspect
+    expect(%w[k3 x2 0#77].map { |t| read(lines, "pagerKeys #{t}").values_at(:index, :logs) }).to eq([[3, 0], [7, 0], [0, 1]]), lines.inspect
+    # The flow scrolls its own scroll state to the cell's place: the content
+    # at 0, cell n at 28 (n + 1) in the stubs' layout, bottom-anchored in a
+    # 100 viewport — 28 (n + 1) - 72 (k3 is A3, n 3; x2 is B2, n 7). A String that is no key names nothing
+    # on a flow (no lazy item).
+    expect([0, 6].map { |t| read(lines, "flow #{t}")[:index] }).to eq([0, 124]), lines.inspect
+    expect(%w[k3 x2 0#77].map { |t| read(lines, "flowKeys #{t}")[:index] }).to eq([40, 152, -1]), lines.inspect
+  end
+
+  it "no two items of a lazy list share a key — two sections', or two cells of one section" do
+    lines = run_emitted(routes)
+    # Section B's k3 is "1:k3"; section A's second k1 is "k1#2".
+    expect(lines.select { |_, v| !v.end_with?('| duplicate key null') }).to eq({}), lines.inspect
+    # The first cell with the key is still the one a key names.
+    expect(landed(lines, 'stackDupKeys k1')).to eq('A1'), lines.inspect
+    expect(landed(lines, 'stackDupKeys k3')).to eq('A3'), lines.inspect
+    expect(landed(lines, 'gridDupKeys k1')).to eq('A1'), lines.inspect
   end
 end
