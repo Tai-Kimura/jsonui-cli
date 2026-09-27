@@ -2472,7 +2472,8 @@ export interface FetchRecorder {
   unmatchedForeign(): string[];
   /** Requests an earlier row's view model started (a timer or task that
    * outlived its row) that landed in this row: not recorded above, answered
-   * 599 — as "METHOD path from <row>", in arrival order. */
+   * 599 — as "METHOD path from <row>", in arrival order. Always empty for an
+   * install without a row name, which tells no rows apart. */
   earlierRowCalls(): string[];
   restore(): void;
 }
@@ -2575,10 +2576,12 @@ let lastDeliveryAt = -Infinity;
  * import, so this file still loads where there is none (it is then null, and
  * rows cannot be told apart — reportEarlierRowCalls says so once).
  *
- * installFetchMock enters its row; a timer or a task a view model starts
- * carries that row with it, and a request it makes after its row ended is
- * told apart from the current row's own — so it cannot fail this row's
- * not-called / unexpectedOps, nor satisfy a call this row waits for.
+ * installFetchMock given a row name (a generated row) enters its row — one
+ * without a name enters nothing (see installFetchMock); a timer or a task a
+ * view model starts carries that row with it, and a request it makes after
+ * its row ended is told apart from the current row's own — so it cannot
+ * fail this row's not-called / unexpectedOps, nor satisfy a call this row
+ * waits for.
  * Measured before this (2026-09-26): row 1's view model posting 1 s after
  * its act turned row 2 red on "not-called … called 1 time(s)", and satisfied
  * row 2's `when` wait. What it cannot tell apart: a call an earlier row's
@@ -2654,7 +2657,20 @@ export function installFetchMock(
   const own = apiOrigins === null ? null : new Set(apiOrigins.map((o) => new URL(o).origin));
   const mine: Traffic = { inFlight: 0, lastActivityAt: realClock.now(), row, earlier: [] };
   traffic = mine;
-  rowContext?.enterWith(mine);
+  // Named — a generated row passes its name — the install enters its row, and
+  // a request started in another named install's row is that row's (below).
+  // Unnamed — a hand-written test calls installFetchMock(routes), as it did
+  // when there was no row argument — it is the one global mock it was then:
+  // it enters nothing, and answers every request from wherever it came.
+  // Entering it put the row where enterWith was called: in a helper after an
+  // await, that is the helper's continuation, and its caller kept the first
+  // install's row — its next request, to the install that replaced it, read
+  // as an earlier row's and was answered 599, not counted.
+  // When the two meet in one test: an unnamed install counts every request,
+  // a named install's row included; a named install after an unnamed one
+  // reads only named rows, and the unnamed one left none.
+  const isolated = row !== "";
+  if (isolated) rowContext?.enterWith(mine);
 
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url =
@@ -2667,7 +2683,7 @@ export function installFetchMock(
     // Started in an earlier row (a timer or task its view model left
     // behind): not this row's call. Not recorded, not counted by settle,
     // answered 599, and named at the end of this row (reportEarlierRowCalls).
-    const from = rowContext?.getStore() as Traffic | undefined;
+    const from = isolated ? (rowContext?.getStore() as Traffic | undefined) : undefined;
     if (from !== undefined && from !== mine) {
       const verb = (init?.method ?? (typeof input === "object" && input !== null && "method" in (input as object)
         ? (input as Request).method : "GET")).toUpperCase();
