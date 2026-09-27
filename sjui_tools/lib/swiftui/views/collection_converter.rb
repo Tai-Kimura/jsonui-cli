@@ -1577,18 +1577,9 @@ module SjuiTools
         def generate_default_scroll_anchor
           default_anchor = @component['defaultScrollAnchor']
           return unless default_anchor
-          if default_anchor.is_a?(String) && is_binding?(default_anchor)
-            prop = extract_property_name(default_anchor)
-            add_modifier_line ".defaultScrollAnchor(data.#{prop} == \"bottom\" ? .bottom : data.#{prop} == \"center\" ? .center : .top)"
-          else
-            anchor = case default_anchor
-                     when 'top' then '.top'
-                     when 'center' then '.center'
-                     when 'bottom' then '.bottom'
-                     else '.top'
-                     end
-            add_modifier_line ".defaultScrollAnchor(#{anchor})"
-          end
+
+          anchor = collection_default_scroll_anchor_swift_expr
+          add_modifier_line ".defaultScrollAnchor(#{anchor == 'nil' ? '.top' : anchor})"
         end
 
         def generate_scroll_reader_close
@@ -2702,10 +2693,12 @@ module SjuiTools
             "scrollDisabled: #{scroll_disabled_expr}"
           ]
 
-          if axis == :vertical
-            anchor_expr = collection_default_scroll_anchor_swift_expr
-            params << "defaultScrollAnchor: #{anchor_expr}" unless anchor_expr == 'nil'
-          else
+          # defaultScrollAnchor on both axes (4f ruling 2026-09-27): until
+          # jsonui-cli 1.9.0 a horizontal Collection's was not passed, and it
+          # started at its leading edge whatever the anchor said.
+          anchor_expr = collection_default_scroll_anchor_swift_expr
+          params << "defaultScrollAnchor: #{anchor_expr}" unless anchor_expr == 'nil'
+          unless axis == :vertical
             insets = @component['insets']
             inset_horizontal = (@component['insetHorizontal'] || 0).to_i
             inset_leading = insets.is_a?(Array) && insets.length == 4 ? insets[1].to_i : inset_horizontal
@@ -2722,18 +2715,23 @@ module SjuiTools
         end
 
         # defaultScrollAnchor expressed as a UnitPoint? Swift expression. Returns
-        # 'nil' when no anchor is configured.
+        # 'nil' when no anchor is configured. Along the scroll axis, as
+        # scrollAnchor (scroll_anchor_point): on a horizontal Collection top /
+        # center / bottom are `.leading` / `.center` / `.trailing` (4f ruling
+        # 2026-09-27) — `.top` / `.bottom` have x 0.5.
         def collection_default_scroll_anchor_swift_expr
           raw = @component['defaultScrollAnchor']
           return 'nil' unless raw
+
+          start, finish = horizontal_scroll? ? %w[.leading .trailing] : %w[.top .bottom]
           if raw.is_a?(String) && is_binding?(raw)
             prop = extract_binding_property(raw)
-            "data.#{prop} == \"bottom\" ? .bottom : data.#{prop} == \"center\" ? .center : .top"
+            "data.#{prop} == \"bottom\" ? #{finish} : data.#{prop} == \"center\" ? .center : #{start}"
           else
             case raw
-            when 'bottom' then '.bottom'
+            when 'bottom' then finish
             when 'center' then '.center'
-            when 'top' then '.top'
+            when 'top' then start
             else 'nil'
             end
           end
