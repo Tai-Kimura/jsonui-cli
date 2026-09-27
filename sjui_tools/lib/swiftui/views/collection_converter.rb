@@ -1258,17 +1258,7 @@ module SjuiTools
           return unless scroll_prop && property_name
 
           recv_var = key_scroll? ? 'cellId' : 'index'
-          is_optional = is_property_optional?(property_name)
-          lists =
-            if @component['sections'].is_a?(Array) && !@component['sections'].empty?
-              secs = is_optional ? "(data.#{property_name}?.sections ?? [])" : "data.#{property_name}.sections"
-              drawn = @component['sections'].each_with_index.select { |section, _| section.is_a?(Hash) && section['cell'] }.map(&:last)
-              drawn.map { |i| "(#{secs}.count > #{i} ? (#{secs}[#{i}].cells?.data ?? []) : [])" }
-            elsif legacy_items_list_element(property_name)
-              ["(#{legacy_array_cells_expr(property_name, is_optional)} ?? [])"]
-            else
-              [is_optional ? "(data.#{property_name}?.sections.first?.cells?.data ?? [])" : "(data.#{property_name}.sections.first?.cells?.data ?? [])"]
-            end
+          lists = drawn_cell_lists.map(&:last)
           add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
           indent do
             add_line 'var page = 0'
@@ -1527,9 +1517,22 @@ module SjuiTools
           has_scroll_to? && @component['cellIdProperty'].nil? && %w[String String?].include?(scroll_to_class)
         end
 
-        # A key-addressed scrollTo (a String): with cellIdProperty or as a cellId.
+        # What the value names is its declared class's (4f ruling 2026-09-27,
+        # round 14; the SSoT's Collection.scrollTo): a String is a key — the
+        # cellId, else the cellIdProperty value — anything else (an Int) a
+        # cell's place across the drawn sections. cellIdProperty decides what
+        # a key is, not what the value is. A value whose class is not
+        # declared is a String with cellIdProperty and an Int without, as
+        # before. Until jsonui-cli 1.9.0 cellIdProperty alone decided: an Int
+        # with cellIdProperty did not compile on the class-list List and the
+        # pager (`String? == Int`) and scrolled nowhere on the other routes.
         def key_scroll?
-          has_scroll_to? && (!@component['cellIdProperty'].nil? || cell_id_scroll?)
+          return false unless has_scroll_to?
+
+          cls = scroll_to_class
+          return %w[String String?].include?(cls) if cls && !cls.empty?
+
+          !@component['cellIdProperty'].nil?
         end
 
         # The value's match against `cell` (a cell's dictionary) where a route
@@ -1574,8 +1577,8 @@ module SjuiTools
           anchor = @component['scrollAnchor'] || 'bottom'
           scroll_animated = @component['scrollAnimated']
           recv_var = key_scroll? ? 'cellId' : 'index'
-          # `scrollTo` is declared as a PLAIN VALUE — `String` when
-          # `cellIdProperty` is set, `Int` otherwise. This used to emit
+          # `scrollTo` is declared as a PLAIN VALUE, its class what it names
+          # (key_scroll?: a String a key, an Int a place). This used to emit
           # `data.x.throttle(...)`, which only typechecks if the property is a
           # Combine publisher, so the attribute forced consumers to declare
           # `PassthroughSubject<Int, Never>` in their data section. The SSoT
@@ -1602,6 +1605,8 @@ module SjuiTools
             target = recv_var
             if @scroll_every_data_section
               emit_every_data_section_lookup(recv_var)
+              target = 'found'
+            elsif @component['cellIdProperty'] && !key_scroll? && emit_keyed_place_lookup(recv_var)
               target = 'found'
             end
             scroll_call = "scrollProxy.scrollTo(#{target}, anchor: .#{anchor})"
@@ -1660,6 +1665,68 @@ module SjuiTools
           end
           add_line '}'
           add_line 'guard let found else { return }'
+        end
+
+        # An Int on a Collection with cellIdProperty (4f round 14): its cells'
+        # loop ids are their keys, else their places (open_cell_foreach), so
+        # the value — a cell's place across the drawn sections — is looked up
+        # when it changes and the scroll goes to that cell's id (`found`),
+        # found by the loop's own rule: the key when no cell before it has
+        # it, else IndexPath(item:section:). The cells as each loop reads
+        # them (drawn_cell_lists; enriched first under autoChangeTrackingId).
+        # false when there is no data source to look in.
+        def emit_keyed_place_lookup(target)
+          lists = drawn_cell_lists
+          return false unless lists
+
+          if @component['autoChangeTrackingId'] == true
+            lists = lists.map do |j, cells|
+              [j, "#{cells}.reconfigured(cellIdProperty: \"#{@component['cellIdProperty']}\", autoChangeTrackingId: true)"]
+            end
+          end
+          add_line 'var found: AnyHashable? = nil'
+          add_line 'var place = 0'
+          add_line 'var seen = Set<String>()'
+          add_line "search: for (sectionIndex, cells) in [#{lists.map { |j, cells| "(#{j}, #{cells})" }.join(', ')}] {"
+          indent do
+            add_line 'for (cellIndex, cell) in cells.enumerated() {'
+            indent do
+              add_line "let key = #{cell_own_key_expr('cell')}"
+              add_line 'let first = key.map { seen.insert($0).inserted } ?? false'
+              add_line "if place == #{target} {"
+              indent do
+                add_line 'if let key, first { found = AnyHashable(key) } else { found = AnyHashable(IndexPath(item: cellIndex, section: sectionIndex)) }'
+                add_line 'break search'
+              end
+              add_line '}'
+              add_line 'place += 1'
+            end
+            add_line '}'
+          end
+          add_line '}'
+          add_line 'guard let found else { return }'
+          true
+        end
+
+        # The drawn cells, each list with the section number its loop draws
+        # it as (open_cell_foreach's `section_index`, 0 for one section):
+        # every declared section that names a cell, the data's own when it
+        # has that many; else the declared list's; else the first data
+        # section's. nil with no data source.
+        def drawn_cell_lists
+          property_name = extract_property_name(@component['items'])
+          return nil unless property_name
+
+          is_optional = is_property_optional?(property_name)
+          if @component['sections'].is_a?(Array) && !@component['sections'].empty?
+            secs = is_optional ? "(data.#{property_name}?.sections ?? [])" : "data.#{property_name}.sections"
+            @component['sections'].each_with_index.select { |section, _| section.is_a?(Hash) && section['cell'] }
+                                  .map { |_, i| [i, "(#{secs}.count > #{i} ? (#{secs}[#{i}].cells?.data ?? []) : [])"] }
+          elsif legacy_items_list_element(property_name)
+            [[0, "(#{legacy_array_cells_expr(property_name, is_optional)} ?? [])"]]
+          else
+            [[0, is_optional ? "(data.#{property_name}?.sections.first?.cells?.data ?? [])" : "(data.#{property_name}.sections.first?.cells?.data ?? [])"]]
+          end
         end
 
         # Open a ForEach block with appropriate identity strategy.
@@ -1752,21 +1819,34 @@ module SjuiTools
               return vars
             end
 
-            # With scrollTo, a cell's loop id is its scroll target: its key —
-            # unless an earlier drawn section has it (`earlierKeys`; the
-            # SSoT's Collection.scrollTo names the FIRST cell, in section
-            # order, whose key it is) — else its place, an IndexPath, which no
-            # value a scrollTo sends (a String, an Int) equals: a cell with no
-            # key has no key. Until jsonui-cli 1.9.0 the loop id of a cell
-            # with no key was "\(index)" ("<section>:\(index)" after the first
-            # section), so the String "3" reached the fourth cell of a
-            # section with no keys. The place counts the section too: the ids
-            # of the sections' sibling loops stay apart, as the "<section>:"
-            # prefix kept them (round 9).
-            own = cell_own_key_expr('cell.data')
-            key = earlier_keys ? "#{own}.flatMap { earlierKeys.contains($0) ? nil : AnyHashable($0) }" : "#{own}.map { AnyHashable($0) }"
-            place = "AnyHashable(IndexPath(item: cell.index, section: #{section_index.to_i}))"
-            add_line "ForEach(items.map { cell in (target: #{key} ?? #{place}, cell: cell) }, id: \\.target) { item in"
+            # With scrollTo, a cell's loop id is its scroll target: its key
+            # when no cell before it, in section order, has that key — no
+            # earlier drawn section (`earlierKeys`) and no earlier cell of its
+            # own section (the SSoT's Collection.scrollTo names the FIRST cell
+            # whose key it is) — else its place, an IndexPath, which no value
+            # a scrollTo sends (a String, an Int) equals: a cell with no key
+            # has no key, and a later cell with a key already taken is no
+            # scroll target. So no two cells share an id, and a String reaches
+            # the first cell with it by construction. Until jsonui-cli 1.9.0
+            # the loop id of a cell with no key was "\(index)"
+            # ("<section>:\(index)" after the first section), so the String
+            # "3" reached the fourth cell of a section with no keys (round
+            # 13); and two cells of one section with one key had one id, the
+            # view it named SwiftUI's choice (round 14). The place counts the
+            # section too: the ids of the sections' sibling loops stay apart,
+            # as the "<section>:" prefix kept them (round 9).
+            add_line 'let targets: [AnyHashable] = {'
+            indent do
+              add_line "var seen = #{earlier_keys ? 'earlierKeys' : 'Set<String>()'}"
+              add_line 'return items.map { cell in'
+              indent do
+                add_line "if let key = #{cell_own_key_expr('cell.data')}, seen.insert(key).inserted { return AnyHashable(key) }"
+                add_line "return AnyHashable(IndexPath(item: cell.index, section: #{section_index.to_i}))"
+              end
+              add_line '}'
+            end
+            add_line '}()'
+            add_line 'ForEach(zip(targets, items).map { pair in (target: pair.0, cell: pair.1) }, id: \\.target) { item in'
             indent { add_line 'let cell = item.cell' }
             vars
           elsif later

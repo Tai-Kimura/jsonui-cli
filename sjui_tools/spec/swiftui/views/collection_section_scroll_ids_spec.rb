@@ -47,11 +47,12 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
 
     # With scrollTo a cell's loop id is its scroll target (4f round 13): its
-    # key — a later section's only when no earlier drawn section has it (4f
-    # ruling 2026-09-27, round 10: scrollTo names the FIRST cell, in section
-    # order, whose key it is) — else its place, an IndexPath: a cell with no
-    # key has no key, and no value a scrollTo sends (a String, an Int) equals
-    # an IndexPath. Until jsonui-cli 1.9.0 a cell with no key had the loop id
+    # key when no cell before it in section order has it — no earlier drawn
+    # section (4f ruling 2026-09-27, round 10: scrollTo names the FIRST cell,
+    # in section order, whose key it is) and no earlier cell of its own
+    # section (round 14) — else its place, an IndexPath: a cell with no key
+    # has no key, and no value a scrollTo sends (a String, an Int) equals an
+    # IndexPath. Until jsonui-cli 1.9.0 a cell with no key had the loop id
     # "\(index)" ("<section>:\(index)" after section 0) and a later section's
     # cell its key as `.id` inside loop ids "<section>:<key>": on the codegen
     # host (iOS 26.5, ScrollRuleProbeUITests.testACellWithNoKeyAnswersNoKey)
@@ -63,21 +64,36 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
                                   'pager' => { 'layout' => 'horizontal', 'paging' => true })
     end
 
-    own = '((cell.data["cellId"] as? String) ?? (cell.data["key"] as? String))'
-    first = "ForEach(items.map { cell in (target: #{own}.map { AnyHashable($0) } ?? AnyHashable(IndexPath(item: cell.index, section: 0)), " \
-            'cell: cell) }, id: \\.target) { item in'
-    later = lambda do |s|
-      "ForEach(items.map { cell in (target: #{own}.flatMap { earlierKeys.contains($0) ? nil : AnyHashable($0) } ?? " \
-        "AnyHashable(IndexPath(item: cell.index, section: #{s})), cell: cell) }, id: \\.target) { item in"
+    # A section's targets: the cells' keys, each taken by the first cell
+    # that has it — `seen` starts from the earlier drawn sections' keys
+    # (`earlierKeys`) after section 0 — else the cells' places.
+    targets = lambda do |seen, s|
+      "let targets: [AnyHashable] = {\n" \
+        "#{'X'}var seen = #{seen}\n" \
+        "#{'X'}return items.map { cell in\n" \
+        "#{'XX'}if let key = ((cell.data[\"cellId\"] as? String) ?? (cell.data[\"key\"] as? String)), seen.insert(key).inserted { return AnyHashable(key) }\n" \
+        "#{'XX'}return AnyHashable(IndexPath(item: cell.index, section: #{s}))\n" \
+        "#{'X'}}\n" \
+        "}()\n" \
+        "ForEach(zip(targets, items).map { pair in (target: pair.0, cell: pair.1) }, id: \\.target) { item in\n" \
+        "#{'X'}let cell = item.cell\n"
+    end
+    # The block's text with its indentation read relative to the targets line.
+    def relative(block)
+      lines = block.lines
+      start = lines.index { |l| l.include?('let targets: [AnyHashable] = {') }
+      return '' unless start
+
+      base = lines[start][/\A */].size
+      lines[start, 9].map { |l| l.sub(/\A {#{base}}/, '').gsub(/\G {4}/, 'X') }.join
     end
 
-    it "with scrollTo, on every route a cell's loop id is its key, else its place; a later section's key only when no earlier section has it" do
+    it "with scrollTo, on every route a cell's loop id is its key, else its place — the key the first cell's in section order" do
       keyed_scroll_routes.each do |route, extra|
         b = blocks(convert(extra.merge('cellIdProperty' => 'key', 'scrollTo' => '@{target}')))
-        expect(b[0]).to include(first), route
-        expect(b[2]).to include(later.call(2)), route
-        expect(b[3]).to include(later.call(3)), route
-        [0, 2, 3].each { |s| expect(b[s]).to include("{ item in\n#{' ' * (b[s][/^( *)ForEach\(items\.map/, 1].size + 4)}let cell = item.cell\n"), "#{route} #{s}" }
+        expect(relative(b[0])).to eq(targets.call('Set<String>()', 0)), route
+        expect(relative(b[2])).to eq(targets.call('earlierKeys', 2)), route
+        expect(relative(b[3])).to eq(targets.call('earlierKeys', 3)), route
         # The earlier drawn sections' keys: 0 before section 2 (1 draws no
         # cell), 0 and 2 before 3 — keys only, a cell with no key adds none.
         keys = '.flatMap { ($0.cells?.data ?? []).compactMap { (($0["cellId"] as? String) ?? ($0["key"] as? String)) } })'
@@ -101,11 +117,29 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       end
     end
 
+    # Round 14: two cells of one section with one key. The first takes the
+    # key; the later is its place — no two views answer one id, and a String
+    # reaches the first by construction. Until jsonui-cli 1.9.0 both loop ids
+    # were the key, and which view a scrollTo reached was SwiftUI's choice
+    # (section 0: `(target: key.map { AnyHashable($0) } ?? place)`; after it
+    # the key unless `earlierKeys` had it).
+    it 'with scrollTo, a key already taken in its own section is no loop id: a later cell with it is its place' do
+      keyed_scroll_routes.each do |route, extra|
+        b = blocks(convert(extra.merge('cellIdProperty' => 'key', 'scrollTo' => '@{target}')))
+        [0, 2, 3].each do |s|
+          expect(b[s]).to include(', seen.insert(key).inserted { return AnyHashable(key) }'), "#{route} #{s}"
+          expect(b[s]).not_to include('.map { AnyHashable($0) }'), "#{route} #{s}"
+          expect(b[s]).not_to include('earlierKeys.contains('), "#{route} #{s}"
+        end
+      end
+    end
+
     it 'control: with no scrollTo, the loop ids are the IdentifiedCellItem ids as before, and there is no .id and no earlierKeys' do
       keyed_scroll_routes.each do |route, extra|
         code = convert(extra.merge('cellIdProperty' => 'key'))
         expect(code).to include('ForEach(items) { cell in'), route
         expect(code).not_to include('id: \\.target'), route
+        expect(code).not_to include('let targets'), route
         expect(code).not_to include('.id('), route
         expect(code).not_to include('earlierKeys'), route
       end
