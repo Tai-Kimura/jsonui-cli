@@ -906,6 +906,13 @@ def _find_data_orphans(
     jsonui-cli 1.9.0 only the root section was, so a layout keeping its data in a
     child — the usual hand-written form — was overwritten with nothing
     reported.
+
+    An `include` is not opened (layout_data.data_entries_with_includes is the
+    reader that does). A replacement does drop an include, and with it the
+    entries it brings, but that is the whole node going — the structural
+    change the prompt above already names — and the remedy printed here,
+    deleting the entry from this file's data section, is not one an entry
+    declared in the included file has.
     """
     import json as _json
     from ..core.layout_data import layout_data_entries

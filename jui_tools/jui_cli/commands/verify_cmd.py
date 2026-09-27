@@ -203,7 +203,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         # one too: its data section is still the spec's to declare.
         initial_values.extend(_initial_value_findings(
             sf, screen_spec, actual_path, Path(layouts_root), config_mgr.project_root,
-            strings=strings_table))
+            strings=strings_table, styles_root=config_mgr.styles_directory))
 
         # Skip specs whose layout is authored externally (layoutFile mode
         # with no components). Generating would produce an empty stub,
@@ -546,7 +546,9 @@ def _coverage_lines(coverage, require_coverage) -> list[str]:
 # The one wrapper every `jui` command reads — see core/spec_kind.py for why
 # there is exactly one.
 from ..core.spec_kind import describes_a_screen as _describes_a_screen  # noqa: E402
-from ..core.layout_data import initial_value_key, layout_data_entries  # noqa: E402
+from ..core.layout_data import (  # noqa: E402
+    data_entries_with_includes, initial_value_key, layout_data_entries,
+)
 
 #: The release from which `--fail-on-diff` counts an initial value a spec
 #: declares that its layout does not carry. Below it the lines are a WARNING
@@ -862,6 +864,14 @@ def _diff_data_section(
     Both sides are read wherever they declare `data` (core/layout_data): until
     jsonui-cli 1.9.0 only a root `data` section was, so a layout keeping its data in a
     child — the form hand-written layouts use — reported nothing.
+
+    An `include` is not opened here, unlike the initial-value check: the
+    question is this file's own data section against what regenerating it
+    writes, and an included layout's entries are in that layout's file — the
+    remedy printed with them ("remove it from the Layout JSON's data
+    section") is not one an entry the included file declares has. Following
+    includes would also report, and count under --fail-on-diff, every such
+    entry a spec does not list, which 1.9.0 did not.
     """
     gen_names = {e["name"] for e in layout_data_entries(generated)}
     orphans: list[tuple[str, str]] = []
@@ -875,7 +885,7 @@ def _diff_data_section(
 
 
 def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_root: Path,
-                            project_root: Path, strings=None) -> list[str]:
+                            project_root: Path, strings=None, *, styles_root: Path) -> list[str]:
     """One line per initial value a spec declares that its layout does not
     carry: the variable, both values, both files.
 
@@ -898,6 +908,14 @@ def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_r
     Until jsonui-cli 1.9.0 nothing compared them: `_diff_data_section` reads names, in
     one direction, and a value the spec declared and the layout dropped went
     unreported.
+
+    A layout's entries are read with its includes expanded, as sjui / kjui
+    build the Data type from them (layout_data.data_entries_with_includes): an
+    include's entry is there under the include id's prefix (`card` + `title`
+    -> `cardTitle`). Until jsonui-cli 1.9.1 an include was not opened, and a
+    spec declaring `cardTitle` was told the layout declares no such entry. An
+    include that cannot be expanded (its file missing or unparsable, or a
+    cycle) is left out, and a variable not found says which one was not read.
     """
     from ..core.spec_extractor import slot_layout_ref
 
@@ -943,9 +961,12 @@ def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_r
             layout = json.loads(Path(path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        entries: dict[str, list[dict]] = {}
-        for e in layout_data_entries(layout):
-            entries.setdefault(e["name"], []).append(e)
+        entries: dict[str, list[tuple[dict, str | None]]] = {}
+        read, unresolved = data_entries_with_includes(
+            layout, layouts_root=layouts_root, styles_root=styles_root, source=Path(path))
+        for e, declared_in in read:
+            entries.setdefault(e["name"], []).append((e, declared_in))
+        not_read = ", ".join(f"'{ref}' ({reason})" for ref, reason in unresolved)
         try:
             own = namespace_candidates(str(Path(path).resolve().relative_to(Path(layouts_root).resolve())))
         except ValueError:
@@ -955,11 +976,14 @@ def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_r
                     f"{shown(var.default, own)} — {rel(path)}")
             found = entries.get(var.name, [])
             if not found:
-                out.append(f"{head} declares no data entry '{var.name}'")
+                out.append(f"{head} declares no data entry '{var.name}'"
+                           + (f" — include(s) not read: {not_read}" if not_read else ""))
                 continue
-            for e in found:
+            for e, declared_in in found:
                 klass = e.get("class") or var.type
                 on = f" (platform {e['platform']})" if isinstance(e.get("platform"), str) else ""
+                if declared_in is not None:
+                    on += f" (in include '{declared_in}')"
                 if "defaultValue" not in e:
                     out.append(f"{head} gives it no defaultValue{on}")
                 elif not agree(var.default, e["defaultValue"], klass, own):
