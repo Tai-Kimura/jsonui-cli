@@ -1495,6 +1495,27 @@ module SjuiTools
           end
         end
 
+        # The scroll direction a horizontal Collection scrolls in: `layout` or
+        # `orientation` 'horizontal', or `horizontalScroll: true`.
+        def horizontal_scroll?
+          layout = @component['layout'] || @component['orientation'] || 'vertical'
+          layout == 'horizontal' || @component['horizontalScroll'] == true
+        end
+
+        # The UnitPoint scrollAnchor names, along the scroll axis (the SSoT's
+        # Collection.scrollAnchor: top — the target's leading edge at the
+        # viewport's; center — its middle at the middle; bottom, the default —
+        # its trailing edge at the trailing edge). A horizontal Collection's
+        # are `.leading` / `.center` / `.trailing` (4f ruling 2026-09-27). Until
+        # jsonui-cli 1.9.0 it was `.top` / `.bottom` there too, whose x is
+        # 0.5: every anchor put the target's middle at the viewport's middle.
+        def scroll_anchor_point
+          anchor = @component['scrollAnchor'] || 'bottom'
+          return anchor unless horizontal_scroll?
+
+          { 'top' => 'leading', 'center' => 'center', 'bottom' => 'trailing' }.fetch(anchor, anchor)
+        end
+
         # ScrollViewReader helpers for programmatic scrolling
         def has_scroll_to?
           @component['scrollTo'] != nil
@@ -1574,7 +1595,7 @@ module SjuiTools
           return unless has_scroll_to?
           scroll_prop = extract_property_name(@component['scrollTo'])
           return unless scroll_prop
-          anchor = @component['scrollAnchor'] || 'bottom'
+          anchor = scroll_anchor_point
           scroll_animated = @component['scrollAnimated']
           recv_var = key_scroll? ? 'cellId' : 'index'
           # `scrollTo` is declared as a PLAIN VALUE, its class what it names

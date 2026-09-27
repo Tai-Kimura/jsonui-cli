@@ -238,6 +238,35 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # scrollAnchor says where the target lands along the scroll axis (the SSoT's
+  # Collection.scrollAnchor): on a horizontal Collection, top / center /
+  # bottom are `.leading` / `.center` / `.trailing` (4f ruling 2026-09-27).
+  # Until jsonui-cli 1.9.0 they were `.top` / `.center` / `.bottom`, whose x
+  # is 0.5: every anchor put the target's middle at the viewport's middle —
+  # measured on the codegen host (ScrollRouteProbeUITests' seventh page).
+  describe "a horizontal Collection's scrollAnchor" do
+    it 'is the leading edge, the middle or the trailing edge along the scroll axis, on every horizontal spelling' do
+      spellings = { 'layout' => { 'layout' => 'horizontal' }, 'orientation' => { 'orientation' => 'horizontal' },
+                    'horizontalScroll' => { 'horizontalScroll' => true }, 'lanes' => { 'layout' => 'horizontal', 'columns' => 2 } }
+      spellings.each do |name, extra|
+        { 'top' => '.leading', 'center' => '.center', 'bottom' => '.trailing', nil => '.trailing' }.each do |anchor, point|
+          node = { 'sections' => [{ 'cell' => 'ACell' }] }.merge(extra)
+          node = node.merge('scrollAnchor' => anchor) if anchor
+          code, = emit(node, INT)
+          expect(code).to include("scrollProxy.scrollTo(index, anchor: #{point})"), "#{name} #{anchor.inspect}"
+          expect(code).not_to match(/anchor: \.(top|bottom)\b/), "#{name} #{anchor.inspect}"
+        end
+      end
+    end
+
+    it 'control: a vertical Collection keeps .top / .center / .bottom' do
+      { 'top' => '.top', 'center' => '.center', 'bottom' => '.bottom' }.each do |anchor, point|
+        code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'scrollAnchor' => anchor }, INT)
+        expect(code).to include("scrollProxy.scrollTo(index, anchor: #{point})"), anchor
+      end
+    end
+  end
+
   describe 'an Int with cellIdProperty: the declared class decides' do
     SECTIONED = { 'sections' => [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell' }] }.freeze
     KEYED = { 'cellIdProperty' => 'key' }.freeze

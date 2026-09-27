@@ -74,8 +74,11 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
 
   # The declarations tsc derives from the CollectionDataSource `rjui build`
   # writes (DataModelGenerator#generate_collection_data_source_typescript) —
-  # the type a data model gives a Collection's items.
+  # the type a data model gives a Collection's items. With no tsc here the
+  # example skips, as every tsc arm does (TypeScriptCompiler: recorded, never
+  # a pass); it called tsc directly and failed with ENOENT.
   def collection_data_source_declarations
+    skip "tsc: #{TypeScriptCompiler.unavailable_reason}" if TypeScriptCompiler.unavailable_reason
     require 'react/data_model_generator'
     source = RjuiTools::React::DataModelGenerator.allocate.send(:generate_collection_data_source_typescript)
     Dir.mktmpdir('rjui_cds') do |dir|

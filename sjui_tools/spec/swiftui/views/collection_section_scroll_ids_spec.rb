@@ -220,7 +220,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         code = convert(extra.merge(more).merge('scrollTo' => value))
         expect(code).to include('ScrollViewReader { scrollProxy in'), "#{route} #{name}"
         expect(code).to include(".onChange(of: data.#{value[2..-2]}) { _, #{name} in"), "#{route} #{name}"
-        expect(code).to include("scrollProxy.scrollTo(#{name}, anchor: .bottom)"), "#{route} #{name}"
+        # The default anchor, bottom: the trailing edge along the scroll axis.
+        anchor = route == 'horizontal' ? '.trailing' : '.bottom'
+        expect(code).to include("scrollProxy.scrollTo(#{name}, anchor: #{anchor})"), "#{route} #{name}"
         expect(code).not_to include('initial:'), "#{route} #{name}"
       end
     end
