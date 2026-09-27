@@ -50,8 +50,7 @@ module SjuiTools
       # expanded into this tree, so a partial's declarations resolve under
       # the includer's namespaces — matching the generated-view face.
       def process_json_file(json_file)
-        Helpers::StringManagerHelper.begin_layout(json_file)
-        super
+        Helpers::StringManagerHelper.for_layout(json_file) { super }
       end
 
       # Skip files with "mode": "uikit" (SwiftUI data models don't need UIKit-only files)

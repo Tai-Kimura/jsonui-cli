@@ -3,6 +3,12 @@
 require 'uikit/view_binding_handler_factory'
 
 RSpec.describe SjuiTools::UIKit::ViewBindingHandlerFactory do
+  # An unknown type loads the extension handlers once per process, from the
+  # working directory's tool tree: put the class back as found, so a later
+  # spec in another directory loads its own.
+  before(:context) { @kept = ProcessStateGuard.keep(described_class) }
+  after(:context) { ProcessStateGuard.put_back(@kept) }
+
   let(:binding_content) { [] }
   let(:reset_text_views) { {} }
   let(:reset_constraint_views) { {} }

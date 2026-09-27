@@ -59,6 +59,15 @@ RSpec.configure do |config|
   # example; a spec that sets the level inside an example still works.
   config.before { SjuiTools::Core::Logger.level = :info if defined?(SjuiTools::Core::Logger) }
 
+  # JsonUI::StageFailures is the stage ledger a build records into and
+  # `report!` writes; it lives as long as the process. Every spec file starts
+  # with an empty one, so no file's build reports what another file's
+  # recorded (spec/support/process_state_guard.rb names the ledger as reset
+  # here).
+  config.before(:context) do
+    JsonUI::StageFailures.clear! if self.class.superclass == RSpec::Core::ExampleGroup && defined?(JsonUI::StageFailures)
+  end
+
   # Filter configuration for slow tests
   config.filter_run_excluding slow: true unless ENV['RUN_SLOW_TESTS']
 
