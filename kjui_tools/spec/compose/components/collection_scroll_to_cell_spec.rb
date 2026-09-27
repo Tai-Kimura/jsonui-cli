@@ -61,7 +61,8 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {}
         val Bottom = object : Alignment { override fun toString() = "Bottom" }; val End = object : Alignment { override fun toString() = "End" } } }
     // What an arrangement packs to (null: the start), as the grid records it.
-    class Arrangement(val alignment: Alignment? = null) { companion object { fun spacedBy(space: Dp, alignment: Alignment? = null): Arrangement = Arrangement(alignment) } }
+    class Arrangement(val alignment: Alignment? = null) { companion object { fun spacedBy(space: Dp, alignment: Alignment? = null): Arrangement = Arrangement(alignment)
+        val Bottom = Arrangement(Alignment.Bottom) } }
     object GridCells { class Fixed(val count: Int) }
     class GridItemSpan(val span: Int)
     class LazyGridItemSpanScope(val maxLineSpan: Int, val maxCurrentLineSpan: Int)
@@ -155,8 +156,10 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     // up (CollectionStack's ReversedColumn, KotlinJsonUI 2.42.0): Positions.
     fun CollectionStack(mode: CollectionStackMode, axis: CollectionStackAxis, modifier: Modifier = Modifier, spacing: Dp? = null,
                         userScrollEnabled: Boolean = true, reverseLayout: Boolean = false, lazyState: LazyListState? = null,
-                        eagerScrollState: ScrollState? = null, lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
+                        eagerScrollState: ScrollState? = null, contentAtBottom: Boolean = false,
+                        lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
         Drawn.userScroll = userScrollEnabled
+        if (contentAtBottom) Drawn.packed = "Bottom"
         if (mode == CollectionStackMode.LAZY) LazyListScope().lazyContent()
         else { Positions.reversed = reverseLayout && axis == CollectionStackAxis.VERTICAL && mode == CollectionStackMode.EAGER; eagerContent() }
     }
@@ -348,7 +351,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'wrapBound' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}')), { mode: 'lazy' }, [6]],
       'wrapBoundNone' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}')), { mode: 'none' }, [6]],
       'gridReversedSpaced' => [emit(grid_node('reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]],
-      'gridSpaced' => [emit(grid_node('lineSpacing' => 4)), { grid: true }, [0]]
+      'gridSpaced' => [emit(grid_node('lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 14: not reversed, defaultScrollAnchor bottom — short content at the bottom.
+      'stackBottom' => [emit(node('defaultScrollAnchor' => 'bottom')), {}, [0]],
+      'stackBottomReversed' => [emit(node('defaultScrollAnchor' => 'bottom', 'reverseLayout' => true)), {}, [0]],
+      'gridBottom' => [emit(grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [0]],
+      'gridBottomSpaced' => [emit(grid_node('defaultScrollAnchor' => 'bottom', 'lineSpacing' => 4)), { grid: true }, [0]]
     }
   end
 
@@ -631,6 +639,17 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     lines = run_emitted(routes)
     expect(read(lines, 'gridReversedSpaced 0')[:packed]).to eq('Bottom'), lines.inspect
     expect(read(lines, 'gridSpaced 0')[:packed]).to eq('null'), lines.inspect
+  end
+
+  # Round 14 (4f ruling 2026-09-27).
+  it 'not reversed, defaultScrollAnchor bottom puts short content at the bottom — the stack and the grid' do
+    lines = run_emitted(routes)
+    %w[stackBottom gridBottom gridBottomSpaced].each do |route|
+      expect(read(lines, "#{route} 0")[:packed]).to eq('Bottom'), "#{route}: #{lines["#{route} 0"]}"
+    end
+    # A reversed stack packs to its bottom in the library already (reverseLayout).
+    expect(read(lines, 'stackBottomReversed 0')[:packed]).to eq('null'), lines.inspect
+    expect(read(lines, 'stack 0')[:packed]).to eq('null'), lines.inspect
   end
 
   it "no two items of a lazy list share a key — two sections', or two cells of one section" do

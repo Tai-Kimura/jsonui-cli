@@ -713,6 +713,13 @@ module KjuiTools
           json_data.key?('scrollEnabled') ? ", enabled = #{user_scroll_enabled_expr(json_data)}" : ''
         end
 
+        # A vertical list, not reversed, whose defaultScrollAnchor is bottom:
+        # content shorter than the list sits at its bottom, where iOS draws it
+        # (4f ruling 2026-09-27, round 14; it sat at the top).
+        def self.content_at_bottom?(json_data)
+          json_data['defaultScrollAnchor'] == 'bottom' && json_data['reverseLayout'] != true
+        end
+
         def self.default_scroll_anchor?(json_data, non_lazy: false)
           anchor = non_lazy ? (%w[center bottom].include?(json_data['defaultScrollAnchor'].to_s) || resting_default_anchor(json_data)) : resting_default_anchor(json_data)
           return false unless anchor
@@ -980,6 +987,12 @@ module KjuiTools
               required_imports&.add(:arrangement)
               code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(between)}),", depth + 1)
             end
+          elsif content_at_bottom?(json_data) && !line_spacing
+            required_imports&.add(:arrangement)
+            code += "\n" + indent("verticalArrangement = Arrangement.Bottom,", depth + 1)
+            if column_spacing
+              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(column_spacing)}),", depth + 1)
+            end
           elsif line_spacing || column_spacing
             required_imports&.add(:arrangement)
             # Vertical scroll: lineSpacing = vertical spacing between rows,
@@ -987,9 +1000,10 @@ module KjuiTools
             # A short reversed grid sits at its bottom — where iOS draws such a
             # list, bottom-anchored (4f ruling 2026-09-27, round 13). With no
             # spacing the grid's own default is already Bottom when reversed;
-            # spacedBy alone packed it to the top.
+            # spacedBy alone packed it to the top. Not reversed, defaultScrollAnchor
+            # bottom puts short content at the bottom too, as iOS draws it (round 14).
             if line_spacing
-              line_arg = json_data['reverseLayout'] == true ? ', Alignment.Bottom' : ''
+              line_arg = json_data['reverseLayout'] == true || content_at_bottom?(json_data) ? ', Alignment.Bottom' : ''
               required_imports&.add(:alignment) unless line_arg.empty?
               code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(line_spacing)}#{line_arg}),", depth + 1)
             end
@@ -2743,6 +2757,10 @@ module KjuiTools
           end
           if reverse_layout
             code += "\n" + indent("reverseLayout = true,", depth + 1)
+          end
+          if !is_horizontal && content_at_bottom?(json_data)
+            code += "\n" + indent("// Requires KotlinJsonUI >= 2.42.0 (CollectionStack contentAtBottom)", depth + 1)
+            code += "\n" + indent("contentAtBottom = true,", depth + 1)
           end
           if lazy_state
             code += "\n" + indent("lazyState = collectionStackState,", depth + 1)
