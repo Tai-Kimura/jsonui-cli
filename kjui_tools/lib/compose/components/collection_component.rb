@@ -185,24 +185,35 @@ module KjuiTools
         # section's cells when the row before is part filled (`gridLineFill`
         # in the grid body, whose arithmetic this repeats).
         #
-        # A value that names no cell scrolls nowhere, and a String is a cell
-        # only when it is some cell's key — with one exception, ruled
-        # (4f 2026-09-27, round 11): on a keyed Collection a String that is
-        # no cell's key and is `<digits>` or `<digits>#<anything>` is read as
-        # the legacy lazy item index, and a debuggable app is told so, with
-        # the migration (a key, or the cell index). The lazy routes read it
-        # (list, grid, pager — a page is its item); a flow has no lazy item,
-        # and there such a String scrolls nowhere, as on iOS and the web.
+        # The declared class decides what the value names (4f ruling
+        # 2026-09-27, round 14; the SSoT's Collection.scrollTo): a number is a
+        # cell's index, counted across the drawn sections, with or without
+        # cellIdProperty; a String is a cell's key — its `cellId`, else its
+        # cellIdProperty value when one is set — and the first cell, in section
+        # order, that has it. A cell with no key has none. The emit reads the
+        # value's runtime class (`is Number`), which is the declared one.
+        # Until jsonui-cli 1.9.0 kjui read every value as its text: with
+        # cellIdProperty an Int was looked up as a key first and then read as
+        # the lazy item index, never as a cell (round 11).
+        #
+        # A value that names no cell scrolls nowhere — with one exception, ruled
+        # (4f 2026-09-27, round 11): a String that is no cell's key and is
+        # `<digits>` or `<digits>#<anything>` is read as the legacy lazy item
+        # index, and a debuggable app is told so, with the migration (a key, or
+        # the cell index). The lazy routes read it (list, grid, pager — a page
+        # is its item); a flow has no lazy item, and there such a String
+        # scrolls nowhere, as on iOS and the web.
         #
         # The Kotlin lines of the effect after `raw`, ending in `val index`
         # (`val cell` on the flow route), or nil when the shape has nothing
-        # to scroll to (no items binding, no drawn section).
+        # to scroll to (no items binding, no drawn section). `prop` is the
+        # bound property.
         #   route :stack — the CollectionStack lazy content
         #   route :grid  — the LazyVerticalGrid / LazyHorizontalGrid sections
         #   route :class_list — the grid's class-list body (no sections)
         #   route :pager — the HorizontalPager: a page is a cell
         #   route :flow  — the FlowRow(s): the cell alone
-        def self.scroll_target_code(json_data, sections, depth, route:, grid_columns: nil, is_horizontal: false)
+        def self.scroll_target_code(json_data, sections, depth, prop:, route:, grid_columns: nil, is_horizontal: false)
           property_name = class_list_items_property(json_data)
           return nil unless property_name
 
@@ -210,23 +221,21 @@ module KjuiTools
           return nil unless lists
 
           cell_id_prop = scroll_cell_id_property(json_data)
+          key = cell_id_prop ? "((it[\"cellId\"] as? String) ?: (it[#{cell_id_prop.to_json}] as? String))" : '(it["cellId"] as? String)'
           lines = []
           add = ->(text) { lines << indent(text, depth + 1) }
           digits = 'raw.substringBefore("#").takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()'
-          legacy = cell_id_prop && route != :flow
-          if cell_id_prop
-            add.call("val cell = #{lists}.flatten().indexOfFirst { ((it[\"cellId\"] as? String) ?: (it[#{cell_id_prop.to_json}] as? String)) == raw }")
-            if legacy
-              id = JsonUIShared::StringLiterals.kotlin_body((json_data['id'] || '(unnamed)').to_s)
-              add.call("val legacyIndex = if (cell < 0) #{digits} else null")
-              add.call('if (cell < 0 && legacyIndex == null) return@LaunchedEffect')
-              add.call("if (legacyIndex != null && scrollToDebug) android.util.Log.w(\"Collection\", \"Collection #{id}: scrollTo \\\"$raw\\\" is no cell's key — read as the legacy lazy item index $legacyIndex. \" +")
-              add.call("    \"Scroll by a cell's key, or by its index among the cells (jsonui-cli 1.9.0, Collection.scrollTo).\")")
-            else
-              add.call('if (cell < 0) return@LaunchedEffect')
-            end
+          legacy = route != :flow
+          add.call("val scrollValue: Any? = data.#{prop}")
+          add.call("val cell = if (scrollValue is Number) scrollValue.toInt() else #{lists}.flatten().indexOfFirst { #{key} == raw }")
+          if legacy
+            id = JsonUIShared::StringLiterals.kotlin_body((json_data['id'] || '(unnamed)').to_s)
+            add.call("val legacyIndex = if (scrollValue !is Number && cell < 0) #{digits} else null")
+            add.call('if (cell < 0 && legacyIndex == null) return@LaunchedEffect')
+            add.call("if (legacyIndex != null && scrollToDebug) android.util.Log.w(\"Collection\", \"Collection #{id}: scrollTo \\\"$raw\\\" is no cell's key — read as the legacy lazy item index $legacyIndex. \" +")
+            add.call("    \"Scroll by a cell's key, or by its index among the cells (jsonui-cli 1.9.0, Collection.scrollTo).\")")
           else
-            add.call("val cell = #{digits} ?: return@LaunchedEffect")
+            add.call('if (cell < 0) return@LaunchedEffect')
           end
           return lines.join("\n") + "\n" if route == :flow
 
@@ -308,6 +317,7 @@ module KjuiTools
               add.call("if (cell < 0 || cell >= #{lists}.sumOf { it.size }) return@LaunchedEffect")
               add.call("val index = #{header}cell")
             else
+              add.call("if (legacyIndex == null && cell >= #{lists}.sumOf { it.size }) return@LaunchedEffect")
               add.call("val index = #{prefix}(#{header}cell)")
             end
             return lines.join("\n") + "\n"
@@ -369,13 +379,13 @@ module KjuiTools
           return '' unless raw_binding.is_a?(String) && (prop = raw_binding[/\A@\{([^}]+)\}\z/, 1])
 
           route = target == :grid ? (sections.any? ? :grid : :class_list) : target
-          resolution = scroll_target_code(json_data, sections, depth, route: route, grid_columns: grid_columns, is_horizontal: is_horizontal)
+          resolution = scroll_target_code(json_data, sections, depth, prop: prop, route: route, grid_columns: grid_columns, is_horizontal: is_horizontal)
           return '' unless resolution
 
           required_imports&.add(:remember_state)
           required_imports&.add(:launched_effect)
           code = indent('val scrollToArmed = remember { mutableStateOf(false) }', depth) + "\n"
-          if scroll_cell_id_property(json_data) && target != :flow
+          if target != :flow
             code += indent('val scrollToDebug = (androidx.compose.ui.platform.LocalContext.current.applicationInfo.flags and ' \
                            'android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0', depth) + "\n"
           end

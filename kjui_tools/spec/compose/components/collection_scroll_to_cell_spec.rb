@@ -157,7 +157,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null, val target: String? = null, val cols: Int = 2)
+    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2)
 
     // The pager composes each page in turn; the page it was asked for is the scroll.
     class PagerState(val pageCount: () -> Int) {
@@ -247,17 +247,19 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
   # change from `first` (the value the Collection composes with, "" unless
   # named); a nil first composes once, with the target.
   def routes
-    ints = %w[0 3 6 9 3#77 -1]
-    keys = %w[k3 x2 k1 0#77 nothing]
+    # Integers are Int values; strings are Strings (the class decides what a
+    # value names, round 14).
+    ints = [0, 3, 6, 9, '3#77', -1]
+    keys = ['k3', 'x2', 'k1', '0#77', 'nothing', 3]
     {
       'stack' => [emit(node), {}, ints],
       'stackReversed' => [emit(node('reverseLayout' => true)), {}, ints],
       'stackKeys' => [emit(node('cellIdProperty' => 'key')), {}, keys],
       'stackEnriched' => [emit(node('cellIdProperty' => 'key', 'autoChangeTrackingId' => true)), {}, %w[k3_e x2_e k3]],
-      'stackCenter' => [emit(node('scrollAnchor' => 'center')), {}, %w[6]],
-      'stackTop' => [emit(node('scrollAnchor' => 'top')), {}, %w[6]],
+      'stackCenter' => [emit(node('scrollAnchor' => 'center')), {}, [6]],
+      'stackTop' => [emit(node('scrollAnchor' => 'top')), {}, [6]],
       'stackDupKeys' => [emit(node('cellIdProperty' => 'key')), { dup: true }, %w[k1 k3]],
-      'stackInitial' => [emit(node), {}, %w[6], nil],
+      'stackInitial' => [emit(node), {}, [6], nil],
       'stackAnchor' => [emit(node('defaultScrollAnchor' => 'bottom')), {}, [''], nil],
       'stackAnchorCenter' => [emit(node('defaultScrollAnchor' => 'center')), {}, [''], nil],
       'grid' => [emit(grid_node), { grid: true }, ints],
@@ -267,10 +269,10 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'gridDupKeys' => [emit(grid_node('cellIdProperty' => 'key')), { grid: true, dup: true }, %w[k1]],
       'gridAnchor' => [emit(grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil],
       'classList' => [emit({ 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}', 'columns' => 2,
-                             'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'] }), { grid: true }, %w[0 6]],
-      'pager' => [emit(pager_node), { grid: true }, %w[0 6 9 10]],
+                             'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'] }), { grid: true }, [0, 6]],
+      'pager' => [emit(pager_node), { grid: true }, [0, 6, 9, 10]],
       'pagerKeys' => [emit(pager_node('cellIdProperty' => 'key')), { grid: true }, %w[k3 x2 0#77]],
-      'flow' => [emit(node('layout' => 'flow', 'height' => 100)), {}, %w[0 6]],
+      'flow' => [emit(node('layout' => 'flow', 'height' => 100)), {}, [0, 6]],
       'flowKeys' => [emit(node('layout' => 'flow', 'height' => 100, 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]]
     }
   end
@@ -282,20 +284,21 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       targets.map do |target|
         sections = data_sections(**options)
         first_arg = first.nil? ? 'null' : "\"#{first}\""
-        "    run(\"#{name} #{target}\", #{first_arg}, \"#{target}\") { value -> #{name}(Data(CollectionDataSource(#{sections}), value), Any()) }"
+        target_arg = target.is_a?(Integer) ? target.to_s : "\"#{target}\""
+        "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value), Any()) }"
       end
     end
     ["import stubs.*\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
      functions.join("\n\n"),
      <<~KOTLIN
        // One composition, then its effects — as a frame does.
-       fun frame(value: String, compose: (String) -> Unit) {
+       fun frame(value: Any?, compose: (Any?) -> Unit) {
            Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0
            compose(value)
            val effects = Drawn.effects.toList(); Drawn.effects.clear()
            kotlinx.coroutines.runBlocking { effects.forEach { it() } }
        }
-       fun run(label: String, first: String?, target: String, compose: (String) -> Unit) {
+       fun run(label: String, first: String?, target: Any?, compose: (Any?) -> Unit) {
            Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Drawn.logs.clear(); Drawn.duplicate = null
            if (first != null) frame(first, compose)
            frame(target, compose)
@@ -387,14 +390,16 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
   it 'an Int is a cell counted across the sections; a key the first cell that has it, on the stack and the grid' do
     lines = run_emitted(routes)
     # The stack's items: H A0 A1 A2 A3 A4 F H B0 … — item 6 is F, item 3 A2.
-    # "3#77" is the cell 3 (digits, a nonce); "-1" names no cell (read as a number it would be the header).
-    %w[stack stackReversed].each do |route|
-      expect(%w[0 3 6 9 3#77 -1].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B1 B4 A3 none]), lines.inspect
-    end
+    # The Ints are cells; -1 names none. The String "3#77" is no cell's key
+    # (key = cellId here, and no cell has one): the legacy lazy item 3, A2 on
+    # the stack (B2, reversed), and said.
+    expect([0, 3, 6, 9, '3#77', -1].map { |t| landed(lines, "stack #{t}") }).to eq(%w[A0 A3 B1 B4 A2 none]), lines.inspect
+    expect([0, 3, 6, 9, -1].map { |t| landed(lines, "stackReversed #{t}") }).to eq(%w[A0 A3 B1 B4 none]), lines.inspect
+    expect(read(lines, 'stack 3#77')[:logs]).to eq(1), lines.inspect
     # The grid's items: H A0 … A4 _ B0 … — A4 leaves its row part filled, so a
     # filler precedes B0; item 6 is the filler.
     %w[grid gridReversed gridBound].each do |route|
-      expect(%w[0 3 6 9 3#77 -1].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B1 B4 A3 none]), lines.inspect
+      expect([0, 3, 6, 9, -1].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B1 B4 none]), lines.inspect
     end
     %w[stackKeys gridKeys].each do |route|
       # k3 is A3's key and B0's: the first section's. "0#77" is no key: read,
@@ -402,12 +407,15 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       # header — and said (4f ruling, round 11). "nothing" scrolls nowhere.
       expect(%w[k3 x2 k1 0#77 nothing].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A3 B2 A1 H none]), lines.inspect
       expect(%w[k3 0#77 nothing].map { |t| read(lines, "#{route} #{t}")[:logs] }).to eq([0, 1, 0]), lines.inspect
+      # An Int with cellIdProperty is the counted cell — A3 — not a key and
+      # not the lazy item 3 (A2) it was read as until jsonui-cli 1.9.0.
+      expect(read(lines, "#{route} 3").values_at(:at, :logs)).to eq(['A3', 0]), lines.inspect
     end
     # Under autoChangeTrackingId a cell's key is its enriched cellId.
     expect(%w[k3_e x2_e k3].map { |t| landed(lines, "stackEnriched #{t}") }).to eq(%w[A3 B2 none]), lines.inspect
     # The class-list grid: a header item, then every data section's cells,
     # each drawn with cellClasses[0] (so the second section's cell 1 is A1).
-    expect(%w[0 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A1 @7]]), lines.inspect
+    expect([0, 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A1 @7]]), lines.inspect
   end
 
   # Round 11 (4f ruling 2026-09-27).
@@ -440,13 +448,13 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     lines = run_emitted(routes)
     # A page is a cell: A0…A4 B0…B4. "10" names no page; "0#77" (no key) is
     # the legacy item index, page 0, and is said.
-    expect(%w[0 6 9 10].map { |t| read(lines, "pager #{t}")[:index] }).to eq([0, 6, 9, -1]), lines.inspect
+    expect([0, 6, 9, 10].map { |t| read(lines, "pager #{t}")[:index] }).to eq([0, 6, 9, -1]), lines.inspect
     expect(%w[k3 x2 0#77].map { |t| read(lines, "pagerKeys #{t}").values_at(:index, :logs) }).to eq([[3, 0], [7, 0], [0, 1]]), lines.inspect
     # The flow scrolls its own scroll state to the cell's place: the content
     # at 0, cell n at 28 (n + 1) in the stubs' layout, bottom-anchored in a
     # 100 viewport — 28 (n + 1) - 72 (k3 is A3, n 3; x2 is B2, n 7). A String that is no key names nothing
     # on a flow (no lazy item).
-    expect(%w[0 6].map { |t| read(lines, "flow #{t}")[:index] }).to eq([0, 124]), lines.inspect
+    expect([0, 6].map { |t| read(lines, "flow #{t}")[:index] }).to eq([0, 124]), lines.inspect
     expect(%w[k3 x2 0#77].map { |t| read(lines, "flowKeys #{t}")[:index] }).to eq([40, 152, -1]), lines.inspect
   end
 

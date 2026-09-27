@@ -82,9 +82,19 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
         suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) {}
     }
     fun rememberLazyGridState(): LazyGridState = LazyGridState()
-    object androidx { object compose { object foundation { object lazy {
-        fun rememberLazyListState(): LazyListState = LazyListState()
-    } } } }
+    object androidx { object compose {
+        object foundation { object lazy {
+            fun rememberLazyListState(): LazyListState = LazyListState()
+        } }
+        // A debuggable app (the legacy reading is said in one, since 1.9.0).
+        object ui { object platform { object LocalContext { val current = Context() } } }
+    } }
+    class ApplicationInfo { val flags = 2 }
+    class Context { val applicationInfo = ApplicationInfo() }
+    object android {
+        object content { object pm { object ApplicationInfo { const val FLAG_DEBUGGABLE = 2 } } }
+        object util { object Log { fun w(tag: String, msg: String): Int = 0 } }
+    }
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     // The items the scroll resolves a cell in (jsonui-cli 1.9.0: scrollTo
     // names a cell, collection_scroll_to_cell_spec.rb).
