@@ -219,8 +219,8 @@ RSpec.describe 'kjui userInteractionEnabled reaches what is drawn in a composabl
             println("open=$open shut=${calls - open}")
         }
       KOTLIN
-      result = KotlinCompiler.run(source)
       skip("compile_as_kotlin: #{KotlinCompiler.unavailable_reason}") if KotlinCompiler.unavailable_reason
+      result = KotlinCompiler.run(source)
       expect(result.errors).to eq([])
       expect(result.output.strip).to eq('open=1 shut=0')
     end

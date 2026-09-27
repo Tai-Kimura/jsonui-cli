@@ -108,8 +108,20 @@ RSpec.describe 'bin/sjui and the Ruby floor (3.2)' do
     skip "#{system_ruby} is absent here" unless File.executable?(system_ruby)
     clean = { 'RUBYOPT' => nil, 'RUBYLIB' => nil, 'BUNDLE_GEMFILE' => nil, 'BUNDLE_BIN_PATH' => nil,
               'GEM_HOME' => nil, 'GEM_PATH' => nil, 'RBENV_VERSION' => nil }
-    facts, = Open3.capture2(clean, system_ruby, '-rrbconfig', '-e', 'print RUBY_VERSION, " ", RbConfig.ruby')
+    # Asked from an empty directory, as the entry is run. On CI's ubuntu-24.04
+    # (2026-09-27) the question asked from the tool's directory made the system
+    # ruby (3.2.3) load Bundler for the tool's Gemfile, fail on the gems it
+    # does not have and print nothing, while the entry run from an empty
+    # directory with the same environment did not. An answer that is not a
+    # version is a failed question, not a ruby below 3.2 — Gem::Version.new(nil)
+    # is 0, which ran the stop on a 3.2 ruby and failed there.
+    facts, said, asked = Dir.mktmpdir("#{tool}_ruby_version") do |dir|
+      Open3.capture3(clean, system_ruby, '-rrbconfig', '-e', 'print RUBY_VERSION, " ", RbConfig.ruby', chdir: dir)
+    end
     version, real_path = facts.split(' ', 2)
+    unless asked.success? && version.to_s.match?(/\A\d+\.\d+/)
+      raise "#{system_ruby} did not say its version (exit #{asked.exitstatus}, stdout #{facts.inspect}): #{said}"
+    end
     skip "#{system_ruby} is Ruby #{version}, not below 3.2" if Gem::Version.new(version) >= Gem::Version.new('3.2')
 
     stdout, stderr, status, dir = run_entry(system_ruby, env: clean, keep_rubyopt: false)
