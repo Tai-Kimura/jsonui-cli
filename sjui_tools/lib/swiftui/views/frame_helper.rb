@@ -334,6 +334,13 @@ module SjuiTools
         # node's own-frame alignment is its content channel (fit bitmap,
         # custom-component internals), which is not this ruling's subject.
         def container_content_node?
+          # A Collection lays out its cells, not `child`: it is a container
+          # (4f ruling 2026-09-27). Its frame fell to SwiftUI's `.center`, so
+          # a `lazy: none` column narrower than a matchParent Collection stood
+          # in the middle, and a bounded one in the middle of its height too,
+          # where the lazy route's cells start at the top leading corner.
+          return true if JsonUIShared::TypeSynonyms.drawn_type(@component['type']) == 'Collection'
+
           children = @component['child'] || @component['children']
           children.is_a?(Array) ? children.any? : !children.nil?
         end

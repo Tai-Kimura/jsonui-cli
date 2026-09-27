@@ -112,10 +112,21 @@ module EmittedSwift
   # `SwiftJsonUIConfiguration` is NOT here: swift_compiler.rb's own
   # `mock_types` already declares it, and a second declaration is a
   # redeclaration error rather than a harmless duplicate.
+  #
+  # `CollectionContentFit` (Classes/SwiftUI/CollectionContentFit.swift) wraps
+  # every scrolling Collection whose scroll-axis size is wrapContent or
+  # undeclared (4f ruling 2026-09-27), so most Collection emits touch it: the
+  # Layout as the library declares it, `init(axis:)` and nothing more.
   LIBRARY_STUBS = <<~SWIFT
     extension String {
         func localized(tableName: String? = nil, bundle: Bundle? = nil,
                        value: String? = nil, comment: String = "") -> String { self }
+    }
+    struct CollectionContentFit: Layout {
+        let axis: Axis
+        init(axis: Axis) { self.axis = axis }
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize { .zero }
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {}
     }
   SWIFT
 

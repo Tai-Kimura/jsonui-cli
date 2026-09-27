@@ -230,6 +230,16 @@ module SjuiTools
             return generated_code
           end
 
+          # A wrapContent (or undeclared) Collection sizes to its content along
+          # its scroll axis, up to its parent's bound (SwiftJsonUI's
+          # CollectionContentFit around the route's scroll container).
+          list_route = columns == 1 && !is_horizontal && !is_flow && (!has_sections || @component['listStyle'])
+          fit_axis = content_fit_axis(is_horizontal, list_route)
+          if fit_axis
+            add_line "CollectionContentFit(axis: .#{fit_axis}) {"
+            @indent_level += 1
+          end
+
           if is_flow
             # Flow layout - items wrap naturally based on content size. Its
             # cells carry their scroll ids already (open_cell_foreach,
@@ -599,6 +609,11 @@ module SjuiTools
             generate_scroll_reader_close
           end
 
+          if fit_axis
+            @indent_level -= 1
+            add_line "}"
+          end
+
           # scrollEnabled — emit .scrollDisabled(_:) (not .disabled(_:)) so a
           # dynamic toggle does not interrupt an in-flight pan / deceleration
           # and does not change the modifier chain shape.
@@ -799,6 +814,27 @@ module SjuiTools
         # separators, and neither overrides the other.
         def list_style_to_swiftui
           LIST_STYLES[JsonUIShared::EnumSpelling.lowered(@component['listStyle'], 'Collection', 'listStyle')] || LIST_STYLES['plain']
+        end
+
+        # The axis along which a scrolling Collection sizes to its content
+        # (4f ruling 2026-09-27, the user's "size to content"): its size on
+        # its scroll axis wrapContent, or undeclared — which sjui emits the
+        # same — and not weighted; not the pager, whose TabView is its pages,
+        # and not a List (`list_route`): a List reports no content height to
+        # size to (measured: CollectionContentFit drew it 0pt tall), so a
+        # wrapContent List still fills its parent. nil otherwise. The SSoT's wrapContent is "size to content, up to the
+        # parent's bound, then scroll", as web and Compose draw it; a SwiftUI
+        # ScrollView takes every point offered, so until jsonui-cli 1.9.0 a
+        # wrapContent Collection filled its parent (120 of a 120pt parent)
+        # and pushed the views after it to the parent's end.
+        def content_fit_axis(is_horizontal, list_route)
+          return nil if (is_horizontal && @component['paging']) || list_route
+
+          size = @component[is_horizontal ? 'width' : 'height']
+          return nil unless size.nil? || size == 'wrapContent'
+          return nil if @component['weight'] || @component[is_horizontal ? 'widthWeight' : 'heightWeight']
+
+          is_horizontal ? 'horizontal' : 'vertical'
         end
 
         # Non-lazy path: no ScrollView, no Lazy* containers. The Collection is

@@ -26,7 +26,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   it 'sections: a leading column spaced as the rows — lineSpacing, else itemSpacing, else 0' do
     [[{ 'lineSpacing' => 4, 'itemSpacing' => 9 }, 4], [{ 'itemSpacing' => 9 }, 9], [{}, 0]].each do |spacing, gap|
       code = grid(spacing.merge('sections' => EDGED_GRID_SECTIONS))
-      expect(code).to include("ScrollView(.vertical, showsIndicators: true) {\n    VStack(alignment: .leading, spacing: #{gap}) {"), spacing.inspect
+      # (Inside CollectionContentFit when the grid's height is wrapContent or
+      # undeclared, 4f ruling 2026-09-27 — hence any indentation.)
+      expect(code).to match(/ScrollView\(\.vertical, showsIndicators: true\) \{\n *VStack\(alignment: \.leading, spacing: #{gap}\) \{/), spacing.inspect
     end
   end
 
