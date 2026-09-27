@@ -64,7 +64,7 @@ module JsonUI
         { name: 'strikethrough', kind: :raw }.freeze,
         # Text content (can be data binding, supports interpolation). PLAIN TEXT: markdown is not interpreted, so "[label](/path)", "**bold**" and backticks render literally, brackets and all. To emphasise or link part of the string, use partialAttributes ('range' plus font/color/underline, and 'onClick' for a tappable span). Rendering real markdown is out of scope for Label — write a custom component.
         { name: 'text', kind: :string, bindable: true }.freeze,
-        # Text alignment (binding supported)
+        # Where the label's text sits across the label's own width: Left the start, Center the middle, Right the end (binding supported). Without textAlign, the horizontal part of gravity places it (left / right / centerHorizontal, center); without either, the start. Vertically the text sits at the vertical gravity names, else the middle (gravityDefaults -> leafOwnFrameChannel). (4f ruling 2026-09-27: the web draws it so from jsonui-cli 1.9.0; iOS and Compose did not: a 200 x 44 label with gravity right drew its text at the start on SwiftJsonUI Dynamic (measured) and on Compose (kjui's emit is the one it draws with no gravity), and a fixed-width label with neither in the middle on iOS (measured).)
         { name: 'textAlign', kind: :enum, bindable: true, values: ['Left', 'Center', 'Right', 'left', 'center', 'right'].freeze }.freeze,
         # Text shadow configuration [accepts: string | object]
         { name: 'textShadow', kind: :raw }.freeze,

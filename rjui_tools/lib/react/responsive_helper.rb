@@ -3,6 +3,7 @@
 require_relative '../core/responsive_resolver'
 require_relative 'tailwind_mapper'
 require_relative '../core/enum_spelling'
+require_relative '../core/type_synonyms'
 
 module RjuiTools
   module React
@@ -289,10 +290,21 @@ module RjuiTools
           base_gravity = component['gravity']
           return [] unless has_gravity || (overrides.key?('orientation') && base_gravity)
 
-          base_classes = TailwindMapper.map_gravity(base_gravity, component['orientation'])
-          effective_orientation = overrides['orientation'] || component['orientation']
           new_gravity = has_gravity ? overrides['gravity'] : base_gravity
-          new_classes = TailwindMapper.map_gravity(new_gravity, effective_orientation)
+          if label_row?(component)
+            # A single-run Label is a flex ROW and maps its gravity itself
+            # (TailwindMapper.map_label_gravity, with its textAlign): a size
+            # class's gravity has to land on the same axes. Until jsonui-cli
+            # 1.9.0 this mapped it as a column's, so a regular `right`
+            # pushed the text to the bottom inside the breakpoint.
+            text_align = overrides.key?('textAlign') ? overrides['textAlign'] : component['textAlign']
+            base_classes = TailwindMapper.map_label_gravity(base_gravity, component['textAlign'])
+            new_classes = TailwindMapper.map_label_gravity(new_gravity, text_align)
+          else
+            base_classes = TailwindMapper.map_gravity(base_gravity, component['orientation'])
+            effective_orientation = overrides['orientation'] || component['orientation']
+            new_classes = TailwindMapper.map_gravity(new_gravity, effective_orientation)
+          end
 
           # Classes identical to the base need no scoped re-emit — the
           # unprefixed base class already applies at every width.
@@ -305,6 +317,12 @@ module RjuiTools
           end
 
           classes
+        end
+
+        # A Label or Text: LabelConverter lays a single-run one out as a flex
+        # row and maps its gravity itself.
+        def label_row?(component)
+          %w[Label Text].include?(JsonUIShared::TypeSynonyms.drawn_type(component['type']))
         end
 
         def build_landscape_key(parsed)

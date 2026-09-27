@@ -16,7 +16,7 @@ require 'react/converters/view_converter'
 # `centerHorizontal` at the start. A container keeps TailwindMapper.map_gravity.
 #
 # The drawn arm is conformance/hosts/web/scripts/label_gravity_probe.mjs
-# (`npm run label-gravity-probe`).
+# (`npm run label-gravity-probe`, at 400px and at the regular 1100px).
 RSpec.describe RjuiTools::React::Converters::LabelConverter do
   def classes(extra)
     json = { 'type' => 'Label', 'id' => 'l', 'text' => 'Go', 'width' => 200, 'height' => 44 }.merge(extra)
@@ -52,6 +52,18 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
                           { 'use_tailwind' => true }).convert
     end
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript
+  end
+
+  # A size class's gravity replaces the base one on the same axes (the
+  # responsive override went through TailwindMapper.map_gravity, a column's
+  # mapping, until jsonui-cli 1.9.0: a regular `right` put the text at the
+  # bottom inside lg:, measured at 1100px).
+  it 'a responsive gravity maps onto the same row axes' do
+    json = { 'type' => 'Label', 'id' => 'l', 'text' => 'Go', 'width' => 200, 'height' => 44, 'gravity' => 'top',
+             'responsive' => { 'regular' => { 'gravity' => 'right' } } }
+    cls = described_class.new(json, { 'use_tailwind' => true }).convert[/className="([^"]*)"/, 1].split
+    expect(cls.select { |c| c.start_with?('lg:') }).to contain_exactly('lg:items-center', 'lg:justify-end')
+    expect(cls).to include('items-start')
   end
 
   it 'control: a container still maps gravity along its orientation' do
