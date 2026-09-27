@@ -330,9 +330,20 @@ module SjuiTools
             end
           end
 
-          # Build Alignment value
-          v ||= 'top'
-          h ||= 'leading'
+          # Build Alignment value. The axis a gravity does not name: a
+          # container's is the canon default (top | start); a LEAF's (a
+          # TextField, an Image — anything with no children, a Label aside)
+          # stays centred. A leaf's partial gravity fixes only its own axis:
+          # Compose and the web centre a TextField's and a Button's text
+          # vertically in a 44pt frame whatever the gravity (measured
+          # 2026-09-27; kjui's emit and the web's are the same for left,
+          # right, center and none). Until jsonui-cli 1.9.0 a leaf's `left`
+          # filled the vertical axis with `top`, and a TextField's text sat at
+          # the top of a 44pt frame (a Button's label is centred by
+          # StateAwareButtonView itself, before and after).
+          cross = centred_cross_axis? ? 'center' : nil
+          v ||= cross || 'top'
+          h ||= cross || 'leading'
           map = {
             %w[top leading] => '.topLeading',
             %w[top center] => '.top',
@@ -345,6 +356,17 @@ module SjuiTools
             %w[bottom trailing] => '.bottomTrailing'
           }
           map[[v, h]]
+        end
+
+        # A leaf that is not a Label: the axis its gravity does not name stays
+        # centred (gravity_to_frame_alignment). A Label is not in this rule —
+        # its text has its own channel (label_frame_alignment, textAlign), and
+        # where this method's caller reaches it (a frame of both sizes) it
+        # keeps what it drew.
+        def centred_cross_axis?
+          return false if container_content_node?
+
+          JsonUIShared::TypeSynonyms.drawn_type(@component['type']) != 'Label'
         end
 
         # True for a node whose content the codegen itself lays out — the
