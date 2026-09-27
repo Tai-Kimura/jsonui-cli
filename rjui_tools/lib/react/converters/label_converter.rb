@@ -328,6 +328,21 @@ module RjuiTools
           nil
         end
 
+        # A label maps its gravity itself (build_class_name): a single-run
+        # label is a flex row, not the column TailwindMapper.map_gravity
+        # assumes; a clamped or multi-run one is a block, where no flex class
+        # does anything.
+        def gravity_classes
+          []
+        end
+
+        # The gravity's tokens, lowered to their canonical spelling.
+        def label_gravity_tokens
+          gravity = attributes['gravity']
+          parts = gravity.is_a?(Array) ? gravity.map(&:to_s) : gravity.to_s.split('|')
+          parts.map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') || g.strip.downcase }
+        end
+
         def build_class_name
           classes = [super]
 
@@ -354,21 +369,24 @@ module RjuiTools
             # and vertical centering means nothing once the text wraps.
             classes << 'block'
           else
-            # Vertical/horizontal alignment with flex
-            # Default: vertically centered. gravity overrides vertical, textAlign overrides horizontal.
+            # A single-run label is a flex ROW: `items-*` is its vertical,
+            # `justify-*` its horizontal. The vertical is the one gravity names
+            # (top / bottom / centerVertical, center), else the middle — the
+            # canon's leafOwnFrameChannel default. The horizontal is
+            # textAlign's, else the one gravity names (left / right /
+            # centerHorizontal, center), else the start. Until jsonui-cli
+            # 1.9.0 the base converter also mapped gravity as a COLUMN's
+            # (`justify-*` its vertical, `items-*` its horizontal) onto this
+            # row, so `right` drew the text at the bottom, `bottom` at the
+            # bottom end, and `centerVertical` / `center` in the middle
+            # across as well (measured in Chromium, a 44px-tall label) —
+            # gravity_classes below keeps that mapping off.
             classes << 'flex'
-            if attributes['gravity']
-              gravity_str = attributes['gravity'].is_a?(Array) ? attributes['gravity'].join('|') : attributes['gravity'].to_s
-              if gravity_str.include?('top')
-                classes << 'items-start'
-              elsif gravity_str.include?('bottom')
-                classes << 'items-end'
-              else
-                classes << 'items-center'
-              end
-            else
-              classes << 'items-center'
-            end
+            tokens = label_gravity_tokens
+            classes << if tokens.include?('top') then 'items-start'
+                       elsif tokens.include?('bottom') then 'items-end'
+                       else 'items-center'
+                       end
 
             # textAlign → justify-* for horizontal alignment within flex
             case JsonUIShared::EnumSpelling.lowered(attributes['textAlign'], 'Label', 'textAlign')
@@ -378,6 +396,11 @@ module RjuiTools
               classes << 'justify-end'
             when 'left'
               classes << 'justify-start'
+            else
+              if (tokens & %w[centerhorizontal center_horizontal center]).any? then classes << 'justify-center'
+              elsif tokens.include?('right') || tokens.include?('end') then classes << 'justify-end'
+              elsif tokens.include?('left') || tokens.include?('start') then classes << 'justify-start'
+              end
             end
           end
 

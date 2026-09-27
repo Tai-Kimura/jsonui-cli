@@ -117,7 +117,9 @@ module EmittedSwift
   # `CollectionContentFit` (Classes/SwiftUI/CollectionContentFit.swift) wraps
   # every scrolling Collection whose scroll-axis size is wrapContent or
   # undeclared (4f ruling 2026-09-27), so most Collection emits touch it: the
-  # Layout as the library declares it, `init(axis:)` and nothing more.
+  # Layout as the library declares it, `init(axis:along:across:)` (SwiftJsonUI
+  # 10.29.0; `across` fits a horizontal row's wrapContent height) and nothing
+  # more.
   LIBRARY_STUBS = <<~SWIFT
     extension String {
         func localized(tableName: String? = nil, bundle: Bundle? = nil,
@@ -125,7 +127,7 @@ module EmittedSwift
     }
     struct CollectionContentFit: Layout {
         let axis: Axis
-        init(axis: Axis) { self.axis = axis }
+        init(axis: Axis, along: Bool = true, across: Bool = false) { self.axis = axis }
         func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize { .zero }
         func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {}
     }

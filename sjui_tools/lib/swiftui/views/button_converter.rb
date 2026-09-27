@@ -41,6 +41,7 @@ module SjuiTools
           # `image:` / `imageTint:` are new parameters, so generated output
           # for an icon button does not compile against an older library.
           add_line '// Requires SwiftJsonUI >= 10.9.0 (Button image)' if has_image
+          add_line '// Requires SwiftJsonUI >= 10.29.0 (Button textAlignment)' if button_text_alignment
           add_line "StateAwareButtonView("
           indent do
             # Process text with binding support
@@ -326,6 +327,15 @@ module SjuiTools
               add_line "imageTint: #{get_swiftui_color(image_tint)}," if image_tint
             end
 
+            # textAlign places the label across the button (the SSoT: a
+            # Button's text is placed horizontally by textAlign alone, default
+            # centre; 4f ruling 2026-09-27). The environment modifier below
+            # aligns the lines of a multi-line label but not the label in the
+            # button's frame, so until jsonui-cli 1.9.0 `Left` and `Right`
+            # stood in the middle. The last parameter, after image/imageTint.
+            button_alignment = button_text_alignment
+            add_line "textAlignment: #{button_alignment}," if button_alignment
+
             # Remove trailing comma from last parameter
             if @generated_code.last&.end_with?(',')
               @generated_code[-1] = @generated_code.last.chomp(',')
@@ -410,6 +420,16 @@ module SjuiTools
             '.borderless'
           else
             '.automatic'
+          end
+        end
+
+        # `.leading` / `.trailing` for textAlign Left / Right (any case),
+        # nil for Center or none — StateAwareButtonView's default is the
+        # centre.
+        def button_text_alignment
+          case @component['textAlign'].to_s.strip.downcase
+          when 'left' then '.leading'
+          when 'right' then '.trailing'
           end
         end
       end

@@ -58,9 +58,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   it 'control: a bound or weighted axis, the pager, a List and lazy: none keep their container as it was' do
+    # The horizontal row declares its height: an undeclared one fits across
+    # (row_cross_fit_spec.rb, jsonui-cli 1.9.0).
     shapes = {
       'height 120' => SECTIONS.merge('height' => 120), 'matchParent' => SECTIONS.merge('height' => 'matchParent'),
-      'weight' => SECTIONS.merge('weight' => 1), 'bound horizontal' => SECTIONS.merge('layout' => 'horizontal', 'width' => 'matchParent'),
+      'weight' => SECTIONS.merge('weight' => 1), 'bound horizontal' => SECTIONS.merge('layout' => 'horizontal', 'width' => 'matchParent', 'height' => 40),
       'pager' => SECTIONS.merge('layout' => 'horizontal', 'paging' => true, 'width' => nil),
       'class-list List' => { 'cellClasses' => ['ACell'] }, 'sectioned List' => SECTIONS.merge('listStyle' => 'plain'),
       'lazy none' => SECTIONS.merge('lazy' => 'none')

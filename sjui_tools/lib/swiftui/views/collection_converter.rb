@@ -235,8 +235,13 @@ module SjuiTools
           # CollectionContentFit around the route's scroll container).
           list_route = columns == 1 && !is_horizontal && !is_flow && (!has_sections || @component['listStyle'])
           fit_axis = content_fit_axis(is_horizontal, list_route)
-          if fit_axis
-            add_line "CollectionContentFit(axis: .#{fit_axis}) {"
+          fit_across = content_fit_across?(is_horizontal, list_route)
+          if fit_axis || fit_across
+            fit_args = ["axis: .#{is_horizontal ? 'horizontal' : 'vertical'}"]
+            fit_args << 'along: false' unless fit_axis
+            fit_args << 'across: true' if fit_across
+            add_line '// Requires SwiftJsonUI >= 10.29.0 (CollectionContentFit across)' if fit_across
+            add_line "CollectionContentFit(#{fit_args.join(', ')}) {"
             @indent_level += 1
           end
 
@@ -609,7 +614,7 @@ module SjuiTools
             generate_scroll_reader_close
           end
 
-          if fit_axis
+          if fit_axis || fit_across
             @indent_level -= 1
             add_line "}"
           end
@@ -835,6 +840,22 @@ module SjuiTools
           return nil if @component['weight'] || @component[is_horizontal ? 'widthWeight' : 'heightWeight']
 
           is_horizontal ? 'horizontal' : 'vertical'
+        end
+
+        # A horizontal scrolling Collection of wrapContent (or undeclared)
+        # height is its cells' height, capped by its parent — across its
+        # scroll axis, as content_fit_axis sizes it along (4f 2026-09-27:
+        # the SSoT's wrapContent is "size to content"). A LazyHStack takes
+        # the height it is offered, so until jsonui-cli 1.9.0 such a row filled
+        # its parent (120 of a 120pt parent) where the eager row was its
+        # cells' 28. Not the pager; not a height a weighted or `distribution:
+        # fill` vertical parent gave it (they have made it matchParent).
+        def content_fit_across?(is_horizontal, list_route)
+          return false unless is_horizontal
+          return false if @component['paging'] || list_route
+
+          height = @component['height']
+          (height.nil? || height == 'wrapContent') && !@component['heightWeight']
         end
 
         # Non-lazy path: no ScrollView, no Lazy* containers. The Collection is
@@ -2637,23 +2658,43 @@ module SjuiTools
           "EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
         end
 
-        # `[t, l, b, r]` from either the array form or UIKit's pipe-separated
-        # string form, or nil when the value is not usable. A short array is
-        # padded the way SJUICollectionView pads it (1 value = all sides,
-        # 2 = vertical/horizontal) rather than being dropped.
+        # The declared insets as `[top, leading, bottom, trailing]` — the order
+        # every caller here destructures — or nil when the value pads nothing.
+        #
+        # The SSoT (Collection.insets, jsonui-cli 1.9.0) reads it as `paddings`
+        # reads them: 1, 2 or 4 values, an array or a string separated by `|`;
+        # one, every side; two, [vertical, horizontal]; four, [top, right,
+        # bottom, left] (right the end, left the start); any other value pads
+        # nothing. SwiftJsonUI Dynamic and both Compose paths read it so. Until
+        # jsonui-cli 1.9.0 this read four as [top, left, bottom, right], so
+        # `insets: [0, 30, 0, 0]` put the cells 30pt in from the start here and
+        # at the start on Dynamic, and it read a value it could not parse as 0
+        # rather than as nothing.
         def collection_insets_array(value)
           parts = case value
                   when Array then value
-                  when String then value.split('|')
+                  when String then value.split('|', -1)
                   else return nil
                   end
-          nums = parts.map { |v| v.to_s.strip }.reject(&:empty?).map(&:to_i)
+          nums = parts.map { |v| inset_number(v) }
+          return nil if nums.empty? || nums.any?(&:nil?)
+
           case nums.length
-          when 4 then nums
+          when 4 then [nums[0], nums[3], nums[2], nums[1]]
           when 2 then [nums[0], nums[1], nums[0], nums[1]]
           when 1 then [nums[0]] * 4
-          else nil
           end
+        end
+
+        # One inset value: a number, or a string that is one; else nil.
+        def inset_number(value)
+          number = case value
+                   when Numeric then value
+                   when String then Float(value.strip, exception: false)
+                   end
+          return nil if number.nil? || !number.finite?
+
+          number == number.to_i ? number.to_i : number
         end
 
         # itemWeight is folded into the COLUMN COUNT (columns_info /
@@ -2734,13 +2775,15 @@ module SjuiTools
           # started at its leading edge whatever the anchor said.
           anchor_expr = collection_default_scroll_anchor_swift_expr
           params << "defaultScrollAnchor: #{anchor_expr}" unless anchor_expr == 'nil'
+          # insetHorizontal rides on the row's leading / trailing spacers; the
+          # declared insets are its content padding (contentInsets below), as
+          # on the vertical axis. Until jsonui-cli 1.9.0 a four-value insets
+          # array also set these spacers — from [1] and [3] read as leading
+          # and trailing — so its horizontal sides were applied twice.
           unless axis == :vertical
-            insets = @component['insets']
-            inset_horizontal = (@component['insetHorizontal'] || 0).to_i
-            inset_leading = insets.is_a?(Array) && insets.length == 4 ? insets[1].to_i : inset_horizontal
-            inset_trailing = insets.is_a?(Array) && insets.length == 4 ? insets[3].to_i : inset_horizontal
-            params << "insetLeading: #{inset_leading}" if inset_leading > 0
-            params << "insetTrailing: #{inset_trailing}" if inset_trailing > 0
+            inset_horizontal = inset_number(@component['insetHorizontal']) || 0
+            params << "insetLeading: #{inset_horizontal}" if inset_horizontal > 0
+            params << "insetTrailing: #{inset_horizontal}" if inset_horizontal > 0
           end
 
           if (insets_expr = collection_content_insets_swift_expr(include_horizontal: axis == :vertical))

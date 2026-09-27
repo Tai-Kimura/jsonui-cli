@@ -121,7 +121,7 @@ module JsonUI
         { name: 'secure', kind: :boolean, bindable: true }.freeze,
         # Text content (binding for two-way). `value` folds here (sjui textfield_converter.rb:527 reads `text || value || bind`). [binding: two-way]
         { name: 'text', kind: :string, bindable: true, aliases: ['value'].freeze }.freeze,
-        # Text alignment
+        # Where the field's text sits across it: Left the start, Center the middle, Right the end; default Left (the start). A TextField's text is placed horizontally by textAlign alone - its gravity positions its content only on the vertical axis, the one textAlign does not own (4f ruling 2026-09-27: iOS, Compose and the web each put a TextField's text at the start whatever its gravity).
         { name: 'textAlign', kind: :enum, values: ['Left', 'Center', 'Right', 'left', 'center', 'right'].freeze }.freeze,
         # Text padding left
         { name: 'textPaddingLeft', kind: :number }.freeze,

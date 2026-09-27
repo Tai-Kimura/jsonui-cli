@@ -312,7 +312,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'sections' => [{ 'cell' => 'item_cell', 'header' => 'header_view' }]
         )
         code = described_class.new(with_header).convert
-        expect(code).to include('.padding(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 8))')
+        # insets [top, right, bottom, left] (the SSoT's Collection.insets,
+        # jsonui-cli 1.9.0): right 12, left 8 — until then read as [top,
+        # left, bottom, right].
+        expect(code).to include('.padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 12))')
         expect(code).not_to include('.padding(.horizontal)')
       end
 

@@ -43,7 +43,7 @@ module JsonUI
         { name: 'tapBackground', kind: :string }.freeze,
         # Button text (can be data binding, supports interpolation)
         { name: 'text', kind: :string, bindable: true }.freeze,
-        # Text alignment
+        # Where the button's text sits across it: Left the start, Center the middle, Right the end; default Center. A Button's text is placed horizontally by textAlign alone - its gravity positions its content only on the vertical axis, the one textAlign does not own (4f ruling 2026-09-27: iOS, Compose and the web each put a Button's text in the middle whatever its gravity; iOS drew Left and Right in the middle too until jsonui-cli 1.9.0 / SwiftJsonUI 10.29.0).
         { name: 'textAlign', kind: :enum, values: ['Left', 'Center', 'Right'].freeze }.freeze,
       ].freeze
 

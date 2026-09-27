@@ -22,3 +22,6 @@ screenshots/
 
 # Collection scrollTo probe scratch (scripts/collection_scroll_probe.mjs)
 .collection-scroll-probe/
+
+# Label gravity probe scratch (scripts/label_gravity_probe.mjs)
+.label-gravity-probe/

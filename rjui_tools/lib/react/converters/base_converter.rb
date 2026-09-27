@@ -69,6 +69,14 @@ module RjuiTools
 
         protected
 
+        # The flex classes a declared gravity maps to. A container's children
+        # run along its `orientation` (a column when none is declared); a
+        # converter whose element lays out another way maps gravity itself
+        # (LabelConverter).
+        def gravity_classes
+          TailwindMapper.map_gravity(attributes['gravity'], attributes['orientation'])
+        end
+
         def build_class_name
           classes = []
           @dynamic_styles = {}
@@ -531,7 +539,7 @@ module RjuiTools
           end
 
           # Gravity alignment - pass orientation for correct flexbox mapping
-          classes.concat(TailwindMapper.map_gravity(attributes['gravity'], attributes['orientation'])) if attributes['gravity']
+          classes.concat(gravity_classes) if attributes['gravity']
 
           # Layout direction — child ORDER, not text direction.
           #
