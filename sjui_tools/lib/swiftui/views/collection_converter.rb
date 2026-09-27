@@ -280,6 +280,7 @@ module SjuiTools
             end
             add_line "}"
             add_modifier_line ".listStyle(#{list_style_to_swiftui})"
+            apply_list_content_insets
             generate_scroll_reader_close
           elsif columns == 1 && !is_horizontal && has_sections
             # Section-based vertical collection — delegate outer container
@@ -370,6 +371,7 @@ module SjuiTools
             end
             add_line "}"
             add_modifier_line ".listStyle(#{list_style_to_swiftui})"
+            apply_list_content_insets
             generate_scroll_reader_close
           elsif is_horizontal && @component['paging']
             # Horizontal paging collection - use TabView with page style
@@ -1285,8 +1287,10 @@ module SjuiTools
             add_line "}"
           end
 
-          # Apply common modifiers
-          apply_modifiers
+          # Apply common modifiers. The insets pad every page's cell
+          # (add_paging_cell), inside the pager's scroll; until jsonui-cli
+          # 1.9.0 they padded the TabView from outside.
+          apply_modifiers(skip_insets: true)
         end
 
         # A pager's scrollTo turns to the page the value names (the SSoT's
@@ -1362,6 +1366,17 @@ module SjuiTools
             add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
           end
           apply_cell_item_identifier(vars[:index_var])
+          # The Collection's insets (with insetHorizontal / insetVertical)
+          # pad the cell on its page: a page is the pager's size, so this is
+          # the padding around the cells inside the pager's scroll (the SSoT's
+          # Collection.insets). Until jsonui-cli 1.9.0 they padded the
+          # TabView from outside: a pager with insets [0, 0, 0, 30] turned
+          # its pages in a scroll 30pt narrower than the Collection. After the
+          # cell's address, which stays the cell's (as SwiftJsonUI Dynamic's
+          # PagingCollectionWrapperView pads it).
+          if (page_insets = collection_content_insets_swift_expr)
+            add_modifier_line ".padding(#{page_insets})"
+          end
           add_modifier_line ".tag(#{vars[:index_var]})"
         end
 
@@ -2833,6 +2848,19 @@ module SjuiTools
             else 'nil'
             end
           end
+        end
+
+        # A List's content insets: the Collection's insets with insetHorizontal
+        # / insetVertical, as safe-area padding on the List - the rows are laid
+        # out that far in from each edge, inside the List's scroll, which stays
+        # the Collection's size, and on top of the safe area and the List's
+        # own row insets (the SSoT's Collection.insets: added, no precedence).
+        # SwiftJsonUI Dynamic's buildListLayout / buildSectionedListLayout
+        # apply the same. Until jsonui-cli 1.9.0 neither List route read the
+        # insets.
+        def apply_list_content_insets
+          insets_expr = collection_content_insets_swift_expr
+          add_modifier_line ".safeAreaPadding(#{insets_expr})" if insets_expr
         end
 
         # Apply insets only when explicitly specified (no default padding)
