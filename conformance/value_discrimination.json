@@ -65,6 +65,39 @@
       "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
     },
     {
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "platform": "android",
+      "cases": [
+        "large",
+        "medium"
+      ],
+      "owner": "C (kjui) — ticket kjui-indicator-style-loses-to-a-declared-wrapcontent, for the release after 1.9.0",
+      "reason": "Records a defect. indicatorStyle is declared for Compose from jsonui-cli 1.9.0; KotlinJsonUI Dynamic (as kjui codegen, codegen_effect.json) lets a declared width / height beat the style's size, and the fixture's Indicator declares wrapContent, so small, medium and large draw the default spinner. iOS and web draw three sizes. Found after the 1.9.0 freeze; the user's ruling sends it to the next release."
+    },
+    {
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "platform": "android",
+      "cases": [
+        "large",
+        "small"
+      ],
+      "owner": "C (kjui) — ticket kjui-indicator-style-loses-to-a-declared-wrapcontent, for the release after 1.9.0",
+      "reason": "Records a defect. indicatorStyle is declared for Compose from jsonui-cli 1.9.0; KotlinJsonUI Dynamic (as kjui codegen, codegen_effect.json) lets a declared width / height beat the style's size, and the fixture's Indicator declares wrapContent, so small, medium and large draw the default spinner. iOS and web draw three sizes. Found after the 1.9.0 freeze; the user's ruling sends it to the next release."
+    },
+    {
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "platform": "android",
+      "cases": [
+        "medium",
+        "small"
+      ],
+      "owner": "C (kjui) — ticket kjui-indicator-style-loses-to-a-declared-wrapcontent, for the release after 1.9.0",
+      "reason": "Records a defect. indicatorStyle is declared for Compose from jsonui-cli 1.9.0; KotlinJsonUI Dynamic (as kjui codegen, codegen_effect.json) lets a declared width / height beat the style's size, and the fixture's Indicator declares wrapContent, so small, medium and large draw the default spinner. iOS and web draw three sizes. Found after the 1.9.0 freeze; the user's ruling sends it to the next release."
+    },
+    {
       "component": "Label",
       "attribute": "fontWeight",
       "platform": "web",
@@ -311,6 +344,171 @@
       ],
       "owner": "canon (adjudicated 51-orch) — fixture-side follow-up owned by D",
       "reason": "Adjudicated 51-orch (wave-end bake, run 31160838024): the canonical ios distribution ruling (2026-08-07) makes `fill` put `.frame(maxWidth: .infinity)` on every child, and the probe's children are IDENTICAL — equal division (fillEqually) and expand-every-child (fill) produce the same geometry for equal children, so the collapse is fixture-shape coincidence, not a dead face: fillProportionally and equalSpacing discriminate in the same run. Fixture-side follow-up owned by D: unequal-content children would separate the two."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "chrome",
+        "prominent"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "chrome",
+        "regular"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "chrome",
+        "thick"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "chrome",
+        "thin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "chrome",
+        "ultrathin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "prominent",
+        "regular"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "prominent",
+        "thick"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "prominent",
+        "thin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "prominent",
+        "ultrathin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "regular",
+        "thick"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "regular",
+        "thin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "regular",
+        "ultrathin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "thick",
+        "thin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "thick",
+        "ultrathin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
+    },
+    {
+      "component": "common",
+      "attribute": "effectStyle",
+      "platform": "android",
+      "cases": [
+        "thin",
+        "ultrathin"
+      ],
+      "owner": "C (kjui) + canon — ticket conformance-effectstyle-fixtures-hosted-on-blur-measure-nothing, for the release after 1.9.0",
+      "reason": "The declared-spelling rule (822e5efe): the fixture's host is a Blur, whose own effectStyle declares Light / Dark / ExtraLight only, so Regular, Prominent, Thin, UltraThin, Thick and Chrome on it are undeclared there and draw the default (Regular) on KotlinJsonUI Dynamic, as on web and SwiftJsonUI Dynamic. The six cannot differ on this host. The fixtures are generated onto a Blur, so the common spellings are never measured on a View — the ticket is to host them where they are declared (or to widen Blur's enum); found after the 1.9.0 freeze."
     },
     {
       "component": "common",

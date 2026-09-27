@@ -3,6 +3,51 @@
   "_comment": "Accepted dynamic≢codegen deviations, per screenshot, platform and render environment (a deviation measured against the local baselines says nothing about the CI renderer's). The codegen host's render of this screenshot does NOT match the committed dynamic baseline (status 'mismatch', with the measured distance) or was never produced (status 'missing'). Every entry needs a reason: fix the codegen and drop the entry, or justify the difference here. Unrecorded deviations fail `jui conformance gate --parity`; entries the measurement no longer supports are stale and must be pruned (re-run `jui conformance parity --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
+      "screenshot": "common_effectStyle__chrome.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 63,
+      "reason": "sjui-codegen-blur-effectstyle-reads-commons-spellings (ticket for the release after 1.9.0): SwiftJsonUI 10.29.0's Dynamic BlurConverter judges effectStyle on Blur's own declaration (Light / Dark / ExtraLight), so Thick / Chrome / Prominent / Thin / UltraThin on a Blur draw the default, as kjui, KotlinJsonUI Dynamic and rjui do (822e5efe). sjui's codegen still emits `.jsonUIVisualEffect(\"Thick\")`, and the library's default spelling set there is common's, where Thick is declared, so the generated code draws the material. The codegen is the side that is off; no consumer layout sets effectStyle (every consumer project measured 2026-09-28 01:11 JST: 0 layouts; the only hits are attribute reference pages). Found after the 1.9.0 freeze; the user's ruling sends it to the next release.",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__prominent.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 74,
+      "reason": "sjui-codegen-blur-effectstyle-reads-commons-spellings (ticket for the release after 1.9.0): SwiftJsonUI 10.29.0's Dynamic BlurConverter judges effectStyle on Blur's own declaration (Light / Dark / ExtraLight), so Thick / Chrome / Prominent / Thin / UltraThin on a Blur draw the default, as kjui, KotlinJsonUI Dynamic and rjui do (822e5efe). sjui's codegen still emits `.jsonUIVisualEffect(\"Thick\")`, and the library's default spelling set there is common's, where Thick is declared, so the generated code draws the material. The codegen is the side that is off; no consumer layout sets effectStyle (every consumer project measured 2026-09-28 01:11 JST: 0 layouts; the only hits are attribute reference pages). Found after the 1.9.0 freeze; the user's ruling sends it to the next release.",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__thick.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 68,
+      "reason": "sjui-codegen-blur-effectstyle-reads-commons-spellings (ticket for the release after 1.9.0): SwiftJsonUI 10.29.0's Dynamic BlurConverter judges effectStyle on Blur's own declaration (Light / Dark / ExtraLight), so Thick / Chrome / Prominent / Thin / UltraThin on a Blur draw the default, as kjui, KotlinJsonUI Dynamic and rjui do (822e5efe). sjui's codegen still emits `.jsonUIVisualEffect(\"Thick\")`, and the library's default spelling set there is common's, where Thick is declared, so the generated code draws the material. The codegen is the side that is off; no consumer layout sets effectStyle (every consumer project measured 2026-09-28 01:11 JST: 0 layouts; the only hits are attribute reference pages). Found after the 1.9.0 freeze; the user's ruling sends it to the next release.",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__thin.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 38,
+      "reason": "sjui-codegen-blur-effectstyle-reads-commons-spellings (ticket for the release after 1.9.0): SwiftJsonUI 10.29.0's Dynamic BlurConverter judges effectStyle on Blur's own declaration (Light / Dark / ExtraLight), so Thick / Chrome / Prominent / Thin / UltraThin on a Blur draw the default, as kjui, KotlinJsonUI Dynamic and rjui do (822e5efe). sjui's codegen still emits `.jsonUIVisualEffect(\"Thick\")`, and the library's default spelling set there is common's, where Thick is declared, so the generated code draws the material. The codegen is the side that is off; no consumer layout sets effectStyle (every consumer project measured 2026-09-28 01:11 JST: 0 layouts; the only hits are attribute reference pages). Found after the 1.9.0 freeze; the user's ruling sends it to the next release.",
+      "note": ""
+    },
+    {
+      "screenshot": "common_effectStyle__ultrathin.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 52,
+      "reason": "sjui-codegen-blur-effectstyle-reads-commons-spellings (ticket for the release after 1.9.0): SwiftJsonUI 10.29.0's Dynamic BlurConverter judges effectStyle on Blur's own declaration (Light / Dark / ExtraLight), so Thick / Chrome / Prominent / Thin / UltraThin on a Blur draw the default, as kjui, KotlinJsonUI Dynamic and rjui do (822e5efe). sjui's codegen still emits `.jsonUIVisualEffect(\"Thick\")`, and the library's default spelling set there is common's, where Thick is declared, so the generated code draws the material. The codegen is the side that is off; no consumer layout sets effectStyle (every consumer project measured 2026-09-28 01:11 JST: 0 layouts; the only hits are attribute reference pages). Found after the 1.9.0 freeze; the user's ruling sends it to the next release.",
+      "note": ""
+    },
+    {
       "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
       "platform": "android",
       "env": "local",
