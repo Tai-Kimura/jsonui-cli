@@ -62,7 +62,8 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
     json = { 'type' => 'Label', 'id' => 'l', 'text' => 'Go', 'width' => 200, 'height' => 44, 'gravity' => 'top',
              'responsive' => { 'regular' => { 'gravity' => 'right' } } }
     cls = described_class.new(json, { 'use_tailwind' => true }).convert[/className="([^"]*)"/, 1].split
-    expect(cls.select { |c| c.start_with?('lg:') }).to contain_exactly('lg:items-center', 'lg:justify-end')
+    # (and its lines follow it: label_lines_follow_gravity_spec)
+    expect(cls.select { |c| c.start_with?('lg:') }).to contain_exactly('lg:items-center', 'lg:justify-end', 'lg:text-right')
     expect(cls).to include('items-start')
   end
 

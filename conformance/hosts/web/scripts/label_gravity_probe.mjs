@@ -13,6 +13,14 @@
 // the text at the bottom, `bottom` at the bottom end, and `centerVertical` in
 // the middle across as well.
 //
+// The lines of a multi-line Label follow the same rule across (4f round 6,
+// 2026-09-27): textAlign, else the horizontal part of gravity, else the
+// start. The `ml_*` labels are wrapContent-wide with two lines of different
+// lengths (a `\n`); the `wrap_*` ones 150px wide with a text that wraps.
+// Until jsonui-cli 1.9.0 gravity placed the text's box but not its lines: a
+// wrapped text filled the row and its lines stayed at the start, and so did
+// the shorter line of a two-line one.
+//
 // A responsive gravity (a size class's override) is mapped the same way, so
 // it lands on the same axes inside its breakpoint; until jsonui-cli 1.9.0 it
 // was mapped as a column's there as well.
@@ -65,11 +73,29 @@ const CASES = [
   ['respRight', { gravity: 'top', responsive: { regular: { gravity: 'right' } } }, 'top', 'start', 'middle', 'end'],
   ['respBottom', { gravity: 'left', textAlign: 'center', responsive: { regular: { gravity: 'bottom' } } }, 'middle', 'middle', 'bottom', 'middle'],
 ]
+// [id, extra attributes, where every line sits across the label's box]
+const TWO_LINES = 'Go\nGo Go Go Go'
+const WRAPS = 'Go Go Go Go Go Go Go Go Go Go Go Go Go'
+const LINE_CASES = [
+  ['ml_none', { text: TWO_LINES }, 'start'],
+  ['ml_center', { text: TWO_LINES, gravity: 'center' }, 'middle'],
+  ['ml_right', { text: TWO_LINES, gravity: 'right' }, 'end'],
+  ['ml_textAlign', { text: TWO_LINES, textAlign: 'center', gravity: 'left' }, 'middle'],
+  ['wrap_none', { text: WRAPS, width: 150 }, 'start'],
+  ['wrap_center', { text: WRAPS, width: 150, gravity: 'center' }, 'middle'],
+  ['wrap_right', { text: WRAPS, width: 150, gravity: 'right' }, 'end'],
+  ['wrap_chz', { text: WRAPS, width: 150, gravity: 'centerHorizontal' }, 'middle'],
+]
 const LAYOUT = {
   type: 'View', id: 'root', width: 'matchParent', orientation: 'vertical', spacing: 6,
-  child: CASES.map(([id, extra]) => ({
-    type: 'Label', id: `lg_${id}`, text: 'Go', fontColor: '#000000', width: 200, height: 44, ...extra,
-  })),
+  child: [
+    ...CASES.map(([id, extra]) => ({
+      type: 'Label', id: `lg_${id}`, text: 'Go', fontColor: '#000000', width: 200, height: 44, ...extra,
+    })),
+    ...LINE_CASES.map(([id, extra]) => ({
+      type: 'Label', id: `lg_${id}`, fontColor: '#000000', fontSize: 14, lines: 0, width: 'wrapContent', height: 'wrapContent', ...extra,
+    })),
+  ],
 }
 const MAIN = `
 import React from 'react'
@@ -112,6 +138,27 @@ function read(page, id) {
   }, id)
 }
 
+// Each line of a label's text: its px from the label box's left and right
+// edges (the text's client rects, grouped by their top).
+function readLines(page, id) {
+  return page.evaluate((lid) => {
+    const box = document.getElementById(lid)
+    if (!box) return null
+    const range = document.createRange()
+    range.selectNodeContents(box)
+    const b = box.getBoundingClientRect()
+    const lines = new Map()
+    for (const r of range.getClientRects()) {
+      if (r.width < 1) continue
+      const key = Math.round(r.top)
+      const line = lines.get(key) || { left: Infinity, right: -Infinity }
+      line.left = Math.min(line.left, r.left); line.right = Math.max(line.right, r.right)
+      lines.set(key, line)
+    }
+    return { w: b.width, lines: [...lines.entries()].sort((x, y) => x[0] - y[0]).map(([, l]) => ({ left: l.left - b.left, right: b.right - l.right })) }
+  }, id)
+}
+
 function where(near, far) {
   if (Math.abs(near - far) <= 2) return 'middle'
   return near < far ? 'near' : 'far'
@@ -147,6 +194,22 @@ try {
     }
     failures += problems.length ? 1 : 0
     console.log(`LABEL_GRAVITY ${String(viewport).padStart(4)}px ${id.padEnd(16)} ${m ? `box ${m.w}x${m.h} text top ${m.top.toFixed(1)} bottom ${m.bottom.toFixed(1)} left ${m.left.toFixed(1)} right ${m.right.toFixed(1)}` : ''}` +
+      `${problems.length ? `  <- ${problems.join('; ')}` : ''}`)
+  }
+  for (const [id, , want] of LINE_CASES) {
+    const m = await readLines(page, `lg_${id}`)
+    const problems = []
+    if (!m) problems.push('not drawn')
+    else {
+      if (m.lines.length < 2) problems.push(`${m.lines.length} line(s), not 2 or more`)
+      for (const [i, l] of m.lines.entries()) {
+        const at = l.left < 1.5 && l.right < 1.5 ? 'fills' : (Math.abs(l.left - l.right) <= 2 ? 'middle' : (l.left < 1.5 ? 'start' : (l.right < 1.5 ? 'end' : 'off')))
+        if (at !== 'fills' && at !== want) problems.push(`line ${i + 1} ${at}, not ${want}`)
+      }
+      if (!m.lines.some((l) => !(l.left < 1.5 && l.right < 1.5))) problems.push('no line shorter than the box: nothing to tell')
+    }
+    failures += problems.length ? 1 : 0
+    console.log(`LABEL_GRAVITY ${String(viewport).padStart(4)}px ${id.padEnd(16)} ${m ? `box ${m.w.toFixed(1)} ${m.lines.map((l) => `line left ${l.left.toFixed(1)} right ${l.right.toFixed(1)}`).join(', ')}` : ''}` +
       `${problems.length ? `  <- ${problems.join('; ')}` : ''}`)
   }
   await page.close()

@@ -351,6 +351,9 @@ module RjuiTools
             # So a clamped label emits NO display utility of its own and lets
             # the clamp keep the box it needs. Same reasoning as the multi-run
             # branch below: vertical centering means nothing once text wraps.
+            # Its lines follow gravity across when textAlign is not declared.
+            line_align = TailwindMapper.label_gravity_text_align(attributes['gravity'], attributes['textAlign'])
+            classes << line_align if line_align
           elsif multi_run_text?
             # partialText / linkable emit one node per run (text, span, text…).
             # As flex items every run becomes its own line box, so the whole
@@ -359,8 +362,12 @@ module RjuiTools
             # (web-partial-labels-render-inside-a-flex-row). A multi-run label
             # is a paragraph and wants normal block flow; horizontal alignment
             # already arrives from textAlign as text-* via the base converter,
-            # and vertical centering means nothing once the text wraps.
+            # and vertical centering means nothing once the text wraps. Its
+            # lines follow gravity across when textAlign is not declared
+            # (TailwindMapper.label_gravity_text_align).
             classes << 'block'
+            line_align = TailwindMapper.label_gravity_text_align(attributes['gravity'], attributes['textAlign'])
+            classes << line_align if line_align
           else
             # A single-run label is a flex ROW: `items-*` is its vertical,
             # `justify-*` its horizontal. The vertical is the one gravity names

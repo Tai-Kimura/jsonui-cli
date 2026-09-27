@@ -424,7 +424,30 @@ module RjuiTools
                      end
                    end
           classes << across if across
+          line_align = label_gravity_text_align(gravity, text_align)
+          classes << line_align if line_align
           classes
+        end
+
+        # The lines of a Label follow its gravity across when it declares no
+        # textAlign (textAlign's own text-* comes from the base converter):
+        # `text-center` for center / centerHorizontal, `text-right` for right,
+        # `text-left` for left; nil otherwise. The flex `justify-*` above
+        # places the text's box; a wrapped or multi-line text fills its row,
+        # and only text-align places its lines (the SSoT's Label.textAlign,
+        # 4f round 6: until jsonui-cli 1.9.0 they stayed at the start).
+        def label_gravity_text_align(gravity, text_align = nil)
+          return nil if text_align.is_a?(String) && !text_align.empty?
+
+          parts = if gravity.is_a?(Array) then gravity.map(&:to_s)
+                  elsif gravity.nil? then []
+                  else gravity.to_s.split('|')
+                  end
+          tokens = parts.map { |g| JsonUIShared::EnumSpelling.lowered(g.strip, 'common', 'gravity') || g.strip.downcase }
+          if (tokens & %w[centerhorizontal center_horizontal center]).any? then 'text-center'
+          elsif tokens.include?('right') || tokens.include?('end') then 'text-right'
+          elsif tokens.include?('left') || tokens.include?('start') then 'text-left'
+          end
         end
 
         # Map gravity attribute based on orientation

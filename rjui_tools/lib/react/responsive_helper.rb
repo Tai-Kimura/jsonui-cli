@@ -310,7 +310,10 @@ module RjuiTools
           # unprefixed base class already applies at every width.
           classes = new_classes - base_classes
 
-          { 'items' => 'items-stretch', 'justify' => 'justify-normal' }.each do |axis, reset|
+          resets = { 'items' => 'items-stretch', 'justify' => 'justify-normal' }
+          # A Label's lines (label_gravity_text_align): back to the start.
+          resets['text'] = 'text-start' if label_row?(component)
+          resets.each do |axis, reset|
             base_has = base_classes.any? { |c| c.start_with?("#{axis}-") }
             new_has = new_classes.any? { |c| c.start_with?("#{axis}-") }
             classes << reset if base_has && !new_has
