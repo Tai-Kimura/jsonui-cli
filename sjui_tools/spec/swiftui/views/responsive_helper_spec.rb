@@ -764,13 +764,15 @@ RSpec.describe SjuiTools::SwiftUI::Views::ResponsiveHelper do
       SjuiTools::SwiftUI::Views::ViewConverter.new(numeric_width_component, 0)
     end
 
-    it 'emits .frame(width: 240) in the regular branch and .frame(maxWidth: .infinity) in the default branch' do
+    it 'emits .frame(width: 240, alignment: .topLeading) in the regular branch and .frame(maxWidth: .infinity) in the default branch' do
       code = described_class.generate_container_function(
         'responsive0', numeric_width_component, converter_for_numeric_width
       )
       regular_section = code[/horizontalSizeClass == \.regular.*?(?=\} else \{)/m]
       default_section = code[/\} else \{.*?(?=\s*\}\s*\}\s*\z)/m]
-      expect(regular_section).to include('.frame(width: 240)')
+      # The container's content at top | start (single_axis_alignment, the
+      # user's ruling of 2026-09-27).
+      expect(regular_section).to include('.frame(width: 240, alignment: .topLeading)')
       expect(default_section).to include('maxWidth: .infinity')
     end
   end
