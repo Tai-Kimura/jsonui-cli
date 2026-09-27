@@ -63,6 +63,8 @@ module SjuiTools
 
         # Which strings.json sections this layout owns — string resolution
         # prefers them over a section that merely holds the same text.
+        namespaces_found = Helpers::StringManagerHelper.current_namespaces
+        namespaces_announced = true
         Helpers::StringManagerHelper.begin_layout(json_file_path)
 
         # Styleファイルを適用
@@ -115,6 +117,10 @@ module SjuiTools
         Views::BaseViewConverter.validation_enabled = true if @validation_was_enabled
 
         output_path
+      ensure
+        # This layout's string sections, for this conversion only
+        # (StringManagerHelper.for_layout).
+        Helpers::StringManagerHelper.current_namespaces = namespaces_found if namespaces_announced
       end
 
       # In-tree containers that scroll their content. A Collection is not
@@ -225,6 +231,8 @@ module SjuiTools
 
         # Per-file normalization state (see convert_file)
         Views::BaseViewConverter.layout_normalized = Core::Normalization.canonicalized?(json_data)
+        namespaces_found = Helpers::StringManagerHelper.current_namespaces
+        namespaces_announced = true
         Helpers::StringManagerHelper.begin_layout(json_file_path)
 
         # Apply styles
@@ -294,6 +302,10 @@ module SjuiTools
         return nil if refused_state_names?(clashes, json_file_path)
 
         [view_code, @onclick_actions.to_a, declarations, root_children, responsive_functions]
+      ensure
+        # This layout's string sections, for this conversion only
+        # (StringManagerHelper.for_layout).
+        Helpers::StringManagerHelper.current_namespaces = namespaces_found if namespaces_announced
       end
 
       # Extract data properties from JSON (similar to DataModelUpdater)

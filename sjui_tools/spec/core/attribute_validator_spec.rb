@@ -2,6 +2,7 @@
 
 require 'core/attribute_validator'
 require 'fileutils'
+require 'tmpdir'
 require 'json'
 
 RSpec.describe SjuiTools::Core::AttributeValidator do
@@ -1541,12 +1542,13 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
 
   # NEW: Tests for style merging
   describe 'Style merging validation' do
-    let(:styles_dir) { File.join(Dir.pwd, 'spec', 'fixtures', 'styles') }
 
     before(:all) do
-      # Create test styles directory and files
-      @styles_dir = File.join(Dir.pwd, 'spec', 'fixtures', 'styles')
-      FileUtils.mkdir_p(@styles_dir)
+      # A directory of its own, not spec/fixtures/styles under the working
+      # directory (the checkout): every process running the suite from here
+      # reads that tree, and a checkout without spec/fixtures kept the
+      # directory this made (suite_writes_nothing_into_the_tool.rb).
+      @styles_dir = Dir.mktmpdir('attribute_validator_styles')
 
       # Create a test style file
       File.write(File.join(@styles_dir, 'TestStyle.json'), JSON.pretty_generate({
@@ -1570,7 +1572,7 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
     end
 
     after(:all) do
-      FileUtils.rm_rf(File.join(Dir.pwd, 'spec', 'fixtures', 'styles'))
+      FileUtils.rm_rf(@styles_dir)
     end
 
     context 'with style reference' do

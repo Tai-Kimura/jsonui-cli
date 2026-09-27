@@ -6,6 +6,11 @@ RSpec.describe SjuiTools::CLI::Commands::Build do
   let(:command) { described_class.new }
   let(:temp_dir) { Dir.mktmpdir('build_test') }
 
+  # `run` finds the project (ProjectFinder.setup_paths, which falls back to
+  # the working directory and keeps it): this spec's, not the next one's.
+  before(:context) { @kept = ProcessStateGuard.keep(SjuiTools::Core::ProjectFinder) }
+  after(:context) { ProcessStateGuard.put_back(@kept) }
+
   after do
     FileUtils.rm_rf(temp_dir)
   end
@@ -93,6 +98,39 @@ RSpec.describe SjuiTools::CLI::Commands::Build do
       it 'logs warning and returns' do
         expect(SjuiTools::Core::Logger).to receive(:warn).with(/No JSON files found/)
         command.send(:build_swiftui)
+      end
+    end
+
+    # The include expander's layouts root is process-wide. A build uses its
+    # own Layouts while it runs and puts back the root it found (jsonui-cli
+    # 1.9.0): until then it left its own set, and whatever ran next in the
+    # process resolved includes from it — this spec's tmp Layouts, for
+    # json_to_swiftui_converter_spec and two more on some seeds.
+    context 'the include expander\'s layouts root' do
+      before { require 'swiftui/include_expander' }
+      around do |example|
+        found = SjuiTools::SwiftUI::IncludeExpander.layouts_root
+        example.run
+      ensure
+        SjuiTools::SwiftUI::IncludeExpander.layouts_root = found
+      end
+
+      it 'is this build\'s Layouts while it runs, and the one it found after, when it returns' do
+        SjuiTools::SwiftUI::IncludeExpander.layouts_root = '/found/before/the/build'
+        during = nil
+        allow(SjuiTools::Core::Logger).to receive(:warn).with(/No JSON files found/) do
+          during = SjuiTools::SwiftUI::IncludeExpander.layouts_root
+        end
+        command.send(:build_swiftui)
+        expect(during).to eq(File.join(temp_dir, 'Layouts'))
+        expect(SjuiTools::SwiftUI::IncludeExpander.layouts_root).to eq('/found/before/the/build')
+      end
+
+      it 'is the one it found after, when the build raises' do
+        SjuiTools::SwiftUI::IncludeExpander.layouts_root = nil
+        allow(SjuiTools::Core::Logger).to receive(:warn).with(/No JSON files found/).and_raise(RuntimeError, 'mid-build')
+        expect { command.send(:build_swiftui) }.to raise_error(RuntimeError, 'mid-build')
+        expect(SjuiTools::SwiftUI::IncludeExpander.layouts_root).to be_nil
       end
     end
 

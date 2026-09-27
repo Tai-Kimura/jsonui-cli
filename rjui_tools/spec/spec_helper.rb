@@ -25,6 +25,15 @@ RSpec.configure do |config|
   end
 
   config.profile_examples = 10
+
+  # JsonUI::StageFailures is the stage ledger a build records into and
+  # `report!` writes; it lives as long as the process. Every spec file starts
+  # with an empty one, so no file's build reports what another file's
+  # recorded (spec/support/process_state_guard.rb names the ledger as reset
+  # here).
+  config.before(:context) do
+    JsonUI::StageFailures.clear! if self.class.superclass == RSpec::Core::ExampleGroup && defined?(JsonUI::StageFailures)
+  end
   config.order = :random
 
   Kernel.srand config.seed
