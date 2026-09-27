@@ -39,6 +39,65 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   CLASS_LIST = { 'cellClasses' => ['ACell'] }.freeze
   PAGER = { 'layout' => 'horizontal', 'paging' => true, 'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }.freeze
 
+  # Round 16: cellIdProperty is the class-list cells' identity too (the
+  # SSoT: "unique ID for ForEach identity"), by the keyed loops' rule — the
+  # key in its data section, [sectionIndex, key], when no earlier cell of the
+  # section has it, else the place — and a scrollTo goes to that id (no
+  # `.id`). Until jsonui-cli 1.9.0 the class-list loop's ids were the
+  # offsets whatever cellIdProperty said, and a scroll went to
+  # `.id(IndexPath(...))`.
+  describe 'the class-list List with cellIdProperty' do
+    it "its loop ids are the keys in their data section, else the places; a scrollTo goes to the found cell's loop id" do
+      [[STR, 'cellId', 'key == cellId'], [INT, 'index', 'place == index'], [[], nil, nil]].each do |props, recv, match|
+        node = CLASS_LIST.merge('cellIdProperty' => 'key')
+        node = node.merge('scrollTo' => nil) if props.empty?
+        code, = emit(node, props)
+        expect(code).to include('let cells = cellsData.enumerated().map { (cellIndex: $0.offset, cellData: $0.element) }')
+        expect(code).to include('if let key = ((cell.cellData["cellId"] as? String) ?? (cell.cellData["key"] as? String)), seen.insert(key).inserted { ' \
+                                'return AnyHashable([AnyHashable(sectionIndex), AnyHashable(key)]) }')
+        expect(code).to include('return AnyHashable(IndexPath(item: cell.cellIndex, section: sectionIndex))')
+        expect(code).to include('ForEach(zip(ids, cells).map { pair in (id: pair.0, cell: pair.1) }, id: \\.id) { item in')
+        expect(code).not_to include('ForEach(Array(cellsData.enumerated()), id: \\.offset)')
+        expect(code).not_to include('.id(')
+        next unless recv
+
+        expect(code).to include(".onChange(of: data.target) { _, #{recv} in")
+        expect(code).to include("if #{match} {")
+        expect(code).to include('scrollProxy.scrollTo(found, anchor:')
+      end
+    end
+
+    it 'control: with no cellIdProperty the loop is the offsets, and a scroll goes to .id(IndexPath(...))' do
+      code, = emit(CLASS_LIST, INT)
+      expect(code).to include('ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in')
+      expect(code).to include('.id(IndexPath(item: cellIndex, section: sectionIndex))')
+      expect(code).not_to include('let ids')
+    end
+
+    it 'type-checks with a String, an Int, none, and autoChangeTrackingId', :swift_compile do
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB + cell_view_stub('ACellView') +
+              "extension Array where Element == [String: Any] {\n" \
+              "  func reconfigured(cellIdProperty: String?, autoChangeTrackingId: Bool) -> [[String: Any]] { self } }\n"
+      shapes = [[{}, STR], [{}, INT], [{ 'scrollTo' => nil }, []], [{ 'autoChangeTrackingId' => true }, STR],
+                [{ 'autoChangeTrackingId' => true }, INT], [{ 'columns' => 2 }, STR]]
+      views = shapes.each_with_index.map do |(extra, props), i|
+        code, state = emit(CLASS_LIST.merge('cellIdProperty' => 'key', 'id' => "keyedClass#{i}").merge(extra), props)
+        target = props.empty? ? '' : (props.first['class'] == 'String' ? 'var target: String = ""' : 'var target: Int = 0')
+        <<~SWIFT
+          struct KeyedClass#{i}Data { var rows: CollectionDataSource? = nil; #{target} }
+          struct KeyedClass#{i}: View {
+              @State var data = KeyedClass#{i}Data()
+          #{state.map { |l| "    #{l}" }.join("\n")}
+              var body: some View {
+          #{code.lines.map { |l| "        #{l}" }.join}
+              }
+          }
+        SWIFT
+      end
+      expect("#{EmittedSwift::LIBRARY_STUBS}\n#{stubs}\n#{views.join("\n")}").to compile_as_swift
+    end
+  end
+
   describe 'the class-list List' do
     it 'reaches every data section: a reader, the cells by their place, the value looked up when it changes' do
       code, = emit(CLASS_LIST, INT)
@@ -53,7 +112,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
 
     it 'a String is a key: the cellId, else the cellIdProperty value when there is one' do
       keyed, = emit(CLASS_LIST.merge('cellIdProperty' => 'key'), STR)
-      expect(keyed).to include('if ((cell["cellId"] as? String) ?? (cell["key"] as? String)) == cellId { found = IndexPath(')
+      expect(keyed).to include("let key = ((cell[\"cellId\"] as? String) ?? (cell[\"key\"] as? String))\n")
+      expect(keyed).to include("if key == cellId {\n")
       ids, = emit(CLASS_LIST, STR)
       expect(ids).to include('if (cell["cellId"] as? String) == cellId { found = IndexPath(')
       expect(ids).not_to include('place')
@@ -146,7 +206,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
 
     it 'control: an Int counts cells and reads no key; with no autoChangeTrackingId nothing is enriched' do
-      [[PAGER.merge(AUTO), INT], [CLASS_LIST.merge(AUTO), INT], [PAGER.merge('cellIdProperty' => 'key'), STR],
+      [[PAGER.merge(AUTO), INT], [PAGER.merge('cellIdProperty' => 'key'), STR],
        [CLASS_LIST.merge('cellIdProperty' => 'key'), STR]].each do |node, props|
         code, = emit(node, props)
         lookup = code.lines.grep(/search: for |for \(cellIndex, /)
@@ -185,7 +245,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     it 'the class-list List and the pager look the Int up as a place, as with no cellIdProperty' do
       list, = emit(CLASS_LIST.merge(KEYED), INT)
       expect(list).to include('.onChange(of: data.target) { _, index in')
-      expect(list).to include('if place == index { found = IndexPath(item: cellIndex, section: sectionIndex); break search }')
+      # The class-list's loop ids are keyed (round 16): the place's cell, its
+      # loop id.
+      expect(list).to include("if place == index {\n")
+      expect(list).to include('if let key, first { found = AnyHashable([AnyHashable(sectionIndex), AnyHashable(key)]) } ' \
+                              'else { found = AnyHashable(IndexPath(item: cellIndex, section: sectionIndex)) }')
       expect(list).not_to include('as? String)) == index')
       pager, = emit(PAGER.merge(KEYED), INT)
       expect(pager).to include('.onChange(of: data.target) { _, index in')

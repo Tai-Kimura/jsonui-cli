@@ -4,7 +4,8 @@ require 'swiftui/views/collection_converter'
 
 # Two or more sections in one Collection (4f round 9):
 # - With cellIdProperty, a section after the first gives its cells ids of
-#   their own — "<section>:" + the key. Keys two sections share were one id to
+#   their own — "<section>:" + the key until round 16, the structured
+#   [section, key] since (no key can spell another section's id). Keys two sections share were one id to
 #   the lazy stack / TabView the sections share, which dropped the later
 #   section's cell, as `\.offset` did before 9ef11908. With scrollTo, a
 #   cell's loop id is its scroll target instead (4f round 13): its key, else
@@ -37,12 +38,35 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   describe 'cellIdProperty: a later section qualifies its keys' do
-    it 'on every route: section 0 its keys, sections 2 and 3 "2:" and "3:"' do
-      section_scroll_routes.each do |route, extra|
-        b = blocks(convert(extra.merge('cellIdProperty' => 'key')))
-        expect(b[0]).to include('IdentifiedCellItem(id: (data["cellId"] as? String) ?? (data["key"] as? String) ?? "\\(index)", index: index'), route
-        expect(b[2]).to include('IdentifiedCellItem(id: "2:" + ((data["cellId"] as? String) ?? (data["key"] as? String) ?? "\\(index)"), index: index'), route
-        expect(b[3]).to include('IdentifiedCellItem(id: "3:" + ('), route
+    # A keyed loop's ids with no direct scroll to a key (4f round 16): each
+    # cell's key in its section, the structured [section, key], when no
+    # earlier cell of the loop has it; else its place.
+    def keyed_ids(block, list, cell, data, index, section)
+      base = block[/^( *)let ids: \[AnyHashable\] = \{/, 1]
+      return nil unless base
+
+      i = ' ' * 4
+      [base + 'let ids: [AnyHashable] = {', "#{base}#{i}var seen = Set<String>()", "#{base}#{i}return #{list}.map { #{cell} in",
+       "#{base}#{i * 2}if let key = ((#{data}[\"cellId\"] as? String) ?? (#{data}[\"key\"] as? String)), seen.insert(key).inserted { " \
+       "return AnyHashable([AnyHashable(#{section}), AnyHashable(key)]) }",
+       "#{base}#{i * 2}return AnyHashable(IndexPath(item: #{index}, section: #{section}))", "#{base}#{i}}", "#{base}}()"].join("\n")
+    end
+
+    # Round 16: every keyed loop's id that carries a section is structured,
+    # [section, key], and a place is an IndexPath — no string is built from
+    # a section and a key. Until jsonui-cli 1.9.0 a later section's id was
+    # "<section>:" + the key (round 9): a key "2:x" in section 0 was section
+    # 2's "x", two sibling loops' one id — round 9's dropped cell.
+    it 'on every route no id is a section and a key joined in a string; the item ids are the keys' do
+      keyed_scroll_routes.each do |route, extra|
+        [convert(extra.merge('cellIdProperty' => 'key')), convert(extra.merge('cellIdProperty' => 'key', 'scrollTo' => '@{target}'))].each do |code|
+          expect(code).not_to match(/"\d+:" \+/), route
+          expect(code).not_to include('"\\(section'), route
+          b = blocks(code)
+          [0, 2, 3].each do |s|
+            expect(b[s]).to include('IdentifiedCellItem(id: (data["cellId"] as? String) ?? (data["key"] as? String) ?? "\\(index)", index: '), "#{route} #{s}"
+          end
+        end
       end
     end
 
@@ -134,20 +158,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       end
     end
 
-    # Round 15: with no scrollTo a loop's ids are the IdentifiedCellItem ids
-    # as before — the key, else "\(index)"; "<section>:" after section 0 —
-    # except that an id an earlier cell of the loop has is the later cell's
-    # place: no two cells of a loop share an id, and the first keeps its own.
-    # Until jsonui-cli 1.9.0 the loop was ForEach(items), and two cells with
-    # one key were one id to SwiftUI.
-    it 'with no scrollTo, a loop id is the IdentifiedCellItem id unless an earlier cell of the loop has it: then its place' do
+    # Round 15 and 16: with no scrollTo a loop id is the cell's key in its
+    # section, [section, key], when no earlier cell of the loop has it; else
+    # its place. No two cells of a loop share an id (round 15: the loop was
+    # ForEach(items), two cells with one key one id), and no key spells
+    # another section's (round 16: the ids were the key, "<section>:" + it
+    # after section 0).
+    it 'with no scrollTo, a loop id is the key in its section, else the place' do
       keyed_scroll_routes.each do |route, extra|
         code = convert(extra.merge('cellIdProperty' => 'key'))
         b = blocks(code)
         [0, 2, 3].each do |s|
-          expect(b[s]).to include("let ids: [AnyHashable] = {\n#{' ' * (b[s][/^( *)let ids/, 1].to_s.size + 4)}var seen = Set<String>()\n"), "#{route} #{s}"
-          expect(b[s]).to include("return items.map { cell in seen.insert(cell.id).inserted ? AnyHashable(cell.id) : " \
-                                  "AnyHashable(IndexPath(item: cell.index, section: #{s})) }"), "#{route} #{s}"
+          expect(b[s]).to include(keyed_ids(b[s], 'items', 'cell', 'cell.data', 'cell.index', s) || 'no ids'), "#{route} #{s}"
           expect(b[s]).to include('ForEach(zip(ids, items).map { pair in (id: pair.0, cell: pair.1) }, id: \\.id) { item in'), "#{route} #{s}"
         end
         expect(code).not_to include('ForEach(items) {'), route

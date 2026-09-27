@@ -1652,6 +1652,8 @@ module SjuiTools
         def emit_every_data_section_lookup(target)
           prop = extract_property_name(@component['items'])
           sections = is_property_optional?(prop) ? "(data.#{prop}?.sections ?? [])" : "data.#{prop}.sections"
+          return emit_keyed_every_data_section_lookup(sections, target) if @component['cellIdProperty']
+
           add_line 'var found: IndexPath? = nil'
           add_line 'var place = 0' unless key_scroll?
           add_line "search: for (sectionIndex, section) in #{sections}.enumerated() {"
@@ -1660,6 +1662,36 @@ module SjuiTools
             add_line "for (cellIndex, #{key_scroll? ? 'cell' : '_'}) in #{cells}.enumerated() {"
             indent do
               add_line "if #{scroll_match_expr('cell', target)} { found = IndexPath(item: cellIndex, section: sectionIndex); break search }"
+              add_line 'place += 1' unless key_scroll?
+            end
+            add_line '}'
+          end
+          add_line '}'
+          add_line 'guard let found else { return }'
+        end
+
+        # The class-list shape with cellIdProperty (4f round 16): its cells'
+        # loop ids are keyed_loop_ids, so the value is looked up by that rule
+        # and the scroll goes to the found cell's loop id — a String the first
+        # cell, in section order, whose key it is (the first of its section
+        # with it, so [section, key]); an Int the cell at that place.
+        def emit_keyed_every_data_section_lookup(sections, target)
+          add_line 'var found: AnyHashable? = nil'
+          add_line 'var place = 0' unless key_scroll?
+          add_line "search: for (sectionIndex, section) in #{sections}.enumerated() {"
+          indent do
+            add_line 'var seen = Set<String>()'
+            add_line "for (cellIndex, cell) in #{enriched_cells('(section.cells?.data ?? [])')}.enumerated() {"
+            indent do
+              add_line "let key = #{cell_own_key_expr('cell')}"
+              add_line 'let first = key.map { seen.insert($0).inserted } ?? false'
+              add_line "if #{key_scroll? ? "key == #{target}" : "place == #{target}"} {"
+              indent do
+                add_line 'if let key, first { found = AnyHashable([AnyHashable(sectionIndex), AnyHashable(key)]) } ' \
+                         'else { found = AnyHashable(IndexPath(item: cellIndex, section: sectionIndex)) }'
+                add_line 'break search'
+              end
+              add_line '}'
               add_line 'place += 1' unless key_scroll?
             end
             add_line '}'
@@ -1819,33 +1851,26 @@ module SjuiTools
             add_line "let items = #{source_expr}.enumerated().map { index, data in"
             indent do
               # Prefer the pre-enriched "cellId" when autoChangeTrackingId is on;
-              # otherwise fall back to the user's primary key. A later section's
-              # id carries its section (4f round 9): keys two sections share
-              # were one id to the lazy stack / TabView they share, which
-              # dropped the later section's cell — as `\.offset` did (9ef11908).
-              id = cell_key_expr('data', 'index')
-              id = "\"#{section_index}:\" + (#{id})" if later
-              add_line "IdentifiedCellItem(id: #{id}, index: #{index_expr}, data: data)"
+              # otherwise fall back to the user's primary key. The item's id is
+              # not the loop's (`ids` / `targets` below are): until jsonui-cli
+              # 1.9.0 a later section's was "<section>:" + the key (4f round 9),
+              # a string a key could spell (round 16).
+              add_line "IdentifiedCellItem(id: #{cell_key_expr('data', 'index')}, index: #{index_expr}, data: data)"
             end
             add_line "}"
             vars = { data_var: 'cell.data', index_var: 'cell.index' }
             unless has_scroll_to?
-              # No scrollTo: a cell's loop id is its IdentifiedCellItem id as
-              # before — its key, else "\(index)"; "<section>:" after the
-              # first section — unless an earlier cell of the loop has that
-              # id: then its place, IndexPath(item:section:), which no String
-              # id equals. So no two cells of a loop share an id, and the
-              # first keeps its own (4f round 15). Until jsonui-cli 1.9.0 the
-              # loop was ForEach(items): two cells with one key were one id to
-              # SwiftUI — which diffed them as one and could draw one cell's
-              # view in the other's place.
-              add_line 'let ids: [AnyHashable] = {'
-              indent do
-                add_line 'var seen = Set<String>()'
-                add_line "return items.map { cell in seen.insert(cell.id).inserted ? AnyHashable(cell.id) : " \
-                         "AnyHashable(IndexPath(item: cell.index, section: #{section_index.to_i})) }"
-              end
-              add_line '}()'
+              # No scrollTo: a cell's loop id is its key in its section,
+              # [section, key] (keyed_loop_ids), when no earlier cell of the
+              # loop has the key; else its place, IndexPath(item:section:). No
+              # two cells share an id — in a loop, or across the sections'
+              # sibling loops, since a key cannot spell another section's id.
+              # Until jsonui-cli 1.9.0 it was the IdentifiedCellItem id: the
+              # key, else "\(index)", and "<section>:" + that after the first
+              # section — a key "2:x" in section 0 was section 2's "x", round
+              # 9's dropped cell (round 16); and two cells with one key were
+              # one id (ForEach(items), round 15).
+              keyed_loop_ids('ids', 'items', 'cell', 'cell.data', 'cell.index', section_index.to_i)
               add_line 'ForEach(zip(ids, items).map { pair in (id: pair.0, cell: pair.1) }, id: \\.id) { item in'
               indent { add_line 'let cell = item.cell' }
               return vars
@@ -1890,6 +1915,27 @@ module SjuiTools
             add_line "ForEach(Array(#{source_expr}.enumerated()), id: \\.offset) { cellIndex, cellData in"
             { data_var: 'cellData', index_var: 'cellIndex' }
           end
+        end
+
+        # `let <name>: [AnyHashable]`, a keyed loop's ids with no direct scroll
+        # to a key (4f round 16): each cell's key in its section, as the
+        # structured `[section, key]` — not a string a key could spell — when
+        # no earlier cell of the loop has the key; else its place,
+        # IndexPath(item:section:). `section` is a literal or, on the
+        # class-list, the running `sectionIndex`.
+        def keyed_loop_ids(name, list, cell, data_var, index_var, section)
+          add_line "let #{name}: [AnyHashable] = {"
+          indent do
+            add_line 'var seen = Set<String>()'
+            add_line "return #{list}.map { #{cell} in"
+            indent do
+              add_line "if let key = #{cell_own_key_expr(data_var)}, seen.insert(key).inserted { " \
+                       "return AnyHashable([AnyHashable(#{section}), AnyHashable(key)]) }"
+              add_line "return AnyHashable(IndexPath(item: #{index_var}, section: #{section}))"
+            end
+            add_line '}'
+          end
+          add_line '}()'
         end
 
         # A class-list header or footer (headerClasses / footerClasses): drawn
@@ -1978,7 +2024,8 @@ module SjuiTools
         # scroll time (emit_every_data_section_lookup) — their id is their place.
         def generate_cell_identity(index_var = 'cellIndex', scroll_id: nil, every_section: false)
           if has_scroll_to? && every_section
-            add_modifier_line ".id(IndexPath(item: #{index_var}, section: sectionIndex))"
+            # With cellIdProperty the loop's id is the target (keyed_loop_ids).
+            add_modifier_line ".id(IndexPath(item: #{index_var}, section: sectionIndex))" unless @component['cellIdProperty']
             @scroll_every_data_section = true
           elsif has_scroll_to? && @component['cellIdProperty'].nil? && !cell_id_scroll?
             # Integer-based ID for scroll target only
@@ -2204,7 +2251,21 @@ module SjuiTools
                     end
             add_line guard
             indent do
-              add_line "ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in"
+              if cell_view && @component['cellIdProperty']
+                # cellIdProperty is the cells' identity here too (4f round 16):
+                # keyed_loop_ids over the section's cells as its lookup reads
+                # them (enriched_cells). Until jsonui-cli 1.9.0 this loop's ids
+                # were the offsets, whatever cellIdProperty said.
+                add_line "let cells = #{enriched_cells('cellsData')}.enumerated().map { (cellIndex: $0.offset, cellData: $0.element) }"
+                keyed_loop_ids('ids', 'cells', 'cell', 'cell.cellData', 'cell.cellIndex', 'sectionIndex')
+                add_line 'ForEach(zip(ids, cells).map { pair in (id: pair.0, cell: pair.1) }, id: \\.id) { item in'
+                indent do
+                  add_line 'let cellIndex = item.cell.cellIndex'
+                  add_line 'let cellData = item.cell.cellData'
+                end
+              else
+                add_line "ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in"
+              end
               indent do
                 if cell_view
                   # What Android and Web already do for this shape:
