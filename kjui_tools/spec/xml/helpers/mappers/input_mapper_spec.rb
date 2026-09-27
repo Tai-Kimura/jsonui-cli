@@ -4,6 +4,14 @@ require 'xml/helpers/mappers/input_mapper'
 require 'xml/helpers/resource_resolver'
 
 RSpec.describe XmlGenerator::Mappers::InputMapper do
+  # The XML resource resolver's strings and colors are read from the project an
+  # example runs in and kept for the process; put back after this file
+  # (spec/support/process_state_guard.rb) — xml_builder_spec left
+  # {"main_view_hello" => "Hello"}, which turns a later file's "Hello" into
+  # @string/main_view_hello.
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(KjuiTools::Xml::Helpers::ResourceResolver) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   let(:mapper) { described_class.new }
 
   describe '#map_input_attributes' do

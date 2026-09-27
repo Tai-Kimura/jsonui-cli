@@ -2,8 +2,21 @@
 
 require 'xml/drawable/state_list_drawable_generator'
 require 'xml/helpers/resource_resolver'
+# The examples stub ConfigManager and ProjectFinder; alone this file had not
+# loaded them, and every example failed with NameError unless another spec
+# file required them first.
+require 'core/config_manager'
+require 'core/project_finder'
 
 RSpec.describe DrawableGenerator::StateListDrawableGenerator do
+  # The XML resource resolver's strings and colors are read from the project an
+  # example runs in and kept for the process; put back after this file
+  # (spec/support/process_state_guard.rb) — xml_builder_spec left
+  # {"main_view_hello" => "Hello"}, which turns a later file's "Hello" into
+  # @string/main_view_hello.
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(KjuiTools::Xml::Helpers::ResourceResolver) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   let(:generator) { described_class.new }
   let(:parent_generator) { double('ParentGenerator') }
 

@@ -37,4 +37,22 @@ RSpec.configure do |config|
 
   config.order = :random
   Kernel.srand config.seed
+
+  # Every spec file starts with an empty stage ledger (JsonUI::StageFailures,
+  # which lives as long as the process: a build records into it and
+  # `report!` writes it) and with the emitters' name counters at zero, as a
+  # build starts each layout (ComposeBuilder: reset_counter!). The counters
+  # were wherever the previous file left them, so a file's emitted names
+  # depended on which files ran before it. spec/support/process_state_guard.rb
+  # names these as reset here.
+  config.before(:context) do
+    next unless self.class.superclass == RSpec::Core::ExampleGroup
+
+    JsonUI::StageFailures.clear! if defined?(JsonUI::StageFailures)
+    %w[TextComponent TextFieldComponent TextViewComponent ButtonComponent ConstraintLayoutComponent].each do |name|
+      next unless defined?(KjuiTools::Compose::Components) && KjuiTools::Compose::Components.const_defined?(name, false)
+
+      KjuiTools::Compose::Components.const_get(name, false).reset_counter!
+    end
+  end
 end

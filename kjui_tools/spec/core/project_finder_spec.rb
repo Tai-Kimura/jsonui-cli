@@ -3,6 +3,13 @@
 require 'core/project_finder'
 
 RSpec.describe KjuiTools::Core::ProjectFinder do
+  # setup_paths sets project_dir to an example's temporary directory; on an
+  # order that runs that example last the file left it, and every later
+  # ComposeBuilder.new took the removed directory as its source path. Put back
+  # after this file (spec/support/process_state_guard.rb).
+  before(:context) { @kept_process_state = ProcessStateGuard.keep(described_class) }
+  after(:context) { ProcessStateGuard.put_back(@kept_process_state) }
+
   let(:temp_dir) { Dir.mktmpdir('project_finder_test') }
 
   before do
