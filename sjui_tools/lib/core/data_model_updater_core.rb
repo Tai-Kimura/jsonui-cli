@@ -48,10 +48,10 @@ module JsonUIShared
   #   - data as a Hash (style-provided simple objects) is accepted on every
   #     platform with type inference (was kjui-only)
   #   - a data[] item must carry a 'name' to count (was kjui-only)
-  #   - the Collection cellIdProperty + scrollTo type override runs on every
-  #     platform (string-level no-op on Kotlin today — its scroll types don't
-  #     match the rewritten spelling; kotlin-side parity is a type_converter
-  #     follow-up)
+  #   - the Collection cellIdProperty + scrollTo type override ran on every
+  #     platform; it is gone (4f round 15, jsonui-cli 1.9.0): a scrollTo's
+  #     declared class says what the value names (the SSoT's
+  #     Collection.scrollTo), and cellIdProperty does not change it
   #   - onToggle joins the event-binding attributes and normalizes to
   #     onValueChange on Switch/Toggle so type_mapping.json (keyed on
   #     onValueChange) resolves — was sjui-only, kjui onToggle handlers
@@ -188,8 +188,11 @@ module JsonUIShared
       # Extract data properties from expanded JSON (pass event_bindings for Event type conversion)
       data_properties = extract_data_properties(expanded_data, [], event_bindings)
 
-      # Scan for collections with cellIdProperty + scrollTo to override scrollTo type
-      override_scroll_to_types(expanded_data, data_properties)
+      # A scrollTo's class is the one its data declares: cellIdProperty
+      # decides what a key is, not what the value is (4f round 15; the SSoT's
+      # Collection.scrollTo). Until jsonui-cli 1.9.0 a Collection with
+      # cellIdProperty and scrollTo had its data's `PassthroughSubject<Int`
+      # rewritten to `PassthroughSubject<String` here.
 
       # Extract onclick actions from expanded JSON
       onclick_actions = extract_onclick_actions(expanded_data)
@@ -286,48 +289,6 @@ module JsonUIShared
       end
 
       bindings
-    end
-
-    # Scan layout for Collection components with cellIdProperty + scrollTo
-    # and override the matching data property type from the Int-keyed scroll
-    # publisher to the String-keyed one (cell ids are strings). The rewrite
-    # targets the sjui Combine spelling; on Kotlin it is a string-level
-    # no-op today — kotlin-side parity is a type_converter follow-up.
-    def override_scroll_to_types(json_data, data_properties)
-      scroll_to_props = collect_string_scroll_to_props(json_data)
-      return if scroll_to_props.empty?
-
-      data_properties.each do |prop|
-        if scroll_to_props.include?(prop['name'])
-          prop['class'] = prop['class'].to_s.gsub('PassthroughSubject<Int', 'PassthroughSubject<String')
-        end
-      end
-    end
-
-    # Recursively find scrollTo property names that need String type (cellIdProperty is set)
-    def collect_string_scroll_to_props(json_data, result = Set.new)
-      return result unless json_data.is_a?(Hash) || json_data.is_a?(Array)
-
-      if json_data.is_a?(Hash)
-        if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Collection' && json_data['cellIdProperty'] && json_data['scrollTo']
-          scroll_to = json_data['scrollTo']
-          if scroll_to.is_a?(String) && scroll_to.start_with?('@{') && scroll_to.end_with?('}')
-            prop_name = scroll_to[2...-1]
-            result.add(prop_name)
-          end
-        end
-
-        child = json_data['child']
-        if child.is_a?(Array)
-          child.each { |c| collect_string_scroll_to_props(c, result) }
-        elsif child
-          collect_string_scroll_to_props(child, result)
-        end
-      elsif json_data.is_a?(Array)
-        json_data.each { |item| collect_string_scroll_to_props(item, result) }
-      end
-
-      result
     end
 
     def extract_onclick_actions(json_data, actions = Set.new)

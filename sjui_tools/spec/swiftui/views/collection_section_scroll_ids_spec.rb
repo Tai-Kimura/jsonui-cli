@@ -134,11 +134,23 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       end
     end
 
-    it 'control: with no scrollTo, the loop ids are the IdentifiedCellItem ids as before, and there is no .id and no earlierKeys' do
+    # Round 15: with no scrollTo a loop's ids are the IdentifiedCellItem ids
+    # as before — the key, else "\(index)"; "<section>:" after section 0 —
+    # except that an id an earlier cell of the loop has is the later cell's
+    # place: no two cells of a loop share an id, and the first keeps its own.
+    # Until jsonui-cli 1.9.0 the loop was ForEach(items), and two cells with
+    # one key were one id to SwiftUI.
+    it 'with no scrollTo, a loop id is the IdentifiedCellItem id unless an earlier cell of the loop has it: then its place' do
       keyed_scroll_routes.each do |route, extra|
         code = convert(extra.merge('cellIdProperty' => 'key'))
-        expect(code).to include('ForEach(items) { cell in'), route
-        expect(code).not_to include('id: \\.target'), route
+        b = blocks(code)
+        [0, 2, 3].each do |s|
+          expect(b[s]).to include("let ids: [AnyHashable] = {\n#{' ' * (b[s][/^( *)let ids/, 1].to_s.size + 4)}var seen = Set<String>()\n"), "#{route} #{s}"
+          expect(b[s]).to include("return items.map { cell in seen.insert(cell.id).inserted ? AnyHashable(cell.id) : " \
+                                  "AnyHashable(IndexPath(item: cell.index, section: #{s})) }"), "#{route} #{s}"
+          expect(b[s]).to include('ForEach(zip(ids, items).map { pair in (id: pair.0, cell: pair.1) }, id: \\.id) { item in'), "#{route} #{s}"
+        end
+        expect(code).not_to include('ForEach(items) {'), route
         expect(code).not_to include('let targets'), route
         expect(code).not_to include('.id('), route
         expect(code).not_to include('earlierKeys'), route
@@ -200,7 +212,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
             "  init(alignment: HorizontalAlignment, horizontalSpacing: CGFloat, verticalSpacing: CGFloat, @ViewBuilder content: @escaping () -> Content) { self.content = content }\n" \
             "  var body: some View { VStack { content() } } }\n"
     codes = section_scroll_routes.values.flat_map do |extra|
-      [convert(extra.merge('scrollTo' => '@{target}')), convert(extra.merge('scrollTo' => '@{key}', 'cellIdProperty' => 'key'))]
+      [convert(extra.merge('scrollTo' => '@{target}')), convert(extra.merge('scrollTo' => '@{key}', 'cellIdProperty' => 'key')),
+       convert(extra.merge('cellIdProperty' => 'key'))]
     end
     expect(compilable_view("VStack {\n#{codes.join("\n")}\n}",
                            data: ['var rows: CollectionDataSource? = nil', 'var target: Int = 0', 'var key: String = ""'],

@@ -14,7 +14,8 @@ require_relative '../../support/emitted_swift'
 #   shares that emit, had `.id(cellIndex)` in every data section;
 # - the pager: its TabView turns to the page the value names — the bound
 #   currentPage, else a page state of its own;
-# - a String with no cellIdProperty: a cell's cellId is its key;
+# - a String with no cellIdProperty: a cell's cellId is its key — its loop id
+#   the cellId when no cell before it has it, else its place (round 15);
 # - an Int with cellIdProperty (round 14): the value's declared class says
 #   what it names, cellIdProperty only what a key is — an Int is a cell's
 #   place on every route. Until jsonui-cli 1.9.0 cellIdProperty made every
@@ -92,18 +93,88 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   describe 'a String with no cellIdProperty' do
-    it "is a cell's cellId: a cell with one takes it as .id — a later section's only when no earlier one has it" do
+    # Round 15: the keyed loops' rule (collection_section_scroll_ids_spec) on
+    # the cellIds. Until jsonui-cli 1.9.0 a cell took its cellId as `.id`
+    # inside loops of offsets — "<section>:<offset>" Strings after section 0,
+    # which a String such as "1:3" reached — and two cells of a section with
+    # one cellId had one `.id`.
+    it "is a cell's cellId: its loop id is the cellId when no cell before it has it, else its place" do
       code, = emit({ 'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }, STR)
-      expect(code).to include('.id((cellData["cellId"] as? String).map { AnyHashable($0) } ?? AnyHashable(cellIndex))')
+      key = 'if let key = (cell.data["cellId"] as? String), seen.insert(key).inserted { return AnyHashable(key) }'
+      expect(code).to include("var seen = Set<String>()\n")
       expect(code).to include('let earlierKeys = Set([0].map { dataSource.sections[$0] }.flatMap { ($0.cells?.data ?? []).compactMap { $0["cellId"] as? String } })')
-      expect(code).to include('.id((cell.data["cellId"] as? String).flatMap { earlierKeys.contains($0) ? nil : AnyHashable($0) } ?? AnyHashable(sectionStart + cell.index))')
+      expect(code).to include('var seen = earlierKeys')
+      expect(code.scan(key).size).to eq(2)
+      expect(code).to include('return AnyHashable(IndexPath(item: cell.index, section: 0))')
+      expect(code).to include('return AnyHashable(IndexPath(item: cell.index, section: 1))')
+      expect(code.scan('ForEach(zip(targets, items).map { pair in (target: pair.0, cell: pair.1) }, id: \\.target) { item in').size).to eq(2)
+      expect(code).not_to include('.id(')
+      expect(code).not_to include('$0.offset')
+      expect(code).not_to include('id: \\.offset')
+      expect(code).not_to include('sectionStart')
       expect(code).to include('.onChange(of: data.target) { _, cellId in')
+      expect(code).to include('scrollProxy.scrollTo(cellId, anchor: .bottom)')
     end
 
     it 'control: an Int keeps the counted ids' do
       code, = emit({ 'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }, INT)
       expect(code).to include('.id(cellIndex)')
       expect(code).not_to include('AnyHashable')
+    end
+  end
+
+  # Round 15: with autoChangeTrackingId a cell's key is its enriched cellId
+  # on every path — the keyed loops read their cells `.reconfigured(...)`,
+  # and so do the lookups. Until jsonui-cli 1.9.0 the pager's and the
+  # class-list List's compared the data's own key: the String a list reached
+  # was no key there, and the data's key reached a page no list would.
+  describe 'autoChangeTrackingId: the lookups read the enriched cellId, as the loops do' do
+    AUTO = { 'cellIdProperty' => 'key', 'autoChangeTrackingId' => true }.freeze
+    ENRICH = '.reconfigured(cellIdProperty: "key", autoChangeTrackingId: true)'
+
+    it 'the pager' do
+      code, = emit(PAGER.merge(AUTO), STR)
+      secs = '(data.rows?.sections ?? [])'
+      expect(code).to include("search: for cells in [(#{secs}.count > 0 ? (#{secs}[0].cells?.data ?? []) : [])#{ENRICH}, " \
+                              "(#{secs}.count > 1 ? (#{secs}[1].cells?.data ?? []) : [])#{ENRICH}] {")
+      expect(code).to include('if ((cell["cellId"] as? String) ?? (cell["key"] as? String)) == cellId { found = page; break search }')
+    end
+
+    it 'the class-list List' do
+      code, = emit(CLASS_LIST.merge(AUTO), STR)
+      expect(code).to include("for (cellIndex, cell) in (section.cells?.data ?? [])#{ENRICH}.enumerated() {")
+    end
+
+    it 'control: an Int counts cells and reads no key; with no autoChangeTrackingId nothing is enriched' do
+      [[PAGER.merge(AUTO), INT], [CLASS_LIST.merge(AUTO), INT], [PAGER.merge('cellIdProperty' => 'key'), STR],
+       [CLASS_LIST.merge('cellIdProperty' => 'key'), STR]].each do |node, props|
+        code, = emit(node, props)
+        lookup = code.lines.grep(/search: for |for \(cellIndex, /)
+        expect(lookup.size).to be >= 1, node.keys.join(' ')
+        expect(lookup.join).not_to include('.reconfigured('), node.keys.join(' ')
+      end
+    end
+
+    it 'type-checks: the pager, the class-list List and a list, a String with autoChangeTrackingId', :swift_compile do
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB +
+              cell_view_stub('ACellView', 'BCellView') +
+              "extension Array where Element == [String: Any] {\n" \
+              "  func reconfigured(cellIdProperty: String?, autoChangeTrackingId: Bool) -> [[String: Any]] { self } }\n"
+      views = [PAGER, CLASS_LIST, { 'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }].each_with_index.map do |node, i|
+        code, state = emit(node.merge(AUTO).merge('id' => "auto#{i}"), STR)
+        code = code.lines.reject { |l| l.include?('.tabViewStyle(.page(') }.join
+        <<~SWIFT
+          struct Auto#{i}Data { var rows: CollectionDataSource? = nil; var target: String = "" }
+          struct Auto#{i}: View {
+              @State var data = Auto#{i}Data()
+          #{state.map { |l| "    #{l}" }.join("\n")}
+              var body: some View {
+          #{code.lines.map { |l| "        #{l}" }.join}
+              }
+          }
+        SWIFT
+      end
+      expect("#{EmittedSwift::LIBRARY_STUBS}\n#{stubs}\n#{views.join("\n")}").to compile_as_swift
     end
   end
 

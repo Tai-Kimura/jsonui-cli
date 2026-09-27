@@ -477,6 +477,32 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
     end
   end
 
+  # A scrollTo's class is the one its data declares (4f round 15; the SSoT's
+  # Collection.scrollTo): cellIdProperty decides what a key is, not what the
+  # value is. Until jsonui-cli 1.9.0 a Collection with cellIdProperty and
+  # scrollTo had its data's `PassthroughSubject<Int` rewritten to
+  # `PassthroughSubject<String` (override_scroll_to_types, shared/core).
+  describe 'a scrollTo on a Collection with cellIdProperty' do
+    let(:updater) { described_class.new }
+
+    it "keeps the class its data declares" do
+      json_path = File.join(layouts_dir, 'scroller.json')
+      File.write(json_path, JSON.generate({
+        'type' => 'View',
+        'child' => [{ 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'cellIdProperty' => 'key',
+                      'scrollTo' => '@{target}', 'sections' => [{ 'cell' => 'ACell' }] }],
+        'data' => [{ 'name' => 'rows', 'class' => 'CollectionDataSource' },
+                   { 'name' => 'target', 'class' => 'PassthroughSubject<Int, Never>' }]
+      }))
+      expect { updater.send(:process_json_file, json_path) }.to output(/Updated Data model/).to_stdout
+      written = Dir[File.join(data_dir, '*.swift')]
+      expect(written.size).to eq(1)
+      model = File.read(written.first)
+      expect(model).to include('PassthroughSubject<Int, Never>')
+      expect(model).not_to include('PassthroughSubject<String')
+    end
+  end
+
   describe 'format_default_value edge cases' do
     let(:updater) { described_class.new }
 
