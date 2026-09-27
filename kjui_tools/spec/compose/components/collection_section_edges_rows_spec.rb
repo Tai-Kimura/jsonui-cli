@@ -6,6 +6,7 @@ require 'tmpdir'
 require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../../lib/compose/generators/cell_generator'
 require_relative '../../support/kotlin_compiler'
+require_relative '../../support/compose_bounded_scroll_stubs'
 
 # A Collection's header or footer view sits in a row of its own: the ROW is
 # full width and the view keeps its own size at the row's start (4f ruling
@@ -34,7 +35,7 @@ RSpec.describe 'kjui codegen: a header or footer is a full-width row, the view a
   def emit(extra)
     %i[info debug warn].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
     node = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'sections' => EDGE_ROWS_SECTIONS }.merge(extra).compact
-    KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, Set.new, nil)
+    ComposeBoundedScrollStubs.unqualify(KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, Set.new, nil))
   end
 
   EDGE_ROWS_ROUTES = {
@@ -81,8 +82,7 @@ RSpec.describe 'kjui codegen: a header or footer is a full-width row, the view a
     val Int.dp: Dp get() = Dp()
     interface Alignment { interface Vertical; companion object { val TopStart = object : Alignment {}; val Top = object : Vertical {} } }
     class Arrangement { companion object { fun spacedBy(space: Dp): Arrangement = Arrangement() } }
-    class Constraints(val hasBoundedHeight: Boolean)
-    class BoxWithConstraintsScope { val constraints = Constraints(true) }
+    class BoxWithConstraintsScope { val constraints = Constraints() }
     fun BoxWithConstraints(modifier: Modifier = Modifier, content: BoxWithConstraintsScope.() -> Unit) { BoxWithConstraintsScope().content() }
     object Layout {
         val drawn = mutableListOf<String>()
@@ -142,6 +142,7 @@ RSpec.describe 'kjui codegen: a header or footer is a full-width row, the view a
     class Data(val rows: CollectionDataSource? = null)
     fun cells(name: String, n: Int) = CollectionDataSection.CellData(name, List(n) { mapOf<String, Any>("id" to "$name$it") })
     fun edge(name: String) = CollectionDataSection.HeaderFooterData(name, emptyMap())
+    #{ComposeBoundedScrollStubs::KOTLIN}
   KOTLIN
 
   def program(functions)

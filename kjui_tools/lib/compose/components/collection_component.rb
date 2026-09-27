@@ -46,10 +46,27 @@ module KjuiTools
         # data section's cells and the result the lazy item index, so a header
         # moved the anchor and a later section was not counted.
         # `route` / `grid_columns` / `is_horizontal` as scroll_target_code.
+        #
+        # Under reverseLayout a lazy list rests at its visual bottom, so top
+        # and bottom trade places, as they do for scrollAnchor (4f ruling
+        # 2026-09-27, round 12 — where iOS lands, which draws the same order
+        # from bottom-anchored content): bottom is where the list rests and
+        # moves nothing; top goes to the cell drawn at the visual top — the
+        # last one the content emits, which is the first section's last cell
+        # when the sections are emitted last-first. Until jsonui-cli 1.9.0
+        # bottom went to the last cell, which a reversed list draws at its
+        # visual top.
+        #
+        # `non_lazy` as scroll_to_effect's: the non-lazy container rests at
+        # its top whatever reverseLayout says (it draws no reverseLayout), and
+        # the cell goes to its top edge (collectionScrollToCell anchor 0), as
+        # scrollToItem puts a lazy item.
         def self.default_scroll_anchor_code(json_data, state_var, depth, required_imports, sections: [], route: :stack,
-                                            grid_columns: nil, is_horizontal: false)
-          anchor = json_data['defaultScrollAnchor']
-          return '' unless %w[center bottom].include?(anchor.to_s)
+                                            grid_columns: nil, is_horizontal: false, non_lazy: nil)
+          lazy_anchor = non_lazy == :only ? nil : resting_default_anchor(json_data)
+          declared = json_data['defaultScrollAnchor'].to_s
+          eager_anchor = non_lazy && %w[center bottom].include?(declared) ? declared : nil
+          return '' unless lazy_anchor || eager_anchor
 
           property_name = class_list_items_property(json_data)
           return '' unless property_name
@@ -60,17 +77,54 @@ module KjuiTools
           count = scroll_cell_count_expr(json_data, sections, route, is_horizontal)
           return '' unless count
 
+          eager_code = lambda do |level|
+            cell = eager_anchor == 'center' ? 'defaultAnchorCount / 2' : 'defaultAnchorCount - 1'
+            indent("collectionScrollToCell(#{cell}, 0, false)", level) + "\n"
+          end
+          lazy_code = lambda do |level|
+            reversed_sections = json_data['reverseLayout'] == true && sections.any? && %i[stack grid].include?(route)
+            cell = if lazy_anchor == 'center' then 'defaultAnchorCount / 2'
+                   elsif reversed_sections
+                     "#{scroll_lists_expr(json_data, sections, route, is_horizontal)}.firstOrNull { it.isNotEmpty() }?.let { it.size - 1 } ?: 0"
+                   else 'defaultAnchorCount - 1'
+                   end
+            out = indent("val cell = #{cell}", level) + "\n"
+            out += scroll_item_code(json_data, sections, level - 1, route: route, grid_columns: grid_columns, is_horizontal: is_horizontal)
+            out + indent("if (index >= 0) #{state_var}.scrollToItem(index)", level) + "\n"
+          end
+
           code = indent("val defaultAnchorCount = #{count}", depth) + "\n"
           code += indent("val defaultAnchorApplied = remember { mutableStateOf(false) }", depth) + "\n"
           code += indent("LaunchedEffect(defaultAnchorCount) {", depth) + "\n"
           code += indent("if (!defaultAnchorApplied.value && defaultAnchorCount > 0) {", depth + 1) + "\n"
-          code += indent("val cell = #{anchor.to_s == 'center' ? 'defaultAnchorCount / 2' : 'defaultAnchorCount - 1'}", depth + 2) + "\n"
-          code += scroll_item_code(json_data, sections, depth + 1, route: route, grid_columns: grid_columns, is_horizontal: is_horizontal)
-          code += indent("if (index >= 0) #{state_var}.scrollToItem(index)", depth + 2) + "\n"
+          if non_lazy.is_a?(String) && eager_anchor && lazy_anchor
+            code += indent("if (#{non_lazy}) {", depth + 2) + "\n"
+            code += eager_code.call(depth + 3)
+            code += indent("} else {", depth + 2) + "\n"
+            code += lazy_code.call(depth + 3)
+            code += indent("}", depth + 2) + "\n"
+          elsif non_lazy.is_a?(String)
+            code += indent("if (#{eager_anchor ? '' : '!'}(#{non_lazy})) {", depth + 2) + "\n"
+            code += eager_anchor ? eager_code.call(depth + 3) : lazy_code.call(depth + 3)
+            code += indent("}", depth + 2) + "\n"
+          elsif eager_anchor
+            code += eager_code.call(depth + 2)
+          else
+            code += lazy_code.call(depth + 2)
+          end
           code += indent("defaultAnchorApplied.value = true", depth + 2) + "\n"
           code += indent("}", depth + 1) + "\n"
           code += indent("}", depth) + "\n"
           code
+        end
+
+        # defaultScrollAnchor as a lazy list rests (default_scroll_anchor_code):
+        # center / bottom, top and bottom traded under reverseLayout; nil when
+        # it moves nothing.
+        def self.resting_default_anchor(json_data)
+          anchor = json_data['defaultScrollAnchor'].to_s
+          anchor = { 'top' => 'bottom', 'bottom' => 'top' }.fetch(anchor, anchor) if json_data['reverseLayout'] == true
+          %w[center bottom].include?(anchor) ? anchor : nil
         end
 
         # `scrollTo` carries an index, and the data section may declare it as
@@ -213,7 +267,12 @@ module KjuiTools
         #   route :class_list — the grid's class-list body (no sections)
         #   route :pager — the HorizontalPager: a page is a cell
         #   route :flow  — the FlowRow(s): the cell alone
-        def self.scroll_target_code(json_data, sections, depth, prop:, route:, grid_columns: nil, is_horizontal: false)
+        # `legacy` overrides whether the legacy form is read: true / false, or
+        # a Kotlin condition (the CollectionStack whose bound mode may be
+        # EAGER, which has no lazy item); `item` whether the lazy item index
+        # follows (false on the non-lazy containers: the cell alone).
+        def self.scroll_target_code(json_data, sections, depth, prop:, route:, grid_columns: nil, is_horizontal: false,
+                                    legacy: nil, item: nil)
           property_name = class_list_items_property(json_data)
           return nil unless property_name
 
@@ -225,19 +284,21 @@ module KjuiTools
           lines = []
           add = ->(text) { lines << indent(text, depth + 1) }
           digits = 'raw.substringBefore("#").takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()'
-          legacy = route != :flow
+          legacy = route != :flow if legacy.nil?
+          item = route != :flow if item.nil?
           add.call("val scrollValue: Any? = data.#{prop}")
           add.call("val cell = if (scrollValue is Number) scrollValue.toInt() else #{lists}.flatten().indexOfFirst { #{key} == raw }")
           if legacy
             id = JsonUIShared::StringLiterals.kotlin_body((json_data['id'] || '(unnamed)').to_s)
-            add.call("val legacyIndex = if (scrollValue !is Number && cell < 0) #{digits} else null")
+            gate = legacy.is_a?(String) ? "#{legacy} && " : ''
+            add.call("val legacyIndex = if (#{gate}scrollValue !is Number && cell < 0) #{digits} else null")
             add.call('if (cell < 0 && legacyIndex == null) return@LaunchedEffect')
             add.call("if (legacyIndex != null && scrollToDebug) android.util.Log.w(\"Collection\", \"Collection #{id}: scrollTo \\\"$raw\\\" is no cell's key — read as the legacy lazy item index $legacyIndex. \" +")
             add.call("    \"Scroll by a cell's key, or by its index among the cells (jsonui-cli 1.9.0, Collection.scrollTo).\")")
           else
             add.call('if (cell < 0) return@LaunchedEffect')
           end
-          return lines.join("\n") + "\n" if route == :flow
+          return lines.join("\n") + "\n" unless item
 
           lines.join("\n") + "\n" + scroll_item_code(json_data, sections, depth, route: route, grid_columns: grid_columns,
                                                                is_horizontal: is_horizontal, prefix: legacy ? 'legacyIndex ?: ' : '')
@@ -374,18 +435,37 @@ module KjuiTools
         # SwiftUI's `.onChange(of:)` reads it — a list with a header and an
         # initial 0 stays at its top. Until jsonui-cli 1.9.0 the first
         # composition scrolled too (LaunchedEffect runs on entering).
-        def self.scroll_to_effect(json_data, sections, depth, required_imports, target:, state: nil, grid_columns: nil, is_horizontal: false)
+        #
+        # `non_lazy` — the containers that scroll without a lazy list (4f
+        # ruling 2026-09-27, round 12): :only for a route that is one (target
+        # :non_lazy, the wrapContent Column; the CollectionStack declared
+        # EAGER), or the Kotlin condition under which the CollectionStack's
+        # bound mode is EAGER. There the cell is scrolled to by where it was
+        # laid out (non_lazy_scroll_prelude), and the legacy form names no
+        # cell: such a container has no lazy item.
+        def self.scroll_to_effect(json_data, sections, depth, required_imports, target:, state: nil, grid_columns: nil, is_horizontal: false,
+                                  non_lazy: nil)
           raw_binding = json_data['scrollTo']
           return '' unless raw_binding.is_a?(String) && (prop = raw_binding[/\A@\{([^}]+)\}\z/, 1])
 
           route = target == :grid ? (sections.any? ? :grid : :class_list) : target
-          resolution = scroll_target_code(json_data, sections, depth, prop: prop, route: route, grid_columns: grid_columns, is_horizontal: is_horizontal)
+          route = sections.any? ? :stack : :class_list if target == :non_lazy
+          only_non_lazy = non_lazy == :only || target == :non_lazy
+          resolution = if only_non_lazy
+                         scroll_target_code(json_data, sections, depth, prop: prop, route: route, is_horizontal: is_horizontal,
+                                            legacy: false, item: false)
+                       elsif non_lazy
+                         scroll_target_code(json_data, sections, depth, prop: prop, route: route, grid_columns: grid_columns,
+                                            is_horizontal: is_horizontal, legacy: "!(#{non_lazy})")
+                       else
+                         scroll_target_code(json_data, sections, depth, prop: prop, route: route, grid_columns: grid_columns, is_horizontal: is_horizontal)
+                       end
           return '' unless resolution
 
           required_imports&.add(:remember_state)
           required_imports&.add(:launched_effect)
           code = indent('val scrollToArmed = remember { mutableStateOf(false) }', depth) + "\n"
-          if target != :flow
+          if target != :flow && !only_non_lazy
             code += indent('val scrollToDebug = (androidx.compose.ui.platform.LocalContext.current.applicationInfo.flags and ' \
                            'android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0', depth) + "\n"
           end
@@ -395,6 +475,16 @@ module KjuiTools
           code += indent("val raw = data.#{prop}#{Helpers::BoundValue.string_typed?(prop) ? '.orEmpty()' : '?.toString().orEmpty()'}", depth + 1) + "\n"
           code += indent('if (raw.isEmpty()) return@LaunchedEffect', depth + 1) + "\n"
           code += resolution
+          non_lazy_call = "collectionScrollToCell(cell, #{non_lazy_anchor_mode(json_data)}, #{non_lazy_animate_expr(json_data)})"
+          if only_non_lazy
+            return code + indent(non_lazy_call, depth + 1) + "\n" + indent('}', depth) + "\n"
+          end
+          if non_lazy
+            code += indent("if (#{non_lazy}) {", depth + 1) + "\n"
+            code += indent("if (cell >= 0) #{non_lazy_call}", depth + 2) + "\n"
+            code += indent('return@LaunchedEffect', depth + 2) + "\n"
+            code += indent('}', depth + 1) + "\n"
+          end
           code += case target
                   when :pager then pager_scroll_code(json_data, depth + 1)
                   when :flow then flow_scroll_code(json_data, depth + 1)
@@ -404,6 +494,71 @@ module KjuiTools
                                            size: target == :grid ? (is_horizontal ? 'size.width' : 'size.height') : 'size')
                   end
           code + indent('}', depth) + "\n"
+        end
+
+        # scrollAnchor on a non-lazy container, as collectionScrollToCell
+        # takes it: 0 top, 1 center, 2 bottom (the default). These containers
+        # draw no reverseLayout, so the anchor is the declared one.
+        def self.non_lazy_anchor_mode(json_data)
+          anchor = JsonUIShared::EnumSpelling.lowered(json_data['scrollAnchor'] || DEFAULT_SCROLL_ANCHOR, 'Collection', 'scrollAnchor').to_s
+          { 'top' => 0, 'center' => 1 }.fetch(anchor, 2)
+        end
+
+        # scrollAnimated as a Kotlin Boolean (scroll_animated_mode).
+        def self.non_lazy_animate_expr(json_data)
+          mode, expr = scroll_animated_mode(json_data)
+          case mode
+          when :binding then expr
+          when :jump then 'false'
+          else 'true'
+          end
+        end
+
+        # The scroll of a container that is not a lazy list — the EAGER
+        # CollectionStack, the wrapContent Column (4f rulings 2026-09-27, round
+        # 12) — for its scrollTo and defaultScrollAnchor: its ScrollState, the
+        # viewport's and each cell's coordinates as they are laid out (the
+        # cells by their place among the drawn cells), and
+        # `collectionScrollToCell(cell, anchor, animate)`, which lands the cell
+        # along the axis (anchor 0 top — its leading edge at the viewport's —,
+        # 1 center, 2 bottom — its trailing edge at the viewport's), waiting a
+        # few frames for a cell that arrived with the value. The viewport and
+        # the cells are recorded by `collectionViewport[0]` /
+        # `collectionCellPlaces[n]` modifiers the caller emits.
+        def self.non_lazy_scroll_prelude(depth, required_imports, is_horizontal:)
+          required_imports&.add(:remember_state)
+          required_imports&.add(:on_globally_positioned)
+          lines = []
+          add = ->(text, level = 0) { lines << indent(text, depth + level) }
+          add.call('val collectionScroll = androidx.compose.foundation.rememberScrollState()')
+          add.call('val collectionCellPlaces = remember { mutableMapOf<Int, androidx.compose.ui.layout.LayoutCoordinates>() }')
+          add.call('val collectionViewport = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }')
+          if is_horizontal
+            add.call('val collectionRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl')
+          end
+          add.call('val collectionScrollToCell: suspend (Int, Int, Boolean) -> Unit = { cell, anchor, animate ->')
+          add.call('var frames = 0', 1)
+          add.call('while ((collectionCellPlaces[cell]?.isAttached != true || collectionViewport[0]?.isAttached != true) && frames < 10) {', 1)
+          add.call('frames++', 2)
+          add.call('androidx.compose.runtime.withFrameNanos { }', 2)
+          add.call('}', 1)
+          add.call('val viewport = collectionViewport[0]?.takeIf { it.isAttached }', 1)
+          add.call('val placed = collectionCellPlaces[cell]?.takeIf { it.isAttached }', 1)
+          add.call('if (viewport != null && placed != null) {', 1)
+          add.call('val at = viewport.localPositionOf(placed, androidx.compose.ui.geometry.Offset.Zero)', 2)
+          if is_horizontal
+            add.call('val size = placed.size.width', 2)
+            add.call('val lead = if (collectionRtl) viewport.size.width - (at.x.toInt() + size) else at.x.toInt()', 2)
+          else
+            add.call('val size = placed.size.height', 2)
+            add.call('val lead = at.y.toInt()', 2)
+          end
+          add.call('val span = collectionScroll.viewportSize - size', 2)
+          add.call('val to = (collectionScroll.value + lead - (if (anchor == 1) span / 2 else if (anchor == 2) span else 0)).coerceAtLeast(0)', 2)
+          add.call('if (animate) collectionScroll.animateScrollTo(to) else collectionScroll.scrollTo(to)', 2)
+          add.call('}', 1)
+          add.call('}')
+          lines.join("\n") + "\n"
         end
 
         # The animate / jump call, as scrollAnimated says: [binding, jump,
@@ -515,8 +670,11 @@ module KjuiTools
           json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
         end
 
-        def self.default_scroll_anchor?(json_data)
-          return false unless %w[center bottom].include?(json_data['defaultScrollAnchor'].to_s)
+        # Whether defaultScrollAnchor moves a lazy list (resting_default_anchor),
+        # or — `non_lazy` — a container that is not one (the declared anchor).
+        def self.default_scroll_anchor?(json_data, non_lazy: false)
+          anchor = non_lazy ? (%w[center bottom].include?(json_data['defaultScrollAnchor'].to_s) || resting_default_anchor(json_data)) : resting_default_anchor(json_data)
+          return false unless anchor
 
           json_data['items'].is_a?(String) && json_data['items'].match?(/@\{[^}]+\}/)
         end
@@ -647,9 +805,11 @@ module KjuiTools
 
           # wrapContent height on vertical Collection → use Column instead of LazyVerticalGrid
           # to avoid crash when nested inside another LazyVerticalGrid (infinite height constraint).
+          # It scrolls inside the height its parent bounds it to (4f ruling
+          # 2026-09-27, round 12; generate_non_lazy's scroll_within_bounds).
           height_value = json_data['height']
           if !is_horizontal && height_value == 'wrapContent'
-            return generate_non_lazy(json_data, sections, depth, required_imports, parent_type)
+            return generate_non_lazy(json_data, sections, depth, required_imports, parent_type, scroll_within_bounds: true)
           end
 
           # Single-column section-based collections route through CollectionStack
@@ -1137,7 +1297,11 @@ module KjuiTools
         # section and no header / footer (the horizontal and flow routes);
         # `columns` > 1 (or a binding) lays the cells out in rows of that
         # many.
-        def self.class_list_eager_body(json_data, names, depth, required_imports, first_only:, columns_info: nil, cell_extra: '')
+        # `places`: each cell records where it was laid out, by its place among
+        # the drawn cells (non_lazy_scroll_prelude) — the every-section and
+        # grid bodies of the wrapContent Column.
+        def self.class_list_eager_body(json_data, names, depth, required_imports, first_only:, columns_info: nil, cell_extra: '',
+                                       places: false)
           cell_name, header_name, footer_name = names
           header_name = footer_name = nil if first_only
           register_class_list_imports([cell_name, header_name, footer_name], required_imports)
@@ -1146,11 +1310,12 @@ module KjuiTools
           code = ''
           code += class_list_edge_call(cell_class_name(header_name), 'header', depth) if header_name
           array = cell_name && property_name && class_list_array_expr(json_data, cell_name)
+          place = ->(expr) { places ? ".onGloballyPositioned { collectionCellPlaces[#{expr}] = it }" : '' }
           if array && !grid
             code += "\n" + indent("// #{cell_name}: the declared list, one section", depth)
             code += "\n" + indent("#{array}.forEachIndexed { cellIndex, currentCellData ->", depth)
             code += "\n" + indent("val sectionIndex = 0", depth + 1)
-            code += class_list_cell(json_data, cell_name, depth + 1, required_imports, cell_extra: cell_extra)
+            code += class_list_cell(json_data, cell_name, depth + 1, required_imports, cell_extra: cell_extra + place.call('cellIndex'))
             code += "\n" + indent("}", depth)
           elsif cell_name && property_name
             if first_only
@@ -1173,11 +1338,18 @@ module KjuiTools
               spacing = json_data['columnSpacing'] || json_data['itemSpacing']
               required_imports&.add(:arrangement) if spacing
               row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)})" : 'modifier = Modifier.fillMaxWidth()'
-              code += "\n" + indent("classListCells.chunked(#{count}).forEach { rowCells ->", depth)
-              code += "\n" + indent("Row(#{row_args}) {", depth + 1)
-              code += "\n" + indent("rowCells.forEach { (sectionIndex, cellIndex, currentCellData) ->", depth + 2)
+              if places
+                code += "\n" + indent("classListCells.chunked(#{count}).forEachIndexed { rowIndex, rowCells ->", depth)
+                code += "\n" + indent("Row(#{row_args}) {", depth + 1)
+                code += "\n" + indent("rowCells.forEachIndexed { columnIndex, (sectionIndex, cellIndex, currentCellData) ->", depth + 2)
+              else
+                code += "\n" + indent("classListCells.chunked(#{count}).forEach { rowCells ->", depth)
+                code += "\n" + indent("Row(#{row_args}) {", depth + 1)
+                code += "\n" + indent("rowCells.forEach { (sectionIndex, cellIndex, currentCellData) ->", depth + 2)
+              end
               code += "\n" + indent("Box(modifier = Modifier.weight(1f)) {", depth + 3)
-              code += class_list_cell(json_data, cell_name, depth + 4, required_imports)
+              code += class_list_cell(json_data, cell_name, depth + 4, required_imports,
+                                      cell_extra: place.call("rowIndex * #{count.include?('.') || count.include?('(') ? "(#{count})" : count} + columnIndex"))
               code += "\n" + indent("}", depth + 3)
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("repeat(#{count} - rowCells.size) { Spacer(modifier = Modifier.weight(1f)) }", depth + 2)
@@ -1187,7 +1359,8 @@ module KjuiTools
               code += "\n" + indent("// #{cell_name}: every data section", depth)
               code += "\n" + indent("#{sections_access(property_name)}.forEachIndexed { sectionIndex, section ->", depth)
               code += "\n" + indent("section.cells?.data?.forEachIndexed { cellIndex, currentCellData ->", depth + 1)
-              code += class_list_cell(json_data, cell_name, depth + 2, required_imports)
+              code += class_list_cell(json_data, cell_name, depth + 2, required_imports,
+                                      cell_extra: place.call("#{scroll_sections_expr(property_name)}.take(sectionIndex).sumOf { it.cells?.data?.size ?: 0 } + cellIndex"))
               code += "\n" + indent("}", depth + 1)
               code += "\n" + indent("}", depth)
             end
@@ -2010,10 +2183,37 @@ module KjuiTools
           info[:literal] > 1 ? info[:literal].to_s : nil
         end
 
-        def self.generate_non_lazy(json_data, sections, depth, required_imports, parent_type)
+        # `scroll_within_bounds` — the wrapContent Column (a vertical Collection
+        # whose height wraps its content, `lazy` lazy or eager): it scrolls
+        # inside the height its parent bounds it to, and under a parent that
+        # does not bound it (a scrolling ancestor) it is its content's height,
+        # with nothing of its own to scroll (4f ruling 2026-09-27, round 12:
+        # what iOS — a ScrollView as tall as its parent lets it be — and the
+        # web — a fit-content box a flex parent shrinks, overflow auto — draw,
+        # measured on both). The layout step hands the verticalScroll a
+        # bounded height where the parent gave none, so it measures instead of
+        # throwing ("measured with an infinity maximum height constraints");
+        # no subcomposition, so a parent may still ask its intrinsics.
+        # scrollTo and defaultScrollAnchor then reach its cells by the rule the
+        # lazy routes follow (non_lazy_scroll_prelude). Until jsonui-cli 1.9.0
+        # it never scrolled: its cells ran past a bounded parent. `lazy: none`
+        # comes here without it and scrolls nowhere.
+        def self.generate_non_lazy(json_data, sections, depth, required_imports, parent_type, scroll_within_bounds: false)
           required_imports&.add(:launched_effect)
 
           items_property = json_data['items']
+          scroll_to = json_data['scrollTo'].is_a?(String) && json_data['scrollTo'].match?(/\A@\{[^}]+\}\z/)
+          declared_anchor = %w[center bottom].include?(json_data['defaultScrollAnchor'].to_s) &&
+                            items_property.is_a?(String) && items_property.match?(/@\{[^}]+\}/)
+          places = scroll_within_bounds && (scroll_to || declared_anchor)
+          prelude = ''
+          if places
+            prelude = non_lazy_scroll_prelude(depth, required_imports, is_horizontal: false)
+            route = sections.any? ? :stack : :class_list
+            prelude += scroll_to_effect(json_data, sections, depth, required_imports, target: :non_lazy)
+            prelude += default_scroll_anchor_code(json_data, nil, depth, required_imports, sections: sections, route: route, non_lazy: :only)
+            places = false if prelude == non_lazy_scroll_prelude(depth, nil, is_horizontal: false)
+          end
 
           # Build modifiers
           modifiers = []
@@ -2026,12 +2226,21 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          if scroll_within_bounds
+            required_imports&.add(:vertical_scroll)
+            required_imports&.add(:layout_modifier)
+            modifiers << '.onGloballyPositioned { collectionViewport[0] = it }' if places
+            modifiers << '.layout { measurable, constraints -> val placeable = measurable.measure(if (constraints.hasBoundedHeight) constraints ' \
+                         'else androidx.compose.ui.unit.Constraints.fitPrioritizingWidth(constraints.minWidth, constraints.maxWidth, ' \
+                         'constraints.minHeight, Int.MAX_VALUE - 1)); layout(placeable.width, placeable.height) { placeable.place(0, 0) } }'
+            modifiers << ".verticalScroll(#{places ? 'collectionScroll' : 'rememberScrollState()'})"
+          end
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # Spacing
           line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
 
-          code = indent("Column(", depth)
+          code = (places ? prelude : '') + indent("Column(", depth)
           code += Helpers::ModifierBuilder.format(modifiers, depth)
           if line_spacing
             required_imports&.add(:arrangement)
@@ -2107,7 +2316,13 @@ module KjuiTools
                 # honors the declared width; a full-width cell declares
                 # matchParent itself). Stretching here was the parity deviation
                 # measured across every android Collection fixture.
-                out += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', d + 1)
+                place = if places
+                          before = drawn_cells_before(sections, index) { |j| "#{scroll_sections_expr(property_name)}.getOrNull(#{j})?.cells?.data?.size" }
+                          ".onGloballyPositioned { collectionCellPlaces[#{before}cellIndex] = it }"
+                        else
+                          ''
+                        end
+                out += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', d + 1, place)
                 out + "\n" + indent(")", d)
               end
               # A grid per section: a section of more than one column (its own
@@ -2151,7 +2366,7 @@ module KjuiTools
             end
           elsif sections.empty? && (names = class_list(json_data))
             code += class_list_eager_body(json_data, names, depth + 1, required_imports, first_only: false,
-                                          columns_info: columns_emit_info(json_data))
+                                          columns_info: columns_emit_info(json_data), places: places)
           end
 
           code += "\n" + indent("}", depth)
@@ -2370,6 +2585,24 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          # The EAGER container scrolls to its cells by the rule the lazy one
+          # follows (4f ruling 2026-09-27, round 12): an Int the counted cell,
+          # a String a key, on a change, landed by scrollAnchor; and
+          # defaultScrollAnchor applies. Its scroll is the caller's
+          # (eagerScrollState) and its cells are found where they were laid out
+          # (non_lazy_scroll_prelude): the viewport is recorded here, after the
+          # padding — the verticalScroll CollectionStack adds comes next. A
+          # bound `lazy` decides at run time. Until jsonui-cli 1.9.0 neither
+          # attribute moved an EAGER CollectionStack.
+          scroll_to_raw = json_data['scrollTo']
+          has_scroll_to = scroll_to_raw && scroll_to_raw.match(/@\{([^}]+)\}/)
+          eager = case json_data['lazy']
+                  when 'eager' then :only
+                  when /\A@\{[^}]+\}\z/ then 'collectionStackMode == CollectionStackMode.EAGER'
+                  end
+          stack_default_anchor = default_scroll_anchor?(json_data, non_lazy: !eager.nil?)
+          eager_scroll = eager && (has_scroll_to || stack_default_anchor) ? eager : nil
+          modifiers << '.onGloballyPositioned { collectionViewport[0] = it }' if eager_scroll
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
           # Multi-line modifier formatting so `wrap_with_visibility` regex can
           # detect and hoist `.weight(...)` onto the VisibilityWrapper. Single-
@@ -2382,19 +2615,23 @@ module KjuiTools
                            end
 
           # scrollTo support
-          scroll_to_raw = json_data['scrollTo']
-          has_scroll_to = scroll_to_raw && scroll_to_raw.match(/@\{([^}]+)\}/)
-          stack_default_anchor = default_scroll_anchor?(json_data)
-
           code = ""
 
-          if has_scroll_to || stack_default_anchor
+          if eager_scroll
+            code += indent("val collectionStackMode = #{mode_expr}", depth) + "\n"
+            mode_expr = 'collectionStackMode'
+            code += non_lazy_scroll_prelude(depth, required_imports, is_horizontal: is_horizontal)
+          end
+          lazy_state = (has_scroll_to || stack_default_anchor) && eager_scroll != :only
+          if lazy_state
             required_imports&.add(:lazy_grid_state)
             code += indent("val collectionStackState = androidx.compose.foundation.lazy.rememberLazyListState()", depth) + "\n"
+          end
+          if has_scroll_to || stack_default_anchor
             code += scroll_to_effect(json_data, sections, depth, required_imports, target: :stack, state: 'collectionStackState',
-                                     is_horizontal: is_horizontal)
+                                     is_horizontal: is_horizontal, non_lazy: eager_scroll)
             code += default_scroll_anchor_code(json_data, 'collectionStackState', depth, required_imports, sections: sections,
-                                               route: :stack, is_horizontal: is_horizontal)
+                                               route: :stack, is_horizontal: is_horizontal, non_lazy: eager_scroll)
           end
 
           # Hoist section / cellData / enrichedData out of the CollectionStack
@@ -2439,8 +2676,12 @@ module KjuiTools
           if reverse_layout
             code += "\n" + indent("reverseLayout = true,", depth + 1)
           end
-          if has_scroll_to || stack_default_anchor
+          if lazy_state
             code += "\n" + indent("lazyState = collectionStackState,", depth + 1)
+          end
+          if eager_scroll
+            code += "\n" + indent("// Requires KotlinJsonUI >= 2.42.0 (CollectionStack eagerScrollState)", depth + 1)
+            code += "\n" + indent("eagerScrollState = collectionScroll,", depth + 1)
           end
 
           # lazyContent block
@@ -2450,7 +2691,7 @@ module KjuiTools
 
           # eagerContent block
           code += "\n" + indent("eagerContent = {", depth + 1)
-          code += generate_collection_stack_eager_content(json_data, sections, depth + 2, required_imports)
+          code += generate_collection_stack_eager_content(json_data, sections, depth + 2, required_imports, places: !eager_scroll.nil?)
           code += "\n" + indent("}", depth + 1)
 
           code += "\n" + indent(")", depth)
@@ -2622,7 +2863,9 @@ module KjuiTools
         # Emit cell ForEach inside @Composable scope (Column / Row body).
         # Assumes section / cellData / enrichedData vals are hoisted in the
         # enclosing @Composable scope by `generate_collection_stack`.
-        def self.generate_collection_stack_eager_content(json_data, sections, depth, required_imports)
+        # `places`: each cell records where it was laid out, by its place among
+        # the drawn cells (non_lazy_scroll_prelude).
+        def self.generate_collection_stack_eager_content(json_data, sections, depth, required_imports, places: false)
           items_property = json_data['items']
           property_name = items_property && items_property.match(/@\{([^}]+)\}/) ? $1 : nil
           cell_id_prop = json_data['cellIdProperty']
@@ -2691,7 +2934,8 @@ module KjuiTools
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
             # No fillMaxWidth on cells — see the grid path note above.
-            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4)
+            place = places ? ".onGloballyPositioned { collectionCellPlaces[#{drawn_cells_before(sections, index) { |j| "section#{j}?.cells?.data?.size" }}cellIndex] = it }" : ''
+            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4, place)
             out += "\n" + indent(")", depth + 3)
             if cell_size_box_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
@@ -2716,6 +2960,14 @@ module KjuiTools
           end
 
           out
+        end
+
+        # The drawn cells before section `index` (the sections that name a
+        # cell, in order), as a Kotlin sum ending in " + ", or "" for none;
+        # the block gives a section's cell count expression (nullable Int).
+        def self.drawn_cells_before(sections, index)
+          before = sections.first(index).each_with_index.select { |section, _| section.is_a?(Hash) && section['cell'] }.map(&:last)
+          before.map { |j| "(#{yield(j)} ?: 0) + " }.join
         end
 
         private

@@ -178,6 +178,10 @@ module KjuiTools
             # cells' places in the scrolled content, recorded as they are laid
             # out.
             on_globally_positioned: "import androidx.compose.ui.layout.onGloballyPositioned",
+            # The wrapContent Collection's Column (collection_component
+            # generate_non_lazy): a layout step that bounds the height the
+            # verticalScroll measures in.
+            layout_modifier: "import androidx.compose.ui.layout.layout",
             # The matchParent flow arm: scroll decided by the parent's
             # constraints on the device, as the dynamic renderer decides it.
             box_with_constraints: ["import androidx.compose.foundation.layout.BoxWithConstraints",

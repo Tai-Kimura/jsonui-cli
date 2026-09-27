@@ -3,6 +3,7 @@
 require 'set'
 require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../support/kotlin_compiler'
+require_relative '../../support/compose_bounded_scroll_stubs'
 
 # Collection.items is a CollectionDataSource or an array (4f ruling,
 # 2026-09-26). A class-list Collection (cellClasses, no `sections`) whose items
@@ -35,9 +36,9 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
   def emit(extra, definition)
     %i[info debug].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
     KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = definition ? { definition['name'] => definition } : {}
-    KjuiTools::Compose::Components::CollectionComponent.generate(
+    ComposeBoundedScrollStubs.unqualify(KjuiTools::Compose::Components::CollectionComponent.generate(
       { 'type' => 'Collection', 'id' => 'list', 'cellClasses' => ['row_cell'], 'items' => '@{rows}' }.merge(extra), 1, Set.new, nil
-    )
+    ))
   ensure
     KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
   end
@@ -118,6 +119,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     class RowCellViewModel { fun updateData(updates: Map<String, Any>) {} }
     @Composable fun RowCellView(viewModel: RowCellViewModel, modifier: Modifier = Modifier) {}
     data class RowCellData(val title: String = "") { fun toMap(): MutableMap<String, Any> = mutableMapOf("title" to title) }
+    #{ComposeBoundedScrollStubs::KOTLIN}
   KOTLIN
 
   it 'every route compiles against List<RowCellData> and List<Any?>?' do

@@ -5,6 +5,7 @@ require 'tmpdir'
 require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../../lib/compose/generators/cell_generator'
 require_relative '../../support/kotlin_compiler'
+require_relative '../../support/compose_bounded_scroll_stubs'
 
 # The class-list Collection — `cellClasses` (with `headerClasses` /
 # `footerClasses`), `items` and no `sections` — on the Compose codegen, route
@@ -50,7 +51,7 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
 
   def emit(node, imports = Set.new)
     %i[info debug warn].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
-    KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, imports, nil)
+    ComposeBoundedScrollStubs.unqualify(KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, imports, nil))
   end
 
   def scaffold(class_name)
@@ -114,6 +115,10 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
     }
     class NullableData(val rows: CollectionDataSource? = null)
     class PlainData(val rows: CollectionDataSource = CollectionDataSource())
+    class ScrollState
+    fun rememberScrollState(): ScrollState = ScrollState()
+    fun Modifier.verticalScroll(state: ScrollState): Modifier = this
+    #{ComposeBoundedScrollStubs::KOTLIN}
   KOTLIN
 
   def placement(code)
