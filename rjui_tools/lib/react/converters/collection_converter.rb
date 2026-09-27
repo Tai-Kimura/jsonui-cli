@@ -281,11 +281,13 @@ module RjuiTools
             # each section's header row, its grid, its footer row — spaced as
             # the rows; each block's grid carries the columns and the gaps.
             classes << 'flex flex-col'
+            classes.concat(vertical_scroll_classes(is_lazy, lazy_expr))
             row_gap = grid_row_gap
             classes << "gap-y-[#{row_gap}px]" if row_gap
           else
             # Grid layout
             classes << 'grid'
+            classes.concat(vertical_scroll_classes(is_lazy, lazy_expr))
             if columns_binding
               # extract_binding_property already prepends `data.` (see
               # base_converter#extract_binding_property), so just splice
@@ -364,6 +366,20 @@ module RjuiTools
 
 
           finalize_classes(classes)
+        end
+
+        # The vertical scroll container of the grid routes, as the list and
+        # the flow are one: `overflow-y-auto` unless `lazy: none` (a bound
+        # `lazy` switches it at run time) or `scrollEnabled: false`. The grid
+        # had none until jsonui-cli 1.9.0, so a grid of a declared height
+        # drew its overflow past its box, and a scrollTo — which scrolls the
+        # Collection's own box (collectionScroll's scrollCollectionToCell) —
+        # moved nothing.
+        def vertical_scroll_classes(is_lazy, lazy_expr)
+          return [] unless is_lazy && attributes['scrollEnabled'] != false
+
+          dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
+          ['overflow-y-auto']
         end
 
         # A grid's or a flow's gaps (attribute_semantics.json ->

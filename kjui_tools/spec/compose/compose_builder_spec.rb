@@ -1765,4 +1765,19 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       end
     end
   end
+
+  # A data item's platform, read as `jui build` reads it (DataItemPlatform:
+  # comma-separated tokens, without case). Until jsonui-cli 1.9.0 only
+  # exactly 'kotlin' was this tool's.
+  describe '#extract_data_properties and a data item\'s platform' do
+    it 'takes an item any Android token names, alone or among others, and not another platform\'s' do
+      json = { 'type' => 'View',
+               'data' => [{ 'name' => 'everywhere', 'class' => 'String' },
+               { 'name' => 'mine', 'class' => 'String', 'platform' => 'android' },
+               { 'name' => 'shared', 'class' => 'String', 'platform' => 'swift, Kotlin' },
+               { 'name' => 'theirs', 'class' => 'String', 'platform' => 'swift' }] }
+      names = described_class.new.send(:extract_data_properties, json).map { |p| p['name'] }
+      expect(names).to match_array(%w[everywhere mine shared])
+    end
+  end
 end

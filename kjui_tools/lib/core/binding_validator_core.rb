@@ -4,6 +4,7 @@
 require 'json'
 require 'set'
 require_relative 'type_synonyms'
+require_relative 'data_item_platform'
 
 module JsonUIShared
   # Validates binding expressions in JSON layouts. Shared body of the three
@@ -23,7 +24,9 @@ module JsonUIShared
   #
   #   platform_id                     'swift' / 'kotlin' / 'react'
   #   log_tag                         'SJUI' / 'KJUI' / 'RJUI'
-  #   data_item_applies?(item)        data[] platform/mode filter
+  #   data_item_applies?(item)        data[] filter: the item's platform is
+  #                                   read here (DataItemPlatform); a profile
+  #                                   adds its mode on top (super)
   #   business_logic_patterns         per-language advisory pattern list
   #   extra_allowed_patterns          per-language additions to the
   #                                   business-logic allowlist
@@ -213,8 +216,11 @@ module JsonUIShared
       raise NotImplementedError, 'platform profile must define log_tag'
     end
 
-    def data_item_applies?(_data_item)
-      true
+    # Whether a data[] item is this platform's: its `platform` read as
+    # `jui build` reads it (DataItemPlatform — comma-separated tokens, any
+    # token of this platform). A profile adds its mode filter on top.
+    def data_item_applies?(data_item)
+      DataItemPlatform.applies?(data_item, platform_id)
     end
 
     # The tool's mode for attribute exclusion ('swiftui' / 'compose');
@@ -412,6 +418,7 @@ module JsonUIShared
       if component['data'].is_a?(Array)
         component['data'].each do |data_item|
           next unless data_item.is_a?(Hash)
+          note_unread_platform_shape(data_item)
           next unless data_item_applies?(data_item)
           # Skip ViewModel class declarations: either the bare
           # { "class": "MyViewModel" } shape (class without name) or a
@@ -451,11 +458,27 @@ module JsonUIShared
       end
     end
 
+    # A data item's `platform` in a shape nothing reads — a list, a number, a
+    # map whose keys are not all platforms. `jui build` passes it through and
+    # the tools take the item on every platform (DataItemPlatform), so the
+    # author's filter does nothing anywhere; until jsonui-cli 1.9.0 sjui and
+    # kjui instead dropped the item on their own platform, silently.
+    def note_unread_platform_shape(data_item)
+      return unless DataItemPlatform.unread_shape?(data_item['platform'])
+
+      # Collected before any view is visited: the file is the context.
+      context = @current_file ? "[#{@current_file}] " : ''
+      @warnings << "#{context}data '#{data_item['name']}': its platform #{data_item['platform'].to_json} is not read — " \
+                   "a data item's platform is a string of comma-separated platform tokens (\"swift\", \"kotlin, react\"), " \
+                   'or a map of per-platform values keyed ios / android / web. The item is data on every platform.'
+    end
+
     def collect_data_from_array(data_array, in_cell = false)
       return unless data_array.is_a?(Array)
 
       data_array.each do |data_item|
         next unless data_item.is_a?(Hash)
+        note_unread_platform_shape(data_item)
         next unless data_item_applies?(data_item)
         next if data_item['class'] && !data_item['name']
         next if data_item['class'].to_s.end_with?('ViewModel')
@@ -498,7 +521,10 @@ module JsonUIShared
         # An Embed's events are handler names, not bindings; validate_embed_component
         # names any that is not one.
         next if key == 'events' && resolve_component_alias(component_type) == 'Embed'
-        next if incompatible_attr?(component_type, key)
+        if incompatible_attr?(component_type, key)
+          note_uses_on_other_platforms(value, key)
+          next
+        end
 
         check_value_for_bindings(value, key, component_type)
         check_selector_declared(value, key, component_type)
@@ -540,6 +566,63 @@ module JsonUIShared
       end
     end
 
+    # An attribute declared for other platforms or modes draws nothing here,
+    # so none of its checks run on this platform — but the data it names is
+    # the layout's all the same, and counted as used. Until jsonui-cli 1.9.0
+    # it was not: a shared layout binding Web.reloadToken / onLoadFailed
+    # (declared for swift and kotlin — an iframe reports neither) warned
+    # "defined but never used" on every web build, and the face had no way
+    # to satisfy both. The same held for any other platform- or mode-
+    # restricted attribute (View.onDrop on sjui / kjui, a UIKit-only one in
+    # SwiftUI mode). Every @{...} in the value counts, and a handler named
+    # without braces (`"onLongPress": "handleHold"`) as it does in
+    # check_selector_declared. Cell scopes are left alone, as
+    # check_undefined_variables leaves them.
+    def note_uses_on_other_platforms(value, attribute_name)
+      return if @cell_depth > 0
+
+      case value
+      when String
+        exprs = value.scan(/@\{([^}]*)\}/).flatten
+        if exprs.empty?
+          name = value.strip
+          if SELECTOR_ATTRS.include?(attribute_name.to_s.split('.').first) && @data_properties.include?(name)
+            @used_properties << name
+          end
+        end
+        exprs.each do |expr|
+          next if expr.start_with?('data.')
+
+          extract_variables(expr).each { |var| @used_properties << var if @data_properties.include?(var) }
+        end
+      when Hash
+        value.each_value { |v| note_uses_on_other_platforms(v, attribute_name) }
+      when Array
+        value.each { |v| note_uses_on_other_platforms(v, attribute_name) }
+      end
+    end
+
+    # Mixed text ("Hi @{who}", contexts.text): each @{...} is interpolated,
+    # so its names are the layout's data in use. Until jsonui-cli 1.9.0 they
+    # were not counted, and 'who' was "defined but never used".
+    # A name data lacks is not named here, as it was not before: whether
+    # text is interpolated is the drawing converter's, and an app's own
+    # converter may keep it literal (JsonUIDocument's CodeBlock.code shows
+    # "@{...}" samples as text — measured 2026-09-27, naming them gave that
+    # face 89 warnings it could not silence: the canon has no escape for
+    # "@{"). Cell scopes are left alone, as check_undefined_variables
+    # leaves them.
+    def note_text_uses(exprs)
+      return if @cell_depth > 0
+
+      exprs.each do |inner|
+        expr = inner.strip
+        next if expr.start_with?('data.')
+
+        extract_variables(expr).each { |var| @used_properties << var if @data_properties.include?(var) }
+      end
+    end
+
     def has_binding?(value)
       case value
       when String
@@ -564,23 +647,32 @@ module JsonUIShared
 
       case value
       when String
-        if value.include?('@{')
-          # Canonical binding-resolution rules (errors) run on every
-          # occurrence, including mixed-text interpolation.
-          check_canonical_binding_rules(value, attribute_name, component_type)
-          check_cell_parent_scope(value, attribute_name, component_type)
+        return unless value.include?('@{')
+
+        # Canonical binding-resolution rules (errors) run on every
+        # occurrence, including mixed-text interpolation.
+        check_canonical_binding_rules(value, attribute_name, component_type)
+        check_cell_parent_scope(value, attribute_name, component_type)
+
+        # A whole binding is a value that is one @{...} and nothing else
+        # (binding_semantics.json contexts.value). Until jsonui-cli 1.9.0 it
+        # was any value that started with "@{" and ended with "}", read
+        # whole: "@{first} and @{second}" was the one expression
+        # "first} and @{second" ('and' "not defined in data").
+        exprs = value.scan(/@\{([^}]*)\}/).flatten
+        unless exprs.length == 1 && value == "@{#{exprs.first}}"
+          note_text_uses(exprs)
+          return
         end
 
-        if value.start_with?('@{') && value.end_with?('}')
-          binding_expr = value[2..-2]
-          @warnings.concat(check_binding(binding_expr, attribute_name, component_type))
+        binding_expr = exprs.first
+        @warnings.concat(check_binding(binding_expr, attribute_name, component_type))
 
-          unless skip_undefined_without_data_section? && !@has_data_definitions
-            check_undefined_variables(binding_expr, attribute_name, component_type)
-          end
-
-          check_color_type(binding_expr, attribute_name, component_type)
+        unless skip_undefined_without_data_section? && !@has_data_definitions
+          check_undefined_variables(binding_expr, attribute_name, component_type)
         end
+
+        check_color_type(binding_expr, attribute_name, component_type)
       when Hash
         value.each do |k, v|
           check_value_for_bindings(v, "#{attribute_name}.#{k}", component_type)

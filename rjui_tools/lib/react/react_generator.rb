@@ -976,19 +976,28 @@ module RjuiTools
                    "#{scroll_anchor_expr(anchor)}, #{horizontal}); }, []);"
         end
 
-        # scrollTo: iOS receives a PassthroughSubject, so a repeat send
-        # re-scrolls; a React effect keys on a value, so re-scrolling to the
-        # same index needs the bound value to change. The value names a CELL
-        # (scrollCollectionToCell): a number its place among the drawn
-        # sections' cells, a string — with cellIdProperty — the first cell
-        # whose key it is, from the keys the effect reads off the data.
+        # scrollTo: the request is a CHANGE of the bound value (the SSoT's
+        # Collection.scrollTo, jsonui-cli 1.9.0) — the value the Collection is
+        # drawn with scrolls nowhere, and sending the same value again does
+        # not re-scroll. The value names a CELL (scrollCollectionToCell): a
+        # number its place among the drawn sections' cells, a string — with
+        # cellIdProperty — the first cell whose key it is, from the keys the
+        # effect reads off the data. The effect runs on mount too, so it
+        # compares with the value it last saw (a ref seeded with the first);
+        # until jsonui-cli 1.9.0 it scrolled on mount to whatever the value
+        # was. `Object.is`, and a ref rather than a "mounted" flag: React's
+        # StrictMode runs a mount effect twice, and the second would have
+        # scrolled.
         if scroll_to_binding?(collection)
           prop = binding_data_path(collection[:scroll_to])
+          seen = "#{camel}ScrollToSeen"
           anchor_expr = scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
           animated = scroll_animated_arg(collection[:scroll_animated])
           lists = collection_cell_key_lists(collection)
-          keys = lists ? "collectionCellKeys(#{lists}, #{collection[:cell_id_property].to_json})" : 'null'
-          lines << "  useEffect(() => { scrollCollectionToCell(#{ref}.current, #{collection[:id].to_json}, #{prop}, " \
+          keys = lists ? "collectionCellKeys(#{lists}, #{cell_key_property(collection).to_json})" : 'null'
+          lines << "  const #{seen} = useRef(#{prop});"
+          lines << "  useEffect(() => { if (Object.is(#{seen}.current, #{prop})) return; #{seen}.current = #{prop}; " \
+                   "scrollCollectionToCell(#{ref}.current, #{collection[:id].to_json}, #{prop}, " \
                    "#{keys}, #{anchor_expr}, #{animated}, #{horizontal}); }, [#{prop}]);"
         end
 
@@ -1017,24 +1026,26 @@ module RjuiTools
       end
 
       # The drawn cells' lists, in section order, as a JS array expression —
-      # the keys scrollTo matches a string against — or nil when the
-      # Collection has no cellIdProperty (a scrollTo is then a number) or no
-      # items binding. The lists are the ones CollectionConverter draws:
+      # the keys scrollTo matches a string against (a cell's cellId, else its
+      # cellIdProperty value when the Collection has one) — or nil when the
+      # Collection has no items binding. Until jsonui-cli 1.9.0 it was nil
+      # with no cellIdProperty too, so a string never met a cellId there.
+      # The lists are the ones CollectionConverter draws:
       # each section that declares a cell (its cells enriched with their
       # cellIds under autoChangeTrackingId); with no sections, the class-list
       # shape's every data section, the first only on a flow or a horizontal
       # Collection, or the one list an array-typed items is.
       def collection_cell_key_lists(collection)
-        prop = collection[:cell_id_property]
+        prop = cell_key_property(collection)
         items = collection[:items]
-        return nil unless prop.is_a?(String) && !prop.empty? && binding_expression?(items)
+        return nil unless binding_expression?(items)
 
         path = binding_data_path(items)
         sections = collection[:sections]
         if sections.is_a?(Array) && !sections.empty?
           lists = sections.each_with_index.select { |section, _| section.is_a?(Hash) && section['cell'] }.map do |_, index|
             source = "(#{path}?.sections?.[#{index}]?.cells?.data ?? [])"
-            collection[:auto_tracking] ? "enrichCellIds(#{source}, #{prop.to_json})" : source
+            collection[:auto_tracking] && prop ? "enrichCellIds(#{source}, #{prop.to_json})" : source
           end
           "[#{lists.join(', ')}]"
         elsif collection_items_list?(items)
@@ -1044,6 +1055,13 @@ module RjuiTools
         else
           "(#{path}?.sections ?? []).map((section) => section.cells?.data ?? [])"
         end
+      end
+
+      # The Collection's cellIdProperty, or nil — a cell's key is its cellId
+      # then (the SSoT's Collection.scrollTo).
+      def cell_key_property(collection)
+        prop = collection[:cell_id_property]
+        prop.is_a?(String) && !prop.empty? ? prop : nil
       end
 
       # items bound to a property the layout declares as a list (`[T]`,

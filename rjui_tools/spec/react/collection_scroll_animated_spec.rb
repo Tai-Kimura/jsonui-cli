@@ -35,7 +35,9 @@ RSpec.describe 'rjui Collection: scrollAnimated' do
   end
 
   def animated_arg(tsx)
-    tsx[/scrollCollectionToCell\(listRef\.current, "list", data\.target, null, '\w+', (.+), false\)/, 1] or raise "no scroll call in\n#{tsx}"
+    # The keys argument (collectionCellKeys(…) since jsonui-cli 1.9.0 hands
+    # them with no cellIdProperty too) is not this arm's subject.
+    tsx[/scrollCollectionToCell\(listRef\.current, "list", data\.target, (?:null|collectionCellKeys\(.*?, null\)), '\w+', (.+), false\)/, 1] or raise "no scroll call in\n#{tsx}"
   end
 
   it 'absent and true animate, a literal false jumps, a binding is true only when the bound value is' do

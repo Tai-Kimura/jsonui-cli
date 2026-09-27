@@ -263,4 +263,19 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter do
       expect(content).to include('previews')
     end
   end
+
+  # A data item's platform, read as `jui build` reads it (DataItemPlatform:
+  # comma-separated tokens, without case). Until jsonui-cli 1.9.0 only
+  # exactly 'swift' was this tool's.
+  describe '#extract_data_properties and a data item\'s platform' do
+    it 'takes an item any iOS token names, alone or among others, and not another platform\'s' do
+      json = { 'type' => 'View',
+               'data' => [{ 'name' => 'everywhere', 'class' => 'String' },
+               { 'name' => 'mine', 'class' => 'String', 'platform' => 'ios' },
+               { 'name' => 'shared', 'class' => 'String', 'platform' => 'kotlin, Swift' },
+               { 'name' => 'theirs', 'class' => 'String', 'platform' => 'kotlin' }] }
+      names = converter.send(:extract_data_properties, json).map { |p| p['name'] }
+      expect(names).to match_array(%w[everywhere mine shared])
+    end
+  end
 end
