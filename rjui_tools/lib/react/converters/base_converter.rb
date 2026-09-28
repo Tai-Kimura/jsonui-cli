@@ -76,6 +76,26 @@ module RjuiTools
           false
         end
 
+        # False for a node box whose children are laid out by an inner
+        # element instead (a Collection's padding box, whose one child is the
+        # scroll container): orientation, direction and gravity then go on
+        # that element, not on this one.
+        def lays_out_children?
+          true
+        end
+
+        # The classes that lay the node's children out — orientation, gravity
+        # and direction, as build_class_name maps them — for the inner element
+        # of a converter whose own box does not (lays_out_children?).
+        def children_layout_classes
+          classes = [TailwindMapper.map_orientation(attributes['orientation'])]
+          classes.concat(gravity_classes) if attributes['gravity']
+          if attributes['direction'] && attributes['orientation']
+            classes << TailwindMapper.map_direction(attributes['direction'], attributes['orientation'])
+          end
+          classes
+        end
+
         # The flex classes a declared gravity maps to. A container's children
         # run along its `orientation` (a column when none is declared); a
         # converter whose element lays out another way maps gravity itself
@@ -349,7 +369,7 @@ module RjuiTools
           )
 
           # Orientation (flex)
-          classes << TailwindMapper.map_orientation(attributes['orientation'])
+          classes << TailwindMapper.map_orientation(attributes['orientation']) if lays_out_children?
 
           # Shadow
           classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow']
@@ -549,7 +569,7 @@ module RjuiTools
           end
 
           # Gravity alignment - pass orientation for correct flexbox mapping
-          classes.concat(gravity_classes) if attributes['gravity']
+          classes.concat(gravity_classes) if attributes['gravity'] && lays_out_children?
 
           # Layout direction — child ORDER, not text direction.
           #
@@ -567,7 +587,7 @@ module RjuiTools
           # anyway (`rtl:` is a variant, `[dir="rtl"] &`). The control-diff check
           # is what surfaced it: every direction fixture rendered pixel-identical
           # to its control.
-          if attributes['direction'] && attributes['orientation']
+          if attributes['direction'] && attributes['orientation'] && lays_out_children?
             reversed_class = TailwindMapper.map_direction(
               attributes['direction'], attributes['orientation']
             )

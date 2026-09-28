@@ -28,3 +28,6 @@ screenshots/
 
 # Collection insets probe scratch (scripts/collection_insets_probe.mjs)
 .collection-insets-probe/
+
+# Collection padding probe scratch (scripts/collection_padding_probe.mjs)
+.collection-padding-probe/

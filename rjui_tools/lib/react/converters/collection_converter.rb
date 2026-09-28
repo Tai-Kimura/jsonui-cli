@@ -18,13 +18,22 @@ module RjuiTools
           ref_attr = build_collection_ref_attr
           scroll_attr = build_current_page_scroll_attr
 
-          content = generate_collection_content(indent + 2)
+          box = @padding_box
+          inner = box ? indent + 2 : indent
+          content = generate_collection_content(inner + 2)
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr}#{ref_attr} className="#{class_name}"#{style_attr}#{scroll_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(inner)}<div#{id_attr}#{ref_attr} className="#{class_name}"#{style_attr}#{scroll_attr}#{testid_attr}#{tag_attr}>
             #{content}
-            #{indent_str(indent)}</div>
+            #{indent_str(inner)}</div>
           JSX
+          if box
+            jsx = <<~JSX.chomp
+              #{indent_str(indent)}<div className="#{box[:classes]}"#{style_attr_for(box[:styles])}>
+              #{jsx}
+              #{indent_str(indent)}</div>
+            JSX
+          end
 
           wrap_with_visibility(jsx, indent)
         end
@@ -196,7 +205,28 @@ module RjuiTools
         protected
 
         def build_class_name
-          classes = [super]
+          # The node's own padding goes outside the scroll, its insets inside
+          # (user ruling 2026-09-28, as iOS and both Compose paths draw them):
+          # with a padding declared, the node's box is a padding box around
+          # the scroll container (padding_box?). That box takes BaseConverter's
+          # classes and styles — size, margins, padding, background, border,
+          # visibility, … — except the ones that lay the cells out
+          # (orientation, gravity, direction), which stay on the scroll
+          # container with the Collection's own; the scroll container fills
+          # the box's content (flex-1 in a flex column) and keeps the id, the
+          # test id, the ref and the scroll handler, so what scrolls is still
+          # the element the id names.
+          @padding_box = nil
+          if padding_box?
+            @padding_box_pass = true
+            box_classes = super
+            @padding_box_pass = false
+            @padding_box = { classes: finalize_classes([box_classes, 'flex flex-col']), styles: @dynamic_styles }
+            @dynamic_styles = {}
+            classes = ['flex-1 min-w-0 min-h-0', *children_layout_classes]
+          else
+            classes = [super]
+          end
 
           # Resolve the column count. A `@{prop}` binding can't be baked
           # into a Tailwind `grid-cols-N` class — Tailwind's JIT only sees
@@ -370,6 +400,40 @@ module RjuiTools
         # (content_inset_classes), not with BaseConverter's padding classes.
         def owns_insets?
           true
+        end
+
+        # On the padding box's pass through BaseConverter the cells' layout
+        # classes are left out: they go on the scroll container.
+        def lays_out_children?
+          !@padding_box_pass
+        end
+
+        #: The node padding spellings BaseConverter#build_class_name reads.
+        NODE_PADDING_KEYS = %w[padding paddings topPadding paddingTop rightPadding paddingRight
+                               bottomPadding paddingBottom leftPadding paddingLeft paddingStart paddingEnd].freeze
+
+        # The Collection declares a padding that pads (a bound value counts;
+        # 0, or zeros, pads nothing): its box is then a padding box around
+        # the scroll container (build_class_name). Until jsonui-cli 1.9.0 the
+        # padding classes and the insets classes sat on the one scroll
+        # container, so an inset's side class replaced the padding on that
+        # edge (padding 16, insets [0, 0, 0, 30]: the first cell at 30, not
+        # 46), a bound inset's four inline edges replaced it on every edge,
+        # and the padding scrolled with the cells.
+        def padding_box?
+          NODE_PADDING_KEYS.any? { |key| padding_pads?(attributes[key]) }
+        end
+
+        def padding_pads?(value)
+          case value
+          when Numeric then !value.zero?
+          when Array then value.any? { |v| padding_pads?(v) }
+          when String
+            return true if has_binding?(value)
+
+            value.split('|').any? { |part| (n = inset_number(part)) && !n.zero? }
+          else false
+          end
         end
 
         # The Collection's content insets on its own box — the scroll
