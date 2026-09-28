@@ -173,11 +173,12 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       expect(result).to include('contentPadding')
     end
 
-    it 'generates Button with paddingHorizontal and paddingVertical' do
+    it 'does not read the undeclared paddingHorizontal / paddingVertical' do
       json_data = { 'type' => 'Button', 'text' => 'Test', 'paddingHorizontal' => 16, 'paddingVertical' => 8 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('horizontal = 16.dp')
-      expect(result).to include('vertical = 8.dp')
+      expect(result).not_to include('horizontal = 16.dp')
+      expect(result).not_to include('vertical = 8.dp')
+      expect(result).to include('contentPadding = PaddingValues(0.dp)')
     end
 
     it 'generates Button with background color' do

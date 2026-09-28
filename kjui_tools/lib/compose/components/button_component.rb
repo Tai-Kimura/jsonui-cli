@@ -162,8 +162,7 @@ module KjuiTools
           
           if padding_data || json_data['paddingTop'] || json_data['paddingBottom'] ||
              json_data['paddingLeft'] || json_data['paddingRight'] || json_data['paddingStart'] ||
-             json_data['paddingEnd'] || json_data['paddingHorizontal'] || json_data['paddingVertical'] ||
-             json_data['leftPadding'] || json_data['rightPadding']
+             json_data['paddingEnd'] || json_data['leftPadding'] || json_data['rightPadding']
             required_imports&.add(:button_padding)
             
             padding_values = []
@@ -196,11 +195,13 @@ module KjuiTools
                 padding_values << "#{Helpers::BoundValue.dp(padding_data)}"
               end
             else
-              # Handle individual padding attributes
-              top_padding = json_data['paddingTop'] || json_data['paddingVertical'] || 0
-              bottom_padding = json_data['paddingBottom'] || json_data['paddingVertical'] || 0
-              start_padding = json_data['paddingStart'] || json_data['paddingLeft'] || json_data['leftPadding'] || json_data['paddingHorizontal'] || 0
-              end_padding = json_data['paddingEnd'] || json_data['paddingRight'] || json_data['rightPadding'] || json_data['paddingHorizontal'] || 0
+              # Handle individual padding attributes. `paddingVertical` /
+              # `paddingHorizontal` are not declared and no other platform
+              # draws them, so they are not read (write `paddings: [v, h]`).
+              top_padding = json_data['paddingTop'] || 0
+              bottom_padding = json_data['paddingBottom'] || 0
+              start_padding = json_data['paddingStart'] || json_data['paddingLeft'] || json_data['leftPadding'] || 0
+              end_padding = json_data['paddingEnd'] || json_data['paddingRight'] || json_data['rightPadding'] || 0
               
               if top_padding == bottom_padding && start_padding == end_padding && top_padding == start_padding
                 # All same, use single value
