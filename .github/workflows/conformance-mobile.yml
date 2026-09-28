@@ -691,6 +691,7 @@ jobs:
             KotlinJsonUI/library-dynamic/build/outputs/androidTest-results/
             KotlinJsonUI/library/build/reports/androidTests/
             KotlinJsonUI/library-dynamic/build/reports/androidTests/
+            KotlinJsonUI/device-evidence/
 
   # ------------------------------------------------------------------ #
   # Merge all three fresh results into REPORT.md and gate on:
