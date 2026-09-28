@@ -55,15 +55,26 @@ module KjuiTools
           # Add testTag and contentDescription for UI testing
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
-          # Size, in the size slot after the margins. The declared `width` /
-          # `height` (common) win and go through the one size builder; with
-          # neither, the style's size. The style's size sat before the
-          # margins, so they padded the inside of the 48dp spinner.
-          declared_size = json_data['width'] || json_data['height'] || json_data['frame']
+          # Size, in the size slot after the margins. A declared length
+          # (a number or a bound number) wins over the style's size and goes
+          # through the one size builder; so do matchParent and a weight,
+          # which were not ruled and keep their old picture. A wrapContent
+          # axis is the content's size, and the style sets the content's
+          # size, so it is NOT a declaration here: with the style's size of
+          # its own, a wrapContent axis draws the style's size, and an
+          # Indicator that declares only wrapContent draws `.size(style)`
+          # (kjui-indicator-style-loses-to-a-declared-wrapcontent). The
+          # style's size sat before the margins, so they padded the inside of
+          # the 48dp spinner.
+          style_size = STYLE_SIZES[style]
+          size_json, wrap_width, wrap_height = style_size ? strip_wrap_axes(json_data) : [json_data, false, false]
+          declared_size = size_json['width'] || size_json['height'] || size_json['frame']
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           if declared_size
-            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
-          elsif (style_size = STYLE_SIZES[style])
+            modifiers.concat(Helpers::ModifierBuilder.build_size(size_json, parent_type, required_imports))
+            modifiers << ".width(#{Helpers::BoundValue.dp(style_size)})" if wrap_width
+            modifiers << ".height(#{Helpers::BoundValue.dp(style_size)})" if wrap_height
+          elsif style_size
             modifiers << ".size(#{Helpers::BoundValue.dp(style_size)})"
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
@@ -121,7 +132,36 @@ module KjuiTools
         end
         
         private
-        
+
+        WRAP_SPELLINGS = %w[wrapContent wrap_content].freeze
+
+        # The declaration without its wrapContent axes (top level or inside a
+        # `frame` object), and which axes were wrapContent. A frame left with
+        # neither axis is dropped, so it declares nothing.
+        def self.strip_wrap_axes(json_data)
+          size_json = json_data.dup
+          wrap_width = false
+          wrap_height = false
+          if size_json['frame'].is_a?(Hash)
+            frame = size_json['frame'].dup
+            wrap_width = WRAP_SPELLINGS.include?(frame['width'])
+            wrap_height = WRAP_SPELLINGS.include?(frame['height'])
+            frame.delete('width') if wrap_width
+            frame.delete('height') if wrap_height
+            if frame['width'] || frame['height']
+              size_json['frame'] = frame
+            else
+              size_json.delete('frame')
+            end
+          else
+            wrap_width = WRAP_SPELLINGS.include?(size_json['width'])
+            wrap_height = WRAP_SPELLINGS.include?(size_json['height'])
+            size_json.delete('width') if wrap_width
+            size_json.delete('height') if wrap_height
+          end
+          [size_json, wrap_width, wrap_height]
+        end
+
         def self.indent(text, level)
           return text if level == 0
           spaces = '    ' * level
