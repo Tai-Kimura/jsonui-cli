@@ -15,7 +15,10 @@ abbreviation of a listed commit is the same commit.
 Stamps, derived from PREV's stamp commit on its first-parent line — the set
 is the files whose line moved from the version before to PREV's (a line that
 only adds PREV's version is prose, not a stamp); red for a stamp left behind
-and for one of two stamp lines left behind.
+and for one of two stamp lines left behind. The stamp file is found in
+check-tag.sh's four forms and order (VERSION, gradle.properties `version=`,
+coordinates(), package.json "version"), each named in the output; a PREV
+with none of them is red.
 
 History marks naming PREV's version, asymmetric — green when they survive or
 when lines are added; red for a blanket bump, for a swap that keeps the
@@ -388,18 +391,122 @@ def test_an_empty_range_is_red(tmp_path, capsys):
     assert "FAIL [from rev-list] the range v1.9.11..v1.9.11 is not empty — 0 commit(s)" in out, out
 
 
-def test_no_version_file_at_prev_is_red_not_an_empty_pass(tmp_path, capsys):
+def test_no_stamp_file_at_prev_is_red_not_an_empty_pass(tmp_path, capsys):
+    # lib/version.rb is a stamp by shape, but none of the four forms: no
+    # VERSION, no gradle.properties version=, no coordinates(), no package.json.
     repo = tmp_path / "nv"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
-    _commit(repo, "base", {"lib/version.rb": f"VERSION = '{OLD}'\n"})
+    _commit(repo, "base", {"lib/version.rb": f"VERSION = '{OLD}'\n",
+                           "gradle.properties": "org.gradle.jvmargs=-Xmx2g\n"})
     _tag(repo, f"v{OLD}", f"v{OLD}\n")
     _commit(repo, "bump", {"lib/version.rb": f"VERSION = '{NEW}'\n"})
     _tag(repo, f"v{NEW}", _body(repo, f"v{OLD}"))
+    assert gate.stamp_source(str(repo), f"v{OLD}") is None
     rc, out = _run(gate, capsys, repo, f"v{OLD}", f"v{NEW}")
     assert rc == 1
-    assert "FAIL [from PREV] v1.9.10:VERSION says 1.9.10 — read <none>" in out, out
-    assert "FAIL [from PREV] the stamp set is derived and contains VERSION — 0 file(s)" in out, out
+    assert (f"FAIL [from PREV] v{OLD} has a version stamp, and it says {OLD} — read <none> "
+            "(no VERSION / gradle.properties version= / coordinates() / package.json)") in out, out
+    assert "FAIL [from PREV] the stamp set is derived and contains the stamp file — 0 file(s)" in out, out
+
+
+# The three stamp forms other than VERSION, each in the shape of the repo that
+# uses it. Every file carries lines that are NOT the version (other properties,
+# a dependency's "version"), so a reader that takes the wrong line, or a stamp
+# commit found by "touched the file" instead of "changed the value", shows.
+def _gradle(version: str, jvm: str = "-Xmx2g") -> dict[str, str]:
+    return {"gradle.properties": f"org.gradle.jvmargs={jvm}\nversion={version}\nandroid.useAndroidX=true\n"}
+
+
+def _coordinates(version: str, jvm: str = "-Xmx2g") -> dict[str, str]:
+    return {"jsonuitestrunner/build.gradle.kts":
+            f'// jvm {jvm}\nmavenPublishing {{\n    coordinates("io.github.tai-kimura", "jsonuitestrunner", "{version}")\n}}\n'}
+
+
+def _package(version: str, jvm: str = "-Xmx2g") -> dict[str, str]:
+    import json as _json
+    pkg = {"name": "jsonui-mcp-server", "version": version, "description": jvm,
+           "dependencies": {"zod": "^3.0.0"}}
+    lock = {"name": "jsonui-mcp-server", "version": version, "lockfileVersion": 3,
+            "packages": {"": {"name": "jsonui-mcp-server", "version": version},
+                         "node_modules/zod": {"version": "3.23.8"}}}
+    return {"package.json": _json.dumps(pkg, indent=2) + "\n",
+            "package-lock.json": _json.dumps(lock, indent=2) + "\n"}
+
+
+FORMS = {
+    "gradle.properties": (_gradle, "gradle.properties", "gradle.properties version=", ["gradle.properties"], "v"),
+    "coordinates": (_coordinates, "jsonuitestrunner/build.gradle.kts", "coordinates()",
+                    ["jsonuitestrunner/build.gradle.kts"], ""),
+    "package.json": (_package, "package.json", 'package.json "version"', ["package-lock.json", "package.json"], "v"),
+}
+
+
+def _form_repo(tmp_path: Path, stamped, prefix: str, *, bump: dict[str, str] | None = None) -> dict:
+    """base (PP) -> stamp commit (OLD, plus the prose mark) -> a commit that
+    edits the stamp file WITHOUT changing the version -> tag PREV -> m1 -> the
+    NEW stamp commit (or `bump`) -> tag NEW with an honest body."""
+    repo = tmp_path / "f"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _commit(repo, "base", {**stamped(PP), "docs/history.md": f"Until {PP} this returned None.\n"})
+    stamp = _commit(repo, f"{OLD}: stamp", {**stamped(OLD), "docs/history.md": f"Until {PP} this returned None.\n{MARK}\n"})
+    _commit(repo, "tune the build", stamped(OLD, jvm="-Xmx4g"))
+    prev, tag = f"{prefix}{OLD}", f"{prefix}{NEW}"
+    _tag(repo, prev, f"{prev}\n")
+    _commit(repo, "feature: m1", {"README.md": "m1\n"})
+    _commit(repo, f"{NEW}: stamp", bump if bump is not None else stamped(NEW, jvm="-Xmx4g"))
+    _tag(repo, tag, _body(repo, prev))
+    return {"repo": repo, "prev": prev, "tag": tag, "stamp": stamp}
+
+
+@pytest.mark.parametrize("name", list(FORMS))
+def test_each_stamp_form_is_read_and_named(tmp_path, capsys, name):
+    stamped, path, form, stamps, prefix = FORMS[name]
+    r = _form_repo(tmp_path, stamped, prefix)
+    assert gate.stamp_source(str(r["repo"]), r["prev"]) == (path, OLD, form)
+    # The last commit touching the file only tuned the build; the stamp commit
+    # is the one that changed the version.
+    assert gate.stamp_commit(str(r["repo"]), r["prev"]) == r["stamp"]
+    rc, out = _run(gate, capsys, r["repo"], r["prev"], r["tag"])
+    assert rc == 0, out
+    assert f"stamp form at {r['prev']}: {form} ({path})" in out, out
+    assert f"PASS [from PREV] {r['prev']}:{path} ({form}) says {OLD} — read {OLD}" in out, out
+    assert f"({PP} -> {OLD}, first-parent): {len(stamps)} file(s)" in out, out
+    assert f"PASS [from PREV] the stamp set is derived and contains {path}" in out, out
+    for stamp in stamps:
+        assert f"PASS [from PREV] stamp {stamp} " in out, out
+    # The stamp line is a stamp, not a history mark: only the prose mark counts.
+    assert f"marks naming {OLD} outside the stamps: {r['prev']}=1 {r['tag']}=1 | gone 0" in out, out
+
+
+@pytest.mark.parametrize("name", list(FORMS))
+def test_each_stamp_form_left_behind_is_red(tmp_path, capsys, name):
+    stamped, path, form, stamps, prefix = FORMS[name]
+    r = _form_repo(tmp_path, stamped, prefix, bump={"README.md": "no bump\n"})
+    rc, out = _run(gate, capsys, r["repo"], r["prev"], r["tag"])
+    assert rc == 1
+    fails = _fails(out)
+    assert fails and all("FAIL [from PREV] stamp " in line for line in fails), out
+    assert any(f"stamp {path} " in line for line in fails), out
+
+
+def test_the_forms_are_read_in_check_tag_sh_order(tmp_path):
+    # VERSION wins over gradle.properties, which wins over coordinates(), which
+    # wins over package.json — check-tag.sh's elif chain.
+    repo = tmp_path / "o"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    layers = [({"package.json": '{"version": "4.0.0", "dependencies": {"a": {"version": "9"}}}\n'},
+               ("package.json", "4.0.0", 'package.json "version"')),
+              (_coordinates("3.0.0"), ("jsonuitestrunner/build.gradle.kts", "3.0.0", "coordinates()")),
+              ({"gradle.properties": "org.gradle.jvmargs=-Xmx2g\n"},  # no version= : not this form
+               ("jsonuitestrunner/build.gradle.kts", "3.0.0", "coordinates()")),
+              (_gradle("2.0.0"), ("gradle.properties", "2.0.0", "gradle.properties version=")),
+              ({"VERSION": "1.0.0\n"}, ("VERSION", "1.0.0", "VERSION"))]
+    for files, want in layers:
+        _commit(repo, "layer", files)
+        assert gate.stamp_source(str(repo), "HEAD") == want
 
 
 @pytest.mark.parametrize("prev, tag, later", [

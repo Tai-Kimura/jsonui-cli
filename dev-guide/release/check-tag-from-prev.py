@@ -16,8 +16,15 @@ check line says which:
   from rev-list  git's own answer for PREV..TAG (never the tag body's claim)
   from the tag   the tag's name (vX.Y.Z)
   HAND-SUPPLIED  the optional tested SHA, compared, never derived
-It reads no VERSION of the candidate, no working tree, and takes no expected
-value by hand except the one labelled so. What makes the two gates
+It reads no version stamp of the candidate, no working tree, and takes no
+expected value by hand except the one labelled so.
+
+The stamp is read in the four forms check-tag.sh reads, in its order —
+VERSION, gradle.properties `version=`, jsonuitestrunner/build.gradle.kts
+coordinates(), package.json "version" — and every run names the form it read;
+a PREV with none of them is red. The order is shared with check-tag.sh, the
+reader is not (2026-09-28: reading VERSION only, this gate was red by
+construction on KotlinJsonUI v2.41.1..v2.42.0, checks 8 / 9 / 10). What makes the two gates
 independent is WHERE EACH GETS ITS EXPECTED VALUES: merging them, or deleting
 one as a duplicate, leaves one source whose agreement with itself means
 nothing.
@@ -37,6 +44,7 @@ What it does NOT see (the silences this design makes, on purpose):
 """
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -120,12 +128,91 @@ def range_sets(repo: str, prev: str, tag: str, body: str) -> dict:
     }
 
 
-def stamp_commit(repo: str, prev: str) -> str | None:
+# The four places a repo keeps its version, in the order check-tag.sh reads
+# them (VERSION: jsonui-cli, SwiftJsonUI; gradle.properties `version=`:
+# KotlinJsonUI; the coordinates() call: jsonui-test-runner-android; package.json
+# "version": jsonui-mcp-server). The ORDER is shared with check-tag.sh, the code
+# is not (the two gates are independent — see the header). Each entry: (path,
+# form name, a reader from the file text to the version, or None when the file
+# is there but is not this form).
+COORDINATES = re.compile(r'coordinates\([^,]*,[^,]*,\s*"([^"]+)"\)')
+
+
+def _read_version_file(text: str) -> str | None:
+    return re.sub(r"\s", "", text)
+
+
+def _read_gradle_properties(text: str) -> str | None:
+    values = [line[len("version="):].strip() for line in text.splitlines() if line.startswith("version=")]
+    return values[0] if values else None
+
+
+def _read_coordinates(text: str) -> str | None:
+    if "coordinates(" not in text:
+        return None
+    match = COORDINATES.search(text)
+    return match.group(1) if match else ""
+
+
+def _read_package_json(text: str) -> str | None:
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return ""
+    value = data.get("version", "") if isinstance(data, dict) else ""
+    return value if isinstance(value, str) else ""
+
+
+STAMP_FORMS = [
+    ("VERSION", "VERSION", _read_version_file),
+    ("gradle.properties", "gradle.properties version=", _read_gradle_properties),
+    ("jsonuitestrunner/build.gradle.kts", "coordinates()", _read_coordinates),
+    ("package.json", 'package.json "version"', _read_package_json),
+]
+NO_STAMP = "no VERSION / gradle.properties version= / coordinates() / package.json"
+
+
+def _show(repo: str, ref: str, path: str) -> str | None:
+    """The file at ref, or None when ref has no such file."""
+    result = subprocess.run(["git", "-C", repo, "show", f"{ref}:{path}"], capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else None
+
+
+def read_form(repo: str, ref: str, path: str) -> str | None:
+    """The version `ref` stamps in `path`, read the way that form is read;
+    None when `ref` has no such file or the file is not that form."""
+    reader = next(r for p, _, r in STAMP_FORMS if p == path)
+    text = _show(repo, ref, path)
+    return None if text is None else reader(text)
+
+
+def stamp_source(repo: str, ref: str) -> tuple[str, str, str] | None:
+    """(path, value, form) of the first stamp form `ref` has, in check-tag.sh's
+    order; None when it has none of the four (a gate that then passes on an
+    empty string would be green by construction)."""
+    for path, form, _ in STAMP_FORMS:
+        value = read_form(repo, ref, path)
+        if value is not None:
+            return path, value, form
+    return None
+
+
+def stamp_commit(repo: str, prev: str, path: str | None = None) -> str | None:
     """PREV's stamp commit: the last commit on PREV's FIRST-PARENT line that
-    touched VERSION. A train may re-apply the stamp by cherry-pick or bring
-    it in by a merge, so 'the bump' is not always a plain commit on main."""
-    out = git(repo, "log", "-1", "--first-parent", "--format=%H", prev, "--", "VERSION").strip()
-    return out or None
+    changed the version stamped in `path` (default: PREV's stamp file). A train
+    may re-apply the stamp by cherry-pick or bring it in by a merge, so 'the
+    bump' is not always a plain commit on main. The VALUE must change, not just
+    the file: gradle.properties and package.json carry other lines too."""
+    if path is None:
+        source = stamp_source(repo, prev)
+        if source is None:
+            return None
+        path = source[0]
+    out = git(repo, "log", "--first-parent", "--format=%H", prev, "--", path, check=False)
+    for commit in out.split():
+        if read_form(repo, commit, path) != read_form(repo, f"{commit}^1", path):
+            return commit
+    return None
 
 
 def stamps_from(repo: str, commit: str, before: str, after: str) -> list[str]:
@@ -227,15 +314,24 @@ def main(argv: list[str]) -> int:
     stamps: list[str] = []
     if old is not None and new is not None:
         old_s, new_s = ".".join(map(str, old)), ".".join(map(str, new))
-        commit = stamp_commit(repo, prev)
-        before = git(repo, "show", f"{commit}^1:VERSION", check=False).strip() if commit else ""
-        at_prev = git(repo, "show", f"{prev}:VERSION", check=False).strip()
-        gate.check("from PREV", f"{prev}:VERSION says {old_s}", at_prev == old_s, f"read {at_prev or '<none>'}")
-        if commit and before:
-            stamps = stamps_from(repo, commit, before, old_s)
-            print(f"     stamp commit {commit[:12]} ({before} -> {old_s}, first-parent): {len(stamps)} file(s)")
-        gate.check("from PREV", "the stamp set is derived and contains VERSION", "VERSION" in stamps,
-                   f"{len(stamps)} file(s)")
+        source = stamp_source(repo, prev)
+        if source is None:
+            gate.check("from PREV", f"{prev} has a version stamp, and it says {old_s}", False,
+                       f"read <none> ({NO_STAMP})")
+            gate.check("from PREV", "the stamp set is derived and contains the stamp file", False,
+                       "0 file(s): no stamp file at PREV")
+        else:
+            stamp_path, at_prev, form = source
+            print(f"     stamp form at {prev}: {form} ({stamp_path})")
+            commit = stamp_commit(repo, prev, stamp_path)
+            before = (read_form(repo, f"{commit}^1", stamp_path) or "") if commit else ""
+            gate.check("from PREV", f"{prev}:{stamp_path} ({form}) says {old_s}", at_prev == old_s,
+                       f"read {at_prev or '<none>'}")
+            if commit and before:
+                stamps = stamps_from(repo, commit, before, old_s)
+                print(f"     stamp commit {commit[:12]} ({before} -> {old_s}, first-parent): {len(stamps)} file(s)")
+            gate.check("from PREV", f"the stamp set is derived and contains {stamp_path}", stamp_path in stamps,
+                       f"{len(stamps)} file(s)")
         for path in stamps:
             prev_text = git(repo, "show", f"{prev}:{path}", check=False)
             tag_text = git(repo, "show", f"{tag}:{path}", check=False)
