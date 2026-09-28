@@ -545,6 +545,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
                         val currentCellData = cellData0.data[cellIndex]
                         val cellId = (currentCellData["cellId"] as? String) ?: "$cellIndex"
                         val cellViewModel: BarInfoCellViewModel = viewModel(key = "item_detail/bar_info_cell_cell_0_${cellId}_${viewModel.hashCode()}")
+                        remember(cellViewModel, currentCellData) { cellViewModel.updateData(currentCellData); currentCellData }
                         LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }
                         BarInfoCellView(
                             viewModel = cellViewModel,

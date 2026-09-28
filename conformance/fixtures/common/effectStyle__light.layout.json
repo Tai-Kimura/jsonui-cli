@@ -15,8 +15,8 @@
     {
       "type": "View",
       "id": "backdrop",
-      "width": 100,
-      "height": 100,
+      "width": 200,
+      "height": 200,
       "background": "#FF0000",
       "orientation": "horizontal",
       "child": [
@@ -24,37 +24,116 @@
           "type": "View",
           "id": "stripe_a",
           "width": 20,
-          "height": 100,
+          "height": 200,
           "background": "#FFFFFF"
         },
         {
           "type": "View",
           "id": "stripe_b",
           "width": 20,
-          "height": 100,
+          "height": 200,
           "background": "#0000FF"
         },
         {
           "type": "View",
           "id": "stripe_c",
           "width": 20,
-          "height": 100,
+          "height": 200,
           "background": "#FFFFFF"
         },
         {
           "type": "View",
           "id": "stripe_d",
           "width": 20,
-          "height": 100,
+          "height": 200,
+          "background": "#00AA00"
+        },
+        {
+          "type": "View",
+          "id": "stripe_e",
+          "width": 20,
+          "height": 200,
+          "background": "#FF0000"
+        },
+        {
+          "type": "View",
+          "id": "stripe_f",
+          "width": 20,
+          "height": 200,
+          "background": "#FFFFFF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_g",
+          "width": 20,
+          "height": 200,
+          "background": "#0000FF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_h",
+          "width": 20,
+          "height": 200,
+          "background": "#FFFFFF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_i",
+          "width": 20,
+          "height": 200,
           "background": "#00AA00"
         }
       ]
     },
     {
-      "type": "Blur",
+      "type": "View",
       "id": "target",
-      "width": 100,
-      "height": 100,
+      "width": 200,
+      "height": 200,
+      "child": [
+        {
+          "type": "View",
+          "id": "box_a",
+          "width": 40,
+          "height": 40,
+          "background": "#FF0000"
+        },
+        {
+          "type": "View",
+          "id": "box_b",
+          "width": 40,
+          "height": 40,
+          "background": "#0000FF"
+        },
+        {
+          "type": "View",
+          "id": "box_c",
+          "width": 40,
+          "height": 40,
+          "background": "#00AA00"
+        },
+        {
+          "type": "View",
+          "id": "box_d",
+          "width": 40,
+          "height": 40,
+          "background": "#FFAA00"
+        },
+        {
+          "type": "View",
+          "id": "box_e",
+          "width": 40,
+          "height": 40,
+          "background": "#AA00AA"
+        },
+        {
+          "type": "View",
+          "id": "box_f",
+          "width": 40,
+          "height": 40,
+          "background": "#00AAAA"
+        }
+      ],
       "effectStyle": "Light"
     }
   ]

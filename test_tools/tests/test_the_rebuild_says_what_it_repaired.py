@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -147,6 +148,7 @@ class TestTheOrdinaryRunGainsNothing:
 
         assert "missing from the tree" not in out
         assert "did not have" not in out
+        assert "removed " not in out
         assert rc == 0
 
     def test_the_first_build_is_not_a_repair(
@@ -178,3 +180,82 @@ class TestTheOrdinaryRunGainsNothing:
         assert "[ABSENT]" in out
         assert "missing from the tree" not in out
         assert "did not have" not in out
+
+
+def _bump_mtime(path: Path, seconds: float = 10.0) -> None:
+    st = path.stat()
+    os.utime(path, (st.st_atime + seconds, st.st_mtime + seconds))
+
+
+class TestAPruneIsNamed:
+    """The rebuild empties generated/ and writes back only what the in-scope
+    swagger generates, so a file no in-scope operation generates is deleted —
+    intended, and it runs under `--no-install` (which skips only the install).
+    Measured on a consumer project (2026-09-28): `validate --no-install`
+    removed a mock and the editor schema copy beside it from one tag
+    directory of generated/, and printed nothing about either. The deletion stays; the silence goes."""
+
+    @pytest.fixture
+    def tagged(self, project, tmp_path):
+        spec_path = tmp_path / "docs" / "api.json"
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        spec["paths"]["/api/x"]["get"]["tags"] = ["x"]
+        spec["paths"]["/api/y"]["get"]["tags"] = ["x"]
+        spec["paths"]["/api/z"] = {"get": {
+            "operationId": "getZ", "tags": ["z"],
+            "responses": {"200": _OK}}}
+        spec_path.write_text(json.dumps(spec), encoding="utf-8")
+        return project, spec_path
+
+    def test_a_dropped_operation_and_its_schema_copy_are_named(
+            self, tagged, monkeypatch, capsys):
+        project, spec_path = tagged
+        _run(project, monkeypatch, capsys)
+        gen = project / "tests" / "mocks" / "generated"
+        mock = gen / "z" / "getZ.mock.json"
+        schema = gen / "z" / ".mock.schema.json"
+        # CONTROL: both files are there before the run that removes them.
+        assert mock.exists() and schema.exists(), sorted(gen.rglob("*"))
+
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        del spec["paths"]["/api/z"]
+        spec_path.write_text(json.dumps(spec), encoding="utf-8")
+        _bump_mtime(spec_path)
+
+        rc, out = _run(project, monkeypatch, capsys)
+
+        # The prune itself is unchanged: generated/ follows the swagger.
+        assert not mock.exists() and not schema.exists()
+        assert (f"removed a file no in-scope operation generates "
+                f"— {Path('z', 'getZ.mock.json')}") in out, out
+        assert (f"removed the editor schema copy of a directory with no "
+                f"generated mock left — {Path('z', '.mock.schema.json')}") in out, out
+        # Only what went is named: the x/ mocks and their schema copy stay.
+        assert len([line for line in out.splitlines() if line.startswith("  removed ")]) == 2, out
+        assert (gen / "x" / ".mock.schema.json").exists()
+        assert rc == 0
+
+    def test_a_file_no_operation_generates_is_named_even_if_unparseable(
+            self, tagged, monkeypatch, capsys):
+        """`_scenario_names` skips a file it cannot parse; the prune does not."""
+        project, spec_path = tagged
+        _run(project, monkeypatch, capsys)
+        stray = project / "tests" / "mocks" / "generated" / "x" / "stray.mock.json"
+        stray.write_text("{not json", encoding="utf-8")
+        _bump_mtime(spec_path, 20.0)
+
+        _, out = _run(project, monkeypatch, capsys)
+
+        assert not stray.exists()
+        assert (f"removed a file no in-scope operation generates "
+                f"— {Path('x', 'stray.mock.json')}") in out, out
+        # Its directory still has generated mocks: the schema copy stays, and
+        # is not reported.
+        assert "editor schema copy" not in out
+
+    def test_the_no_install_help_says_the_rebuild_still_runs(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["jsonui-test", "validate", "--help"])
+        with pytest.raises(SystemExit):
+            cli.main()
+        text = " ".join(capsys.readouterr().out.split())
+        assert "generated/ tree is still rebuilt" in text, text

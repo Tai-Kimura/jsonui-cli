@@ -1287,10 +1287,13 @@ module SjuiTools
             add_line "}"
           end
 
-          # Apply common modifiers. The insets pad every page's cell
-          # (add_paging_cell), inside the pager's scroll; until jsonui-cli
-          # 1.9.0 they padded the TabView from outside.
-          apply_modifiers(skip_insets: true)
+          # The common modifiers are applied once, by convert_non_responsive
+          # (`apply_modifiers(skip_insets: true)` after this returns). The
+          # insets pad every page's cell (add_paging_cell), inside the pager's
+          # scroll; until jsonui-cli 1.9.0 they padded the TabView from
+          # outside. This method applied the modifiers too, so the frame and
+          # the padding / margin stages were emitted twice (and stacked
+          # paddings add up) — ticket sjui-pager-emits-its-common-modifiers-twice.
         end
 
         # A pager's scrollTo turns to the page the value names (the SSoT's

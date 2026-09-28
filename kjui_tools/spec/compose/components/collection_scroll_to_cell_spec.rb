@@ -140,6 +140,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         if (slot.key != key1) { slot.key = key1; slot.value = calculation() }
         return slot.value as T
     }
+    fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = remember(listOf(key1, key2), calculation)
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
         val slot = Composition.slot { Keyed(Any(), null) }
         if (slot.key != key1) { slot.key = key1; Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } } }
@@ -517,13 +518,13 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       files.each { |name, source| File.write(File.join(dir, name), source) }
       compiler_cp = [KotlinCompiler.compiler_jar, stdlib, reflect, coroutines, annotations,
                      KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
-      out, status = Open3.capture2e(KotlinCompiler.java_bin, '-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+      out, status = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                                     '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
                                     '-d', File.join(dir, 'out'), *files.keys.map { |name| File.join(dir, name) })
       errors = out.lines.grep(/error:/)
       raise "the emitted code did not compile:\n#{errors.join}\n#{files['Emitted.kt']}" unless status.success? && errors.empty?
 
-      run, status = Open3.capture2e(KotlinCompiler.java_bin, '-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
+      run, status = KotlinCompiler.java_capture2e('-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
       raise "the emitted code did not run:\n#{run}" unless status.success?
 
       run.lines.to_h { |l| k, v = l.chomp.split(' => ', 2); [k, v] }

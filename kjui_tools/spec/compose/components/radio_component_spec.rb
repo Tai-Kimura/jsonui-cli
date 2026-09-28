@@ -355,10 +355,12 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       expect(code).to include('else Color.Gray')
     end
 
-    it 'emits no appearance arguments when neither is declared' do
+    # With no colour of its own the selected colour is still emitted: the
+    # tint a container handed down, else theme primary (InheritedTint).
+    it 'emits no size and only the handed-down tint when neither is declared' do
       code = glyph({})
       expect(code).not_to include('Modifier.size(')
-      expect(code).not_to include('RadioButtonDefaults.colors(')
+      expect(code).to include('colors = RadioButtonDefaults.colors(selectedColor = jsonUITintOr(MaterialTheme.colorScheme.primary))')
     end
   end
 end
@@ -446,7 +448,12 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         interface Alignment { interface Vertical; companion object { val CenterVertically: Vertical = object : Vertical {} } }
         fun Column(modifier: Modifier = Modifier, content: () -> Unit) {}
         fun Row(verticalAlignment: Alignment.Vertical? = null, modifier: Modifier = Modifier, content: () -> Unit) {}
-        fun RadioButton(selected: Boolean, onClick: () -> Unit, enabled: Boolean = true) {}
+        class RadioButtonColors
+        object RadioButtonDefaults { fun colors(selectedColor: Color = Color(), unselectedColor: Color = Color()) = RadioButtonColors() }
+        fun RadioButton(selected: Boolean, onClick: () -> Unit, enabled: Boolean = true, colors: RadioButtonColors = RadioButtonColors()) {}
+        class ColorScheme { val primary = Color() }
+        object MaterialTheme { val colorScheme = ColorScheme() }
+        fun jsonUITintOr(fallback: Color): Color = fallback
         fun Spacer(modifier: Modifier) {}
         fun Text(text: String, color: Color = Color()) {}
         class MutableState<T>(var value: T)

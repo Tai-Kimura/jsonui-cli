@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/safeAreaInsetPositions__trailing.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.safeAreaInsetPositions (trailing)",
+    "description": "Conformance fixture for 'safeAreaInsetPositions' on View (section: View, class: visual). Value under test: [\"trailing\"].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "safeAreaInsetPositions__trailing",
+      "description": "Conformance fixture for 'safeAreaInsetPositions' on View (section: View, class: visual). Value under test: [\"trailing\"].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_safeAreaInsetPositions__trailing"
+        }
+      ]
+    }
+  ]
+}

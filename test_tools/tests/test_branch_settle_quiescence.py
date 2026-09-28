@@ -200,6 +200,176 @@ def test_web_an_expected_op_never_sent_fails_by_name_at_expect_ms(tmp_path):
     assert bt.EXPECT_MS <= int(got["WAITED"]) < FIRST_LATE_MS, got
 
 
+# ------------------------------------------- web, the early close ----
+#
+# Ticket test-branch-web-generated-rows-take-800ms-each-under-the-quiet-window:
+# every generated row waited the quiet window twice, 800 ms at the least,
+# whatever it did. settleQuiet now also closes once nothing is due — no
+# request in flight, no delayed response, no timer the row scheduled through
+# setTimeout / setInterval — for ten idle turns; a timer due keeps the quiet
+# window, and a timer past it is not waited for. settleHarness (the wait
+# after building the harness) skips when construction did nothing.
+
+#: A view model's late call: sent this long after the act, from a timer —
+#: inside the quiet window, far past the ten idle turns of the early close.
+TIMER_LATE_MS = bt.QUIET_MS // 2
+#: A setInterval's period, and the tick that sends the late call.
+TICK_MS, TICKS = 50, 3
+#: A timer far past the quiet window: never waited for.
+FAR_MS = 600000
+#: What "closed early" means here: well under the quiet window it replaced.
+EARLY_MS = bt.QUIET_MS // 2
+
+
+def test_the_early_close_specimens_are_bound_to_the_declarations():
+    assert 10 * 5 < TIMER_LATE_MS < bt.QUIET_MS       # past ten polls, inside the window
+    assert TICK_MS * TICKS < bt.QUIET_MS
+    assert FAR_MS >= 100 * bt.QUIET_MS
+    assert EARLY_MS <= bt.QUIET_MS // 2
+
+
+_TS_TIMERS = """import { installFetchMock, settleHarness, settleQuiet } from "./runtime.ts";
+const ok = { status: 200, body: {} };
+const ROUTES: any[] = [
+  { op: "late", method: "GET", pattern: "^/late$", scenario: "ok", scenarios: { ok } },
+];
+const mode = process.argv[2];
+// The timer a fake installed after the install would run on: its own, not
+// the one the row watches.
+const unseenSetTimeout = globalThis.setTimeout;
+const LATE = TIMER_LATE_MS, TICK = TICK_MS, TICKS_N = TICKS, FAR = FAR_MS;
+const rec = installFetchMock(ROUTES, {}, null, "early-close");
+const late = (): void => void fetch("https://x.test/late");
+let fired = false;
+let cleanup = (): void => {};
+const started = Date.now();
+if (mode === "harness-nothing" || mode === "harness-timer") {
+  // A constructor: nothing, or state loaded LATE ms later from a timer.
+  const vm = { loaded: false };
+  if (mode === "harness-timer") setTimeout(() => { vm.loaded = true; }, LATE);
+  try { await settleHarness(); } catch (e) { console.log(`THROWN ${(e as Error).message}`); }
+  console.log(`LOADED ${vm.loaded}`);
+} else {
+  rec.mark();
+  // The act: what the view model left behind.
+  if (mode === "late-timeout") setTimeout(() => { fired = true; late(); }, LATE);
+  if (mode === "late-interval") {
+    let ticks = 0;
+    const t = setInterval(() => { ticks += 1; if (ticks === TICKS_N) { clearInterval(t); fired = true; late(); } }, TICK);
+  }
+  if (mode === "far-interval") {
+    const t = setInterval(() => { fired = true; }, FAR);
+    cleanup = () => clearInterval(t);
+  }
+  if (mode === "far-timeout") {
+    const t = setTimeout(() => { fired = true; }, FAR);
+    cleanup = () => clearTimeout(t);
+  }
+  if (mode === "cleared") clearTimeout(setTimeout(() => { fired = true; late(); }, LATE));
+  if (mode === "cleared-by-number") clearTimeout(Number(setTimeout(() => { fired = true; late(); }, LATE)));
+  if (mode === "displaced") {
+    // A test replaced the timers after the install (vi.useFakeTimers() in
+    // the row, say): the row cannot see what is scheduled on them.
+    (globalThis as any).setTimeout = (f: () => void, ms: number) => unseenSetTimeout(f, ms);
+    setTimeout(() => { fired = true; late(); }, LATE);
+  }
+  try { await settleQuiet(); } catch (e) { console.log(`THROWN ${(e as Error).message}`); }
+}
+console.log(`WAITED ${Date.now() - started}`);
+console.log(`FIRED ${fired}`);
+console.log(`UNEXPECTED ${JSON.stringify(rec.unexpectedOps([]))}`);
+cleanup();
+rec.restore();
+process.exit(0);
+""".replace("TIMER_LATE_MS", str(TIMER_LATE_MS)).replace("TICK_MS", str(TICK_MS)).replace(
+    "= TICKS,", f"= {TICKS},").replace("FAR_MS", str(FAR_MS))
+
+
+def _timers(tmp_path: Path, mode: str, runtime: str = bt.RUNTIME_TS) -> dict:
+    return _node(tmp_path, runtime, _TS_TIMERS, mode)
+
+
+def test_web_nothing_due_closes_early(tmp_path):
+    got = _timers(tmp_path, "nothing")
+    assert "THROWN" not in got and got["UNEXPECTED"] == "[]", got
+    assert int(got["WAITED"]) < EARLY_MS, got
+
+
+def test_web_control_without_the_early_close_nothing_due_waits_the_window(tmp_path):
+    got = _timers(tmp_path, "nothing", _without("early"))
+    assert int(got["WAITED"]) >= bt.QUIET_MS, got
+
+
+@pytest.mark.parametrize("mode, sent_at", [
+    ("late-timeout", TIMER_LATE_MS),
+    ("late-interval", TICK_MS * TICKS),
+])
+def test_web_a_late_call_from_a_view_model_timer_is_still_caught(tmp_path, mode, sent_at):
+    """The arm the quiet window exists for: an undeclared call the view model
+    sends from a timer, inside the window, reads in `unexpectedOps` — and the
+    row closes soon after it, not QUIET_MS after it."""
+    got = _timers(tmp_path, mode)
+    assert "THROWN" not in got and got["FIRED"] == "true", got
+    assert got["UNEXPECTED"] == '["late"]', got
+    assert sent_at <= int(got["WAITED"]) < sent_at + bt.QUIET_MS, got
+
+
+def test_web_control_without_the_timer_watch_the_late_call_is_a_vacuous_green(tmp_path):
+    got = _timers(tmp_path, "late-timeout", _without("watch"))
+    assert got["FIRED"] == "false" and got["UNEXPECTED"] == "[]", got
+
+
+def test_web_control_an_interval_read_as_done_after_one_tick_misses_the_late_call(tmp_path):
+    got = _timers(tmp_path, "late-interval", _without("interval"))
+    assert got["FIRED"] == "false" and got["UNEXPECTED"] == "[]", got
+
+
+@pytest.mark.parametrize("mode", ["far-timeout", "far-interval"])
+def test_web_a_timer_past_the_window_keeps_the_window_and_is_not_waited_for(tmp_path, mode):
+    """A timer due takes the early close away; it never holds the row past
+    the quiet window — a setInterval never cleared, a setTimeout of minutes."""
+    got = _timers(tmp_path, mode)
+    assert "THROWN" not in got and got["FIRED"] == "false", got
+    assert bt.QUIET_MS <= int(got["WAITED"]) < 10 * bt.QUIET_MS, got
+
+
+@pytest.mark.parametrize("mode", ["cleared", "cleared-by-number"])
+def test_web_a_cleared_timer_is_not_due(tmp_path, mode):
+    got = _timers(tmp_path, mode)
+    assert "THROWN" not in got and got["FIRED"] == "false", got
+    assert int(got["WAITED"]) < EARLY_MS, got
+
+
+def test_web_timers_replaced_after_the_install_keep_the_window(tmp_path):
+    got = _timers(tmp_path, "displaced")
+    assert "THROWN" not in got and got["UNEXPECTED"] == '["late"]', got
+    assert int(got["WAITED"]) >= bt.QUIET_MS, got
+
+
+def test_web_control_a_watch_that_misses_the_replacement_misses_the_late_call(tmp_path):
+    got = _timers(tmp_path, "displaced", _without("displaced"))
+    assert got["FIRED"] == "false" and got["UNEXPECTED"] == "[]", got
+
+
+def test_web_the_harness_wait_skips_when_construction_did_nothing(tmp_path):
+    got = _timers(tmp_path, "harness-nothing")
+    assert "THROWN" not in got and got["LOADED"] == "false", got
+    assert int(got["WAITED"]) < EARLY_MS, got
+
+
+def test_web_the_harness_wait_waits_for_a_constructor_timer(tmp_path):
+    got = _timers(tmp_path, "harness-timer")
+    assert "THROWN" not in got and got["LOADED"] == "true", got
+    assert TIMER_LATE_MS <= int(got["WAITED"]) < TIMER_LATE_MS + bt.QUIET_MS, got
+
+
+def test_web_control_without_the_skip_the_harness_wait_is_settle_quiet(tmp_path):
+    """The skip is what makes it shorter than settleQuiet: without it (and
+    without the early close) a harness that did nothing waits the window."""
+    got = _timers(tmp_path, "harness-nothing", _without("harness-skip", "early"))
+    assert int(got["WAITED"]) >= bt.QUIET_MS, got
+
+
 # ---------------------------------------------------------------- ios ----
 
 _SWIFT_SHIM = """import Foundation
@@ -418,7 +588,7 @@ def test_web_control_without_the_row_timeout_vitest_ends_it_naming_nothing(tmp_p
 #: quiet window, and the shortened budget and EXPECT_MS below.
 STILL_MS = 3000
 #: The same for the cases whose clock was frozen before the runtime loaded:
-#: settle names it after STALLED_POLLS polls of 5 ms, or STALLED_TURNS turns —
+#: settle names it after STALLED_POLLS polls, or STALLED_TURNS turns —
 #: a second at the least, more on a loaded machine.
 STILL_BEFORE_IMPORT_MS = 10000
 #: The copy of the runtime the named-failure cases run: one capped delay of
@@ -508,6 +678,15 @@ const REAL = (): void => {};
 const CLOCKS: [string, () => void][] = [["real clock", REAL],
   ...Object.entries(FAKES).map(([fake, install]): [string, () => void] => [`fake: ${fake}`, install])];
 
+// A view model's timer far past the quiet window, scheduled after the install
+// so the row watches it: it takes the early close away, and the case measures
+// the quiet window — on the clock the runtime took — as it did before there
+// was an early close. Cleared when the case ends.
+function hold(): () => void {
+  const t = setTimeout(() => {}, 600000);
+  return () => clearTimeout(t);
+}
+
 function route(op: string, delayMs?: number): RouteSpec {
   const ok = delayMs === undefined ? { status: 200, body: {} } : { status: 200, body: {}, delayMs };
   return { op, method: "GET", pattern: `^/${op}$`, scenario: "ok", scenarios: { ok } };
@@ -518,7 +697,18 @@ for (const [fake, install] of Object.entries(FAKES)) {
   it(`settleQuiet() returns — fake: ${fake}`, async () => {
     install();
     const rec = installFetchMock([], {}, null, fake);
-    try { must(await outcome(settleQuiet()), "returned"); } finally { rec.restore(); }
+    const release = hold();
+    try { must(await outcome(settleQuiet()), "returned"); } finally { release(); rec.restore(); }
+  }, 10000);
+}
+
+// Nothing due: the early close, which reads no clock — so a frozen one
+// cannot hold it, and it takes about ten turns, not QUIET_MS.
+for (const fake of ["Date", "every timer"]) {
+  it(`settleQuiet() closes early with nothing due — fake: ${fake}`, async () => {
+    FAKES[fake]();
+    const rec = installFetchMock([], {}, null, `early ${fake}`);
+    try { must(await timed(settleQuiet()), "returned within QUIET_MS"); } finally { rec.restore(); }
   }, 10000);
 }
 
@@ -566,11 +756,12 @@ for (const [name, wait] of [["settleQuiet", settleQuiet], ["settle", settle]] as
     FAKES["Date"]();
     const rec = installFetchMock([route("first")], {}, null, "expect");
     rec.mark();
+    const release = hold();
     setTimeout(() => void fetch("https://x.test/first"), 100);
     try {
       must(await outcome(wait({ rec, expect: ["first"] })), "returned");
       must(`called ${rec.countFor("first")}`, "called 1");
-    } finally { rec.restore(); }
+    } finally { release(); rec.restore(); }
   }, 10000);
 }
 
@@ -579,6 +770,7 @@ for (const [name, wait] of [["settleQuiet", settleQuiet], ["settle", settle]] as
 it("a delayed response is waited for once the test advances its timers — fake: every timer", async () => {
   FAKES["every timer"]();
   const rec = installFetchMock([route("slow", 200)], {}, null, "delayed");
+  const release = hold();
   let arrived = false;
   void fetch("https://x.test/slow").then(() => { arrived = true; });
   try {
@@ -586,7 +778,7 @@ it("a delayed response is waited for once the test advances its timers — fake:
     await vi.advanceTimersByTimeAsync(200);
     must(await settled, "returned");
     must(`arrived ${arrived}`, "arrived true");
-  } finally { rec.restore(); }
+  } finally { release(); rec.restore(); }
 }, 10000);
 
 // The named failures still fire on a frozen Date.
@@ -639,7 +831,9 @@ afterAll(() => { vi.useRealTimers(); });
 
 it("settleQuiet() returns — Date frozen before the runtime was imported", async () => {
   const rec = installFetchMock([], {}, null, "date-before-import");
-  try { must(await outcome(settleQuiet()), "returned"); } finally { rec.restore(); }
+  // A timer past the quiet window: no early close, the window is measured.
+  const t = setTimeout(() => {}, 600000);
+  try { must(await outcome(settleQuiet()), "returned"); } finally { clearTimeout(t); rec.restore(); }
 }, 10000);
 '''
 
@@ -655,10 +849,12 @@ afterAll(() => { vi.useRealTimers(); });
 
 it("settleQuiet() names the clock — Date and performance frozen before the runtime was imported", async () => {
   const rec = installFetchMock([], {}, null, "clock-before-import");
+  // A timer past the quiet window: no early close, the window is measured.
+  const t = setTimeout(() => {}, 600000);
   try {
     must(await outcome(settleQuiet(), STILL_BEFORE_IMPORT_MS),
       /^threw: settle: the clock it measures with \(performance\.now, taken when this runtime loaded\) read the same time across 200 polls/);
-  } finally { rec.restore(); }
+  } finally { clearTimeout(t); rec.restore(); }
 }, STILL_BEFORE_IMPORT_MS + 10000);
 
 it("settle(20) names the clock after a delayed response — Date and performance frozen before the runtime was imported", async () => {
@@ -678,6 +874,7 @@ _FAKES = ("Date", "Date, setInterval, clearInterval", "setSystemTime alone", "ev
 _FROZEN = [*(f"settleQuiet() returns — fake: {f}" for f in _FAKES),
            "settleQuiet({ rec, expect }) returns once the op is called — fake: Date",
            "settle({ rec, expect }) returns once the op is called — fake: Date"]
+_EARLY = [f"settleQuiet() closes early with nothing due — fake: {f}" for f in ("Date", "every timer")]
 _DELAYED = "a delayed response is waited for once the test advances its timers — fake: every timer"
 _NAMED = ["past the budget, settleQuiet fails by name — fake: Date",
           "an expected op never called fails by name at EXPECT_MS — fake: Date"]
@@ -692,7 +889,7 @@ _DATE_BEFORE = "settleQuiet() returns — Date frozen before the runtime was imp
 _BOTH_BEFORE = "settleQuiet() names the clock — Date and performance frozen before the runtime was imported"
 _TURNS_BOTH_BEFORE = ("settle(20) names the clock after a delayed response — Date and performance "
                       "frozen before the runtime was imported")
-_CLOCK_CASES = [*_FROZEN, *_NO_ARG_FAST, *_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _DELAYED, *_NAMED,
+_CLOCK_CASES = [*_FROZEN, *_EARLY, *_NO_ARG_FAST, *_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _DELAYED, *_NAMED,
                 _TURNS_BUDGET, _DATE_BEFORE, _BOTH_BEFORE, _TURNS_BOTH_BEFORE]
 
 #: How settle sends a call without an object — to settleTurns, ten turns when
@@ -729,6 +926,19 @@ _PARTS = {
                "    if (quiet && missing.length === 0) return;\n")],
     # settle(turns) draining one turn, whatever it was asked for.
     "one-turn": [("    for (let i = 0; i < turns; i += 1) {\n", "    for (let i = 0; i < 1; i += 1) {\n")],
+    # No early close: every settleQuiet waits out the quiet window (1.9.0).
+    "early": [("    if (missing.length === 0 && idle >= minPolls) return;\n", "")],
+    # No timer watch, and a watch that vouches anyway: the early close is
+    # taken while a view model's timer is still due.
+    "watch": [("  const unwatchTimers = watchRowTimers(mine);\n",
+               "  mine.watching = () => true;\n  const unwatchTimers = (): void => {};\n")],
+    # A watch that does not notice a replaced setTimeout.
+    "displaced": [("    !traffic.unwatched && traffic.watching();\n", "    !traffic.unwatched;\n")],
+    # A setInterval read as done after its first tick.
+    "interval": [("    setInterval: schedule(original.setInterval, true),\n",
+                  "    setInterval: schedule(original.setInterval, false),\n")],
+    # settleHarness without its skip: settleQuiet after every harness.
+    "harness-skip": [("  if (traffic.seq === 0 && nothingDue()) return;\n", "")],
 }
 
 
@@ -790,23 +1000,33 @@ _SLOW = "OUTCOME returned in "
     (("clock", "guard"), dict.fromkeys([*_FROZEN, _DELAYED, *_NAMED, _DATE_BEFORE, _BOTH_BEFORE,
                                         _DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE], _WAITING)),
     # 1.9.0's timer: the waits' own sleep on a timer only the test advances.
-    (("timer",), dict.fromkeys(["settleQuiet() returns — fake: every timer", _DELAYED,
-                                "settle() returns within QUIET_MS — fake: every timer"],
-                               f"OUTCOME still waiting after {STILL_MS} ms")),
+    # And the early close is lost on a real timer too: the runtime's own
+    # sleeps then go through the row's watched setTimeout, and each counts
+    # as the row's activity.
+    (("timer",), {**dict.fromkeys(["settleQuiet() returns — fake: every timer", _DELAYED,
+                                   "settleQuiet() closes early with nothing due — fake: every timer",
+                                   "settle() returns within QUIET_MS — fake: every timer"],
+                                  f"OUTCOME still waiting after {STILL_MS} ms"),
+                  "settleQuiet() closes early with nothing due — fake: Date": _SLOW}),
+    # The next three are what 1.9.0 and its fixes wired settle to: the quiet
+    # window as it was then, with no early close — so each takes the early
+    # close out too, and the early-close cases go red with it (_EARLY). With
+    # the early close in, a settle() sent through the quiet window with
+    # nothing due returns in ten turns, and these wirings read as fast.
     # 1.9.0's settle: a number is the TypeError the 1.8.120 callers got, and
     # settle() is the quiet window, QUIET_MS on every call.
-    (("until",), {**dict.fromkeys([*_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE],
-                                  _TYPE_ERROR),
-                  **dict.fromkeys(_NO_ARG_FAST, _SLOW)}),
+    (("until", "early"), {**dict.fromkeys([*_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _TURNS_BUDGET,
+                                           _TURNS_BOTH_BEFORE], _TYPE_ERROR),
+                          **dict.fromkeys([*_NO_ARG_FAST, *_EARLY], _SLOW)}),
     # A number sent through the quiet window (99492ffa): QUIET_MS more on
     # every call, and the quiet path's budget and stall messages.
-    (("quiet-for-numbers",), {**dict.fromkeys(_TURNS_FAST, _SLOW),
-                              _TURNS_BUDGET: "OUTCOME threw: settle: still busy after ",
-                              _TURNS_BOTH_BEFORE: "OUTCOME threw: settle: the clock it measures with "
-                                                  "(performance.now, taken when this runtime loaded) read "
-                                                  "the same time across 200 polls"}),
+    (("quiet-for-numbers", "early"), {**dict.fromkeys([*_TURNS_FAST, *_EARLY], _SLOW),
+                                      _TURNS_BUDGET: "OUTCOME threw: settle: still busy after ",
+                                      _TURNS_BOTH_BEFORE: "OUTCOME threw: settle: the clock it measures with "
+                                                          "(performance.now, taken when this runtime loaded) read "
+                                                          "the same time across 200 polls"}),
     # settle() sent through the quiet window (d5808b85): QUIET_MS on every call.
-    (("quiet-for-no-arg",), dict.fromkeys(_NO_ARG_FAST, _SLOW)),
+    (("quiet-for-no-arg", "early"), dict.fromkeys([*_NO_ARG_FAST, *_EARLY], _SLOW)),
     # settle(turns) that does not wait for a delayed response.
     (("no-deliveries",), {_DELIVERY_REAL: "OUTCOME arrived false", _DELIVERY_DATE: "OUTCOME arrived false",
                           _TURNS_BUDGET: "OUTCOME returned", _TURNS_BOTH_BEFORE: "OUTCOME returned"}),
@@ -816,8 +1036,10 @@ _SLOW = "OUTCOME returned in "
     # No stall guards: the clock frozen before the import loops again.
     (("guard",), dict.fromkeys([_BOTH_BEFORE, _TURNS_BOTH_BEFORE],
                                f"OUTCOME still waiting after {STILL_BEFORE_IMPORT_MS} ms")),
+    # No early close: a row with nothing due takes the quiet window again.
+    (("early",), dict.fromkeys(_EARLY, _SLOW)),
 ], ids=["clock", "clock-and-guard", "timer", "until", "quiet-for-numbers", "quiet-for-no-arg",
-        "no-deliveries", "date-clock", "guard"])
+        "no-deliveries", "date-clock", "guard", "early"])
 def test_web_control_each_part_taken_out_turns_its_own_cases_red(tmp_path, parts, red):
     got = _clock_cases(tmp_path, _without(*parts))
     assert sorted(name for name, (state, _) in got.items() if state != "passed") == sorted(red), got
@@ -888,14 +1110,14 @@ export function createHarness() {
 '''.replace("LATE_MS", str(LATE_MS))
 
 
-def _ticker(root: Path) -> Path:
+def _ticker(root: Path, harness: str = _TICKER_HARNESS) -> Path:
     import json
 
     from tests import test_branch_notices_reach_agent_runs as n
     n._write(root / "jui.config.json", json.dumps({"spec_directory": "docs/screens/json", "platforms": ["web"]}))
     n._write(root / "docs/screens/json/ticker.spec.json", json.dumps(_TICKER_SPEC))
     report = bt.generate_branch_tests("ticker", root, platform="web", config_platforms=["web"])
-    n._write(root / "tests/unit/branch-harness/ticker.ts", _TICKER_HARNESS)
+    n._write(root / "tests/unit/branch-harness/ticker.ts", harness)
     n._runner_files(root)
     return report.test_file
 
@@ -908,13 +1130,18 @@ def _waits(text: str) -> list[str]:
 
 
 def test_web_generated_rows_wait_with_settle_quiet(tmp_path):
+    """After the harness, settleHarness (settleQuiet, skipped when
+    construction did nothing); after the act, settleQuiet."""
     text = _ticker(tmp_path / "p").read_text(encoding="utf-8")
-    assert _waits(text) == ["settleQuiet", "settleQuiet"], text
-    assert text.count("      await settleQuiet();\n") == 2, text
+    assert _waits(text) == ["settleHarness", "settleQuiet", "settleQuiet"], text
+    assert "settleHarness, settleQuiet,\n  type RouteSpec," in text, text
+    assert text.count("      const h = createHarness();\n      await settleHarness();\n") == 1, text
+    assert text.count("      await settleQuiet();\n") == 1, text
 
 
 def test_web_control_rows_emitting_settle_would_call_the_turns(tmp_path, monkeypatch):
     monkeypatch.setattr(bt, "WEB_ROW_WAIT", "settle")
+    monkeypatch.setattr(bt, "WEB_HARNESS_WAIT", "settle")
     text = _ticker(tmp_path / "p").read_text(encoding="utf-8")
     assert _waits(text) == ["settle", "settle"], text
 
@@ -930,3 +1157,52 @@ def test_web_control_a_row_that_called_settle_reads_it_half_done(tmp_path, monke
     _ticker(tmp_path / "p")
     run, tests = _vitest(tmp_path / "p")
     assert [(s, m) for _, s, m in tests] == [("failed", "expected 'idle' to deeply equal 'ticked'")], tests
+
+
+# ------------------------------- web, a generated row's time (the ticket) ----
+
+#: A view model whose act does its work at once: no request, no timer.
+_TICKER_AT_ONCE = _TICKER_HARNESS.replace(
+    f'async tick() {{ setTimeout(() => {{ this.status = "ticked"; }}, {LATE_MS}); }}',
+    'async tick() { this.status = "ticked"; }')
+
+
+def _row_ms(root: Path) -> list[tuple[str, int]]:
+    """Each test's (outcome, duration in ms) from the junit report."""
+    import xml.etree.ElementTree as ET
+
+    from tests import test_branch_notices_reach_agent_runs as n
+    tc.tool("node")
+    n._vitest()
+    out = root / "vitest-junit.xml"
+    run = n._vitest_run(root, {}, "--reporter=junit", f"--outputFile={out}")
+    assert out.is_file(), (run.stdout + run.stderr)[-4000:]
+    return [("failed" if case.find("failure") is not None else "passed",
+             round(float(case.get("time", "0")) * 1000))
+            for case in ET.parse(out).getroot().iter("testcase")]
+
+
+def test_web_a_generated_row_with_nothing_due_takes_less_than_the_quiet_window(tmp_path):
+    """1.9.0's rows took 2 x QUIET_MS at the least, whatever they did."""
+    assert _TICKER_AT_ONCE != _TICKER_HARNESS
+    _ticker(tmp_path / "p", _TICKER_AT_ONCE)
+    [(state, ms)] = _row_ms(tmp_path / "p")
+    assert state == "passed" and ms < bt.QUIET_MS, (state, ms)
+
+
+def test_web_control_without_the_early_close_and_the_skip_a_row_takes_two_windows(tmp_path, monkeypatch):
+    """1.9.0's wait: settleQuiet after the harness, and no early close."""
+    monkeypatch.setattr(bt, "RUNTIME_TS", _without("early"))
+    monkeypatch.setattr(bt, "WEB_HARNESS_WAIT", "settleQuiet")
+    _ticker(tmp_path / "p", _TICKER_AT_ONCE)
+    [(state, ms)] = _row_ms(tmp_path / "p")
+    assert state == "passed" and ms >= 2 * bt.QUIET_MS, (state, ms)
+
+
+def test_web_a_generated_row_whose_view_model_finishes_from_a_timer_closes_after_it(tmp_path):
+    """The ticker finishes LATE_MS after the act, from a timer and with no
+    request: the row reads it (test_web_a_generated_row_reads_the_state_after_
+    the_quiet_window) and closes soon after it, not QUIET_MS after it."""
+    _ticker(tmp_path / "p")
+    [(state, ms)] = _row_ms(tmp_path / "p")
+    assert state == "passed" and LATE_MS <= ms < LATE_MS + bt.QUIET_MS, (state, ms)

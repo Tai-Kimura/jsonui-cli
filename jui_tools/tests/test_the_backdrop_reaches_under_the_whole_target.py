@@ -255,6 +255,16 @@ class TestTheTargetDoesNotCoverItsOwnBackdrop:
             "the base no longer paints the target; this override is now a "
             "no-op and the reason written beside it is stale")
 
+    def test_the_common_effect_style_host_drops_the_opaque_base_fill(self):
+        """`common.effectStyle` is hosted on the `View` base. A material on a
+        View is a scrim plus a blur of what is behind it; the web path paints
+        the scrim only when no background is declared, so the base #DDDDDD
+        would make every value the same grey square."""
+        assert rules.host_for("common", "effectStyle") == rules.DEFAULT_COMMON_HOST
+        extra = rules.BASE_ATTRS_BY_ATTRIBUTE["View.effectStyle"]
+        assert "background" in extra and extra["background"] is None
+        assert "View.effectStyle" in dict(_striped_owners())
+
     def test_the_blur_families_keep_their_own_fill_rules(self):
         """Control: the override is scoped to `glass`. `Blur`'s target is the
         effect itself, not a view painted behind it, so it neither has nor

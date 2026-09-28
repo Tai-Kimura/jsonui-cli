@@ -5,6 +5,7 @@ require_relative 'text_style_helper'
 require_relative '../helpers/font_helper'
 require_relative '../helpers/string_manager_helper'
 require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
 
 module SjuiTools
   module SwiftUI
@@ -349,9 +350,13 @@ module SjuiTools
           # environment modifier, so it reaches the Text inside the button
           # without the library growing a parameter — the same treatment the
           # TextField converter gives the same spelling.
+          # The lines follow the same answer as the placement above: an
+          # undeclared spelling draws Button's default, the centre, not
+          # `text_alignment_to_swiftui`'s `.leading` fallback (which is
+          # Label's default, not Button's).
           if @component['textAlign']
             @modifier_bag.append(:component_specific,
-                                 ".multilineTextAlignment(#{text_alignment_to_swiftui(@component['textAlign'])})")
+                                 ".multilineTextAlignment(#{button_text_alignment || '.center'})")
           end
 
           # Apply frame constraints and margins
@@ -423,11 +428,13 @@ module SjuiTools
           end
         end
 
-        # `.leading` / `.trailing` for textAlign Left / Right (any case),
-        # nil for Center or none — StateAwareButtonView's default is the
-        # centre.
+        # `.leading` / `.trailing` for textAlign Left / Right, nil for
+        # Center, none, or any spelling Button does not declare (822e5efe:
+        # a value is its declared spelling, case and all — Button declares
+        # Left / Center / Right only, so `left` / `start` / `trailing` draw
+        # the default) — StateAwareButtonView's default is the centre.
         def button_text_alignment
-          case @component['textAlign'].to_s.strip.downcase
+          case JsonUIShared::EnumSpelling.lowered(@component['textAlign'], 'Button', 'textAlign')
           when 'left' then '.leading'
           when 'right' then '.trailing'
           end

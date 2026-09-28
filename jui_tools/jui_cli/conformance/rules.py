@@ -884,6 +884,23 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # The string spelling of a weight. "2" also differs from the numeric
     # case's 1, so the two faces are distinguishable from each other too.
     ("common", "weight"): [("as_string", "2")],
+    # The edges the representative (`["top", "bottom"]`) never names. The
+    # 1.9.0 product fix (fa537fab) made `leading` / `trailing` / `vertical`
+    # reach every platform; these are its conformance fixtures, first written in
+    # 83633f15, which was never merged. Named, so the list value does not
+    # become a stringified slug. On web a headless desktop viewport reports
+    # env(safe-area-inset-*) = 0, so these render like their control there —
+    # they prove the emit, and the insets are real on the devices.
+    ("View", "safeAreaInsetPositions"): [
+        ("leading", ["leading"]),
+        ("trailing", ["trailing"]),
+        ("vertical", ["vertical"]),
+    ],
+    ("SafeAreaView", "safeAreaInsetPositions"): [
+        ("leading", ["leading"]),
+        ("trailing", ["trailing"]),
+        ("vertical", ["vertical"]),
+    ],
 }
 
 #: Attributes that get a BOUND case: the value under test written as
@@ -1758,6 +1775,15 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # widths. Ledger row: value_discrimination `common.effectStyle` android
     # prominent/thick, owner G, `backdrop-collapses-8bit`.
     "Blur.effectStyle": {"root.backdrop": _striped_backdrop()},
+    # The common spelling on its default `View` host (COMMON_HOST_OVERRIDES
+    # no longer moves it to a Blur). The target keeps the View base's 200x200
+    # and its six boxes, so the backdrop is 200x200 to reach under all of it
+    # on both axes, as `glass` does. `background: None` drops the base's
+    # opaque #DDDDDD: web paints the material's scrim only when no background
+    # is declared, and an opaque fill between the backdrop filter and the
+    # stripes would make every value draw the same grey square.
+    "View.effectStyle": {"root.backdrop": _striped_backdrop(width=200, height=200),
+                         "background": None},
     # The THIRD family that needs something behind it, found the same way
     # the first two were: the three glass fixtures render over the bare root,
     # which is white, and a material over white is white at every setting.
@@ -2962,16 +2988,20 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
 #: (`aria-disabled` on web, the `Disabled` semantics on Compose), which is the
 #: only thing a UI test can observe on a non-input element.
 COMMON_HOST_OVERRIDES: dict[str, str] = {
-    # `effectStyle`'s enum IS the UIBlurEffect vocabulary — Light, Dark,
-    # ExtraLight, systemThinMaterial … — and a bare View has no blur to style,
-    # so the probe emitted nothing and the spelling read as unread. B measured
-    # both hosts: View emits nothing, Blur emits `.preferredColorScheme(.dark)`.
+    # `effectStyle` is NOT here any more, so its common fixtures go on the
+    # default `View` host. They used to sit on a `Blur`, on the August reading
+    # that "a blur effect style is only meaningful on something that blurs".
+    # That stopped being true once a value on a Blur is judged on Blur's OWN
+    # declaration (Light / Dark / ExtraLight): Regular, Prominent, Thin,
+    # UltraThin, Thick and Chrome are undeclared there, all six drew the
+    # default, and six of the nine common fixtures drew one picture. Common's
+    # spellings were never measured on a node that declares them.
     #
-    # `Blur` already declares `effectStyle` in its own section, so the `common`
-    # copy is a duplicate; whether the declaration should move there is E's
-    # call, and hosting the common fixture on Blur is correct either way — a
-    # blur effect style is only meaningful on something that blurs.
-    "effectStyle": "Blur",
+    # On a View every path that has a non-Blur route draws a material (a scrim
+    # plus a blur), so the nine values are told apart where they are declared.
+    # A path with no such route draws nothing and shows as inert, which is a
+    # finding, not a reason to hide the fixture on another host. The Blur
+    # section keeps its own `Blur/effectStyle__*` fixtures for its own enum.
     "tapBackground": "Button",
     "highlightBackground": "Button",
     "disabledBackground": "Button",

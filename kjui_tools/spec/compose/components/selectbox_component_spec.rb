@@ -141,13 +141,13 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         expect(result).not_to include('"from placeholder"')
       end
 
-      it 'generates disabled SelectBox' do
+      it 'does not read the undeclared disabled key' do
         json_data = {
           'type' => 'SelectBox',
           'disabled' => true
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('enabled = false')
+        expect(result).not_to include('enabled = false')
       end
 
       it 'generates SelectBox with enabled false' do

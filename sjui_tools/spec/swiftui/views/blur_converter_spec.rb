@@ -125,6 +125,30 @@ RSpec.describe SjuiTools::SwiftUI::Views::BlurConverter do
     end
   end
 
+  # ticket sjui-codegen-blur-effectstyle-reads-commons-spellings: a Blur's
+  # effectStyle is judged on Blur's own declaration (Light / Dark /
+  # ExtraLight), as SwiftJsonUI Dynamic, kjui, KotlinJsonUI Dynamic and rjui
+  # judge it. The library's `jsonUIVisualEffect` defaults its `in:` set to
+  # common's fourteen spellings, so forwarding an undeclared value drew a
+  # material on iOS release only.
+  describe 'effectStyle judged on Blur\'s declaration' do
+    %w[Thick Chrome Prominent Thin UltraThin].each do |value|
+      it "#{value} (common's, undeclared on Blur) draws the default" do
+        code = described_class.new({ 'type' => 'Blur', 'effectStyle' => value }).convert
+
+        expect(code).to include('.jsonUIVisualEffect(nil)')
+        expect(code).not_to include(value)
+      end
+    end
+
+    %w[Light Dark ExtraLight].each do |value|
+      it "#{value} (declared on Blur) is forwarded as written" do
+        expect(described_class.new({ 'type' => 'Blur', 'effectStyle' => value }).convert)
+          .to include(".jsonUIVisualEffect(\"#{value}\")")
+      end
+    end
+  end
+
   # ---------------------------------------------------------------- 1.8.107
   #
   # A child's `visibility` is honored by THIS container. Reported 2026-09-20:

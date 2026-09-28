@@ -894,7 +894,7 @@ def _scenario_names(gen_root: Path) -> dict:
 
 
 def _rebuild_generated(resolved, mock_path, scope, reason: str) -> int:
-    from .mock.generate import GENERATED_DIR, generate
+    from .mock.generate import EDITOR_SCHEMA_FILENAME, GENERATED_DIR, generate
 
     gen_root = mock_path / GENERATED_DIR
     # Whether there was a tree at all, kept separately from what was in it:
@@ -902,6 +902,10 @@ def _rebuild_generated(resolved, mock_path, scope, reason: str) -> int:
     # not a repair and must not be reported as one.
     had_tree = gen_root.exists()
     before = _scenario_names(gen_root)
+    # Every file the rebuild may delete, by path — not `_scenario_names`,
+    # which skips a file it cannot parse, and a file that is not valid JSON
+    # is deleted all the same.
+    files_before = _generated_files(gen_root, EDITOR_SCHEMA_FILENAME)
     try:
         built = generate(resolved, mock_path, scope=scope)
     except (OSError, ValueError, KeyError) as e:
@@ -964,7 +968,36 @@ def _rebuild_generated(resolved, mock_path, scope, reason: str) -> int:
             # deleted is not knowable from here, and "restored" asserts it.
             print(f"  generation added a scenario this file did not have "
                   f"— {rel}: {', '.join(sorted(gained))}")
+    # AND WHAT WENT. The rebuild empties generated/ and writes back only what
+    # the in-scope swagger produces (mock/generate.py `_clear_generated`), so
+    # a file no in-scope operation generates — an operation the swagger
+    # dropped, one the scope no longer covers, a file someone put there by
+    # hand — is deleted. That prune is intended: generated/ is a pure
+    # function of the swagger. It was also SILENT, and it runs under
+    # `validate --no-install` too (that flag skips the install, not this
+    # rebuild): a consumer project measured two files vanishing from one
+    # tag directory of generated/ — a mock and the editor schema copy that
+    # went with it — on a run that printed nothing about either (2026-09-28).
+    files_after = _generated_files(gen_root, EDITOR_SCHEMA_FILENAME)
+    for rel in sorted(files_before - files_after):
+        if Path(rel).name == EDITOR_SCHEMA_FILENAME:
+            # Not a mock: the editor schema copy is placed only in a
+            # directory that still holds generated mocks, so it goes when
+            # the last one there does.
+            print(f"  removed the editor schema copy of a directory with no "
+                  f"generated mock left — {rel}")
+        else:
+            print(f"  removed a file no in-scope operation generates — {rel}")
     return 0
+
+
+def _generated_files(gen_root: Path, schema_filename: str) -> set:
+    """Relative paths of every mock and editor schema copy under generated/."""
+    if not gen_root.exists():
+        return set()
+    return {str(p.relative_to(gen_root))
+            for pattern in ("*.mock.json", schema_filename)
+            for p in gen_root.rglob(pattern)}
 
 
 def _print_drift_findings(report):
@@ -3185,7 +3218,10 @@ def main():
     validate_parser.add_argument(
         "--no-install",
         action="store_true",
-        help="Validate only; skip flatten-install even if test.install is configured"
+        help="Validate only; skip flatten-install even if test.install is configured. "
+             "A stale mocks generated/ tree is still rebuilt (and files no in-scope "
+             "operation generates are removed, each one named); --no-mock-check "
+             "skips that"
     )
     validate_parser.add_argument(
         "--no-mock-check",

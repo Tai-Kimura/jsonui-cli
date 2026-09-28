@@ -25,10 +25,26 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
     factory.create_converter({ 'type' => 'Button', 'text' => 'Go', 'width' => 200, 'height' => 44 }.merge(extra), 0, nil, factory).convert.to_s
   end
 
-  it 'textAlign Left and Right place the label at the start and the end' do
-    expect(emit('textAlign' => 'Left')).to include('textAlignment: .leading')
-    expect(emit('textAlign' => 'Right')).to include('textAlignment: .trailing')
-    expect(emit('textAlign' => 'left')).to include('textAlignment: .leading')
+  it 'textAlign Left and Right place the label at the start and the end, and its lines with it' do
+    expect(emit('textAlign' => 'Left')).to include('textAlignment: .leading', '.multilineTextAlignment(.leading)')
+    expect(emit('textAlign' => 'Right')).to include('textAlignment: .trailing', '.multilineTextAlignment(.trailing)')
+  end
+
+  # 822e5efe: a value is its declared spelling, case and all. Button declares
+  # Left / Center / Right only (Label and TextField also declare the lower
+  # case; Button does not), so any other spelling draws Button's default, the
+  # centre — the placement and the lines alike. Until the fix sjui compared
+  # the value case-insensitively (`left` / `LEFT` → .leading) and sent the
+  # lines of an undeclared value to text_alignment_to_swiftui's `.leading`
+  # fallback while the label sat in the centre. Ticket
+  # sjui-button-textalign-read-case-insensitively.
+  it 'an undeclared spelling (left, LEFT, start, trailing) is centred, the lines too' do
+    %w[left LEFT start trailing leading end].each do |value|
+      code = emit('textAlign' => value)
+      expect(code).not_to include('textAlignment:'), value
+      expect(code).to include('.multilineTextAlignment(.center)'), value
+      expect(code).not_to include('.multilineTextAlignment(.leading)'), value
+    end
   end
 
   it 'control: Center, none and a gravity pass nothing (the centre is the default)' do

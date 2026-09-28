@@ -90,6 +90,7 @@ RSpec.describe 'kjui codegen: a flow per section' do
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     inline fun <T> key(vararg keys: Any?, block: () -> T): T = block()
     inline fun <T> remember(key1: Any?, calculation: () -> T): T = calculation()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     object com { object kotlinjsonui { object utils { object CellIdGenerator {
         fun enrichCellIds(data: List<Map<String, Any>>, property: String): List<Map<String, Any>> = data
     } } } }
@@ -147,12 +148,12 @@ RSpec.describe 'kjui codegen: a flow per section' do
       annotations = KotlinCompiler.newest('org.jetbrains', 'annotations')
       compiler_cp = [KotlinCompiler.compiler_jar, stdlib, reflect, coroutines, annotations,
                      KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
-      out, = Open3.capture2e(KotlinCompiler.java_bin, '-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+      out, = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                              '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
                              '-d', File.join(dir, 'out'), File.join(dir, 'Emitted.kt'))
       raise "did not compile:\n#{out}" if out.include?('error:')
 
-      run, status = Open3.capture2e(KotlinCompiler.java_bin, '-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
+      run, status = KotlinCompiler.java_capture2e('-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
       raise "did not run:\n#{run}" unless status.success?
 
       run.lines.to_h { |l| l.chomp.split(' => ', 2) }
@@ -237,12 +238,12 @@ RSpec.describe 'kjui codegen: a flow per section' do
           annotations = KotlinCompiler.newest('org.jetbrains', 'annotations')
           compiler_cp = [KotlinCompiler.compiler_jar, stdlib, reflect, coroutines, annotations,
                          KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
-          built, = Open3.capture2e(KotlinCompiler.java_bin, '-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+          built, = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                                    '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
                                    '-d', File.join(dir, 'out'), File.join(dir, 'Emitted.kt'))
           raise "did not compile:\n#{built}" if built.include?('error:')
 
-          ran, status = Open3.capture2e(KotlinCompiler.java_bin, '-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
+          ran, status = KotlinCompiler.java_capture2e('-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
           raise "did not run:\n#{ran}" unless status.success?
 
           ran

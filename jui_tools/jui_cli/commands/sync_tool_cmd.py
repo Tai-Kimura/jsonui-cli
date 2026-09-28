@@ -47,6 +47,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from ..core.config_manager import ConfigManager
+from ..core.tool_resolver import _rbenv_version_installed
 from ..version import source_sha, toolchain_version
 
 
@@ -319,6 +320,34 @@ def _prune_undistributed_top_level(source_tool_dir: Path, target_tool_dir: Path,
     return removed
 
 
+# The tools' Ruby floor (bin/sjui, bin/kjui, bin/rjui refuse anything older).
+RUBY_FLOOR = (3, 2)
+RUBY_FLOOR_TEXT = "3.2"
+
+
+def _ruby_pin_meets_floor(pin: str) -> bool:
+    """True when a ``.ruby-version`` value names a Ruby at or above RUBY_FLOOR.
+
+    Accepts ``3.3.1``, ``3.3``, ``ruby-3.3.1``. Anything that does not parse
+    (``system``, ``jruby-9.4``, empty) is reported as not meeting it, so the
+    user sees it named; it is still never rewritten.
+    """
+    text = pin.strip()
+    if text.startswith("ruby-"):
+        text = text[len("ruby-"):]
+    parts = text.split(".")
+    if len(parts) < 2 or not parts[0].isdigit():
+        return False
+    minor = ""
+    for ch in parts[1]:
+        if not ch.isdigit():
+            break
+        minor += ch
+    if not minor:
+        return False
+    return (int(parts[0]), int(minor)) >= RUBY_FLOOR
+
+
 def _sync_one_tool(
     source_tool_dir: Path,
     target_tool_dir: Path,
@@ -330,10 +359,16 @@ def _sync_one_tool(
 ) -> dict[str, int]:
     """Mirror source_tool_dir into target_tool_dir, preserving extensions/.
 
-    Also propagates the tool's ``.ruby-version`` to the platform root so that
+    Also seeds the tool's ``.ruby-version`` into the platform root so that
     standalone ``rjui build`` / ``sjui build`` invocations (not routed through
-    ``jui build`` with its RBENV_VERSION injection) pick up the correct Ruby
-    when rbenv walks up from the user's CWD.
+    ``jui build`` with its RBENV_VERSION injection) pick up a Ruby at or above
+    the tools' floor (3.2) when rbenv walks up from the user's CWD. The pin is
+    the maintainer's patch level (e.g. 3.2.2), so it is written only when the
+    root has no pin AND that exact Ruby is installed — the same policy as
+    ``tool_resolver`` (an uninstalled pin makes rbenv stop before the tool's
+    own Ruby-floor ERROR can guide the user). An existing root pin is never
+    rewritten: one at or above 3.2 is kept silently, one below it (or one that
+    does not parse) is named so the user can fix it.
 
     When ``source_root`` is given, CLI-root ``shared/core/`` payloads (see
     :data:`SHARED_CORE_PAYLOADS`) are distributed into ``<tool>/shared/core/``.
@@ -380,27 +415,35 @@ def _sync_one_tool(
             if _is_extensions_path(rel_dir) or rel_dir.name == "extensions":
                 counters["preserved"] += len(filenames)
 
-    # Propagate Ruby version pin to the platform root. rbenv walks up from
+    # Seed the Ruby version pin into the platform root. rbenv walks up from
     # the user's CWD; standalone `rjui build` from <platform_root>/ otherwise
     # falls through to the global Ruby — the system Ruby (2.6 on macOS) where
     # none was set, which the tools refuse at their entry from jsonui-cli
-    # 1.9.0 (floor 3.2).
+    # 1.9.0 (floor 3.2). The source pin is a patch level (3.2.2): writing it
+    # where it is not installed makes rbenv stop before the tool runs, and
+    # rewriting a user's pin would undo what the tool's floor ERROR told them
+    # to do. So: never rewrite an existing pin; write only an installed one.
     source_ruby_version_file = source_tool_dir / ".ruby-version"
     if source_ruby_version_file.exists():
         want = source_ruby_version_file.read_text().strip()
         target_ruby_version_file = platform_root / ".ruby-version"
-        have: str | None = None
         if target_ruby_version_file.exists():
             have = target_ruby_version_file.read_text().strip()
-        if have != want:
+            if not _ruby_pin_meets_floor(have):
+                print(f"  ruby pin:     ../.ruby-version names {have!r}, below the tools' "
+                      f"floor {RUBY_FLOOR_TEXT}; not rewritten — change it to Ruby "
+                      f"{RUBY_FLOOR_TEXT} or later")
+        elif want and _rbenv_version_installed(want):
             if dry_run:
-                if have is None:
-                    print(f"  would write:  ../.ruby-version  ({want})")
-                else:
-                    print(f"  would update: ../.ruby-version  ({have} → {want})")
+                print(f"  would write:  ../.ruby-version  ({want})")
             else:
                 target_ruby_version_file.write_text(f"{want}\n")
             counters["ruby_pin"] += 1
+        elif want:
+            verb = "would not write" if dry_run else "not written"
+            print(f"  ruby pin:     ../.ruby-version {verb} — Ruby {want} is not installed "
+                  f"under rbenv; the tool names what to pin if its Ruby is below "
+                  f"{RUBY_FLOOR_TEXT}")
 
     # Distribute CLI-root shared/core payloads into <tool>/shared/core/ so the
     # tool font helpers resolve their first candidate path in project-local

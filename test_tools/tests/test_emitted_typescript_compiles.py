@@ -202,7 +202,7 @@ class TestTheTurnsArgumentOf1_8_120TypeChecks:
     accepts one caller can reject another.
     """
 
-    _CALLER = '''import { installFetchMock, settle, settleQuiet } from "./jsonui-branch-runtime";
+    _CALLER = '''import { installFetchMock, settle, settleHarness, settleQuiet } from "./jsonui-branch-runtime";
 
 // The calls a hand-written test made against 1.8.120's `settle(turns = 10)`.
 export async function writtenAgainst1_8_120(n: number): Promise<void> {
@@ -219,6 +219,7 @@ export async function writtenAgainst1_8_120(n: number): Promise<void> {
 // The generated row's calls, and the one a 1.9.0 row made.
 export async function generatedRow(): Promise<void> {
   const rec = installFetchMock([], {});
+  await settleHarness();
   await settleQuiet();
   await settleQuiet({ rec, expect: ["op"] });
   await settle({ rec, expect: ["op"] });
@@ -256,6 +257,16 @@ export const harness: { settle(): Promise<void> } = { settle };
         done = self._check(tmp_path, bt.RUNTIME_TS.replace(exported, "function settleQuiet(\n"))
         errors = [line for line in (done.stdout + done.stderr).splitlines() if "error TS" in line]
         assert len(errors) == 1 and "TS2459" in errors[0] and "'settleQuiet'" in errors[0], errors
+
+    def test_control_without_the_harness_wait_export_the_rows_import_fails(self, tmp_path):
+        """A generated row calls settleHarness after building the harness
+        (ticket test-branch-web-generated-rows-take-800ms-each-under-the-
+        quiet-window): exported, and taking no argument."""
+        exported = "export async function settleHarness(): Promise<void> {\n"
+        assert bt.RUNTIME_TS.count(exported) == 1
+        done = self._check(tmp_path, bt.RUNTIME_TS.replace(exported, "async function settleHarness(): Promise<void> {\n"))
+        errors = [line for line in (done.stdout + done.stderr).splitlines() if "error TS" in line]
+        assert len(errors) == 1 and "TS2459" in errors[0] and "'settleHarness'" in errors[0], errors
 
     def test_control_without_the_turns_form_each_numeric_call_is_ts2345(self, tmp_path):
         """1.9.0's signature, put back: the consumer's error, once per numeric

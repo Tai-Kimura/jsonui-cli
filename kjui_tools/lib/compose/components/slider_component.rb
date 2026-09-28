@@ -4,6 +4,7 @@ require_relative '../helpers/bound_value'
 require_relative '../helpers/static_seed'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/inherited_tint'
 require_relative '../../core/normalization'
 
 module KjuiTools
@@ -148,19 +149,26 @@ module KjuiTools
           active_tint = json_data['progressTintColor'] ||
                         json_data['minimumTrackTintColor'] || json_data['tintColor']
           inactive_tint = json_data['trackTintColor'] || json_data['maximumTrackTintColor']
-          if active_tint || inactive_tint || thumb_tint
+          # The thumb and the filled track are the accent: the Slider's own,
+          # else the tint a container handed down (InheritedTint) — so the
+          # colors are always emitted.
+          begin
             required_imports&.add(:slider_colors)
             colors_params = []
-            
-            if thumb_tint
-              thumbcolor_resolved = Helpers::ResourceResolver.process_color(thumb_tint, required_imports)
-              colors_params << "thumbColor = #{thumbcolor_resolved}"
-            end
-            
-            if active_tint
-              activetrackcolor_resolved = Helpers::ResourceResolver.process_color(active_tint, required_imports)
-              colors_params << "activeTrackColor = #{activetrackcolor_resolved}"
-            end
+
+            thumbcolor_resolved = if thumb_tint
+                                    Helpers::ResourceResolver.process_color(thumb_tint, required_imports)
+                                  else
+                                    Helpers::InheritedTint.accent(required_imports)
+                                  end
+            colors_params << "thumbColor = #{thumbcolor_resolved}"
+
+            activetrackcolor_resolved = if active_tint
+                                          Helpers::ResourceResolver.process_color(active_tint, required_imports)
+                                        else
+                                          Helpers::InheritedTint.accent(required_imports)
+                                        end
+            colors_params << "activeTrackColor = #{activetrackcolor_resolved}"
             
             if inactive_tint
               inactivetrackcolor_resolved = Helpers::ResourceResolver.process_color(inactive_tint, required_imports)

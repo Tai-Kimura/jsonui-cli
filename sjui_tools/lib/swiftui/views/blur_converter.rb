@@ -23,7 +23,11 @@ module SjuiTools
           # style-file reference matched against blur appearances, and the
           # declared attribute was ignored entirely.
           effect_style = @component['effectStyle']
-          
+          # Judged on Blur's own declaration (Light / Dark / ExtraLight), as
+          # the dynamic BlurConverter and the kjui / rjui Blur paths judge it:
+          # the library's default set is common's, where Thick is declared.
+          effect_style = nil if JsonUIShared::EnumSpelling.lowered(effect_style, 'Blur', 'effectStyle').nil?
+
           # 子要素を生成
           if children.any?
             # 複数の子要素がある場合はZStackでラップ
@@ -52,8 +56,10 @@ module SjuiTools
           # every declared value blurred with the same material while the
           # dynamic path resolved the per-value material/tint — the 13
           # structural Blur/effectStyle parity rows (control included).
-          # `jsonUIVisualEffect` normalises case/aliases and defaults an
-          # absent value to `regular` itself.
+          # The value is forwarded in its declared spelling (a value is its
+          # declared spelling, case and all — jsonui-cli 1.9.0); anything Blur
+          # does not declare was dropped to nil above, and
+          # `jsonUIVisualEffect` defaults nil to `regular` itself.
           if effect_style
             add_modifier_line ".jsonUIVisualEffect(\"#{effect_style}\")"
           else

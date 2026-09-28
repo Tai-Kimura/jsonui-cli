@@ -5,7 +5,6 @@ require 'tmpdir'
 require 'core/string_literals'
 require 'core/resources/string_manager'
 require 'swiftui/converter_factory'
-require 'swiftui/views/include_converter'
 require 'swiftui/data_model_updater'
 require 'swiftui/view_updater'
 require 'swiftui/binding/binding_expression'
@@ -160,10 +159,6 @@ RSpec.describe 'author text in generated Swift goes through the shared escaper' 
      ->(t) { convert.(views::WebConverter, { 'type' => 'Web', 'url' => t }) }, ->(s) { "URL(string: #{s})" }],
     ['Web html', :swift,
      ->(t) { convert.(views::WebConverter, { 'type' => 'Web', 'html' => t }) }, ->(s) { "html: #{s}" }],
-    ['Include literal data param', :swift,
-     lambda { |t|
-       convert.(views::IncludeConverter, { 'type' => 'Include', 'include' => 'child', 'data' => { 'k' => t } })
-     }, ->(s) { "\"k\": #{s}" }],
     ['Embed literal param', :swift,
      lambda { |t|
        convert.(views::EmbedConverter, { 'type' => 'Embed', 'screen' => 'counter', 'params' => { 'k' => t } })

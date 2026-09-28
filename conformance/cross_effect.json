@@ -887,16 +887,6 @@
       "note": ""
     },
     {
-      "fixture": "common/effectStyle__regular",
-      "platforms": {
-        "android": "active",
-        "ios": "inert",
-        "web": "inert"
-      },
-      "reason": "adjudicated blur-value-not-derived (ios) + backdrop-collapses-8bit (web/android), joining the already-measured common/effectStyle__prominent row: sjui blur_converter.rb hardcodes `.background(.ultraThinMaterial)` for EVERY value and derives nothing from effectStyle — only Dark/Light/ExtraLight select a `.preferredColorScheme`, and on a host that is already light that selection is itself a no-op, so every spelling in this group photographs the same on ios. Over the fixture's flat backdrop the remaining material scrims quantise into the same 8-bit pixels. Closure: D's high-frequency backdrop fixture makes the values separable, and the spelling canon is open with E (same question as the prominent row). NOTE 2026-08-07: A's in-flight web re-measure already reports these fixtures ACTIVE on web (10000 px against the backdrop control); when that run is committed the recorded platform set changes and the ratchet returns the row for re-adjudication, which is the correct behaviour. Family: blur-value-not-derived.",
-      "note": ""
-    },
-    {
       "fixture": "common/gravity__left",
       "verdict": "uniformly-inert",
       "declared": "left",

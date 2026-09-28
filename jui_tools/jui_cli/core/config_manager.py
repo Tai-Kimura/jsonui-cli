@@ -61,6 +61,78 @@ DEFAULT_LAYOUTS_DIR = {
 }
 
 
+#: The platforms jui generates and builds for — the keys `jui init` writes.
+KNOWN_PLATFORMS = ("ios", "android", "web")
+
+
+class ConfigShapeError(ValueError):
+    """``jui.config.json`` parsed, but a key jui reads has the wrong shape.
+
+    Raised by :meth:`ConfigManager.load` and turned into one ``ERROR:`` line
+    and exit 1 at the CLI entry, so a bad config reads as a bad config and
+    not as a crash in whichever command happened to touch it first.
+    """
+
+
+def validate_platforms(config: Any, path: Path | str = "jui.config.json") -> None:
+    """Refuse a ``platforms`` value jui cannot read, in one sentence.
+
+    ``jui init`` writes ``platforms`` as an object keyed by platform name,
+    each entry carrying the ``root`` every command resolves paths against.
+    The sibling test tools also accept a bare list of names, and a project
+    written for them reached ``jui g project`` / ``jui build`` / ``jui
+    verify`` as an ``AttributeError: 'list' object has no attribute
+    'items'``. A list cannot simply be read as names here: jui needs each
+    platform's ``root``, and ``{"web": {}}`` crashed the same way with a
+    ``KeyError: 'root'``. So both shapes are refused up front, naming the
+    key and the shape ``jui init`` writes.
+    """
+    if not isinstance(config, dict):
+        raise ConfigShapeError(
+            f"{path}: the config must be a JSON object as written by "
+            f"`jui init`; got {_shape_name(config)}."
+        )
+    if "platforms" not in config:
+        return
+    platforms = config["platforms"]
+    if not isinstance(platforms, dict):
+        raise ConfigShapeError(
+            f"{path}: `platforms` must be an object like "
+            '{"web": {"root": "web"}} as written by `jui init`; '
+            f"got {_shape_name(platforms)} ({json.dumps(platforms)})."
+        )
+    # Only the platforms jui builds for are held to the entry shape. An
+    # unknown key is skipped by every reader that looks platforms up by name
+    # (the scan-root helpers plant one on purpose to prove it), so refusing
+    # it here would turn a tolerated extra into a new failure.
+    for name in KNOWN_PLATFORMS:
+        if name not in platforms:
+            continue
+        pconfig = platforms[name]
+        if not isinstance(pconfig, dict):
+            raise ConfigShapeError(
+                f"{path}: `platforms.{name}` must be an object with a "
+                f'`root`, like {{"{name}": {{"root": "{name}"}}}} as written '
+                f"by `jui init`; got {_shape_name(pconfig)}."
+            )
+        root = pconfig.get("root")
+        if not isinstance(root, str) or not root:
+            raise ConfigShapeError(
+                f"{path}: `platforms.{name}` has no `root` (the platform "
+                f"project directory); write it like "
+                f'{{"{name}": {{"root": "{name}"}}}} as `jui init` does.'
+            )
+
+
+def _shape_name(value: Any) -> str:
+    if value is None:
+        return "null"
+    return {
+        list: "a list", str: "a string", bool: "a boolean",
+        int: "a number", float: "a number", dict: "an object",
+    }.get(type(value), type(value).__name__)
+
+
 class ConfigManager:
     """Manages jui.config.json read/write."""
 
@@ -101,7 +173,9 @@ class ConfigManager:
         if not self._path.exists():
             return dict(DEFAULT_CONFIG)
         with open(self._path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            config = json.load(f)
+        validate_platforms(config, self._path)
+        return config
 
     def save(self, config: dict[str, Any]) -> None:
         """Save config to file."""

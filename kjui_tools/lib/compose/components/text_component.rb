@@ -611,24 +611,22 @@ module KjuiTools
         # *attribute*: a path for the highlight's own declaration
         # (%w[highlightAttributes textAlign] — Left / Right / Center only).
         # Where a Label's text sits across a frame wider than it when it
-        # declares no textAlign: by its gravity's horizontal part — the end for
-        # right, the middle for center / centerHorizontal (4f ruling 2026-09-27,
-        # round 17; the web draws it so and iOS follows). nil otherwise (the
-        # start), and for a Label of wrapContent width, which is its text's
-        # width. It sat at the start whatever the gravity. KotlinJsonUI Dynamic
-        # places it the same (DynamicTextComponent.gravityTextAlign).
+        # declares no textAlign: by its gravity's horizontal part — the middle
+        # for center / centerHorizontal, the end for right; nil otherwise (the
+        # start). Center is tested before right, so a gravity naming both
+        # centres, as on iOS and the web (the SSoT Label.textAlign order).
+        # Emitted whatever the width: a single-line wrapContent Label is as
+        # wide as its text, so the alignment is a no-op there, but one whose
+        # text wraps inside a narrower parent takes the parent's width, and its
+        # lines must follow the rule too. KotlinJsonUI Dynamic places it the
+        # same (DynamicTextComponent.gravityTextAlign).
         def self.gravity_text_align(json_data)
-          width = json_data['width']
-          own_width = (!width.nil? && !%w[wrapContent wrap_content].include?(width.to_s)) ||
-                      json_data['minWidth'] || json_data['widthWeight'] || json_data['weight']
-          return nil unless own_width
-
           gravity = json_data['gravity']
           parts = (gravity.is_a?(Array) ? gravity : gravity.to_s.split('|')).map do |g|
             JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity')
           end.compact
-          if parts.include?('right') then 'TextAlign.End'
-          elsif (parts & %w[center centerhorizontal center_horizontal centerinparent center_in_parent]).any? then 'TextAlign.Center'
+          if (parts & %w[center centerhorizontal center_horizontal centerinparent center_in_parent]).any? then 'TextAlign.Center'
+          elsif parts.include?('right') then 'TextAlign.End'
           end
         end
 

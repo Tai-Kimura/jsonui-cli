@@ -6,7 +6,8 @@ declarations-p2-design.md). The generator is deliberately mechanical:
   arrange = baseline -> branch baseline -> condition witnesses -> when.data
             + fetch stub serving named mock scenarios per declared endpoint
   act     = await vm.<method>(args from when.arg via spec param order)
-            + settleQuiet() to wait out fire-and-forget fetches
+            + settleQuiet() to wait out fire-and-forget fetches (and
+              settleHarness() after building the harness)
   assert  = the branch's `then` entries, nothing more
 
 Everything between the spec and the emitted test is declared vocabulary:
@@ -844,6 +845,14 @@ DELAY_CAP_MS = 30000
 #: as it did when settle counted turns (`settle()` = ten turns, no quiet
 #: window), and a row claims its absences over the quiet window.
 WEB_ROW_WAIT = "settleQuiet"
+
+#: What a generated web row awaits after building the harness, before it
+#: arranges the state: settleQuiet(), skipped when construction made no
+#: request and scheduled no timer (the runtime's settleHarness). Both waits
+#: close early when nothing is due — no request in flight, no delayed
+#: response, no timer the row scheduled — and otherwise wait out the quiet
+#: window; a row with nothing to wait for no longer takes 2 x QUIET_MS.
+WEB_HARNESS_WAIT = "settleHarness"
 
 #: How long a runtime's settle waits, with no request in flight, after one
 #: last arrived or was answered — the window a row's "not called" and "no
@@ -2158,7 +2167,7 @@ def render_test_file(
                  + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
                  + ("" if red else "reportUnmatched, ")
                  + "reportEarlierRowCalls, reportUnmatchedForeign, resolveString, seedState, "
-                 + WEB_ROW_WAIT + ",\n  type RouteSpec,")
+                 + ", ".join(sorted({WEB_HARNESS_WAIT, WEB_ROW_WAIT})) + ",\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
     # The harness may export `apiOrigins` (P2e(a), v4.19): the app's API
@@ -2264,7 +2273,7 @@ def _render_branch(
     for cname, cvalue in row.conditions:
         out.append(f"      await arrangeCondition({_ts(cname)}, {_ts(cvalue)});")
     out.append("      const h = createHarness();")
-    out.append(f"      await {WEB_ROW_WAIT}();")
+    out.append(f"      await {WEB_HARNESS_WAIT}();")
     if state:
         out.append(f"      h.setState({_ts(state)});")
     if seed:
@@ -2559,8 +2568,26 @@ interface Traffic {
   row: string;
   /** Requests an earlier row's view model started, that landed here. */
   earlier: string[];
+  /** The timers scheduled through the global setTimeout / setInterval since
+   * this install (watchRowTimers) that are still due: a setTimeout until it
+   * fires or is cleared, a setInterval until it is cleared. */
+  timers: Set<unknown>;
+  /** Bumped by every request's start and end and every watched timer's
+   * scheduling and firing: a wait that reads the same value twice saw
+   * nothing happen in between. 0 until the row does anything. */
+  seq: number;
+  /** A timer scheduled with a string handler, which the watch cannot see
+   * fire: the row cannot close early (it waits out the quiet window). */
+  unwatched: boolean;
+  /** Whether the timer functions this install watches are still the global
+   * ones — false once a test replaced them (`vi.useFakeTimers()` after the
+   * install): timers scheduled on the replacement are not seen. */
+  watching(): boolean;
 }
-let traffic: Traffic = { inFlight: 0, lastActivityAt: 0, row: "", earlier: [] };
+let traffic: Traffic = {
+  inFlight: 0, lastActivityAt: 0, row: "", earlier: [],
+  timers: new Set(), seq: 0, unwatched: false, watching: () => false,
+};
 
 /** Responses a scenario's `delayMs` is holding back, and when the last of
  * them arrived — what `settle(turns)` reads, as it did when it was the only
@@ -2596,6 +2623,114 @@ const rowContext: { enterWith(store: object): void; getStore(): object | undefin
   }
 })();
 
+/** Where a watching wrapper keeps the function it wraps — a registered
+ * symbol, so another copy of this runtime loaded in the same process (one
+ * per test directory, say) unwraps it too, and wrappers never stack. */
+const WATCHED = Symbol.for("jsonui-test.branch-runtime.watched-timer");
+const TIMER_FUNCTIONS = ["setTimeout", "setInterval", "clearTimeout", "clearInterval"] as const;
+
+/** The function under any watching wrapper this runtime put on it. */
+function unwatched<T>(fn: T): T {
+  let at: any = fn;
+  while (typeof at === "function" && at[WATCHED]) at = at[WATCHED];
+  return at;
+}
+
+/** Watch the timers a row's view model schedules — what lets settleQuiet
+ * close before the quiet window when nothing is left to happen (waitForQuiet).
+ *
+ * The global setTimeout / setInterval / clearTimeout / clearInterval are
+ * replaced, from this install until its restore(), by wrappers that call the
+ * function they replaced (looked up at install, after any fake a test put in
+ * before it) and note in `mine.timers` each timer still due: a setTimeout
+ * until its callback runs or it is cleared, a setInterval until it is
+ * cleared. Every scheduling and every callback bumps `mine.seq`. Nothing
+ * else changes: the ids, `this`, the arguments and the callbacks are the
+ * ones the caller would have got. A timer scheduled in one row that fires in
+ * a later one stays in its own row's set; one scheduled from an earlier
+ * row's leftover work while this row runs counts here, which only keeps this
+ * row on its quiet window.
+ *
+ * What it cannot see — each only keeps the early close from being taken, or
+ * is what the ten idle turns before it are for:
+ * - a timer function taken before this install (a library that keeps its
+ *   own reference from when it loaded, or this runtime's own `sleep`);
+ * - a replacement installed after it (`vi.useFakeTimers()` inside the row):
+ *   `watching()` then reads false and the row waits out the quiet window;
+ * - a string handler: the row is marked `unwatched`, and waits it out too;
+ * - setImmediate, requestAnimationFrame, a MessageChannel, an I/O callback,
+ *   Node's timers/promises (and `util.promisify(setTimeout)`, which is it),
+ *   or a Node Timeout re-armed with refresh() after it fired: not tracked;
+ *   work they start within the ten idle turns is seen, later work is not
+ *   (the quiet window it replaced would have seen it up to QUIET_MS).
+ * Returns the restore: puts back what it replaced, where the wrappers are
+ * still the globals (a test that replaced them since keeps its own). */
+function watchRowTimers(mine: Traffic): () => void {
+  const g = globalThis as any;
+  if (TIMER_FUNCTIONS.some((name) => typeof g[name] !== "function")) {
+    mine.unwatched = true;
+    return () => {};
+  }
+  const original = Object.fromEntries(TIMER_FUNCTIONS.map((name) => [name, unwatched(g[name])])) as
+    Record<(typeof TIMER_FUNCTIONS)[number], (...args: any[]) => any>;
+  const forget = (id: unknown): void => {
+    if (mine.timers.delete(id)) return;
+    // Cleared by the number a Node Timeout converts to (`+timer`): find it.
+    if (typeof id !== "number" && typeof id !== "string") return;
+    for (const due of mine.timers) {
+      if (typeof due === "object" && due !== null && Number(due) === Number(id)) {
+        mine.timers.delete(due);
+        return;
+      }
+    }
+  };
+  const schedule = (set: (...args: any[]) => any, repeats: boolean) =>
+    function (this: unknown, handler: unknown, ...rest: unknown[]): unknown {
+      mine.seq += 1;
+      if (typeof handler !== "function") {
+        mine.unwatched = true;
+        return set.apply(this, [handler, ...rest]);
+      }
+      let id: unknown;
+      const fire = function (this: unknown, ...args: unknown[]): unknown {
+        if (!repeats) mine.timers.delete(id);
+        mine.seq += 1;
+        return (handler as (...a: unknown[]) => unknown).apply(this, args);
+      };
+      id = set.apply(this, [fire, ...rest]);
+      mine.timers.add(id);
+      return id;
+    };
+  const clear = (unset: (...args: any[]) => any) =>
+    function (this: unknown, id?: unknown, ...rest: unknown[]): unknown {
+      forget(id);
+      return unset.apply(this, [id, ...rest]);
+    };
+  const wrapper = {
+    setTimeout: schedule(original.setTimeout, false),
+    setInterval: schedule(original.setInterval, true),
+    clearTimeout: clear(original.clearTimeout),
+    clearInterval: clear(original.clearInterval),
+  };
+  for (const name of TIMER_FUNCTIONS) {
+    // What the replaced function carries (Node's util.promisify.custom on
+    // setTimeout, say) the wrapper carries too.
+    for (const key of Reflect.ownKeys(original[name])) {
+      if (key === "length" || key === "name" || key === "prototype" || key === WATCHED) continue;
+      const property = Object.getOwnPropertyDescriptor(original[name], key);
+      if (property) Object.defineProperty(wrapper[name], key, property);
+    }
+    Object.defineProperty(wrapper[name], WATCHED, { value: original[name] });
+    g[name] = wrapper[name];
+  }
+  mine.watching = () => TIMER_FUNCTIONS.every((name) => g[name] === wrapper[name]);
+  return () => {
+    for (const name of TIMER_FUNCTIONS) {
+      if (g[name] === wrapper[name]) g[name] = original[name];
+    }
+  };
+}
+
 /** How long `settle` waits, with no request in flight, after the last one
  * arrived or was answered — the window every "not called" and "no
  * undeclared call" in a row is claimed over. Declared, not measured: the
@@ -2627,9 +2762,11 @@ export const ROW_TIMEOUT_MS = 2 * SETTLE_DELAY_BUDGET_MS + 5000;
  * longer than this on its own unless the event loop is held up. */
 const DEFAULT_SETTLE_TURNS = 10;
 /** How many polls in a row may read the same time before `settle` stops and
- * names the clock. Each poll sleeps 5 ms on a timer that runs, so 200 are
- * about a second at the least; a clock that runs reads a new value well
- * within that, even at a resolution a browser coarsens to tens of ms. */
+ * names the clock. Each poll sleeps 5 ms on a timer that runs — or, while
+ * nothing is due (waitForQuiet), one macrotask turn, a millisecond at the
+ * least — so 200 are 200 ms at the least, and about a second while anything
+ * is due; a clock that runs reads a new value well within that, even at a
+ * resolution a browser coarsens to tens of ms. */
 const STALLED_POLLS = 200;
 /** The same for `settle(turns)`, counted in the macrotask turns it drains
  * and the waits for a delayed response it makes while the clock reads the
@@ -2655,8 +2792,12 @@ export function installFetchMock(
   const calls: RecordedCall[] = [];
   const compiled = routes.map((r) => ({ ...r, re: new RegExp(r.pattern) }));
   const own = apiOrigins === null ? null : new Set(apiOrigins.map((o) => new URL(o).origin));
-  const mine: Traffic = { inFlight: 0, lastActivityAt: realClock.now(), row, earlier: [] };
+  const mine: Traffic = {
+    inFlight: 0, lastActivityAt: realClock.now(), row, earlier: [],
+    timers: new Set(), seq: 0, unwatched: false, watching: () => false,
+  };
   traffic = mine;
+  const unwatchTimers = watchRowTimers(mine);
   // Named — a generated row passes its name — the install enters its row, and
   // a request started in another named install's row is that row's (below).
   // Unnamed — a hand-written test calls installFetchMock(routes), as it did
@@ -2693,6 +2834,7 @@ export function installFetchMock(
     }
     // In flight from here to the Response handed back, delayed or not.
     mine.inFlight += 1;
+    mine.seq += 1;
     mine.lastActivityAt = realClock.now();
     try {
       // P2e(a), v4.19: a relative URL is the app's; an absolute one is when its
@@ -2761,6 +2903,7 @@ export function installFetchMock(
       );
     } finally {
       mine.inFlight -= 1;
+      mine.seq += 1;
       mine.lastActivityAt = realClock.now();
     }
   }) as typeof fetch;
@@ -2823,6 +2966,7 @@ export function installFetchMock(
     },
     restore() {
       globalThis.fetch = original;
+      unwatchTimers();
     },
   };
 }
@@ -3033,6 +3177,25 @@ export function settleQuiet(
   return waitForQuiet(until, DEFAULT_SETTLE_TURNS);
 }
 
+/** The wait a generated row makes after building the harness (and before
+ * arranging its state): settleQuiet(), skipped when construction did
+ * nothing this runtime could wait for.
+ *
+ * It drains one macrotask turn first — every promise chain the constructor
+ * started without a timer or a request has run by then — and returns if,
+ * since installFetchMock, no request was made and no timer scheduled
+ * (`seq` still 0) and nothing is due (a delayed response of an earlier
+ * install's, say) and the timer watch is on (watchRowTimers). Anything else
+ * — a request, a timer, a watch a test displaced — is settleQuiet(), with
+ * its early close and its quiet window. What it cannot see is what the
+ * early close cannot (watchRowTimers); for a constructor, that is also what
+ * arranging the state straight after it would have overwritten. */
+export async function settleHarness(): Promise<void> {
+  await sleep(0);
+  if (traffic.seq === 0 && nothingDue()) return;
+  return waitForQuiet(undefined, DEFAULT_SETTLE_TURNS);
+}
+
 /** The error for a clock that read the same time while the timer ran. */
 function clockStoodStill(across: string): Error {
   const faked = realClock.name === "Date.now" ? "Date" : "performance";
@@ -3045,10 +3208,49 @@ function clockStoodStill(across: string): Error {
   );
 }
 
-/** settleQuiet's wait: the quiet window, and at least `minPolls` polls —
- * each a macrotask turn — so the ten turns `settle()` drains have run even
- * when the quiet window passes sooner (an event loop held up by synchronous
- * work). */
+/** Whether nothing is left to happen in the row, as far as this runtime can
+ * see: no request in flight, no delayed response due (any install's), no
+ * timer the row scheduled still due (watchRowTimers) — and the watch is
+ * still on the timers the row schedules with, and saw every handler. */
+function nothingDue(): boolean {
+  return traffic.inFlight === 0 && pendingDeliveries.size === 0 && traffic.timers.size === 0 &&
+    !traffic.unwatched && traffic.watching();
+}
+
+/** settleQuiet's wait. It returns at whichever of two exits comes first:
+ *
+ * - The quiet window (1.9.0's, unchanged): no request in flight and QUIET_MS
+ *   since a request last arrived or was answered, at least `minPolls` polls
+ *   — each a macrotask turn — so the ten turns `settle()` drains have run
+ *   even when the quiet window passes sooner (an event loop held up by
+ *   synchronous work).
+ * - The early close: nothing due (nothingDue) and nothing happened —
+ *   no request started or ended, no watched timer scheduled or fired — for
+ *   `minPolls` polls in a row. While nothing is due each poll is one
+ *   macrotask turn (sleep(0)), so a row with nothing left closes in about
+ *   ten turns, not QUIET_MS.
+ *
+ * The early close is what makes a row that waits on nothing fast; it never
+ * makes a wait longer, and it never takes a late call out of the window:
+ *
+ * - A late call a view model schedules with setTimeout / setInterval keeps
+ *   its timer due until the callback runs, so there is no early close
+ *   before it — and once it runs, its request is in flight and recorded
+ *   before the ten idle turns can pass.
+ * - A timer further out than the quiet window (a setTimeout of seconds, a
+ *   setInterval never cleared) is due for the whole wait, so there is no
+ *   early close at all: the row waits out the quiet window exactly as in
+ *   1.9.0, and returns at it without waiting for the timer. A timer due is
+ *   never waited for past the quiet window; it only takes the early close
+ *   away. The same holds whenever the watch cannot vouch (nothingDue).
+ * - An op the row expects and has not seen yet takes the early close away
+ *   too: the row waits for it as before, polling every 5 ms.
+ *
+ * Every red names what it did before: the budgets, EXPECT_MS and the stall
+ * guard are the quiet window's. The early close does not read the clock, so
+ * a clock standing still cannot hold it; the stall guard counts every poll,
+ * so a clock standing still with nothing due and no early close (work that
+ * keeps starting between polls) is named, not looped on. */
 async function waitForQuiet(
   until: { rec: { countFor(op: string): number }; expect: string[] } | undefined,
   minPolls: number
@@ -3056,13 +3258,20 @@ async function waitForQuiet(
   const started = realClock.now();
   let last = started;
   let stalled = 0;
+  let idle = 0;
+  let seen = traffic.seq;
   for (let polls = 1; ; polls += 1) {
-    await sleep(5);
+    const expecting = until ? until.expect.filter((op) => until.rec.countFor(op) === 0).length > 0 : false;
+    const turn = !expecting && nothingDue();
+    await sleep(turn ? 0 : 5);
     const now = realClock.now();
     stalled = now === last ? stalled + 1 : 0;
     last = now;
-    if (stalled >= STALLED_POLLS) throw clockStoodStill(`${STALLED_POLLS} polls of 5 ms`);
+    if (stalled >= STALLED_POLLS) throw clockStoodStill(`${STALLED_POLLS} polls of 5 ms or a macrotask turn`);
     const missing = until ? until.expect.filter((op) => until.rec.countFor(op) === 0) : [];
+    idle = nothingDue() && traffic.seq === seen ? idle + 1 : 0;
+    seen = traffic.seq;
+    if (missing.length === 0 && idle >= minPolls) return;
     const quiet = traffic.inFlight === 0 && now - Math.max(traffic.lastActivityAt, started) >= QUIET_MS;
     if (quiet && missing.length === 0 && polls >= minPolls) return;
     const waited = Math.floor(now - started);
