@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "98816ec2d24eb65d6db040a75508fe685e86bf5150b4fe9c51f7922fa47492ce"
+    "sha256": "bede3936c9fef7e4cec574db7cc2e065dce00016949803064519255ae65f57a9"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -23,7 +23,7 @@
     "kotlin/ImageAttributes.kt": "c1c71f09993e9f3b1d19eefd81ada0be784ab02819d52ebd6d0a7c1c1536a959",
     "kotlin/IndicatorAttributes.kt": "e8436a0a162c5d1eeb3719fd096aa14b2a07db8856d21b6106425f70646b45e9",
     "kotlin/InputAttributes.kt": "903fd9e7b512b362162d08501c1c515589e54154efa0320feaee9f8d776b7ead",
-    "kotlin/LabelAttributes.kt": "0e5cc239757ac8b0f2643073ec5a5a15c379dae0f8b6fc82bc89069a2fbdf4fa",
+    "kotlin/LabelAttributes.kt": "d0f11f4b51ffaaaca8bb0fec67686dda05d0a6b4bb87c81b2e2fb72b68c31caf",
     "kotlin/NetworkImageAttributes.kt": "b1027f5df1db014aae61671d9854ee1d48bd97ad78dafba35ace2d692d3a9cb6",
     "kotlin/ProgressAttributes.kt": "f51c590c8eb69a92d9c9cad2767c4f69d3a5bc0d94b8110958cd6ed411eb6d25",
     "kotlin/RadioAttributes.kt": "fd380279508ea8fb0fd1e02221ec0047fb4c2e43b3e58523f48065dac07e0b6d",
@@ -55,7 +55,7 @@
     "ruby/image_attributes.rb": "2c787c4db730744102b068ab9ce036f4c3136bc604dbb03df8bed38473f718c9",
     "ruby/indicator_attributes.rb": "37f3e15e6ac649f05eeb87fce0ff39fa64ac7356fe6404116703c1fa1b254039",
     "ruby/input_attributes.rb": "a531d2c2e8b01eada67e933647c688c3670d5d444b6795000b04870662823e6b",
-    "ruby/label_attributes.rb": "6484324700da692048c8734a30bfe4d46352b5c7aa7d1e50a1f7e93f94516c73",
+    "ruby/label_attributes.rb": "9fd5584744e3eeaa6380f3e09ee95df32a50522a2bdfde7737cba5dad40f2f18",
     "ruby/network_image_attributes.rb": "e0c1b7b66125e720b2cdc79d0d5bb077e0330a81c2149eaa71cbfe7f3b543b4c",
     "ruby/progress_attributes.rb": "024887c62e85c728977acbd89b70417e54331d19018413d28e0cc9ee001d3172",
     "ruby/radio_attributes.rb": "6229d2444e4701b3a77e6f02f0bb2753d0f961427226e5c9e22d767256529fe2",
@@ -89,7 +89,7 @@
     "swift/ImageAttributes.swift": "a72a9083218e8816f8c3c80196c452cc252aabbe6fe0a7aebfa95c2fceb4c171",
     "swift/IndicatorAttributes.swift": "f5511f9d2c2a184b391482cd911fd2031d6bdff926289ffde5fdabfbe0127205",
     "swift/InputAttributes.swift": "f7a04953e61a3d39b9fe3dc0d5f83cb504f607902a7adeb203b166eb8c8cb294",
-    "swift/LabelAttributes.swift": "108f546d40c64b8cbb56b78ec4d30faa6c5825fbe13344c3ffe5a33ce7183fed",
+    "swift/LabelAttributes.swift": "75d3defe420034d8e5cad02aacdd8507a93b0d254fc5be3e71262ea5bc4be7c1",
     "swift/NetworkImageAttributes.swift": "77cc8d839aa9715e40afb1405707917845485e5e5d18322aa6069d20f43d32e3",
     "swift/ProgressAttributes.swift": "49ecf74402c1b8f406ac4f9169ab6182113caf4015af257369f067fed02b566f",
     "swift/RadioAttributes.swift": "cad7f704c3528a1dbdf8351e8436d177b6fe5d98e352aedfb29ffb3a12884741",

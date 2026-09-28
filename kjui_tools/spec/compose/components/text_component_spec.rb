@@ -248,17 +248,42 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(top).not_to include('wrapContentHeight(align')
     end
 
-    # Round 17, item 7 (4f ruling 2026-09-27): without textAlign, a Label's
-    # text is placed across a frame wider than it by its gravity's horizontal
-    # part; textAlign still wins, and a wrapContent width is the text's own.
+    # Without textAlign, a Label's text is placed across a frame wider than
+    # it by its gravity's horizontal part; textAlign still wins.
     it 'places the text across a wider frame by the gravity when no textAlign is declared' do
       align = ->(json) { described_class.generate({ 'type' => 'Label', 'text' => '4' }.merge(json), 0, required_imports)[/textAlign = (TextAlign\.\w+)/, 1] }
       expect(align.({ 'width' => 32, 'gravity' => 'right' })).to eq('TextAlign.End')
       expect(align.({ 'width' => 'matchParent', 'gravity' => %w[top centerHorizontal] })).to eq('TextAlign.Center')
       expect(align.({ 'width' => 32, 'gravity' => 'right', 'textAlign' => 'left' })).to eq('TextAlign.Start')
-      expect(align.({ 'width' => 'wrapContent', 'gravity' => 'center' })).to be_nil
       expect(align.({ 'width' => 32, 'gravity' => 'left' })).to be_nil
       expect(align.({ 'width' => 32, 'gravity' => 'right', 'linkable' => true, 'text' => '4 http://a.b' })).to eq('TextAlign.End')
+    end
+
+    # The width guard is gone: a wrapContent Label whose text wraps inside a
+    # narrower parent takes the parent's width, and its lines follow the
+    # gravity as on iOS and the web. On a single line the Text is as wide as
+    # its text, so the emitted alignment changes nothing there.
+    it 'aligns the lines of a wrapContent Label by the gravity too' do
+      align = ->(json) { described_class.generate({ 'type' => 'Label', 'text' => 'a b c' }.merge(json), 0, required_imports)[/textAlign = (TextAlign\.\w+)/, 1] }
+      expect(align.({ 'width' => 'wrapContent', 'gravity' => 'center' })).to eq('TextAlign.Center')
+      expect(align.({ 'width' => 'wrap_content', 'gravity' => 'right' })).to eq('TextAlign.End')
+      expect(align.({ 'gravity' => 'centerHorizontal' })).to eq('TextAlign.Center')
+      expect(align.({ 'width' => 'wrapContent', 'gravity' => 'center', 'linkable' => true, 'text' => 'a http://a.b' })).to eq('TextAlign.Center')
+      expect(align.({ 'width' => 'wrapContent', 'gravity' => 'right',
+                      'partialAttributes' => [{ 'range' => [0, 1], 'fontColor' => '#FF0000' }] })).to eq('TextAlign.End')
+      expect(align.({ 'width' => 'wrapContent', 'gravity' => 'center', 'textAlign' => 'left' })).to eq('TextAlign.Start')
+      expect(align.({ 'width' => 'wrapContent' })).to be_nil
+    end
+
+    # Center is tested before right (the SSoT Label.textAlign order, as on iOS
+    # and the web), whichever spelling or order the gravity uses.
+    it 'takes center before right when the gravity names both' do
+      align = ->(json) { described_class.generate({ 'type' => 'Label', 'text' => 'a' }.merge(json), 0, required_imports)[/textAlign = (TextAlign\.\w+)/, 1] }
+      expect(align.({ 'width' => 32, 'gravity' => 'center|right' })).to eq('TextAlign.Center')
+      expect(align.({ 'width' => 32, 'gravity' => 'right|center' })).to eq('TextAlign.Center')
+      expect(align.({ 'width' => 32, 'gravity' => %w[right centerHorizontal] })).to eq('TextAlign.Center')
+      expect(align.({ 'width' => 32, 'gravity' => %w[right centerVertical] })).to eq('TextAlign.End')
+      expect(align.({ 'width' => 32, 'gravity' => 'right|center', 'linkable' => true, 'text' => 'a http://a.b' })).to eq('TextAlign.Center')
     end
 
     it 'places the text of a linkable Label and of one with partialAttributes the same way' do
