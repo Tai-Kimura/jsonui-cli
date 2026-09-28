@@ -135,6 +135,39 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     SWIFT
   end
 
+  # A pager's common modifiers are emitted once (ticket
+  # sjui-pager-emits-its-common-modifiers-twice): `generate_paging_horizontal`
+  # applied them and then `convert_non_responsive` applied them again, so
+  # `.frame(` and the padding / margin stages came out twice — and stacked
+  # paddings add up in SwiftUI (a `topMargin: 24` drew 48pt).
+  describe 'the common modifiers of a pager' do
+    PAGER_NODE = { 'type' => 'Collection', 'id' => 'pager', 'layout' => 'horizontal', 'paging' => true,
+                   'items' => '@{cards}', 'currentPage' => '@{currentPage}', 'cellClasses' => ['card_cell'],
+                   'width' => 300, 'height' => 44, 'topMargin' => 24, 'padding' => 4 }.freeze
+
+    def once(code, needle)
+      expect(code.scan(needle).size).to eq(1), "#{needle.inspect} ×#{code.scan(needle).size} in:\n#{code}"
+    end
+
+    it 'the plain pager: `.frame(`, `.padding(4)` and `.padding(.top, 24)` once each' do
+      code = described_class.new(PAGER_NODE.dup).convert.to_s
+      once(code, '.padding(.top, 24)')
+      once(code, '.frame(')
+      once(code, '.padding(4)')
+    end
+
+    it 'the responsive pager: once per branch' do
+      node = PAGER_NODE.merge('responsive' => { 'regular' => { 'topMargin' => 24, 'height' => 200 } })
+      code = described_class.new(node).convert.to_s
+      branches = code.split(/\} else \{/)
+      expect(branches.size).to eq(2), code
+      branches.each do |branch|
+        once(branch, '.padding(.top, 24)')
+        once(branch, '.frame(')
+      end
+    end
+  end
+
   # The pager without its iOS-only page style, type-checked where the suite's
   # compile arm runs (the macOS SDK has TabView(selection:) but no `.page`):
   # the tag arithmetic and the Int selection.
