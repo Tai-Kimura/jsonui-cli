@@ -81,17 +81,17 @@ module RjuiTools
           return "#{attributes['angle']}deg" if attributes['angle']
 
           # Fall back to gradientDirection
+          # GradientView declares Vertical / Horizontal / Oblique only, and
+          # EnumSpelling.lowered yields nil for anything else, so these are
+          # the only arms that can match. The reversed / synonym spellings
+          # (RightToLeft, BottomToTop, LeftToRight, TopToBottom, Diagonal)
+          # belong to View.gradientDirection (platform swift), which no
+          # GradientView converter reads — sjui and kjui draw the same three.
           direction = JsonUIShared::EnumSpelling.lowered(attributes['gradientDirection'] || attributes['direction'] || 'Vertical', 'GradientView', 'gradientDirection').to_s
           case direction
-          when 'horizontal', 'lefttoright'
+          when 'horizontal'
             'to right'
-          when 'righttoleft'
-            'to left'
-          when 'toptobottom'
-            'to bottom'
-          when 'bottomtotop'
-            'to top'
-          when 'oblique', 'diagonal'
+          when 'oblique'
             '45deg'
           else # vertical
             'to bottom'
