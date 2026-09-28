@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .core.config_manager import ConfigShapeError
 from .core.parent_spec_merger import ParentSpecDeclarationError
 from .core.spec_extractor import CanonicalMarkError
 from .version import version_label
@@ -96,7 +97,8 @@ def main(argv: list[str] | None = None) -> int:
     if handler:
         try:
             return handler(args)
-        except (CanonicalMarkError, ParentSpecDeclarationError) as exc:
+        except (CanonicalMarkError, ParentSpecDeclarationError,
+                ConfigShapeError) as exc:
             # Formatted, not a traceback. The message was already specific
             # enough to act on — a lane read it straight off a red run — but
             # seven frames of Python above it read as "the tool crashed", and
