@@ -1,4 +1,13 @@
 #!/bin/zsh
+# 🔻 ZSH ONLY, AND SAID SO BEFORE ANYTHING RUNS. Started as `bash check-tag.sh`
+# this script did not fail: it printed 20 checks instead of 23 and one false
+# red (2026-09-28, v1.9.2). bash splits the words argument differently, so
+# the three "body still carries" checks never ran, and it runs the last
+# command of a pipeline in a subshell, so the off-tag names collected in a
+# `| while` loop were lost and "every off-tag patch-id is named" read 36
+# unnamed. Both looked like results. This line is written so that bash and
+# sh parse it too.
+[ -n "${ZSH_VERSION:-}" ] || { echo "check-tag.sh: run it with zsh (./check-tag.sh, or zsh check-tag.sh) - under another shell some checks silently do not run" >&2; exit 2; }
 #
 # Judge a tag that has been CUT BUT NOT PUSHED.
 #
