@@ -230,10 +230,11 @@ module KjuiTools
             code += "\n" + indent("placeholder = #{resolved},", depth + 1)
           end
           
-          # Add enabled state if specified
-          if json_data['disabled']
-            code += "\n" + indent("enabled = false,", depth + 1)
-          elsif json_data['enabled'] == false
+          # Add enabled state if specified. The declared `enabled` only:
+          # SelectBox declares no `disabled`, and no other platform draws it
+          # (sjui / rjui read `enabled`; the Dynamic SelectBox names it as
+          # an unread key in a debuggable build).
+          if json_data['enabled'] == false
             code += "\n" + indent("enabled = false,", depth + 1)
           end
           
