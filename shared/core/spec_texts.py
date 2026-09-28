@@ -141,10 +141,13 @@ def _flatten(node: Any, prefix: str, out: _TextsFile) -> None:
     for key, value in node.items():
         where = f"{prefix}.{key}" if prefix else str(key)
         if not isinstance(key, str):
+            # Not echoed back as `"True":` — the author wrote `yes:` (or
+            # `on:`), and that spelling is gone by the time the key is here.
             out.errors.append(
                 f"key {key!r} under '{prefix or '(top)'}' is a "
-                f"{type(key).__name__}, not a string — quote it "
-                f"(\"{key}\":) if it is meant as a name")
+                f"{type(key).__name__}, not a string — YAML reads yes / no / "
+                f"on / off / true / false and bare numbers as values; quote "
+                f"the key if it is meant as a name")
             continue
         if "." in key:
             out.errors.append(
@@ -183,7 +186,16 @@ def load_texts_file(path: Path) -> _TextsFile:
         out.errors.append(f"cannot be read ({e})")
         return out
     except yaml.YAMLError as e:
-        out.errors.append(" ".join(str(e).split()))
+        # `str(e)` carries PyYAML's own rendering — `in "<unicode string>",
+        # line 7, column 3:` plus the source line and a caret — which names
+        # no file and reads as a crash. The problem and its line are the
+        # finding; the file is prefixed by the caller.
+        mark = getattr(e, "problem_mark", None)
+        problem = getattr(e, "problem", None)
+        if mark is not None and problem:
+            out.errors.append(f"line {mark.line + 1}: {problem}")
+        else:
+            out.errors.append(" ".join(str(e).split()))
         return out
     if data is None:
         return out

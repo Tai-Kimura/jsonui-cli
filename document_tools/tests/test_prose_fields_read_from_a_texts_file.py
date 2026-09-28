@@ -146,7 +146,7 @@ class YamlRules(_Dir):
     def test_a_yes_key_is_a_boolean_and_is_refused(self):
         (e,) = self.errors("yes: x\n")
         self.assertIn("bool", e)
-        self.assertIn("quote it", e)
+        self.assertIn("quote the key", e)
 
     def test_a_dotted_key_is_refused(self):
         (e,) = self.errors("a.b: x\n")
@@ -156,6 +156,9 @@ class YamlRules(_Dir):
     def test_a_duplicate_key_is_refused_instead_of_keeping_the_last(self):
         (e,) = self.errors("dup: 1st\ndup: 2nd\n")
         self.assertIn("duplicate key 'dup'", e)
+        # The line of the second key, not PyYAML's `in "<unicode string>"`.
+        self.assertIn("line 3:", e)
+        self.assertNotIn("<unicode string>", e)
 
     def test_a_list_value_is_refused(self):
         (e,) = self.errors("l:\n  - a\n")
