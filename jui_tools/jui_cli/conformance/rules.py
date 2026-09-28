@@ -884,6 +884,23 @@ EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
     # The string spelling of a weight. "2" also differs from the numeric
     # case's 1, so the two faces are distinguishable from each other too.
     ("common", "weight"): [("as_string", "2")],
+    # The edges the representative (`["top", "bottom"]`) never names. The
+    # 1.9.0 product fix (fa537fab) made `leading` / `trailing` / `vertical`
+    # reach every platform; these are its conformance fixtures, first written in
+    # 83633f15, which was never merged. Named, so the list value does not
+    # become a stringified slug. On web a headless desktop viewport reports
+    # env(safe-area-inset-*) = 0, so these render like their control there —
+    # they prove the emit, and the insets are real on the devices.
+    ("View", "safeAreaInsetPositions"): [
+        ("leading", ["leading"]),
+        ("trailing", ["trailing"]),
+        ("vertical", ["vertical"]),
+    ],
+    ("SafeAreaView", "safeAreaInsetPositions"): [
+        ("leading", ["leading"]),
+        ("trailing", ["trailing"]),
+        ("vertical", ["vertical"]),
+    ],
 }
 
 #: Attributes that get a BOUND case: the value under test written as

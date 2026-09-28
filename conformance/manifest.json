@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "e8416161eb3bfd3d61e121b6312d9ce16c1c4454d1746653db71aeebef3c8bb4",
+  "generatedFrom": "98816ec2d24eb65d6db040a75508fe685e86bf5150b4fe9c51f7922fa47492ce",
   "counts": {
-    "fixtures": 1126,
+    "fixtures": 1132,
     "assertable": 49,
-    "visual": 843,
+    "visual": 849,
     "interactive": 38,
     "control": 118,
     "declarationOnly": 77,
@@ -18470,7 +18470,85 @@
       "test": "fixtures/View/safeAreaInsetPositions__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": null,
+      "peerGroup": "View/safeAreaInsetPositions@View",
+      "control": "__control/View"
+    },
+    {
+      "id": "View/safeAreaInsetPositions__leading",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "case": "leading",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "leading"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/safeAreaInsetPositions__leading.layout.json",
+      "test": "fixtures/View/safeAreaInsetPositions__leading.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "View/safeAreaInsetPositions@View",
+      "control": "__control/View"
+    },
+    {
+      "id": "View/safeAreaInsetPositions__trailing",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "case": "trailing",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "trailing"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/safeAreaInsetPositions__trailing.layout.json",
+      "test": "fixtures/View/safeAreaInsetPositions__trailing.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "View/safeAreaInsetPositions@View",
+      "control": "__control/View"
+    },
+    {
+      "id": "View/safeAreaInsetPositions__vertical",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "case": "vertical",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "vertical"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/safeAreaInsetPositions__vertical.layout.json",
+      "test": "fixtures/View/safeAreaInsetPositions__vertical.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "View/safeAreaInsetPositions@View",
       "control": "__control/View"
     },
     {
@@ -23178,7 +23256,85 @@
       "test": "fixtures/SafeAreaView/safeAreaInsetPositions__static.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": null,
+      "peerGroup": "SafeAreaView/safeAreaInsetPositions@SafeAreaView__height-200_width-200",
+      "control": "__control/SafeAreaView__height-200_width-200"
+    },
+    {
+      "id": "SafeAreaView/safeAreaInsetPositions__leading",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "case": "leading",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "leading"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/safeAreaInsetPositions__leading.layout.json",
+      "test": "fixtures/SafeAreaView/safeAreaInsetPositions__leading.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/safeAreaInsetPositions@SafeAreaView__height-200_width-200",
+      "control": "__control/SafeAreaView__height-200_width-200"
+    },
+    {
+      "id": "SafeAreaView/safeAreaInsetPositions__trailing",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "case": "trailing",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "trailing"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/safeAreaInsetPositions__trailing.layout.json",
+      "test": "fixtures/SafeAreaView/safeAreaInsetPositions__trailing.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/safeAreaInsetPositions@SafeAreaView__height-200_width-200",
+      "control": "__control/SafeAreaView__height-200_width-200"
+    },
+    {
+      "id": "SafeAreaView/safeAreaInsetPositions__vertical",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "case": "vertical",
+      "class": "visual",
+      "host": "SafeAreaView",
+      "writtenKey": "safeAreaInsetPositions",
+      "aliasOf": null,
+      "value": [
+        "vertical"
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SafeAreaView/safeAreaInsetPositions__vertical.layout.json",
+      "test": "fixtures/SafeAreaView/safeAreaInsetPositions__vertical.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SafeAreaView/safeAreaInsetPositions@SafeAreaView__height-200_width-200",
       "control": "__control/SafeAreaView__height-200_width-200"
     },
     {
@@ -23205,7 +23361,7 @@
       "test": "fixtures/SafeAreaView/safeAreaInsetPositions__alias_edges.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": null,
+      "peerGroup": "SafeAreaView/safeAreaInsetPositions@SafeAreaView__height-200_width-200",
       "control": "__control/SafeAreaView__height-200_width-200"
     },
     {

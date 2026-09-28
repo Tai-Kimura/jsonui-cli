@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/safeAreaInsetPositions__leading.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.safeAreaInsetPositions (leading)",
+    "description": "Conformance fixture for 'safeAreaInsetPositions' on View (section: View, class: visual). Value under test: [\"leading\"].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "safeAreaInsetPositions__leading",
+      "description": "Conformance fixture for 'safeAreaInsetPositions' on View (section: View, class: visual). Value under test: [\"leading\"].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_safeAreaInsetPositions__leading"
+        }
+      ]
+    }
+  ]
+}
