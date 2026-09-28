@@ -267,11 +267,10 @@ module SjuiTools
         end
 
         def handle_include_and_variables
-          # include処理は専用のIncludeConverterで処理するため、
-          # ここではメタデータのみを記録
+          # include は変換前に IncludeExpander.process_includes で展開される。
+          # ここに残っている include はメタデータのみを記録する
           if @component['include']
-            # includeがある場合は、IncludeConverterが処理することを示すコメントを追加
-            add_line "// Component will be replaced by IncludeConverter"
+            add_line "// Component include should have been expanded by process_includes"
             add_line "// include: #{@component['include']}"
 
             if @component['shared_data']

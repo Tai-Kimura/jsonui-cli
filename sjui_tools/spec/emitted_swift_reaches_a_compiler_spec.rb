@@ -170,7 +170,6 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'swiftui/views/hidden_binding_identifier_spec.rb' => "p2 — #{UNCONVERTED}",
     'swiftui/views/icon_label_converter_spec.rb' => "p1 — #{UNCONVERTED}",
     'swiftui/views/image_converter_spec.rb' => "p1 — #{UNCONVERTED}",
-    'swiftui/views/include_converter_spec.rb' => "p1 — #{UNCONVERTED}",
     'swiftui/views/indicator_converter_spec.rb' => "p1 — #{UNCONVERTED}",
     'swiftui/views/input_lands_on_a_real_uikeyboardtype_spec.rb' => "p3 — #{UNCONVERTED}",
     'swiftui/views/label_converter_characterization_spec.rb' => "p1 — #{UNCONVERTED}",
