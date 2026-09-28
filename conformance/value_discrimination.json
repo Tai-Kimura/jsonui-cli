@@ -65,39 +65,6 @@
       "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
     },
     {
-      "component": "Indicator",
-      "attribute": "indicatorStyle",
-      "platform": "android",
-      "cases": [
-        "large",
-        "medium"
-      ],
-      "owner": "C (kjui) — ticket kjui-indicator-style-loses-to-a-declared-wrapcontent, for the release after 1.9.0",
-      "reason": "Records a defect. indicatorStyle is declared for Compose from jsonui-cli 1.9.0; KotlinJsonUI Dynamic (as kjui codegen, codegen_effect.json) lets a declared width / height beat the style's size, and the fixture's Indicator declares wrapContent, so small, medium and large draw the default spinner. iOS and web draw three sizes. Found after the 1.9.0 freeze; the user's ruling sends it to the next release."
-    },
-    {
-      "component": "Indicator",
-      "attribute": "indicatorStyle",
-      "platform": "android",
-      "cases": [
-        "large",
-        "small"
-      ],
-      "owner": "C (kjui) — ticket kjui-indicator-style-loses-to-a-declared-wrapcontent, for the release after 1.9.0",
-      "reason": "Records a defect. indicatorStyle is declared for Compose from jsonui-cli 1.9.0; KotlinJsonUI Dynamic (as kjui codegen, codegen_effect.json) lets a declared width / height beat the style's size, and the fixture's Indicator declares wrapContent, so small, medium and large draw the default spinner. iOS and web draw three sizes. Found after the 1.9.0 freeze; the user's ruling sends it to the next release."
-    },
-    {
-      "component": "Indicator",
-      "attribute": "indicatorStyle",
-      "platform": "android",
-      "cases": [
-        "medium",
-        "small"
-      ],
-      "owner": "C (kjui) — ticket kjui-indicator-style-loses-to-a-declared-wrapcontent, for the release after 1.9.0",
-      "reason": "Records a defect. indicatorStyle is declared for Compose from jsonui-cli 1.9.0; KotlinJsonUI Dynamic (as kjui codegen, codegen_effect.json) lets a declared width / height beat the style's size, and the fixture's Indicator declares wrapContent, so small, medium and large draw the default spinner. iOS and web draw three sizes. Found after the 1.9.0 freeze; the user's ruling sends it to the next release."
-    },
-    {
       "component": "Label",
       "attribute": "fontWeight",
       "platform": "web",
