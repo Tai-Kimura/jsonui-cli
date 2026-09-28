@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ..prose import (
+    labelled_block, prose_block, prose_html as _p, with_markdown_css,
+)
+
 
 #: Top-level keys that say nothing about what a sub-spec CONTRIBUTES — they are
 #: bookkeeping every spec carries.
@@ -140,7 +144,7 @@ def generate_spec_html(
     # Overview
     parts.append('<section id="overview">')
     parts.append('<h2>Overview</h2>')
-    parts.append(f'<p>{_e(metadata.get("description", ""))}</p>')
+    parts.append(prose_block(metadata.get("description", "")))
 
     # Metadata table
     if metadata.get("author") or metadata.get("createdAt") or metadata.get("updatedAt"):
@@ -189,7 +193,7 @@ def generate_spec_html(
         for sub in sub_specs:
             sub_name = _e(sub.get("name", "-"))
             sub_file = sub.get("file", "")
-            sub_desc = _e(sub.get("description", "-"))
+            sub_desc = _p(sub.get("description", "-"))
             declares = (f"<td>{_e(_sub_spec_sections(spec_dir, sub_file))}</td>"
                         if show_declares else "")
             # Create link to sub-spec HTML if current_path is available
@@ -290,7 +294,7 @@ def generate_spec_html(
         parts.append('</pre>')
 
     if structure.get("notes"):
-        parts.append(f'<p class="notes"><strong>Notes:</strong> {_e(structure["notes"])}</p>')
+        parts.append(labelled_block("Notes", structure["notes"]))
 
     # Collection(s) — structure.collection plus the multi-Collection
     # structure.collections[] form; each renders its own block.
@@ -437,7 +441,7 @@ def generate_spec_html(
                 html_file = spec_file.replace(".component.json", ".html")
                 link_path = f"../../components/html/{html_file}"
                 spec_link = f'<a href="{_e(link_path)}" class="component-link">{_e(spec_file)}</a>'
-            parts.append(f'<tr><td><span class="custom-component-name">{_e(cc_name)}</span></td><td>{spec_link}</td><td>{_e(description)}</td></tr>')
+            parts.append(f'<tr><td><span class="custom-component-name">{_e(cc_name)}</span></td><td>{spec_link}</td><td>{_p(description)}</td></tr>')
         parts.append('</tbody></table>')
 
     parts.append('</section>')
@@ -463,7 +467,7 @@ def generate_spec_html(
         if view_model:
             parts.append('<h3>ViewModel</h3>')
             if view_model.get("description"):
-                parts.append(f'<p>{_e(view_model["description"])}</p>')
+                parts.append(prose_block(view_model["description"]))
 
             vm_methods = view_model.get("methods", [])
             if vm_methods:
@@ -482,7 +486,7 @@ def generate_spec_html(
                     sig = _format_vm_method_html(m)
                     plats = _format_member_platforms(m)
                     desc = m.get("description", "-") if isinstance(m, dict) else "-"
-                    parts.append(f'<tr><td>{sig}</td><td>{plats}</td><td>{_e(desc)}</td></tr>')
+                    parts.append(f'<tr><td>{sig}</td><td>{plats}</td><td>{_p(desc)}</td></tr>')
                 parts.append('</tbody></table>')
                 parts.append('</details>')
 
@@ -505,7 +509,7 @@ def generate_spec_html(
                     plats = _format_member_platforms(v)
                     parts.append(
                         f'<tr><td>{decl}</td><td>{flags}</td>'
-                        f'<td>{plats}</td><td>{_e(v.get("description", "-"))}</td></tr>'
+                        f'<td>{plats}</td><td>{_p(v.get("description", "-"))}</td></tr>'
                     )
                 parts.append('</tbody></table>')
                 parts.append('</details>')
@@ -526,7 +530,7 @@ def generate_spec_html(
             for uc in use_cases:
                 parts.append(f'<h4>{_e(uc.get("name", "-"))}</h4>')
                 if uc.get("description"):
-                    parts.append(f'<p>{_e(uc["description"])}</p>')
+                    parts.append(prose_block(uc["description"]))
                 dep_repos = uc.get("repositories", [])
                 if dep_repos:
                     parts.append(f'<p><strong>Dependencies:</strong> {", ".join(_e(r) for r in dep_repos)}</p>')
@@ -558,10 +562,10 @@ def generate_spec_html(
                     parts.append('</pre>')
 
                 if endpoint.get("notes"):
-                    parts.append(f'<p class="notes"><strong>Notes:</strong> {_e(endpoint["notes"])}</p>')
+                    parts.append(labelled_block("Notes", endpoint["notes"]))
 
         if data_flow.get("notes"):
-            parts.append(f'<p class="notes"><strong>Notes:</strong> {_e(data_flow["notes"])}</p>')
+            parts.append(labelled_block("Notes", data_flow["notes"]))
 
         parts.append('</section>')
 
@@ -577,10 +581,10 @@ def generate_spec_html(
             parts.append('<tbody>')
             for val in state.get("values", []):
                 visible = ", ".join(f'<code>{_e(e)}</code>' for e in val.get("visibleElements", [])) or "-"
-                parts.append(f'<tr><td><code>{_e(val.get("value", "-"))}</code></td><td>{_e(val.get("description", "-"))}</td><td>{visible}</td></tr>')
+                parts.append(f'<tr><td><code>{_e(val.get("value", "-"))}</code></td><td>{_p(val.get("description", "-"))}</td><td>{visible}</td></tr>')
             parts.append('</tbody></table>')
             if state.get("notes"):
-                parts.append(f'<p class="notes"><strong>Notes:</strong> {_e(state["notes"])}</p>')
+                parts.append(labelled_block("Notes", state["notes"]))
 
         variables = state_mgmt.get("uiVariables", [])
         if variables:
@@ -593,7 +597,7 @@ def generate_spec_html(
             parts.append('<thead><tr><th>Variable</th><th>Type</th><th>Description</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for var in variables:
-                parts.append(f'<tr><td><code>{_e(var.get("name", "-"))}</code></td><td>{_e(var.get("type", "-"))}</td><td>{_e(var.get("description", "-"))}</td><td>{_e(var.get("notes", "") or "-")}</td></tr>')
+                parts.append(f'<tr><td><code>{_e(var.get("name", "-"))}</code></td><td>{_e(var.get("type", "-"))}</td><td>{_p(var.get("description", "-"))}</td><td>{_p(var.get("notes", "") or "-")}</td></tr>')
             parts.append('</tbody></table>')
             parts.append('</details>')
 
@@ -614,8 +618,8 @@ def generate_spec_html(
             for h in handlers:
                 parts.append(
                     f'<tr><td><code>{_e(h.get("name", "-"))}</code></td>'
-                    f'<td>{_e(h.get("description", "-"))}</td>'
-                    f'<td>{_e(h.get("notes", "") or "-")}</td></tr>'
+                    f'<td>{_p(h.get("description", "-"))}</td>'
+                    f'<td>{_p(h.get("notes", "") or "-")}</td></tr>'
                 )
             parts.append('</tbody></table>')
             parts.append('</details>')
@@ -639,7 +643,7 @@ def generate_spec_html(
             parts.append('</pre>')
 
         if state_mgmt.get("notes"):
-            parts.append(f'<p class="notes"><strong>Notes:</strong> {_e(state_mgmt["notes"])}</p>')
+            parts.append(labelled_block("Notes", state_mgmt["notes"]))
 
         parts.append('</section>')
 
@@ -651,7 +655,7 @@ def generate_spec_html(
         parts.append('<thead><tr><th>Action</th><th>Processing</th><th>Destination</th><th>Notes</th></tr></thead>')
         parts.append('<tbody>')
         for action in user_actions:
-            parts.append(f'<tr><td>{_e(action.get("action", "-"))}</td><td>{_e(action.get("processing", "-"))}</td><td>{_e(action.get("destination", "") or "-")}</td><td>{_e(action.get("notes", "") or "-")}</td></tr>')
+            parts.append(f'<tr><td>{_e(action.get("action", "-"))}</td><td>{_e(action.get("processing", "-"))}</td><td>{_e(action.get("destination", "") or "-")}</td><td>{_p(action.get("notes", "") or "-")}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
@@ -667,7 +671,7 @@ def generate_spec_html(
             parts.append('<thead><tr><th>Field</th><th>Rule</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for v in client_side:
-                parts.append(f'<tr><td>{_e(v.get("field", "-"))}</td><td>{_e(v.get("rule", "-"))}</td><td>{_e(v.get("notes", "") or "-")}</td></tr>')
+                parts.append(f'<tr><td>{_e(v.get("field", "-"))}</td><td>{_e(v.get("rule", "-"))}</td><td>{_p(v.get("notes", "") or "-")}</td></tr>')
             parts.append('</tbody></table>')
 
         server_side = validation.get("serverSide", [])
@@ -677,11 +681,11 @@ def generate_spec_html(
             parts.append('<thead><tr><th>Error Condition</th><th>Handling</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for v in server_side:
-                parts.append(f'<tr><td>{_e(v.get("condition", "-"))}</td><td>{_e(v.get("handling", "-"))}</td><td>{_e(v.get("notes", "") or "-")}</td></tr>')
+                parts.append(f'<tr><td>{_e(v.get("condition", "-"))}</td><td>{_e(v.get("handling", "-"))}</td><td>{_p(v.get("notes", "") or "-")}</td></tr>')
             parts.append('</tbody></table>')
 
         if validation.get("notes"):
-            parts.append(f'<p class="notes"><strong>Notes:</strong> {_e(validation["notes"])}</p>')
+            parts.append(labelled_block("Notes", validation["notes"]))
 
         parts.append('</section>')
 
@@ -698,7 +702,7 @@ def generate_spec_html(
         parts.append('<thead><tr><th>Condition</th><th>Destination</th><th>Notes</th></tr></thead>')
         parts.append('<tbody>')
         for trans in transitions:
-            parts.append(f'<tr><td>{_e(trans.get("condition", "-"))}</td><td>{_e(trans.get("destination", "-"))}</td><td>{_e(trans.get("notes", "") or "-")}</td></tr>')
+            parts.append(f'<tr><td>{_e(trans.get("condition", "-"))}</td><td>{_e(trans.get("destination", "-"))}</td><td>{_p(trans.get("notes", "") or "-")}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
@@ -746,7 +750,7 @@ def generate_spec_html(
                     f'<code>{_e(f.get("type", "-"))}</code>'
                     '</td>'
                     f'<td><code>{_e(f.get("path", "-"))}</code></td>'
-                    f'<td>{_e(file_note or "-")}</td>'
+                    f'<td>{_p(file_note or "-")}</td>'
                     '</tr>'
                 )
         parts.append('</tbody></table>')
@@ -759,7 +763,7 @@ def generate_spec_html(
         parts.append('<h2>Notes</h2>')
         parts.append('<ul>')
         for note in notes:
-            parts.append(f'<li>{_e(note)}</li>')
+            parts.append(f'<li>{_p(note)}</li>')
         parts.append('</ul>')
         parts.append('</section>')
 
@@ -773,7 +777,7 @@ def generate_spec_html(
     # Footer with Mermaid script
     parts.append(_get_html_footer(has_sidebar))
 
-    return "\n".join(parts)
+    return with_markdown_css("\n".join(parts))
 
 
 def _format_branch_value(value: Any) -> str:
@@ -895,15 +899,12 @@ def _generate_branch_contracts_section(branch_contracts: dict) -> list[str]:
                 f'<td>{_format_branch_pairs(when) if isinstance(when, dict) else "-"}</td>'
                 f'<td>{_format_branch_pairs(then) if isinstance(then, dict) else "-"}</td>'
                 f'{platform_cell}'
-                f'<td>{_e(branch.get("notes", "") or "-")}</td></tr>'
+                f'<td>{_p(branch.get("notes", "") or "-")}</td></tr>'
             )
         parts.append('</tbody></table>')
 
     if branch_contracts.get("notes"):
-        parts.append(
-            f'<p class="notes"><strong>Notes:</strong> '
-            f'{_e(branch_contracts["notes"])}</p>'
-        )
+        parts.append(labelled_block("Notes", branch_contracts["notes"]))
     parts.append('</section>')
     return parts
 
@@ -927,7 +928,7 @@ def _format_method_html(method) -> str:
         if return_type:
             method_str += f' → <code class="return-type">{return_type}</code>'
         if method.get("description"):
-            method_str += f' — {_e(method["description"])}'
+            method_str += f' — {_p(method["description"])}'
         return method_str
     else:
         return f'<code>{_e(method)}</code>'
@@ -1439,13 +1440,15 @@ def _render_notes_cell(comp: dict) -> str:
     Both may be present — description comes first, notes second on its
     own line. Falls back to ``-`` if neither exists.
     """
-    desc = (comp.get("description") or "").strip()
-    notes = (comp.get("notes") or "").strip()
+    desc = comp.get("description") or ""
+    notes = comp.get("notes") or ""
     parts: list[str] = []
-    if desc:
-        parts.append(f'<div>{_e(desc)}</div>')
-    if notes:
-        parts.append(f'<div>{_e(notes)}</div>')
+    # Not `.strip()`ed: that returns a plain `str`, and a Markdown text would
+    # lose what it is before reaching `_p`. Blank-ness is tested separately.
+    if str(desc).strip():
+        parts.append(f'<div>{_p(desc)}</div>')
+    if str(notes).strip():
+        parts.append(f'<div>{_p(notes)}</div>')
     return "".join(parts) or "-"
 
 
@@ -2051,7 +2054,7 @@ def generate_component_html(
     # Main content
     parts.append('<div class="container">')
     parts.append(f'<h1>{_e(display_name)} <span class="badge badge-category">{_e(category)}</span></h1>')
-    parts.append(f'<p>{_e(description)}</p>')
+    parts.append(prose_block(description))
 
     # Props section
     if props:
@@ -2070,7 +2073,7 @@ def generate_component_html(
             parts.append(f'<td class="type">{_e(str(prop.get("type", "")))}</td>')
             parts.append(f'<td>{badge}</td>')
             parts.append(f'<td class="default">{_e(str(default_val))}</td>')
-            parts.append(f'<td>{_e(str(prop.get("description", "")))}</td></tr>')
+            parts.append(f'<td>{_p(prop.get("description", ""))}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
@@ -2086,7 +2089,7 @@ def generate_component_html(
             badge = '<span class="badge badge-required">Required</span>' if required else '<span class="badge badge-optional">Optional</span>'
             parts.append(f'<tr><td><code>{_e(str(slot.get("name", "")))}</code></td>')
             parts.append(f'<td>{badge}</td>')
-            parts.append(f'<td>{_e(str(slot.get("description", "")))}</td></tr>')
+            parts.append(f'<td>{_p(slot.get("description", ""))}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
@@ -2102,7 +2105,7 @@ def generate_component_html(
         for comp in components:
             parts.append(f'<tr><td><code>{_e(str(comp.get("type", "")))}</code></td>')
             parts.append(f'<td><code>{_e(str(comp.get("id", "")))}</code></td>')
-            parts.append(f'<td>{_e(str(comp.get("description", "")))}</td></tr>')
+            parts.append(f'<td>{_p(comp.get("description", ""))}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
@@ -2126,7 +2129,7 @@ def generate_component_html(
                 parts.append(f'<tr><td><code>{_e(str(state.get("name", "")))}</code></td>')
                 parts.append(f'<td class="type">{_e(str(state.get("type", "")))}</td>')
                 parts.append(f'<td class="default">{_e(str(initial))}</td>')
-                parts.append(f'<td>{_e(str(state.get("description", "")))}</td></tr>')
+                parts.append(f'<td>{_p(state.get("description", ""))}</td></tr>')
             parts.append('</tbody></table>')
 
         if exposed_events:
@@ -2139,7 +2142,7 @@ def generate_component_html(
                 param_str = ", ".join([f"{p.get('name', '')}: {p.get('type', '')}" for p in params]) if params else "-"
                 parts.append(f'<tr><td><code>{_e(str(event.get("name", "")))}</code></td>')
                 parts.append(f'<td class="type">{_e(param_str)}</td>')
-                parts.append(f'<td>{_e(str(event.get("description", "")))}</td></tr>')
+                parts.append(f'<td>{_p(event.get("description", ""))}</td></tr>')
             parts.append('</tbody></table>')
 
         parts.append('</section>')
@@ -2175,7 +2178,7 @@ def generate_component_html(
     # Footer
     parts.append(_get_html_footer(has_sidebar))
 
-    return "\n".join(parts)
+    return with_markdown_css("\n".join(parts))
 
 
 def generate_component_markdown(spec_data: dict) -> str:

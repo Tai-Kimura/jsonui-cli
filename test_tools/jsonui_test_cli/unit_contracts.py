@@ -47,6 +47,7 @@ from .branch_tests import (
     _is_sub_spec_of_a_parent,
     _load_spec,
     _load_spec_result,
+    _with_texts,
     _parent_declaring,
     _screen_of,
     _spec_files,
@@ -1034,7 +1035,7 @@ def discover_unit_contracts(
             rel_file = path.name
         try:
             with open(path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
+                raw = _with_texts(json.load(f), path)
         except (OSError, json.JSONDecodeError) as e:
             # Unreadable is not "declares nothing". Keeping it in `scanned`
             # keeps the denominator honest, and saying so keeps a spec that
@@ -1246,12 +1247,21 @@ def _cases_of(spec: dict, screen: str, spec_file: str = "",
                     target=target,
                     name=name,
                     platforms=tuple(str(p) for p in platforms),
-                    intent=str(case.get("intent") or ""),
+                    # Not `str(...)` on a string: that drops `MarkdownText`,
+                    # and the unit page renders a texts-file intent as
+                    # Markdown only because it still is one.
+                    intent=_intent_of(case.get("intent")),
                     spec_file=spec_file,
                     app=app,
                 )
             )
     return out, problems
+
+
+def _intent_of(value) -> str:
+    if isinstance(value, str):
+        return value
+    return str(value) if value else ""
 
 
 def _test_roots(project_root: Path, config: dict) -> dict[str, list[Path] | None]:

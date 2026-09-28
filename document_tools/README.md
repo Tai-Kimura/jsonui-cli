@@ -81,6 +81,47 @@ anything that is not a release number, never turns it into a WARNING. A spec
 without a `layoutFile` is checked against its `structure.components`, a
 WARNING as before.
 
+#### Long prose: texts files (`.texts.yaml`)
+
+A prose field — `description`, `notes` (or one entry of a `notes` array) and
+a unit case's `intent` — may point into a YAML file instead of holding the
+text inline:
+
+```json
+{ "metadata": { "description": { "md": "overview" } } }
+{ "intent": { "md": "user_repository.health_check.timeout" } }
+{ "intent": { "md": "shared/network.texts.yaml#timeouts.default" } }
+```
+
+Without a `#`, the key is read from the spec's paired file
+(`app_contracts.spec.json` -> `app_contracts.texts.yaml`, same directory);
+with one, from the named file, relative to the spec. The key is a
+`.`-separated path through nested mappings:
+
+```yaml
+overview: |
+  この面の app が所有する unit target の契約。
+
+  ### 移設元
+  - UserRepository: login.spec.json (2)
+
+user_repository:
+  health_check:
+    timeout: |
+      **[api.healthCheck=default]** GET /api/health は要求単位で **10 秒**。
+```
+
+- A value from a texts file is rendered as **Markdown** (CommonMark, tables,
+  strikethrough; raw HTML is not rendered). An inline string stays plain
+  text, with its line breaks kept.
+- Validation errors: an undefined key, a key naming a mapping, a missing
+  file, a key that is not a string (`yes:` / `on:` / `1:` — quote it), a key
+  containing `.`, a duplicate key, a list or empty value, and a reference in
+  a field that is not prose. A key of the paired file that no field
+  references is a warning.
+- Needs `PyYAML` and `markdown-it-py` (declared dependencies; validation
+  names the `pip install` when either is missing).
+
 #### Validate Component Specification
 
 ```bash

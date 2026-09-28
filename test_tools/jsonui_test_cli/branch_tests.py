@@ -160,6 +160,21 @@ def _merge_parent_spec_result(parent_path: Path) -> tuple[dict | None, str | Non
         return None, None
 
 
+def _with_texts(spec: dict, spec_file: Path) -> dict:
+    """`spec` with `{"md": ...}` prose references resolved (shared/core/
+    spec_texts.py). Unresolvable ones stay as written — the spec validator
+    is what reports them."""
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return spec
+    texts = shared_core.load("spec_texts")
+    if texts is None or not isinstance(spec, dict):
+        return spec
+    return texts.resolve_spec_texts(spec, spec_file).data
+
+
 def _load_spec(spec_file: Path) -> dict:
     """The spec as this generator should read it — merged when it is a parent."""
     return _load_spec_result(spec_file)[0]
@@ -173,7 +188,7 @@ def _load_spec_result(spec_file: Path) -> tuple[dict, str | None]:
     counting a refused block reads as "the declaration was checked".
     """
     with open(spec_file, "r", encoding="utf-8") as f:
-        spec = json.load(f)
+        spec = _with_texts(json.load(f), spec_file)
     if spec.get("type") == PARENT_SPEC_TYPE:
         merged, refusal = _merge_parent_spec_result(spec_file)
         if merged is not None:

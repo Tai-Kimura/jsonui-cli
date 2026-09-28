@@ -309,6 +309,11 @@ class SpecValidator:
             ))
             return result
 
+        # `{"md": ...}` prose references are resolved before anything reads
+        # the spec, so every check below — and every page built from
+        # `result.spec_data` — sees strings. See shared/core/spec_texts.py.
+        data = self._resolve_texts(data, result)
+
         # Determine spec type and validate
         spec_type = data.get("type", "screen_spec")
         self._spec_type = spec_type
@@ -316,6 +321,27 @@ class SpecValidator:
 
         self._dispatch_by_type(spec_type, data, result)
         return result
+
+    def _resolve_texts(self, data: Any, result: SpecValidationResult) -> Any:
+        texts = shared_core.load("spec_texts")
+        if texts is None or not isinstance(data, dict):
+            return data
+        resolution = texts.resolve_spec_texts(data, self._spec_file_path)
+        for message in resolution.errors:
+            result.errors.append(SpecValidationMessage(
+                path="texts", message=message))
+        for message in resolution.warnings:
+            result.warnings.append(SpecValidationMessage(
+                path="texts", message=message, level="warning"))
+        # Refused here rather than at render time: every page is built from
+        # a validated spec, so this is the one place a missing renderer is
+        # named before a page silently falls back to raw Markdown.
+        from ..prose import markdown_available, missing_renderer_message
+        if resolution.files and not markdown_available():
+            result.errors.append(SpecValidationMessage(
+                path="texts", message=missing_renderer_message()))
+        result.spec_data = resolution.data
+        return resolution.data
 
     def validate_data(self, data: dict, name: str = "spec") -> SpecValidationResult:
         """Validate specification data directly."""

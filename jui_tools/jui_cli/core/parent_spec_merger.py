@@ -49,6 +49,20 @@ class ParentSpecDeclarationError(ValueError):
     """
 
 
+def _with_texts(data: Any, path: Path) -> Any:
+    """`data` with its `{"md": ...}` prose references resolved.
+
+    Errors are not reported here: the merger is a reader, and the spec
+    validator names every unresolvable reference against its own file. An
+    unresolved one stays as written, as `resolve_spec_texts` leaves it.
+    """
+    from jui_cli.core import shared_core
+    texts = shared_core.load("spec_texts")
+    if texts is None or not isinstance(data, dict):
+        return data
+    return texts.resolve_spec_texts(data, path).data
+
+
 def _reject_parent_declarations(parent_data: dict, parent_path) -> None:
     """Halt when a parent declares a section built from its sub-specs.
 
@@ -82,7 +96,7 @@ class ParentSpecMerger:
     def merge_from_file(self, parent_path: Path) -> MergeResult:
         """Load a parent_spec file, resolve sub_spec paths, and merge."""
         parent_path = Path(parent_path)
-        parent_data = json.loads(parent_path.read_text())
+        parent_data = _with_texts(json.loads(parent_path.read_text()), parent_path)
 
         if parent_data.get("type") != "screen_parent_spec":
             raise ValueError(
@@ -103,7 +117,10 @@ class ParentSpecMerger:
                 alt = (parent_path.parent / file_ref).resolve()
                 path = alt if alt.exists() else path
             sub_spec_paths.append(path)
-            sub_specs.append(json.loads(path.read_text()))
+            # Each sub-spec's texts resolve against ITS paired file, so they
+            # are resolved here, per file, before the merge loses which file
+            # a case came from.
+            sub_specs.append(_with_texts(json.loads(path.read_text()), path))
 
         _reject_parent_declarations(parent_data, parent_path)
 
