@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'swiftui/converter_factory'
+require_relative '../../support/emitted_swift'
 
 # `common.effectStyle` on a node that is not a Blur.
 #
@@ -16,6 +17,8 @@ require 'swiftui/converter_factory'
 # by :corner_radius. The Dynamic runtime's `glass` stage applies the two in the
 # same order.
 RSpec.describe 'common.effectStyle on a non-Blur node (SwiftUI codegen)' do
+  include EmittedSwift
+
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
   after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
 
@@ -102,5 +105,19 @@ RSpec.describe 'common.effectStyle on a non-Blur node (SwiftUI codegen)' do
     code = emit(view('glass' => true))
     expect(code).to include('.sjuiGlassEffect()')
     expect(code).not_to include('jsonUIVisualEffect')
+  end
+
+  it 'type-checks the material call against the library signature', :swift_compile do
+    # Mirrors SwiftJsonUI/Classes/SwiftUI/VisualEffectStyle.swift: the
+    # declared spelling (or nil for a binding) and the default spellings list.
+    stub = <<~SWIFT
+      extension View {
+          func jsonUIVisualEffect(_ declared: String?, in spellings: [String] = []) -> some View { self }
+      }
+    SWIFT
+    codes = [emit(view('effectStyle' => 'Thick')), emit(view('effectStyle' => '@{style}')),
+             emit(view('effectStyle' => 'Dark', 'background' => '#00FF00', 'cornerRadius' => 8,
+                       'child' => [{ 'type' => 'View', 'width' => 10, 'height' => 10 }]))]
+    expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: ['var style: String? = nil'], stubs: stub)).to compile_as_swift
   end
 end
