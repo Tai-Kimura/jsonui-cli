@@ -505,7 +505,12 @@ jobs:
   ruby-suites:
     name: rspec (${{ matrix.tool }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # 40, not 20: the kjui leg compiles and runs emitted Kotlin now (below).
+    # Measured 2026-09-28 on Linux with OpenJDK 21: the kjui suite went
+    # 1m06 -> 8m52 with the compiler present, and 17m43 on a loaded machine.
+    # The ubuntu runner's own time is not measured yet; a cancelled kjui leg
+    # means suspect this number first.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -536,6 +541,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      # The kjui specs compile (and some run) emitted Kotlin through
+      # kjui_tools/spec/support/kotlin_compiler.rb. Without a JDK and the
+      # compiler jars every such arm is pending (~104 of them), so a Kotlin
+      # emit that does not compile would pass here (ticket
+      # kjui-rspec-ci-job-has-no-kotlin-compiler). KOTLINC_JAVA names the JDK
+      # to the helper; KJUI_REQUIRE_KOTLINC=1 turns "no compiler" into an
+      # error instead of a skip, so this leg cannot go quietly back to pending.
+      - uses: actions/setup-java@v4
+        if: ${{ matrix.tool == 'kjui_tools' }}
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Cache the Kotlin compiler jars
+        if: ${{ matrix.tool == 'kjui_tools' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches/modules-2/files-2.1
+          key: kotlinc-jars-${{ hashFiles('.github/scripts/fetch_kotlin_compiler_jars.sh') }}
+      - name: Fetch the Kotlin compiler jars (pinned, sha256-checked)
+        if: ${{ matrix.tool == 'kjui_tools' }}
+        run: |
+          bash .github/scripts/fetch_kotlin_compiler_jars.sh
+          echo "KOTLINC_JAVA=$JAVA_HOME/bin/java" >> "$GITHUB_ENV"
+          echo "KJUI_REQUIRE_KOTLINC=1" >> "$GITHUB_ENV"
       - name: Install gems (no Gemfile)
         # sjui_tools has no Gemfile; its specs need rspec + simplecov and the
         # non-default gems its lib requires (xcodeproj, listen).

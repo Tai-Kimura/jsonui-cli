@@ -91,11 +91,11 @@ RSpec.describe 'the leaf wrapper kjui writes' do
                      KotlinCompiler.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'),
                      KotlinCompiler.newest('org.jetbrains', 'annotations'),
                      KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
-      out, status = Open3.capture2e(KotlinCompiler.java_bin, '-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+      out, status = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                                     '-no-stdlib', '-cp', [stdlib, gson].join(':'), '-d', File.join(dir, 'out'), file)
       raise "kotlinc: #{out}" unless status.success?
 
-      run, status = Open3.capture2e(KotlinCompiler.java_bin, '-cp', [stdlib, gson, File.join(dir, 'out')].join(':'),
+      run, status = KotlinCompiler.java_capture2e('-cp', [stdlib, gson, File.join(dir, 'out')].join(':'),
                                     'LeafMessageKt', vectors_path)
       raise "run: #{run}" unless status.success?
 

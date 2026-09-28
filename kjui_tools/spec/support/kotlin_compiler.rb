@@ -25,7 +25,10 @@ require 'tmpdir'
 module KotlinCompiler
   module_function
 
-  GRADLE_MODULES = File.join(Dir.home, '.gradle', 'caches', 'modules-2', 'files-2.1')
+  # GRADLE_USER_HOME is Gradle's own override of ~/.gradle; CI fills a cache
+  # at the default place with .github/scripts/fetch_kotlin_compiler_jars.sh.
+  GRADLE_HOME = ENV.fetch('GRADLE_USER_HOME') { File.join(Dir.home, '.gradle') }
+  GRADLE_MODULES = File.join(GRADLE_HOME, 'caches', 'modules-2', 'files-2.1')
 
   def newest(group, artifact)
     Dir.glob(File.join(GRADLE_MODULES, group, artifact, '**', "#{artifact}-*.jar"))
@@ -34,22 +37,84 @@ module KotlinCompiler
   end
 
   def compiler_jar
-    Dir.glob(File.join(Dir.home, '.gradle', 'caches', '**',
+    Dir.glob(File.join(GRADLE_HOME, 'caches', '**',
                        'kotlin-compiler-embeddable-*.jar'))
        .reject { |p| p.include?('sources') }
        .sort.last
   end
 
+  HOMEBREW_JAVA = '/opt/homebrew/opt/openjdk@17/bin/java'
+  # The JDKs the pinned compiler (kotlin-compiler-embeddable 2.1.0) is
+  # measured on: 17 on the release machine, 21 on Linux (2026-09-28).
+  ACCEPTED_JAVA_MAJORS = (17..21).freeze
+
+  # The `java` a compile runs on, in this order:
+  #   1. KOTLINC_JAVA — an explicit path, taken as given (CI sets it to the
+  #      setup-java JDK);
+  #   2. Homebrew's openjdk@17 — the release machine. Its Android Studio JBR
+  #      on PATH is Java 25 and `/usr/libexec/java_home -v 17` answers 21, so
+  #      neither PATH nor java_home is asked;
+  #   3. JAVA_HOME, when its `release` file names a major in
+  #      ACCEPTED_JAVA_MAJORS (a JAVA_HOME pointing at that JBR is refused).
   def java_bin
-    # The Android Studio JBR on PATH is Java 25 and `/usr/libexec/java_home
-    # -v 17` answers 21 here, so neither is asked.
-    candidate = '/opt/homebrew/opt/openjdk@17/bin/java'
-    File.executable?(candidate) ? candidate : nil
+    return @java_bin if defined?(@java_bin)
+
+    candidates = [explicit_java, HOMEBREW_JAVA, java_home_java].compact
+    @java_bin = candidates.find { |c| File.executable?(c) }
   end
+
+  def explicit_java
+    path = ENV.fetch('KOTLINC_JAVA', '')
+    path.empty? ? nil : path
+  end
+
+  def java_home_java
+    home = ENV.fetch('JAVA_HOME', '')
+    return nil if home.empty?
+
+    release = File.join(home, 'release')
+    version = File.exist?(release) && File.read(release)[/^JAVA_VERSION="(\d+)/, 1]
+    version && ACCEPTED_JAVA_MAJORS.cover?(version.to_i) ? File.join(home, 'bin', 'java') : nil
+  end
+
+  # A JVM started while JAVA_TOOL_OPTIONS (or JDK_JAVA_OPTIONS) is set writes
+  # "Picked up JAVA_TOOL_OPTIONS: …" to stderr before anything else, so an arm
+  # that reads the merged output of an emitted `main` finds that line too.
+  # Drop it; it is the JVM's, not the program's.
+  JVM_NOTICE = /^(?:NOTE: )?Picked up (?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS):.*\R?/.freeze
+
+  def strip_jvm_notices(text)
+    text.to_s.gsub(JVM_NOTICE, '')
+  end
+
+  # Open3.capture2e on `java_bin`, with the JVM's notices dropped from the
+  # merged output (an arm that parses a `main`'s lines would otherwise read
+  # "Picked up JAVA_TOOL_OPTIONS: …" as one of them).
+  def java_capture2e(*args)
+    out, status = Open3.capture2e(java_bin, *args)
+    [strip_jvm_notices(out), status]
+  end
+
+  # Raised instead of a skip when KJUI_REQUIRE_KOTLINC=1 (CI's kjui leg sets
+  # it once it has fetched the compiler): a leg that is meant to compile must
+  # not go back to pending without anyone seeing it.
+  class Unavailable < StandardError; end
 
   # nil when a compile can be attempted; otherwise why it cannot.
   def unavailable_reason
-    return 'no JDK 17 at /opt/homebrew/opt/openjdk@17' unless java_bin
+    reason = find_unavailable_reason
+    if reason && ENV['KJUI_REQUIRE_KOTLINC'] == '1'
+      raise Unavailable, "KJUI_REQUIRE_KOTLINC=1 and the Kotlin compiler is unavailable: #{reason}"
+    end
+
+    reason
+  end
+
+  def find_unavailable_reason
+    unless java_bin
+      return 'no JDK 17 at /opt/homebrew/opt/openjdk@17, no KOTLINC_JAVA, ' \
+             "no JAVA_HOME with Java #{ACCEPTED_JAVA_MAJORS.min}-#{ACCEPTED_JAVA_MAJORS.max}"
+    end
     return 'no kotlin-compiler-embeddable in the Gradle cache' unless compiler_jar
 
     missing = REQUIRED.reject { |g, a| newest(g, a) }
@@ -134,7 +199,7 @@ module KotlinCompiler
       return Run.new(false, errors, '') unless errors.empty?
 
       stdout, stderr, status = Open3.capture3(java_bin, '-cp', "#{out_dir}:#{target_cp}", 'EmittedKt')
-      Run.new(status.success?, status.success? ? [] : [stderr.strip], stdout)
+      Run.new(status.success?, status.success? ? [] : [strip_jvm_notices(stderr).strip], stdout)
     end
   end
 end
@@ -153,6 +218,8 @@ RSpec::Matchers.define :compile_as_kotlin do |*libraries|
     missing = libraries.reject { |lib| KotlinCompiler.newest(*KotlinCompiler::LIBRARIES.fetch(lib)) }
     unless missing.empty?
       message = "compile_as_kotlin: not in the Gradle cache: #{missing.join(', ')}"
+      raise KotlinCompiler::Unavailable, message if ENV['KJUI_REQUIRE_KOTLINC'] == '1'
+
       example = RSpec.current_example
       RSpec::Core::Pending.mark_skipped!(example, message) if example
       raise RSpec::Core::Pending::SkipDeclaredInExample, message
