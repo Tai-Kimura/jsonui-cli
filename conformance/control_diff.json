@@ -2716,9 +2716,9 @@
       "fixture": "common/effectStyle__dark",
       "platforms": [
         "android",
-        "ios",
         "web"
-      ]
+      ],
+      "note": "ios dropped 2026-09-28: the common effectStyle fixtures moved from a Blur host to the default View host (rules.COMMON_HOST_OVERRIDES), and no ios path draws effectStyle on a View — sjui_tools reads it only in blur_converter.rb and SwiftJsonUI Dynamic only in BlurConverter.swift (read, not measured). The earlier ios entry was measured on the Blur host, where Dark is Blur's own declared value. The missing View path is a defect to file, not an accepted state."
     },
     {
       "fixture": "common/effectStyle__extralight",

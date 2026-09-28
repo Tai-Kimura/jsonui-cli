@@ -4793,7 +4793,7 @@
       "attribute": "effectStyle",
       "case": "light",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Light",
@@ -4808,8 +4808,8 @@
       "test": "fixtures/common/effectStyle__light.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__dark",
@@ -4817,7 +4817,7 @@
       "attribute": "effectStyle",
       "case": "dark",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Dark",
@@ -4832,8 +4832,8 @@
       "test": "fixtures/common/effectStyle__dark.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__extralight",
@@ -4841,7 +4841,7 @@
       "attribute": "effectStyle",
       "case": "extralight",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "ExtraLight",
@@ -4856,8 +4856,8 @@
       "test": "fixtures/common/effectStyle__extralight.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__regular",
@@ -4865,7 +4865,7 @@
       "attribute": "effectStyle",
       "case": "regular",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Regular",
@@ -4880,8 +4880,8 @@
       "test": "fixtures/common/effectStyle__regular.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__prominent",
@@ -4889,7 +4889,7 @@
       "attribute": "effectStyle",
       "case": "prominent",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Prominent",
@@ -4904,8 +4904,8 @@
       "test": "fixtures/common/effectStyle__prominent.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__ultrathin",
@@ -4913,7 +4913,7 @@
       "attribute": "effectStyle",
       "case": "ultrathin",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "UltraThin",
@@ -4928,8 +4928,8 @@
       "test": "fixtures/common/effectStyle__ultrathin.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__thin",
@@ -4937,7 +4937,7 @@
       "attribute": "effectStyle",
       "case": "thin",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Thin",
@@ -4952,8 +4952,8 @@
       "test": "fixtures/common/effectStyle__thin.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__thick",
@@ -4961,7 +4961,7 @@
       "attribute": "effectStyle",
       "case": "thick",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Thick",
@@ -4976,8 +4976,8 @@
       "test": "fixtures/common/effectStyle__thick.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/effectStyle__chrome",
@@ -4985,7 +4985,7 @@
       "attribute": "effectStyle",
       "case": "chrome",
       "class": "visual",
-      "host": "Blur",
+      "host": "View",
       "writtenKey": "effectStyle",
       "aliasOf": null,
       "value": "Chrome",
@@ -5000,8 +5000,8 @@
       "test": "fixtures/common/effectStyle__chrome.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/effectStyle@Blur__root.backdrop-b5f80259",
-      "control": "__control/Blur__root.backdrop-b5f80259"
+      "peerGroup": "common/effectStyle@View__no-background_root.backdrop-5f535fdc",
+      "control": "__control/View__no-background_root.backdrop-5f535fdc"
     },
     {
       "id": "common/enabled__true",
@@ -26090,7 +26090,9 @@
       "aliasOf": null,
       "value": null,
       "platforms": [
-        "ios"
+        "ios",
+        "android",
+        "web"
       ],
       "mode": null,
       "deprecated": null,

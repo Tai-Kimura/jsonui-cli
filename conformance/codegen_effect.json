@@ -4,6 +4,16 @@
   "entries": [
     {
       "component": "common",
+      "attribute": "effectStyle",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "sjui_tools: follow-up ticket to file (ios has no View path for common.effectStyle), for the release after 1.9.0",
+      "reason": "The common effectStyle fixtures moved from a Blur host to the default View host (rules.COMMON_HOST_OVERRIDES), so common's spellings are now judged on a node that declares them. sjui_tools reads effectStyle only in blur_converter.rb, so a View emits exactly its control for every value. Android (modifier_builder.rb) and web (base_converter.rb) draw a non-Blur node's material as a scrim plus a blur; ios had no such route and the Blur host hid it.",
+      "note": "Fix: give a non-Blur node the same material route the Blur converter has (VisualEffectStyle), in sjui_tools and in SwiftJsonUI Dynamic, which also reads effectStyle only in its Blur converter."
+    },
+    {
+      "component": "common",
       "attribute": "tintColor",
       "platform": "android",
       "check": "C0",
