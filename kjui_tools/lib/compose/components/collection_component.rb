@@ -32,10 +32,11 @@ module KjuiTools
         # One place, so the next arm inherits the rule instead of having to
         # remember it. `index_expr` is the loop variable that arm happens to
         # bind ($cellIndex / $index / $page); `extra` is any modifier chain
-        # that arm needs after the tag.
-        def self.cell_test_tag_modifier(collection_id, index_expr, depth, extra = '')
+        # that arm needs after the tag; `lead` any it needs before the tag
+        # (the pager's page padding).
+        def self.cell_test_tag_modifier(collection_id, index_expr, depth, extra = '', lead: '')
           tag = collection_id ? ".testTag(\"#{JsonUIShared::StringLiterals.kotlin_body(collection_id)}_item_\$#{index_expr}\")" : ''
-          indent("modifier = Modifier#{tag}#{extra}", depth)
+          indent("modifier = Modifier#{lead}#{tag}#{extra}", depth)
         end
 
         # defaultScrollAnchor (center / bottom): where the list starts, applied
@@ -1785,6 +1786,18 @@ module KjuiTools
             code += indent("}", depth) + "\n"
           end
 
+          # The content padding — contentPadding / insets, insetHorizontal /
+          # insetVertical and the safe area, added side by side as on every
+          # other route (collection_stack_content_padding_expr) — pads EACH
+          # PAGE'S CELL inside the page, as sjui pads the page's cell
+          # (add_paging_cell) and KotlinJsonUI Dynamic its page box: a page
+          # stays the pager's width, so no neighbouring page shows in the
+          # padding, which HorizontalPager's own `contentPadding` would do.
+          # The pager read no insets through jsonui-cli 1.9.0.
+          page_padding = collection_stack_content_padding_expr(json_data, is_horizontal: true)
+          code += indent("val pagePadding = #{page_padding}", depth) + "\n" if page_padding
+          cell_lead = page_padding ? '.padding(pagePadding)' : ''
+
           # HorizontalPager
           code += indent("HorizontalPager(", depth)
           code += "\n" + indent("state = pagerState", depth + 1)
@@ -1810,7 +1823,7 @@ module KjuiTools
 
           # Render cell content
           if !one_section && sources.any?
-            code += paging_cells(json_data, sources, depth + 1)
+            code += paging_cells(json_data, sources, depth + 1, cell_lead)
           elsif one_section
             cell_view_name = sections.first['cell']
             if cell_view_name
@@ -1836,7 +1849,7 @@ module KjuiTools
               code += "\n" + indent("#{cell_class}View(", depth + 3)
               code += "\n" + indent("viewModel = cellViewModel,", depth + 4)
               collection_id = json_data['id']
-              code += "\n" + cell_test_tag_modifier(collection_id, 'page', depth + 4, '.fillMaxSize()')
+              code += "\n" + cell_test_tag_modifier(collection_id, 'page', depth + 4, '.fillMaxSize()', lead: cell_lead)
               code += "\n" + indent(")", depth + 3)
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
@@ -1887,7 +1900,9 @@ module KjuiTools
         # The page body: the source the page falls in, and its cell there. A
         # page's index counts across all the sources, so `page` is the pager's
         # own index and the item's test tag and ViewModel key are unique.
-        def self.paging_cells(json_data, sources, depth)
+        # `lead`: the page's padding (generate_paging_horizontal), before the
+        # cell's test tag so the tag's bounds are the padded cell's.
+        def self.paging_cells(json_data, sources, depth, lead = '')
           code = "\n" + indent("var pageStart = 0", depth)
           sources.each_with_index do |(cell, _), n|
             cell_class = cell_class_name(cell)
@@ -1899,7 +1914,7 @@ module KjuiTools
             code += "\n" + indent("}", depth + 1)
             code += "\n" + indent("#{cell_class}View(", depth + 1)
             code += "\n" + indent("viewModel = cellViewModel,", depth + 2)
-            code += "\n" + cell_test_tag_modifier(json_data['id'], 'page', depth + 2, '.fillMaxSize()')
+            code += "\n" + cell_test_tag_modifier(json_data['id'], 'page', depth + 2, '.fillMaxSize()', lead: lead)
             code += "\n" + indent(")", depth + 1)
             code += "\n" + indent("}", depth)
             code += "\n" + indent("pageStart += pageSection#{n}.size", depth) if n < sources.size - 1
