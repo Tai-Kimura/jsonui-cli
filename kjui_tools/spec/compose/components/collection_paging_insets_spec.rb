@@ -67,6 +67,7 @@ RSpec.describe 'kjui codegen: a paging Collection pads each page cell by its ins
     }
     class ScreenModel
     inline fun <reified T : Any> viewModel(key: String? = null): T = T::class.java.getDeclaredConstructor().newInstance()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
     class CollectionDataSection(val cells: CellData? = null) {
         class CellData(val viewName: String, val data: List<Map<String, Any>>)

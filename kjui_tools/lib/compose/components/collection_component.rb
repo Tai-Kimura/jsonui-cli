@@ -896,6 +896,7 @@ module KjuiTools
           required_imports&.add(:lazy_grid)
           required_imports&.add(:grid_item_span)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:remember) # seed_view_model_line
           
           # Resolve the grid column count. The top-level `columns` attribute
           # accepts either a literal Int or a `@{prop}` binding (see
@@ -1275,12 +1276,47 @@ module KjuiTools
           "#{receiver}#{conversion}"
         end
 
+        # A cell's (or a section header's / footer's) ViewModel handed its
+        # data BEFORE its view composes, emitted right after the
+        # `viewModel(key = …)` line and before the LaunchedEffect that feeds it.
+        #
+        # `viewModel(key = …)` makes a fresh ViewModel for a key it has not
+        # seen — a cell composed for the first time, or a cell whose key
+        # moved with its contents (autoChangeTrackingId) — and the
+        # LaunchedEffect runs only once the frame is composed. So that first
+        # frame drew the cell from its layout's defaults (a label bound
+        # `gone` by the data drew visible: a cell of another height for one
+        # frame, and in a reverseLayout list every row above it jumped).
+        #
+        # The cell view reads `viewModel.data.collectAsState()`, whose first
+        # value is the StateFlow's value when it is first composed; this runs
+        # earlier in the same composition, so the view's first frame has the
+        # cell's data. The data lives in a MutableStateFlow, not snapshot
+        # state, so this is no composition-time snapshot write. Keyed on the
+        # ViewModel and the data, it runs once per new ViewModel or new data
+        # and never on a plain recomposition, so a cell's own writes to its
+        # ViewModel stay until its data changes — as with the effect. It
+        # returns the data rather than Unit (Compose lint RememberReturnType).
+        #
+        # Not `viewModel(key = …) { … }` (the initializer overload): the cell
+        # ViewModel is the project's own class (an AndroidViewModel as
+        # scaffolded, its constructor the project's to change), so kjui cannot
+        # construct it; and a reused ViewModel would not be seeded by it.
+        #
+        # The LaunchedEffect stays: on the first frame it re-applies the same
+        # data, which changes nothing (an equal Data; a MutableStateFlow
+        # conflates it).
+        def self.seed_view_model_line(view_model, data, depth)
+          indent("remember(#{view_model}, #{data}) { #{view_model}.updateData(#{data}); #{data} }", depth)
+        end
+
         # One cell, with `sectionIndex`, `cellIndex` and `currentCellData` in
         # scope: its own ViewModel fed the cell's data — the scaffold's
         # `XView(viewModel, modifier)`, as the sections path calls it.
         def self.class_list_cell(json_data, cell_name, depth, required_imports, cell_extra: '')
           cell_class = cell_class_name(cell_name)
           code = "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_class}_cell_\${sectionIndex}_\${cellIndex}_\${viewModel.hashCode()}\")", depth)
+          code += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth)
           code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth)
           on_item_appear = json_data['onItemAppear']
           if on_item_appear.is_a?(String) && on_item_appear.match(/@\{([^}]+)\}/)
@@ -1323,6 +1359,7 @@ module KjuiTools
 
         def self.register_class_list_imports(names, required_imports)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:remember) # seed_view_model_line
           names.compact.each { |name| required_imports&.add("cell:#{name}") }
         end
 
@@ -1566,6 +1603,7 @@ module KjuiTools
                   code += "\n" + indent("#{section_var}.header?.let { headerData ->", depth + 2)
                   code += "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth + 3)
                   code += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{header_view_name}_header_#{index}_\${viewModel.hashCode()}\")", depth + 4)
+                  code += "\n" + seed_view_model_line("headerViewModel", "headerData.data", depth + 4)
                   code += "\n" + indent("LaunchedEffect(headerData.data) {", depth + 4)
                   code += "\n" + indent("headerViewModel.updateData(headerData.data)", depth + 5)
                   code += "\n" + indent("}", depth + 4)
@@ -1631,6 +1669,7 @@ module KjuiTools
                 else
                   code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 5)
                 end
+                code += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth + 5)
                 code += "\n" + indent("LaunchedEffect(currentCellData) {", depth + 5)
                 code += "\n" + indent("cellViewModel.updateData(currentCellData)", depth + 6)
                 code += "\n" + indent("}", depth + 5)
@@ -1667,6 +1706,7 @@ module KjuiTools
                   code += "\n" + indent("#{section_var}.footer?.let { footerData ->", depth + 2)
                   code += "\n" + indent("item(span = { GridItemSpan(maxLineSpan) }) {", depth + 3)
                   code += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{footer_view_name}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 4)
+                  code += "\n" + seed_view_model_line("footerViewModel", "footerData.data", depth + 4)
                   code += "\n" + indent("LaunchedEffect(footerData.data) {", depth + 4)
                   code += "\n" + indent("footerViewModel.updateData(footerData.data)", depth + 5)
                   code += "\n" + indent("}", depth + 4)
@@ -1690,6 +1730,7 @@ module KjuiTools
         def self.generate_paging_horizontal(json_data, sections, depth, required_imports, parent_type)
           required_imports&.add(:horizontal_pager)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:remember) # seed_view_model_line
           required_imports&.add(:remember_state)
           required_imports&.add(:snapshot_flow)
 
@@ -1843,6 +1884,7 @@ module KjuiTools
               end
               code += "\n" + indent("if (item != null) {", depth + 2)
               code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_page_\${page}_\${viewModel.hashCode()}\")", depth + 3)
+              code += "\n" + seed_view_model_line("cellViewModel", "item", depth + 3)
               code += "\n" + indent("LaunchedEffect(item) {", depth + 3)
               code += "\n" + indent("cellViewModel.updateData(item)", depth + 4)
               code += "\n" + indent("}", depth + 3)
@@ -1909,6 +1951,7 @@ module KjuiTools
             code += "\n" + indent("if (page >= pageStart && page < pageStart + pageSection#{n}.size) {", depth)
             code += "\n" + indent("val item = pageSection#{n}[page - pageStart]", depth + 1)
             code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell}_page_\${page}_\${viewModel.hashCode()}\")", depth + 1)
+            code += "\n" + seed_view_model_line("cellViewModel", "item", depth + 1)
             code += "\n" + indent("LaunchedEffect(item) {", depth + 1)
             code += "\n" + indent("cellViewModel.updateData(item)", depth + 2)
             code += "\n" + indent("}", depth + 1)
@@ -2000,6 +2043,7 @@ module KjuiTools
           required_imports&.add(:flow_row)
           required_imports&.add(:arrangement)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:remember) # seed_view_model_line
           # FLOW_OVERFLOW_MODIFIER names Alignment.Top; wrapContentHeight itself
           # rides the foundation.layout.* import every generated file carries.
           required_imports&.add(:alignment)
@@ -2222,6 +2266,7 @@ module KjuiTools
               else
                 code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_flow_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", inner_depth)
               end
+              code += "\n" + seed_view_model_line("cellViewModel", "item", inner_depth)
               code += "\n" + indent("LaunchedEffect(item) {", inner_depth)
               code += "\n" + indent("cellViewModel.updateData(item)", inner_depth + 1)
               code += "\n" + indent("}", inner_depth)
@@ -2274,6 +2319,7 @@ module KjuiTools
           edge_class = cell_class_name(name)
           code = "\n" + indent("#{section_var}.#{kind}?.let { #{kind}Data ->", depth)
           code += "\n" + indent("val #{kind}ViewModel: #{edge_class}ViewModel = viewModel(key = \"#{name}_#{kind}_#{index}_\${viewModel.hashCode()}\")", depth + 1)
+          code += "\n" + seed_view_model_line("#{kind}ViewModel", "#{kind}Data.data", depth + 1)
           code += "\n" + indent("LaunchedEffect(#{kind}Data.data) { #{kind}ViewModel.updateData(#{kind}Data.data) }", depth + 1)
           code += "\n" + edge_view_call(edge_class, "#{kind}ViewModel", depth + 1)
           code + "\n" + indent("}", depth)
@@ -2315,6 +2361,7 @@ module KjuiTools
         # Dynamic reads it. scrollEnabled false stops the user's scrolling only.
         def self.generate_non_lazy(json_data, sections, depth, required_imports, parent_type, scroll_within_bounds: false)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:remember) # seed_view_model_line
           bound_mode = json_data['lazy'].is_a?(String) && json_data['lazy'][/\A@\{([^}]+)\}\z/, 1]
 
           items_property = json_data['items']
@@ -2417,6 +2464,7 @@ module KjuiTools
                 header_class = cell_class_name(section['header'])
                 code += "\n" + indent("#{section_var}.header?.let { headerData ->", depth + 2)
                 code += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 3)
+                code += "\n" + seed_view_model_line("headerViewModel", "headerData.data", depth + 3)
                 code += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 3)
                 code += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 3)
                 code += "\n" + indent("}", depth + 2)
@@ -2444,6 +2492,7 @@ module KjuiTools
                 else
                   out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", d)
                 end
+                out += "\n" + seed_view_model_line("cellViewModel", "currentCellData", d)
                 out += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", d)
                 out += "\n" + indent("#{cell_class}View(", d)
                 out += "\n" + indent("viewModel = cellViewModel,", d + 1)
@@ -2492,6 +2541,7 @@ module KjuiTools
                 footer_class = cell_class_name(section['footer'])
                 code += "\n" + indent("#{section_var}.footer?.let { footerData ->", depth + 2)
                 code += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 3)
+                code += "\n" + seed_view_model_line("footerViewModel", "footerData.data", depth + 3)
                 code += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 3)
                 code += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 3)
                 code += "\n" + indent("}", depth + 2)
@@ -2512,6 +2562,7 @@ module KjuiTools
         # horizontalScroll. Expects an already-scrollable parent.
         def self.generate_non_lazy_row(json_data, sections, depth, required_imports, parent_type)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:remember) # seed_view_model_line
 
           items_property = json_data['items']
 
@@ -2569,6 +2620,7 @@ module KjuiTools
               else
                 code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_rowCell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 4)
               end
+              code += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth + 4)
               code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 4)
               code += "\n" + indent("#{cell_class}View(", depth + 4)
               code += "\n" + indent("viewModel = cellViewModel,", depth + 5)
@@ -2641,6 +2693,7 @@ module KjuiTools
         def self.generate_collection_stack(json_data, sections, depth, required_imports, parent_type, is_horizontal:)
           required_imports&.add(:collection_stack)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:remember) # seed_view_model_line
           required_imports&.add(:remember_state)
 
           axis_kotlin = is_horizontal ? 'CollectionStackAxis.HORIZONTAL' : 'CollectionStackAxis.VERTICAL'
@@ -2993,6 +3046,7 @@ module KjuiTools
               out += "\n" + indent("section#{index}.header?.let { headerData ->", depth + 1)
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 3)
+              out += "\n" + seed_view_model_line("headerViewModel", "headerData.data", depth + 3)
               out += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 3)
               out += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 3)
               out += "\n" + indent("}", depth + 2)
@@ -3037,6 +3091,7 @@ module KjuiTools
             else
               out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 3)
             end
+            out += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth + 3)
             out += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 3)
             # The CollectionStack route is the one the sectioned single-column
             # fixtures take — the chrome and the declared cell sizes must
@@ -3068,6 +3123,7 @@ module KjuiTools
               out += "\n" + indent("section#{index}.footer?.let { footerData ->", depth + 1)
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 3)
+              out += "\n" + seed_view_model_line("footerViewModel", "footerData.data", depth + 3)
               out += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 3)
               out += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 3)
               out += "\n" + indent("}", depth + 2)
@@ -3114,6 +3170,7 @@ module KjuiTools
               header_class = cell_class_name(section['header'])
               out += "\n" + indent("section#{index}.header?.let { headerData ->", depth + 1)
               out += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 2)
+              out += "\n" + seed_view_model_line("headerViewModel", "headerData.data", depth + 2)
               out += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 2)
               out += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 2)
               out += "\n" + indent("}", depth + 1)
@@ -3145,6 +3202,7 @@ module KjuiTools
             else
               out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 3)
             end
+            out += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth + 3)
             out += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 3)
             # The CollectionStack route is the one the sectioned single-column
             # fixtures take — the chrome and the declared cell sizes must
@@ -3176,6 +3234,7 @@ module KjuiTools
               out += "\n" + indent("// Section #{index + 1} Footer: #{Helpers::ModifierBuilder.comment_text(section['footer'])}", depth + 1)
               out += "\n" + indent("section#{index}.footer?.let { footerData ->", depth + 1)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 2)
+              out += "\n" + seed_view_model_line("footerViewModel", "footerData.data", depth + 2)
               out += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 2)
               out += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 2)
               out += "\n" + indent("}", depth + 1)

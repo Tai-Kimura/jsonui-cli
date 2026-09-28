@@ -140,6 +140,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         if (slot.key != key1) { slot.key = key1; slot.value = calculation() }
         return slot.value as T
     }
+    fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = remember(listOf(key1, key2), calculation)
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
         val slot = Composition.slot { Keyed(Any(), null) }
         if (slot.key != key1) { slot.key = key1; Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } } }

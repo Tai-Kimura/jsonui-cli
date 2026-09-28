@@ -115,6 +115,7 @@ RSpec.describe 'kjui codegen: a grid per section' do
     fun Spacer(modifier: Modifier) { Layout.row?.append("_") }
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     inline fun <reified T : Any> viewModel(key: String? = null): T = T::class.java.getDeclaredConstructor().newInstance()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
     class CollectionDataSection(
         val header: HeaderFooterData? = null,

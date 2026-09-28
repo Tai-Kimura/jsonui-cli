@@ -116,6 +116,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     fun HorizontalPager(state: PagerState, modifier: Modifier = Modifier, pageContent: (Int) -> Unit) {}
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     inline fun <reified T> viewModel(key: String? = null): T = throw IllegalStateException()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     class RowCellViewModel { fun updateData(updates: Map<String, Any>) {} }
     @Composable fun RowCellView(viewModel: RowCellViewModel, modifier: Modifier = Modifier) {}
     data class RowCellData(val title: String = "") { fun toMap(): MutableMap<String, Any> = mutableMapOf("title" to title) }

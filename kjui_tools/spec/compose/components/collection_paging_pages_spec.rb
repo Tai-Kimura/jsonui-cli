@@ -69,6 +69,7 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
     // The screen's ViewModel: the pager writes the page it shows back here.
     class ScreenModel { val written = mutableListOf<Map<String, Any>>(); fun updateData(updates: Map<String, Any>) { written += updates } }
     inline fun <T> remember(key1: Any?, calculation: () -> T): T = calculation()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     object com { object kotlinjsonui { object utils { object CellIdGenerator {
         fun enrichCellIds(data: List<Map<String, Any>>, property: String): List<Map<String, Any>> = data
     } } } }
@@ -189,6 +190,7 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
               val item = cellData.data.getOrNull(page)
               if (item != null) {
                   val cellViewModel: CardCellViewModel = viewModel(key = "card_cell_page_${page}_${viewModel.hashCode()}")
+                  remember(cellViewModel, item) { cellViewModel.updateData(item); item }
                   LaunchedEffect(item) {
                       cellViewModel.updateData(item)
                   }

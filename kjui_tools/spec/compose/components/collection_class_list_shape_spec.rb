@@ -104,6 +104,7 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
     fun HorizontalPager(state: PagerState, modifier: Modifier = Modifier, pageContent: (Int) -> Unit) {}
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     inline fun <reified T> viewModel(key: String? = null): T = throw IllegalStateException()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
     class CollectionDataSection(
         val header: HeaderFooterData? = null,

@@ -130,6 +130,7 @@ RSpec.describe 'kjui codegen: a header or footer is a full-width row, the view a
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     inline fun <T> key(vararg keys: Any?, block: () -> T): T = block()
     inline fun <T> remember(key1: Any?, calculation: () -> T): T = calculation()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     object com { object kotlinjsonui { object utils { object CellIdGenerator {
         fun enrichCellIds(data: List<Map<String, Any>>, property: String): List<Map<String, Any>> = data
     } } } }

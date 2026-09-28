@@ -81,6 +81,7 @@ RSpec.describe 'kjui codegen: horizontal spacing' do
     fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: () -> Unit) {}
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     inline fun <reified T> viewModel(key: String? = null): T = throw IllegalStateException()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     class ACellViewModel { fun updateData(updates: Map<String, Any>) {} }
     class BCellViewModel { fun updateData(updates: Map<String, Any>) {} }
     @Composable fun ACellView(viewModel: ACellViewModel, modifier: Modifier = Modifier) {}
