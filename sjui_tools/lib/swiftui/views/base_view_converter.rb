@@ -672,6 +672,14 @@ module SjuiTools
             @modifier_bag.register_unless_exists(:clip_to_bounds, ".clipped()")
           end
 
+          # effectStyle material (non-Blur nodes). Registered here too so the
+          # converters that assemble their own chain (Label, Button,
+          # SelectBox, ...) draw it; apply_modifiers' apply_glass re-registers
+          # the slot with the material and any glass, material first.
+          if (effect_line = effect_style_line)
+            @modifier_bag.register_unless_exists(:glass, effect_line)
+          end
+
           # オフセット（offsetX, offsetY）
           register_offset_modifier
 
@@ -1778,9 +1786,55 @@ module SjuiTools
         # This emitter is the SwiftUI path, so it passes all four keys through;
         # the UIKit path cannot honour `identity` or `shape` and the
         # declaration says so.
+        # The :glass slot carries the node's materials: the `effectStyle`
+        # material first, then Liquid Glass over it. Both are "a material over
+        # whatever background is already there, clipped by :corner_radius",
+        # which is the slot's own reason for sitting where it does — so the
+        # effect material shares it instead of taking a new MODIFIER_ORDER key
+        # (a new key would move modifier_order.json, which SwiftJsonUI vendors
+        # at a pinned release). The Dynamic runtime's `glass` stage applies the
+        # two in the same order (DynamicModifierHelper.applyMaterials).
         def apply_glass
+          lines = [effect_style_line, glass_line].compact
+          return if lines.empty?
+
+          # A single call keeps the slot's old shape (a String); two go in as
+          # an Array, which emit_all and to_lines already write in order.
+          @modifier_bag.register(:glass, lines.length == 1 ? lines.first : lines)
+        end
+
+        # `common.effectStyle` on a node that is not a Blur: the declared
+        # visual-effect material, drawn behind the content through the ONE
+        # library table (`jsonUIVisualEffect` / `VisualEffectStyle`) that the
+        # Blur converter calls — so a View and a Blur declaring the same
+        # material cannot draw different pictures. Android (modifier_builder)
+        # and web (base_converter) already drew a non-Blur node's material;
+        # ios read the attribute only in blur_converter.rb, so a View emitted
+        # exactly its control for every value.
+        #
+        # A Blur is left alone: it applies its own declaration (Light / Dark /
+        # ExtraLight) in BlurConverter, which also calls apply_modifiers.
+        #
+        # The value is forwarded in its declared spelling, case and all
+        # (jsonui-cli 1.9.0); the library judges it against common's
+        # declaration and draws `Regular` for anything undeclared. A binding
+        # is not a spelling at all: it draws the default, as it does on web
+        # and in the Dynamic runtime (the typed parse keeps it `.unknown`).
+        def effect_style_line
+          value = @component['effectStyle']
+          return nil if value.nil?
+          return nil if JsonUIShared::TypeSynonyms.drawn_type(@component['type'].to_s) == 'Blur'
+
+          if value.is_a?(String) && !bound_value?(value)
+            ".jsonUIVisualEffect(#{swift_string_literal(value)})"
+          else
+            '.jsonUIVisualEffect(nil)'
+          end
+        end
+
+        def glass_line
           value = @component['glass']
-          return if value.nil? || value == false || value == 'false'
+          return nil if value.nil? || value == false || value == 'false'
 
           args = []
           if value.is_a?(Hash)
@@ -1799,7 +1853,7 @@ module SjuiTools
             end
           end
 
-          @modifier_bag.register(:glass, ".sjuiGlassEffect(#{args.join(', ')})")
+          ".sjuiGlassEffect(#{args.join(', ')})"
         end
 
         # Is this shape spelling one the SSoT declares?

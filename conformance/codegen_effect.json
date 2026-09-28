@@ -1,16 +1,5 @@
 {
   "schemaVersion": 1,
   "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
-  "entries": [
-    {
-      "component": "common",
-      "attribute": "effectStyle",
-      "platform": "ios",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "sjui_tools: follow-up ticket to file (ios has no View path for common.effectStyle), for the release after 1.9.0",
-      "reason": "The common effectStyle fixtures moved from a Blur host to the default View host (rules.COMMON_HOST_OVERRIDES), so common's spellings are now judged on a node that declares them. sjui_tools reads effectStyle only in blur_converter.rb, so a View emits exactly its control for every value. Android (modifier_builder.rb) and web (base_converter.rb) draw a non-Blur node's material as a scrim plus a blur; ios had no such route and the Blur host hid it.",
-      "note": "Fix: give a non-Blur node the same material route the Blur converter has (VisualEffectStyle), in sjui_tools and in SwiftJsonUI Dynamic, which also reads effectStyle only in its Blur converter."
-    }
-  ]
+  "entries": []
 }
