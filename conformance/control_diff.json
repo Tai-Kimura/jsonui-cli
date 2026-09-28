@@ -2709,7 +2709,8 @@
     {
       "fixture": "common/effectStyle__chrome",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
@@ -2723,43 +2724,50 @@
     {
       "fixture": "common/effectStyle__extralight",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
       "fixture": "common/effectStyle__light",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
       "fixture": "common/effectStyle__prominent",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
       "fixture": "common/effectStyle__regular",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
       "fixture": "common/effectStyle__thick",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
       "fixture": "common/effectStyle__thin",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
       "fixture": "common/effectStyle__ultrathin",
       "platforms": [
-        "android"
+        "android",
+        "web"
       ]
     },
     {
