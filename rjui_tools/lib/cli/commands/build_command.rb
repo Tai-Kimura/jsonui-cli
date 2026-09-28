@@ -342,6 +342,7 @@ module RjuiTools
           prune_orphan_viewmodel_bases(json_files)
           prune_layout_orphans
           prune_other_language_copies
+          prune_stale_helpers
 
           # Print all collected warnings at the end
           print_validation_summary
@@ -455,6 +456,73 @@ module RjuiTools
           orphans.report_lines(result, base: data.source_path).each do |level, line|
             level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
           end
+        end
+
+        # The helpers the build writes at the top of generated_directory
+        # (screenMarker, interactionStop, includeId, ...). A helper this build
+        # did not write stays behind otherwise — one a later version dropped,
+        # one an earlier (or later) version added, or includeId from a
+        # `jui build` that turned the include prefix on, followed by a
+        # standalone `rjui build` that does not (ticket
+        # rjui-clean-keeps-a-helper-the-running-version-no-longer-emits). Every
+        # build, not only `--clean`: the rule the layout-orphan sweep follows.
+        #
+        # Deleted: a file directly in generated_directory that `rjui build`
+        # marked as its own — the @generated sentinel AND its `Generator: rjui
+        # build` line — and that no emitter wrote this run. Named and kept: a
+        # file there carrying @generated under another generator's name (not
+        # provably ours). A file without the sentinel is the user's and is
+        # left alone silently. Not candidates: the outputs other stages own
+        # at the same level (ColorManager / theme.css — the colour stage, which
+        # can fail and carry on without rewriting them; StringManager — the
+        # strings stage), and everything below the top level (components,
+        # data, hooks, view model bases have their own prunes). Skipped when
+        # generated_directory is also one of those output directories.
+        HELPER_OWNED_ELSEWHERE = %w[ColorManager StringManager theme].freeze
+        HELPER_GENERATOR_LINE = /Generator:\s+rjui build\s*$/.freeze
+
+        def prune_stale_helpers
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          return unless Dir.exist?(generated_dir)
+
+          root = File.expand_path(generated_dir)
+          shared = [
+            @config['components_directory'], @config['data_directory'], @config['hooks_directory'],
+            @config['generated_viewmodels_directory'], @config['viewmodels_directory'],
+            @config['extensions_directory'], @config['lib_directory']
+          ].compact.map { |dir| File.expand_path(dir) }
+          return if shared.include?(root)
+
+          emitted = @emitted_helpers || Set.new
+          removed = []
+          kept = []
+          Dir.children(generated_dir).sort.each do |name|
+            path = File.join(generated_dir, name)
+            next unless File.file?(path)
+            next unless %w[.ts .js .tsx .jsx].include?(File.extname(name))
+            next if HELPER_OWNED_ELSEWHERE.include?(File.basename(name, File.extname(name)))
+            next if emitted.include?(File.expand_path(path))
+
+            head = File.foreach(path).first(JsonUIShared::GeneratedOrphans::HEAD_LINES)
+            next unless head.any? { |line| line.include?(JsonUIShared::GeneratedOrphans::SENTINEL) }
+
+            if head.any? { |line| line.match?(HELPER_GENERATOR_LINE) }
+              File.delete(path)
+              removed << path
+            else
+              kept << path
+            end
+          end
+
+          unless removed.empty?
+            Core::Logger.info("Pruned #{removed.size} generated helper(s) this build no longer writes:")
+            removed.each { |p| Core::Logger.info("  - #{p}") }
+          end
+          return if kept.empty?
+
+          Core::Logger.warn("#{kept.size} file(s) in #{generated_dir} carry @generated but not `rjui build`'s mark " \
+                            'and this build did not write them; they were kept:')
+          kept.each { |p| Core::Logger.warn("  - #{p}: delete it by hand if nothing imports it") }
         end
 
         # A project that changed `typescript` keeps what earlier builds wrote
@@ -599,6 +667,11 @@ module RjuiTools
         end
 
         private
+
+        # An emitter's record of the helper it wrote, for prune_stale_helpers.
+        def note_emitted_helper(path)
+          (@emitted_helpers ||= Set.new) << File.expand_path(path)
+        end
 
         def to_pascal_case(string)
           string.split(/[-_]/).map(&:capitalize).join
@@ -1464,6 +1537,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.info("Generated: #{path}")
         end
 
@@ -1511,6 +1585,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.info("Generated: #{path}")
         end
 
@@ -1548,6 +1623,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.info("Generated: #{path}")
         end
 
@@ -1684,6 +1760,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.info("Generated: #{path}")
         end
 
@@ -1810,6 +1887,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.success("Updated: #{path}")
         end
 
@@ -1997,6 +2075,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.success("Updated: #{path}")
         end
 
@@ -2098,6 +2177,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.success("Updated: #{path}")
         end
 
@@ -2323,6 +2403,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.success("Updated: #{path}")
         end
 
@@ -2402,6 +2483,7 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
           Core::Logger.success("Updated: #{path}")
         end
       end
