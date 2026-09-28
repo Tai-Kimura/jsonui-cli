@@ -11,26 +11,6 @@
       "owner": "sjui_tools: follow-up ticket to file (ios has no View path for common.effectStyle), for the release after 1.9.0",
       "reason": "The common effectStyle fixtures moved from a Blur host to the default View host (rules.COMMON_HOST_OVERRIDES), so common's spellings are now judged on a node that declares them. sjui_tools reads effectStyle only in blur_converter.rb, so a View emits exactly its control for every value. Android (modifier_builder.rb) and web (base_converter.rb) draw a non-Blur node's material as a scrim plus a blur; ios had no such route and the Blur host hid it.",
       "note": "Fix: give a non-Blur node the same material route the Blur converter has (VisualEffectStyle), in sjui_tools and in SwiftJsonUI Dynamic, which also reads effectStyle only in its Blur converter."
-    },
-    {
-      "component": "common",
-      "attribute": "tintColor",
-      "platform": "android",
-      "check": "C0",
-      "class": "unread-spelling",
-      "owner": "kjui_tools: ticket kjui-a-containers-tintcolor-reaches-no-descendant-control, for the release after 1.9.0",
-      "reason": "Ruling f5e6a502 (1.9.0): tintColor is the accent of the operable parts, never the text colour, so kjui dropped the LocalContentColor wrapper that coloured descendant text. A View has no operable part of its own, so Android now emits nothing for it; sjui emits .tint, which reaches a descendant control. Found after the 1.9.0 freeze; the user's ruling sends it to the next release.",
-      "note": "Fix: hand a container's tint down to the controls below it (their own tintColor wins), as .tint does on iOS."
-    },
-    {
-      "component": "common",
-      "attribute": "tintColor",
-      "platform": "android",
-      "check": "C1",
-      "class": "bound-dropped",
-      "owner": "kjui_tools: ticket kjui-a-containers-tintcolor-reaches-no-descendant-control, for the release after 1.9.0",
-      "reason": "The bound form of the same: with nothing emitted for a View's tintColor, the binding has nowhere to go (see the C0 row).",
-      "note": "Goes with the C0 row."
     }
   ]
 }

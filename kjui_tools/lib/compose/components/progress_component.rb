@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/inherited_tint'
 
 module KjuiTools
   module Compose
@@ -57,14 +58,18 @@ module KjuiTools
           # Progress colors. `tintColor` is the cross-platform (UIKit)
           # spelling of the indicator colour — progressTintColor wins when
           # both are present.
+          # Without one of its own, the tint a container handed down
+          # (InheritedTint) — so the colour is always emitted.
           progress_tint = json_data['progressTintColor'] || json_data['tintColor']
-          if progress_tint || json_data['trackTintColor']
+          begin
             colors_params = []
-            
-            if progress_tint
-              color_resolved = Helpers::ResourceResolver.process_color(progress_tint, required_imports)
-              colors_params << "color = #{color_resolved}"
-            end
+
+            color_resolved = if progress_tint
+                               Helpers::ResourceResolver.process_color(progress_tint, required_imports)
+                             else
+                               Helpers::InheritedTint.accent(required_imports)
+                             end
+            colors_params << "color = #{color_resolved}"
             
             if json_data['trackTintColor']
               trackcolor_resolved = Helpers::ResourceResolver.process_color(json_data['trackTintColor'], required_imports)
@@ -72,7 +77,11 @@ module KjuiTools
             end
             
             if colors_params.any?
-              code += ",\n" + colors_params.map { |param| indent(param, depth + 1) }.join(",\n")
+              # After `(` (no argument yet) or a trailing `,` (the progress
+              # argument, with no modifier after it) no separator is added:
+              # the colour is always emitted now, and `(,` / `,,` do not parse.
+              separator = code.rstrip.end_with?('(', ',') ? "\n" : ",\n"
+              code += separator + colors_params.map { |param| indent(param, depth + 1) }.join(",\n")
             end
           end
           

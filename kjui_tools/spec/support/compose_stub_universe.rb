@@ -60,6 +60,14 @@ module ComposeStubUniverse
       class ProvidedValue
       class SafeAreaConfig(val ignoreBottom: Boolean = false)
       object LocalSafeAreaConfig { infix fun provides(value: SafeAreaConfig) = ProvidedValue() }
+      // KotlinJsonUI's com.kotlinjsonui.core.LocalJsonUITint / jsonUITintOr: a
+      // container's tintColor handed down (InheritedTint), and the read a
+      // control makes where it declares no accent of its own.
+      object LocalJsonUITint {
+          val current = Color()
+          infix fun provides(value: Color) = ProvidedValue()
+      }
+      fun jsonUITintOr(fallback: Color): Color = fallback
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
@@ -211,7 +219,10 @@ module ComposeStubUniverse
                fontSize: TextUnit = TextUnit(), fontStyle: FontStyle? = null, modifier: Modifier = Modifier,
                style: TextStyle? = null) {}
       fun Spacer(modifier: Modifier = Modifier) {}
-      fun RadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
+      class RadioButtonColors
+      object RadioButtonDefaults { fun colors(selectedColor: Color = Color(), unselectedColor: Color = Color()) = RadioButtonColors() }
+      fun RadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                      colors: RadioButtonColors = RadioButtonColors()) {}
       fun IconToggleButton(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier,
                            enabled: Boolean = true, content: () -> Unit) {}
       fun Icon(painter: Painter, contentDescription: String?, tint: Color = Color()) {}
@@ -244,11 +255,26 @@ module ComposeStubUniverse
       fun Image(painter: Painter, contentDescription: String?, modifier: Modifier = Modifier,
                 contentScale: ContentScale = ContentScale.Fit) {}
       fun AsyncImage(model: Any?, contentDescription: String?, modifier: Modifier = Modifier) {}
-      fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
-      fun Checkbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
+      class SwitchColors
+      object SwitchDefaults {
+          fun colors(checkedTrackColor: Color = Color(), uncheckedTrackColor: Color = Color(),
+                     checkedThumbColor: Color = Color(), uncheckedThumbColor: Color = Color()) = SwitchColors()
+      }
+      fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                 colors: SwitchColors = SwitchColors()) {}
+      class CheckboxColors
+      object CheckboxDefaults {
+          fun colors(checkedColor: Color = Color(), uncheckedColor: Color = Color(), checkmarkColor: Color = Color()) = CheckboxColors()
+      }
+      fun Checkbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                   colors: CheckboxColors = CheckboxColors()) {}
+      class SliderColors
+      object SliderDefaults {
+          fun colors(thumbColor: Color = Color(), activeTrackColor: Color = Color(), inactiveTrackColor: Color = Color()) = SliderColors()
+      }
       fun Slider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
                  valueRange: ClosedFloatingPointRange<Float> = 0f..1f, onValueChangeFinished: (() -> Unit)? = null,
-                 steps: Int = 0) {}
+                 steps: Int = 0, colors: SliderColors = SliderColors()) {}
       fun LinearProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
       // the determinate overload (Material3: `progress: () -> Float` first)
       fun LinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
@@ -315,6 +341,14 @@ module ComposeStubUniverse
           val current = false
           infix fun provides(value: Boolean) = ProvidedValue()
       }
+      // KotlinJsonUI's com.kotlinjsonui.core.LocalJsonUITint / jsonUITintOr: a
+      // container's tintColor handed down (InheritedTint), and the read a
+      // control makes where it declares no accent of its own.
+      object LocalJsonUITint {
+          val current = Color()
+          infix fun provides(value: Color) = ProvidedValue()
+      }
+      fun jsonUITintOr(fallback: Color): Color = fallback
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value

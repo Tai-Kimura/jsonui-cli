@@ -331,6 +331,11 @@ module KjuiTools
             hilt_viewmodel: "import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
             local_interaction_stopped: "import com.kotlinjsonui.core.LocalInteractionStopped",
+            # A container's tintColor handed down (InheritedTint): the local
+            # it provides, and the read a control makes where it declares no
+            # accent of its own.
+            local_jsonui_tint: "import com.kotlinjsonui.core.LocalJsonUITint",
+            jsonui_tint_or: "import com.kotlinjsonui.core.jsonUITintOr",
             # A group of single Radios written with a static selection keeps it in
             # the view's own map (RadioComponent / ComposeBuilder
             # #provide_radio_groups): the provider, its CompositionLocal and the

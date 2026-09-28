@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/inherited_tint'
 require_relative '../../core/normalization'
 require_relative '../../core/string_literals'
 
@@ -221,7 +222,9 @@ module KjuiTools
             # dynamic rendered theme-primary: same undeclared-default
             # divergence class as CustomTextField (parity family
             # kjui-codegen-tabview).
-            tint = json_data['tintColor'] ? Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports) : 'MaterialTheme.colorScheme.primary'
+            # Without a tintColor of its own, the tint a container handed
+            # down (InheritedTint), then theme primary.
+            tint = json_data['tintColor'] ? Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports) : Helpers::InheritedTint.accent(required_imports)
             unselected = json_data['unselectedColor'] ? Helpers::ResourceResolver.process_color(json_data['unselectedColor'], required_imports) : 'MaterialTheme.colorScheme.onSurfaceVariant'
             code += "\n" + indent("colors = NavigationBarItemDefaults.colors(", depth + 4)
             code += "\n" + indent("selectedIconColor = #{tint},", depth + 5)

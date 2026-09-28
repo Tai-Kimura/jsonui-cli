@@ -30,6 +30,7 @@ require_relative 'helpers/safe_area_edges'
 require_relative 'helpers/resource_resolver'
 require_relative 'helpers/visibility_helper'
 require_relative 'helpers/code_indent'
+require_relative 'helpers/inherited_tint'
 require_relative 'helpers/responsive_helper'
 require_relative 'helpers/section_extractor'
 require_relative 'components/text_component'
@@ -481,8 +482,10 @@ module KjuiTools
         end
         # TabView is on that list as a container, but its generate returns a
         # plain String, as Embed's does, so nothing wrapped it and a TabView's
-        # visibility drew nothing. Its visibility only: its tintColor is its
-        # own row (the selected tab's colour), not one handed down.
+        # visibility drew nothing. Its visibility only here: its tintColor is
+        # its own row (the selected tab's colour), and it is handed down to
+        # the tabs' views as any holder's is (InheritedTint, at
+        # provide_interaction_stop).
         if component_type == 'TabView' && code.is_a?(String) && !code.empty?
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
         end
@@ -723,8 +726,13 @@ module KjuiTools
       # CompositionLocalProvider adds no layout node, and its content lambda
       # has no receiver, so a weight / align on the node still resolves in
       # the scope around it.
+      #
+      # The same exits hand a container's tintColor down (InheritedTint): every
+      # node drawn reaches this call, so the tint provider is added here too.
       def provide_interaction_stop(json_data, code, depth)
         return code unless code.is_a?(String) && !code.empty?
+
+        code = Helpers::InheritedTint.provide(json_data, code, depth, @required_imports)
         return code unless JsonUIShared::TapAccessibility.hands_stop_down?(json_data)
 
         @required_imports&.add(:composition_local_provider)
@@ -1439,11 +1447,13 @@ module KjuiTools
         # horizontal) — anything else through generate_component
         custom = self.class.custom_component_types.include?(component_type)
         drawn = custom ? child_data : JsonUIShared::TypeSynonyms.drawn(child_data)
+        # The two inline containers hand their tintColor down as the
+        # generate_component exits do (InheritedTint).
         case custom ? nil : (drawn['type'] || 'View')
         when 'ScrollView'
-          generate_scroll_with_constraints(drawn, ref_name, constraints, depth)
+          Helpers::InheritedTint.provide(drawn, generate_scroll_with_constraints(drawn, ref_name, constraints, depth), depth, @required_imports)
         when 'View'
-          generate_view_with_constraints(drawn, ref_name, constraints, depth)
+          Helpers::InheritedTint.provide(drawn, generate_view_with_constraints(drawn, ref_name, constraints, depth), depth, @required_imports)
         else
           # For other types, generate normally but wrap with constraint modifier
           generate_component_with_constraints(child_data, ref_name, constraints, depth)

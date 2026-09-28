@@ -5,6 +5,7 @@ require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/inherited_tint'
 require_relative '../../core/normalization'
 
 module KjuiTools
@@ -187,15 +188,18 @@ module KjuiTools
         # `iconColor` measured as unread on android (plan 49 lane C).
         def self.checkbox_colors_arg(json_data, required_imports, depth)
           checked_color_value = json_data['checkColor'] || json_data['checkedColor'] || json_data['tintColor'] || json_data['onTintColor']
-          return '' unless checked_color_value || json_data['uncheckedColor'] || json_data['iconColor']
 
           required_imports&.add(:checkbox_colors)
           colors_params = []
 
-          if checked_color_value
-            checked_color = Helpers::ResourceResolver.process_color(checked_color_value, required_imports)
-            colors_params << "checkedColor = #{checked_color}"
-          end
+          # The box's accent: the CheckBox's own, else the tint a container
+          # handed down (InheritedTint) — so the colors are always emitted.
+          checked_color = if checked_color_value
+                            Helpers::ResourceResolver.process_color(checked_color_value, required_imports)
+                          else
+                            Helpers::InheritedTint.accent(required_imports)
+                          end
+          colors_params << "checkedColor = #{checked_color}"
 
           if json_data['uncheckedColor']
             unchecked_color = Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)

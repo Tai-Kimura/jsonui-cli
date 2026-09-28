@@ -6,6 +6,7 @@ require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/inherited_tint'
 require_relative '../../core/string_literals'
 require_relative '../../core/layout_path'
 
@@ -121,16 +122,14 @@ module KjuiTools
                 end
                 code += "\n" + indent("}", depth + 3)
                 
-                # RadioButton colors
-                if json_data['selectedColor'] || json_data['checkedColor'] || json_data['unselectedColor'] || json_data['uncheckedColor'] || json_data['iconColor']
+                # RadioButton colors — always emitted: the selected colour is
+                # the Radio's own, else the tint a container handed down
+                # (selected_accent).
+                begin
                   required_imports&.add(:radio_colors)
                   colors_params = []
-                  
-                  selected = json_data['selectedColor'] || json_data['checkedColor']
-                  if selected
-                    selectedcolor_resolved = Helpers::ResourceResolver.process_color(selected, required_imports)
-                    colors_params << "selectedColor = #{selectedcolor_resolved}"
-                  end
+
+                  colors_params << "selectedColor = #{selected_accent(json_data, required_imports)}"
                   
                   # `uncheckedColor` is the cross-platform spelling of the
                   # same colour; the Compose-native name wins when both exist.
@@ -187,7 +186,9 @@ module KjuiTools
               if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
                 code += "\n" + indent(click, depth + 5)
               end
-              code += "\n" + indent("}", depth + 4)
+              code += "\n" + indent("},", depth + 4)
+              required_imports&.add(:radio_colors)
+              code += "\n" + indent("colors = RadioButtonDefaults.colors(selectedColor = #{selected_accent(json_data, required_imports)})", depth + 4)
               code += "\n" + indent(")", depth + 3)
               code += "\n" + indent("Spacer(modifier = Modifier.width(8.dp))", depth + 3)
               code += "\n" + indent("Text(option)", depth + 3)
@@ -368,7 +369,9 @@ module KjuiTools
               selected_color = Helpers::ResourceResolver.process_color(color, required_imports)
               code += "\n" + indent("            tint = if (isSelected) #{selected_color} else Color.Gray", depth)
             else
-              code += "\n" + indent("            tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray", depth)
+              # No colour of its own: the tint a container handed down, else
+              # theme primary (InheritedTint).
+              code += "\n" + indent("            tint = if (isSelected) #{Helpers::InheritedTint.accent(required_imports)} else Color.Gray", depth)
             end
             
             code += "\n" + indent("        )", depth)
@@ -533,7 +536,9 @@ module KjuiTools
             if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
               code += "\n" + indent("                #{click}", depth)
             end
-            code += "\n" + indent("            }", depth)
+            code += "\n" + indent("            },", depth)
+            required_imports&.add(:radio_colors)
+            code += "\n" + indent("            colors = RadioButtonDefaults.colors(selectedColor = #{selected_accent(json_data, required_imports)})", depth)
             code += "\n" + indent("        )", depth)
             code += "\n" + indent("        Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
             # The option's label: fontColor, and fontSize / font as the single
@@ -566,6 +571,17 @@ module KjuiTools
         # iconColor is a single tint for the whole glyph, so it applies to BOTH
         # states — unlike selectedColor / tintColor, which only set the selected
         # one. For a Checkbox the glyph is the tick, hence checkmarkColor.
+        # The selected button's colour: the Radio's own — `selectedColor` /
+        # `checkedColor`, then `tintColor`, the control's accent (the order
+        # KotlinJsonUI Dynamic's buttonColorValues reads) — else the tint a
+        # container handed down (InheritedTint).
+        def self.selected_accent(json_data, required_imports)
+          own = json_data['selectedColor'] || json_data['checkedColor'] || json_data['tintColor']
+          return Helpers::InheritedTint.accent(required_imports) unless own
+
+          Helpers::ResourceResolver.process_color(own, required_imports)
+        end
+
         def self.icon_appearance_args(json_data, required_imports, control)
           args = []
           # iconSize sizes the GLYPH: Material draws its glyph at a fixed
@@ -594,13 +610,15 @@ module KjuiTools
                          Helpers::ResourceResolver.process_color(json_data['unselectedColor'] || json_data['uncheckedColor'], required_imports)
             selected ||= icon_color
             unselected ||= icon_color
-            if selected || unselected
-              required_imports&.add(:radio_colors)
-              parts = []
-              parts << "selectedColor = #{selected}" if selected
-              parts << "unselectedColor = #{unselected}" if unselected
-              args << "colors = RadioButtonDefaults.colors(#{parts.join(', ')})"
-            end
+            # Then the Radio's tintColor (the control's accent), else the tint
+            # a container handed down (selected_accent) — so the colours are
+            # always emitted.
+            selected ||= selected_accent(json_data, required_imports)
+            required_imports&.add(:radio_colors)
+            parts = []
+            parts << "selectedColor = #{selected}"
+            parts << "unselectedColor = #{unselected}" if unselected
+            args << "colors = RadioButtonDefaults.colors(#{parts.join(', ')})"
           when :checkbox
             if icon_color
               required_imports&.add(:checkbox_colors)

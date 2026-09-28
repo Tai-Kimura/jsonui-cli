@@ -732,7 +732,7 @@
         "string",
         "binding"
       ],
-      "description": "Tint color - hex string or color name from colors.json (binding supported). It is the accent of the node's operable parts, SwiftUI `.tint` / CSS `accent-color`: a control's accent, a link's colour, the text cursor - never the text colour (jsonui-cli 1.9.0 ruling). From 1.9.0 Compose no longer tints the text or icons inside a tinted node (the LocalContentColor wrap is gone), as iOS and web never did. The per-type declarations say what the accent is on that type (TextField: the cursor; Switch / Slider / Progress: the tint; Segment / TabView: the selected item)."
+      "description": "Tint color - hex string or color name from colors.json (binding supported). It is the accent of the node's operable parts, SwiftUI `.tint` / CSS `accent-color`: a control's accent, a link's colour, the text cursor - never the text colour (jsonui-cli 1.9.0 ruling). From 1.9.0 Compose no longer tints the text or icons inside a tinted node (the LocalContentColor wrap is gone), as iOS and web never did. The per-type declarations say what the accent is on that type (TextField: the cursor; Switch / Slider / Progress: the tint; Segment / TabView: the selected item). A container's tintColor reaches the controls inside it (included views, cells and embedded screens too), as SwiftUI's `.tint` does: on Compose, from the release after jsonui-cli 1.9.1, through the library's LocalJsonUITint; a control's own tintColor (or a more specific colour such as onTintColor) wins. Images and icons do not take it."
     },
     "binding": {
       "type": [

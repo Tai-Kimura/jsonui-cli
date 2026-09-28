@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/inherited_tint'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/static_seed'
 require_relative '../../core/enum_spelling'
@@ -83,14 +84,19 @@ module KjuiTools
           # it skins the OFF state, which `onTintColor` overrides when on
           # (switch.trackColors in shared/core/attribute_semantics.json).
           off_track_color = json_data['trackTintColor'] || json_data['offTintColor']
-          if track_color || off_track_color || json_data['thumbTintColor']
+          # The on-track is the accent: the Switch's own, else the tint a
+          # container handed down (InheritedTint) — so the colors are always
+          # emitted.
+          begin
             required_imports&.add(:switch_colors)
             colors_params = []
 
-            if track_color
-              checkedtrackcolor_resolved = Helpers::ResourceResolver.process_color(track_color, required_imports)
-              colors_params << "checkedTrackColor = #{checkedtrackcolor_resolved}"
-            end
+            checkedtrackcolor_resolved = if track_color
+                                           Helpers::ResourceResolver.process_color(track_color, required_imports)
+                                         else
+                                           Helpers::InheritedTint.accent(required_imports)
+                                         end
+            colors_params << "checkedTrackColor = #{checkedtrackcolor_resolved}"
 
             if off_track_color
               uncheckedtrackcolor_resolved = Helpers::ResourceResolver.process_color(off_track_color, required_imports)
@@ -170,14 +176,19 @@ module KjuiTools
           # Switch colors — same canonical/legacy pair as the block above.
           track_color = json_data['onTintColor'] || json_data['tint'] || json_data['tintColor']
           off_track_color = json_data['trackTintColor'] || json_data['offTintColor']
-          if track_color || off_track_color || json_data['thumbTintColor']
+          # The on-track is the accent: the Switch's own, else the tint a
+          # container handed down (InheritedTint) — so the colors are always
+          # emitted.
+          begin
             required_imports&.add(:switch_colors)
             colors_params = []
 
-            if track_color
-              checkedtrackcolor_resolved = Helpers::ResourceResolver.process_color(track_color, required_imports)
-              colors_params << "checkedTrackColor = #{checkedtrackcolor_resolved}"
-            end
+            checkedtrackcolor_resolved = if track_color
+                                           Helpers::ResourceResolver.process_color(track_color, required_imports)
+                                         else
+                                           Helpers::InheritedTint.accent(required_imports)
+                                         end
+            colors_params << "checkedTrackColor = #{checkedtrackcolor_resolved}"
 
             if off_track_color
               uncheckedtrackcolor_resolved = Helpers::ResourceResolver.process_color(off_track_color, required_imports)
