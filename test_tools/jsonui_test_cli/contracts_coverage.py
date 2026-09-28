@@ -1442,8 +1442,11 @@ def _gate_line(version: str) -> str:
     """The one line about the gate: on, announced, withdrawn, unreadable, or
     not declared."""
     if gate_is_on(version):
+        # The release it shipped as, not the literal: "1.8.121" was announced
+        # and 1.9.0 cut (shared/core/gate_versions.DISPLAY_RELEASE).
+        shown = getattr(_gates(), "display", lambda literal: literal)(VALIDATE_GATE_FROM)
         return (f"validate gates on contracts coverage (from jsonui-cli "
-                f"{VALIDATE_GATE_FROM}): it fails on entries not in the baseline, on "
+                f"{shown}): it fails on entries not in the baseline, on "
                 "baselined entries that are closed, on baselined entries gone from the "
                 "run, and on what cannot be baselined")
     state = gate_state()

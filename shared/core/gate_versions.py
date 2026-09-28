@@ -18,7 +18,8 @@ coverage (`VALIDATE_GATE_FROM`, test_tools), the spec validator's layout ids
 (`UNMATCHED_GATE_FROM`) and the tag gate. The "withdrawn" defect appeared in
 two of them in two different shapes (the gate always on; generation
 stopping) precisely because each had its own copy. The literals stay next to
-their owners; only the reading is here.
+their owners; only the reading is here — and, for a literal that names a
+release which never shipped, the release a user can install (`display`).
 
 Loaded by file path through each package's `shared_core` loader (it imports
 nothing of its own, like every module under shared/core).
@@ -77,3 +78,21 @@ def state_note(name: str, literal: str | None) -> str:
     if state == "undeclared":
         return f"version not declared ({name}) — this build announces no release"
     return ""
+
+
+#: A literal that names a release which was never cut -> the first release at
+#: or above it, by hand. v1.8.120 announced "1.8.121"; the next release shipped
+#: as 1.9.0. The literal itself stays what was announced — the tag gate
+#: (validate_gate_version.py) fails a literal the release does not come after,
+#: and "running >= literal" is the same comparison either way — so only what
+#: a line PRINTS changes: a user is never told about a version they cannot
+#: install. Written here, not derived: which releases were cut is a fact of the
+#: release history, not of the number.
+DISPLAY_RELEASE = {"1.8.121": "1.9.0"}
+
+
+def display(literal: str | None) -> str | None:
+    """The release a gate line names for *literal*: the release it shipped
+    as (`DISPLAY_RELEASE`), else the literal unchanged. Only for a gate that
+    is ON — an announcement names the literal as announced."""
+    return DISPLAY_RELEASE.get(literal, literal) if isinstance(literal, str) else literal

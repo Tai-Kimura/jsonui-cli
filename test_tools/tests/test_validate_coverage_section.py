@@ -260,6 +260,18 @@ class TestTheGateVersion:
             "coverage gate cannot be read — shared/core/gate_versions.py is not in this "
             "tool tree, so this build announces no release and does not gate")
 
+    def test_the_on_line_names_the_release_it_shipped_as(self, monkeypatch):
+        # v1.8.120 announced "1.8.121"; it shipped as 1.9.0. The literal stays
+        # (the tag gate holds it), the line names what a user can install.
+        monkeypatch.setattr(cc, "VALIDATE_GATE_FROM", "1.8.121")
+        assert cc._gate_line("1.9.0").startswith(
+            "validate gates on contracts coverage (from jsonui-cli 1.9.0): ")
+        # an announcement names the literal as announced
+        assert cc._gate_line("1.8.120") == cc.VALIDATE_NOTICE.format(version="1.8.121")
+        # a literal that was cut is printed as is
+        monkeypatch.setattr(cc, "VALIDATE_GATE_FROM", "1.8.120")
+        assert "(from jsonui-cli 1.8.120)" in cc._gate_line("1.9.0")
+
     def test_control_a_release_number_is_one(self):
         assert cc.gate_state("1.8.120") == "release" and cc.gate_is_on("1.8.120", "1.8.120")
 
