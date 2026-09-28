@@ -734,12 +734,23 @@ waited. A screen with no `delayMs` generates what it did.
 
 ### Web: `settle` and `settleQuiet`
 
-The web runtime (`tests/unit/generated/jsonui-branch-runtime.ts`) exports two
-waits. A generated row calls `settleQuiet()` after building the harness and
-after the act, and `settleQuiet({ rec, expect: [...] })` when the row expects
-ops: it returns once no request is in flight and nothing arrived or was
-answered for 400 ms (and, given `expect`, the recorder has each op), so a
-row's absences are claimed over that window. A hand-written test's `settle()`
+The web runtime (`tests/unit/generated/jsonui-branch-runtime.ts`) exports the
+waits. A generated row calls `settleQuiet()` after the act, and
+`settleQuiet({ rec, expect: [...] })` when the row expects ops: it returns
+once no request is in flight and nothing arrived or was answered for 400 ms
+(and, given `expect`, the recorder has each op), so a row's absences are
+claimed over that window. It also closes early — after about ten idle
+macrotask turns — once nothing is due: no request in flight, no delayed
+response, and no timer the row scheduled through `setTimeout` /
+`setInterval` still pending (the runtime watches those from
+`installFetchMock` to `restore()`). A timer pending keeps the 400 ms window,
+so a late call a view model sends from a timer inside the window is still
+recorded; a timer further out (a long `setInterval`, a `setTimeout` of
+seconds) is not waited for — the row returns at the window, as before. After
+building the harness a row calls `settleHarness()`: `settleQuiet()`, skipped
+when construction made no request and scheduled no timer. A test that
+replaces the timers after the install (`vi.useFakeTimers()` inside the row)
+gets the window, without the early close. A hand-written test's `settle()`
 and `settle(n)` do what they did in 1.8.120: drain ten (or n) macrotask turns
 and wait for every delayed response — no quiet window, so each call takes
 about as long as its turns. `settle({ rec, expect })` is `settleQuiet({ rec,
