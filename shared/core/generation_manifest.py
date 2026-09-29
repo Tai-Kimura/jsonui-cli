@@ -346,7 +346,7 @@ class GenerationRun:
         paths = list(paths)
         listings = listing_memo()
         self.roots = None if roots is None else tuple(
-            self._key(r, listings=listings) for r in roots)
+            self._root_key(r, listings=listings) for r in roots)
         self.observed = len(paths)
         for path in paths:
             state = _state_of(path)
@@ -370,7 +370,7 @@ class GenerationRun:
         keys = sorted(self._key(Path(self.project_root) / k, listings=listings)
                       for k in keys)
         self.roots = None if roots is None else tuple(
-            self._key(r, listings=listings) for r in roots)
+            self._root_key(r, listings=listings) for r in roots)
         self.observed = len(keys)
         self.written_keys = keys
         self._refuse_outside_roots(keys)
@@ -696,6 +696,38 @@ class GenerationRun:
             return p.relative_to(root).as_posix()
         except ValueError:
             return p.as_posix()
+
+
+    def _root_key(self, path, *, listings: dict | None = None) -> str:
+        """A declared scan root as `summary.run.scan.roots` records it.
+
+        `_key`, and where `_key` falls back to the absolute path — a root
+        outside the project, i.e. the `--app` docs directory of a split tree —
+        the path relative to the project root instead (`../docs/<face>`).
+        The manifest is a tracked file on some faces: an absolute root put
+        the operator's home directory into it on every doc run, a diff the
+        face could neither commit (public repository) nor stop (reported
+        2026-09-29, `doc-run-manifest-scan-roots-absolute-path`). The
+        relative spelling is what `outsideOutput.scopeRelative` already says
+        for the same directory, and `_canonical_roots` joins a relative root
+        onto the project root, so the comparison is unchanged.
+
+        Relative between the two REAL paths: `real_case` keeps a symlinked
+        prefix as given (`/var` vs `/private/var` on macOS), and a relpath
+        across two spellings of one prefix climbs to `/` and back down. Only
+        when no relative form exists at all (another drive) is the absolute
+        one kept.
+        """
+        key = self._key(path, listings=listings)
+        if not Path(key).is_absolute():
+            return key
+        try:
+            rel = os.path.relpath(
+                real_case(Path(os.path.realpath(path)), listings=listings),
+                real_case(Path(os.path.realpath(self.project_root)), listings=listings))
+        except ValueError:
+            return key
+        return Path(rel).as_posix()
 
 
 #: The name the ticket used. Same object.
