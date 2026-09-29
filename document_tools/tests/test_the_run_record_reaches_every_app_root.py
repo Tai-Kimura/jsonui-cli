@@ -27,6 +27,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -306,3 +307,37 @@ def test_a_split_tree_run_writes_no_absolute_path_into_either_manifest(split_tre
         # relative — not dropped (an empty record would pass the check above).
         assert run["outsideOutput"]["directories"], run["outsideOutput"]
         assert run["outsideOutput"]["scope"] == [".", docs]
+
+
+def test_a_run_with_leftovers_writes_no_absolute_path_either(split_tree):
+    """The shape the arm above never had: a LEFTOVER. Through 1.9.4 the four
+    leftover fields (`leftoverPaths`, `leftoverOutsidePaths`,
+    `leftoverOutsideSiteCopies`, `leftoverOutsideReferencedBy`) were written
+    `str(path)`, so one stale page put the checkout's path back into the
+    tracked manifest. 1.9.4's acceptance was measured on a tree with none
+    (found 2026-09-29). Planted: one aged page under -o and one in a
+    directory the run writes outside it."""
+    args = ("--app", f"a:{split_tree / 'docs' / 'a'}", "--app", f"b:{split_tree / 'docs' / 'b'}")
+    _run(split_tree, *args)
+    first = _manifest(split_tree / "a")["summary"]["run"]["outsideOutput"]["directories"]
+    assert first, "fixture: the run must write outside -o"
+    old = time.time() - 3600
+    planted = [split_tree / "out" / "gone.html",
+               ((split_tree / "a") / first[0] / "gone_too.html")]
+    for p in planted:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("<p>old</p>", encoding="utf-8")
+        os.utime(p, (old, old))
+    _run(split_tree, *args)
+    prefixes = {str(split_tree), str(split_tree.resolve())}
+    a_raw = (split_tree / "a" / ".jsonui-cli" / "generation-manifest.json").read_text(encoding="utf-8")
+    run = json.loads(a_raw)["summary"]["run"]
+    # The premise, first: both leftovers were found and recorded.
+    assert run["leftovers"] == 1 and run["leftoversOutside"] == 1, run
+    base = (split_tree / "a").resolve()
+    assert [(base / x).resolve() for x in run["leftoverPaths"]] == [planted[0].resolve()]
+    assert [(base / x).resolve() for x in run["leftoverOutsidePaths"]] == [planted[1].resolve()]
+    for face in ("a", "b"):
+        raw = (split_tree / face / ".jsonui-cli" / "generation-manifest.json").read_text(encoding="utf-8")
+        leaked = sorted(p for p in prefixes if p in raw)
+        assert leaked == [], f"{face}: the manifest names the checkout {leaked}"

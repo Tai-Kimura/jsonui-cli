@@ -94,8 +94,12 @@ def test_each_face_records_the_leftovers_under_its_own_scope(run):
     a = _manifest(site / "a")["summary"]["run"]
     b = _manifest(site / "b")["summary"]["run"]
     assert a["leftoversOutside"] == 2
-    assert set(a["leftoverOutsidePaths"]) == {str(orphan), str(orphan_md)}
-    assert a["leftoverOutsideSiteCopies"] == [str(site_copy)]
+    # Relative to the face's root since 1.9.5 (a tracked manifest must not
+    # carry the checkout's path); resolved back, they are the same files.
+    ra = (site / "a").resolve()
+    assert {(ra / x).resolve() for x in a["leftoverOutsidePaths"]} == {orphan.resolve(), orphan_md.resolve()}
+    assert all(not Path(x).is_absolute() for x in a["leftoverOutsidePaths"] + a["leftoverOutsideSiteCopies"])
+    assert [(ra / x).resolve() for x in a["leftoverOutsideSiteCopies"]] == [site_copy.resolve()]
     # Explicit zero on the face with none — an answer, not an absence.
     assert b["leftoversOutside"] == 0 and b["leftoverOutsidePaths"] == [] and b["leftoverOutsideSiteCopies"] == []
 
@@ -186,7 +190,10 @@ def test_an_orphan_that_tests_still_name_is_reported_as_theirs_not_as_deletable(
     targets = [{"app": "a", "root": site / "a", "docs": docs["a"]}]
     gen._record_generation_manifest(out, targets, [], {}, stale_outside=pairs)
     refs = _manifest(site / "a")["summary"]["run"]["leftoverOutsideReferencedBy"]
-    assert refs[str(orphan)] == 2 and refs[str(orphan_md)] == 0
+    ra = (site / "a").resolve()
+    by_file = {(ra / k).resolve(): n for k, n in refs.items()}
+    assert all(not Path(k).is_absolute() for k in refs)
+    assert by_file[orphan.resolve()] == 2 and by_file[orphan_md.resolve()] == 0
 
 
 def test_the_document_writer_registers_its_source_and_its_referrers(tmp_path, monkeypatch):

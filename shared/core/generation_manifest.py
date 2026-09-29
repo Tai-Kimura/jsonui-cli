@@ -499,7 +499,13 @@ class GenerationRun:
         f = self._facts_dict()
         stale = list(stale)
         f["leftovers"] = len(stale)
-        f["leftoverPaths"] = [str(p) for p in stale[:20]]
+        # Relative to the project root, like every other path in the record:
+        # through 1.9.4 these four were `str(p)`, so a face with a single
+        # leftover had its checkout's absolute path in a tracked manifest —
+        # 1.9.4's "no absolute path" acceptance was measured on a specimen
+        # with no leftovers (found 2026-09-29 while measuring 1.9.5).
+        rel = self._spelled
+        f["leftoverPaths"] = [rel(p) for p in stale[:20]]
         if len(stale) > 20:
             f["leftoverPathsNote"] = f"first 20 of {len(stale)}"
         listings = listing_memo()
@@ -509,10 +515,10 @@ class GenerationRun:
         f["leftoversOutside"] = len(mine)
         f["leftoversOutsideScanned"] = len(list(walked_dirs))
         f["collidingSourceNames"] = list(colliding_sources)
-        f["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
-        f["leftoverOutsideSiteCopies"] = [str(c) for _p, copies in mine[:20] for c in copies]
+        f["leftoverOutsidePaths"] = [rel(p) for p, _c in mine[:20]]
+        f["leftoverOutsideSiteCopies"] = [rel(c) for _p, copies in mine[:20] for c in copies]
         f["leftoverOutsideReferencedBy"] = {
-            str(p): len(referrers.get(Path(p).resolve(), [])) for p, _c in mine[:20]}
+            rel(p): len(referrers.get(Path(p).resolve(), [])) for p, _c in mine[:20]}
         if len(mine) > 20:
             f["leftoverOutsidePathsNote"] = f"first 20 of {len(mine)}"
 
@@ -721,12 +727,19 @@ class GenerationRun:
         key = self._key(path, listings=listings)
         if not Path(key).is_absolute():
             return key
+        return self._spelled(path, listings=listings)
+
+    def _spelled(self, path, *, listings: dict | None = None) -> str:
+        """Any path as the record writes it: relative to the project root
+        (`../` where the layout climbs out of it), between the two REAL paths
+        — see `_root_key` for why. Absolute only where no relative form
+        exists at all (another drive)."""
         try:
             rel = os.path.relpath(
                 real_case(Path(os.path.realpath(path)), listings=listings),
                 real_case(Path(os.path.realpath(self.project_root)), listings=listings))
         except ValueError:
-            return key
+            return str(path)
         return Path(rel).as_posix()
 
 

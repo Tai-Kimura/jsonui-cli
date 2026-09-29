@@ -298,7 +298,11 @@ def test_every_root_records_the_same_leftover_not_one_each(tmp_path):
     per_root = {}
     for entry in roots:
         run = _manifest(Path(entry["root"]))["summary"]["run"]
-        per_root[entry["app"]] = (run["leftovers"], tuple(run.get("leftoverPaths", ())))
+        # Compared as FILES: since 1.9.5 each root spells the paths relative
+        # to itself, so two roots at different depths name one page two ways.
+        base = Path(entry["root"]).resolve()
+        per_root[entry["app"]] = (run["leftovers"], tuple(sorted(
+            str((base / x).resolve()) for x in run.get("leftoverPaths", ()))))
     assert len(set(per_root.values())) == 1, (
         f"the roots disagree about the run's leftovers, so the term is "
         f"ambiguous: {per_root}")
