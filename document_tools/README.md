@@ -121,6 +121,12 @@ user_repository:
   containing `.`, a duplicate key, a merge key (`<<:`), a list or empty
   value, and a reference in a field that is not prose. A key of the paired
   file that no field references is a warning.
+- `jsonui-test` refuses a spec whose reference cannot be resolved, with the
+  same message: `generate branch-tests` and `contracts coverage` report it
+  as a problem of that spec (exit 1 / not evaluated), and
+  `generate unit-stubs` (with or without `--check`) stops before comparing
+  or writing anything. A sub-spec's reference is resolved against the
+  sub-spec's own texts file only.
 - Needs `PyYAML` and `markdown-it-py` (declared dependencies) — but only
   for a spec that uses a reference. A spec with a reference fails
   validation, naming the `pip install`, when either is missing; a spec with

@@ -30,6 +30,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import branch_runtime_prose as prose
 from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
@@ -37,6 +38,20 @@ from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
 
 class BranchTestGenerationError(Exception):
     """Raised for vocabulary that cannot be bound to real assets."""
+
+
+class SpecTextsError(BranchTestGenerationError):
+    """A spec's `{"md": ...}` prose reference could not be resolved.
+
+    Raised by `_load_spec_result`, so every command that reads a spec here
+    refuses it the same way: a scan reports it as a problem of that spec
+    (and fails), a single-spec command stops with it. Never "read it anyway":
+    the unresolved value is a dict, and the reader that emits prose — a unit
+    stub's failure message, the unit page — printed its repr.
+
+    The message is the resolver's own (shared/core/spec_texts.py), which
+    names the field — the same sentence `jsonui-doc validate` prints.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +164,8 @@ def _merge_parent_spec_result(parent_path: Path) -> tuple[dict | None, str | Non
     except ImportError:
         return None, None
     try:
-        return ParentSpecMerger(spec_dir=parent_path.parent).merge_from_file(
-            parent_path).spec, None
+        result = ParentSpecMerger(spec_dir=parent_path.parent).merge_from_file(
+            parent_path)
     except ValueError as e:
         # A declaration the parent may not carry. `jui build` reports this in
         # its own run; a read-only caller needs to know its input was refused,
@@ -158,21 +173,39 @@ def _merge_parent_spec_result(parent_path: Path) -> tuple[dict | None, str | Non
         return None, str(e)
     except (OSError, KeyError, json.JSONDecodeError):
         return None, None
+    # The merger resolves each sub-spec's references against that sub-spec's
+    # own texts file and leaves what it could not resolve in place; the
+    # merged dict no longer says which file a field came from, so this is
+    # the only point the failure can still be named. `getattr`: a jui_cli
+    # older than texts files has no such list.
+    texts_errors = getattr(result, "texts_errors", None) or []
+    if texts_errors:
+        raise SpecTextsError(_texts_refusal(parent_path, texts_errors))
+    return result.spec, None
 
 
-def _with_texts(spec: dict, spec_file: Path) -> dict:
-    """`spec` with `{"md": ...}` prose references resolved (shared/core/
-    spec_texts.py). Unresolvable ones stay as written — the spec validator
-    is what reports them."""
+def _read_spec_texts(spec: Any, spec_file: Path) -> tuple[Any, list[str]]:
+    """``(spec with `{"md": ...}` prose resolved, the resolver's errors)``.
+
+    See shared/core/spec_texts.py. An unresolvable reference stays as
+    written in the returned spec; the caller decides — and every caller in
+    this package refuses (`SpecTextsError`, or a problem of that spec).
+    """
     _prefer_sibling_jui_cli()
     try:
         from jui_cli.core import shared_core
     except ImportError:
-        return spec
+        return spec, []
     texts = shared_core.load("spec_texts")
     if texts is None or not isinstance(spec, dict):
-        return spec
-    return texts.resolve_spec_texts(spec, spec_file).data
+        return spec, []
+    resolution = texts.resolve_spec_texts(spec, spec_file)
+    return resolution.data, list(resolution.errors)
+
+
+def _texts_refusal(spec_file: Path, errors: list[str]) -> str:
+    return (f"{Path(spec_file).name}: {len(errors)} text reference(s) could not "
+            f"be resolved, so this spec was not read — " + "; ".join(errors))
 
 
 def _load_spec(spec_file: Path) -> dict:
@@ -186,9 +219,14 @@ def _load_spec_result(spec_file: Path) -> tuple[dict, str | None]:
     A refusal means the returned dict is the RAW parent, including whatever
     the merger declined. Callers that count declarations must report it:
     counting a refused block reads as "the declaration was checked".
+
+    Raises `SpecTextsError` when a `{"md": ...}` reference — in this file or,
+    for a parent, in one of its sub-specs — cannot be resolved.
     """
     with open(spec_file, "r", encoding="utf-8") as f:
-        spec = _with_texts(json.load(f), spec_file)
+        spec, texts_errors = _read_spec_texts(json.load(f), spec_file)
+    if texts_errors:
+        raise SpecTextsError(_texts_refusal(spec_file, texts_errors))
     if spec.get("type") == PARENT_SPEC_TYPE:
         merged, refusal = _merge_parent_spec_result(spec_file)
         if merged is not None:
@@ -390,7 +428,13 @@ def discover_branch_screens(
                 path, spec_path):
             # Part of a screen, not a screen. Its parent carries it.
             continue
-        spec, refusal = _load_spec_result(path)
+        try:
+            spec, refusal = _load_spec_result(path)
+        except SpecTextsError as e:
+            # Fatal through the same `problems` a refused parent uses: this
+            # screen is scanned and NOT read.
+            problems.append(f"{screen}: {e}")
+            continue
         if refusal is not None:
             # The merger refused this parent, so `spec` is the RAW file — and
             # a raw parent carries no `branchContracts`: the block lives in the

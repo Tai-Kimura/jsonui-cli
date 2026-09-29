@@ -445,6 +445,14 @@ class NoReferencesNoDependency(_Dir):
         self.assertIn("PyYAML", w)
         self.assertIn("skipped", w)
 
+    def test_a_reference_without_pyyaml_names_the_field(self):
+        with _NoModule("yaml"):
+            r = self.resolve(_app_spec({"md": "k"}), "k: x\n")
+        (e,) = r.errors
+        self.assertIn("metadata.description", e)
+        self.assertIn("PyYAML", e)
+        self.assertIn("pip install pyyaml", e)
+
     def test_validation_passes_without_either_dependency(self):
         from jsonui_doc_cli import prose
         path = self.write("app.spec.json", _app_spec("plain"))

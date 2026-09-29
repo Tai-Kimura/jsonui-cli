@@ -101,6 +101,11 @@ class _TextsFile:
         self.branches: set[str] = set()
         self.errors: list[str] = []
         self.missing = False
+        #: PyYAML is not installed. Not a fault of the file, so it is not in
+        #: `errors`: each reference into it is named instead (the field is
+        #: what the author has to find), and a spec with no reference into
+        #: it is not failed for it.
+        self.no_parser = False
 
 
 def _yaml_loader():
@@ -192,9 +197,7 @@ def load_texts_file(path: Path) -> _TextsFile:
         return out
     yaml, loader = _yaml_loader()
     if yaml is None:
-        out.errors.append(
-            f"PyYAML is not installed, so {path.name} cannot be read — "
-            f"{_INSTALL_HINT}")
+        out.no_parser = True
         return out
     try:
         data = yaml.load(path.read_text(encoding="utf-8"), Loader=loader)
@@ -298,6 +301,11 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
             result.errors.append(
                 f"{where}: '{shown}' — {_rel(path, base)} does not exist")
             return ref
+        if loaded.no_parser:
+            result.errors.append(
+                f"{where}: '{shown}' cannot be read — PyYAML is not "
+                f"installed ({_INSTALL_HINT})")
+            return ref
         if key in loaded.leaves:
             used.setdefault(path.resolve(), set()).add(key)
             result.resolved += 1
@@ -350,6 +358,9 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
                 f"check of this file was skipped — {_INSTALL_HINT}")
             return result
         loaded = texts(paired)
+    if loaded is not None and loaded.no_parser:
+        # Referenced: each reference already failed, naming PyYAML.
+        return result
     if loaded is not None and not loaded.errors:
         unused = sorted(set(loaded.leaves) - used.get(paired.resolve(), set()))
         if unused:

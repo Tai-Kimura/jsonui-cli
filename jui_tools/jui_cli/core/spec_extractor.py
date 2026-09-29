@@ -434,8 +434,13 @@ def extract_screen_spec(spec_data: dict, spec_path=None) -> ScreenSpec:
         # reaches a generated doc comment is the text, not a dict repr. An
         # unresolvable reference is left as written; `jsonui-doc validate`
         # is what names it.
+        #
+        # Not for a merged parent: `spec_path` is then the PARENT's file,
+        # while each sub-spec's references were already resolved against
+        # their own file by the merger. Resolving again here read what a
+        # sub-spec could not resolve from the parent's texts file.
         texts = shared_core.load("spec_texts")
-        if texts is not None:
+        if texts is not None and not getattr(spec_data, "texts_resolved", False):
             spec_data = texts.resolve_spec_texts(spec_data, Path(spec_path)).data
     metadata = spec_data.get("metadata", {})
     structure = spec_data.get("structure", {})
