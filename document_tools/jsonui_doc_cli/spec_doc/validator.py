@@ -12,6 +12,15 @@ from typing import Any
 from .screen_spec_schema import SCREEN_SPEC_SCHEMA
 from .component_spec_schema import COMPONENT_SPEC_SCHEMA
 from .rules_config import CustomRules, load_rules_for_path
+
+
+def _match(pattern, value, flags=0):
+    """`re.match` for a value read from a spec: a non-string (a texts
+    reference in a field that is not prose, a number, a list) does not match
+    instead of raising TypeError out of the validator."""
+    if not isinstance(value, str):
+        return None
+    return re.match(pattern, value, flags)
 from .. import shared_core
 
 #: The three types the merger treats as one screen's documents.
@@ -240,10 +249,10 @@ class SpecValidator:
 
     def _matches_pattern_with_fallback(self, value: str, base_pattern: str, extra_patterns: list[str]) -> bool:
         """Check if value matches the base pattern or any extra pattern."""
-        if re.match(base_pattern, value):
+        if _match(base_pattern, value):
             return True
         for pattern in extra_patterns:
-            if re.match(pattern, value):
+            if _match(pattern, value):
                 return True
         return False
 
@@ -415,7 +424,7 @@ class SpecValidator:
 
         # Validate version format
         version = data.get("version", "")
-        if not re.match(r"^\d+\.\d+$", version):
+        if not _match(r"^\d+\.\d+$", version):
             result.errors.append(SpecValidationMessage(
                 path="version",
                 message=f"Invalid version format: '{version}'. Expected 'X.Y' (e.g., '1.0')"
@@ -553,7 +562,7 @@ class SpecValidator:
                 ))
 
         version = data.get("version", "")
-        if not re.match(r"^\d+\.\d+$", version):
+        if not _match(r"^\d+\.\d+$", version):
             result.errors.append(SpecValidationMessage(
                 path="version",
                 message=f"Invalid version format: '{version}'. Expected 'X.Y' (e.g., '1.0')"
@@ -687,7 +696,7 @@ class SpecValidator:
 
         # Validate name format (PascalCase for screen_spec, relaxed for screen_sub_spec)
         name = metadata.get("name", "")
-        if name and self._spec_type != "screen_sub_spec" and not re.match(r"^[A-Z][a-zA-Z0-9]*$", name):
+        if name and self._spec_type != "screen_sub_spec" and not _match(r"^[A-Z][a-zA-Z0-9]*$", name):
             result.errors.append(SpecValidationMessage(
                 path="metadata.name",
                 message=f"Name must be PascalCase: '{name}'"
@@ -697,7 +706,7 @@ class SpecValidator:
         for date_field in ["createdAt", "updatedAt"]:
             if date_field in metadata:
                 date_value = metadata[date_field]
-                if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_value):
+                if not _match(r"^\d{4}-\d{2}-\d{2}$", date_value):
                     result.warnings.append(SpecValidationMessage(
                         path=f"metadata.{date_field}",
                         message=f"Date should be YYYY-MM-DD format: '{date_value}'",
@@ -908,7 +917,7 @@ class SpecValidator:
 
         # Validate ID format (snake_case)
         comp_id = comp.get("id", "")
-        if comp_id and not re.match(r"^[a-z][a-z0-9_]*$", comp_id):
+        if comp_id and not _match(r"^[a-z][a-z0-9_]*$", comp_id):
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.id",
                 message=f"ID must be snake_case: '{comp_id}'"
@@ -975,7 +984,7 @@ class SpecValidator:
             return
 
         name = cc.get("name", "")
-        if name and not re.match(r"^[A-Z][a-zA-Z0-9]*$", name):
+        if name and not _match(r"^[A-Z][a-zA-Z0-9]*$", name):
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.name",
                 message=f"Custom component name must be PascalCase: '{name}'"
@@ -1008,7 +1017,7 @@ class SpecValidator:
         if not self._validate_required_fields(elem, ["id", "components"], path, result):
             return
         eid = elem.get("id", "")
-        if eid and not re.match(r"^[a-z][a-z0-9_]*$", eid):
+        if eid and not _match(r"^[a-z][a-z0-9_]*$", eid):
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.id",
                 message=f"ID must be snake_case: '{eid}'"
@@ -1047,7 +1056,7 @@ class SpecValidator:
         if not self._validate_required_fields(wv, ["id", "wraps"], path, result):
             return
         wid = wv.get("id", "")
-        if wid and not re.match(r"^[a-z][a-z0-9_]*$", wid):
+        if wid and not _match(r"^[a-z][a-z0-9_]*$", wid):
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.id",
                 message=f"ID must be snake_case: '{wid}'"
@@ -1304,7 +1313,7 @@ class SpecValidator:
                 path=f"{path}.regionId",
                 message="Embed requires 'regionId'",
             ))
-        elif not isinstance(rid, str) or not re.match(r"^[a-z][a-zA-Z0-9]*$", rid):
+        elif not isinstance(rid, str) or not _match(r"^[a-z][a-zA-Z0-9]*$", rid):
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.regionId",
                 message=(
@@ -1321,7 +1330,7 @@ class SpecValidator:
                 message="Embed requires 'screen' attribute",
             ))
             return
-        if not isinstance(screen, str) or not re.match(r"^[a-z][a-z0-9_]*$", screen):
+        if not isinstance(screen, str) or not _match(r"^[a-z][a-z0-9_]*$", screen):
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.screen",
                 message=(
@@ -1333,7 +1342,7 @@ class SpecValidator:
         # 2. screen reference: best-effort layout JSON file lookup
         if (
             isinstance(screen, str)
-            and re.match(r"^[a-z][a-z0-9_]*$", screen)
+            and _match(r"^[a-z][a-z0-9_]*$", screen)
             and self._spec_file_path
         ):
             spec_dir = self._spec_file_path.parent
@@ -1364,13 +1373,13 @@ class SpecValidator:
             else:
                 vm_vars = self._collect_vm_var_names()
                 for k, v in params.items():
-                    if not re.match(r"^[a-z][a-zA-Z0-9]*$", k):
+                    if not _match(r"^[a-z][a-zA-Z0-9]*$", k):
                         result.errors.append(SpecValidationMessage(
                             path=f"{path}.params.{k}",
                             message=f"params key must be camelCase, got '{k}'",
                         ))
                     if isinstance(v, str):
-                        m = re.match(r"^@\{([a-zA-Z0-9_.]+)\}$", v)
+                        m = _match(r"^@\{([a-zA-Z0-9_.]+)\}$", v)
                         if m and vm_vars:
                             head = m.group(1).split(".")[0]
                             if head not in vm_vars:
@@ -1405,7 +1414,7 @@ class SpecValidator:
             else:
                 handlers = self._collect_vm_handler_names()
                 for k, v in events.items():
-                    if not re.match(r"^on[A-Z][a-zA-Z0-9]*$", k):
+                    if not _match(r"^on[A-Z][a-zA-Z0-9]*$", k):
                         result.errors.append(SpecValidationMessage(
                             path=f"{path}.events.{k}",
                             message=(
@@ -2098,7 +2107,7 @@ class SpecValidator:
                         # Free-text signature — take the leading identifier.
                         # It carries no endpoint, so it can name a method but
                         # can never be a candidate the generator binds to.
-                        m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)", method)
+                        m = _match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)", method)
                         if m:
                             name = m.group(1)
                     elif isinstance(method, dict) and isinstance(method.get("name"), str):
@@ -2150,7 +2159,7 @@ class SpecValidator:
         endpoint = method.get("endpoint")
         if not isinstance(endpoint, str):
             return False
-        return bool(re.match(r"^([A-Z]+)\s+(\S+)$", endpoint.strip()))
+        return bool(_match(r"^([A-Z]+)\s+(\S+)$", endpoint.strip()))
 
     def _collect_transition_destinations(self) -> set[str]:
         names: set[str] = set()
@@ -2802,7 +2811,7 @@ class SpecValidator:
         whether the app's apiOutcomeRules name the op in `sideCalls`: there a
         row can say "not-called" (the generator serves it on its side route)
         and nothing else."""
-        if not re.match(
+        if not _match(
             r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$", op
         ):
             result.errors.append(SpecValidationMessage(
@@ -2919,7 +2928,7 @@ class SpecValidator:
             # and the value needs both documents, and `jsonui-test contracts
             # coverage` / `generate branch-tests` check it.
             name = key[len("harness."):]
-            if not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", name):
+            if not _match(r"^[A-Za-z][A-Za-z0-9_]*$", name):
                 result.errors.append(SpecValidationMessage(
                     path=entry_path,
                     message=(
@@ -3166,7 +3175,7 @@ class SpecValidator:
                         f"'{value}'"
                     ),
                 ))
-            elif not re.match(r"^response\.[A-Za-z_][A-Za-z0-9_]*"
+            elif not _match(r"^response\.[A-Za-z_][A-Za-z0-9_]*"
                               r"(\.([A-Za-z_][A-Za-z0-9_]*|[0-9]+))*$", ref):
                 result.errors.append(SpecValidationMessage(
                     path=path,
@@ -3177,7 +3186,7 @@ class SpecValidator:
                         f"'{value}'"
                     ),
                 ))
-        elif not re.match(r"^[a-z][a-z0-9_]*$", ref):
+        elif not _match(r"^[a-z][a-z0-9_]*$", ref):
             result.errors.append(SpecValidationMessage(
                 path=path,
                 message=(
@@ -4017,7 +4026,7 @@ class SpecValidator:
 
         # Validate version format
         version = data.get("version", "")
-        if not re.match(r"^\d+\.\d+$", version):
+        if not _match(r"^\d+\.\d+$", version):
             result.errors.append(SpecValidationMessage(
                 path="version",
                 message=f"Invalid version format: '{version}'. Expected 'X.Y' (e.g., '1.0')"
@@ -4053,7 +4062,7 @@ class SpecValidator:
 
         # Validate name format (PascalCase)
         name = metadata.get("name", "")
-        if name and not re.match(r"^[A-Z][a-zA-Z0-9]*$", name):
+        if name and not _match(r"^[A-Z][a-zA-Z0-9]*$", name):
             result.errors.append(SpecValidationMessage(
                 path="metadata.name",
                 message=f"Name must be PascalCase: '{name}'"
@@ -4072,7 +4081,7 @@ class SpecValidator:
         for date_field in ["createdAt", "updatedAt"]:
             if date_field in metadata:
                 date_value = metadata[date_field]
-                if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_value):
+                if not _match(r"^\d{4}-\d{2}-\d{2}$", date_value):
                     result.warnings.append(SpecValidationMessage(
                         path=f"metadata.{date_field}",
                         message=f"Date should be YYYY-MM-DD format: '{date_value}'",
@@ -4177,7 +4186,7 @@ class SpecValidator:
 
         # Validate ID format (snake_case)
         comp_id = comp.get("id", "")
-        if comp_id and not re.match(r"^[a-z][a-z0-9_]*$", comp_id):
+        if comp_id and not _match(r"^[a-z][a-z0-9_]*$", comp_id):
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.id",
                 message=f"ID must be snake_case: '{comp_id}'"

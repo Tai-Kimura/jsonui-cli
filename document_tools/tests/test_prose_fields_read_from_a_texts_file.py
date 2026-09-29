@@ -672,3 +672,22 @@ class StillNotProse(_Dir):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NonStringMetadataDoesNotCrash(_Dir):
+    """A reference in a screen spec's metadata.name or a date field is an
+    error, never a TypeError out of the name / date regex."""
+
+    def test_a_reference_in_name_or_a_date_is_reported(self):
+        for field in ("name", "updatedAt"):
+            with self.subTest(field=field):
+                spec = _wide_screen()
+                spec["metadata"][field] = {"md": "k"}
+                path = self.write("wide.spec.json", spec)
+                self.write("wide.texts.yaml", WIDE_YAML + "k: x\n")
+                result = SpecValidator().validate_file(path)
+                self.assertFalse(result.is_valid)
+                self.assertTrue(any(e.path == f"metadata.{field}"
+                                    or f"metadata.{field}" in e.message
+                                    for e in result.errors),
+                                [(e.path, e.message) for e in result.errors])
