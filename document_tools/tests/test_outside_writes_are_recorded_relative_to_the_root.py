@@ -69,8 +69,13 @@ def test_the_relative_form_walks_up_out_of_the_root_on_a_split_tree(tmp_path, mo
     # The scope has its relative twin: the root itself, then the --app docs.
     assert a["scopeRelative"] == [".", "../docs/a"]
     assert b["scopeRelative"] == [".", "../docs/b"]
-    # The absolute form stays, so nothing that reads it today breaks.
-    assert a["directories"] == [str((site / "docs" / "a" / "screens" / "html").resolve())]
+    # ⚠️ INVERTED 2026-09-29 (was: "the absolute form stays, so nothing that
+    # reads it today breaks"). No reader was found in any repository, and the
+    # absolute form was the reason the tracked manifest could not be
+    # committed (doc-run-manifest-scan-roots-absolute-path). `directories`
+    # now carries the relative spelling, same as its twin.
+    assert a["directories"] == a["directoriesRelative"] == ["../docs/a/screens/html"]
+    assert a["scope"] == a["scopeRelative"]
 
 
 def test_two_clones_at_different_paths_write_the_same_relative_list(tmp_path, monkeypatch):
@@ -87,7 +92,9 @@ def test_two_clones_at_different_paths_write_the_same_relative_list(tmp_path, mo
     for name in ("a", "b"):
         o1 = _manifest(first / name)["summary"]["run"]["outsideOutput"]
         o2 = _manifest(second / name)["summary"]["run"]["outsideOutput"]
-        assert o1["directories"] != o2["directories"]
+        # INVERTED 2026-09-29: the plain lists are relative now, so two clones
+        # at different paths write them identically too.
+        assert o1["directories"] == o2["directories"] and o1["directories"]
         # ⚠️ Assert the NON-NULL COUNT before the equality. On 2026-09-10 this
         # arm was first run against copies that were not git repositories, so
         # both sides came back [None, None, …] and the equality held on two
@@ -97,7 +104,7 @@ def test_two_clones_at_different_paths_write_the_same_relative_list(tmp_path, mo
                 len(o["directories"]), "every directory must have a relative form"
             assert all(x is not None for x in o["scopeRelative"])
         assert json.dumps(o1["directoriesRelative"]) == json.dumps(o2["directoriesRelative"])
-        assert o1["scopeRelative"] == o2["scopeRelative"] and o1["scope"] != o2["scope"]
+        assert o1["scopeRelative"] == o2["scopeRelative"] and o1["scope"] == o2["scope"]
 
 
 def test_a_directory_outside_the_repository_still_gets_its_relative_form(tmp_path, monkeypatch):
@@ -125,7 +132,7 @@ def test_a_directory_outside_the_repository_still_gets_its_relative_form(tmp_pat
         {"directories": [inside, far], "gitTrackedDirectories": {}, "uncheckable": []})
     block = _manifest(site / "a")["summary"]["run"]["outsideOutput"]
     # `inside` is under neither the root nor the (foreign) docs: out of scope.
-    assert block["directories"] == [far]
+    assert block["directories"] == [os.path.relpath(far, str((site / "a").resolve()))]
     # The relative form exists and leads there: no None, and it climbs out.
     assert block["directoriesRelative"] == [
         os.path.relpath(far, str((site / "a").resolve()))]

@@ -2431,6 +2431,33 @@ def _relative_to_root(directories: list, root: Path) -> list:
     return out
 
 
+def _spell_paths_relative(block: dict, root: Path) -> None:
+    """Every path the recorded block carries, relative to the manifest's root.
+
+    Until 1.9.3 `directories`, `scope`, the keys of `gitTrackedDirectories` /
+    `gitModifiedDirectories` and `uncheckable` stayed absolute beside their
+    relative twins, "so nothing that reads it today breaks". Measured
+    2026-09-29: no code in jsonui-cli, jsonui-mcp-server, jsonui-test-runner,
+    JsonUIDocument or either agents pack reads them, while two split-tree faces'
+    tracked manifests carried six home-directory paths each — the file a
+    public repository cannot commit (`doc-run-manifest-scan-roots-absolute-
+    path`). The key NAMES stay and so do the counts, so a reader that counts
+    entries reads the same number; only the spelling changed. The flags
+    above are computed first, from the absolute paths. A directory with no
+    relative form at all (another drive) keeps its absolute spelling.
+    """
+    def rel(values: list) -> list:
+        return [r if r is not None else str(v)
+                for v, r in zip(values, _relative_to_root(values, root))]
+    for key in ("directories", "scope", "uncheckable"):
+        if isinstance(block.get(key), list):
+            block[key] = rel(block[key])
+    for key in ("gitTrackedDirectories", "gitModifiedDirectories"):
+        if isinstance(block.get(key), dict):
+            names = list(block[key])
+            block[key] = dict(zip(rel(names), (block[key][n] for n in names)))
+
+
 def _outside_repo_flags(directories: list, root: Path) -> list:
     """For each directory, whether it lies outside the repository holding
     `root` — index-aligned with `directories` and `directoriesRelative`.
@@ -2563,8 +2590,9 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # `scope` read as "unrestricted" beside blocks that had it (measured on
         # one face's single-root run next to a four-root run, same version).
         block = _scope_outside(outside, scopes)
-        # The same directories relative to THIS manifest's root, beside the
-        # absolute ones. The manifest is a tracked file on some faces, and
+        # The same directories relative to THIS manifest's root (and, since
+        # 1.9.4, the plain keys are respelled that way too — see
+        # `_spell_paths_relative`). The manifest is a tracked file on some faces, and
         # an absolute path makes it machine-specific: a clone at another
         # path rewrites every line on its first run. Relative to the root —
         # `../docs/<face>/…` on a split tree, which is not a defect but the
@@ -2581,6 +2609,7 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # with a relative twin and another without. The root itself is `.`.
         block["scopeRelative"] = _relative_to_root(block["scope"], root)
         block["scopeOutsideRepo"] = _outside_repo_flags(block["scope"], root)
+        _spell_paths_relative(block, root)
         ledger.record_outside_output(block)
     # Its own key, not `collisions`: that word already belongs to the
     # manifest's count of keys whose spellings normalised onto one entry,

@@ -194,11 +194,14 @@ def test_outside_writes_are_scoped_to_each_root(two_roots):
         out, [{"app": "a", "root": roots["a"]}, {"app": "b", "root": roots["b"]}], [], outside)
     a = _manifest(roots["a"])["summary"]["run"]["outsideOutput"]
     b = _manifest(roots["b"])["summary"]["run"]["outsideOutput"]
-    assert a["directories"] == [a_dir] and b["directories"] == [b_dir]
-    assert a["gitTrackedDirectories"] == {a_dir: 5} and b["gitTrackedDirectories"] == {b_dir: 14}
-    assert a["gitModifiedDirectories"] == {} and b["gitModifiedDirectories"] == {b_dir: 2}
+    # Recorded relative to each face's root since 1.9.4 (a tracked manifest
+    # must not carry the operator's home directory); the scoping is the same.
+    assert a["directories"] == ["docs/components"] and b["directories"] == ["docs/requirements"]
+    assert a["gitTrackedDirectories"] == {"docs/components": 5}
+    assert b["gitTrackedDirectories"] == {"docs/requirements": 14}
+    assert a["gitModifiedDirectories"] == {} and b["gitModifiedDirectories"] == {"docs/requirements": 2}
     assert a["uncheckable"] == [] and b["uncheckable"] == []
-    assert a["scope"] == [str(roots["a"].resolve())] and b["scope"] == [str(roots["b"].resolve())]
+    assert a["scope"] == ["."] and b["scope"] == ["."]
 
 
 def test_a_single_root_block_is_scoped_and_says_so(two_roots):
@@ -211,8 +214,8 @@ def test_a_single_root_block_is_scoped_and_says_so(two_roots):
     outside = {"directories": ["/elsewhere/docs", own], "gitTrackedDirectories": {}, "uncheckable": []}
     gen._record_generation_manifest(out, roots["a"], [], outside)
     block = _manifest(roots["a"])["summary"]["run"]["outsideOutput"]
-    assert block["directories"] == [own]
-    assert block["scope"] == [str(roots["a"].resolve())] and block["scopeRelative"] == ["."]
+    assert block["directories"] == ["docs/html"]
+    assert block["scope"] == ["."] and block["scopeRelative"] == ["."]
     assert block["directoriesRelative"] == ["docs/html"]
     assert block["elsewhere"] == 1  # /elsewhere/docs: counted, not listed
 
@@ -234,9 +237,12 @@ def test_a_docs_directory_outside_the_root_is_still_the_faces_own(two_roots, tmp
               {"app": "b", "root": roots["b"], "docs": docs_b}], [], outside)
     a = _manifest(roots["a"])["summary"]["run"]["outsideOutput"]
     b = _manifest(roots["b"])["summary"]["run"]["outsideOutput"]
-    assert a["directories"] == [wa] and b["directories"] == [wb]
-    assert a["gitTrackedDirectories"] == {wa: 3} and b["gitTrackedDirectories"] == {wb: 4}
-    assert a["scope"] == [str(roots["a"].resolve()), str(docs_a.resolve())]
+    ra, rb = str(roots["a"].resolve()), str(roots["b"].resolve())
+    assert a["directories"] == [os.path.relpath(wa, ra)] and b["directories"] == [os.path.relpath(wb, rb)]
+    assert a["directories"][0].startswith("..")
+    assert a["gitTrackedDirectories"] == {os.path.relpath(wa, ra): 3}
+    assert b["gitTrackedDirectories"] == {os.path.relpath(wb, rb): 4}
+    assert a["scope"] == [".", os.path.relpath(str(docs_a.resolve()), ra)]
 
 
 @pytest.fixture()
@@ -270,7 +276,33 @@ def test_the_command_scopes_each_faces_record_to_its_own_docs_in_a_split_tree(sp
     # face's block names ITS docs and not the other's.
     oa = a.get("outsideOutput") or {}
     ob = b.get("outsideOutput") or {}
-    assert oa.get("scope") == [str(ra.resolve()), str((split_tree / "docs" / "a").resolve())]
-    assert all("/docs/a/" in d for d in oa.get("directories", [])), oa
-    assert all("/docs/b/" in d for d in ob.get("directories", [])), ob
+    assert oa.get("scope") == [".", "../docs/a"]
+    assert all(d.startswith("../docs/a/") for d in oa.get("directories", [])), oa
+    assert all(d.startswith("../docs/b/") for d in ob.get("directories", [])), ob
     assert oa.get("directories") and ob.get("directories"), (oa, ob)
+
+
+def test_a_split_tree_run_writes_no_absolute_path_into_either_manifest(split_tree):
+    """Regression: doc-run-manifest-scan-roots-absolute-path (2026-09-29).
+
+    The reporting faces track `.jsonui-cli/generation-manifest.json` in a
+    public repository. Through 1.9.3 every doc run over `--app <face>:<docs>`
+    wrote the checkout's absolute path into it — `summary.run.scan.roots`
+    (the --app docs directory, outside the face root) and six entries of
+    `outsideOutput` — so the file could not be committed and never stopped
+    differing. Measured on the real command, over the WHOLE file, with both
+    spellings of the temporary directory (macOS hands out `/var/…`, which
+    resolves to `/private/var/…`), so a path in either form is caught."""
+    _run(split_tree, "--app", f"a:{split_tree / 'docs' / 'a'}", "--app", f"b:{split_tree / 'docs' / 'b'}")
+    prefixes = {str(split_tree), str(split_tree.resolve())}
+    for face, docs in (("a", "../docs/a"), ("b", "../docs/b")):
+        path = split_tree / face / ".jsonui-cli" / "generation-manifest.json"
+        raw = path.read_text(encoding="utf-8")
+        leaked = sorted(p for p in prefixes if p in raw)
+        assert leaked == [], f"{face}: the manifest names the checkout {leaked}"
+        run = json.loads(raw)["summary"]["run"]
+        assert run["scan"]["roots"] == [".", docs]
+        # The positive side of the same file: the paths are still there, spelled
+        # relative — not dropped (an empty record would pass the check above).
+        assert run["outsideOutput"]["directories"], run["outsideOutput"]
+        assert run["outsideOutput"]["scope"] == [".", docs]
