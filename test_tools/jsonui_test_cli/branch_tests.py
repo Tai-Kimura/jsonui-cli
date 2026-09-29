@@ -1511,6 +1511,13 @@ def find_app_contract_spec(project_root: Path) -> AppRules:
             continue
         if not isinstance(raw, dict) or raw.get("type") != APP_CONTRACTS_SPEC_TYPE:
             continue
+        # Through the resolver like every other reader here: a rule's
+        # `reason` may be a `{"md": ...}` reference (1.9.3), and read raw it
+        # is a dict — "reason is required" for a reason that is written.
+        raw, texts_errors = _read_spec_texts(raw, path)
+        if texts_errors:
+            found.problems.extend((path, message) for message in texts_errors)
+            continue
         declares_rules = "apiOutcomeRules" in raw
         declares_conditions = "harnessConditions" in raw
         if not (declares_rules or declares_conditions):
@@ -2256,7 +2263,7 @@ def render_test_file(
             lines.append("  // %d note-only branch(es) — declared outside the machine-checkable" % len(notes))
             lines.append("  // contract in the spec; listed here so coverage boundaries stay visible:")
             for num, note in notes:
-                lines.append(f"  //   #{num}: {note}")
+                lines.extend(_note_comment(num, note))
         for item in _rows_in_order(contract, method_name, rows, "web", report):
             if item[0] == "skipped":
                 lines.append(
@@ -3764,7 +3771,7 @@ def render_kotlin_test_file(
         if notes:
             lines.append("  // %d note-only branch(es) — outside the machine-checkable contract:" % len(notes))
             for num, note in notes:
-                lines.append(f"  //   #{num}: {note}")
+                lines.extend(_note_comment(num, note))
         for item in _rows_in_order(contract, method_name, rows, "android", report):
             if item[0] == "skipped":
                 lines.append(
@@ -4891,7 +4898,7 @@ def render_swift_test_file(
         if notes:
             lines.append("  // %d note-only branch(es) — outside the machine-checkable contract:" % len(notes))
             for num, note in notes:
-                lines.append(f"  //   #{num}: {note}")
+                lines.extend(_note_comment(num, note))
         for item in _rows_in_order(contract, method_name, rows, "ios", report):
             if item[0] == "skipped":
                 lines.append(
@@ -6601,6 +6608,20 @@ def _skip_for_platform(report: "GenerationReport") -> bool:
         return False
     report.platform_applicable = False
     return True
+
+
+def _note_comment(num: int, note) -> list[str]:
+    """A note-only branch as comment lines in a generated test, every line of
+    it commented.
+
+    A note may be a texts-file Markdown page (1.9.3), and a line of it
+    written without the `//` was code — the generated file stopped
+    compiling at the note's second line.
+    """
+    first, *rest = str(note).replace("\r\n", "\n").rstrip("\n").split("\n")
+    out = [f"  //   #{num}: {first}"]
+    out += [f"  //       {line}".rstrip() for line in rest]
+    return out
 
 
 def _conditions_listing(conditions: list, prefix: str) -> str:

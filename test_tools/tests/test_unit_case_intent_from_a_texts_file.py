@@ -188,3 +188,68 @@ def test_a_sub_spec_reference_the_merger_could_not_resolve_is_refused(tmp_path):
 
 def test_an_intent_that_is_still_a_dict_is_never_its_repr():
     assert uc._intent_of({"md": "cases.retries"}) == ""
+
+
+# --------------------------------------------------------------------------
+# 1.9.3: the widened prose fields, as test_tools reads them.
+
+def test_an_api_outcome_rule_reason_from_a_texts_file_is_read(tmp_path):
+    specs = tmp_path / "docs" / "screens"
+    specs.mkdir(parents=True)
+    (tmp_path / "jui.config.json").write_text(
+        json.dumps({"spec_directory": "docs/screens"}), encoding="utf-8")
+    (specs / "app.spec.json").write_text(json.dumps({
+        "type": APP_CONTRACTS_SPEC_TYPE, "version": "1.0",
+        "metadata": {"name": "app", "description": "d"},
+        "unitContracts": [{"target": "ApiClient",
+                           "cases": [{"name": "refreshes", "intent": "i"}]}],
+        "apiOutcomeRules": [{"id": "auth", "statuses": ["401"],
+                             "sideCalls": ["postRefresh"],
+                             "verifiedBy": ["refreshes"],
+                             "reason": {"md": "rules.auth"}}],
+    }), encoding="utf-8")
+    (specs / "app.texts.yaml").write_text(
+        "rules:\n  auth: |\n    Refreshes the token.\n\n    - once\n", encoding="utf-8")
+    found = bt.find_app_contract_spec(tmp_path)
+    assert found.problems == []
+    (rule,) = found.rules
+    assert rule.reason == "Refreshes the token.\n\n- once\n"
+
+
+def test_a_harness_condition_reason_reference_is_refused(tmp_path):
+    specs = tmp_path / "docs" / "screens"
+    specs.mkdir(parents=True)
+    (tmp_path / "jui.config.json").write_text(
+        json.dumps({"spec_directory": "docs/screens"}), encoding="utf-8")
+    (specs / "app.spec.json").write_text(json.dumps({
+        "type": APP_CONTRACTS_SPEC_TYPE, "version": "1.0",
+        "metadata": {"name": "app", "description": "d"},
+        "harnessConditions": {"flag": {"values": ["on", "off"], "default": "off",
+                                       "reason": {"md": "k"}}},
+    }), encoding="utf-8")
+    (specs / "app.texts.yaml").write_text("k: x\n", encoding="utf-8")
+    found = bt.find_app_contract_spec(tmp_path)
+    assert any("harnessConditions.flag.reason" in message
+               and "read only in" in message for _path, message in found.problems), \
+        found.problems
+
+
+@pytest.mark.parametrize("platform,kw", [("web", {}),
+                                         ("android", {"package": "com.example.app"}),
+                                         ("ios", {"module": "App"})])
+def test_a_multi_line_branch_note_stays_a_comment(tmp_path, platform, kw):
+    from tests.test_branch_tests_generator import _contract, _project as _bproject
+    bc = _contract([
+        {"when": {"data.isAgreed": False}, "then": {"api": "none"}},
+        {"note": {"md": "polling"}},
+    ])
+    root = _bproject(tmp_path, bc)
+    (root / "docs" / "specs" / "checkout.texts.yaml").write_text(
+        "polling: |\n  Polling is out of scope.\n\n  - see the v2 plan\n",
+        encoding="utf-8")
+    content = bt.generate_branch_tests(
+        "checkout", root, platform=platform, **kw).test_file.read_text(encoding="utf-8")
+    start = content.index("#2: Polling is out of scope.")
+    block = content[start:].split("\n")[:3]
+    assert block[1].strip() == "//", block
+    assert block[2].strip() == "//       - see the v2 plan", block

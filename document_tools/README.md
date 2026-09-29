@@ -83,9 +83,24 @@ WARNING as before.
 
 #### Long prose: texts files (`.texts.yaml`)
 
-A prose field — `description`, `notes` (or one entry of a `notes` array) and
-a unit case's `intent` — may point into a YAML file instead of holding the
-text inline:
+A prose field may point into a YAML file instead of holding the text
+inline. The prose fields are:
+
+| Field | Where |
+|---|---|
+| `description`, `notes` (or one entry of a `notes` array) | anywhere |
+| `intent` | a unit case |
+| `purpose` | `structure.decorativeElements[]`, `structure.wrapperViews[]` |
+| `processing` | `userActions[]` |
+| `rule` / `handling` | `validation.clientSide[]` / `validation.serverSide[]` |
+| `meaning` | `branchContracts.conditions.<name>` |
+| `note` | a note-only branch (`branchContracts.methods.<m>.branches[]`) |
+| `reason` | `apiOutcomeRules[]`, `excludedOutcomes`, `unreachedOps` — **not** `harnessConditions` (written into the generated hook's comments) or `canonicalDivergence` (read by the API canon) |
+| `condition` | `transitions[]` only — **not** `validation.serverSide[]` (the parent-spec merger's key for an entry) or `stateManagement.displayLogic[]` |
+
+A reference anywhere else — a name, a destination, `displayName`, `action`,
+`diagram`, a component `example` — is an error: some tool reads those
+values as names, keys or code.
 
 ```json
 { "metadata": { "description": { "md": "overview" } } }

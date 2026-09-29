@@ -203,7 +203,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 f"`{c.get('id', '')}`" for c in elem.get("components", []) or []
             )
             lines.append(
-                f"| `{elem.get('id', '-')}` | {elem.get('purpose', '-') or '-'} "
+                f"| `{elem.get('id', '-')}` | {_cell(elem.get('purpose', '-') or '-')} "
                 f"| {elem.get('parentId', '-') or '-'} | {comp_ids or '-'} |"
             )
         lines.append("")
@@ -220,7 +220,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             style_str = ", ".join(f"{k}={v}" for k, v in style.items()) or "-"
             lines.append(
                 f"| `{wv.get('id', '-')}` | `{wv.get('wraps', '-')}` "
-                f"| {wv.get('purpose', '-') or '-'} | {style_str} |"
+                f"| {_cell(wv.get('purpose', '-') or '-')} | {style_str} |"
             )
         lines.append("")
 
@@ -496,7 +496,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         lines.append("|---|---|---|---|")
         for action in user_actions:
             act = action.get("action", "-")
-            processing = action.get("processing", "-")
+            processing = _cell(action.get("processing", "-"))
             dest = action.get("destination", "-") or "-"
             act_notes = _cell(action.get("notes", "-") or "-")
             lines.append(f"| {act} | {processing} | {dest} | {act_notes} |")
@@ -515,7 +515,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("|---|---|---|")
             for v in client_side:
                 field = v.get("field", "-")
-                rule = v.get("rule", "-")
+                rule = _cell(v.get("rule", "-"))
                 v_notes = _cell(v.get("notes", "-") or "-")
                 lines.append(f"| {field} | {rule} | {v_notes} |")
             lines.append("")
@@ -528,7 +528,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("|---|---|---|")
             for v in server_side:
                 condition = v.get("condition", "-")
-                handling = v.get("handling", "-")
+                handling = _cell(v.get("handling", "-"))
                 v_notes = _cell(v.get("notes", "-") or "-")
                 lines.append(f"| {condition} | {handling} | {v_notes} |")
             lines.append("")
@@ -591,7 +591,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 wt = cond.get("witness_true")
                 wf = cond.get("witness_false")
                 lines.append(
-                    f"| `{cname}` | {cond.get('meaning', '-') or '-'} | "
+                    f"| `{cname}` | {_cell(cond.get('meaning', '-') or '-')} | "
                     f"{_pairs(wt) if isinstance(wt, dict) else '-'} | "
                     f"{_pairs(wf) if isinstance(wf, dict) else '-'} |"
                 )
@@ -656,7 +656,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         lines.append("| Condition | Destination | Notes |")
         lines.append("|---|---|---|")
         for trans in transitions:
-            condition = trans.get("condition", "-")
+            condition = _cell(trans.get("condition", "-"))
             dest = trans.get("destination", "-")
             t_notes = _cell(trans.get("notes", "-") or "-")
             lines.append(f"| {condition} | {dest} | {t_notes} |")

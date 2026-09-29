@@ -495,5 +495,180 @@ class NoReferencesNoDependency(_Dir):
         self.assertTrue(any("markdown-it-py" in e.message for e in result.errors))
 
 
+
+# --------------------------------------------------------------------------
+# 1.9.3: the prose fields beyond description / notes / intent.
+#
+# Each accepted field is one no tool parses, matches as a name, compares,
+# keys on or emits as code (the table is in the commit message and in
+# shared/core/spec_texts.py). A key that is prose at one path and read by a
+# tool at another is accepted only where it is prose.
+
+def _md(tag):
+    return f"**{tag}**\nsecond line of {tag}\n"
+
+
+WIDE_YAML = "\n".join(
+    f"{k}: |\n  **{k}**\n  second line of {k}"
+    for k in ("purpose_d", "purpose_w", "processing", "rule", "handling",
+              "condition", "meaning", "note", "excluded", "unreached")
+) + "\n"
+
+
+def _wide_screen():
+    ref = lambda k: {"md": k}  # noqa: E731
+    return {
+        "type": "screen_spec", "version": "1.0",
+        "metadata": {"name": "wide", "displayName": "Wide", "description": "d"},
+        "structure": {
+            "components": [{"type": "View", "id": "root", "description": "r"}],
+            "layout": {"root": "root", "children": []},
+            "decorativeElements": [{"id": "bg", "purpose": ref("purpose_d"),
+                                    "components": []}],
+            "wrapperViews": [{"id": "wrap", "purpose": ref("purpose_w"),
+                              "wraps": "root"}],
+        },
+        "userActions": [{"action": "tap", "processing": ref("processing")}],
+        "validation": {
+            "clientSide": [{"field": "email", "rule": ref("rule")}],
+            "serverSide": [{"condition": "EMAIL_TAKEN", "handling": ref("handling")}],
+        },
+        "transitions": [{"condition": ref("condition"), "destination": "home"}],
+        "branchContracts": {
+            "conditions": {"loggedIn": {"meaning": ref("meaning"),
+                                        "witness_true": {"a": 1},
+                                        "witness_false": {"a": 0}}},
+            "unreachedOps": {"api.logout": {"reason": ref("unreached")}},
+            "methods": {"onTap": {
+                "excludedOutcomes": {"api.login": {"500": {
+                    "by": "network-layer", "reason": ref("excluded")}}},
+                "branches": [{"note": ref("note")}]}},
+        },
+    }
+
+
+ACCEPTED_PATHS = {
+    "purpose_d": ("structure", "decorativeElements", 0, "purpose"),
+    "purpose_w": ("structure", "wrapperViews", 0, "purpose"),
+    "processing": ("userActions", 0, "processing"),
+    "rule": ("validation", "clientSide", 0, "rule"),
+    "handling": ("validation", "serverSide", 0, "handling"),
+    "condition": ("transitions", 0, "condition"),
+    "meaning": ("branchContracts", "conditions", "loggedIn", "meaning"),
+    "note": ("branchContracts", "methods", "onTap", "branches", 0, "note"),
+    "excluded": ("branchContracts", "methods", "onTap", "excludedOutcomes",
+                 "api.login", "500", "reason"),
+    "unreached": ("branchContracts", "unreachedOps", "api.logout", "reason"),
+}
+
+#: Shown on the pages — `reason` is not rendered anywhere, so it is only
+#: resolved (and required to resolve).
+DISPLAYED = ("purpose_d", "purpose_w", "processing", "rule", "handling",
+             "condition", "meaning", "note")
+
+
+def _at(data, path):
+    for part in path:
+        data = data[part]
+    return data
+
+
+class WidenedProseFields(_Dir):
+    def test_each_new_field_resolves_to_markdown(self):
+        r = self.resolve(_wide_screen(), WIDE_YAML, name="wide.spec.json")
+        self.assertEqual([], r.errors)
+        for key, path in ACCEPTED_PATHS.items():
+            with self.subTest(key=key):
+                value = _at(r.data, path)
+                self.assertTrue(texts.is_markdown(value), (key, value))
+                self.assertIn(f"**{key}**", value)
+
+    def test_the_validator_takes_the_references(self):
+        path = self.write("wide.spec.json", _wide_screen())
+        self.write("wide.texts.yaml", WIDE_YAML)
+        result = SpecValidator().validate_file(path)
+        texts_errors = [e.message for e in result.errors
+                        if e.path == "texts" or "reference" in e.message
+                        or "{'md'" in e.message]
+        self.assertEqual([], texts_errors)
+        for key in ("processing", "rule", "handling", "meaning", "note",
+                    "excluded", "unreached"):
+            with self.subTest(key=key):
+                self.assertFalse(any(key in e.path for e in result.errors
+                                     if "required" in e.message.lower()),
+                                 [(e.path, e.message) for e in result.errors])
+
+    def test_the_html_page_renders_each_displayed_field_as_markdown(self):
+        r = self.resolve(_wide_screen(), WIDE_YAML, name="wide.spec.json")
+        page = generate_spec_html(r.data)
+        for key in DISPLAYED:
+            with self.subTest(key=key):
+                self.assertIn(f"<strong>{key}</strong>", page)
+                self.assertNotIn(f"**{key}**", page)
+
+    def test_the_markdown_page_keeps_each_displayed_field_in_its_row(self):
+        r = self.resolve(_wide_screen(), WIDE_YAML, name="wide.spec.json")
+        out = generate_spec_markdown(r.data)
+        for key in DISPLAYED:
+            with self.subTest(key=key):
+                (row,) = [ln for ln in out.splitlines() if f"**{key}**" in ln]
+                self.assertIn(f"**{key}**<br>second line of {key}", row)
+
+
+class StillNotProse(_Dir):
+    """A reference in a field a tool reads as a name, a key, an expression
+    or code stays an error — including a prose key name at a path where a
+    tool reads it."""
+
+    CASES = {
+        "transitions[0].destination":
+            lambda s: s["transitions"][0].__setitem__("destination", {"md": "k"}),
+        "metadata.displayName":
+            lambda s: s["metadata"].__setitem__("displayName", {"md": "k"}),
+        "validation.serverSide[0].condition":
+            lambda s: s["validation"]["serverSide"][0].__setitem__("condition", {"md": "k"}),
+        "userActions[0].action":
+            lambda s: s["userActions"][0].__setitem__("action", {"md": "k"}),
+        "dataFlow.diagram":
+            lambda s: s.__setitem__("dataFlow", {"diagram": {"md": "k"}}),
+        "dataFlow.repositories[0].methods[0].canonicalDivergence.reason":
+            lambda s: s.__setitem__("dataFlow", {"repositories": [{"name": "R", "methods": [
+                {"name": "m", "canonicalDivergence": {"reason": {"md": "k"}}}]}]}),
+    }
+
+    def test_a_reference_in_a_machine_read_field_is_an_error(self):
+        for where, mutate in self.CASES.items():
+            with self.subTest(where=where):
+                spec = {"type": "screen_spec", "version": "1.0",
+                        "metadata": {"name": "n", "description": "d"},
+                        "userActions": [{"action": "a", "processing": "p"}],
+                        "validation": {"serverSide": [{"condition": "c",
+                                                       "handling": "h"}]},
+                        "transitions": [{"condition": "c", "destination": "x"}]}
+                mutate(spec)
+                r = self.resolve(spec, "k: x\n", name="n.spec.json")
+                self.assertEqual(1, len(r.errors), r.errors)
+                self.assertIn(where, r.errors[0])
+                self.assertIn("a text reference is read only in", r.errors[0])
+
+    def test_a_harness_condition_reason_is_not_prose(self):
+        spec = _app_spec("d")
+        spec["harnessConditions"] = {"flag": {"values": ["on", "off"],
+                                              "default": "off",
+                                              "reason": {"md": "k"}}}
+        r = self.resolve(spec, "k: x\n")
+        (e,) = r.errors
+        self.assertIn("harnessConditions.flag.reason", e)
+
+    def test_an_api_outcome_rule_reason_is_prose(self):
+        spec = _app_spec("d")
+        spec["apiOutcomeRules"] = [{"id": "r1", "statuses": ["401"],
+                                    "sideCalls": {}, "verifiedBy": [],
+                                    "reason": {"md": "k"}}]
+        r = self.resolve(spec, "k: why\n")
+        self.assertEqual([], r.errors)
+        self.assertTrue(texts.is_markdown(r.data["apiOutcomeRules"][0]["reason"]))
+
+
 if __name__ == "__main__":
     unittest.main()

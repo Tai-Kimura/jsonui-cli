@@ -8,6 +8,8 @@ paragraph. So a prose field may instead point into a YAML file:
     "intent": { "md": "user_repository.health_check.timeout" }
     "intent": { "md": "shared/network.texts.yaml#timeouts.default" }
 
+(The fields that accept it are `TEXT_KEYS`, scoped by `TEXT_KEY_SCOPE`.)
+
 The first form reads the spec's paired file (`foo.spec.json` ->
 `foo.texts.yaml`, next to it); the second names a file relative to the spec's
 directory. The key is a `.`-separated path through nested mappings, and the
@@ -48,7 +50,79 @@ from typing import Any
 #: The spec keys whose value may be a reference. Prose only: a reference in an
 #: identifier or a type is not a text, and resolving it there would hand a
 #: Markdown page to a reader that expects a name.
-TEXT_KEYS = ("description", "notes", "intent")
+#:
+#: A key is here only when NO tool parses its value, matches it as a name,
+#: compares it, keys on it or emits it as code — checked per key against
+#: every reader in jui_tools, test_tools, document_tools and the three Ruby
+#: tools (which read Layout JSON, never a spec) when the set was widened in
+#: 1.9.3:
+#:
+#: - purpose     decorativeElements / wrapperViews — shown by jsonui-doc; the
+#:               layout generator stores it and emits nothing from it
+#: - processing  userActions — shown; the validator requires it and its
+#:               branch-drift net scans it as prose
+#: - handling    validation.serverSide — same as processing
+#: - rule        validation.clientSide — shown; required
+#: - meaning     branchContracts.conditions — shown; required
+#: - note        a note-only branch — shown; written into generated tests as
+#:               a comment (every line prefixed)
+#: - reason      apiOutcomeRules / excludedOutcomes / unreachedOps — required
+#:               and kept, never shown; see TEXT_KEY_SCOPE for the two paths
+#:               it is NOT prose at
+#: - condition   transitions only — shown; see TEXT_KEY_SCOPE
+#:
+#: Left out, because a tool reads them: displayName (page titles, the flow
+#: diagram's node labels, unit-target ownership), destination (transition
+#: names, the flow diagram's edges), action (a row's label, matched against
+#: method names), diagram (Mermaid source), example (a JSON code block),
+#: title / header / footer / cell (layout and tab names), author, and the
+#: identifiers and types.
+TEXT_KEYS = ("description", "notes", "intent", "purpose", "processing",
+             "handling", "rule", "meaning", "note", "reason", "condition")
+
+#: Keys that are prose at some paths only: key -> (mode, ancestor keys).
+#: "not-under" — prose unless one of those keys is an ancestor; "only-under"
+#: — prose only when the first path segment is one of them.
+#:
+#: - reason under harnessConditions is written into the generated condition
+#:   hook's comment block line by line; under canonicalDivergence it is read
+#:   by the API canon (`openapi_canonical.check_divergences`), which `jui
+#:   build` runs BEFORE texts are resolved.
+#: - condition under validation.serverSide is the parent-spec merger's
+#:   identity key for an entry (two sub-specs' entries are compared by it);
+#:   under displayLogic it is the rule's expression.
+TEXT_KEY_SCOPE = {
+    "reason": ("not-under", ("harnessConditions", "canonicalDivergence")),
+    "condition": ("only-under", ("transitions",)),
+}
+
+
+def is_text_field(ancestors: tuple, key: str) -> bool:
+    """Whether `key`, reached through `ancestors` (the dict keys above it,
+    list indices left out), is a prose field a reference may stand in."""
+    if key not in TEXT_KEYS:
+        return False
+    scope = TEXT_KEY_SCOPE.get(key)
+    if scope is None:
+        return True
+    mode, names = scope
+    if mode == "not-under":
+        return not any(a in names for a in ancestors)
+    return bool(ancestors) and ancestors[0] in names
+
+
+def text_fields_phrase() -> str:
+    """The accepted fields, for a message."""
+    parts = []
+    for key in TEXT_KEYS:
+        scope = TEXT_KEY_SCOPE.get(key)
+        if scope is None:
+            parts.append(key)
+        elif scope[0] == "not-under":
+            parts.append(f"{key} (not under {' / '.join(scope[1])})")
+        else:
+            parts.append(f"{key} (under {' / '.join(scope[1])} only)")
+    return " / ".join(parts)
 
 #: The paired file's suffix, replacing the spec's `.spec.json` /
 #: `.component.json` / `.json`.
@@ -320,7 +394,7 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
         # key in it is a consequence, not a second finding.
         return ref
 
-    def walk(node: Any, path: str, in_text: bool) -> Any:
+    def walk(node: Any, path: str, in_text: bool, ancestors: tuple) -> Any:
         if isinstance(node, dict):
             if is_reference(node):
                 result.references += 1
@@ -328,20 +402,23 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
                     return resolve_ref(node, path)
                 result.errors.append(
                     f"{path}: a text reference is read only in "
-                    f"{' / '.join(TEXT_KEYS)}")
+                    f"{text_fields_phrase()}")
                 return node
             return {
-                k: walk(v, f"{path}.{k}" if path else str(k), k in TEXT_KEYS)
+                k: walk(v, f"{path}.{k}" if path else str(k),
+                        isinstance(k, str) and is_text_field(ancestors, k),
+                        ancestors + (k,))
                 for k, v in node.items()
             }
         if isinstance(node, list):
             # `notes: [...]` — each entry is prose too. Deeper lists under a
             # text key are not prose, so the flag is not carried past one.
-            return [walk(v, f"{path}[{i}]", in_text and not isinstance(v, list))
+            return [walk(v, f"{path}[{i}]", in_text and not isinstance(v, list),
+                         ancestors)
                     for i, v in enumerate(node)]
         return node
 
-    result.data = walk(data, "", False)
+    result.data = walk(data, "", False, ())
 
     # A paired file exists for this spec alone, so a key nothing reads is
     # dead text — usually a reference renamed on one side only. A named file

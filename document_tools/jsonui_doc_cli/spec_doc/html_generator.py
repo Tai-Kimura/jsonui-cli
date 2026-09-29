@@ -255,7 +255,7 @@ def generate_spec_html(
             parts.append(
                 '<tr>'
                 f'<td><code>{_e(elem.get("id", "-"))}</code></td>'
-                f'<td>{_e(elem.get("purpose", "-") or "-")}</td>'
+                f'<td>{_p(elem.get("purpose", "-") or "-")}</td>'
                 f'<td>{_e(elem.get("parentId", "-") or "-")}</td>'
                 f'<td>{comp_ids or "-"}</td>'
                 '</tr>'
@@ -279,7 +279,7 @@ def generate_spec_html(
                 '<tr>'
                 f'<td><code>{_e(wv.get("id", "-"))}</code></td>'
                 f'<td><code>{_e(wv.get("wraps", "-"))}</code></td>'
-                f'<td>{_e(wv.get("purpose", "-") or "-")}</td>'
+                f'<td>{_p(wv.get("purpose", "-") or "-")}</td>'
                 f'<td>{_e(style_str)}</td>'
                 '</tr>'
             )
@@ -655,7 +655,7 @@ def generate_spec_html(
         parts.append('<thead><tr><th>Action</th><th>Processing</th><th>Destination</th><th>Notes</th></tr></thead>')
         parts.append('<tbody>')
         for action in user_actions:
-            parts.append(f'<tr><td>{_e(action.get("action", "-"))}</td><td>{_e(action.get("processing", "-"))}</td><td>{_e(action.get("destination", "") or "-")}</td><td>{_p(action.get("notes", "") or "-")}</td></tr>')
+            parts.append(f'<tr><td>{_e(action.get("action", "-"))}</td><td>{_p(action.get("processing", "-"))}</td><td>{_e(action.get("destination", "") or "-")}</td><td>{_p(action.get("notes", "") or "-")}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
@@ -671,7 +671,7 @@ def generate_spec_html(
             parts.append('<thead><tr><th>Field</th><th>Rule</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for v in client_side:
-                parts.append(f'<tr><td>{_e(v.get("field", "-"))}</td><td>{_e(v.get("rule", "-"))}</td><td>{_p(v.get("notes", "") or "-")}</td></tr>')
+                parts.append(f'<tr><td>{_e(v.get("field", "-"))}</td><td>{_p(v.get("rule", "-"))}</td><td>{_p(v.get("notes", "") or "-")}</td></tr>')
             parts.append('</tbody></table>')
 
         server_side = validation.get("serverSide", [])
@@ -681,7 +681,7 @@ def generate_spec_html(
             parts.append('<thead><tr><th>Error Condition</th><th>Handling</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for v in server_side:
-                parts.append(f'<tr><td>{_e(v.get("condition", "-"))}</td><td>{_e(v.get("handling", "-"))}</td><td>{_p(v.get("notes", "") or "-")}</td></tr>')
+                parts.append(f'<tr><td>{_e(v.get("condition", "-"))}</td><td>{_p(v.get("handling", "-"))}</td><td>{_p(v.get("notes", "") or "-")}</td></tr>')
             parts.append('</tbody></table>')
 
         if validation.get("notes"):
@@ -702,7 +702,7 @@ def generate_spec_html(
         parts.append('<thead><tr><th>Condition</th><th>Destination</th><th>Notes</th></tr></thead>')
         parts.append('<tbody>')
         for trans in transitions:
-            parts.append(f'<tr><td>{_e(trans.get("condition", "-"))}</td><td>{_e(trans.get("destination", "-"))}</td><td>{_p(trans.get("notes", "") or "-")}</td></tr>')
+            parts.append(f'<tr><td>{_p(trans.get("condition", "-"))}</td><td>{_e(trans.get("destination", "-"))}</td><td>{_p(trans.get("notes", "") or "-")}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
@@ -849,7 +849,7 @@ def _generate_branch_contracts_section(branch_contracts: dict) -> list[str]:
             wf = cond.get("witness_false")
             parts.append(
                 f'<tr><td><code>{_e(str(cname))}</code></td>'
-                f'<td>{_e(cond.get("meaning", "-") or "-")}</td>'
+                f'<td>{_p(cond.get("meaning", "-") or "-")}</td>'
                 f'<td>{_format_branch_pairs(wt) if isinstance(wt, dict) else "-"}</td>'
                 f'<td>{_format_branch_pairs(wf) if isinstance(wf, dict) else "-"}</td></tr>'
             )
@@ -886,7 +886,7 @@ def _generate_branch_contracts_section(branch_contracts: dict) -> list[str]:
                 parts.append(
                     f'<tr><td>{i}</td><td colspan="{4 if scoped else 3}">'
                     f'<em>note (not machine-checked): '
-                    f'{_e(branch.get("note", "") or "")}</em></td></tr>'
+                    f'{_p(branch.get("note", "") or "")}</em></td></tr>'
                 )
                 continue
             when = branch.get("when")
