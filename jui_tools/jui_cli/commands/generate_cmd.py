@@ -1067,6 +1067,28 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
     return 1
 
 
+def _component_spec_texts(spec_data, spec_path: Path):
+    """The component spec with its `{"md": ...}` prose resolved.
+
+    The same resolver every other spec reader uses (shared/core/spec_texts.py).
+    Read raw, a texts-file prop description was a dict, failed the
+    `isinstance(..., str)` filter below and was dropped from the converter's
+    doc comment without a word. PyYAML is imported only when a reference is
+    met, so a spec without one needs nothing new. An unresolvable reference
+    is named here and its description left out, as before; `jsonui-doc
+    validate` is where it fails.
+    """
+    from jui_cli.core import shared_core
+    texts = shared_core.load("spec_texts")
+    if texts is None or not isinstance(spec_data, dict):
+        return spec_data
+    resolution = texts.resolve_spec_texts(spec_data, spec_path)
+    for message in resolution.errors:
+        print(f"WARNING: {spec_path.name}: {message} — its text is not "
+              f"passed to the converter")
+    return resolution.data
+
+
 def _run_converters_from_specs(
     specs_to_process: list,
     platforms: dict,
@@ -1096,6 +1118,7 @@ def _run_converters_from_specs(
     for spec_path in specs_to_process:
         with open(spec_path, "r", encoding="utf-8") as f:
             spec_data = json.load(f)
+        spec_data = _component_spec_texts(spec_data, Path(spec_path))
 
         comp_name = spec_data.get("metadata", {}).get("name", spec_path.stem)
         if comp_name in seen_names:

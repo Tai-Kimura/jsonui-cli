@@ -81,6 +81,76 @@ anything that is not a release number, never turns it into a WARNING. A spec
 without a `layoutFile` is checked against its `structure.components`, a
 WARNING as before.
 
+#### Long prose: texts files (`.texts.yaml`)
+
+A prose field may point into a YAML file instead of holding the text
+inline. The prose fields are:
+
+| Field | Where |
+|---|---|
+| `description`, `notes` (or one entry of a `notes` array) | anywhere |
+| `intent` | a unit case |
+| `purpose` | `structure.decorativeElements[]`, `structure.wrapperViews[]` |
+| `processing` | `userActions[]` |
+| `rule` / `handling` | `validation.clientSide[]` / `validation.serverSide[]` |
+| `meaning` | `branchContracts.conditions.<name>` |
+| `note` | a note-only branch (`branchContracts.methods.<m>.branches[]`) |
+| `reason` | `apiOutcomeRules[]`, `excludedOutcomes`, `unreachedOps` — **not** `harnessConditions` (written into the generated hook's comments) or `canonicalDivergence` (read by the API canon) |
+| `condition` | `transitions[]` only — **not** `validation.serverSide[]` (the parent-spec merger's key for an entry) or `stateManagement.displayLogic[]` |
+
+A reference anywhere else — a name, a destination, `displayName`, `action`,
+`diagram`, a component `example` — is an error: some tool reads those
+values as names, keys or code.
+
+```json
+{ "metadata": { "description": { "md": "overview" } } }
+{ "intent": { "md": "user_repository.health_check.timeout" } }
+{ "intent": { "md": "shared/network.texts.yaml#timeouts.default" } }
+```
+
+Without a `#`, the key is read from the spec's paired file
+(`app_contracts.spec.json` -> `app_contracts.texts.yaml`, same directory);
+with one, from the named file, relative to the spec. The named file must be
+a relative path ending in `.texts.yaml` (`../shared/x.texts.yaml` is fine; an
+absolute path, an empty file part such as `#key`, or any other file is an
+error). The key is a `.`-separated path through nested mappings:
+
+```yaml
+overview: |
+  この面の app が所有する unit target の契約。
+
+  ### 移設元
+  - UserRepository: login.spec.json (2)
+
+user_repository:
+  health_check:
+    timeout: |
+      **[api.healthCheck=default]** GET /api/health は要求単位で **10 秒**。
+```
+
+- A value from a texts file is rendered as **Markdown** (CommonMark, tables,
+  strikethrough; raw HTML is not rendered). An inline string stays plain
+  text, with its line breaks kept.
+- Validation errors: an undefined key, a key naming a mapping, a missing
+  file, a key that is not a string (`yes:` / `on:` / `1:` — quote it), a key
+  containing `.`, a duplicate key, a merge key (`<<:`), a list or empty
+  value, and a reference in a field that is not prose. A key of the paired
+  file that no field references is a warning.
+- `jsonui-test` refuses a spec whose reference cannot be resolved, with the
+  same message: `generate branch-tests` and `contracts coverage` report it
+  as a problem of that spec (exit 1 / not evaluated), and
+  `generate unit-stubs` (with or without `--check`) stops before comparing
+  or writing anything. A sub-spec's reference is resolved against the
+  sub-spec's own texts file only.
+- Needs `PyYAML` and `markdown-it-py` (declared dependencies) — but only
+  for a spec that uses a reference. A spec with a reference fails
+  validation, naming the `pip install`, when either is missing; a spec with
+  none never needs them (a paired file beside it then gets a warning that
+  its unused-key check was skipped). A page that renders a texts-file value
+  without `markdown-it-py` (the unit pages do not pass through validation)
+  shows it as plain text, and `generate html` prints one
+  `WARNING [doc-markdown]` line per run.
+
 #### Validate Component Specification
 
 ```bash

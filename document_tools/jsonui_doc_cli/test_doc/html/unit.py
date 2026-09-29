@@ -21,6 +21,7 @@ from pathlib import Path
 from .styles import get_unit_styles, get_toggle_script
 from .sidebar import generate_screen_sidebar, escape_html
 from ...reproducible import build_datetime
+from ...prose import prose_html, with_markdown_css
 
 
 #: Per-face case states, in the order a reader should scan them, with the
@@ -201,12 +202,16 @@ def generate_unit_html(
         html_parts.append(f"      <tr>{''.join(header)}</tr>")
         for i, case in enumerate(cases, 1):
             case_name = str(case.get("name") or f"case {i}")
-            intent = str(case.get("intent") or "")
+            intent = case.get("intent") or ""
+            if not isinstance(intent, str):
+                intent = str(intent)
             status = case.get("status") or {}
             # Built outside the f-string: a backslash in an f-string
             # expression is a SyntaxError before 3.12, and this package
             # declares >=3.10 (CI runs 3.11).
-            intent_cell = escape_html(intent) if intent else "<span class='zero'>&mdash;</span>"
+            # `prose_html`, not `escape_html`: an intent from a texts file
+            # is Markdown, and a plain one keeps its line breaks.
+            intent_cell = prose_html(intent) if intent else "<span class='zero'>&mdash;</span>"
             row = [
                 f"<td class='num'>{i}</td>",
                 f"<td class='case' id='case-{i}'><code>{escape_html(case_name)}</code></td>",
@@ -271,7 +276,7 @@ def generate_unit_html(
     html_parts.append("</body>")
     html_parts.append("</html>")
 
-    return "\n".join(html_parts)
+    return with_markdown_css("\n".join(html_parts))
 
 
 def _get_html_header(title: str) -> list[str]:

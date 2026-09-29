@@ -30,6 +30,11 @@ class MergeResult:
     spec: dict[str, Any]
     sub_spec_paths: list[Path] = field(default_factory=list)
     conflicts: list[MergeConflict] = field(default_factory=list)
+    #: `{"md": ...}` references the parent or a sub-spec could not resolve,
+    #: each prefixed with its file's name. Left unresolved in `spec`; a
+    #: caller that emits prose from the merged view refuses on these (the
+    #: merged dict no longer says which file a field came from).
+    texts_errors: list[str] = field(default_factory=list)
 
     @property
     def has_conflicts(self) -> bool:
@@ -47,6 +52,51 @@ class ParentSpecDeclarationError(ValueError):
     directions and zero conflicts reported, because the parent was never a
     participant to conflict with.
     """
+
+
+class MergedSpec(dict):
+    """The merged screen spec: a plain dict whose `{"md": ...}` references
+    were already resolved, each against the file it was written in.
+
+    `extract_screen_spec` receives it with the PARENT's path. Resolving it
+    again there would read every reference a sub-spec could not resolve
+    against the parent's texts file — and silently take a same-named key
+    from it. The type is what tells `extract_screen_spec` not to.
+    """
+
+    texts_resolved = True
+
+
+def _with_texts(data: Any, path: Path, errors: list[str] | None = None) -> Any:
+    """`data` with its `{"md": ...}` prose references resolved.
+
+    An unresolved reference stays as written, as `resolve_spec_texts` leaves
+    it, and its message is appended to `errors` prefixed with the file — the
+    spec validator names it against its own file too, and a reader of the
+    merged view needs it to refuse.
+    """
+    from jui_cli.core import shared_core
+    texts = shared_core.load("spec_texts")
+    if texts is None or not isinstance(data, dict):
+        return data
+    resolution = texts.resolve_spec_texts(data, path)
+    if errors is not None:
+        errors.extend(f"{Path(path).name}: {e}" for e in resolution.errors)
+    return resolution.data
+
+
+def _note(value: Any) -> Any:
+    """A single (non-list) `notes` value, as one entry of the merged list.
+
+    A string is kept AS IS, not `str()`-ed: a `MarkdownText` from a texts
+    file is a str subclass, and `str()` returns a plain `str`, so the page
+    stopped rendering the note as Markdown. An unresolved `{"md": ...}` is
+    kept as a dict for the same reason the resolver leaves it one — so the
+    reader that validates it sees a reference, not its repr.
+    """
+    if isinstance(value, (str, dict)):
+        return value
+    return str(value)
 
 
 def _reject_parent_declarations(parent_data: dict, parent_path) -> None:
@@ -82,7 +132,9 @@ class ParentSpecMerger:
     def merge_from_file(self, parent_path: Path) -> MergeResult:
         """Load a parent_spec file, resolve sub_spec paths, and merge."""
         parent_path = Path(parent_path)
-        parent_data = json.loads(parent_path.read_text())
+        texts_errors: list[str] = []
+        parent_data = _with_texts(json.loads(parent_path.read_text()), parent_path,
+                                  texts_errors)
 
         if parent_data.get("type") != "screen_parent_spec":
             raise ValueError(
@@ -103,12 +155,17 @@ class ParentSpecMerger:
                 alt = (parent_path.parent / file_ref).resolve()
                 path = alt if alt.exists() else path
             sub_spec_paths.append(path)
-            sub_specs.append(json.loads(path.read_text()))
+            # Each sub-spec's texts resolve against ITS paired file, so they
+            # are resolved here, per file, before the merge loses which file
+            # a case came from.
+            sub_specs.append(_with_texts(json.loads(path.read_text()), path,
+                                         texts_errors))
 
         _reject_parent_declarations(parent_data, parent_path)
 
         merged, conflicts = self.merge(parent_data, sub_specs)
-        return MergeResult(spec=merged, sub_spec_paths=sub_spec_paths, conflicts=conflicts)
+        return MergeResult(spec=MergedSpec(merged), sub_spec_paths=sub_spec_paths,
+                           conflicts=conflicts, texts_errors=texts_errors)
 
     def merge(
         self, parent_spec: dict, sub_specs: list[dict]
@@ -570,7 +627,7 @@ class ParentSpecMerger:
                 if isinstance(v, list):
                     notes_parts.extend(v)
                 else:
-                    notes_parts.append(str(v))
+                    notes_parts.append(_note(v))
 
         # Parent additions (parent wins on non-list sections)
         for section_name, container in (
@@ -602,7 +659,7 @@ class ParentSpecMerger:
             if isinstance(parent_notes, list):
                 notes_parts = list(parent_notes) + notes_parts
             else:
-                notes_parts = [str(parent_notes)] + notes_parts
+                notes_parts = [_note(parent_notes)] + notes_parts
 
         if root_components:
             structure["rootComponents"] = root_components

@@ -32,7 +32,7 @@ from .html.sidebar import escape_html
 from .markdown import generate_markdown, generate_schema_markdown
 from .mermaid import generate_mermaid_html
 from .mermaid.spec_graph import spec_page_path
-from .. import run_log
+from .. import prose, run_log
 from . import run_state
 from ..run_log import warn
 
@@ -173,6 +173,9 @@ def get_diagram_errors() -> list[dict]:
 #: that `reset_per_run_ledgers` is the whole answer to "what does a fresh run
 #: start from", not the answer for the ledgers this module happens to own.
 run_state.external(run_log.reset, "run_log")
+#: The once-per-run "markdown-it-py is missing" notice (`prose.py`) — a
+#: second run in one process must say it again.
+run_state.external(prose.reset_render_warnings, "prose")
 
 
 def reset_per_run_ledgers() -> None:

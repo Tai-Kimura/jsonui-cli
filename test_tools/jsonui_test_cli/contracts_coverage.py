@@ -51,6 +51,7 @@ from .branch_tests import (
     _also_op,
     _branch_active,
     _is_sub_spec_of_a_parent,
+    SpecTextsError,
     _load_spec_result,
     _reached_ops,
     _scenario_status,
@@ -313,7 +314,13 @@ def iter_screens(project: Project, only: str | None = None) -> tuple[list, int]:
             continue
         if raw.get("type") != PARENT_SPEC_TYPE and _is_sub_spec_of_a_parent(path, project.spec_dir):
             continue
-        spec, refusal = _load_spec_result(path)
+        try:
+            spec, refusal = _load_spec_result(path)
+        except SpecTextsError as e:
+            # Not evaluated, and saying why in the resolver's words — a spec
+            # read with a `{"md": ...}` still a dict is not the spec.
+            screens.append(ScreenSource(name, None, str(e)))
+            continue
         screens.append(ScreenSource(name, None if refusal else spec, refusal))
     return screens, unknown
 

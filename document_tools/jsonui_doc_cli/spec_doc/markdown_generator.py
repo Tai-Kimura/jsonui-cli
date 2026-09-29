@@ -16,6 +16,42 @@ _PLATFORM_TOKEN_TO_LABEL = {
 }
 
 
+def _cell(value) -> str:
+    """A prose value inside a table row: its line breaks as `<br>`.
+
+    A raw newline ends a Markdown table row, so a multi-line description —
+    a texts-file Markdown one especially — split its row in two and pushed
+    the rest of the text out of the table. Block-level prose is inserted
+    as-is, where a Markdown text renders as written.
+    """
+    if value is None:
+        return ""
+    return str(value).replace("\r\n", "\n").replace("\n", "<br>")
+
+
+def _labelled(label: str, value) -> list[str]:
+    """`**Notes:** text`, or — for Markdown from a texts file — the label on
+    its own line and the value as blocks below it.
+
+    Inline, a Markdown value that opens with a heading or a list is glued to
+    the label's paragraph, and `## Rule` renders as the literal text "## Rule".
+    """
+    if _is_markdown(value):
+        return [f"**{label}:**", "", str(value).rstrip("\n")]
+    return [f"**{label}:** {value}"]
+
+
+def _list_continuation(text) -> str:
+    """Text placed inside a `- ` list item: continuation lines indented so
+    they stay in the item instead of starting a new block after the list."""
+    return str(text).replace("\r\n", "\n").replace("\n", "\n  ")
+
+
+def _is_markdown(value) -> bool:
+    from ..prose import is_markdown
+    return is_markdown(value)
+
+
 def _format_platform_md(value) -> str:
     """Format a platform filter (string or override dict) for markdown output."""
     if not value:
@@ -120,7 +156,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             cells = [sub.get("name", "-"), f"`{sub.get('file', '')}`"]
             if show_declares:
                 cells.append(_sub_spec_sections(spec_dir, sub.get("file", "")) or "-")
-            cells.append(sub.get("description", "-"))
+            cells.append(_cell(sub.get("description", "-")))
             lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
 
@@ -140,9 +176,9 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             comp_type = comp.get("type", "-")
             comp_id = comp.get("id", "-")
             platform = _format_platform_md(comp.get("platform"))
-            desc = comp.get("description", "-")
+            desc = _cell(comp.get("description", "-"))
             initial = comp.get("initialState", "-")
-            comp_notes = comp.get("notes", "-") or "-"
+            comp_notes = _cell(comp.get("notes", "-") or "-")
             indent = "&nbsp;&nbsp;" * depth + ("↳ " if depth else "")
             lines.append(
                 f"| {indent}{comp_type} | `{comp_id}` | {platform} | {desc} | {initial} | {comp_notes} |"
@@ -167,7 +203,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 f"`{c.get('id', '')}`" for c in elem.get("components", []) or []
             )
             lines.append(
-                f"| `{elem.get('id', '-')}` | {elem.get('purpose', '-') or '-'} "
+                f"| `{elem.get('id', '-')}` | {_cell(elem.get('purpose', '-') or '-')} "
                 f"| {elem.get('parentId', '-') or '-'} | {comp_ids or '-'} |"
             )
         lines.append("")
@@ -184,7 +220,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             style_str = ", ".join(f"{k}={v}" for k, v in style.items()) or "-"
             lines.append(
                 f"| `{wv.get('id', '-')}` | `{wv.get('wraps', '-')}` "
-                f"| {wv.get('purpose', '-') or '-'} | {style_str} |"
+                f"| {_cell(wv.get('purpose', '-') or '-')} | {style_str} |"
             )
         lines.append("")
 
@@ -200,7 +236,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
 
     # Structure notes
     if structure.get("notes"):
-        lines.append(f"**Notes:** {structure['notes']}")
+        lines.extend(_labelled("Notes", structure['notes']))
         lines.append("")
 
     # Collection Structure(s) — structure.collection + structure.collections[]
@@ -284,7 +320,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 for m in vm_methods:
                     sig = _format_vm_method_md(m)
                     plats = _format_member_platforms_md(m)
-                    desc = m.get("description", "-") if isinstance(m, dict) else "-"
+                    desc = _cell(m.get("description", "-")) if isinstance(m, dict) else "-"
                     lines.append(f"| {sig} | {plats} | {desc} |")
                 lines.append("")
 
@@ -299,7 +335,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     flags = _format_vm_var_flags_md(v)
                     plats = _format_member_platforms_md(v)
                     lines.append(
-                        f"| {decl} | {flags} | {plats} | {v.get('description', '-')} |"
+                        f"| {decl} | {flags} | {plats} | {_cell(v.get('description', '-'))} |"
                     )
                 lines.append("")
 
@@ -368,11 +404,11 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     lines.append("")
 
                 if endpoint.get("notes"):
-                    lines.append(f"**Notes:** {endpoint['notes']}")
+                    lines.extend(_labelled("Notes", endpoint['notes']))
                     lines.append("")
 
         if data_flow.get("notes"):
-            lines.append(f"**Notes:** {data_flow['notes']}")
+            lines.extend(_labelled("Notes", data_flow['notes']))
             lines.append("")
 
     # State Management
@@ -390,12 +426,12 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("|---|---|---|")
             for val in state.get("values", []):
                 v = val.get("value", "-")
-                desc = val.get("description", "-")
+                desc = _cell(val.get("description", "-"))
                 visible = ", ".join(f"`{e}`" for e in val.get("visibleElements", [])) or "-"
                 lines.append(f"| `.{v}` | {desc} | {visible} |")
             lines.append("")
             if state.get("notes"):
-                lines.append(f"**Notes:** {state['notes']}")
+                lines.extend(_labelled("Notes", state['notes']))
                 lines.append("")
 
         # UI Variables
@@ -408,8 +444,8 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             for var in variables:
                 var_name = var.get("name", "-")
                 var_type = var.get("type", "-")
-                desc = var.get("description", "-")
-                var_notes = var.get("notes", "-") or "-"
+                desc = _cell(var.get("description", "-"))
+                var_notes = _cell(var.get("notes", "-") or "-")
                 lines.append(f"| `{var_name}` | {var_type} | {desc} | {var_notes} |")
             lines.append("")
 
@@ -424,8 +460,8 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("|---|---|---|")
             for handler in handlers:
                 h_name = handler.get("name", "-")
-                desc = handler.get("description", "-")
-                h_notes = handler.get("notes", "-") or "-"
+                desc = _cell(handler.get("description", "-"))
+                h_notes = _cell(handler.get("notes", "-") or "-")
                 lines.append(f"| `{h_name}` | {desc} | {h_notes} |")
             lines.append("")
 
@@ -449,7 +485,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("")
 
         if state_mgmt.get("notes"):
-            lines.append(f"**Notes:** {state_mgmt['notes']}")
+            lines.extend(_labelled("Notes", state_mgmt['notes']))
             lines.append("")
 
     # User Actions
@@ -460,9 +496,9 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         lines.append("|---|---|---|---|")
         for action in user_actions:
             act = action.get("action", "-")
-            processing = action.get("processing", "-")
+            processing = _cell(action.get("processing", "-"))
             dest = action.get("destination", "-") or "-"
-            act_notes = action.get("notes", "-") or "-"
+            act_notes = _cell(action.get("notes", "-") or "-")
             lines.append(f"| {act} | {processing} | {dest} | {act_notes} |")
         lines.append("")
 
@@ -479,8 +515,8 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("|---|---|---|")
             for v in client_side:
                 field = v.get("field", "-")
-                rule = v.get("rule", "-")
-                v_notes = v.get("notes", "-") or "-"
+                rule = _cell(v.get("rule", "-"))
+                v_notes = _cell(v.get("notes", "-") or "-")
                 lines.append(f"| {field} | {rule} | {v_notes} |")
             lines.append("")
 
@@ -492,13 +528,13 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("|---|---|---|")
             for v in server_side:
                 condition = v.get("condition", "-")
-                handling = v.get("handling", "-")
-                v_notes = v.get("notes", "-") or "-"
+                handling = _cell(v.get("handling", "-"))
+                v_notes = _cell(v.get("notes", "-") or "-")
                 lines.append(f"| {condition} | {handling} | {v_notes} |")
             lines.append("")
 
         if validation.get("notes"):
-            lines.append(f"**Notes:** {validation['notes']}")
+            lines.extend(_labelled("Notes", validation['notes']))
             lines.append("")
 
     # Branch Contracts (opt-in decision tables)
@@ -555,7 +591,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 wt = cond.get("witness_true")
                 wf = cond.get("witness_false")
                 lines.append(
-                    f"| `{cname}` | {cond.get('meaning', '-') or '-'} | "
+                    f"| `{cname}` | {_cell(cond.get('meaning', '-') or '-')} | "
                     f"{_pairs(wt) if isinstance(wt, dict) else '-'} | "
                     f"{_pairs(wf) if isinstance(wf, dict) else '-'} |"
                 )
@@ -588,7 +624,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     empty = " | |" if scoped else " |"
                     lines.append(
                         f"| {i} | *note (not machine-checked): "
-                        f"{branch.get('note', '') or ''}* |{empty} |"
+                        f"{_cell(branch.get('note', '') or '')}* |{empty} |"
                     )
                     continue
                 when = branch.get("when")
@@ -605,12 +641,12 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     f"| {i} | {_pairs(when) if isinstance(when, dict) else '-'} | "
                     f"{_pairs(then) if isinstance(then, dict) else '-'} | "
                     f"{platform_cell}"
-                    f"{branch.get('notes', '-') or '-'} |"
+                    f"{_cell(branch.get('notes', '-') or '-')} |"
                 )
             lines.append("")
 
         if branch_contracts.get("notes"):
-            lines.append(f"**Notes:** {branch_contracts['notes']}")
+            lines.extend(_labelled("Notes", branch_contracts['notes']))
             lines.append("")
 
     # Transitions
@@ -620,9 +656,9 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         lines.append("| Condition | Destination | Notes |")
         lines.append("|---|---|---|")
         for trans in transitions:
-            condition = trans.get("condition", "-")
+            condition = _cell(trans.get("condition", "-"))
             dest = trans.get("destination", "-")
-            t_notes = trans.get("notes", "-") or "-"
+            t_notes = _cell(trans.get("notes", "-") or "-")
             lines.append(f"| {condition} | {dest} | {t_notes} |")
         lines.append("")
 
@@ -635,7 +671,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         for f in related_files:
             f_type = f.get("type", "-")
             path = f.get("path", "-")
-            f_notes = f.get("notes", "-") or "-"
+            f_notes = _cell(f.get("notes", "-") or "-")
             lines.append(f"| {f_type} | `{path}` | {f_notes} |")
         lines.append("")
 
@@ -644,7 +680,9 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         lines.append("## Notes")
         lines.append("")
         for note in notes:
-            lines.append(f"- {note}")
+            # Continuation lines indented, so a multi-paragraph note stays
+            # inside its list item instead of ending the list.
+            lines.append("- " + str(note).replace("\n", "\n  "))
         lines.append("")
 
     return "\n".join(lines)
@@ -705,7 +743,14 @@ def _format_method_md(method) -> str:
         if return_type:
             result += f" → `{return_type}`"
         if method.get("description"):
-            result += f" — {method['description']}"
+            desc = method["description"]
+            if _is_markdown(desc):
+                # Its own paragraph inside the item: a Markdown value may
+                # open with a list or a heading, which glued after " — "
+                # would be literal text.
+                result += " —\n\n  " + _list_continuation(str(desc).rstrip("\n"))
+            else:
+                result += f" — {_list_continuation(desc)}"
         return result
     else:
         return f"`{method}`"

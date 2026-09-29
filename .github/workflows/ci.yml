@@ -223,6 +223,12 @@ jobs:
       - name: Install document_tools (dev)
         working-directory: document_tools
         run: python -m pip install -e ".[dev]" --no-deps
+      # --no-deps above skips document_tools' own third-party dependencies
+      # too. PyYAML arrives with jui_tools; markdown-it-py renders texts-file
+      # prose (`{"md": ...}`) and has no other way in, so without this every
+      # rendering arm of test_prose_fields_read_from_a_texts_file fails here.
+      - name: Install document_tools' third-party dependencies
+        run: python -m pip install "markdown-it-py>=3.0" "PyYAML>=6.0"
       # The live-reflection adapter behind `jsonui-doc check db` is only
       # exercised when sqlalchemy is importable. Without this the one test
       # covering it skipped here AND on every developer machine, so the

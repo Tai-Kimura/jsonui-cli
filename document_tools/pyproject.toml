@@ -29,8 +29,16 @@ keywords = ["jsonui", "documentation", "html", "markdown", "mermaid"]
 # the sibling to the default branch, so a pinned CI could not tell a tool
 # change from an implementation change. jui_tools/tests/test_version_lockstep.py
 # enforces it.
+#
+# PyYAML and markdown-it-py read and render prose kept in a spec's
+# `<name>.texts.yaml` (`{"md": "key"}` references). Both are imported only
+# when a spec uses one, and their absence is a validation error naming the
+# `pip install` — so the launcher-only path (no pip run) still documents
+# every spec that does not.
 dependencies = [
     "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v1.9.2#subdirectory=test_tools",
+    "PyYAML>=6.0",
+    "markdown-it-py>=3.0",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

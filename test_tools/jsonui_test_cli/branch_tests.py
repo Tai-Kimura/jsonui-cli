@@ -30,6 +30,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import branch_runtime_prose as prose
 from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
@@ -37,6 +38,20 @@ from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
 
 class BranchTestGenerationError(Exception):
     """Raised for vocabulary that cannot be bound to real assets."""
+
+
+class SpecTextsError(BranchTestGenerationError):
+    """A spec's `{"md": ...}` prose reference could not be resolved.
+
+    Raised by `_load_spec_result`, so every command that reads a spec here
+    refuses it the same way: a scan reports it as a problem of that spec
+    (and fails), a single-spec command stops with it. Never "read it anyway":
+    the unresolved value is a dict, and the reader that emits prose — a unit
+    stub's failure message, the unit page — printed its repr.
+
+    The message is the resolver's own (shared/core/spec_texts.py), which
+    names the field — the same sentence `jsonui-doc validate` prints.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +164,8 @@ def _merge_parent_spec_result(parent_path: Path) -> tuple[dict | None, str | Non
     except ImportError:
         return None, None
     try:
-        return ParentSpecMerger(spec_dir=parent_path.parent).merge_from_file(
-            parent_path).spec, None
+        result = ParentSpecMerger(spec_dir=parent_path.parent).merge_from_file(
+            parent_path)
     except ValueError as e:
         # A declaration the parent may not carry. `jui build` reports this in
         # its own run; a read-only caller needs to know its input was refused,
@@ -158,6 +173,39 @@ def _merge_parent_spec_result(parent_path: Path) -> tuple[dict | None, str | Non
         return None, str(e)
     except (OSError, KeyError, json.JSONDecodeError):
         return None, None
+    # The merger resolves each sub-spec's references against that sub-spec's
+    # own texts file and leaves what it could not resolve in place; the
+    # merged dict no longer says which file a field came from, so this is
+    # the only point the failure can still be named. `getattr`: a jui_cli
+    # older than texts files has no such list.
+    texts_errors = getattr(result, "texts_errors", None) or []
+    if texts_errors:
+        raise SpecTextsError(_texts_refusal(parent_path, texts_errors))
+    return result.spec, None
+
+
+def _read_spec_texts(spec: Any, spec_file: Path) -> tuple[Any, list[str]]:
+    """``(spec with `{"md": ...}` prose resolved, the resolver's errors)``.
+
+    See shared/core/spec_texts.py. An unresolvable reference stays as
+    written in the returned spec; the caller decides — and every caller in
+    this package refuses (`SpecTextsError`, or a problem of that spec).
+    """
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return spec, []
+    texts = shared_core.load("spec_texts")
+    if texts is None or not isinstance(spec, dict):
+        return spec, []
+    resolution = texts.resolve_spec_texts(spec, spec_file)
+    return resolution.data, list(resolution.errors)
+
+
+def _texts_refusal(spec_file: Path, errors: list[str]) -> str:
+    return (f"{Path(spec_file).name}: {len(errors)} text reference(s) could not "
+            f"be resolved, so this spec was not read — " + "; ".join(errors))
 
 
 def _load_spec(spec_file: Path) -> dict:
@@ -171,9 +219,14 @@ def _load_spec_result(spec_file: Path) -> tuple[dict, str | None]:
     A refusal means the returned dict is the RAW parent, including whatever
     the merger declined. Callers that count declarations must report it:
     counting a refused block reads as "the declaration was checked".
+
+    Raises `SpecTextsError` when a `{"md": ...}` reference — in this file or,
+    for a parent, in one of its sub-specs — cannot be resolved.
     """
     with open(spec_file, "r", encoding="utf-8") as f:
-        spec = json.load(f)
+        spec, texts_errors = _read_spec_texts(json.load(f), spec_file)
+    if texts_errors:
+        raise SpecTextsError(_texts_refusal(spec_file, texts_errors))
     if spec.get("type") == PARENT_SPEC_TYPE:
         merged, refusal = _merge_parent_spec_result(spec_file)
         if merged is not None:
@@ -375,7 +428,13 @@ def discover_branch_screens(
                 path, spec_path):
             # Part of a screen, not a screen. Its parent carries it.
             continue
-        spec, refusal = _load_spec_result(path)
+        try:
+            spec, refusal = _load_spec_result(path)
+        except SpecTextsError as e:
+            # Fatal through the same `problems` a refused parent uses: this
+            # screen is scanned and NOT read.
+            problems.append(f"{screen}: {e}")
+            continue
         if refusal is not None:
             # The merger refused this parent, so `spec` is the RAW file — and
             # a raw parent carries no `branchContracts`: the block lives in the
@@ -1452,6 +1511,13 @@ def find_app_contract_spec(project_root: Path) -> AppRules:
             continue
         if not isinstance(raw, dict) or raw.get("type") != APP_CONTRACTS_SPEC_TYPE:
             continue
+        # Through the resolver like every other reader here: a rule's
+        # `reason` may be a `{"md": ...}` reference (1.9.3), and read raw it
+        # is a dict — "reason is required" for a reason that is written.
+        raw, texts_errors = _read_spec_texts(raw, path)
+        if texts_errors:
+            found.problems.extend((path, message) for message in texts_errors)
+            continue
         declares_rules = "apiOutcomeRules" in raw
         declares_conditions = "harnessConditions" in raw
         if not (declares_rules or declares_conditions):
@@ -2197,7 +2263,7 @@ def render_test_file(
             lines.append("  // %d note-only branch(es) — declared outside the machine-checkable" % len(notes))
             lines.append("  // contract in the spec; listed here so coverage boundaries stay visible:")
             for num, note in notes:
-                lines.append(f"  //   #{num}: {note}")
+                lines.extend(_note_comment(num, note))
         for item in _rows_in_order(contract, method_name, rows, "web", report):
             if item[0] == "skipped":
                 lines.append(
@@ -3705,7 +3771,7 @@ def render_kotlin_test_file(
         if notes:
             lines.append("  // %d note-only branch(es) — outside the machine-checkable contract:" % len(notes))
             for num, note in notes:
-                lines.append(f"  //   #{num}: {note}")
+                lines.extend(_note_comment(num, note))
         for item in _rows_in_order(contract, method_name, rows, "android", report):
             if item[0] == "skipped":
                 lines.append(
@@ -4832,7 +4898,7 @@ def render_swift_test_file(
         if notes:
             lines.append("  // %d note-only branch(es) — outside the machine-checkable contract:" % len(notes))
             for num, note in notes:
-                lines.append(f"  //   #{num}: {note}")
+                lines.extend(_note_comment(num, note))
         for item in _rows_in_order(contract, method_name, rows, "ios", report):
             if item[0] == "skipped":
                 lines.append(
@@ -6542,6 +6608,20 @@ def _skip_for_platform(report: "GenerationReport") -> bool:
         return False
     report.platform_applicable = False
     return True
+
+
+def _note_comment(num: int, note) -> list[str]:
+    """A note-only branch as comment lines in a generated test, every line of
+    it commented.
+
+    A note may be a texts-file Markdown page (1.9.3), and a line of it
+    written without the `//` was code — the generated file stopped
+    compiling at the note's second line.
+    """
+    first, *rest = str(note).replace("\r\n", "\n").rstrip("\n").split("\n")
+    out = [f"  //   #{num}: {first}"]
+    out += [f"  //       {line}".rstrip() for line in rest]
+    return out
 
 
 def _conditions_listing(conditions: list, prefix: str) -> str:

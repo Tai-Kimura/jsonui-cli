@@ -46,7 +46,10 @@ from .branch_tests import (
     BranchTestGenerationError,
     _is_sub_spec_of_a_parent,
     _load_spec,
+    SpecTextsError,
     _load_spec_result,
+    _read_spec_texts,
+    _texts_refusal,
     _parent_declaring,
     _screen_of,
     _spec_files,
@@ -1020,6 +1023,12 @@ def discover_unit_contracts(
     #: screen -> its spec AS READ, for the ownership rule below.
     screen_specs: dict[str, dict] = {}
     problems: list[str] = []
+    #: Specs whose `{"md": ...}` prose could not be resolved. Refused as a
+    #: WHOLE run, not as a problem line: `generate` writes stubs despite
+    #: problems, and it would write the unresolved intent's repr into a
+    #: test's failure message. Every command reading this — `--check`,
+    #: `generate`, the unit pages — stops with the resolver's words.
+    texts_refusals: list[str] = []
     # Sub-specs that declare a block, by the parent that owns them. They are
     # skipped AS SCREENS (parent + subs is one screen), and their blocks are
     # meant to arrive through the parent's merged view. When they do not, the
@@ -1034,7 +1043,7 @@ def discover_unit_contracts(
             rel_file = path.name
         try:
             with open(path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
+                raw, raw_texts_errors = _read_spec_texts(json.load(f), path)
         except (OSError, json.JSONDecodeError) as e:
             # Unreadable is not "declares nothing". Keeping it in `scanned`
             # keeps the denominator honest, and saying so keeps a spec that
@@ -1047,6 +1056,10 @@ def discover_unit_contracts(
             scanned.append(screen)
             problems.append(f"{screen}: spec could not be read ({e})")
             unreadable_files.append(rel_file)
+            continue
+        if raw_texts_errors:
+            # Collected, then refused as a whole after the sweep (below).
+            texts_refusals.append(_texts_refusal(path, raw_texts_errors))
             continue
         if raw.get("type") == APP_CONTRACTS_SPEC_TYPE:
             # NOT a screen, so it never enters `scanned` or `declaring`.
@@ -1076,7 +1089,11 @@ def discover_unit_contracts(
                 if parent is not None:
                     declared_in_sub.setdefault(_screen_of(parent), []).append(screen)
             continue
-        spec, refusal = _load_spec_result(path)
+        try:
+            spec, refusal = _load_spec_result(path)
+        except SpecTextsError as e:
+            texts_refusals.append(str(e))
+            continue
         if refusal is not None:
             # The merger REFUSED this parent, and `spec` is therefore the raw
             # file — including the block that was refused. Counting it is how
@@ -1109,6 +1126,11 @@ def discover_unit_contracts(
         screen_specs[screen] = spec
         if spec.get("unitContracts") is not None:
             declaring.append(screen)
+    if texts_refusals:
+        raise UnitContractError(
+            f"{len(texts_refusals)} spec(s) carry a text reference that could "
+            f"not be resolved — nothing is compared or written until it is:\n  "
+            + "\n  ".join(texts_refusals))
     for parent_screen, subs in sorted(declared_in_sub.items()):
         if parent_screen in declaring:
             continue
@@ -1246,12 +1268,24 @@ def _cases_of(spec: dict, screen: str, spec_file: str = "",
                     target=target,
                     name=name,
                     platforms=tuple(str(p) for p in platforms),
-                    intent=str(case.get("intent") or ""),
+                    # Not `str(...)` on a string: that drops `MarkdownText`,
+                    # and the unit page renders a texts-file intent as
+                    # Markdown only because it still is one.
+                    intent=_intent_of(case.get("intent")),
                     spec_file=spec_file,
                     app=app,
                 )
             )
     return out, problems
+
+
+def _intent_of(value) -> str:
+    """The intent as text: a string AS IS (a `MarkdownText` stays one), and
+    anything else — an unresolved `{"md": ...}` above all — as nothing, so
+    a stub falls back to the case name. Never `str()` of a dict: its repr
+    was written into a generated test. `discover_unit_contracts` refuses an
+    unresolved reference before it gets here; this is the second fence."""
+    return value if isinstance(value, str) else ""
 
 
 def _test_roots(project_root: Path, config: dict) -> dict[str, list[Path] | None]:
