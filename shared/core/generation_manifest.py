@@ -832,6 +832,13 @@ def _supersedes(new_key, new_value, old_key, old_value, canonical) -> bool:
     return new_key == canonical and old_key != canonical
 
 
+def _producer_of(entry) -> str:
+    """Who recorded a `files` entry; an unstamped entry predates the stamp
+    and was written by `jui build`, the only producer at the time."""
+    by = entry.get("generatedBy") if isinstance(entry, dict) else None
+    return by or "jui build"
+
+
 def save(ledger: GenerationRun, *, generated_by: str = "jui build",
          clear_run_facts: bool = False) -> dict:
     """Merge this run's writes into the manifest and write it back.
@@ -909,18 +916,41 @@ def save(ledger: GenerationRun, *, generated_by: str = "jui build",
     untracked: list[str] = []
     dropped_versions: dict = {}
     untracked_versions: dict = {}
+    #
+    # 🚨 ONLY THIS PRODUCER'S ENTRIES LEAVE THE TRACKED SET. `files` is one
+    # table shared by `jui build` and `jsonui-doc generate html`, and the
+    # build's `present` is the build's scan — it never contains the pages a
+    # doc run recorded. Through 1.9.4 every build released all of them as
+    # "left the tracked set" (their files still there) and the next doc run
+    # put them back: on a face that tracks the manifest, ~1200 lines flipped
+    # on every alternation (reported 2026-09-29, 238 pages,
+    # `jui-build-releases-doc-run-entries-from-shared-manifest`). Another
+    # producer's entry is kept while its file exists; one whose file is gone
+    # is still `dropped` — that fact does not depend on who wrote it, and the
+    # doc run, which has no `present`, would otherwise never remove it. An
+    # entry with no `generatedBy` predates the stamp and was the build's.
+    kept_foreign: list[str] = []
     if present_keys is not None:
         present = set(present_keys)
         for key in sorted(k for k in files if k not in present):
             entry = files.get(key) or {}
             name = entry.get("version") or "unknown"
-            if (Path(project_root) / key).exists():
+            exists = (Path(project_root) / key).exists()
+            if exists and _producer_of(entry) != generated_by:
+                kept_foreign.append(key)
+            elif exists:
                 untracked.append(key)
                 untracked_versions[name] = untracked_versions.get(name, 0) + 1
             else:
                 dropped.append(key)
                 dropped_versions[name] = dropped_versions.get(name, 0) + 1
-        files = {k: v for k, v in files.items() if k in present}
+        keep = present | set(kept_foreign)
+        files = {k: v for k, v in files.items() if k in keep}
+        # The kept entries are tracked, by their own producer: counted in
+        # `tracked` and its breakdown, or `tracked` would flip between the
+        # two producers' totals on every alternation just as the table did.
+        if kept_foreign:
+            ledger.present = list(present_keys) + kept_foreign
 
     # The producer's instant when it recorded one, else this module's clock
     # — which honours SOURCE_DATE_EPOCH. Not `datetime.now` here: that was
