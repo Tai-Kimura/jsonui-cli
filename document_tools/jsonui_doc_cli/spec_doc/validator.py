@@ -333,11 +333,15 @@ class SpecValidator:
         for message in resolution.warnings:
             result.warnings.append(SpecValidationMessage(
                 path="texts", message=message, level="warning"))
-        # Refused here rather than at render time: every page is built from
-        # a validated spec, so this is the one place a missing renderer is
-        # named before a page silently falls back to raw Markdown.
+        # Refused here rather than at render time: a spec page is built from
+        # a validated spec, so this names a missing renderer before the page
+        # falls back to plain text (`prose.render_markdown`, which warns once
+        # per run for the pages that do not pass through here). Keyed on a
+        # reference that RESOLVED: a texts file read only for the unused-key
+        # audit, or one whose every reference failed, puts no Markdown on a
+        # page and so needs no renderer.
         from ..prose import markdown_available, missing_renderer_message
-        if resolution.files and not markdown_available():
+        if resolution.resolved and not markdown_available():
             result.errors.append(SpecValidationMessage(
                 path="texts", message=missing_renderer_message()))
         result.spec_data = resolution.data

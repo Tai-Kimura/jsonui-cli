@@ -116,13 +116,29 @@ def _yaml_loader():
     def _mapping(loader, node, deep=False):
         seen: dict = {}
         for key_node, _ in node.value:
-            key = loader.construct_object(key_node, deep=deep)
-            try:
-                hash(key)
-            except TypeError:
+            # Before constructing the key: PyYAML has no constructor for the
+            # merge tag in this position, and its own error ("could not
+            # determine a constructor for the tag ...merge") names nothing an
+            # author wrote.
+            if key_node.tag == "tag:yaml.org,2002:merge":
                 raise yaml.constructor.ConstructorError(
-                    None, None, "a key must be a plain string",
-                    key_node.start_mark)
+                    None, None,
+                    "merge keys (`<<:`) are not supported in a texts file — "
+                    "write each key out", key_node.start_mark)
+            key = loader.construct_object(key_node, deep=deep)
+            # Before the duplicate check: `yes:` and `1:` are True and 1,
+            # which compare equal, so a mapping holding both was reported as
+            # "duplicate key 1" — neither the rule broken nor the spelling
+            # written. The node's own scalar is the spelling.
+            if not isinstance(key, str):
+                spelling = getattr(key_node, "value", None)
+                shown = spelling if isinstance(spelling, str) else repr(key)
+                raise yaml.constructor.ConstructorError(
+                    None, None,
+                    f"key '{shown}' is read as a {type(key).__name__}, not a "
+                    f"string — YAML reads yes / no / on / off / true / false "
+                    f"and bare numbers as values; quote the key if it is "
+                    f"meant as a name", key_node.start_mark)
             if key in seen:
                 raise yaml.constructor.ConstructorError(
                     None, None,
@@ -217,6 +233,12 @@ class TextsResolution:
         self.warnings: list[str] = []
         #: Every texts file a reference read, for callers that track inputs.
         self.files: list[Path] = []
+        #: `{"md": ...}` objects met anywhere in the spec, resolved or not.
+        self.references = 0
+        #: References that became `MarkdownText` — what needs a renderer.
+        #: Not `files`: a file read for the unused-key audit, or one whose
+        #: every reference failed, puts no Markdown on any page.
+        self.resolved = 0
 
 
 def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
@@ -259,6 +281,10 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
             return ref
         if "#" in target:
             file_part, key = target.split("#", 1)
+            refusal = _file_part_refusal(file_part)
+            if refusal:
+                result.errors.append(f"{where}: '{target}' {refusal}")
+                return ref
             path = base / file_part
         else:
             file_part, key = "", target
@@ -274,6 +300,7 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
             return ref
         if key in loaded.leaves:
             used.setdefault(path.resolve(), set()).add(key)
+            result.resolved += 1
             return MarkdownText(loaded.leaves[key], shown)
         if key in loaded.branches:
             result.errors.append(
@@ -288,6 +315,7 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
     def walk(node: Any, path: str, in_text: bool) -> Any:
         if isinstance(node, dict):
             if is_reference(node):
+                result.references += 1
                 if in_text:
                     return resolve_ref(node, path)
                 result.errors.append(
@@ -312,6 +340,15 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
     # may be shared by other specs, so one spec cannot call its keys unused.
     loaded = files.get(paired.resolve()) if paired.is_file() else None
     if loaded is None and paired.is_file():
+        if not result.references and _yaml_loader()[0] is None:
+            # Nothing in this spec needs the file, so nothing in it can make
+            # the spec wrong: only the audit wants PyYAML here. An error
+            # would fail a spec with no reference on a launcher-only
+            # install, for a check of text that spec does not use.
+            result.warnings.append(
+                f"{paired.name}: PyYAML is not installed, so the unused-key "
+                f"check of this file was skipped — {_INSTALL_HINT}")
+            return result
         loaded = texts(paired)
     if loaded is not None and not loaded.errors:
         unused = sorted(set(loaded.leaves) - used.get(paired.resolve(), set()))
@@ -321,6 +358,28 @@ def resolve_spec_texts(data: Any, spec_path: Path | str) -> TextsResolution:
                 f"{paired.name}: {len(unused)} key(s) no field of this spec "
                 f"references: {shown}")
     return result
+
+
+def _file_part_refusal(file_part: str) -> str | None:
+    """Why the file half of `file#key` is refused, or None.
+
+    Relative, and a `.texts.yaml`: a reference is read by every tool that
+    reads the spec, so an absolute path works on one machine only, and a
+    reference to any other file would quote that file into generated pages
+    and code (`../../.env#KEY`). `..` stays allowed — a shared texts file
+    beside the spec directory is the point of the named form.
+    """
+    if not file_part.strip():
+        return ("names no file before '#' — write {\"md\": \"key\"} to "
+                "read the spec's paired file")
+    if Path(file_part).is_absolute() or file_part.startswith(("/", "\\")) \
+            or (len(file_part) > 1 and file_part[1] == ":"):
+        return ("names an absolute path — name the file relative to the "
+                "spec, so the reference reads the same on every machine")
+    if not file_part.endswith(TEXTS_SUFFIX):
+        return (f"names '{file_part}', which is not a {TEXTS_SUFFIX} file — "
+                f"a reference reads texts files only")
+    return None
 
 
 def _rel(path: Path, base: Path) -> str:

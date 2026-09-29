@@ -95,8 +95,10 @@ text inline:
 
 Without a `#`, the key is read from the spec's paired file
 (`app_contracts.spec.json` -> `app_contracts.texts.yaml`, same directory);
-with one, from the named file, relative to the spec. The key is a
-`.`-separated path through nested mappings:
+with one, from the named file, relative to the spec. The named file must be
+a relative path ending in `.texts.yaml` (`../shared/x.texts.yaml` is fine; an
+absolute path, an empty file part such as `#key`, or any other file is an
+error). The key is a `.`-separated path through nested mappings:
 
 ```yaml
 overview: |
@@ -116,11 +118,17 @@ user_repository:
   text, with its line breaks kept.
 - Validation errors: an undefined key, a key naming a mapping, a missing
   file, a key that is not a string (`yes:` / `on:` / `1:` — quote it), a key
-  containing `.`, a duplicate key, a list or empty value, and a reference in
-  a field that is not prose. A key of the paired file that no field
-  references is a warning.
-- Needs `PyYAML` and `markdown-it-py` (declared dependencies; validation
-  names the `pip install` when either is missing).
+  containing `.`, a duplicate key, a merge key (`<<:`), a list or empty
+  value, and a reference in a field that is not prose. A key of the paired
+  file that no field references is a warning.
+- Needs `PyYAML` and `markdown-it-py` (declared dependencies) — but only
+  for a spec that uses a reference. A spec with a reference fails
+  validation, naming the `pip install`, when either is missing; a spec with
+  none never needs them (a paired file beside it then gets a warning that
+  its unused-key check was skipped). A page that renders a texts-file value
+  without `markdown-it-py` (the unit pages do not pass through validation)
+  shows it as plain text, and `generate html` prints one
+  `WARNING [doc-markdown]` line per run.
 
 #### Validate Component Specification
 

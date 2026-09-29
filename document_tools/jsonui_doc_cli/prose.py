@@ -51,9 +51,45 @@ def is_markdown(value: Any) -> bool:
     return texts is not None and texts.is_markdown(value)
 
 
+#: Whether this run has said that markdown-it-py is missing. Once per run:
+#: every Markdown value on every page falls back the same way, and one line
+#: per value would bury the one fact under hundreds of copies. Reset by
+#: `reset_render_warnings`, which `test_doc/generator.py` registers as
+#: per-run state.
+_missing_renderer_reported = False
+
+
+def reset_render_warnings() -> None:
+    global _missing_renderer_reported
+    _missing_renderer_reported = False
+
+
+def _report_missing_renderer() -> None:
+    global _missing_renderer_reported
+    if _missing_renderer_reported:
+        return
+    _missing_renderer_reported = True
+    from .run_log import warn
+    warn(f"  WARNING [doc-markdown]: {missing_renderer_message()}; "
+         f"texts-file Markdown is shown as plain text")
+
+
 def render_markdown(text: str) -> str:
-    """Markdown -> HTML, wrapped in `div.md` so the stylesheet can scope it."""
-    return f'<div class="md">{_renderer().render(str(text)).strip()}</div>'
+    """Markdown -> HTML, wrapped in `div.md` so the stylesheet can scope it.
+
+    ⚠️ NEVER RAISES FOR A MISSING markdown-it-py. The validator refuses a
+    spec page whose references resolved while the renderer is missing, but
+    the unit pages render case intents without passing through it, and an
+    ImportError here stopped the whole `generate html` run. So the text is
+    shown escaped (`plain_html`) and the run says so once, in the counted
+    warning channel, with the validator's own sentence.
+    """
+    try:
+        renderer = _renderer()
+    except ImportError:
+        _report_missing_renderer()
+        return plain_html(text)
+    return f'<div class="md">{renderer.render(str(text)).strip()}</div>'
 
 
 def plain_html(value: Any) -> str:

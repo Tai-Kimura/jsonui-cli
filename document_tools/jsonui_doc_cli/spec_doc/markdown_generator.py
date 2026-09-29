@@ -29,6 +29,29 @@ def _cell(value) -> str:
     return str(value).replace("\r\n", "\n").replace("\n", "<br>")
 
 
+def _labelled(label: str, value) -> list[str]:
+    """`**Notes:** text`, or — for Markdown from a texts file — the label on
+    its own line and the value as blocks below it.
+
+    Inline, a Markdown value that opens with a heading or a list is glued to
+    the label's paragraph, and `## Rule` renders as the literal text "## Rule".
+    """
+    if _is_markdown(value):
+        return [f"**{label}:**", "", str(value).rstrip("\n")]
+    return [f"**{label}:** {value}"]
+
+
+def _list_continuation(text) -> str:
+    """Text placed inside a `- ` list item: continuation lines indented so
+    they stay in the item instead of starting a new block after the list."""
+    return str(text).replace("\r\n", "\n").replace("\n", "\n  ")
+
+
+def _is_markdown(value) -> bool:
+    from ..prose import is_markdown
+    return is_markdown(value)
+
+
 def _format_platform_md(value) -> str:
     """Format a platform filter (string or override dict) for markdown output."""
     if not value:
@@ -213,7 +236,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
 
     # Structure notes
     if structure.get("notes"):
-        lines.append(f"**Notes:** {structure['notes']}")
+        lines.extend(_labelled("Notes", structure['notes']))
         lines.append("")
 
     # Collection Structure(s) — structure.collection + structure.collections[]
@@ -381,11 +404,11 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     lines.append("")
 
                 if endpoint.get("notes"):
-                    lines.append(f"**Notes:** {endpoint['notes']}")
+                    lines.extend(_labelled("Notes", endpoint['notes']))
                     lines.append("")
 
         if data_flow.get("notes"):
-            lines.append(f"**Notes:** {data_flow['notes']}")
+            lines.extend(_labelled("Notes", data_flow['notes']))
             lines.append("")
 
     # State Management
@@ -408,7 +431,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 lines.append(f"| `.{v}` | {desc} | {visible} |")
             lines.append("")
             if state.get("notes"):
-                lines.append(f"**Notes:** {state['notes']}")
+                lines.extend(_labelled("Notes", state['notes']))
                 lines.append("")
 
         # UI Variables
@@ -462,7 +485,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("")
 
         if state_mgmt.get("notes"):
-            lines.append(f"**Notes:** {state_mgmt['notes']}")
+            lines.extend(_labelled("Notes", state_mgmt['notes']))
             lines.append("")
 
     # User Actions
@@ -511,7 +534,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("")
 
         if validation.get("notes"):
-            lines.append(f"**Notes:** {validation['notes']}")
+            lines.extend(_labelled("Notes", validation['notes']))
             lines.append("")
 
     # Branch Contracts (opt-in decision tables)
@@ -601,7 +624,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     empty = " | |" if scoped else " |"
                     lines.append(
                         f"| {i} | *note (not machine-checked): "
-                        f"{branch.get('note', '') or ''}* |{empty} |"
+                        f"{_cell(branch.get('note', '') or '')}* |{empty} |"
                     )
                     continue
                 when = branch.get("when")
@@ -618,12 +641,12 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     f"| {i} | {_pairs(when) if isinstance(when, dict) else '-'} | "
                     f"{_pairs(then) if isinstance(then, dict) else '-'} | "
                     f"{platform_cell}"
-                    f"{branch.get('notes', '-') or '-'} |"
+                    f"{_cell(branch.get('notes', '-') or '-')} |"
                 )
             lines.append("")
 
         if branch_contracts.get("notes"):
-            lines.append(f"**Notes:** {branch_contracts['notes']}")
+            lines.extend(_labelled("Notes", branch_contracts['notes']))
             lines.append("")
 
     # Transitions
@@ -720,7 +743,14 @@ def _format_method_md(method) -> str:
         if return_type:
             result += f" → `{return_type}`"
         if method.get("description"):
-            result += f" — {method['description']}"
+            desc = method["description"]
+            if _is_markdown(desc):
+                # Its own paragraph inside the item: a Markdown value may
+                # open with a list or a heading, which glued after " — "
+                # would be literal text.
+                result += " —\n\n  " + _list_continuation(str(desc).rstrip("\n"))
+            else:
+                result += f" — {_list_continuation(desc)}"
         return result
     else:
         return f"`{method}`"

@@ -230,5 +230,262 @@ class Rendering(_Dir):
         self.assertIn("- para 1\n  \n  para 2", out)
 
 
+
+class _NoModule:
+    """`sys.modules[name] = None` for the block: `import name` raises
+    ImportError, the state of a launcher-only install."""
+
+    def __init__(self, *names):
+        self.names = names
+
+    def __enter__(self):
+        import sys
+        self.saved = {n: sys.modules.get(n, _NoModule) for n in self.names}
+        for n in self.names:
+            sys.modules[n] = None
+        return self
+
+    def __exit__(self, *exc):
+        import sys
+        for n, v in self.saved.items():
+            if v is _NoModule:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = v
+
+
+class MissingRenderer(unittest.TestCase):
+    """A: markdown-it-py missing must not crash a page — the unit pages
+    render intents without going through the validator's check."""
+
+    def setUp(self):
+        import io
+        from jsonui_doc_cli import prose, run_log
+        self.prose = prose
+        # The renderer is cached once built; a machine that never had the
+        # module never built it.
+        self.saved_md = prose._md
+        prose._md = None
+        getattr(prose, "reset_render_warnings", lambda: None)()
+        run_log.reset()
+        self.out = io.StringIO()
+
+    def tearDown(self):
+        self.prose._md = self.saved_md
+        getattr(self.prose, "reset_render_warnings", lambda: None)()
+
+    def _unit_page(self, intent):
+        from jsonui_doc_cli.test_doc.html.unit import generate_unit_html
+        target = {"target": "ApiClient", "screens": [], "spec_files": [],
+                  "cases": [{"name": "retries", "intent": intent,
+                             "status": {}}],
+                  "faces": {"web": {"declared": ["retries"], "implemented": [],
+                                    "missing": [], "never_runs": [],
+                                    "unattributed": [], "files": []}}}
+        return generate_unit_html(target, ["web"])
+
+    def test_a_markdown_intent_falls_back_to_escaped_text_and_warns_once(self):
+        import contextlib
+        from jsonui_doc_cli import run_log
+        md = texts.MarkdownText("**bold** <b>x</b>\nline 2")
+        with _NoModule("markdown_it"), contextlib.redirect_stdout(self.out):
+            page1 = self._unit_page(md)
+            page2 = self._unit_page(md)
+        for page in (page1, page2):
+            self.assertIn("**bold** &lt;b&gt;x&lt;/b&gt;<br>line 2", page)
+            self.assertNotIn('<div class="md">', page)
+        printed = self.out.getvalue()
+        self.assertEqual(1, printed.count("markdown-it-py is not installed"),
+                         printed)
+        self.assertEqual(1, run_log.count())
+        self.assertRegex(printed, run_log.COUNTING_RE)
+
+    def test_the_warning_is_once_per_run_not_once_per_process(self):
+        import contextlib
+        from jsonui_doc_cli.test_doc.generator import reset_per_run_ledgers
+        md = texts.MarkdownText("x")
+        with _NoModule("markdown_it"), contextlib.redirect_stdout(self.out):
+            self.prose.prose_html(md)
+            reset_per_run_ledgers()
+            self.prose.prose_html(md)
+        self.assertEqual(2, self.out.getvalue().count(
+            "markdown-it-py is not installed"))
+
+
+class TableCellsInMarkdown(unittest.TestCase):
+    """C: every prose value inside a Markdown table row keeps the row."""
+
+    TWO = texts.MarkdownText("line one\nline two") if texts else "line one\nline two"
+
+    def _rows_have_no_raw_break(self, out, needle="line one"):
+        (row,) = [ln for ln in out.splitlines() if needle in ln]
+        self.assertIn("line one<br>line two", row)
+        self.assertTrue(row.rstrip().endswith("|"), row)
+
+    def test_component_markdown_tables(self):
+        from jsonui_doc_cli.spec_doc.html_generator import generate_component_markdown
+        for section in ("props", "slots", "components", "internal", "events"):
+            spec = {"metadata": {"name": "C", "description": "d"}}
+            item = {"name": "x", "type": "String", "description": self.TWO}
+            if section == "props":
+                spec["props"] = {"items": [item]}
+            elif section == "slots":
+                spec["slots"] = {"items": [item]}
+            elif section == "components":
+                spec["structure"] = {"components": [
+                    {"type": "View", "id": "v", "description": self.TWO}]}
+            elif section == "internal":
+                spec["stateManagement"] = {"internalStates": [item]}
+            else:
+                spec["stateManagement"] = {"exposedEvents": [item]}
+            with self.subTest(section=section):
+                self._rows_have_no_raw_break(generate_component_markdown(spec))
+
+    def test_branch_contract_row_notes_and_note_rows(self):
+        spec = _app_spec("d")
+        spec["type"] = "screen_spec"
+        spec["branchContracts"] = {"methods": {"onTap": {"branches": [
+            {"when": {"data.a": True}, "then": {"api": "none"},
+             "notes": self.TWO},
+        ]}}}
+        self._rows_have_no_raw_break(generate_spec_markdown(spec))
+
+
+class MarkdownBlocksInTheMarkdownPage(unittest.TestCase):
+    """C: a Markdown value keeps its block structure in the .md page."""
+
+    def test_notes_label_puts_a_markdown_block_on_its_own_lines(self):
+        spec = _app_spec("d")
+        spec["type"] = "screen_spec"
+        spec["structure"] = {"components": [], "layout": {},
+                             "notes": texts.MarkdownText("## Heading\n\n- item")}
+        out = generate_spec_markdown(spec)
+        self.assertNotIn("**Notes:** ## Heading", out)
+        self.assertIn("\n## Heading\n", out)
+        self.assertIn("\n- item", out)
+
+    def test_a_plain_note_stays_inline(self):
+        spec = _app_spec("d")
+        spec["type"] = "screen_spec"
+        spec["structure"] = {"components": [], "layout": {}, "notes": "short"}
+        self.assertIn("**Notes:** short", generate_spec_markdown(spec))
+
+    def test_a_method_description_stays_inside_its_list_item(self):
+        spec = _app_spec("d")
+        spec["type"] = "screen_spec"
+        spec["dataFlow"] = {"repositories": [{"name": "Repo", "methods": [
+            {"name": "load", "description": texts.MarkdownText(
+                "first\n\n- sub a\n- sub b")}]}]}
+        out = generate_spec_markdown(spec)
+        self.assertIn("\n  - sub a\n  - sub b", out)
+        self.assertNotIn("\n- sub a", out)
+
+
+class FileReferenceRules(_Dir):
+    """G / H: the file half of a `file#key` reference."""
+
+    def errors(self, ref):
+        return self.resolve(_app_spec({"md": ref})).errors
+
+    def test_an_empty_file_part_is_named(self):
+        self.write("app.texts.yaml", "key: x\n")
+        (e,) = self.errors("#key")
+        self.assertIn("no file before '#'", e)
+        self.assertNotIn("does not exist", e)
+
+    def test_an_absolute_path_is_refused(self):
+        other = Path(tempfile.mkdtemp()) / "abs.texts.yaml"
+        other.write_text("key: x\n", encoding="utf-8")
+        (e,) = self.errors(f"{other}#key")
+        self.assertIn("absolute", e)
+
+    def test_a_file_that_is_not_a_texts_file_is_refused(self):
+        self.write("secrets.yaml", "key: x\n")
+        (e,) = self.errors("secrets.yaml#key")
+        self.assertIn(".texts.yaml", e)
+        self.assertIn("secrets.yaml", e)
+
+    def test_a_relative_shared_file_above_the_spec_is_still_allowed(self):
+        self.write("shared/net.texts.yaml", "k: shared\n")
+        path = self.write("screens/app.spec.json",
+                          _app_spec({"md": "../shared/net.texts.yaml#k"}))
+        r = texts.resolve_spec_texts(
+            _app_spec({"md": "../shared/net.texts.yaml#k"}), path)
+        self.assertEqual([], r.errors)
+        self.assertEqual("shared", r.data["metadata"]["description"])
+
+
+class YamlMessages(_Dir):
+    """G: the message names what the author wrote."""
+
+    def errors(self, yaml_text):
+        return self.resolve(_app_spec({"md": "ok"}), "ok: fine\n" + yaml_text).errors
+
+    def test_a_bool_and_an_int_key_are_non_string_keys_not_duplicates(self):
+        (e,) = self.errors("yes: a\n1: b\n")
+        self.assertNotIn("duplicate", e)
+        self.assertIn("not a string", e)
+        self.assertIn("yes", e)
+
+    def test_a_merge_key_is_named_as_unsupported(self):
+        (e,) = self.errors("base: &b\n  x: one\nderived:\n  <<: *b\n  y: two\n")
+        self.assertIn("merge key", e)
+        self.assertNotIn("constructor", e)
+
+
+class NoReferencesNoDependency(_Dir):
+    """I: a spec that references nothing never needs PyYAML or markdown-it."""
+
+    def test_no_reference_and_no_pyyaml_is_not_an_error(self):
+        spec = _app_spec("plain")
+        with _NoModule("yaml"):
+            r = self.resolve(spec, "stale: x\n")
+        self.assertEqual([], r.errors)
+        (w,) = r.warnings
+        self.assertIn("PyYAML", w)
+        self.assertIn("skipped", w)
+
+    def test_validation_passes_without_either_dependency(self):
+        from jsonui_doc_cli import prose
+        path = self.write("app.spec.json", _app_spec("plain"))
+        self.write("app.texts.yaml", "stale: x\n")
+        saved = prose._md
+        prose._md = None
+        try:
+            with _NoModule("yaml", "markdown_it"):
+                result = SpecValidator().validate_file(path)
+        finally:
+            prose._md = saved
+        self.assertEqual([], [e.message for e in result.errors])
+
+    def test_a_texts_file_that_resolves_nothing_to_markdown_needs_no_renderer(self):
+        from jsonui_doc_cli import prose
+        path = self.write("app.spec.json", _app_spec({"md": "gone"}))
+        self.write("app.texts.yaml", "other: x\n")
+        saved = prose._md
+        prose._md = None
+        try:
+            with _NoModule("markdown_it"):
+                result = SpecValidator().validate_file(path)
+        finally:
+            prose._md = saved
+        messages = [e.message for e in result.errors]
+        self.assertTrue(any("not defined" in m for m in messages), messages)
+        self.assertFalse(any("markdown-it-py" in m for m in messages), messages)
+
+    def test_a_resolved_reference_still_needs_the_renderer(self):
+        from jsonui_doc_cli import prose
+        path = self.write("app.spec.json", _app_spec({"md": "k"}))
+        self.write("app.texts.yaml", "k: x\n")
+        saved = prose._md
+        prose._md = None
+        try:
+            with _NoModule("markdown_it"):
+                result = SpecValidator().validate_file(path)
+        finally:
+            prose._md = saved
+        self.assertTrue(any("markdown-it-py" in e.message for e in result.errors))
+
+
 if __name__ == "__main__":
     unittest.main()

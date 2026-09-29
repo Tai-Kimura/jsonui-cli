@@ -2183,6 +2183,11 @@ def generate_component_html(
 
 def generate_component_markdown(spec_data: dict) -> str:
     """Generate Markdown documentation for a component specification."""
+    # The table-cell rule of the screen page's Markdown, not a second copy:
+    # a raw newline in a cell ends the row. Imported here because
+    # markdown_generator imports this module.
+    from .markdown_generator import _cell
+
     metadata = spec_data.get("metadata", {})
     name = metadata.get("name", "Component")
     display_name = metadata.get("displayName", name)
@@ -2209,7 +2214,7 @@ def generate_component_markdown(spec_data: dict) -> str:
             default_val = prop.get("default", "-")
             if default_val is None:
                 default_val = "null"
-            md += f"| `{prop.get('name', '')}` | `{prop.get('type', '')}` | {required} | `{default_val}` | {prop.get('description', '')} |\n"
+            md += f"| `{prop.get('name', '')}` | `{prop.get('type', '')}` | {required} | `{default_val}` | {_cell(prop.get('description', ''))} |\n"
         md += "\n"
 
     # Slots
@@ -2219,7 +2224,7 @@ def generate_component_markdown(spec_data: dict) -> str:
         md += "|------|----------|-------------|\n"
         for slot in slots:
             required = "Yes" if slot.get("required", False) else "No"
-            md += f"| `{slot.get('name', '')}` | {required} | {slot.get('description', '')} |\n"
+            md += f"| `{slot.get('name', '')}` | {required} | {_cell(slot.get('description', ''))} |\n"
         md += "\n"
 
     # Structure
@@ -2230,7 +2235,7 @@ def generate_component_markdown(spec_data: dict) -> str:
         md += "| Type | ID | Description |\n"
         md += "|------|----|--------------|\n"
         for comp in components:
-            md += f"| `{comp.get('type', '')}` | `{comp.get('id', '')}` | {comp.get('description', '')} |\n"
+            md += f"| `{comp.get('type', '')}` | `{comp.get('id', '')}` | {_cell(comp.get('description', ''))} |\n"
         md += "\n"
 
     # State Management
@@ -2248,7 +2253,7 @@ def generate_component_markdown(spec_data: dict) -> str:
                 initial = state.get("initialValue", "-")
                 if initial is None:
                     initial = "null"
-                md += f"| `{state.get('name', '')}` | `{state.get('type', '')}` | `{initial}` | {state.get('description', '')} |\n"
+                md += f"| `{state.get('name', '')}` | `{state.get('type', '')}` | `{initial}` | {_cell(state.get('description', ''))} |\n"
             md += "\n"
 
         if exposed_events:
@@ -2258,7 +2263,7 @@ def generate_component_markdown(spec_data: dict) -> str:
             for event in exposed_events:
                 params = event.get("parameters", [])
                 param_str = ", ".join([f"{p.get('name', '')}: {p.get('type', '')}" for p in params]) if params else "-"
-                md += f"| `{event.get('name', '')}` | `{param_str}` | {event.get('description', '')} |\n"
+                md += f"| `{event.get('name', '')}` | `{param_str}` | {_cell(event.get('description', ''))} |\n"
             md += "\n"
 
     # Usage
