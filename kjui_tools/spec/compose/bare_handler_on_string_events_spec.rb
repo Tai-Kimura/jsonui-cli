@@ -71,9 +71,28 @@ RSpec.describe 'kjui: a bare handler name on an event the SSoT declares with a s
     expect(calls).not_to be_empty
     expect(<<~KOTLIN).to compile_as_kotlin
       class Data(val h: ((Int) -> Unit)? = null)
-      fun calls(data: Data, cellIndex: Int, page: Int, index: Int) {
+      fun calls(data: Data, cellIndex: Int, page: Int, index: Int, selectedTab: Int) {
       #{calls.map { |c| "    #{c}" }.join("\n")}
       }
     KOTLIN
+  end
+
+  # TabView.onValueChange is called when the selection's value changes (ruling
+  # 2026-10-02): a tap only writes the selection, and an effect keyed on the
+  # selection calls the handler when it differs from the last one — so not
+  # when the tab view appears, not on a second tap of the selected tab, and on
+  # a selectedIndex write. Until jsonui-cli 1.9.6 the tab's onClick called it.
+  it 'TabView: the handler is called on a change of the selection, not from a tab tap' do
+    tabs = { 'type' => 'TabView', 'id' => 'tabs', 'tabs' => [{ 'title' => 'a', 'view' => 'a_view' }, { 'title' => 'b', 'view' => 'b_view' }],
+             'onValueChange' => '@{h}' }
+    { tabs => 'selectedTab', tabs.merge('selectedIndex' => '@{tab}') => 'data.tab' }.each do |node, selection|
+      code, imports = generate(node)
+      expect(code.scan(/onClick = \{[^\n]*\}/).join).not_to include('data.h'), selection
+      expect(code).to include("var tabsLastSelected by remember { mutableStateOf(#{selection}) }",
+                              "LaunchedEffect(#{selection}) {",
+                              "if (#{selection} != tabsLastSelected) {",
+                              "data.h?.invoke(#{selection})")
+      expect(imports).to include(:launched_effect, :remember, :remember_state)
+    end
   end
 end

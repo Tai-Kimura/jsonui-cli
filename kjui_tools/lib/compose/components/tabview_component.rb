@@ -67,6 +67,26 @@ module KjuiTools
                          view_id = Helpers::ModifierBuilder.view_id(json_data)
                          ->(index) { Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, index.to_s) }
                        end
+          # Called when the selected tab's value changes — a tap on another tab
+          # or a selectedIndex write — and not when the tab view first appears
+          # or the selected tab is tapped again (the SSoT's TabView.onValueChange,
+          # ruling 2026-10-02, as SwiftJsonUI's `.onChange(of: selection)` and
+          # KotlinJsonUI Dynamic). A tap only writes the selection. Until
+          # jsonui-cli 1.9.6 the tab's onClick called the handler, so a second
+          # tap on the selected tab called it again and a write never did.
+          if tab_change
+            required_imports&.add(:launched_effect)
+            required_imports&.add(:remember)
+            required_imports&.add(:remember_state)
+            last_var = "#{(Helpers::ModifierBuilder.view_id(json_data) || 'tabs').to_s.gsub(/[^A-Za-z0-9]/, '_')}LastSelected"
+            code += "\n" + indent("var #{last_var} by remember { mutableStateOf(#{state_expr}) }", depth)
+            code += "\n" + indent("LaunchedEffect(#{state_expr}) {", depth)
+            code += "\n" + indent("if (#{state_expr} != #{last_var}) {", depth + 1)
+            code += "\n" + indent("#{last_var} = #{state_expr}", depth + 2)
+            code += "\n" + indent(tab_change.call(state_expr), depth + 2)
+            code += "\n" + indent("}", depth + 1)
+            code += "\n" + indent("}", depth)
+          end
           # `enabled` is the tab bar's own items' parameter: a disabled TabView
           # does not switch tabs (NavigationBarItem's `enabled`, which also
           # marks each item disabled for TalkBack). Only the Scaffold's
@@ -139,7 +159,7 @@ module KjuiTools
             # `gsub('it', index)` rewrote every "it" of the setter, so a bound
             # name holding one — `editIndex` — wrote `"ed0Index"`, a key the
             # data does not have, and the tab never switched.
-            code += "\n" + indent("onClick = { #{[select_tab.call(index), tab_change&.call(index)].compact.join('; ')} },", depth + 4)
+            code += "\n" + indent("onClick = { #{select_tab.call(index)} },", depth + 4)
             code += "\n" + indent("enabled = #{tabs_enabled},", depth + 4) if tabs_enabled
 
             # The badge reaches a screen reader only through the item. Material3's

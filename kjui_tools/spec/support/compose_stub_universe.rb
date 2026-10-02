@@ -74,6 +74,9 @@ module ComposeStubUniverse
       operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
       fun <T> remember(calculation: () -> T): T = calculation()
       fun <T> mutableStateOf(value: T) = MutableState(value)
+      // The effect a TabView's onValueChange is called from (on a change of
+      // the selection, ruling 2026-10-02).
+      fun LaunchedEffect(key1: Any?, block: suspend () -> Unit) {}
       #{views.map { |v| "fun #{v}() {}" }.join("\n")}
     KOTLIN
   end
