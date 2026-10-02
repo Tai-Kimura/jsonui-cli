@@ -697,11 +697,17 @@
         "string",
         "array"
       ],
-      "description": "Click handler function name (selector-based, lowercase) - string only, no binding"
+      "description": "Click handler function name (selector-based, lowercase) - string only, no binding",
+      "notApplicableTo": {
+        "Web": "the page takes the taps (WKWebView on iOS, the Android web view, the iframe on web); a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
+      }
     },
     "onClick": {
       "type": "binding",
-      "description": "Click handler (camelCase) - binding only (@{functionName}). On a type the SSoT does not declare (an app's own component) JsonUI gives the tap no screen-reader role; the component carries its own."
+      "description": "Click handler (camelCase) - binding only (@{functionName}). On a type the SSoT does not declare (an app's own component) JsonUI gives the tap no screen-reader role; the component carries its own.",
+      "notApplicableTo": {
+        "Web": "the page takes the taps (WKWebView on iOS, the Android web view, the iframe on web); a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
+      }
     },
     "onLongPress": {
       "type": "binding",
@@ -714,7 +720,12 @@
     },
     "onPan": {
       "type": "binding",
-      "description": "Pan gesture handler (camelCase) - binding only (@{functionName}). Invoked repeatedly while the user drags. Payload: cumulative translation since the gesture began (iOS CGSize, Android Offset; web passes the PointerEvent). A handler declared () -> Void is called without the payload."
+      "description": "Pan gesture handler (camelCase) - binding only (@{functionName}). Invoked repeatedly while the user drags. Payload: cumulative translation since the gesture began (iOS CGSize, Android Offset; web passes the PointerEvent). A handler declared () -> Void is called without the payload.",
+      "notApplicableTo": {
+        "TextField": "the field's own drag (text selection, caret placement) takes the gesture; a pan laid over it would break editing (ruling 2026-10-03: not delivered, the build warns)",
+        "TextView": "the field's own drag (text selection, caret placement) takes the gesture; a pan laid over it would break editing (ruling 2026-10-03: not delivered, the build warns)",
+        "Slider": "the slider's own drag moves its value; a pan laid over it would break that (ruling 2026-10-03: not delivered, the build warns)"
+      }
     },
     "onPinch": {
       "type": "binding",

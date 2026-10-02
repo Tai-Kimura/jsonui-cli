@@ -211,6 +211,15 @@ module JsonUIShared
 
         if valid_attrs.key?(key)
           attr_def = valid_attrs[key]
+          # An attribute the SSoT declares on a section it does not reach
+          # (`notApplicableTo`: section -> reason) is written, builds, and is
+          # never called there — the component's own operation takes the
+          # gesture. Named, on every face in the same words (ruling
+          # 2026-10-03: onPan on a text field / slider, onClick on a Web).
+          if (reason = not_applicable_reason(attr_def, type))
+            add_warning("'#{key}' is not called on a #{map_type_to_definition(type)}: #{reason}")
+            next
+          end
           # Check platform compatibility first
           if platform_compatible?(attr_def)
             # Check mode compatibility
@@ -473,6 +482,16 @@ module JsonUIShared
         end
       end
       base
+    end
+
+    # The reason an attribute is declared not to reach this type's section,
+    # or nil (`notApplicableTo`, keyed by the canonical section: EditText /
+    # Input resolve to TextField through the type synonyms).
+    def not_applicable_reason(attr_def, type)
+      table = attr_def['notApplicableTo']
+      return nil unless table.is_a?(Hash)
+
+      table[map_type_to_definition(type)]
     end
 
     # Get valid attributes for a component type (common + type-specific)
