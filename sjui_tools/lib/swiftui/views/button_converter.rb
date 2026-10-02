@@ -157,6 +157,16 @@ module SjuiTools
             if action && is_binding?(action) && !tap_shut?
               handler_call = gated_handler_call(get_event_handler_invocation(action, view_id, nil))
               add_line "action: { #{handler_call} },"
+            elsif !action && JsonUIShared::TapAccessibility.handler?(@component['onclick']) && !tap_shut?
+              # `onclick`, the selector spelling (a method name, no binding),
+              # is declared on every type and read on a View's path
+              # (build_selector_click_lines); a Button's action read onClick
+              # only, so a Button tapped and called nothing, with no warning
+              # (ticket sjui-button-onclick-selector-and-onlongpress-are-never-
+              # called). camelCase wins when both are present, as on a View.
+              calls = JsonUIShared::TapAccessibility.handler_values(@component['onclick'])
+                                                     .map { |n| no_value_call(to_camel_case(n)) }
+              add_line "action: { #{gated_handler_call(calls.join('; '))} },"
             else
               add_line "action: { },"
             end
@@ -368,6 +378,16 @@ module SjuiTools
           # draws them for every other type.
           apply_common_decorations
 
+          # The common events a View takes in apply_modifiers, which a Button
+          # does not run: onLongPress was never attached to a Button (same
+          # ticket), and onPan / onPinch / onAppear / onDisappear were not
+          # either. The long press is simultaneous so the Button's own tap
+          # still fires; pan and pinch already are.
+          apply_button_long_press_to_bag
+          apply_pan_to_bag
+          apply_pinch_to_bag
+          apply_lifecycle_events_to_bag
+
           # confirmationDialog / alert (iOS 15+)
           apply_confirmation_dialog_to_bag
           apply_alert_to_bag
@@ -376,6 +396,17 @@ module SjuiTools
           register_hit_test_gate
 
           generated_code
+        end
+
+        def apply_button_long_press_to_bag
+          handler = @component['onLongPress']
+          return unless handler && is_binding?(handler)
+
+          @modifier_bag.register(:on_long_press, [
+            ".simultaneousGesture(LongPressGesture().onEnded { _ in",
+            "    #{no_value_call(extract_binding_property(handler))}",
+            "})"
+          ])
         end
 
         def apply_padding_to_text

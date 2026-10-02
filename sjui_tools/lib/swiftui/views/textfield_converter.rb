@@ -56,19 +56,22 @@ module SjuiTools
           # Get text binding
           text_binding = if @component['text'] && is_binding?(@component['text'])
                           textfield_handler.get_text_binding(@component)
-                        elsif @component['text'].is_a?(String) && !@component['text'].empty?
+                        else
                           # A literal `text` seeds the field's initial content
                           # (the UIKit runtime sets field.text and the dynamic
-                          # path renders it) — .constant("") dropped it and the
-                          # field opened empty showing its placeholder. Local
-                          # @State keeps the field editable, matching UIKit.
+                          # path renders it); no `text` opens it empty. Either
+                          # way a local @State keeps the field editable,
+                          # matching UIKit and Dynamic. No `text` used to get
+                          # `.constant("")`: the user could not type into it,
+                          # and onTextChange — wired to a `$` binding only —
+                          # was dropped with no warning (ticket sjui-textfield-
+                          # without-a-text-binding-cannot-be-typed-into-and-
+                          # drops-ontextchange).
                           # No id: its position (position_name), not camelCased.
+                          initial = @component['text'].is_a?(String) ? @component['text'] : ''
                           state_name = @component['id'] ? "#{to_camel_case(@component['id'])}Text" : "#{position_name('textField')}Text"
-                          @state_variables << "@State private var #{state_name}: String = #{swift_string_literal(@component['text'])}"
+                          @state_variables << "@State private var #{state_name}: String = #{swift_string_literal(initial)}"
                           "$#{state_name}"
-                        else
-                          # If no binding, create a constant binding with empty string
-                          ".constant(\"\")"
                         end
 
           # Check if it should be a SecureField
@@ -267,9 +270,9 @@ module SjuiTools
                 add_line "data.#{focus_var} = newValue" if @component['id']
                 if focus_handlers.any? || blur_handlers.any?
                   add_line "if newValue {"
-                  indent { focus_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
+                  indent { focus_handlers.each { |h| add_line focus_handler_call(h) } }
                   add_line "} else {"
-                  indent { blur_handlers.each { |h| add_line "data.#{to_camel_case(h.to_s)}?()" } }
+                  indent { blur_handlers.each { |h| add_line focus_handler_call(h) } }
                   add_line "}"
                 end
               end
@@ -390,6 +393,15 @@ module SjuiTools
           apply_binding_modifiers
 
           generated_code
+        end
+
+        # A focus / blur handler, declared "string": '@{h}' or the bare name,
+        # called as the data declares it. The name was written as given, so
+        # '@{h}' became `data.@{h}?()`, which did not compile (ticket
+        # sjui-textfield-focus-events-write-the-binding-braces).
+        def focus_handler_call(handler)
+          name = is_binding?(handler) ? extract_binding_property(handler) : to_camel_case(handler.to_s.strip)
+          no_value_call(name)
         end
 
         private
