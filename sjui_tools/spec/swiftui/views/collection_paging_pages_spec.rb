@@ -112,6 +112,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # From jsonui-cli 1.9.6 a bound currentPage outside the pages is clamped and
+  # written back (the `.onChange` block below; ticket
+  # sjui-dynamic-pager-does-not-write-back-a-clamped-page). Otherwise the emit
+  # it always had.
   it 'one declared section: the emit it always had (the faces carousels shape)' do
     node = { 'type' => 'Collection', 'id' => 'carousel', 'layout' => 'horizontal', 'paging' => true, 'items' => '@{cards}',
              'currentPage' => '@{currentPage}', 'itemSpacing' => 8, 'sections' => [{ 'cell' => 'card_cell' }],
@@ -131,6 +135,15 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           }
       }
           .tabViewStyle(.page(indexDisplayMode: .never))
+          .onChange(of: data.currentPage) { oldValue, newValue in
+          let lastPage = max([((data.cards?.sections ?? []).count > 0 ? ((data.cards?.sections ?? [])[0].cells?.data ?? []) : [])].reduce(0) { $0 + $1.count } - 1, 0)
+          let clamped = min(max(newValue, 0), lastPage)
+          if clamped != newValue {
+              data.currentPage = clamped
+              return
+          }
+          guard (0...lastPage).contains(oldValue) else { return }
+      }
           .accessibilityIdentifier("carousel")
     SWIFT
   end

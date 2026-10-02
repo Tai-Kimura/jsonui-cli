@@ -1288,12 +1288,40 @@ module SjuiTools
           # page. Until jsonui-cli 1.9.6 it was emitted only with a currentPage
           # binding, so without one the callback was dropped with no warning
           # (ticket sjui-pager-page-change-callback-requires-currentpage-binding).
-          if page_changed_handler
-            handler_call = get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
+          #
+          # A bound currentPage outside the pages is clamped: the pager shows
+          # the last (or first) page, the clamped page is written back once,
+          # and the handler is told the clamped page only when it differs from
+          # the page shown before — never the out-of-range value; the
+          # write-back's own change (from the out-of-range value) is not a
+          # page change. Until jsonui-cli 1.9.6 a currentPage of 10 on three
+          # pages left page 0 shown, the binding at 10 and the handler told 10
+          # (measured on the iOS simulator; ticket
+          # sjui-dynamic-pager-does-not-write-back-a-clamped-page). kjui's
+          # generated pager writes the clamped page back the same way.
+          lists = current_page_prop ? drawn_cell_lists : nil
+          if page_changed_handler || lists
+            handler_call = page_changed_handler && get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
             add_modifier_line ".onChange(of: #{selection}) { oldValue, newValue in"
             indent do
-              add_line "guard oldValue != newValue else { return }"
-              add_line handler_call
+              if lists
+                add_line "let lastPage = max([#{lists.map(&:last).join(', ')}].reduce(0) { $0 + $1.count } - 1, 0)"
+                add_line 'let clamped = min(max(newValue, 0), lastPage)'
+                add_line 'if clamped != newValue {'
+                indent do
+                  add_line "#{selection} = clamped"
+                  if handler_call
+                    add_line "if (0...lastPage).contains(oldValue) && oldValue != clamped { #{get_event_handler_invocation(page_changed_handler, view_id, 'clamped')} }"
+                  end
+                  add_line 'return'
+                end
+                add_line '}'
+                add_line 'guard (0...lastPage).contains(oldValue) else { return }'
+              end
+              if handler_call
+                add_line "guard oldValue != newValue else { return }"
+                add_line handler_call
+              end
             end
             add_line "}"
           end

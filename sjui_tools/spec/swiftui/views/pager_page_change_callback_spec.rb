@@ -49,6 +49,25 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     expect(code).to include('data.onPage?(newValue)')
   end
 
+  # A bound currentPage outside the pages is clamped and written back; the
+  # handler hears the clamped page (only when the shown page changes), never
+  # the out-of-range value, and the write-back's own change is not a page
+  # change (ticket sjui-dynamic-pager-does-not-write-back-a-clamped-page).
+  it 'clamps a bound currentPage outside the pages, and tells the handler the clamped page' do
+    code, = emit('onPageChanged' => '@{onPage}', 'currentPage' => '@{page}')
+    expect(code).to include('let clamped = min(max(newValue, 0), lastPage)',
+                            "if clamped != newValue {\n",
+                            'data.page = clamped',
+                            'if (0...lastPage).contains(oldValue) && oldValue != clamped { data.onPage?(clamped) }',
+                            'guard (0...lastPage).contains(oldValue) else { return }')
+    # No handler: the clamp still writes back; no currentPage: nothing to clamp.
+    bare, = emit('currentPage' => '@{page}')
+    expect(bare).to include('data.page = clamped')
+    expect(bare).not_to include('onPage')
+    own, = emit('onPageChanged' => '@{onPage}')
+    expect(own).not_to include('clamped')
+  end
+
   it 'a scrollTo and the callback share the one page state' do
     code, state = emit('onValueChange' => '@{onPage}', 'scrollTo' => '@{target}')
     expect(state).to eq(['@State private var listScrollPage: Int = 0'])
