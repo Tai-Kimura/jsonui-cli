@@ -216,6 +216,9 @@ module JsonUIShared
           # never called there — the component's own operation takes the
           # gesture. Named, on every face in the same words (ruling
           # 2026-10-03: onPan on a text field / slider, onClick on a Web).
+          # A bound value with a declared limitation on this face
+          # (`bindingInfo`: platform, note) — named once as INFO.
+          add_binding_info(key, value, attr_def, type)
           if (reason = not_applicable_reason(attr_def, type))
             add_warning("'#{key}' is not called on a #{map_type_to_definition(type)}: #{reason}")
             next
@@ -487,6 +490,14 @@ module JsonUIShared
     # The reason an attribute is declared not to reach this type's section,
     # or nil (`notApplicableTo`, keyed by the canonical section: EditText /
     # Input resolve to TextField through the type synonyms).
+    def add_binding_info(key, value, attr_def, type)
+      info = attr_def['bindingInfo']
+      return unless info.is_a?(Hash) && value.is_a?(String) && value.include?('@{')
+      return unless Array(info['platform']).include?(self.class::PLATFORM)
+
+      add_info("'#{key}' on #{type} is bound: #{info['note']}")
+    end
+
     def not_applicable_reason(attr_def, type)
       table = attr_def['notApplicableTo']
       return nil unless table.is_a?(Hash)

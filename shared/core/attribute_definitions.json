@@ -2628,7 +2628,13 @@
       "valueAliases": {
         "ScaleToFill": "fill"
       },
-      "description": "Content mode (binding supported). ScaleToFill is a declared synonym of fill (the stretch — see attribute_semantics.json#semantics.image); the normalizer folds it, fixtures are generated for the canonical spelling only."
+      "description": "Content mode (binding supported). ScaleToFill is a declared synonym of fill (the stretch — see attribute_semantics.json#semantics.image); the normalizer folds it, fixtures are generated for the canonical spelling only.",
+      "bindingInfo": {
+        "platform": [
+          "swift"
+        ],
+        "note": "a contentMode bound to a value that is AspectFill at run time is cropped to its frame by the generated code only when width and height are numbers; on a frame that is not two numbers the image can be drawn past the frame (jsonui-cli ticket sjui-aspectfill-image-is-not-cropped-to-its-frame, known gap). A literal contentMode is cropped on every frame."
+      }
     },
     "renderingMode": {
       "type": "string",
@@ -2764,7 +2770,13 @@
         "AspectFit",
         "Center"
       ],
-      "description": "Content mode (binding supported)"
+      "description": "Content mode (binding supported)",
+      "bindingInfo": {
+        "platform": [
+          "swift"
+        ],
+        "note": "a contentMode bound to a value that is AspectFill at run time is cropped to its frame by the generated code only when width and height are numbers; on a frame that is not two numbers the image can be drawn past the frame (jsonui-cli ticket sjui-aspectfill-image-is-not-cropped-to-its-frame, known gap). A literal contentMode is cropped on every frame."
+      }
     },
     "cachePolicy": {
       "type": "string",
