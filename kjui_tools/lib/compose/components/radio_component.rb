@@ -501,8 +501,10 @@ module KjuiTools
           end
           
           # onValueChange is told the item on every tap, after the selection
-          # is written — as KotlinJsonUI Dynamic (createRadioGroupWithItems)
-          # and both iOS faces call it. Through jsonui-cli 1.9.5 the items form
+          # is written — as both iOS faces call it (read, not run; KotlinJsonUI
+          # Dynamic's items path does not call it either:
+          # kjui-dynamic-radio-items-never-calls-onvaluechange, measured on a
+          # device). Through jsonui-cli 1.9.5 the items form
           # wired no handler (only the undeclared `options` form did): the
           # group drew, wrote its selection back and never called onValueChange
           # (kjui-radio-items-never-calls-onvaluechange).

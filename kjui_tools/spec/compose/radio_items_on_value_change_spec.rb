@@ -8,8 +8,9 @@ require_relative '../support/kotlin_compiler'
 # kjui-radio-items-never-calls-onvaluechange: a Radio in its declared `items`
 # form drew a row per item and wrote its selection back on a tap, and called
 # no onValueChange (through jsonui-cli 1.9.5 only the undeclared `options` form
-# wired the handler). It compiled, so nothing said so. KotlinJsonUI Dynamic
-# and both iOS faces call it with the item.
+# wired the handler). It compiled, so nothing said so. Both iOS faces call it
+# with the item (read, not run); KotlinJsonUI Dynamic's items path does not
+# (measured: kjui-dynamic-radio-items-never-calls-onvaluechange).
 #
 # The arm RUNS the emitted group on the JVM: the stubs keep every click
 # lambda the group registers (the row's clickable and the RadioButton's
