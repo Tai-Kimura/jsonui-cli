@@ -1785,7 +1785,7 @@ module KjuiTools
           # 'onValueChanged' / 'onPageChanged' alias fallbacks (skipped on
           # L1-normalized layouts).
           on_page_raw = Core::Normalization.attr_lookup(json_data, 'onValueChange', 'onValueChanged', 'onPageChanged')
-          page_callback_prop = on_page_raw&.match(/@\{([^}]+)\}/)&.captures&.first
+          page_callback_prop = Helpers::ModifierBuilder.string_event_name(on_page_raw)
 
           # Build modifiers
           modifiers = []

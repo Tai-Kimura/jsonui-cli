@@ -6,9 +6,8 @@ require 'set'
 require_relative '../support/kotlin_compiler'
 
 # An event attribute the SSoT declares with a "string" type takes the bare
-# name as a declared form: a Collection's onItemAppear and TabView
-# onValueChange here (the pager's onValueChange / onPageChanged follows on top
-# of the pager's own rework, which rewrites that line).
+# name as a declared form: a Collection's onValueChange (onPageChanged /
+# onValueChanged are its aliases) and onItemAppear, TabView onValueChange.
 # Until jsonui-cli 1.9.6 the generator read the binding form only and dropped
 # a bare name with no report, so "onPageChanged": "onPage" built and never
 # called onPage (ticket bare-event-handler-is-dropped-without-a-warning). The
@@ -29,6 +28,12 @@ RSpec.describe 'kjui: a bare handler name on an event the SSoT declares with a s
 
   def self.shapes
     {
+      # The pager calls its handler from three places — the page collector,
+      # a currentPage landing and a scrollTo landing — each through the one
+      # resolution (pageChangeHandler); this shape draws all three.
+      'Collection.onPageChanged' => { 'type' => 'Collection', 'id' => 'pager', 'items' => '@{rows}', 'layout' => 'horizontal',
+                                      'paging' => true, 'currentPage' => '@{page}', 'scrollTo' => '@{target}',
+                                      'sections' => [{ 'cell' => 'ACell' }] },
       'Collection.onItemAppear' => { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'sections' => [{ 'cell' => 'ACell' }] },
       'Collection.onItemAppear (paging)' => { 'type' => 'Collection', 'id' => 'pager2', 'items' => '@{rows}', 'layout' => 'horizontal',
                                                'paging' => true, 'sections' => [{ 'cell' => 'ACell' }] },
@@ -40,7 +45,7 @@ RSpec.describe 'kjui: a bare handler name on an event the SSoT declares with a s
     attr = name.split(' ').first.split('.').last
     it "#{name}: the bare name generates what the binding generates, and calls the handler" do
       bound = generate(node.merge(attr => '@{h}'))
-      expect(bound.first).to match(/data\.h\?\.invoke\(/)
+      expect(bound.first).to match(/data\.h\?\.invoke\(|rememberUpdatedState\(data\.h\)/)
       expect(generate(node.merge(attr => 'h'))).to eq(bound)
     end
   end
@@ -50,7 +55,7 @@ RSpec.describe 'kjui: a bare handler name on an event the SSoT declares with a s
       attr = name.split(' ').first.split('.').last
       [nil, '', 'not a name'].each do |value|
         code, = generate(value.nil? ? node : node.merge(attr => value))
-        expect(code).not_to match(/data\.h\?\.invoke\(/), "#{name} = #{value.inspect}"
+        expect(code).not_to match(/data\.h\?\.invoke\(|data\.h\)/), "#{name} = #{value.inspect}"
       end
     end
   end
