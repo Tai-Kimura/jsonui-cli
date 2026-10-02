@@ -4836,7 +4836,7 @@
         "binding"
       ],
       "binding_direction": "one-way",
-      "description": "Tab/page selection change handler. Canonical; prefer over onTabChange/onPageChanged.",
+      "description": "Tab/page selection change handler. Canonical; prefer over onTabChange/onPageChanged. Called when the selected tab changes — by a tap on another tab or a selectedIndex write — with the new index; not called when the TabView first appears, nor when the selected tab is tapped again (ruling 2026-10-02).",
       "platform": [
         "swift",
         "kotlin",

@@ -184,9 +184,12 @@ RSpec.describe 'L1-normalized layout consumption' do
       }
       declare const data: {
         onSlide?: (value: number) => void; tabIndex?: number; onTab?: (index: number) => void;
-        selectedTabIndex?: number; setSelectedTabIndex?: (index: number) => void;
+        selectedTabIndex?: number; setSelectedTabIndex?: (index: number) => void; setTabIndex?: (index: number) => void;
       };
       declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;
+      // The file's helper (ReactGenerator writes it where a file uses it): a
+      // TabView's onValueChange is called on a change of the selection.
+      declare const JsonUIValueChange: <T>(props: { value: T; onChange: (value: T) => void }) => JSX.Element;
       declare const Circle: (props: { className?: string }) => JSX.Element;
     TS
   end
