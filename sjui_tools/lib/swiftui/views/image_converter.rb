@@ -86,6 +86,12 @@ module SjuiTools
             if w.is_a?(Numeric) && h.is_a?(Numeric)
               @modifier_bag.append(:component_specific, ".frame(width: #{w}, height: #{h}, alignment: #{positional_alignment})")
               @modifier_bag.append(:component_specific, ".clipped()")
+            else
+              # A frame that is not two numbers (matchParent, weight): the
+              # unscaled image is drawn whole, past the frame — a 64pt image
+              # in a 16pt spine covered its neighbour. It is placed and
+              # cropped by the frame the layout gives it.
+              crop_to_frame(positional_alignment)
             end
           elsif content_mode_bound
             # The library seam the dynamic face uses (ImageContentModeSeam,
@@ -111,6 +117,11 @@ module SjuiTools
           elsif @component['contentMode']
             content_mode = map_content_mode(@component['contentMode'])
             @modifier_bag.append(:component_specific, ".aspectRatio(contentMode: #{content_mode})")
+            # AspectFill is the crop (attribute_semantics.json image.ruling).
+            # SwiftUI's `.fill` is fill-and-overflow: the image was drawn past
+            # its frame, over its neighbours (jsonui-cli ticket
+            # sjui-aspectfill-image-is-not-cropped-to-its-frame).
+            crop_to_frame('.center') if content_mode == '.fill'
           else
             @modifier_bag.append(:component_specific, ".aspectRatio(contentMode: .fit)")
           end
@@ -179,6 +190,24 @@ module SjuiTools
         end
 
         private
+
+        # Keep a filled or unscaled image inside the frame the layout gives it:
+        # on each axis the layout sizes (anything but wrapContent) the image
+        # takes the offered size instead of its own — so it cannot grow its
+        # frame or its ancestors — and the final frame clips what is drawn
+        # past it (:clip_to_bounds sits after the frame keys). A wrapContent
+        # axis keeps the image's own size.
+        def crop_to_frame(alignment)
+          axes = []
+          axes << 'minWidth: 0, maxWidth: .infinity' unless wrap_axis?(@component['width'])
+          axes << 'minHeight: 0, maxHeight: .infinity' unless wrap_axis?(@component['height'])
+          @modifier_bag.append(:component_specific, ".frame(#{axes.join(', ')}, alignment: #{alignment})") if axes.any?
+          @modifier_bag.register(:clip_to_bounds, '.clipped()')
+        end
+
+        def wrap_axis?(value)
+          value.nil? || value.to_s == 'wrapContent'
+        end
 
         def map_content_mode(mode)
           case JsonUIShared::EnumSpelling.lowered(mode, 'Image', 'contentMode')
