@@ -7,7 +7,8 @@ require 'core/binding_validator'
 #
 # Loads shared/core/binding_vectors.json and drives every "kind":"validation"
 # case through the kjui BindingValidator, asserting the canonical rule id
-# (expectError, from shared/core/binding_semantics.json validatorRules)
+# (expectError, or expectWarning for a warning, from
+# shared/core/binding_semantics.json validatorRules)
 # appears in the emitted message.
 #
 # Context mapping (vector context => kjui layout construct):
@@ -21,8 +22,10 @@ RSpec.describe 'shared binding vectors — validation cases' do
   vectors = JSON.parse(File.read(vectors_path))
   validation_cases = vectors['cases'].select { |c| c['kind'] == 'validation' }
 
-  it 'finds the 9 validation vectors in the shared asset' do
-    expect(validation_cases.size).to eq(9)
+  # 9 errors, and from jsonui-cli 1.9.6 the six binding-mixed-text warnings
+  # (runtime interpolation cases until then).
+  it 'finds the 15 validation vectors in the shared asset' do
+    expect(validation_cases.size).to eq(15)
   end
 
   def build_layout_for(kase)
@@ -74,11 +77,15 @@ RSpec.describe 'shared binding vectors — validation cases' do
   end
 
   validation_cases.each do |kase|
-    it "#{kase['id']} => #{kase['expectError']}" do
+    rule = kase['expectError'] || kase['expectWarning']
+    it "#{kase['id']} => #{rule}" do
       validator = KjuiTools::Core::BindingValidator.new
       warnings = validator.validate(build_layout_for(kase), 'vectors.json')
-      expect(warnings).to include(a_string_including(kase.fetch('expectError'))),
-                          "expected #{kase['expectError']} for #{kase['id']}, got: #{warnings.inspect}"
+      expect(warnings).to include(a_string_including("[#{rule}]")),
+                          "expected #{rule} for #{kase['id']}, got: #{warnings.inspect}"
+      # The severity is binding_semantics.json validatorRules'.
+      reported_as_error = validator.errors.any? { |m| m.include?("[#{rule}]") }
+      expect(reported_as_error).to be(kase.key?('expectError'))
     end
   end
 end

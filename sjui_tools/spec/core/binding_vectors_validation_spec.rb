@@ -5,9 +5,10 @@ require 'json'
 
 # Consumes the shared canonical test vectors
 # (shared/core/binding_vectors.json, renderer SSoT track 15) — every
-# "kind": "validation" case must be rejected by the sjui binding validator
+# "kind": "validation" case must be reported by the sjui binding validator
 # with the canonical rule id (binding_semantics.json validatorRules) present
-# in the emitted message.
+# in the emitted message — as an error for expectError, as a warning (and not
+# an error) for expectWarning.
 RSpec.describe 'shared binding vectors — validation cases (sjui consumption)' do
   vectors_path = File.expand_path('../../../shared/core/binding_vectors.json', __dir__)
   vectors = JSON.parse(File.read(vectors_path))
@@ -23,7 +24,11 @@ RSpec.describe 'shared binding vectors — validation cases (sjui consumption)' 
       'invalid_negation_in_text',
       'invalid_negation_in_params',
       'invalid_default_in_params',
-      'invalid_array_in_params'
+      'invalid_array_in_params',
+      # binding-mixed-text (warning), from jsonui-cli 1.9.6 — runtime
+      # interpolation cases until then
+      'text_flat_basic', 'text_multiple_bindings', 'text_adjacent_no_space',
+      'text_repeated_binding', 'text_unresolved_mixed', 'text_default_in_mixed_text'
     )
   end
 
@@ -45,17 +50,18 @@ RSpec.describe 'shared binding vectors — validation cases (sjui consumption)' 
   end
 
   validation_cases.each do |kase|
-    it "#{kase['id']} is rejected with #{kase['expectError']}" do
+    rule = kase['expectError'] || kase['expectWarning']
+    it "#{kase['id']} is reported with #{rule}" do
       validator = SjuiTools::Core::BindingValidator.new
       messages = validator.validate(build_layout(kase), 'vector.json')
 
-      expect(messages.any? { |m| m.include?(kase['expectError']) }).to be(true),
-        "expected a message containing '#{kase['expectError']}', got: #{messages.inspect}"
+      expect(messages.any? { |m| m.include?("[#{rule}]") }).to be(true),
+        "expected a message containing '[#{rule}]', got: #{messages.inspect}"
 
-      # All current validation vectors are error severity in
-      # binding_semantics.json validatorRules
-      expect(validator.errors.any? { |m| m.include?(kase['expectError']) }).to be(true),
-        "expected an ERROR containing '#{kase['expectError']}', got errors: #{validator.errors.inspect}"
+      # The severity is binding_semantics.json validatorRules'.
+      reported_as_error = validator.errors.any? { |m| m.include?("[#{rule}]") }
+      expect(reported_as_error).to be(kase.key?('expectError')),
+        "expected #{rule} as #{kase.key?('expectError') ? 'an ERROR' : 'a warning'}, got errors: #{validator.errors.inspect}"
     end
   end
 end

@@ -26,7 +26,7 @@
         {
           "assert": "text",
           "id": "target",
-          "equals": "()"
+          "equals": ""
         }
       ]
     }

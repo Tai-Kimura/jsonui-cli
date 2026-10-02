@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "57016d423edd2d109939026c9ecce3a1dd1772d8fc37637ad880c6abd44da79f",
+  "generatedFrom": "81ebcbc4c2c197ed5d6630c1121fb8f45a1ae0aaa9be123d1c5f7ce88de96f04",
   "counts": {
     "fixtures": 1132,
     "assertable": 49,
@@ -5945,7 +5945,7 @@
       "host": "Label",
       "writtenKey": "text",
       "aliasOf": null,
-      "value": "Hello @{conformanceText}!",
+      "value": "@{conformanceGreeting}",
       "platforms": [
         "ios",
         "android",
@@ -5958,9 +5958,9 @@
       "state": {
         "vars": [
           {
-            "name": "conformanceText",
+            "name": "conformanceGreeting",
             "class": "String",
-            "defaultValue": "Bound Initial"
+            "defaultValue": "Hello Bound Initial!"
           }
         ],
         "handlers": []
@@ -6182,7 +6182,7 @@
       "host": "Label",
       "writtenKey": "text",
       "aliasOf": null,
-      "value": "(@{conformanceMissing})",
+      "value": "@{conformanceMissing}",
       "platforms": [
         "ios",
         "android",
@@ -6207,7 +6207,7 @@
       "host": "Label",
       "writtenKey": "text",
       "aliasOf": null,
-      "value": "(@{conformanceMissing.name})",
+      "value": "@{conformanceMissing.name}",
       "platforms": [
         "ios",
         "android",

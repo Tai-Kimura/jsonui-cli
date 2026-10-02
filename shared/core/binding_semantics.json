@@ -10,8 +10,8 @@
   },
   "contexts": {
     "text": {
-      "description": "Mixed-text interpolation. A string attribute may contain any number of '@{...}' occurrences with surrounding literal text; each occurrence is replaced by the stringified resolved value.",
-      "interpolation": true,
+      "description": "A text attribute's binding: the whole value is one '@{...}' expression, stringified. A value that mixes literal text with a binding ('Title: @{x}', '@{a} / @{b}') is a warning, binding-mixed-text (ruling 2026-10-02): compose the string in the ViewModel and bind it as one value — a layout holds no logic, and a composed string cannot be localized as one text. Until jsonui-cli 1.9.6 this context declared mixed-text interpolation (each occurrence replaced by its stringified value); sjui and rjui still interpolate such a value and kjui draws its first binding alone, outside any guarantee.",
+      "interpolation": false,
       "features": ["path", "default"],
       "unresolved": "emptyString"
     },
@@ -122,6 +122,7 @@
     {"id": "binding-negation-context", "severity": "error", "context": "text|embedParams|nameRef|twoWay", "rule": "'!' negation used outside a boolean value context."},
     {"id": "binding-default-in-params", "severity": "error", "context": "embedParams", "rule": "'??' default used in an embed params leaf (defaults belong to the embedded screen's data section)."},
     {"id": "binding-params-array", "severity": "error", "context": "embedParams", "rule": "Array anywhere inside params (pre-existing rule from the embed isolated+params track; restated here)."},
-    {"id": "binding-cell-parent-scope", "severity": "warning", "context": "collectionCell", "rule": "Cell layout binds a key that is only present in the parent screen's data."}
+    {"id": "binding-cell-parent-scope", "severity": "warning", "context": "collectionCell", "rule": "Cell layout binds a key that is only present in the parent screen's data."},
+    {"id": "binding-mixed-text", "severity": "warning", "context": "text|value", "rule": "A value of an attribute the component declares holds a binding and is not one binding (literal text around it, or two bindings). Compose the string in the ViewModel (it also keeps the text localizable) and bind it as one value; a layout holds no logic."}
   ]
 }

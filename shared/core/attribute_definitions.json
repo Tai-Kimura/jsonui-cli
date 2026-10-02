@@ -1233,7 +1233,7 @@
         "string",
         "binding"
       ],
-      "description": "Text content (can be data binding, supports interpolation). PLAIN TEXT: markdown is not interpreted, so \"[label](/path)\", \"**bold**\" and backticks render literally, brackets and all. To emphasise or link part of the string, use partialAttributes ('range' plus font/color/underline, and 'onClick' for a tappable span). Rendering real markdown is out of scope for Label — write a custom component."
+      "description": "Text content: a literal, or one data binding (`@{text}`). A value that mixes literal text with a binding (`Title: @{x}`) is a build warning, binding-mixed-text — compose the string in the ViewModel and bind it as one value (until jsonui-cli 1.9.6 this read \"supports interpolation\"). PLAIN TEXT: markdown is not interpreted, so \"[label](/path)\", \"**bold**\" and backticks render literally, brackets and all. To emphasise or link part of the string, use partialAttributes ('range' plus font/color/underline, and 'onClick' for a tappable span). Rendering real markdown is out of scope for Label — write a custom component."
     },
     "hint": {
       "type": "string",
@@ -2380,7 +2380,7 @@
         "string",
         "binding"
       ],
-      "description": "Button text (can be data binding, supports interpolation)"
+      "description": "Button text: a literal, or one data binding (`@{title}`). A value that mixes literal text with a binding is a build warning, binding-mixed-text — compose the string in the ViewModel and bind it as one value (until jsonui-cli 1.9.6 this read \"supports interpolation\")."
     },
     "font": {
       "type": "string",

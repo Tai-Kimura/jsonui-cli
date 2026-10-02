@@ -113,7 +113,13 @@ class BindingSemanticsAssetTests(unittest.TestCase):
         for case in self.vectors["cases"]:
             if case.get("kind") != "validation":
                 continue
-            self.assertIn(case["expectError"], rule_ids, case["id"])
+            # expectError for an error rule, expectWarning for a warning rule
+            # (binding-mixed-text, jsonui-cli 1.9.6) — exactly one.
+            named = [k for k in ("expectError", "expectWarning") if k in case]
+            self.assertEqual(len(named), 1, f"{case['id']}: name exactly one of expectError / expectWarning")
+            self.assertIn(case[named[0]], rule_ids, case["id"])
+            severity = next(r["severity"] for r in self.semantics["validatorRules"] if r["id"] == case[named[0]])
+            self.assertEqual(severity, "error" if named[0] == "expectError" else "warning", case["id"])
             self.assertTrue(
                 any(k in case for k in ("template", "expr", "params")),
                 f"{case['id']}: validation case needs template/expr/params input",
@@ -132,7 +138,8 @@ class BindingSemanticsAssetTests(unittest.TestCase):
 
     def test_every_error_rule_has_a_validation_vector(self):
         referenced = {
-            c["expectError"] for c in self.vectors["cases"] if c.get("kind") == "validation"
+            c["expectError"] for c in self.vectors["cases"]
+            if c.get("kind") == "validation" and "expectError" in c
         }
         for rule in self.semantics["validatorRules"]:
             if rule["severity"] != "error":
