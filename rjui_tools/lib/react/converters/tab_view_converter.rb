@@ -34,6 +34,21 @@ module RjuiTools
             build_tab_panel(tab, index, selected_binding, indent + 4)
           end.join("\n")
 
+          # onValueChange is called when the selected tab's value changes — a
+          # tap on another tab or a selectedIndex write — and not when the tab
+          # view first appears or the selected tab is tapped again (the SSoT's
+          # TabView.onValueChange, ruling 2026-10-02, as SwiftJsonUI's
+          # `.onChange(of: selection)`). The file's JsonUIValueChange watches
+          # the selection; a tap only writes it. Until jsonui-cli 1.9.6 the
+          # tab's onClick called the handler, so a second tap on the selected
+          # tab called it again and a selectedIndex write never did.
+          value_change = if handler_name
+                           "\n#{indent_str(indent + 2)}<JsonUIValueChange value={#{selected_binding}} " \
+                             "onChange={(value) => #{tab_change_call(on_change, 'value')}} />"
+                         else
+                           ''
+                         end
+
           jsx = <<~JSX.chomp
             #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}>
             #{indent_str(indent + 2)}<div className="flex-1 overflow-auto">
@@ -41,7 +56,7 @@ module RjuiTools
             #{indent_str(indent + 2)}</div>
             #{indent_str(indent + 2)}<nav className="#{nav_class}"#{nav_style}>
             #{tab_items_jsx}
-            #{indent_str(indent + 2)}</nav>
+            #{indent_str(indent + 2)}</nav>#{value_change}
             #{indent_str(indent)}</div>
           JSX
           jsx = wrap_seeded(jsx, indent, selected_attr.is_a?(Numeric) ? selected_attr.to_i : 0) if @seeded
@@ -130,7 +145,8 @@ module RjuiTools
           show_labels = attributes['showLabels'] != false
           label_jsx = show_labels ? "\n#{indent_str(8)}<span className=\"text-xs mt-1\">#{title}</span>" : ''
 
-          on_change = build_on_change
+          # A tap writes the selection; the handler is JsonUIValueChange's.
+          write = "#{selection_setter}?.(#{index})"
 
           # Build tab id for test automation (selectTab action)
           tab_id = extract_id ? "#{extract_id}_tab_#{index}" : nil
@@ -139,7 +155,7 @@ module RjuiTools
           <<~JSX.chomp
             #{indent_str(6)}<button#{tab_id_attr}
             #{indent_str(8)}className={`#{button_class}`}#{style_attr}
-            #{indent_str(8)}onClick={#{@seeded ? "() => { setSeeded(#{index}); #{tab_change_call(on_change, index)}; }" : "() => #{tab_change_call(on_change, index)}"}}#{disabled_attr}
+            #{indent_str(8)}onClick={#{@seeded ? "() => { setSeeded(#{index}); #{write}; }" : "() => #{write}"}}#{disabled_attr}
             #{indent_str(6)}>
             #{indent_str(8)}<div className="relative">
             #{icon_jsx}#{badge_jsx ? "\n#{badge_jsx}" : ''}
@@ -289,7 +305,7 @@ module RjuiTools
         # it as declared too (get_event_handler_invocation).
         def tab_change_call(on_change, index)
           handler = attributes['onValueChange']
-          name = handler.is_a?(String) && has_binding?(handler) ? extract_raw_binding_property(handler).to_s.strip : nil
+          name = string_event_handler?(handler) ? string_event_name(handler) : nil
           classes = config['_data_classes'] || {}
           return "#{on_change}?.(#{index})" unless name && classes.key?(name)
 
@@ -300,27 +316,32 @@ module RjuiTools
           "#{on_change}?.(#{index})"
         end
 
-        def build_on_change
-          # Canonical name is onValueChange; onTabChange / onPageChanged
-          # are the definitions aliases for TabView.
+        # The bound onValueChange (canonical; onTabChange / onPageChanged are
+        # the definitions aliases for TabView) as the data property it names,
+        # or nil.
+        def handler_name
           handler = attributes['onValueChange']
+          return nil unless string_event_handler?(handler)
 
-          if handler && has_binding?(handler)
-            extract_binding_property(handler)
-          else
-            # Generate setter from the binding. Unbound, the tab state is the
-            # implicit `selectedTabIndex` the data model declares — spelling it
-            # anything else left the JSX referencing a property no generated
-            # Data interface has, which is a type error the consumer cannot fix.
-            selected = attributes['selectedIndex']
-            raw_binding = if selected && has_binding?(selected)
-                            extract_raw_binding_property(selected)
-                          else
-                            'selectedTabIndex'
-                          end
-            setter_name = "set#{raw_binding[0].upcase}#{raw_binding[1..]}"
-            add_viewmodel_data_prefix(setter_name)
-          end
+          resolve_handler_property(has_binding?(handler) ? handler : string_event_name(handler))
+        end
+
+        def build_on_change
+          handler_name || selection_setter
+        end
+
+        # The selection's setter: `set<Prop>` of a bound selectedIndex, else
+        # the implicit `selectedTabIndex`'s — the data model declares both
+        # (spelling it anything else left the JSX referencing a property no
+        # generated Data interface has).
+        def selection_setter
+          selected = attributes['selectedIndex']
+          raw_binding = if selected && has_binding?(selected)
+                          extract_raw_binding_property(selected)
+                        else
+                          'selectedTabIndex'
+                        end
+          add_viewmodel_data_prefix("set#{raw_binding[0].upcase}#{raw_binding[1..]}")
         end
 
         # Convert icon name to file path - just use the icon name as-is

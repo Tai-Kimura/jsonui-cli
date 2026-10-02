@@ -84,9 +84,11 @@ class CodegenHostStagingSet(unittest.TestCase):
 
     def test_the_three_populations(self):
         hostable, driver, companion = self.partition()
-        self.assertEqual(len(driver), 16, "fixtures needing a driver")
+        # 15 from 1.9.6: SelectBox/onValueChanged__callback_fire (selectOption)
+        # is no longer generated — onValueChanged is onValueChange's alias.
+        self.assertEqual(len(driver), 15, "fixtures needing a driver")
         self.assertEqual(len(companion), 7, "embed-companion resolution not hosted")
-        self.assertEqual(len(hostable), len(self.ios) - 23, "hostable on the codegen face")
+        self.assertEqual(len(hostable), len(self.ios) - 22, "hostable on the codegen face")  # 15 + 7
 
     def test_the_parts_account_for_every_ios_fixture(self):
         # Control. Three counts that do not sum to the whole describe some
@@ -111,8 +113,13 @@ class CodegenHostStagingSet(unittest.TestCase):
         driving = [f for f in interactive if _drives_input(f)]
         # 37 since `Web/onLoadFailed__callback_fire`, which fires on its own
         # (the page fails) and so drives nothing: interactive +1, driving +0.
-        self.assertEqual(len(interactive), 37)
-        self.assertEqual(len(driving), 16)
+        # 36 / 15 from jsonui-cli 1.9.6: SelectBox.onValueChanged became
+        # onValueChange's declared alias (sjui-selectbox-onvaluechanged-alias-
+        # is-never-called), so `SelectBox/onValueChanged__callback_fire` — a
+        # selectOption fixture — is no longer generated: interactive -1,
+        # driving -1.
+        self.assertEqual(len(interactive), 36)
+        self.assertEqual(len(driving), 15)
 
     def test_the_fixtures_measured_on_dynamic_are_hostable(self):
         # These three passed on the dynamic face while being excluded here —

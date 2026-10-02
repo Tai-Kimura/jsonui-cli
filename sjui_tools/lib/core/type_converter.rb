@@ -6,6 +6,7 @@ require_relative 'project_finder'
 require_relative 'type_converter_core'
 require_relative 'enum_spelling'
 require_relative 'logger'
+require_relative 'swift_identifier'
 
 module SjuiTools
   module Core
@@ -298,7 +299,7 @@ module SjuiTools
             end
 
             # ColorManager generates camelCase property names (medium_gray -> mediumGray)
-            property_name = snake_to_camel(value)
+            property_name = SwiftIdentifier.reference(snake_to_camel(value))
             if mode == 'uikit'
               "ColorManager.uikit.#{property_name} ?? .clear"
             else

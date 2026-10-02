@@ -5,6 +5,7 @@ require 'fileutils'
 require_relative '../logger'
 require_relative '../generated_marker'
 require_relative '../color_manager_core'
+require_relative '../swift_identifier'
 
 module SjuiTools
   module Core
@@ -97,6 +98,18 @@ module SjuiTools
         def swift_enum_case(mode)
           # `light` / `dark` / `highContrast` (camelCase).
           snake_to_camel(mode)
+        end
+
+        # A palette's struct, beside the colours' members in the same scope
+        # (`uikit` / `swiftui`): the mode's name, unless a colour has that
+        # name too — a colour `light` and the palette `light` were one
+        # redeclared name, and the file did not compile (ticket
+        # sjui-resource-managers-emit-swift-that-does-not-compile). Then the
+        # palette is `<mode>Palette`; no other name changes.
+        def palette_struct_name(mode, all_keys)
+          name = swift_enum_case(mode)
+          colours = all_keys.map { |key| Core::SwiftIdentifier.reference(snake_to_camel(key)) }
+          colours.include?(name) ? "#{name}Palette" : name
         end
 
         def generate_swift_code(merged_palettes)
@@ -258,14 +271,14 @@ module SjuiTools
           # Dynamic current-mode accessors.
           all_keys.each do |key|
             camel = snake_to_camel(key)
-            lines << "        public static var #{camel}: UIColor? { color(for: \"#{key}\") }"
+            lines << "        public static var #{Core::SwiftIdentifier.declaration(camel)}: UIColor? { color(for: \"#{key}\") }"
           end
           lines << ''
 
           # Per-mode palette structs inside uikit.
           @modes.each do |mode|
             palette = merged_palettes[mode] || {}
-            struct_name = swift_enum_case(mode)
+            struct_name = palette_struct_name(mode, all_keys)
             lines << "        /// Fixed values from `#{mode}` palette (not affected by setMode)."
             lines << "        public struct #{struct_name} {"
             lines << '            private init() {}'
@@ -273,9 +286,9 @@ module SjuiTools
               camel = snake_to_camel(key)
               hex = palette[key]
               if hex.is_a?(String)
-                lines << "            public static var #{camel}: UIColor? { UIColor.colorWithHexString(\"#{hex}\") }"
+                lines << "            public static var #{Core::SwiftIdentifier.declaration(camel)}: UIColor? { UIColor.colorWithHexString(\"#{hex}\") }"
               else
-                lines << "            public static var #{camel}: UIColor? { nil }"
+                lines << "            public static var #{Core::SwiftIdentifier.declaration(camel)}: UIColor? { nil }"
               end
             end
             lines << '        }'
@@ -296,17 +309,17 @@ module SjuiTools
           lines << ''
           all_keys.each do |key|
             camel = snake_to_camel(key)
-            lines << "        public static var #{camel}: Color? { color(for: \"#{key}\") }"
+            lines << "        public static var #{Core::SwiftIdentifier.declaration(camel)}: Color? { color(for: \"#{key}\") }"
           end
           lines << ''
           @modes.each do |mode|
             palette = merged_palettes[mode] || {}
-            struct_name = swift_enum_case(mode)
+            struct_name = palette_struct_name(mode, all_keys)
             lines << "        public struct #{struct_name} {"
             lines << '            private init() {}'
             palette.keys.sort.each do |key|
               camel = snake_to_camel(key)
-              lines << "            public static var #{camel}: Color? { uikit.#{struct_name}.#{camel}.map(Color.init(uiColor:)) }"
+              lines << "            public static var #{Core::SwiftIdentifier.declaration(camel)}: Color? { uikit.#{struct_name}.#{Core::SwiftIdentifier.reference(camel)}.map(Color.init(uiColor:)) }"
             end
             lines << '        }'
           end

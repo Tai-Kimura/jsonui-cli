@@ -52,6 +52,12 @@ require_relative '../core/enum_spelling'
 module RjuiTools
   module React
     class ReactGenerator
+
+      # `StringManager.currentLanguage.xxx` and `StringManager.currentLanguage["x-y"]`
+      # (the helper's two spellings) read from the subscribed `$s` snapshot.
+      def self.read_strings_from_snapshot(jsx_content)
+        jsx_content.gsub(/StringManager\.currentLanguage(?=[.\[])/, '$s')
+      end
       include Helpers::StringManagerHelper
 
       # The one table, shared with the child dispatch (BaseConverter
@@ -318,20 +324,21 @@ module RjuiTools
         # a static value (BaseConverter#wrap_seeded) holds its state in the
         # file's JsonUISeeded.
         uses_seeded = jsx_content.include?('<JsonUISeeded')
+        uses_value_change = jsx_content.include?('<JsonUIValueChange')
         needs_state = !state_vars.empty? || uses_seeded
         uses_extensions = !extension_components.empty?
         needs_focus = !focus_fields.empty?
         needs_collection_scroll = !collection_scrolls.empty?
         needs_relative_position = !relative_containers.empty?
         needs_auto_shrink = !auto_shrink_targets.empty?
-        needs_client = needs_state || uses_string_manager || uses_extensions || needs_landscape || needs_focus ||
+        needs_client = needs_state || uses_value_change || uses_string_manager || uses_extensions || needs_landscape || needs_focus ||
                        needs_collection_scroll || needs_relative_position || needs_auto_shrink || variants.any?
         use_client = needs_client ? @framework.use_client_prefix : ''
 
         # Build React import
         react_hooks = []
         react_hooks << 'useState' if needs_state
-        if needs_focus || needs_collection_scroll || needs_relative_position || needs_auto_shrink
+        if needs_focus || needs_collection_scroll || needs_relative_position || needs_auto_shrink || uses_value_change
           react_hooks << 'useRef'
           react_hooks << 'useEffect'
         end
@@ -553,9 +560,7 @@ module RjuiTools
         # rewrite those to `$s.xxx` below so the JSX reads from the
         # subscribed snapshot and re-renders on `setLanguage`.
         string_manager_declaration = uses_string_manager ? "\n  const $s = useStringManager();\n" : ''
-        if uses_string_manager
-          jsx_content = jsx_content.gsub('StringManager.currentLanguage.', '$s.')
-        end
+        jsx_content = self.class.read_strings_from_snapshot(jsx_content) if uses_string_manager
 
         # Root id passthrough: collections address cells as
         # {collectionId}_item_{index} via an `id` prop (kjui testTag
@@ -638,7 +643,7 @@ module RjuiTools
           #{use_client}#{marker_header}
           #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{interaction_stop_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
-          #{props_interface if @config['typescript']}#{seeded_helper(@config['typescript']) if uses_seeded}
+          #{props_interface if @config['typescript']}#{seeded_helper(@config['typescript']) if uses_seeded}#{value_change_helper(@config['typescript']) if uses_value_change}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
             return (
           #{jsx_content}
@@ -1021,8 +1026,11 @@ module RjuiTools
 
         # onItemAppear: re-observes when the item list changes, because the
         # observer can only watch the cells that existed when it was created.
-        if (appear = collection[:on_item_appear]) && binding_expression?(appear)
-          prop = binding_data_path(appear)
+        # A bare name is the declared "string" form (ticket
+        # bare-event-handler-is-dropped-without-a-warning): until 1.9.6 only
+        # '@{name}' was read.
+        if (appear = collection[:on_item_appear]) && (binding_expression?(appear) || bare_handler_name?(appear))
+          prop = binding_expression?(appear) ? binding_data_path(appear) : "data.#{appear.strip}"
           dep = binding_expression?(collection[:items]) ? binding_data_path(collection[:items]) : ''
           lines << "  useEffect(() => observeCollectionItems(#{ref}.current, " \
                    "(index) => #{prop}?.(index)), [#{dep}]);"
@@ -1104,6 +1112,10 @@ module RjuiTools
         value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
       end
 
+      def bare_handler_name?(value)
+        value.is_a?(String) && value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
+      end
+
       def binding_data_path(value)
         "data.#{value[2..-2].strip}"
       end
@@ -1171,6 +1183,31 @@ module RjuiTools
           const JsonUISeeded = #{signature} => {
             const [value, setValue] = useState(seed);
             return <>{children(value, setValue)}</>;
+          };
+        TSX
+      end
+
+      # A value's change, told once per change: not when it is first drawn,
+      # not when it is drawn again with the same value. TabView's
+      # onValueChange is called through it (ruling 2026-10-02).
+      def value_change_helper(typescript)
+        signature = if typescript
+                      '<T,>({ value, onChange }: { value: T; onChange: (value: T) => void })'
+                    else
+                      '({ value, onChange })'
+                    end
+        <<~TSX.chomp
+
+          // A value's change, told once: not when it is first drawn, nor when it is drawn again unchanged.
+          const JsonUIValueChange = #{signature} => {
+            const last = useRef(value);
+            useEffect(() => {
+              if (last.current !== value) {
+                last.current = value;
+                onChange(value);
+              }
+            }, [value]);
+            return null;
           };
         TSX
       end

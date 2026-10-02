@@ -198,6 +198,22 @@ module SjuiTools
           @binding_handler.is_binding?(value)
         end
 
+        # A handler named by an event attribute the SSoT declares with a
+        # "string" type (onAppear, onTextChange, a Collection's / TabView's
+        # onValueChange, onItemAppear): the binding '@{name}' or the bare
+        # name, both naming the data's closure. Until jsonui-cli 1.9.6 these
+        # attributes read the binding form only and dropped a bare name with
+        # no report (ticket bare-event-handler-is-dropped-without-a-warning).
+        # A binding-only attribute (onClick, …) does not take a bare name;
+        # the binding validator reports one (binding-bare-event).
+        def handler_reference?(value)
+          is_binding?(value) || (value.is_a?(String) && value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/))
+        end
+
+        def handler_property(value)
+          extract_binding_property(value) || value.strip
+        end
+
         # The PATH a binding expression names.
         # "@{propertyName}"        -> "propertyName"
         # "@{!propertyName}"       -> "propertyName" (negation stripped)
@@ -1629,31 +1645,35 @@ module SjuiTools
         def get_event_handler_invocation(handler, view_id, value_expr = nil)
           method_name = extract_binding_property(handler) || handler
           data_def = ColorHelper.data_definitions[method_name]
+          class_type = data_def && data_def['class'].to_s
+          return "data.#{method_name}?()" if class_type.nil? || class_type.empty?
 
-          if data_def && data_def['class']
-            class_type = data_def['class'].to_s
-            # Check for Event type or (String, Type) pattern
-            # SwiftUI uses Void instead of Unit
-            if class_type.include?('Event') || class_type.match?(/\(\s*\(?\s*String\s*[,)]/)
-              if value_expr.nil?
-                "data.#{method_name}?(\"#{view_id}\")"
-              else
-                "data.#{method_name}?(\"#{view_id}\", #{value_expr})"
-              end
-            elsif value_expr && class_type.match?(/\(\s*\(?\s*(Int|Bool|Boolean|Float|Double|Number|String|CGSize|CGFloat)\s*\)?\s*\)\s*->/)
-              # Handler takes a single typed argument (e.g., (Int) -> Void).
-              # CGSize / CGFloat are the onPan / onPinch gesture payloads.
+          # Event-object handlers take (viewId[, value]) as before.
+          if class_type.include?('Event')
+            return value_expr.nil? ? "data.#{method_name}?(\"#{view_id}\")" : "data.#{method_name}?(\"#{view_id}\", #{value_expr})"
+          end
+
+          # The declared closure's parameter count decides the call. The shape
+          # was guessed from the spelling — a class starting `(String` read as
+          # (viewId, value) — so a one-parameter `(String) -> Void` (a Radio's,
+          # a TextView's onTextChange) was called with two arguments, and an
+          # `(Any) -> Void` onPan, in neither list, with none: both did not
+          # compile (ticket sjui-radio-items-calls-a-one-parameter-handler-
+          # with-two-arguments).
+          params = JsonUIShared::BindingValidatorCore.closure_parameters(class_type) || []
+          case params.size
+          when 0
+            "data.#{method_name}?()"
+          when 1
+            if value_expr
               "data.#{method_name}?(#{value_expr})"
-            elsif class_type.match?(/\(\s*\)\s*->/)
-              # () -> Void type - no arguments
-              "data.#{method_name}?()"
+            elsif params.first.sub(/\?\z/, '') == 'String'
+              "data.#{method_name}?(\"#{view_id}\")"
             else
-              # Default to no arguments
               "data.#{method_name}?()"
             end
           else
-            # No type definition found - default to no arguments
-            "data.#{method_name}?()"
+            value_expr.nil? ? "data.#{method_name}?(\"#{view_id}\")" : "data.#{method_name}?(\"#{view_id}\", #{value_expr})"
           end
         end
 

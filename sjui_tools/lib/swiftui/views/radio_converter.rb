@@ -159,6 +159,13 @@ module SjuiTools
               add_modifier_line ".onTapGesture {"
               indent do
                 add_line "#{state_var} = #{swift_string_literal(radio_value)}"
+                # onValueChange, with this radio's value, as the items form
+                # calls it with the item it just wrote. The group form wrote
+                # the selection and called nothing (ticket
+                # sjui-radio-group-form-never-calls-onvaluechange).
+                if @component['onValueChange'] && is_binding?(@component['onValueChange'])
+                  add_line get_event_handler_invocation(@component['onValueChange'], id, swift_string_literal(radio_value))
+                end
                 # onClick handler - called when radio is clicked
                 # canTap and userInteractionEnabled gate the call, not the
                 # selection (operation_click_call — every handler, the legacy

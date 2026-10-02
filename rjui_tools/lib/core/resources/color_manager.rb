@@ -136,7 +136,7 @@ module RjuiTools
             palette = merged_palettes[mode] || {}
             lines << "const _#{js_ident(mode)}Palette = Object.freeze({"
             palette.keys.sort.each do |key|
-              camel = snake_to_camel(key)
+              camel = js_member(snake_to_camel(key))
               value = palette[key]
               if value.is_a?(String)
                 lines << "  #{camel}: '#{value}',"
@@ -303,17 +303,18 @@ module RjuiTools
           lines << ''
 
           # Per-mode palette accessors: ColorManager.light, ColorManager.dark, …
+          # (ColorManager.lightPalette when a colour is also named `light`).
+          all_keys = all_color_keys(merged_palettes)
           @modes.each do |mode|
-            lines << "  get #{snake_to_camel(mode)}() { return _#{js_ident(mode)}Palette; }"
+            lines << "  get #{palette_getter_name(mode, all_keys)}() { return _#{js_ident(mode)}Palette; }"
           end
           lines << ''
 
           # Dynamic current-mode accessors on the instance.
-          all_keys = all_color_keys(merged_palettes)
           unless all_keys.empty?
             lines << '  // Dynamic current-mode accessors (camelCase)'
             all_keys.each do |key|
-              camel = snake_to_camel(key)
+              camel = js_member(snake_to_camel(key))
               lines << "  get #{camel}() { return this.color('#{key}'); }"
             end
             lines << ''
@@ -507,6 +508,23 @@ module RjuiTools
 
         def js_ident(mode)
           snake_to_camel(mode.to_s.gsub(/[^A-Za-z0-9_]/, '_'))
+        end
+
+        # A colour's member name: a key that starts with a digit
+        # (`4ecdc4`) is not a property name or getter TypeScript parses, so
+        # it gets `_` — as sjui's ColorManager names it. `color('4ecdc4')`
+        # still takes the key as written.
+        def js_member(name)
+          name.match?(/\A\d/) ? "_#{name}" : name
+        end
+
+        # A mode's palette getter shares the class with the colours' getters,
+        # so a colour named like a mode (`light`) made two `get light()` —
+        # TS2300. Only then is the palette's getter `<mode>Palette`.
+        def palette_getter_name(mode, all_keys)
+          name = snake_to_camel(mode)
+          colour_names = all_keys.map { |key| js_member(snake_to_camel(key)) }
+          colour_names.include?(name) ? "#{name}Palette" : name
         end
 
         def js_string_or_ident(mode)

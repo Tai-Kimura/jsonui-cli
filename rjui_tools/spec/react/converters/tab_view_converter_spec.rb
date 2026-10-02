@@ -69,7 +69,7 @@ RSpec.describe RjuiTools::React::Converters::TabViewConverter do
     end
 
     context 'with onTabChange handler' do
-      it 'uses handler for onClick with optional chaining' do
+      it 'writes the selection on a tap and hears its change (ruling 2026-10-02)' do
         converter = create_converter({
           'type' => 'TabView',
           'onTabChange' => '@{handleTabChange}',
@@ -78,8 +78,12 @@ RSpec.describe RjuiTools::React::Converters::TabViewConverter do
           ]
         })
         result = converter.convert
-        # The tab view's own state moves, and the handler hears it.
-        expect(result).to include('onClick={() => { setSeeded(0); data.handleTabChange?.(0); }}')
+        # The tab view's own state moves on a tap; the handler hears the
+        # selection CHANGE (JsonUIValueChange), not the tap — a second tap on
+        # the selected tab calls nothing (until jsonui-cli 1.9.6 onClick
+        # called the handler).
+        expect(result).to include('onClick={() => { setSeeded(0); data.setSelectedTabIndex?.(0); }}')
+        expect(result).to include('<JsonUIValueChange value={(data.selectedTabIndex ?? seeded)} onChange={(value) => data.handleTabChange?.(value)} />')
       end
     end
 

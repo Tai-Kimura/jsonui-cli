@@ -108,8 +108,12 @@ module SjuiTools
         def value_change_call(id)
           handler = @component['valueChange']
           return nil unless handler.is_a?(String) && !handler.strip.empty?
-          # A binding here is `onValueChange`'s job, not this attribute's.
-          return nil if is_binding?(handler)
+          # Declared "string": '@{h}' names the same closure a bare name does.
+          # It was refused here as "onValueChange's job" — but this is only
+          # read when onValueChange is absent, so `valueChange: "@{h}"` built
+          # a Picker that called nothing, with no warning (ticket
+          # sjui-segment-valuechange-binding-is-never-called).
+          return get_event_handler_invocation(handler, id, 'newValue') if is_binding?(handler)
 
           get_event_handler_invocation(to_camel_case(handler), id, 'newValue')
         end

@@ -128,8 +128,9 @@ module JsonUIShared
       @two_way_attrs_by_type = build_two_way_attrs(defs)
       @boolean_attrs_by_type = build_boolean_attrs(defs)
       @known_attrs_by_type = build_known_attrs(defs)
-      @handler_attrs_by_type = build_handler_attrs(defs)
-      @event_attrs_by_type = build_handler_attrs(defs, binding_only_events: true)
+      # One read of the SSoT's event declarations, three sets from it
+      # (build_event_tables).
+      @handler_attrs_by_type, @event_attrs_by_type, @binding_only_events_by_type = build_event_tables(defs)
     end
 
     # Validate all bindings in a JSON component tree
@@ -529,6 +530,7 @@ module JsonUIShared
         end
 
         check_value_for_bindings(value, key, component_type)
+        next if check_bare_event(value, key, component_type)
         check_selector_declared(value, key, component_type)
 
         # UIKit-era advisory: bindings need an id to reference the view.
@@ -829,7 +831,7 @@ module JsonUIShared
     # layout with no data section is validated elsewhere.
     #
     # Which attributes take a handler's bare name is the SSoT's, per
-    # component type (build_handler_attrs): an event key — on<Upper> — whose
+    # component type (build_event_tables): an event key — on<Upper> — whose
     # type takes a string (`string`, or `string | binding`), with its
     # aliases, and the two UIKit selector keys (LEGACY_SELECTOR_KEYS). One
     # on<Upper> key takes a string and is no handler: Switch.onTintColor, a
@@ -849,28 +851,48 @@ module JsonUIShared
     LEGACY_SELECTOR_KEYS = %w[onclick valueChange].freeze
     NOT_HANDLER_KEYS = %w[onTintColor].freeze
 
-    # binding_only_events: also the events declared binding-only — the set
-    # an attribute drawn on another platform reads (note_uses_on_other_platforms),
-    # which counted a bare `"onLongPress": "handleHold"` as a use from 1.9.0:
-    # the face that does not draw it cannot change it.
-    def build_handler_attrs(defs, binding_only_events: false)
-      result = {}
+    # The SSoT's event attributes per component type, read once and split by
+    # what they take (until jsonui-cli 1.9.6 two passes derived the same
+    # thing apart — build_handler_attrs and build_binding_only_events — and
+    # collided in this file):
+    #   handler      an event key (on<Upper>) whose type takes a string, or a
+    #                UIKit selector key (LEGACY_SELECTOR_KEYS): a bare name
+    #                there is a declared form, a use of the data it names;
+    #   binding-only an event key whose type has "binding" and no "string": a
+    #                bare name there calls nothing (binding-bare-event);
+    #   event        both — the set an attribute drawn on another platform
+    #                reads (note_uses_on_other_platforms), which counted a bare
+    #                `"onLongPress": "handleHold"` as a use from 1.9.0: the
+    #                face that does not draw it cannot change it.
+    # Each with its aliases. By the key, not the alias: CheckBox.onSrc is
+    # selectedIcon's alias. Returns [handler, event, binding_only].
+    def build_event_tables(defs)
+      handler = {}
+      binding_only = {}
       defs.each do |component_type, attrs|
         next unless attrs.is_a?(Hash)
-        matched = Set.new
+
+        takes_name = Set.new
+        binding_events = Set.new
         attrs.each do |attr_name, attr_def|
           next unless attr_def.is_a?(Hash)
-          types = Array(attr_def['type'])
-          takes = types.include?('string') || (binding_only_events && types.include?('binding'))
-          event = attr_name.match?(/\Aon[A-Z]/) && takes && !NOT_HANDLER_KEYS.include?(attr_name)
-          next unless event || LEGACY_SELECTOR_KEYS.include?(attr_name)
 
-          matched << attr_name
-          Array(attr_def['aliases']).each { |a| matched << a }
+          types = Array(attr_def['type'])
+          names = [attr_name, *Array(attr_def['aliases'])]
+          event = attr_name.match?(/\Aon[A-Z]/) && !NOT_HANDLER_KEYS.include?(attr_name)
+          if LEGACY_SELECTOR_KEYS.include?(attr_name) || (event && types.include?('string'))
+            takes_name.merge(names)
+          elsif event && types.include?('binding')
+            binding_events.merge(names)
+          end
         end
-        result[component_type] = matched unless matched.empty?
+        handler[component_type] = takes_name unless takes_name.empty?
+        binding_only[component_type] = binding_events unless binding_events.empty?
       end
-      result
+      event = (handler.keys | binding_only.keys).to_h do |type|
+        [type, (handler[type] || Set.new) | (binding_only[type] || Set.new)]
+      end
+      [handler, event, binding_only]
     end
 
     # A type the SSoT does not declare (a custom component) reads any name
@@ -883,6 +905,38 @@ module JsonUIShared
       return false if @attribute_definitions[resolve_component_alias(component_type)].is_a?(Hash)
 
       table.values.reduce(Set.new, :|).include?(name)
+    end
+
+    # binding-bare-event (warning): a bare name given to an event attribute
+    # the SSoT declares binding-only — `type` "binding" with no "string"
+    # (onClick, onLongPress, Switch / Slider / Segment / CheckBox / Radio /
+    # SelectBox onValueChange, …). The declaration admits no bare name, and
+    # the generators dropped one with no report: measured 2026-10-02 over the
+    # 21 such attributes, 19 lose a bare name on at least one face (sjui,
+    # kjui, rjui), some leaving an ERROR comment in code that still builds.
+    # An attribute declared with "string" (onAppear, onTextChange, a
+    # Collection's onValueChange, …) takes a bare name as a declared form,
+    # so a bare name there is not this rule's — a generator that drops one
+    # is the defect (ticket bare-event-handler-is-dropped-without-a-warning).
+    #
+    # Only types the SSoT declares: an app's own component uses camelCase
+    # keys as props (the known gap binding_semantics.json names). Returns
+    # true when it reported, so the undeclared-selector advice (which asks
+    # for the bare name to be declared in data) is not given as well.
+    def check_bare_event(value, attribute_name, component_type)
+      return false unless value.is_a?(String)
+
+      name = value.strip
+      return false if name.empty? || name.include?('@{')
+
+      section = resolve_component_alias(component_type)
+      return false if section == 'common' || !@attribute_definitions[section].is_a?(Hash)
+      return false unless lookup_attr_set(@binding_only_events_by_type, component_type, attribute_name)
+
+      @warnings << "#{build_context_prefix}'#{component_type}.#{attribute_name}' is the bare name '#{name}', but the attribute " \
+                   "is declared binding-only: write '@{#{name}}'. The generated code calls nothing for a bare name " \
+                   "(binding-bare-event)."
+      true
     end
 
     def check_selector_declared(value, attribute_name, component_type)

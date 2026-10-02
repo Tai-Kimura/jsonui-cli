@@ -697,11 +697,17 @@
         "string",
         "array"
       ],
-      "description": "Click handler function name (selector-based, lowercase) - string only, no binding"
+      "description": "Click handler function name (selector-based, lowercase) - string only, no binding",
+      "notApplicableTo": {
+        "Web": "the embedded page takes the taps; a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
+      }
     },
     "onClick": {
       "type": "binding",
-      "description": "Click handler (camelCase) - binding only (@{functionName}). On a type the SSoT does not declare (an app's own component) JsonUI gives the tap no screen-reader role; the component carries its own."
+      "description": "Click handler (camelCase) - binding only (@{functionName}). On a type the SSoT does not declare (an app's own component) JsonUI gives the tap no screen-reader role; the component carries its own.",
+      "notApplicableTo": {
+        "Web": "the embedded page takes the taps; a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
+      }
     },
     "onLongPress": {
       "type": "binding",
@@ -714,7 +720,12 @@
     },
     "onPan": {
       "type": "binding",
-      "description": "Pan gesture handler (camelCase) - binding only (@{functionName}). Invoked repeatedly while the user drags. Payload: cumulative translation since the gesture began (iOS CGSize, Android Offset; web passes the PointerEvent). A handler declared () -> Void is called without the payload."
+      "description": "Pan gesture handler (camelCase) - binding only (@{functionName}). Invoked repeatedly while the user drags. Payload: cumulative translation since the gesture began (iOS CGSize, Android Offset; web passes the PointerEvent). A handler declared () -> Void is called without the payload.",
+      "notApplicableTo": {
+        "TextField": "the field's own drag (text selection, caret placement) takes the gesture; a pan laid over it would break editing (ruling 2026-10-03: not delivered, the build warns)",
+        "TextView": "the field's own drag (text selection, caret placement) takes the gesture; a pan laid over it would break editing (ruling 2026-10-03: not delivered, the build warns)",
+        "Slider": "the slider's own drag moves its value; a pan laid over it would break that (ruling 2026-10-03: not delivered, the build warns)"
+      }
     },
     "onPinch": {
       "type": "binding",
@@ -3094,11 +3105,10 @@
     },
     "onValueChange": {
       "type": "binding",
-      "description": "Value change handler - binding only (@{functionName}). The handler receives the new value of the selection binding, the same on every platform: with selectedIndex bound it is the Int index (declare ((Int) -> Void)?, or ((String, Int) -> Void)? for viewId + index); with selectedItem / selectedValue bound it is the String item (declare ((String, String) -> Void)? for viewId + item). A lone (String) parameter is the selected item as a String, with selectedIndex bound too; the viewId comes only as the first of two parameters. (() -> Void)? receives nothing and the ViewModel reads the bound value back."
-    },
-    "onValueChanged": {
-      "type": "binding",
-      "description": "Value change handler (alias for onValueChange) - binding only (@{functionName})"
+      "description": "Value change handler - binding only (@{functionName}). The handler receives the new value of the selection binding, the same on every platform: with selectedIndex bound it is the Int index (declare ((Int) -> Void)?, or ((String, Int) -> Void)? for viewId + index); with selectedItem / selectedValue bound it is the String item (declare ((String, String) -> Void)? for viewId + item). A lone (String) parameter is the selected item as a String, with selectedIndex bound too; the viewId comes only as the first of two parameters. (() -> Void)? receives nothing and the ViewModel reads the bound value back. `onValueChanged` folds here, as on Slider, Collection and CheckBox; it was declared as its own attribute, so the normalizer never folded it and sjui codegen called nothing for it (ticket sjui-selectbox-onvaluechanged-alias-is-never-called).",
+      "aliases": [
+        "onValueChanged"
+      ]
     },
     "colorScheme": {
       "type": "string",
@@ -4089,7 +4099,7 @@
         "binding"
       ],
       "binding_direction": "one-way",
-      "description": "Collection page/selection change handler. Canonical; prefer over onPageChanged.",
+      "description": "Collection page/selection change handler. Canonical; prefer over onPageChanged. Called when the page changes — by a swipe, a scrollTo or a currentPage write — with the new page; not called when the pager first appears (ruling 2026-10-02).",
       "platform": [
         "swift",
         "kotlin",
@@ -4836,7 +4846,7 @@
         "binding"
       ],
       "binding_direction": "one-way",
-      "description": "Tab/page selection change handler. Canonical; prefer over onTabChange/onPageChanged.",
+      "description": "Tab/page selection change handler. Canonical; prefer over onTabChange/onPageChanged. Called when the selected tab changes — by a tap on another tab or a selectedIndex write — with the new index; not called when the TabView first appears, nor when the selected tab is tapped again (ruling 2026-10-02).",
       "platform": [
         "swift",
         "kotlin",

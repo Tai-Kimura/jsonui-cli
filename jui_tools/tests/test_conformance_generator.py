@@ -652,9 +652,10 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
         # 2026-07 when `swipe` was recognized as a pan trigger; Toggle/Check
         # onValueChange left with the B1 alias collapse — the canonical
         # Switch/CheckBox rules carry the coverage; Web.onLoadFailed joined
-        # 2026-09 as the 12th, firing on a page that fails); every interactive
-        # fixture carries a state contract.
-        self.assertEqual(self.summary.promoted, {"callback": 12})
+        # 2026-09 as the 12th, firing on a page that fails; SelectBox
+        # onValueChanged left in 1.9.6 when it became onValueChange's declared
+        # alias, the 11th); every interactive fixture carries a state contract.
+        self.assertEqual(self.summary.promoted, {"callback": 11})
         self.assertGreaterEqual(self.summary.interactive_count, 19)
         for fixture in self.manifest["fixtures"]:
             if fixture["class"] == "interactive":

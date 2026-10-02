@@ -12,6 +12,7 @@ require_relative '../plural_validator'
 require_relative '../layout_variant'
 require_relative '../string_manager_core'
 require_relative '../string_literals'
+require_relative '../swift_identifier'
 
 module SjuiTools
   module Core
@@ -133,7 +134,7 @@ module SjuiTools
         # Get the StringManager function call for a key (e.g., "logout_text" -> "StringManager.logoutText()")
         def string_manager_call(key)
           func_name = snake_to_camel(key)
-          "StringManager.#{func_name}()"
+          "StringManager.#{Core::SwiftIdentifier.reference(func_name)}()"
         end
 
         # Write strings.json (Kotlin-style: no NOT_IMPLEMENTED_YET, just key-value pairs)
@@ -515,7 +516,7 @@ module SjuiTools
               # Convert key to function name (e.g., "submit_button" -> "submitButton")
               func_name = snake_to_camel(key)
 
-              content << "    public static func #{func_name}() -> String {"
+              content << "    public static func #{Core::SwiftIdentifier.declaration(func_name)}() -> String {"
               content << "        return \"#{key}\".localized()"
               content << "    }"
               content << ""
@@ -556,7 +557,7 @@ module SjuiTools
               if JsonUIShared::PluralValidator.plural_value?(value)
                 # Plural key: the format lives in Localizable.stringsdict and
                 # String.localizedStringWithFormat picks the CLDR category.
-                content << "        public static func #{func_name}("
+                content << "        public static func #{Core::SwiftIdentifier.declaration(func_name)}("
                 content << "            count: Int,"
                 content << "            tableName: String? = nil,"
                 content << "            bundle: Bundle? = nil,"
@@ -575,7 +576,7 @@ module SjuiTools
                 next
               end
 
-              content << "        public static func #{func_name}("
+              content << "        public static func #{Core::SwiftIdentifier.declaration(func_name)}("
               content << "            tableName: String? = nil,"
               content << "            bundle: Bundle? = nil,"
               content << "            value: String? = nil,"

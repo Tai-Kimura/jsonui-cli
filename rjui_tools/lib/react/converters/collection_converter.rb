@@ -145,9 +145,9 @@ module RjuiTools
         # collection-attributes-declared-but-not-drawn-on-some-paths).
         def page_change_handler
           handler = attributes['onValueChange']
-          return nil unless attributes['paging'] == true && handler.is_a?(String) && has_binding?(handler)
+          return nil unless attributes['paging'] == true && string_event_handler?(handler)
 
-          extract_binding_property(handler)
+          resolve_handler_property(has_binding?(handler) ? handler : string_event_name(handler))
         end
 
         def build_collection_ref_attr
@@ -181,13 +181,29 @@ module RjuiTools
           end
           # The callback fires once per page change: the element remembers
           # the page it last reported (a scroll fires many events per page).
+          # It starts remembering the page the pager first shows — the bound
+          # currentPage, else 0 — because the callback is called when the
+          # page CHANGES and not when the pager appears (attribute_definitions
+          # Collection.onValueChange, ruling 2026-10-02). Until jsonui-cli
+          # 1.9.6 it started empty, so the first scroll event reported the
+          # page it was already on: a nudge that snapped back to page 0 called
+          # the callback with 0 (measured in Chromium, ticket
+          # pager-page-change-callback-initial-call-differs-by-platform).
+          # React writes the attribute only when its value changes, so the
+          # page the handler records between renders is kept.
+          seed = ''
           if (callback = page_change_handler)
             calls << "const el = #{ref_var}; if (el && el.dataset.jsonuiPage !== String(page)) " \
                      "{ el.dataset.jsonuiPage = String(page); #{callback}?.(page); }"
+            seed = if current_page.is_a?(String) && has_binding?(current_page)
+                     " data-jsonui-page={String(#{extract_binding_property(current_page)} ?? 0)}"
+                   else
+                     ' data-jsonui-page="0"'
+                   end
           end
           return '' if calls.empty?
 
-          " onScroll={() => { const page = currentCollectionPage(#{ref_var}, #{horizontal_collection?}); " \
+          "#{seed} onScroll={() => { const page = currentCollectionPage(#{ref_var}, #{horizontal_collection?}); " \
             "#{calls.join(' ')} }}"
         end
 

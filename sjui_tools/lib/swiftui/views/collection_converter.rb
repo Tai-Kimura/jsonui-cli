@@ -1202,10 +1202,17 @@ module SjuiTools
             current_page_prop = extract_binding_property(@component['currentPage'])
           end
 
-          # TabView with optional selection binding. A scrollTo pages by the
-          # selection (paging_scroll_selection): the bound currentPage, or a
-          # page state of the pager's own when there is none.
-          page_state = paging_scroll_selection(current_page_prop)
+          # Page-change callback. onValueChange is the canonical name;
+          # onValueChanged / onPageChanged are its definitions aliases (L0
+          # fallback only).
+          page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
+          page_changed_handler = nil unless handler_reference?(page_changed_handler)
+
+          # TabView with optional selection binding. A scrollTo and a
+          # page-change callback read the selection (paging_scroll_selection):
+          # the bound currentPage, or a page state of the pager's own when
+          # there is none.
+          page_state = paging_scroll_selection(current_page_prop, page_changed_handler)
           if current_page_prop
             add_line "TabView(selection: $data.#{current_page_prop}) {"
           elsif page_state
@@ -1271,18 +1278,50 @@ module SjuiTools
           end
           add_line "}"
           add_modifier_line ".tabViewStyle(.page(indexDisplayMode: .never))"
-          generate_paging_scroll_to(current_page_prop ? "data.#{current_page_prop}" : page_state) if has_scroll_to?
+          selection = current_page_prop ? "data.#{current_page_prop}" : page_state
+          generate_paging_scroll_to(selection) if has_scroll_to?
 
-          # Page-change callback - guard against feedback loop.
-          # onValueChange is the canonical name; onValueChanged /
-          # onPageChanged are its definitions aliases (L0 fallback only).
-          page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
-          if page_changed_handler && is_binding?(page_changed_handler) && current_page_prop
-            handler_call = get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
-            add_modifier_line ".onChange(of: data.#{current_page_prop}) { oldValue, newValue in"
+          # The page-change callback is called with the page the selection
+          # turns to — the bound currentPage, else the pager's own page state,
+          # as KotlinJsonUI calls it from the pager whether or not a
+          # currentPage is bound and SwiftJsonUI Dynamic from its internal
+          # page. Until jsonui-cli 1.9.6 it was emitted only with a currentPage
+          # binding, so without one the callback was dropped with no warning
+          # (ticket sjui-pager-page-change-callback-requires-currentpage-binding).
+          #
+          # A bound currentPage outside the pages is clamped: the pager shows
+          # the last (or first) page, the clamped page is written back once,
+          # and the handler is told the clamped page only when it differs from
+          # the page shown before — never the out-of-range value; the
+          # write-back's own change (from the out-of-range value) is not a
+          # page change. Until jsonui-cli 1.9.6 a currentPage of 10 on three
+          # pages left page 0 shown, the binding at 10 and the handler told 10
+          # (measured on the iOS simulator; ticket
+          # sjui-dynamic-pager-does-not-write-back-a-clamped-page). kjui's
+          # generated pager writes the clamped page back the same way.
+          lists = current_page_prop ? drawn_cell_lists : nil
+          if page_changed_handler || lists
+            handler_call = page_changed_handler && get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
+            add_modifier_line ".onChange(of: #{selection}) { oldValue, newValue in"
             indent do
-              add_line "guard oldValue != newValue else { return }"
-              add_line handler_call
+              if lists
+                add_line "let lastPage = max([#{lists.map(&:last).join(', ')}].reduce(0) { $0 + $1.count } - 1, 0)"
+                add_line 'let clamped = min(max(newValue, 0), lastPage)'
+                add_line 'if clamped != newValue {'
+                indent do
+                  add_line "#{selection} = clamped"
+                  if handler_call
+                    add_line "if (0...lastPage).contains(oldValue) && oldValue != clamped { #{get_event_handler_invocation(page_changed_handler, view_id, 'clamped')} }"
+                  end
+                  add_line 'return'
+                end
+                add_line '}'
+                add_line 'guard (0...lastPage).contains(oldValue) else { return }'
+              end
+              if handler_call
+                add_line "guard oldValue != newValue else { return }"
+                add_line handler_call
+              end
             end
             add_line "}"
           end
@@ -1301,11 +1340,13 @@ module SjuiTools
         # the drawn sections; a String the first page whose key it is). It
         # needs the TabView's selection: the bound currentPage, else a state
         # of its own — `<id>ScrollPage`, 0 as the TabView starts — returned
-        # here, nil when there is no scrollTo or a currentPage is bound. Until
+        # here, nil when a currentPage is bound or neither a scrollTo nor a
+        # bound page-change callback reads it (the callback has read it since
+        # jsonui-cli 1.9.6). Until
         # jsonui-cli 1.9.0 the pager drew no scrollTo (and, with no currentPage,
         # no selection at all).
-        def paging_scroll_selection(current_page_prop)
-          return nil if current_page_prop || !has_scroll_to?
+        def paging_scroll_selection(current_page_prop, page_changed_handler = nil)
+          return nil if current_page_prop || (!has_scroll_to? && !page_changed_handler)
 
           name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('collection'))
           state = "#{name}ScrollPage"
@@ -2127,8 +2168,8 @@ module SjuiTools
 
           # onItemAppear: fire callback with index when cell appears
           on_item_appear = @component['onItemAppear']
-          if on_item_appear && is_binding?(on_item_appear)
-            prop = extract_binding_property(on_item_appear)
+          if handler_reference?(on_item_appear)
+            prop = handler_property(on_item_appear)
             add_modifier_line ".onAppear { data.#{prop}?(#{index_var}) }"
           end
         end
@@ -2145,7 +2186,14 @@ module SjuiTools
           prop['defaultValue'].nil? || prop['defaultValue'] == 'nil'
         end
 
+        # The Swift view a cell / header / footer reference draws. A class
+        # method too: the build asks it which cell views the generated code
+        # will name (CellViewScaffold), by this one rule.
         def extract_view_name(class_info)
+          self.class.cell_view_name(class_info)
+        end
+
+        def self.cell_view_name(class_info)
           return nil unless class_info
 
           if class_info.is_a?(Hash)
@@ -2168,7 +2216,7 @@ module SjuiTools
           # First, convert snake_case to PascalCase if needed
           # e.g., "item_card" -> "ItemCard"
           if class_name.include?('_')
-            class_name = to_pascal_case(class_name)
+            class_name = pascal_case(class_name)
           end
 
           # Convert UIKit cell class name to SwiftUI view name
@@ -2190,6 +2238,13 @@ module SjuiTools
                       end
 
           view_name
+        end
+
+        def self.pascal_case(str)
+          snake = str.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                     .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                     .downcase
+          snake.split(/[_\-]/).map(&:capitalize).join
         end
 
         # Convert snake_case, kebab-case, camelCase, or PascalCase to PascalCase

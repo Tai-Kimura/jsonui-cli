@@ -65,6 +65,22 @@ module SjuiTools
           puts "  2. Run 'sjui build' to generate the SwiftUI code"
         end
 
+        # The cell's View and ViewModel sources, as `generate` writes them —
+        # what `sjui build` scaffolds for a hand-written cell layout
+        # (CellViewScaffold). The Data and the GeneratedView are the build's
+        # own, from the layout.
+        def pascal_name
+          @pascal_name
+        end
+
+        def cell_view_source
+          view_file_content
+        end
+
+        def cell_view_model_source
+          view_model_file_content
+        end
+
         private
 
         def create_directories
