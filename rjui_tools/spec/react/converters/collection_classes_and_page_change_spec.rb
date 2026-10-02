@@ -207,6 +207,10 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
   it 'calls the page-change callback with the page, once per page, and the file type-checks' do
     expect(pager).to include("import { currentCollectionPage } from '@/generated/collectionScroll';")
     expect(pager).to include('data.onPageChange?.(page)').and include('el.dataset.jsonuiPage !== String(page)')
+    # The guard starts at the page the pager first shows, so the first scroll
+    # event does not report the page it is already on (ruling 2026-10-02:
+    # called on a change, not when the pager appears).
+    expect(pager).to include('data-jsonui-page="0" onScroll={')
     expect(pager.scan('<PageCell ').size).to eq(1)
     typed = typed_ambient(pager).sub(
       "{ rows?: import('@/generated/data/CollectionDataSource').CollectionDataSource }",
@@ -214,6 +218,24 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
     )
     expect(typed).to include('onPageChange?: (page: number) => void }')
     expect(pager).to compile_as_typescript.with_ambient(typed)
+  end
+
+  # With a bound currentPage the pager first shows that page, so the guard
+  # starts there; until jsonui-cli 1.9.6 it started empty, and a nudge that
+  # snapped back called the callback with the page it was on (measured in
+  # Chromium, ticket pager-page-change-callback-initial-call-differs-by-platform).
+  it 'starts the page guard at the bound currentPage, and the file type-checks' do
+    bound = generate([{ 'type' => 'Collection', 'id' => 'pager', 'paging' => true, 'layout' => 'horizontal',
+                        'cellClasses' => ['page_cell'], 'items' => '@{pages}', 'currentPage' => '@{page}',
+                        'onPageChanged' => '@{onPageChange}' }])
+    expect(bound).to include('data-jsonui-page={String(data.page ?? 0)} onScroll={')
+    typed = typed_ambient(bound).sub(
+      "{ rows?: import('@/generated/data/CollectionDataSource').CollectionDataSource }",
+      "{ pages?: import('@/generated/data/CollectionDataSource').CollectionDataSource; page?: number; " \
+      'onPageChange?: (page: number) => void }'
+    )
+    expect(typed).to include('page?: number; onPageChange?: (page: number) => void }')
+    expect(bound).to compile_as_typescript.with_ambient(typed)
   end
 
   it "declares the callback in the screen's Data model, taking the page index (the alias spelling too)" do

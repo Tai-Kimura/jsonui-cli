@@ -4089,7 +4089,7 @@
         "binding"
       ],
       "binding_direction": "one-way",
-      "description": "Collection page/selection change handler. Canonical; prefer over onPageChanged.",
+      "description": "Collection page/selection change handler. Canonical; prefer over onPageChanged. Called when the page changes — by a swipe, a scrollTo or a currentPage write — with the new page; not called when the pager first appears (ruling 2026-10-02).",
       "platform": [
         "swift",
         "kotlin",
