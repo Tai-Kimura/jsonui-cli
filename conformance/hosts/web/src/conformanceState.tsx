@@ -29,6 +29,8 @@ export interface ConformanceStateHandler {
   name: string;
   /** Kind 1: set one state var to a literal value. */
   set?: { var: string; value: string };
+  /** Kind 3: count calls — each call adds 1 to the var ("0" → "1" → "2"). */
+  count?: { var: string };
   /**
    * Kind 2: drive an isolated embed's private stack through the
    * EmbedNavigatorRegistry (template v2 `getEmbedNavigator`). Exclusive
@@ -76,6 +78,12 @@ export function StateHost({
             navigator.pop();
           }
         };
+        continue;
+      }
+      if (handler.count) {
+        const countVar = handler.count.var;
+        out[handler.name] = () =>
+          setData((prev) => ({ ...prev, [countVar]: String((parseInt(String(prev[countVar] ?? '0'), 10) || 0) + 1) }));
         continue;
       }
       if (!handler.set) continue;
