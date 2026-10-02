@@ -483,7 +483,13 @@ module KjuiTools
           if auto_size_factor
             required_imports&.add(:text_auto_size)
             min_font_size = scaled_sp(json_data['fontSize'] || 14, auto_size_factor, round: true)
-            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size})", depth + 1)
+            # Shrink only: fontSize is the ceiling, as iOS's
+            # .minimumScaleFactor. Through jsonui-cli 1.9.5 no maxFontSize was
+            # given, StepBased took its default 112.sp, and a short text grew
+            # to fill its box (kjui-minimum-scale-factor-grows-text-past-its-
+            # font-size; seen on a device).
+            max_font_size = scaled_sp(json_data['fontSize'] || 14, 1)
+            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}, maxFontSize = #{max_font_size})", depth + 1)
           end
 
           # `lineBreakMode`, when explicitly set, takes precedence over the
