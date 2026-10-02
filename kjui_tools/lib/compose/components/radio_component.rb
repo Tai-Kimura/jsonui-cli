@@ -500,6 +500,19 @@ module KjuiTools
             code += "\n" + indent("    Spacer(modifier = Modifier.height(8.dp))", depth)
           end
           
+          # onValueChange is told the item on every tap, after the selection
+          # is written — as KotlinJsonUI Dynamic (createRadioGroupWithItems)
+          # and both iOS faces call it. Through jsonui-cli 1.9.5 the items form
+          # wired no handler (only the undeclared `options` form did): the
+          # group drew, wrote its selection back and never called onValueChange
+          # (kjui-radio-items-never-calls-onvaluechange).
+          change_call = ->(item_literal) do
+            handler = json_data['onValueChange']
+            next nil unless handler.is_a?(String) && !handler.strip.empty?
+
+            Helpers::ModifierBuilder.get_event_handler_invocation(handler, Helpers::ModifierBuilder.view_id(json_data), item_literal)
+          end
+
           # Generate radio items
           rows_from = code.length
           options.each do |item_literal, item_text|
@@ -519,6 +532,9 @@ module KjuiTools
             if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
               code += "\n" + indent("                #{click}", depth)
             end
+            if (change = change_call.call(item_literal))
+              code += "\n" + indent("                #{change}", depth)
+            end
             code += "\n" + indent("            }", depth)
             code += "\n" + indent("    ) {", depth)
             code += "\n" + indent("        RadioButton(", depth)
@@ -535,6 +551,9 @@ module KjuiTools
             
             if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
               code += "\n" + indent("                #{click}", depth)
+            end
+            if (change = change_call.call(item_literal))
+              code += "\n" + indent("                #{change}", depth)
             end
             code += "\n" + indent("            },", depth)
             required_imports&.add(:radio_colors)
