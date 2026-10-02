@@ -391,6 +391,12 @@ module RjuiTools
             if has_binding?(handler)
               prop = extract_binding_property(handler)
               return " onChange={(e) => #{prop}?.(e.target.value)}"
+            elsif string_event_handler?(handler)
+              # onTextChange is declared "string": a bare name is the data's
+              # closure, as '@{name}' is. It was written without `data.`, a
+              # name nothing declares (bare-event-handler-is-dropped-without-
+              # a-warning, the onTextChange half).
+              return " onChange={(e) => #{add_viewmodel_data_prefix(string_event_name(handler))}?.(e.target.value)}"
             else
               return " onChange={(e) => #{handler}?.(e.target.value)}"
             end

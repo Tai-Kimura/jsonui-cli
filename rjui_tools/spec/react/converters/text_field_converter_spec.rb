@@ -375,7 +375,9 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
         'onTextChange' => 'handleChange'
       })
       result = converter.convert
-      expect(result).to include('onChange={(e) => handleChange?.(e.target.value)}')
+      # A bare name is the data's closure, as '@{handleChange}' is (it was
+      # written without `data.`, a name the component does not have).
+      expect(result).to include('onChange={(e) => data.handleChange?.(e.target.value)}')
     end
 
     it 'handles binding expression in onChange' do

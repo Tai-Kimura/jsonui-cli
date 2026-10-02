@@ -236,6 +236,12 @@ module RjuiTools
 
           if handler && has_binding?(handler)
             extract_binding_property(handler)
+          elsif has_binding?(attributes['valueChange'])
+            # `valueChange` is declared "string": '@{h}' names the same
+            # closure a bare name does. It was written out as `data.@{h}`,
+            # which is not TypeScript (rjui-segment-valuechange-binding-
+            # writes-the-braces).
+            extract_binding_property(attributes['valueChange'])
           elsif attributes['valueChange'].is_a?(String) && !attributes['valueChange'].empty?
             # `valueChange` is the legacy SELECTOR spelling (a bare method
             # name, like `onclick`) that only the UIKit runtime read.
