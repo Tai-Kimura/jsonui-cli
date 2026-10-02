@@ -30,6 +30,12 @@ RSpec.describe 'kjui Collection: an index handler is called as declared' do
     expect(call('(() -> Void)?', 'page', receiver: 'pageChangeHandler')).to eq('pageChangeHandler?.invoke()')
   end
 
+  it 'calls an undeclared handler with the index, as before (control)' do
+    CIH_RESOLVER.data_definitions = {}
+    expect(CIH_COMPONENT.index_handler_call('h', { 'type' => 'Collection' }, 'page', receiver: 'pageChangeHandler')).to eq('pageChangeHandler?.invoke(page)')
+    expect(CIH_COMPONENT.index_handler_call('h', { 'type' => 'Collection' }, 'cellIndex')).to eq('data.h?.invoke(cellIndex)')
+  end
+
   it 'leaves no hand-written index call in the component' do
     source = File.read(CIH_SOURCE)
     expect(source.scan(/\?\.invoke\((?:cellIndex|page|pagerState\.currentPage)\)/)).to eq([])

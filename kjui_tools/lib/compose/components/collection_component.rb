@@ -640,8 +640,16 @@ module KjuiTools
         # (kjui-collection-index-handlers-ignore-the-declared-shape).
         # `receiver` replaces `data.<name>` for a handler held elsewhere (the
         # pager's rememberUpdatedState).
+        # A handler the layout's data does not declare is called with the
+        # index, as these sites always called it — the declaration is what
+        # says `()`; with none there is nothing to follow (and the undeclared
+        # form compiled against a one-parameter handler before).
         def self.index_handler_call(name, json_data, index_expr, receiver: nil)
-          call = Helpers::ModifierBuilder.get_event_handler_invocation("@{#{name}}", Helpers::ModifierBuilder.view_id(json_data), index_expr)
+          call = if Helpers::ResourceResolver.data_definitions&.dig(name, 'class')
+                   Helpers::ModifierBuilder.get_event_handler_invocation("@{#{name}}", Helpers::ModifierBuilder.view_id(json_data), index_expr)
+                 else
+                   "data.#{name}?.invoke(#{index_expr})"
+                 end
           receiver ? call.sub("data.#{name}?", "#{receiver}?") : call
         end
 
