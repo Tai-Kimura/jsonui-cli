@@ -455,7 +455,7 @@ module KjuiTools
         # laid out (non_lazy_scroll_prelude), and the legacy form names no
         # cell: such a container has no lazy item.
         def self.scroll_to_effect(json_data, sections, depth, required_imports, target:, state: nil, grid_columns: nil, is_horizontal: false,
-                                  non_lazy: nil)
+                                  non_lazy: nil, pager_legs: nil)
           raw_binding = json_data['scrollTo']
           return '' unless raw_binding.is_a?(String) && (prop = raw_binding[/\A@\{([^}]+)\}\z/, 1])
 
@@ -497,7 +497,7 @@ module KjuiTools
             code += indent('}', depth + 1) + "\n"
           end
           code += case target
-                  when :pager then pager_scroll_code(json_data, depth + 1)
+                  when :pager then pager_scroll_code(json_data, depth + 1, pager_legs)
                   when :flow then flow_scroll_code(json_data, depth + 1)
                   else
                     indent('if (index < 0) return@LaunchedEffect', depth + 1) + "\n" +
@@ -626,9 +626,46 @@ module KjuiTools
 
         # The pager: the page is the cell (pageCount from the pager's own
         # sources); no anchor — a page fills the pager.
-        def self.pager_scroll_code(json_data, depth)
-          indent('if (index !in 0 until pageCount) return@LaunchedEffect', depth) + "\n" +
-            indent(scroll_call(json_data, ->(animate) { "pagerState.#{animate ? 'animateScrollToPage' : 'scrollToPage'}(index)" }), depth) + "\n"
+        #
+        # A pager whose page is bound or whose page change is handled
+        # (`legs`) scrolls as its currentPage effect does: quiet while the
+        # scroll is in flight, the landing told once (pager_programmatic_scroll).
+        # Through jsonui-cli 1.9.5 a scrollTo from 0 to 6 of 7 pages told the
+        # callback [5, 6] and wrote 5 and 6 back (measured on a device).
+        def self.pager_scroll_code(json_data, depth, legs = nil)
+          call = scroll_call(json_data, ->(animate) { "pagerState.#{animate ? 'animateScrollToPage' : 'scrollToPage'}(index)" })
+          code = indent('if (index !in 0 until pageCount) return@LaunchedEffect', depth) + "\n"
+          return code + indent(call, depth) + "\n" unless legs
+
+          code + pager_programmatic_scroll(call, nil, legs, depth)
+        end
+
+        # A programmatic scroll of the pager: the pager -> VM leg (the
+        # write-back and the page callback, generate_paging_horizontal) is
+        # quiet while it is in flight, and its landing is told once after it —
+        # written back if the bound page differs, handed to the callback if
+        # the page moved. A cancelled scroll tells nothing. `guard` wraps the
+        # scroll in a condition (the currentPage effect's `from != target`).
+        def self.pager_programmatic_scroll(call, guard, legs, depth)
+          page_prop, handled = legs.values_at(:page_prop, :handled)
+          code = indent('val from = pagerState.currentPage', depth) + "\n"
+          inner = depth
+          if guard
+            code += indent("if (#{guard}) {", depth) + "\n"
+            inner += 1
+          end
+          code += indent('programmaticScroll = true', inner) + "\n"
+          code += indent('try {', inner) + "\n"
+          code += indent(call, inner + 1) + "\n"
+          code += indent('} finally {', inner) + "\n"
+          code += indent('programmaticScroll = false', inner + 1) + "\n"
+          code += indent('}', inner) + "\n"
+          code += indent('}', depth) + "\n" if guard
+          if page_prop
+            code += indent("if (data.#{page_prop} != pagerState.currentPage) viewModel.updateData(mapOf(\"#{page_prop}\" to pagerState.currentPage))", depth) + "\n"
+          end
+          code += indent('if (pagerState.currentPage != from) pageChangeHandler?.invoke(pagerState.currentPage)', depth) + "\n" if handled
+          code
         end
 
         # The flow: the cell's place in the scrolled content, recorded as it
@@ -1801,48 +1838,64 @@ module KjuiTools
           end
 
           # Sync data binding -> pager. While this programmatic scroll is in
-          # flight the write-back below stays quiet: the pager's currentPage
-          # passes through the pages between (and an animation more than 3
-          # pages away first jumps near the target), and writing those back
-          # moved data.<page>, which re-keyed this effect and cancelled its
-          # own animateScrollToPage short of the target — 0 -> 6 of 7 pages
-          # stopped on 5, 0 -> 2 of 3 on 1, measured on a device through
-          # jsonui-cli 1.9.5 (kjui-pager-writeback-cancels-its-own-programmatic-scroll).
-          # The same guard KotlinJsonUI Dynamic keeps (DynamicCollectionComponent,
-          # `programmaticScroll`). Once the scroll lands, the page it landed
-          # on is written back — the one write the echo used to make (a value
-          # past the last page settles on the last page, as it did).
-          if page_prop
+          # flight the pager -> VM leg below stays quiet: the pager's
+          # currentPage passes through the pages between (and an animation
+          # more than 3 pages away first jumps near the target), and writing
+          # those back moved data.<page>, which re-keyed this effect and
+          # cancelled its own animateScrollToPage short of the target — 0 -> 6
+          # of 7 pages stopped on 5, 0 -> 2 of 3 on 1, measured on a device
+          # through jsonui-cli 1.9.5 (kjui-pager-writeback-cancels-its-own-
+          # programmatic-scroll). The page callback is quiet too: a handler
+          # that sets the bound page itself (the usual one) cancelled the
+          # scroll the same way, on 5 of 7. The scroll's landing is told once
+          # — written back if data.<page> differs (a value past the last page
+          # settles on the last page) and handed to the callback if the page
+          # moved, as iOS's onChange tells a selection change once. A scrollTo
+          # scrolls the same way (pager_scroll_code).
+          # Keyed on pageCount too: a page bound before the pages exist (a
+          # restored page, items that load later) is scrolled to when they
+          # arrive; through 1.9.5 the pager stayed on 0 and wrote 0 back.
+          # The same guard KotlinJsonUI Dynamic keeps (`programmaticScroll`).
+          #
+          # The callback is read through rememberUpdatedState: the effects
+          # outlive the composition they start in, and through 1.9.5 they
+          # called the handler the data held then — a handler the ViewModel
+          # set after the pager appeared was never called (measured).
+          pager_legs = (page_prop || page_callback_prop) && { page_prop: page_prop, handled: !page_callback_prop.nil? }
+          if pager_legs
             code += indent("var programmaticScroll by remember { mutableStateOf(false) }", depth) + "\n"
-            code += indent("LaunchedEffect(data.#{page_prop}) {", depth) + "\n"
-            code += indent("val target = data.#{page_prop}.coerceIn(0, (pageCount - 1).coerceAtLeast(0))", depth + 1) + "\n"
-            code += indent("if (pagerState.currentPage != target) {", depth + 1) + "\n"
-            code += indent("programmaticScroll = true", depth + 2) + "\n"
-            code += indent("try {", depth + 2) + "\n"
-            code += indent("pagerState.animateScrollToPage(target)", depth + 3) + "\n"
-            code += indent("} finally {", depth + 2) + "\n"
-            code += indent("programmaticScroll = false", depth + 3) + "\n"
-            code += indent("}", depth + 2) + "\n"
-            code += indent("}", depth + 1) + "\n"
-            code += indent("if (data.#{page_prop} != pagerState.currentPage) viewModel.updateData(mapOf(\"#{page_prop}\" to pagerState.currentPage))", depth + 1) + "\n"
+          end
+          if page_callback_prop
+            required_imports&.add(:remember_updated_state)
+            code += indent("val pageChangeHandler by rememberUpdatedState(data.#{page_callback_prop})", depth) + "\n"
+          end
+          if page_prop
+            code += indent("LaunchedEffect(data.#{page_prop}, pageCount) {", depth) + "\n"
+            code += indent("if (pageCount == 0) return@LaunchedEffect", depth + 1) + "\n"
+            code += indent("val target = data.#{page_prop}.coerceIn(0, pageCount - 1)", depth + 1) + "\n"
+            code += pager_programmatic_scroll('pagerState.animateScrollToPage(target)', 'from != target', pager_legs, depth + 1)
             code += indent("}", depth) + "\n"
           end
 
           # scrollTo: the page is the cell the value names, counted across the
           # sources (4f ruling 2026-09-27, round 11). The pager read no
           # scrollTo until jsonui-cli 1.9.0.
-          code += scroll_to_effect(json_data, sections, depth, required_imports, target: :pager, is_horizontal: true)
+          code += scroll_to_effect(json_data, sections, depth, required_imports, target: :pager, is_horizontal: true, pager_legs: pager_legs)
 
-          # Sync pager -> binding + callback
+          # Sync pager -> binding + callback: a page the pager moved to, not
+          # the page it appeared on (`drop(1)`). Through 1.9.5 the collector's
+          # first value told the callback and the binding the appearance page
+          # — 0 on a fresh pager, before the pages exist — which iOS and web
+          # do not; the ruling of 2026-10-02 is "only on a change"
+          # (pager-page-change-callback-initial-call-differs-by-platform).
           if page_prop || page_callback_prop
+            required_imports&.add(:flow_drop)
             code += indent("LaunchedEffect(pagerState) {", depth) + "\n"
-            code += indent("snapshotFlow { pagerState.currentPage }.collect { page ->", depth + 1) + "\n"
-            if page_prop
-              code += indent("if (!programmaticScroll) viewModel.updateData(mapOf(\"#{page_prop}\" to page))", depth + 2) + "\n"
-            end
-            if page_callback_prop
-              code += indent("data.#{page_callback_prop}?.invoke(page)", depth + 2) + "\n"
-            end
+            code += indent("snapshotFlow { pagerState.currentPage }.drop(1).collect { page ->", depth + 1) + "\n"
+            code += indent("if (!programmaticScroll) {", depth + 2) + "\n"
+            code += indent("viewModel.updateData(mapOf(\"#{page_prop}\" to page))", depth + 3) + "\n" if page_prop
+            code += indent("pageChangeHandler?.invoke(page)", depth + 3) + "\n" if page_callback_prop
+            code += indent("}", depth + 2) + "\n"
             code += indent("}", depth + 1) + "\n"
             code += indent("}", depth) + "\n"
           end

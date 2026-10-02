@@ -156,6 +156,8 @@ module KjuiTools
             horizontal_pager: ["import androidx.compose.foundation.pager.HorizontalPager",
                                "import androidx.compose.foundation.pager.rememberPagerState"],
             snapshot_flow: "import androidx.compose.runtime.snapshotFlow",
+            flow_drop: "import kotlinx.coroutines.flow.drop",
+            remember_updated_state: "import androidx.compose.runtime.rememberUpdatedState",
             # Button pressed-state colours (highlightBackground/highlightColor).
             pressed_state: ["import androidx.compose.foundation.interaction.MutableInteractionSource",
                             "import androidx.compose.foundation.interaction.collectIsPressedAsState",
