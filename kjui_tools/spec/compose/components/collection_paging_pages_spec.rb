@@ -68,7 +68,13 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
     fun <T> snapshotFlow(block: () -> T): kotlinx.coroutines.flow.Flow<T> = kotlinx.coroutines.flow.flowOf(block())
     // The screen's ViewModel: the pager writes the page it shows back here.
     class ScreenModel { val written = mutableListOf<Map<String, Any>>(); fun updateData(updates: Map<String, Any>) { written += updates } }
+    inline fun <T> remember(calculation: () -> T): T = calculation()
     inline fun <T> remember(key1: Any?, calculation: () -> T): T = calculation()
+    // A bound pager's programmatic-scroll flag (`var … by remember { mutableStateOf(false) }`).
+    class MutableState<T>(var value: T)
+    fun <T> mutableStateOf(value: T): MutableState<T> = MutableState(value)
+    operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
+    operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, value: T) { this.value = value }
     inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
     object com { object kotlinjsonui { object utils { object CellIdGenerator {
         fun enrichCellIds(data: List<Map<String, Any>>, property: String): List<Map<String, Any>> = data
@@ -161,6 +167,9 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
     expect(code).not_to include('ACellView(')
   end
 
+  # The bound pager's two effects are the 1.9.6 text: through 1.9.5 the
+  # write-back was unguarded and cancelled the effect's own scroll
+  # (kjui-pager-writeback-cancels-its-own-programmatic-scroll, below).
   it 'one declared section: the emit it always had (the faces carousel shape)' do
     node = { 'type' => 'Collection', 'id' => 'carousel', 'layout' => 'horizontal', 'paging' => true, 'items' => '@{cards}',
              'currentPage' => '@{currentPage}', 'itemSpacing' => 8, 'sections' => [{ 'cell' => 'card_cell' }],
@@ -169,13 +178,22 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
     expect(KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, Set.new, nil)).to eq(<<~'KOTLIN'.chomp.gsub(/^/, '    '))
       val pageCount = data.cards?.sections?.firstOrNull()?.cells?.data?.size ?: 0
       val pagerState = rememberPagerState(initialPage = (data.currentPage).coerceIn(0, (pageCount - 1).coerceAtLeast(0))) { pageCount }
+      var programmaticScroll by remember { mutableStateOf(false) }
       LaunchedEffect(data.currentPage) {
           val target = data.currentPage.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-          if (pagerState.currentPage != target) pagerState.animateScrollToPage(target)
+          if (pagerState.currentPage != target) {
+              programmaticScroll = true
+              try {
+                  pagerState.animateScrollToPage(target)
+              } finally {
+                  programmaticScroll = false
+              }
+          }
+          if (data.currentPage != pagerState.currentPage) viewModel.updateData(mapOf("currentPage" to pagerState.currentPage))
       }
       LaunchedEffect(pagerState) {
           snapshotFlow { pagerState.currentPage }.collect { page ->
-              viewModel.updateData(mapOf("currentPage" to page))
+              if (!programmaticScroll) viewModel.updateData(mapOf("currentPage" to page))
           }
       }
       HorizontalPager(
@@ -202,5 +220,82 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
           }
       }
     KOTLIN
+  end
+end
+
+# kjui-pager-writeback-cancels-its-own-programmatic-scroll: with `currentPage`
+# bound, the pager wrote every `pagerState.currentPage` back into the data —
+# including the pages a ViewModel-driven `animateScrollToPage` passes through.
+# That moved `data.<page>`, re-keyed `LaunchedEffect(data.<page>)` and
+# cancelled the animation it was running. Measured on a device (conf_ci,
+# Compose BOM 2026.09.00) through jsonui-cli 1.9.5 with the generated view of
+# a bound pager: 0 -> 6 of 7 pages stopped on 5, 0 -> 2 of 3 stopped on 1,
+# 0 -> 1 reached 1. With this emit: 6, 2 and 1.
+#
+# The write-back now stays quiet while the effect's own scroll is in flight —
+# the guard KotlinJsonUI Dynamic keeps (`programmaticScroll`) — and once the
+# scroll lands the page it landed on is written back. The page callback still
+# hears every page, programmatic ones included, as on the Dynamic face.
+#
+# These arms read the emitted text: what the guard does at runtime is the
+# device measurement above, which no JVM stub of Compose's effect keys can
+# stand for. That the text is well-typed Kotlin is the `bound` route of the
+# compile arm above.
+RSpec.describe 'kjui codegen: a bound pager does not cancel its own programmatic scroll' do
+  def emit(extra)
+    %i[info debug warn].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
+    node = {
+      'type' => 'Collection', 'id' => 'pager', 'layout' => 'horizontal', 'paging' => true,
+      'items' => '@{rows}', 'sections' => [{ 'cell' => 'x_cell' }]
+    }.merge(extra)
+    KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, Set.new, nil)
+  end
+
+  def block(code, opener)
+    lines = code.lines
+    start = lines.index { |l| l.include?(opener) } or raise "no #{opener} in the emit"
+    depth = 0
+    lines[start..].each_with_index do |line, i|
+      depth += line.count('{') - line.count('}')
+      return lines[start..start + i].join if depth.zero?
+    end
+    raise "#{opener} does not close"
+  end
+
+  let(:code) { emit('currentPage' => '@{page}', 'onPageChanged' => '@{onPage}') }
+
+  it 'raises the flag around the animation and lowers it however the animation ends' do
+    effect = block(code, 'LaunchedEffect(data.page)')
+    expect(code).to include('var programmaticScroll by remember { mutableStateOf(false) }')
+    expect(effect).to match(/programmaticScroll = true\s+try \{\s+pagerState\.animateScrollToPage\(target\)\s+\} finally \{\s+programmaticScroll = false\s+\}/)
+  end
+
+  it 'writes back only pages the user moved to, and the page a programmatic scroll lands on' do
+    collector = block(code, 'LaunchedEffect(pagerState)')
+    # Through 1.9.5 this line was unguarded: `viewModel.updateData(mapOf("page" to page))`.
+    expect(collector).to include('if (!programmaticScroll) viewModel.updateData(mapOf("page" to page))')
+    expect(collector.scan('viewModel.updateData(').size).to eq(1)
+
+    effect = block(code, 'LaunchedEffect(data.page)').lines
+    landing = effect.index { |l| l.include?('viewModel.updateData(') }
+    expect(landing).not_to be_nil
+    expect(effect[landing]).to include('if (data.page != pagerState.currentPage) viewModel.updateData(mapOf("page" to pagerState.currentPage))')
+    # After the try/finally, not inside it: a cancelled scroll writes nothing.
+    finally_at = effect.index { |l| l.include?('} finally {') }
+    finally_close = (finally_at + 1...effect.size).find { |i| effect[i].strip == '}' }
+    expect(finally_close).to be < landing
+  end
+
+  it 'still tells the page callback every page' do
+    collector = block(code, 'LaunchedEffect(pagerState)')
+    expect(collector).to include("data.onPage?.invoke(page)\n")
+    expect(collector).not_to match(/programmaticScroll\)?\s*data\.onPage/)
+  end
+
+  it 'emits no flag when currentPage is not bound' do
+    # Control: only the callback leg, which writes nothing back.
+    unbound = emit('onPageChanged' => '@{onPage}')
+    expect(unbound).not_to include('programmaticScroll')
+    expect(block(unbound, 'LaunchedEffect(pagerState)')).to include('data.onPage?.invoke(page)')
   end
 end

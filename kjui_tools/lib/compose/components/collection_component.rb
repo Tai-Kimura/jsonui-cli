@@ -1800,11 +1800,31 @@ module KjuiTools
             code += indent("val pagerState = rememberPagerState { pageCount }", depth) + "\n"
           end
 
-          # Sync data binding -> pager
+          # Sync data binding -> pager. While this programmatic scroll is in
+          # flight the write-back below stays quiet: the pager's currentPage
+          # passes through the pages between (and an animation more than 3
+          # pages away first jumps near the target), and writing those back
+          # moved data.<page>, which re-keyed this effect and cancelled its
+          # own animateScrollToPage short of the target — 0 -> 6 of 7 pages
+          # stopped on 5, 0 -> 2 of 3 on 1, measured on a device through
+          # jsonui-cli 1.9.5 (kjui-pager-writeback-cancels-its-own-programmatic-scroll).
+          # The same guard KotlinJsonUI Dynamic keeps (DynamicCollectionComponent,
+          # `programmaticScroll`). Once the scroll lands, the page it landed
+          # on is written back — the one write the echo used to make (a value
+          # past the last page settles on the last page, as it did).
           if page_prop
+            code += indent("var programmaticScroll by remember { mutableStateOf(false) }", depth) + "\n"
             code += indent("LaunchedEffect(data.#{page_prop}) {", depth) + "\n"
             code += indent("val target = data.#{page_prop}.coerceIn(0, (pageCount - 1).coerceAtLeast(0))", depth + 1) + "\n"
-            code += indent("if (pagerState.currentPage != target) pagerState.animateScrollToPage(target)", depth + 1) + "\n"
+            code += indent("if (pagerState.currentPage != target) {", depth + 1) + "\n"
+            code += indent("programmaticScroll = true", depth + 2) + "\n"
+            code += indent("try {", depth + 2) + "\n"
+            code += indent("pagerState.animateScrollToPage(target)", depth + 3) + "\n"
+            code += indent("} finally {", depth + 2) + "\n"
+            code += indent("programmaticScroll = false", depth + 3) + "\n"
+            code += indent("}", depth + 2) + "\n"
+            code += indent("}", depth + 1) + "\n"
+            code += indent("if (data.#{page_prop} != pagerState.currentPage) viewModel.updateData(mapOf(\"#{page_prop}\" to pagerState.currentPage))", depth + 1) + "\n"
             code += indent("}", depth) + "\n"
           end
 
@@ -1818,7 +1838,7 @@ module KjuiTools
             code += indent("LaunchedEffect(pagerState) {", depth) + "\n"
             code += indent("snapshotFlow { pagerState.currentPage }.collect { page ->", depth + 1) + "\n"
             if page_prop
-              code += indent("viewModel.updateData(mapOf(\"#{page_prop}\" to page))", depth + 2) + "\n"
+              code += indent("if (!programmaticScroll) viewModel.updateData(mapOf(\"#{page_prop}\" to page))", depth + 2) + "\n"
             end
             if page_callback_prop
               code += indent("data.#{page_callback_prop}?.invoke(page)", depth + 2) + "\n"
