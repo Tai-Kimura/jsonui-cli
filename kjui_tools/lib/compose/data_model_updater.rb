@@ -299,9 +299,16 @@ module KjuiTools
               # map has none. Through jsonui-cli 1.9.5 this wrote the empty
               # source whatever the map held (kjui-frommap-drops-collectiondatasource).
               content += "map[\"#{name}\"] as? com.kotlinjsonui.data.CollectionDataSource ?: #{from_map_fallback(prop, class_type, 'com.kotlinjsonui.data.CollectionDataSource()')}"
-            when /^List<.*>$/
+            when /^List<.*>$/, 'Array', 'array'
+              # A JSON container (Array / Object / Hash) reads as the type the
+              # field holds (map_to_kotlin_type), with the declared default
+              # behind it. Through jsonui-cli 1.9.5 the declared spelling fell
+              # to the branch below with no fallback: a nullable cast into the
+              # non-null field a defaultValue gives — the Data class did not
+              # compile (conformance Label/text__binding_dot_path and three
+              # more — kjui-object-path-binding-does-not-compile).
               content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
-            when /^Map<.*>$/
+            when /^Map<.*>$/, 'Object', 'object', 'Hash', 'hash'
               content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
             else
               # For custom types, try to cast directly

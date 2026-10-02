@@ -2086,6 +2086,14 @@ module KjuiTools
           # the generated ViewModel imports nothing from com.kotlinjsonui.data,
           # so a bare cast is an unresolved reference on a fresh generation.
           "value as? com.kotlinjsonui.data.CollectionDataSource ?: updated.#{name}"
+        when 'Object', 'object', 'Hash', 'hash', 'Array', 'array'
+          # A JSON container is the type the Data class holds it as
+          # (DataModelUpdater#map_to_kotlin_type: Map<String, Any?> /
+          # List<Any?>). TypeConverter spells it as written, and the cast
+          # `value as? Object` did not compile against the Data field
+          # (kjui-object-path-binding-does-not-compile).
+          model_type = DataModelUpdater.allocate.send(:map_to_kotlin_type, class_type)
+          "value as? #{model_type} ?: updated.#{name}"
         else
           "value as? #{kotlin_type} ?: updated.#{name}"
         end
