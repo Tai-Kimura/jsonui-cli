@@ -1192,16 +1192,19 @@ module KjuiTools
           # real dispatch above, so it keeps testTag/size/background/children).
           wrapper = result[:child_wrapper]
           decorator = result[:child_decorator]
+          # A container that wraps itself in a scope (an id-less ScrollView's
+          # `run { }`) draws its children one level deeper.
+          offset = result[:child_depth_offset].to_i
           children.each_with_index do |child, child_index|
-            child_depth = wrapper ? depth + 2 : depth + 1
+            child_depth = (wrapper ? depth + 2 : depth + 1) + offset
             child_code = generate_component(child, child_depth, layout_type)
             next if child_code.empty?
             child_code = decorator.call(child, child_code, child_depth, child_index) if decorator
 
             if wrapper
-              code += "\n" + ('    ' * (depth + 1)) + wrapper[:open]
+              code += "\n" + ('    ' * (depth + 1 + offset)) + wrapper[:open]
               code += "\n" + child_code
-              code += "\n" + ('    ' * (depth + 1)) + wrapper[:close]
+              code += "\n" + ('    ' * (depth + 1 + offset)) + wrapper[:close]
             else
               code += "\n" + child_code
             end
