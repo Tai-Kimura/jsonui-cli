@@ -30,10 +30,15 @@ RSpec.describe 'kjui codegen: viewId by position' do
     builder.instance_variable_set(:@responsive_functions, [])
     builder.send(:generate_component, comp, 0).to_s
   end
-  typed = ->(names) { names.to_h { |n| [n, { 'class' => '((String) -> Unit)?' }] } }
+  typed = ->(names, klass = '((String) -> Unit)?') { names.to_h { |n| [n, { 'class' => klass }] } }
 
   # Each handler that is passed a viewId, on an id-less node at 0_1 (after a
-  # Label at 0_0). The `(String)` type makes every path pass the viewId.
+  # Label at 0_0). The declarations that receive the viewId: `(String)` for a
+  # tap, `(String, Any)` for an event with a value. Through 1.9.5 `(String)`
+  # stood for both, because a value event called it with (viewId, value)
+  # whatever it declared — two arguments to a one-parameter handler, which did
+  # not compile (kjui-text-change-callback-passes-the-id-to-a-one-parameter-
+  # handler). The call now follows the declared parameter count.
   handlers = {
     'Switch onValueChange' => [{ 'type' => 'Switch', 'onValueChange' => '@{h}' }, 'switch_0_1'],
     'Toggle onValueChange' => [{ 'type' => 'Toggle', 'onValueChange' => '@{h}' }, 'switch_0_1'],
@@ -51,7 +56,9 @@ RSpec.describe 'kjui codegen: viewId by position' do
 
   handlers.each do |label, (node, expected)|
     it "#{label} passes #{expected}, and an explicit id wins" do
-      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = typed.call(%w[h])
+      value_event = %w[onValueChange onTextChange].any? { |e| node.key?(e) }
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions =
+        typed.call(%w[h], value_event ? '((String, Any) -> Unit)?' : '((String) -> Unit)?')
       layout = ->(n) { { 'type' => 'View', 'child' => [{ 'type' => 'Label', 'text' => 'first' }, n] } }
       expect(emit.call(layout.call(node))).to include("data.h?.invoke(\"#{expected}\"")
       expect(emit.call(layout.call(node.merge('id' => 'mine')))).to include('data.h?.invoke("mine"')

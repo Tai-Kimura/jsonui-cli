@@ -90,7 +90,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
       generator = described_class.new('Test', attributes: { 'title' => 'String' })
       result = generator.send(:generate_parameter_collection)
       expect(result).to include("@component['title']")
-      expect(result).to include("format_value(value, 'String')")
+      expect(result).to include("format_value(value, 'String', key: 'title')")
     end
 
     it 'generates boolean parameter code with key? check' do

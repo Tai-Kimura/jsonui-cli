@@ -1192,16 +1192,19 @@ module KjuiTools
           # real dispatch above, so it keeps testTag/size/background/children).
           wrapper = result[:child_wrapper]
           decorator = result[:child_decorator]
+          # A container that wraps itself in a scope (an id-less ScrollView's
+          # `run { }`) draws its children one level deeper.
+          offset = result[:child_depth_offset].to_i
           children.each_with_index do |child, child_index|
-            child_depth = wrapper ? depth + 2 : depth + 1
+            child_depth = (wrapper ? depth + 2 : depth + 1) + offset
             child_code = generate_component(child, child_depth, layout_type)
             next if child_code.empty?
             child_code = decorator.call(child, child_code, child_depth, child_index) if decorator
 
             if wrapper
-              code += "\n" + ('    ' * (depth + 1)) + wrapper[:open]
+              code += "\n" + ('    ' * (depth + 1 + offset)) + wrapper[:open]
               code += "\n" + child_code
-              code += "\n" + ('    ' * (depth + 1)) + wrapper[:close]
+              code += "\n" + ('    ' * (depth + 1 + offset)) + wrapper[:close]
             else
               code += "\n" + child_code
             end
@@ -2083,6 +2086,14 @@ module KjuiTools
           # the generated ViewModel imports nothing from com.kotlinjsonui.data,
           # so a bare cast is an unresolved reference on a fresh generation.
           "value as? com.kotlinjsonui.data.CollectionDataSource ?: updated.#{name}"
+        when 'Object', 'object', 'Hash', 'hash', 'Array', 'array'
+          # A JSON container is the type the Data class holds it as
+          # (DataModelUpdater#map_to_kotlin_type: Map<String, Any?> /
+          # List<Any?>). TypeConverter spells it as written, and the cast
+          # `value as? Object` did not compile against the Data field
+          # (kjui-object-path-binding-does-not-compile).
+          model_type = DataModelUpdater.allocate.send(:map_to_kotlin_type, class_type)
+          "value as? #{model_type} ?: updated.#{name}"
         else
           "value as? #{kotlin_type} ?: updated.#{name}"
         end

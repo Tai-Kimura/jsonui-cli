@@ -75,6 +75,19 @@ module KjuiTools
           keyboard_padding = keyboard_avoidance ? (keyboard_padding_dp(json_data) || 20) : nil
           state_var = nil
           code = ''
+          # A ScrollView with no id names its list state with nothing of its
+          # own, so two of them in one composable declared one name twice and
+          # the file did not compile ("Conflicting declarations: local val
+          # scrollPagingState" — KotlinJsonUI's sample-app scroll_test, three
+          # id-less ScrollViews, regenerated with jsonui-cli 1.9.6; since
+          # 1.8.109 every ScrollView with keyboardAvoidance, the default,
+          # declares one). The id-less one keeps its state in a `run { }` of
+          # its own, as StaticSeed does for a seeded control, so the name can
+          # never meet another's and the section extractor lifts the two as one
+          # statement. With an id the emit is what it was.
+          outer_depth = depth
+          scoped = (paging || anchor || keyboard_padding) && json_data['id'].to_s.empty?
+          depth += 1 if scoped
           if paging || anchor || keyboard_padding
             required_imports&.add(:snap_fling) if paging
             required_imports&.add(:lazy_list_state) unless paging
@@ -173,13 +186,19 @@ module KjuiTools
           # that isn't actually present. SwiftUI-free centering modifiers
           # (`wrapContentWidth/Height(Alignment.*)`) work in any scope, so the
           # ScopeFree branch of build_alignment routes through those instead.
+          closing = paging ? "\n" + indent("}", depth) : "\n" + indent("}", depth + 1) + "\n" + indent("}", depth)
+          if scoped
+            code = indent("run {", outer_depth) + "\n" + code
+            closing += "\n" + indent("}", outer_depth)
+          end
           result = {
             code: code,
             children: children,
-            closing: paging ? "\n" + indent("}", depth) : "\n" + indent("}", depth + 1) + "\n" + indent("}", depth),
+            closing: closing,
             layout_type: 'ScopeFree',
             json_data: json_data
           }
+          result[:child_depth_offset] = 1 if scoped
           result[:child_wrapper] = { open: 'item {', close: '}' } if paging
           result
         end

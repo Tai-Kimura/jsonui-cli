@@ -150,11 +150,19 @@ module KjuiTools
             end
           elsif json_data['onTextChange']
             view_id = Helpers::ModifierBuilder.view_id(json_data)
+            # The text's changes, not its first value: a LaunchedEffect keyed
+            # on the text runs on its first composition too, and with no bound
+            # value to compare against this branch called onTextChange once
+            # when the screen was drawn (kjui-text-change-is-called-on-display-
+            # without-a-text-binding; the bound branch above compares, and
+            # KotlinJsonUI Dynamic calls it for an edit only).
+            required_imports&.add(:snapshot_flow)
+            required_imports&.add(:flow_drop)
             if Helpers::ModifierBuilder.is_binding?(json_data['onTextChange'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
-              code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); #{handler_call} }", depth) + "\n"
+              code += indent("LaunchedEffect(#{state_var}) { snapshotFlow { #{state_var}.text.toString() }.drop(1).collect { newValue -> #{handler_call} } }", depth) + "\n"
             else
-              code += indent("LaunchedEffect(#{state_var}.text) { data.#{json_data['onTextChange']}?.invoke() }", depth) + "\n"
+              code += indent("LaunchedEffect(#{state_var}) { snapshotFlow { #{state_var}.text.toString() }.drop(1).collect { data.#{json_data['onTextChange']}?.invoke() } }", depth) + "\n"
             end
           end
 

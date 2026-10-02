@@ -128,6 +128,8 @@ module JsonUIShared
       @two_way_attrs_by_type = build_two_way_attrs(defs)
       @boolean_attrs_by_type = build_boolean_attrs(defs)
       @known_attrs_by_type = build_known_attrs(defs)
+      @handler_attrs_by_type = build_handler_attrs(defs)
+      @event_attrs_by_type = build_handler_attrs(defs, binding_only_events: true)
     end
 
     # Validate all bindings in a JSON component tree
@@ -522,7 +524,7 @@ module JsonUIShared
         # names any that is not one.
         next if key == 'events' && resolve_component_alias(component_type) == 'Embed'
         if incompatible_attr?(component_type, key)
-          note_uses_on_other_platforms(value, key)
+          note_uses_on_other_platforms(value, key, component_type)
           next
         end
 
@@ -578,7 +580,7 @@ module JsonUIShared
     # without braces (`"onLongPress": "handleHold"`) as it does in
     # check_selector_declared. Cell scopes are left alone, as
     # check_undefined_variables leaves them.
-    def note_uses_on_other_platforms(value, attribute_name)
+    def note_uses_on_other_platforms(value, attribute_name, component_type)
       return if @cell_depth > 0
 
       case value
@@ -586,7 +588,7 @@ module JsonUIShared
         exprs = value.scan(/@\{([^}]*)\}/).flatten
         if exprs.empty?
           name = value.strip
-          if SELECTOR_ATTRS.include?(attribute_name.to_s.split('.').first) && @data_properties.include?(name)
+          if handler_attr?(component_type, attribute_name, table: @event_attrs_by_type) && @data_properties.include?(name)
             @used_properties << name
           end
         end
@@ -596,9 +598,9 @@ module JsonUIShared
           extract_variables(expr).each { |var| @used_properties << var if @data_properties.include?(var) }
         end
       when Hash
-        value.each_value { |v| note_uses_on_other_platforms(v, attribute_name) }
+        value.each_value { |v| note_uses_on_other_platforms(v, attribute_name, component_type) }
       when Array
-        value.each { |v| note_uses_on_other_platforms(v, attribute_name) }
+        value.each { |v| note_uses_on_other_platforms(v, attribute_name, component_type) }
       end
     end
 
@@ -825,15 +827,66 @@ module JsonUIShared
     # and surfaced as a type error in the consumer's tsc, the latest possible
     # place. Advisory only, and only when the file declares data at all: a
     # layout with no data section is validated elsewhere.
-    SELECTOR_ATTRS = %w[
-      onclick onClick onLongPress onPan onPinch
-      onDragStart onDrop onDragEnter onDragLeave onDragOver
-      valueChange onTextChange onChange onItemAppear
-    ].freeze
+    #
+    # Which attributes take a handler's bare name is the SSoT's, per
+    # component type (build_handler_attrs): an event key — on<Upper> — whose
+    # type takes a string (`string`, or `string | binding`), with its
+    # aliases, and the two UIKit selector keys (LEGACY_SELECTOR_KEYS). One
+    # on<Upper> key takes a string and is no handler: Switch.onTintColor, a
+    # colour (NOT_HANDLER_KEYS). A bare name there is
+    # a declared form the generators call, so it is a use of the data it
+    # names. An event declared binding-only takes `@{name}` only: a bare name
+    # there calls nothing, and is not counted (binding-bare-event names it).
+    #
+    # Until jsonui-cli 1.9.6 this was a hand-kept list of 14 names — with
+    # none of the `string | binding` events but onItemAppear and onTextChange,
+    # with eight binding-only ones, and with `onChange`, which the SSoT
+    # declares nowhere — and its use count sat behind
+    # report_undeclared_selectors?, which no face turns on. So every bare
+    # handler name, `onclick` included, warned "Data property '…' is defined
+    # but never used" (measured on 1.9.5, kjui: View.onclick,
+    # Collection.onItemAppear, TabView.onValueChange, TextField.onTextChange).
+    LEGACY_SELECTOR_KEYS = %w[onclick valueChange].freeze
+    NOT_HANDLER_KEYS = %w[onTintColor].freeze
+
+    # binding_only_events: also the events declared binding-only — the set
+    # an attribute drawn on another platform reads (note_uses_on_other_platforms),
+    # which counted a bare `"onLongPress": "handleHold"` as a use from 1.9.0:
+    # the face that does not draw it cannot change it.
+    def build_handler_attrs(defs, binding_only_events: false)
+      result = {}
+      defs.each do |component_type, attrs|
+        next unless attrs.is_a?(Hash)
+        matched = Set.new
+        attrs.each do |attr_name, attr_def|
+          next unless attr_def.is_a?(Hash)
+          types = Array(attr_def['type'])
+          takes = types.include?('string') || (binding_only_events && types.include?('binding'))
+          event = attr_name.match?(/\Aon[A-Z]/) && takes && !NOT_HANDLER_KEYS.include?(attr_name)
+          next unless event || LEGACY_SELECTOR_KEYS.include?(attr_name)
+
+          matched << attr_name
+          Array(attr_def['aliases']).each { |a| matched << a }
+        end
+        result[component_type] = matched unless matched.empty?
+      end
+      result
+    end
+
+    # A type the SSoT does not declare (a custom component) reads any name
+    # some declared type handles, as the hand-kept list read every name on
+    # every type: narrowing it to `common` would turn its bare handlers into
+    # "never used" warnings.
+    def handler_attr?(component_type, attr_name, table: @handler_attrs_by_type)
+      name = attr_name.to_s.split('.').first
+      return true if lookup_attr_set(table, component_type, name)
+      return false if @attribute_definitions[resolve_component_alias(component_type)].is_a?(Hash)
+
+      table.values.reduce(Set.new, :|).include?(name)
+    end
 
     def check_selector_declared(value, attribute_name, component_type)
-      return unless report_undeclared_selectors?
-      return unless SELECTOR_ATTRS.include?(attribute_name)
+      return unless handler_attr?(component_type, attribute_name)
       return unless value.is_a?(String)
 
       name = value.strip
@@ -845,6 +898,7 @@ module JsonUIShared
         @used_properties << name
         return
       end
+      return unless report_undeclared_selectors?
 
       @warnings << "#{build_context_prefix}Handler '#{name}' in '#{component_type}.#{attribute_name}' is not defined in data. " \
                    "Add: { \"class\": \"Function\", \"name\": \"#{name}\" }"

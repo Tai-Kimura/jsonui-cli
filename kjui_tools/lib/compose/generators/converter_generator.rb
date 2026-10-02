@@ -158,6 +158,7 @@ module KjuiTools
             require_relative '../../helpers/modifier_builder'
             require_relative '../../../core/attribute_types'
             require_relative '../../../core/logger'
+            require_relative '../../../core/string_manager_core'
 
             module KjuiTools
               module Compose
@@ -176,16 +177,21 @@ module KjuiTools
                         # A literal the layout gives a prop, written as the Kotlin the
                         # composable's declared type takes — by the shared attribute
                         # type vocabulary (lib/core/attribute_types.rb), the table the
-                        # composable itself was scaffolded from. A string the project
-                        # declares as a resource stays stringResource(...); a colour
+                        # composable itself was scaffolded from. A String prop whose
+                        # NAME is display text (StringManagerCore.localized_prop? —
+                        # the list jui lint-strings checks) stays stringResource(...)
+                        # when the project declares the key; any other String prop
+                        # is the literal, as sjui writes it (variant: "bar"). A colour
                         # goes through ResourceResolver as before. nil when it cannot
                         # be written: the prop is then passed nothing, and said so.
-                        format_value = lambda do |value, type|
+                        format_value = lambda do |value, type, key = nil|
                           JsonUIShared::AttributeTypes.kotlin_literal(type, value) do |canonical, literal|
                             next nil unless literal.is_a?(String)
 
                             case canonical
                             when 'string'
+                              next nil unless JsonUIShared::StringManagerCore.localized_prop?(key)
+
                               resolved = Helpers::ResourceResolver.process_text(literal, required_imports)
                               resolved if resolved.to_s.include?('stringResource')
                             when 'color'
@@ -314,7 +320,7 @@ module KjuiTools
             lines << "                params << \"#{actual_key} = data.\#{prop_name}\""
             lines << "              else"
             lines << "                # Handle static value"
-            lines << "                formatted_value = format_value.call(value, '#{type}')"
+            lines << "                formatted_value = format_value.call(value, '#{type}', '#{actual_key}')"
             lines << "                if formatted_value"
             lines << "                  params << \"#{actual_key} = \#{formatted_value}\""
             lines << "                else"

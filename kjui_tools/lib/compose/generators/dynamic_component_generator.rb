@@ -341,11 +341,20 @@ module KjuiTools
             t = JsonUIShared::AttributeTypes.parse(type)
             read = case normalize_type(type)
                    when :string then "ResourceResolver.resolveText(json, \"#{k}\", data, context)"
-                   when :int then "resolveInt(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
-                   when :long then "resolveLong(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
-                   when :float then "resolveFloat(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
-                   when :double then "resolveDouble(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
-                   when :bool then "resolveBool(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
+                   when :int, :long, :float, :double, :bool
+                     # A `T?` prop reads null when the layout omits it (or binds
+                     # nothing of its type), as the composable's `T? = null`
+                     # and the iOS adapter's `resolveValue(…) ?? …` do. Through
+                     # jsonui-cli 1.9.5 it read the base type's default — 0 /
+                     # false — so Dynamic drew an omitted `trackHeight: Double?`
+                     # 0 thick (kjui-dynamic-scaffold-reads-an-optional-number-
+                     # as-its-base-default).
+                     reader = "resolve#{SCALAR_READERS.fetch(normalize_type(type))}"
+                     if t.nullable
+                       "#{reader}OrNull(json, \"#{k}\", data)"
+                     else
+                       "#{reader}(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
+                     end
                    when :color then "ColorParser.parseColorWithBinding(json, \"#{k}\", data, context)"
                    when :callback then "resolveCallback(json.get(\"#{k}\")?.asString, data)"
                    when :collection_data_source then "resolveCollectionDataSource(json, \"#{k}\", data)"
@@ -412,42 +421,48 @@ module KjuiTools
 
         def int_helper_method
           <<~KOTLIN.gsub(/^/, '    ')
-            private fun resolveInt(json: JsonObject, key: String, data: Map<String, Any>, default: Int = 0): Int {
-                val element = json.get(key) ?: return default
+            private fun resolveInt(json: JsonObject, key: String, data: Map<String, Any>, default: Int): Int =
+                resolveIntOrNull(json, key, data) ?: default
+
+            private fun resolveIntOrNull(json: JsonObject, key: String, data: Map<String, Any>): Int? {
+                val element = json.get(key) ?: return null
                 if (element.isJsonPrimitive) {
                     val prim = element.asJsonPrimitive
                     if (prim.isNumber) return prim.asInt
                     if (prim.isString) {
                         val str = prim.asString
                         if (ModifierBuilder.isBinding(str)) {
-                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return default
-                            return (data[prop] as? Number)?.toInt() ?: default
+                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return null
+                            return (data[prop] as? Number)?.toInt()
                         }
-                        return str.toIntOrNull() ?: default
+                        return str.toIntOrNull()
                     }
                 }
-                return default
+                return null
             }
           KOTLIN
         end
 
         def long_helper_method
           <<~KOTLIN.gsub(/^/, '    ')
-            private fun resolveLong(json: JsonObject, key: String, data: Map<String, Any>, default: Long = 0L): Long {
-                val element = json.get(key) ?: return default
+            private fun resolveLong(json: JsonObject, key: String, data: Map<String, Any>, default: Long): Long =
+                resolveLongOrNull(json, key, data) ?: default
+
+            private fun resolveLongOrNull(json: JsonObject, key: String, data: Map<String, Any>): Long? {
+                val element = json.get(key) ?: return null
                 if (element.isJsonPrimitive) {
                     val prim = element.asJsonPrimitive
                     if (prim.isNumber) return prim.asLong
                     if (prim.isString) {
                         val str = prim.asString
                         if (ModifierBuilder.isBinding(str)) {
-                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return default
-                            return (data[prop] as? Number)?.toLong() ?: default
+                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return null
+                            return (data[prop] as? Number)?.toLong()
                         }
-                        return str.toLongOrNull() ?: default
+                        return str.toLongOrNull()
                     }
                 }
-                return default
+                return null
             }
           KOTLIN
         end
@@ -492,63 +507,72 @@ module KjuiTools
 
         def float_helper_method
           <<~KOTLIN.gsub(/^/, '    ')
-            private fun resolveFloat(json: JsonObject, key: String, data: Map<String, Any>, default: Float = 0f): Float {
-                val element = json.get(key) ?: return default
+            private fun resolveFloat(json: JsonObject, key: String, data: Map<String, Any>, default: Float): Float =
+                resolveFloatOrNull(json, key, data) ?: default
+
+            private fun resolveFloatOrNull(json: JsonObject, key: String, data: Map<String, Any>): Float? {
+                val element = json.get(key) ?: return null
                 if (element.isJsonPrimitive) {
                     val prim = element.asJsonPrimitive
                     if (prim.isNumber) return prim.asFloat
                     if (prim.isString) {
                         val str = prim.asString
                         if (ModifierBuilder.isBinding(str)) {
-                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return default
-                            return (data[prop] as? Number)?.toFloat() ?: default
+                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return null
+                            return (data[prop] as? Number)?.toFloat()
                         }
-                        return str.toFloatOrNull() ?: default
+                        return str.toFloatOrNull()
                     }
                 }
-                return default
+                return null
             }
           KOTLIN
         end
 
         def double_helper_method
           <<~KOTLIN.gsub(/^/, '    ')
-            private fun resolveDouble(json: JsonObject, key: String, data: Map<String, Any>, default: Double = 0.0): Double {
-                val element = json.get(key) ?: return default
+            private fun resolveDouble(json: JsonObject, key: String, data: Map<String, Any>, default: Double): Double =
+                resolveDoubleOrNull(json, key, data) ?: default
+
+            private fun resolveDoubleOrNull(json: JsonObject, key: String, data: Map<String, Any>): Double? {
+                val element = json.get(key) ?: return null
                 if (element.isJsonPrimitive) {
                     val prim = element.asJsonPrimitive
                     if (prim.isNumber) return prim.asDouble
                     if (prim.isString) {
                         val str = prim.asString
                         if (ModifierBuilder.isBinding(str)) {
-                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return default
-                            return (data[prop] as? Number)?.toDouble() ?: default
+                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return null
+                            return (data[prop] as? Number)?.toDouble()
                         }
-                        return str.toDoubleOrNull() ?: default
+                        return str.toDoubleOrNull()
                     }
                 }
-                return default
+                return null
             }
           KOTLIN
         end
 
         def bool_helper_method
           <<~KOTLIN.gsub(/^/, '    ')
-            private fun resolveBool(json: JsonObject, key: String, data: Map<String, Any>, default: Boolean = false): Boolean {
-                val element = json.get(key) ?: return default
+            private fun resolveBool(json: JsonObject, key: String, data: Map<String, Any>, default: Boolean): Boolean =
+                resolveBoolOrNull(json, key, data) ?: default
+
+            private fun resolveBoolOrNull(json: JsonObject, key: String, data: Map<String, Any>): Boolean? {
+                val element = json.get(key) ?: return null
                 if (element.isJsonPrimitive) {
                     val prim = element.asJsonPrimitive
                     if (prim.isBoolean) return prim.asBoolean
                     if (prim.isString) {
                         val str = prim.asString
                         if (ModifierBuilder.isBinding(str)) {
-                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return default
-                            return data[prop] as? Boolean ?: default
+                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return null
+                            return data[prop] as? Boolean
                         }
-                        return str.toBooleanStrictOrNull() ?: default
+                        return str.toBooleanStrictOrNull()
                     }
                 }
-                return default
+                return null
             }
           KOTLIN
         end
@@ -580,6 +604,8 @@ module KjuiTools
         # -------------------------------------------------------------------
         # Type normalization
         # -------------------------------------------------------------------
+
+        SCALAR_READERS = { int: 'Int', long: 'Long', float: 'Float', double: 'Double', bool: 'Bool' }.freeze
 
         # The reader an attribute needs: the shared vocabulary's kind
         # (lib/core/attribute_types.rb). CGFloat reads as a Float; a type

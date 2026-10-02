@@ -67,7 +67,14 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
   #   (b) describes a constant in a Kotlin-emitting namespace; or
   #   (c) holds one of the old spellings, so no spec that was in leaves.
   EMIT_MARKERS_KT = ['expect(code)', 'expect(kotlin', 'expect(out'].freeze
-  COMPILE_MARKER_KT = 'compile_as_kotlin'
+  # A compile arm is the matcher, or a run (KotlinCompiler.run compiles the
+  # source and then executes it — its errors are the compile's). Until 1.9.6
+  # only the matcher counted, and an arm that ran what it emitted, asserting
+  # `run.errors == []`, was counted as no compile at all.
+  COMPILE_MARKERS_KT = ['compile_as_kotlin', 'KotlinCompiler.run('].freeze
+  def self.compiles?(body)
+    COMPILE_MARKERS_KT.any? { |marker| body.include?(marker) }
+  end
   LIB_KT = File.expand_path('../lib', __dir__)
   # core/resources/color_manager writes ColorManager.kt. Until 1.9.0 it was
   # outside this list, and its spec was in only by the markers' spelling.
@@ -222,9 +229,20 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     expect(self.class.emits_kotlin?(stripped)).to be(true)
   end
 
+  # The markers' controls: a run counts, a run's name in prose does not
+  # stand in for one, and a spec with neither is still an offender.
+  it 'counts a spec whose compile arm is a run' do
+    rel = 'compose/radio_items_on_value_change_spec.rb'
+    body = File.read(File.join(root, rel))
+    expect(body).not_to include('compile_as_kotlin')
+    expect(emit_specs(root).map(&:first)).to include(rel)
+    expect(self.class.compiles?(body)).to be(true)
+    expect(self.class.compiles?(body.gsub('KotlinCompiler.run(', 'KotlinCompiler.unavailable_reason('))).to be(false)
+  end
+
   it 'has no spec asserting emitted Kotlin that neither compiles nor is listed' do
     offenders = emit_specs(root).reject do |rel, body|
-      body.include?(COMPILE_MARKER_KT) || ALLOWLIST_KT.key?(rel)
+      self.class.compiles?(body) || ALLOWLIST_KT.key?(rel)
     end.map(&:first)
 
     expect(offenders).to be_empty,
@@ -240,7 +258,7 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
   it 'has no allowlist entry that already compiles' do
     converted = ALLOWLIST_KT.keys.select do |rel|
       path = File.join(root, rel)
-      File.file?(path) && File.read(path).include?(COMPILE_MARKER_KT)
+      File.file?(path) && self.class.compiles?(File.read(path))
     end
     expect(converted).to be_empty,
                          "these now compile — remove them from ALLOWLIST_KT:\n#{converted.join("\n")}"

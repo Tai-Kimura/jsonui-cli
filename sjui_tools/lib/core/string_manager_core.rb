@@ -42,7 +42,23 @@ module JsonUIShared
     # (mirrors the XML mapper / Compose components / SwiftUI converters).
     # `alt` is spoken rather than shown, and localized all the same: an
     # image's screen-reader text (shared/core/image_accessibility.rb).
-    STRING_PROPERTIES = %w[text hint placeholder label prompt alt].freeze
+    # `accessibilityLabel` likewise (ruling 2026-10-03): spoken text, and a
+    # custom component's prop of that name is the one a consumer gave a
+    # strings.json key (kjui-custom-component-string-literal-prop-is-read-as-
+    # a-string-key). The one list: jui lint-strings reads it from this file,
+    # and both converter scaffolds ask localized_prop? below.
+    STRING_PROPERTIES = %w[text hint placeholder label prompt alt accessibilityLabel].freeze
+
+    # A custom component's literal String prop is looked up as a strings.json
+    # key when its NAME is one of STRING_PROPERTIES — the display text names
+    # lint-strings checks — and written as the literal otherwise (an
+    # enum-like `variant: "bar"`), on both OS (ruling 2026-10-03). Through
+    # jsonui-cli 1.9.5 kjui's scaffold looked every String literal up (and
+    # warned "Bare key … foreign section" for a `bar` it was never meant to
+    # resolve) while sjui's looked none up.
+    def self.localized_prop?(name)
+      STRING_PROPERTIES.include?(name.to_s)
+    end
 
     # Array attributes whose String items are user-visible text
     # (e.g. Segment items).

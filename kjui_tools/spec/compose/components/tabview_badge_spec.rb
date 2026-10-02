@@ -120,10 +120,12 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
     end
   end
 
-  # onValueChange (onTabChange / onPageChanged its aliases), after each tab's
-  # selection is written, called as the data declares it: `(Int)` with the
-  # index, `(String, Int)` with the viewId first, `()` with nothing. Compose
-  # read no handler at all — the handler was never called.
+  # onValueChange (onTabChange / onPageChanged its aliases), called as the
+  # data declares it — `(Int)` with the index, `(String, Int)` with the viewId
+  # first, `()` with nothing — when the selection's value changes (ruling
+  # 2026-10-02): a tab's tap only writes the selection, and an effect keyed on
+  # it calls the handler. Until jsonui-cli 1.9.6 the tab's onClick called it
+  # (and before that, Compose read no handler at all).
   describe 'the tab-change handler' do
     after { KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {} }
 
@@ -132,14 +134,15 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
       { 'type' => 'TabView', 'id' => 'tv', 'tabs' => [{ 'title' => 'One' }, { 'title' => 'Two' }], handler_key => "@{#{handler}}" }.merge(selection)
     end
 
-    it 'is called from each tab, after the selection, as the data declares it' do
+    it 'is called on a change of the selection, as the data declares it; a tap only writes the selection' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = classes.transform_values { |c| { 'class' => c } }
-      expect(described_class.generate(node.call('onValueChange', 'onTab'), 0, required_imports))
-        .to include('onClick = { viewModel.updateData(mapOf("sel" to 1)); data.onTab?.invoke(1) },')
+      bound = described_class.generate(node.call('onValueChange', 'onTab'), 0, required_imports)
+      expect(bound).to include('onClick = { viewModel.updateData(mapOf("sel" to 1)) },',
+                               'LaunchedEffect(data.sel) {', 'data.onTab?.invoke(data.sel)')
       expect(described_class.generate(node.call('onTabChange', 'onTabId'), 0, required_imports))
-        .to include('data.onTabId?.invoke("tv", 0) },')
-      expect(described_class.generate(node.call('onPageChanged', 'onTabNone', {}), 0, required_imports))
-        .to include('onClick = { selectedTab = 1; data.onTabNone?.invoke() },')
+        .to include('data.onTabId?.invoke("tv", data.sel)')
+      local = described_class.generate(node.call('onPageChanged', 'onTabNone', {}), 0, required_imports)
+      expect(local).to include('onClick = { selectedTab = 1 },', 'LaunchedEffect(selectedTab) {', 'data.onTabNone?.invoke()')
     end
 
     it 'emits Kotlin that compiles for each declared shape' do

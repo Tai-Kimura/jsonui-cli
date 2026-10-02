@@ -210,6 +210,58 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
   end
 
 
+  # Two ScrollViews with no id in one composable each declared
+  # `val scrollPagingState` — "Conflicting declarations", the file did not
+  # compile (KotlinJsonUI's sample-app scroll_test regenerated with
+  # jsonui-cli 1.9.6: three id-less ScrollViews in one section). An id-less
+  # one keeps its state in a `run { }` of its own; one with an id emits what
+  # it did.
+  describe 'ScrollViews without an id side by side' do
+    let(:imports) { Set.new }
+
+    def emit(node)
+      result = described_class.generate(node, 1, imports)
+      result[:code] + result[:closing]
+    end
+
+    it 'compile in one composable' do
+      a = emit({ 'type' => 'ScrollView', 'child' => [] })
+      b = emit({ 'type' => 'ScrollView', 'defaultScrollAnchor' => 'bottom', 'child' => [] })
+      expect(a).to start_with("    run {\n        val scrollPagingState = rememberLazyListState()")
+      expect(<<~KOTLIN).to compile_as_kotlin
+        annotation class Composable
+        class LazyListState { suspend fun scrollBy(d: Float): Float = d }
+        @Composable
+        fun rememberLazyListState(): LazyListState = LazyListState()
+        object Modifier
+        @Composable
+        fun Modifier.keyboardAvoidance(listState: LazyListState, clearanceDp: Int = 20): Modifier = this
+        @Composable
+        fun LaunchedEffect(key: Any?, block: suspend () -> Unit) {}
+        class LazyListScope { fun item(content: () -> Unit) { content() } }
+        @Composable
+        fun LazyColumn(state: LazyListState = rememberLazyListState(), modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) { LazyListScope().content() }
+        @Composable
+        fun Host() {
+        #{a}
+        #{b}
+        }
+      KOTLIN
+    end
+
+    it 'emit with an id what they did (control)' do
+      code = emit({ 'type' => 'ScrollView', 'id' => 'form', 'child' => [] })
+      expect(code).not_to include('run {')
+      expect(code).to start_with('    val scrollPagingStateform = rememberLazyListState()')
+    end
+
+    it 'draw their children one level inside the scope' do
+      result = described_class.generate({ 'type' => 'ScrollView', 'child' => [] }, 1, imports)
+      expect(result[:child_depth_offset]).to eq(1)
+      expect(described_class.generate({ 'type' => 'ScrollView', 'id' => 'f', 'child' => [] }, 1, imports)[:child_depth_offset]).to be_nil
+    end
+  end
+
   # ---------------------------------------------------------------- 1.8.109
   #
   # Every attribute this component READS is declared for kotlin in the SSoT.

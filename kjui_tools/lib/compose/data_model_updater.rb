@@ -294,10 +294,21 @@ module KjuiTools
               # silently dropped them while the dynamic path resolved them.
               content += "map[\"#{name}\"] as? Color ?: (map[\"#{name}\"] as? String)?.let { com.kotlinjsonui.generated.ColorManager.compose.colorOrHex(it) } ?: #{from_map_fallback(prop, class_type, 'Color.Unspecified')}"
             when 'CollectionDataSource'
-              content += "com.kotlinjsonui.data.CollectionDataSource()"
-            when /^List<.*>$/
+              # The map's value, as updateData and iOS's update(dictionary:)
+              # read it; the declared default (else an empty source) when the
+              # map has none. Through jsonui-cli 1.9.5 this wrote the empty
+              # source whatever the map held (kjui-frommap-drops-collectiondatasource).
+              content += "map[\"#{name}\"] as? com.kotlinjsonui.data.CollectionDataSource ?: #{from_map_fallback(prop, class_type, 'com.kotlinjsonui.data.CollectionDataSource()')}"
+            when /^List<.*>$/, 'Array', 'array'
+              # A JSON container (Array / Object / Hash) reads as the type the
+              # field holds (map_to_kotlin_type), with the declared default
+              # behind it. Through jsonui-cli 1.9.5 the declared spelling fell
+              # to the branch below with no fallback: a nullable cast into the
+              # non-null field a defaultValue gives — the Data class did not
+              # compile (conformance Label/text__binding_dot_path and three
+              # more — kjui-object-path-binding-does-not-compile).
               content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
-            when /^Map<.*>$/
+            when /^Map<.*>$/, 'Object', 'object', 'Hash', 'hash'
               content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
             else
               # For custom types, try to cast directly

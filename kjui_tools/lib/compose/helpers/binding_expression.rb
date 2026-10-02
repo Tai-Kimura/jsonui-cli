@@ -124,6 +124,48 @@ module KjuiTools
             path.to_s.match?(PATH_RE)
           end
 
+          # A data item declared as a JSON container — Object / Hash (the Data
+          # class holds it as Map<String, Any?>) or Array (List<Any?>) — is
+          # read step by step: `@{obj.name}` is `data.obj?.get("name")`,
+          # `@{items[0].title}` is `(data.items?.getOrNull(0) as? Map<*, *>)
+          # ?.get("title")`; a step past the first reads what it reaches as a
+          # map or a list. Through jsonui-cli 1.9.5 the path was written as
+          # Kotlin properties and indexing (`data.obj.name`,
+          # `data.items[0].title`): a Map has no `name`, an element is Any?,
+          # and the item may be nullable, so the file did not compile
+          # (conformance Label/text__binding_unresolved_path, dot_path,
+          # deep_path, bracket_index — kjui-object-path-binding-does-not-
+          # compile). A model type's path stays property access.
+          CONTAINER_CLASSES = {
+            'Object' => :map, 'object' => :map, 'Hash' => :map, 'hash' => :map,
+            'Array' => :list, 'array' => :list
+          }.freeze
+
+          def container_kind(name)
+            definition = ResourceResolver.data_definitions[name]
+            cls = definition.is_a?(Hash) ? definition['class'] : nil
+            CONTAINER_CLASSES[cls.to_s.strip]
+          end
+
+          def kotlin_path(path)
+            tokens = path.scan(/([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]/)
+            head = tokens.first&.first
+            kind = head && container_kind(head)
+            return "data.#{path}" if kind.nil? || tokens.size == 1
+
+            expr = "data.#{head}"
+            typed = true # expr is still the declared Map / List, not an element
+            tokens.drop(1).each do |field, index|
+              if field
+                expr = typed && kind == :map ? "#{expr}?.get(#{quote(field)})" : "(#{expr} as? Map<*, *>)?.get(#{quote(field)})"
+              else
+                expr = typed && kind == :list ? "#{expr}?.getOrNull(#{index})" : "(#{expr} as? List<*>)?.getOrNull(#{index})"
+              end
+              typed = false
+            end
+            expr
+          end
+
           def interpolated_access(inner)
             p = parse(inner)
             # Not a path: emit the author's own text as a literal instead of
@@ -131,7 +173,7 @@ module KjuiTools
             # must not do is write a file that cannot be parsed.
             return quote("@{#{inner}}") unless emittable_path?(p.path)
 
-            base = "data.#{p.path}"
+            base = kotlin_path(p.path)
             if !property_nullable?(p.path)
               "\"${#{base}}\""
             elsif p.has_default
