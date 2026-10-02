@@ -9,6 +9,7 @@ require_relative '../core/logger'
 require_relative '../core/type_converter'
 require_relative '../core/data_item_platform'
 require_relative '../core/attribute_validator'
+require_relative '../core/attribute_alias_fold'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
@@ -231,6 +232,9 @@ module KjuiTools
           # it (the two paths answered differently). Ticket
           # leaf-refusal-does-not-see-inside-a-partial-include.
           json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file), nil, @layouts_dir)
+          # Declared attribute aliases read as their canonical names, for a
+          # layout `jui build` did not canonicalize (Core::AttributeAliasFold).
+          Core::AttributeAliasFold.fold!(json_data, source: File.basename(json_file)).each { |w| Core::Logger.warn(w) }
 
           shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
             json_data, source_path: File.basename(json_file),
@@ -1802,6 +1806,7 @@ module KjuiTools
         json_data = StyleLoader.load_and_merge(json_data)
         # Expanded first, as the base is: the checks read the drawn tree.
         json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file), nil, @layouts_dir)
+        Core::AttributeAliasFold.fold!(json_data, source: File.basename(variant_file)).each { |w| Core::Logger.warn(w) }
 
         shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
           json_data, source_path: File.basename(variant_file),
