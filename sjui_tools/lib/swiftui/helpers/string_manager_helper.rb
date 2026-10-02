@@ -7,6 +7,7 @@ require_relative '../../core/project_finder'
 require_relative '../../core/logger'
 require_relative '../../core/string_manager_core'
 require_relative '../../core/string_literals'
+require_relative '../../core/swift_identifier'
 
 module SjuiTools
   module SwiftUI
@@ -162,7 +163,7 @@ module SjuiTools
           report_string_namespace(text, resolved) if warnings
           struct_name = snake_to_pascal(resolved['namespace'])
           method_name = snake_to_camel(resolved['key'])
-          "StringManager.#{struct_name}.#{method_name}()"
+          "StringManager.#{struct_name}.#{Core::SwiftIdentifier.reference(method_name)}()"
         end
 
         # Both conditions are SSoT damage rather than build errors, so
@@ -234,7 +235,7 @@ module SjuiTools
               if file_strings.key?(key)
                 struct_name = snake_to_pascal(file_name)
                 method_name = snake_to_camel(key)
-                return "StringManager.#{struct_name}.#{method_name}()"
+                return "StringManager.#{struct_name}.#{Core::SwiftIdentifier.reference(method_name)}()"
               end
             end
 
@@ -251,7 +252,7 @@ module SjuiTools
             if own.include?(file_name) && file_strings.key?(text)
               struct_name = snake_to_pascal(file_name)
               method_name = snake_to_camel(text)
-              return "StringManager.#{struct_name}.#{method_name}()"
+              return "StringManager.#{struct_name}.#{Core::SwiftIdentifier.reference(method_name)}()"
             end
           end
 
