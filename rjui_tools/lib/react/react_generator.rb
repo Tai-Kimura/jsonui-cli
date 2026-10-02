@@ -52,6 +52,12 @@ require_relative '../core/enum_spelling'
 module RjuiTools
   module React
     class ReactGenerator
+
+      # `StringManager.currentLanguage.xxx` and `StringManager.currentLanguage["x-y"]`
+      # (the helper's two spellings) read from the subscribed `$s` snapshot.
+      def self.read_strings_from_snapshot(jsx_content)
+        jsx_content.gsub(/StringManager\.currentLanguage(?=[.\[])/, '$s')
+      end
       include Helpers::StringManagerHelper
 
       # The one table, shared with the child dispatch (BaseConverter
@@ -554,9 +560,7 @@ module RjuiTools
         # rewrite those to `$s.xxx` below so the JSX reads from the
         # subscribed snapshot and re-renders on `setLanguage`.
         string_manager_declaration = uses_string_manager ? "\n  const $s = useStringManager();\n" : ''
-        if uses_string_manager
-          jsx_content = jsx_content.gsub('StringManager.currentLanguage.', '$s.')
-        end
+        jsx_content = self.class.read_strings_from_snapshot(jsx_content) if uses_string_manager
 
         # Root id passthrough: collections address cells as
         # {collectionId}_item_{index} via an `id` prop (kjui testTag

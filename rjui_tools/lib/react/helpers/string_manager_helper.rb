@@ -138,8 +138,7 @@ module RjuiTools
               match_value = value.is_a?(Hash) ? (value.values.first || '') : value.to_s
               if match_value == text
                 full_key = "#{file_name}_#{key}"
-                camel_key = string_manager_accessor(full_key)
-                return "{StringManager.currentLanguage.#{camel_key}}"
+                return "{#{string_manager_reference(full_key)}}"
               end
             end
           end
@@ -163,8 +162,7 @@ module RjuiTools
               key = text.sub(/^#{Regexp.escape(file_name)}_/, '')
               if file_strings.key?(key)
                 full_key = "#{file_name}_#{key}"
-                camel_key = string_manager_accessor(full_key)
-                return "{StringManager.currentLanguage.#{camel_key}}"
+                return "{#{string_manager_reference(full_key)}}"
               end
             end
           end
@@ -183,8 +181,7 @@ module RjuiTools
 
             if file_strings.key?(text)
               full_key = "#{namespace}_#{text}"
-              camel_key = string_manager_accessor(full_key)
-              return "{StringManager.currentLanguage.#{camel_key}}"
+              return "{#{string_manager_reference(full_key)}}"
             end
           end
 
@@ -267,6 +264,22 @@ module RjuiTools
         # reference the runtime does not have: the page renders nothing where
         # the string should be. (The proxy also keeps the raw snake spelling,
         # which is why nothing here needs to quote it.)
+        # `StringManager.currentLanguage.<accessor>`, or with brackets when the
+        # accessor is not a name a dot can take — a key with `-` or a space
+        # (`icon-label_description` → `…Icon-labelDescription`) read as a
+        # subtraction. The StringManager's map carries the same camelCase
+        # spelling under either access.
+        JS_IDENTIFIER_NAME = /\A[\p{L}\p{Nl}$_][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$\u200C\u200D]*\z/.freeze
+
+        def string_manager_reference(full_key)
+          accessor = string_manager_accessor(full_key)
+          if accessor.match?(JS_IDENTIFIER_NAME)
+            "StringManager.currentLanguage.#{accessor}"
+          else
+            "StringManager.currentLanguage[#{JSON.generate(accessor)}]"
+          end
+        end
+
         def string_manager_accessor(full_key)
           full_key.gsub(/_([a-z0-9])/) { Regexp.last_match(1).upcase }
         end
