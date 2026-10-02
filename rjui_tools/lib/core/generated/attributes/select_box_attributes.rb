@@ -54,10 +54,8 @@ module JsonUI
         { name: 'minuteInterval', kind: :number }.freeze,
         # Allow multiple selection
         { name: 'multiple', kind: :boolean }.freeze,
-        # Value change handler - binding only (@{functionName}). The handler receives the new value of the selection binding, the same on every platform: with selectedIndex bound it is the Int index (declare ((Int) -> Void)?, or ((String, Int) -> Void)? for viewId + index); with selectedItem / selectedValue bound it is the String item (declare ((String, String) -> Void)? for viewId + item). A lone (String) parameter is the selected item as a String, with selectedIndex bound too; the viewId comes only as the first of two parameters. (() -> Void)? receives nothing and the ViewModel reads the bound value back.
-        { name: 'onValueChange', kind: :binding }.freeze,
-        # Value change handler (alias for onValueChange) - binding only (@{functionName})
-        { name: 'onValueChanged', kind: :binding }.freeze,
+        # Value change handler - binding only (@{functionName}). The handler receives the new value of the selection binding, the same on every platform: with selectedIndex bound it is the Int index (declare ((Int) -> Void)?, or ((String, Int) -> Void)? for viewId + index); with selectedItem / selectedValue bound it is the String item (declare ((String, String) -> Void)? for viewId + item). A lone (String) parameter is the selected item as a String, with selectedIndex bound too; the viewId comes only as the first of two parameters. (() -> Void)? receives nothing and the ViewModel reads the bound value back. `onValueChanged` folds here, as on Slider, Collection and CheckBox; it was declared as its own attribute, so the normalizer never folded it and sjui codegen called nothing for it (ticket sjui-selectbox-onvaluechanged-alias-is-never-called).
+        { name: 'onValueChange', kind: :binding, aliases: ['onValueChanged'].freeze }.freeze,
         # Placeholder text (alias for prompt)
         { name: 'placeholder', kind: :string }.freeze,
         # Prompt text (primary)

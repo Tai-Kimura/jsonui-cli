@@ -167,7 +167,10 @@ module SjuiTools
                                    else
                                      nil
                                    end
-              has_handler = @component['onValueChange'] && is_binding?(@component['onValueChange'])
+              # onValueChanged is onValueChange's declared alias (folded by the
+              # normalizer; read here for a layout that was not normalized).
+              value_handler = attr_with_alias('onValueChange', 'onValueChanged')
+              has_handler = value_handler && is_binding?(value_handler)
 
               if selected_date_prop || has_handler || click
                 add_line "onValueChange: { newValue in"
@@ -179,7 +182,7 @@ module SjuiTools
                     # The date's string; by the handler's declared parameters
                     # (pick_invocation) — no index for a date, and a handler
                     # declared to take one is not called.
-                    add_line pick_invocation(@component['onValueChange'], id, nil)
+                    add_line pick_invocation(value_handler, id, nil)
                   end
                   add_line click if click
                 end
@@ -284,7 +287,7 @@ module SjuiTools
             # nothing.
             if selectItemType != 'Date'
               calls = []
-              handler = @component['onValueChange']
+              handler = attr_with_alias('onValueChange', 'onValueChanged')
               if handler && is_binding?(handler)
                 index_prop = extract_binding_property(@component['selectedIndex']) if is_binding?(@component['selectedIndex'])
                 index_expr = index_prop ? "data.#{index_prop}" : "(#{items_expression(items)}.firstIndex(of: newValue) ?? -1)"

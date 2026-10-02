@@ -8,17 +8,17 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "5e649d34323886f4ccf9193bf06398ebd9a456fc2496700f0813672ca50e9e50",
+  "generatedFrom": "41cb1e9f342e5c6528955653fdcf0a48a01177ee890faac4c6b644072b6990c2",
   "counts": {
-    "fixtures": 1132,
+    "fixtures": 1131,
     "assertable": 49,
     "visual": 849,
-    "interactive": 38,
+    "interactive": 37,
     "control": 118,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
-      "callback": 12
+      "callback": 11
     }
   },
   "fixtures": [
@@ -15860,45 +15860,6 @@
       "deprecated": null,
       "layout": "fixtures/SelectBox/onValueChange__callback_fire.layout.json",
       "test": "fixtures/SelectBox/onValueChange__callback_fire.test.json",
-      "state": {
-        "vars": [
-          {
-            "name": "conformanceResult",
-            "class": "String",
-            "defaultValue": "ready"
-          }
-        ],
-        "handlers": [
-          {
-            "name": "conformanceFire",
-            "set": {
-              "var": "conformanceResult",
-              "value": "fired"
-            }
-          }
-        ]
-      },
-      "promotedFrom": "callback"
-    },
-    {
-      "id": "SelectBox/onValueChanged__callback_fire",
-      "component": "SelectBox",
-      "attribute": "onValueChanged",
-      "case": "callback_fire",
-      "class": "interactive",
-      "host": "SelectBox",
-      "writtenKey": "onValueChanged",
-      "aliasOf": null,
-      "value": "@{conformanceFire}",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/SelectBox/onValueChanged__callback_fire.layout.json",
-      "test": "fixtures/SelectBox/onValueChanged__callback_fire.test.json",
       "state": {
         "vars": [
           {

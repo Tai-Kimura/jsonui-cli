@@ -638,11 +638,11 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
             "SelectBox", "onValueChange", _FIRE_BINDING, _select_target("Two"), HANDLER_TEXT
         ),
     ),
-    ("SelectBox", "onValueChanged"): (
-        _callback_fire(
-            "SelectBox", "onValueChanged", _FIRE_BINDING, _select_target("Two"), HANDLER_TEXT
-        ),
-    ),
+    # SelectBox.onValueChanged is onValueChange's declared alias from
+    # jsonui-cli 1.9.6 (it was its own attribute, which the normalizer never
+    # folded: sjui-selectbox-onvaluechanged-alias-is-never-called). An alias
+    # gets no fixture of its own, as Slider's / CheckBox's do not; the fold is
+    # the normalizer's, and the unnormalized converter path is sjui's spec.
 }
 # Not promoted (kept as v1 skips, with the blocking gap):
 # - binding-only attrs (`bind`/`binding`/`bindingScript`, Collection scrollTo/
