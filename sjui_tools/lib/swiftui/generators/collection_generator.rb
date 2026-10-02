@@ -141,12 +141,11 @@ module SjuiTools
 
             struct #{@pascal_name}View: View, Equatable {
                 @StateObject private var viewModel: #{@pascal_name}ViewModel
-                let cellId: String
+                let cellKey: String
                 let cellData: Any
 
                 init(data: Any) {
-                    let dict = data as? [String: Any]
-                    self.cellId = dict?["cellId"] as? String ?? ""
+                    self.cellKey = #{@pascal_name}ViewModel.cellKey(of: data)
                     self.cellData = data
                     _viewModel = StateObject(wrappedValue: Self.makeViewModel(with: data))
                 }
@@ -158,12 +157,12 @@ module SjuiTools
                 }
 
                 static func == (lhs: #{@pascal_name}View, rhs: #{@pascal_name}View) -> Bool {
-                    lhs.cellId == rhs.cellId
+                    lhs.cellKey == rhs.cellKey
                 }
 
                 var body: some View {
                     #{@pascal_name}GeneratedView(data: $viewModel.data)
-                        .onChange(of: cellId) { _, _ in
+                        .onChange(of: cellKey) { _, _ in
                             viewModel.setData(cellData)
                         }
                         // Add navigation destinations, sheets, or other view-level modifiers here
@@ -267,13 +266,24 @@ module SjuiTools
                 let jsonFileName = "#{@snake_name}"
 
                 @Published var data = #{@pascal_name}Data()
-                private var lastCellId: String?
+                private var lastCellKey: String?
+
+                // A cell is known by the "cellId" the Collection writes under
+                // autoChangeTrackingId + cellIdProperty, and otherwise by its
+                // whole value: without a cellId every cell would share one key,
+                // and the first call would read nothing.
+                static func cellKey(of itemData: Any) -> String {
+                    if let id = (itemData as? [String: Any])?["cellId"] as? String, !id.isEmpty {
+                        return id
+                    }
+                    return String(describing: itemData)
+                }
 
                 func setData(_ itemData: Any) {
                     guard let dict = itemData as? [String: Any] else { return }
-                    let cellId = dict["cellId"] as? String
-                    guard cellId != lastCellId else { return }
-                    lastCellId = cellId
+                    let key = Self.cellKey(of: itemData)
+                    guard key != lastCellKey else { return }
+                    lastCellKey = key
                     data.update(dictionary: dict)
                 }
             }
