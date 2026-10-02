@@ -58,7 +58,23 @@ module RjuiTools
         end
         gen.send(:extract_event_handler_bindings, tree).each_key { |name| add.call(name, including.call(name)) }
         undeclared(tree).each { |name| add.call(name, including.call(name)) }
+        # The members the Data walk synthesizes (a TabView's tab state, its
+        # setter, its tabs' Data) — synthesized on the expanded tree too, so
+        # under the same name there, the include's id or not.
+        synthesized(tree, gen).each { |name| add.call(name, name) }
         out
+      end
+
+      def synthesized(node, gen, names = [])
+        case node
+        when Hash
+          gen.send(:tab_view_members, node).each { |m| names << m['name'] unless names.include?(m['name']) }
+          child = node['child'] || node['children']
+          (child.is_a?(Array) ? child : [child].compact).each { |c| synthesized(c, gen, names) }
+        when Array
+          node.each { |c| synthesized(c, gen, names) }
+        end
+        names
       end
 
       # The names a layout binds that its Data type has no other member for.

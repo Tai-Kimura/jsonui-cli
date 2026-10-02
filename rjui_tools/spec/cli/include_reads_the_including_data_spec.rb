@@ -107,6 +107,73 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
     FileUtils.rm_rf(dir) if dir
   end
 
+  # A partial holding a TabView: the screen's VM drives its tab and hears its
+  # taps. The screen's data hands `selectedTabIndex: 1` and a setter that
+  # records what it is called with; the rendered tree shows which tab's
+  # content is drawn, and tab 0's button is pressed.
+  IRD_TABS_PROGRAM = <<~JS
+    const fs = require('fs'); const esbuild = require(process.argv[2]);
+    const files = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+    const strip = (src) => src.split('\\n').filter((l) => !l.startsWith('import ')).join('\\n')
+      .replace(/^export default [^;]+;$/gm, '').replace(/^export /gm, '').replace(/^"use client";$/m, '');
+    const code = files.map((f) => esbuild.transformSync(strip(fs.readFileSync(f, 'utf8')),
+      { loader: 'tsx', jsx: 'transform', jsxFactory: 'h', jsxFragment: 'Frag' }).code).join('\\n');
+    const h = (type, props, ...children) => (typeof type === 'function'
+      ? type({ ...(props || {}), children: children.length === 1 ? children[0] : children })
+      : { type, props: props || {}, children: children.flat(Infinity) });
+    const calls = [];
+    const stubs = { Frag: 'frag', React: {}, useState: (v) => [v, () => {}], useRef: (v) => ({ current: v }),
+      useEffect: () => {}, useMemo: (f) => f(), useCallback: (f) => f, Circle: () => null,
+      useStringManager: () => new Proxy({}, { get: (_, k) => String(k) }), screenMarker: () => ({}) };
+    const names = Object.keys(stubs);
+    const screenData = { selectedTabIndex: 1, setSelectedTabIndex: (i) => calls.push(i) };
+    const tree = new Function('h', 'screenData', ...names, `${code}\\nreturn h(Screen, { data: screenData });`)(h, screenData, ...names.map((n) => stubs[n]));
+    const ids = []; let tab0 = null;
+    const walk = (n) => { if (n && typeof n === 'object' && n.props) {
+      if (n.props.id) ids.push(n.props.id);
+      if (n.props.id === 'tv_tab_0') tab0 = n;
+      (n.children || []).forEach(walk); } };
+    walk(tree);
+    tab0.props.onClick();
+    process.stdout.write(JSON.stringify({ ids, calls }));
+  JS
+
+  def self.draw_tabs
+    dir = Dir.mktmpdir('rjui_include_tabs')
+    tool = File.join(dir, 'rjui_tools')
+    FileUtils.mkdir_p(tool)
+    %w[bin lib].each { |d| raise "could not copy #{d}" unless system('cp', '-RL', File.join(IRD_RJUI_ROOT, d), tool) }
+    File.write(File.join(dir, 'rjui.config.json'),
+               JSON.generate(RjuiTools::Core::ConfigManager::DEFAULT_CONFIG.merge('typescript' => true)))
+    layouts = File.join(dir, 'src', 'Layouts')
+    FileUtils.mkdir_p(File.join(layouts, 'parts'))
+    box = ->(id) { { 'type' => 'View', 'id' => id, 'width' => 'matchParent', 'height' => 'matchParent', 'child' => [] } }
+    File.write(File.join(layouts, 'tab_a.json'), JSON.generate(box.call('content_a')))
+    File.write(File.join(layouts, 'tab_b.json'), JSON.generate(box.call('content_b')))
+    File.write(File.join(layouts, 'parts', 'tabs.json'), JSON.generate(
+      'type' => 'View', 'id' => 'tabs_root', 'width' => 'matchParent', 'height' => 'wrapContent',
+      'child' => [{ 'type' => 'TabView', 'id' => 'tv', 'width' => 'matchParent', 'height' => 200,
+                    'tabs' => [{ 'title' => 'A', 'view' => 'tab_a' }, { 'title' => 'B', 'view' => 'tab_b' }] }]
+    ))
+    File.write(File.join(layouts, 'screen.json'), JSON.generate(
+      'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent',
+      'child' => [{ 'include' => 'parts/tabs' }]
+    ))
+    log, status = Open3.capture2e(RbConfig.ruby, File.join(tool, 'bin', 'rjui'), 'build', chdir: dir)
+    raise "rjui build failed:\n#{log}" unless status.success?
+
+    generated = File.join(dir, 'src', 'generated')
+    files = Dir.glob(File.join(generated, 'data', '*.ts')) + Dir.glob(File.join(generated, 'components', '**', '*.tsx'))
+    File.write(File.join(dir, 'main.js'), IRD_TABS_PROGRAM)
+    File.write(File.join(dir, 'files.json'), JSON.generate(files))
+    out, err, node = Open3.capture3('node', File.join(dir, 'main.js'), IRD_ESBUILD, File.join(dir, 'files.json'))
+    raise "node failed: #{err}" unless node.success?
+
+    [JSON.parse(out), File.read(File.join(generated, 'components', 'Screen.tsx'))[/<Tabs[^>]*\/>/]]
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+
   before do
     skip 'node is not on PATH' unless system('node', '--version', out: File::NULL, err: File::NULL)
     skip "esbuild is not installed (npm ci --prefix #{File.dirname(IRD_ESBUILD, 2)})" unless File.directory?(IRD_ESBUILD)
@@ -189,5 +256,18 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
     texts, = self.class.draw([self.class.string('a', 'from shared_data'), self.class.string('b', 'from data')], { 'include' => 'parts/panel', 'shared_data' => { 'title' => '@{a}' }, 'data' => { 'title' => '@{b}' } })
 
     expect(texts['panel_title']).to eq('from data')
+  end
+
+  # Until 1.9.6 the call site was `<Tabs />`: the partial drew its own seeded
+  # tab 0 whatever the screen's VM held, and a tap moved only that seeded
+  # state — setSelectedTabIndex was never called (ticket
+  # rjui-include-does-not-hand-a-partials-tabview-state).
+  it "hands a partial's TabView the screen's tab state and setter" do
+    drawn, site = self.class.draw_tabs
+
+    expect(site).to include('selectedTabIndex: data.selectedTabIndex', 'setSelectedTabIndex: data.setSelectedTabIndex')
+    expect(drawn['ids']).to include('content_b')
+    expect(drawn['ids']).not_to include('content_a')
+    expect(drawn['calls']).to eq([0])
   end
 end

@@ -663,6 +663,37 @@ module RjuiTools
         end
       end
 
+      # The members a TabView's Data type gets without a declaration: the tab
+      # state and its setter (the converter reads `data.selectedTabIndex ??
+      # seeded` and calls `data.setSelectedTabIndex`), and one `<view>Data`
+      # per tab view. One rule for the Data type and the include call site,
+      # which hands a partial these from the including screen
+      # (IncludedMembers; ticket rjui-include-does-not-hand-a-partials-
+      # tabview-state).
+      def tab_view_members(json_data)
+        return [] unless json_data.is_a?(Hash)
+        return [] unless JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TabView' && json_data['tabs'].is_a?(Array)
+
+        # The tab state and its setter. The converter reads the state back
+        # (`data.selectedTabIndex ?? 0`) when selectedIndex is not bound, so
+        # declaring only the setter left the generated JSX referencing a
+        # property the interface does not have.
+        members = [
+          { 'name' => 'selectedTabIndex', 'class' => 'Int', 'tsType' => 'number', 'defaultValue' => nil },
+          { 'name' => 'setSelectedTabIndex', 'class' => 'Function', 'tsType' => '(index: number) => void', 'defaultValue' => nil }
+        ]
+        json_data['tabs'].each do |tab|
+          next unless tab.is_a?(Hash) && tab['view']
+
+          # Convert view name to camelCase + Data (e.g., home -> homeData, item_card -> itemCardData)
+          view_name = tab['view']
+          data_prop_name = view_name.split('_').each_with_index.map { |part, i| i == 0 ? part.downcase : part.capitalize }.join + 'Data'
+          pascal_name = view_name.split('_').map(&:capitalize).join
+          members << { 'name' => data_prop_name, 'class' => 'Object', 'tsType' => "#{pascal_name}Data", 'defaultValue' => nil }
+        end
+        members
+      end
+
       # A data[] item as this Data type writes it: TypeConverter (mode:
       # react), then a bound Event's signature.
       def normalize_declared_data(data_item, event_bindings)
@@ -750,39 +781,7 @@ module RjuiTools
           end
 
           # Check for TabView tabs - generate data properties for each tab's view
-          if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TabView' && json_data['tabs'].is_a?(Array)
-            # The tab state and its setter. The converter reads the state back
-            # (`data.selectedTabIndex ?? 0`) when selectedIndex is not bound, so
-            # declaring only the setter left the generated JSX referencing a
-            # property the interface does not have.
-            properties << {
-              'name' => 'selectedTabIndex',
-              'class' => 'Int',
-              'tsType' => 'number',
-              'defaultValue' => nil
-            }
-            properties << {
-              'name' => 'setSelectedTabIndex',
-              'class' => 'Function',
-              'tsType' => '(index: number) => void',
-              'defaultValue' => nil
-            }
-
-            json_data['tabs'].each do |tab|
-              if tab['view']
-                # Convert view name to camelCase + Data (e.g., home -> homeData, item_card -> itemCardData)
-                view_name = tab['view']
-                data_prop_name = view_name.split('_').each_with_index.map { |part, i| i == 0 ? part.downcase : part.capitalize }.join + 'Data'
-                pascal_name = view_name.split('_').map(&:capitalize).join
-                properties << {
-                  'name' => data_prop_name,
-                  'class' => 'Object',
-                  'tsType' => "#{pascal_name}Data",
-                  'defaultValue' => nil
-                }
-              end
-            end
-          end
+          properties.concat(tab_view_members(json_data))
 
           # Process children
           child = json_data['child'] || json_data['children']
