@@ -25,7 +25,7 @@ RSpec.describe 'rjui validator: an event declared not to reach a component is na
   end
 
   it 'names onClick and onclick on a Web' do
-    expect(warnings_for({ 'type' => 'Web', 'onClick' => '@{h}' }).grep(/'onClick' is not called on a Web: the page takes the taps/).size).to eq(1)
+    expect(warnings_for({ 'type' => 'Web', 'onClick' => '@{h}' }).grep(/'onClick' is not called on a Web: the embedded page takes the taps/).size).to eq(1)
     expect(warnings_for({ 'type' => 'Web', 'onclick' => 'h' }).grep(/'onclick' is not called on a Web: /).size).to eq(1)
   end
 

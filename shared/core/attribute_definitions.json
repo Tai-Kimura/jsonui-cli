@@ -699,14 +699,14 @@
       ],
       "description": "Click handler function name (selector-based, lowercase) - string only, no binding",
       "notApplicableTo": {
-        "Web": "the page takes the taps (WKWebView on iOS, the Android web view, the iframe on web); a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
+        "Web": "the embedded page takes the taps; a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
       }
     },
     "onClick": {
       "type": "binding",
       "description": "Click handler (camelCase) - binding only (@{functionName}). On a type the SSoT does not declare (an app's own component) JsonUI gives the tap no screen-reader role; the component carries its own.",
       "notApplicableTo": {
-        "Web": "the page takes the taps (WKWebView on iOS, the Android web view, the iframe on web); a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
+        "Web": "the embedded page takes the taps; a tap laid over it would break the page's own taps and scrolling (ruling 2026-10-03: not delivered, the build warns)"
       }
     },
     "onLongPress": {
