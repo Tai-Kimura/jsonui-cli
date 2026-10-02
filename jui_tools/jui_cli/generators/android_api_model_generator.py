@@ -32,6 +32,8 @@ from ..core.comment_safety import sanitize_block_comment
 from ..core.generated_marker import comment_footer, comment_header
 from ..core.impl_updater import atomic_write_text
 from ..core.openapi_naming import (
+    check_enum_case_identifiers,
+    enum_case_source,
     escape_keyword,
     resolve_enum_case_for_default,
     snake_to_camel,
@@ -623,6 +625,10 @@ class AndroidApiModelGenerator:
         if enum.kind == PrimitiveKind.STRING:
             lines.append(f"enum class {enum.name}(val wire: String) {{")
             cases = list(zip(enum.case_names, enum.string_values))
+            check_enum_case_identifiers(
+                enum, [escape_keyword(_kotlin_enum_case(c), language="kotlin") for c, _ in cases],
+                language="Kotlin", source=str(doc.source_path),
+            )
             for i, (case_name, raw) in enumerate(cases):
                 ident = escape_keyword(_kotlin_enum_case(case_name), language="kotlin")
                 suffix = "," if i < len(cases) - 1 else ";"
@@ -635,6 +641,10 @@ class AndroidApiModelGenerator:
         else:
             lines.append(f"enum class {enum.name}(val wire: Int) {{")
             cases_int = list(zip(enum.case_names, enum.integer_values))
+            check_enum_case_identifiers(
+                enum, [escape_keyword(_kotlin_enum_case(c), language="kotlin") for c, _ in cases_int],
+                language="Kotlin", source=str(doc.source_path),
+            )
             for i, (case_name, raw_int) in enumerate(cases_int):
                 ident = escape_keyword(_kotlin_enum_case(case_name), language="kotlin")
                 suffix = "," if i < len(cases_int) - 1 else ";"
@@ -950,10 +960,14 @@ def _kotlin_enum_case(case_name: str) -> str:
     """Enum case identifier — Kotlin convention is SCREAMING_SNAKE_CASE.
 
     Convert snake_case → UPPER_SNAKE, camelCase → UPPER_SNAKE, etc.
+    A number's minus sign is spelled ``MINUS`` (``value_-1`` →
+    ``VALUE_MINUS_1``; openapi_naming.enum_case_source), as Swift spells it
+    ``valueMinus1``. Through jsonui-cli 1.9.5 it was a second underscore
+    (``VALUE__1``).
     """
     # Insert underscore between camelCase boundaries first, then upper.
     import re
-    s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", case_name)
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", enum_case_source(case_name))
     s = s.replace("-", "_").replace(" ", "_")
     return s.upper()
 
