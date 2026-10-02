@@ -669,7 +669,10 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
 #   handler cannot be fired deterministically. Needs a `pinch` action in the
 #   runner vocabulary; onPan is promoted precisely because `swipe` IS a pan.
 # - TextField focus/editing callbacks (onFocus/onBlur/onBeginEditing/...):
-#   need a focus-shift vocabulary; revisit with the iOS/Android round.
+#   buildable with the existing `tap` — two fields, a tap on the second takes
+#   focus from the first (support lane 2 fired blur that way on the iOS
+#   simulator, jsonui-cli 1.9.6) — and not built yet. The four were measured
+#   called on iOS / web / Android by hand at 1.9.6, not by a fixture.
 
 
 def specs_for(section: str, attribute: str) -> tuple[InteractiveSpec, ...]:
