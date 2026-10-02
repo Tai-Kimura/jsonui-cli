@@ -5,6 +5,7 @@ require 'fileutils'
 require 'rexml/document'
 require 'pathname'
 require_relative '../logger'
+require_relative '../kotlin_identifier'
 require_relative '../generated_marker'
 require_relative '../plural_validator'
 require_relative '../string_manager_core'
@@ -303,11 +304,16 @@ module KjuiTools
             file_strings.each do |key, value|
               # Create full key with file prefix
               full_key = "#{file_prefix}_#{key}"
+              # The name the resource is written under: an Android resource
+              # cannot start with a digit (a layout whose path does) —
+              # Core::KotlinIdentifier. Translations are still looked up by
+              # full_key, the strings.json spelling.
+              xml_name = Core::KotlinIdentifier.resource_name(full_key)
 
               # Plural entries compile to <plurals> (R.plurals); VM/Compose
               # code reads them via pluralStringResource / getQuantityString.
               if JsonUIShared::PluralValidator.plural_value?(value)
-                upsert_plurals_element(resources, existing_plurals, full_key, value, lang_dir)
+                upsert_plurals_element(resources, existing_plurals, xml_name, value, lang_dir)
                 next
               end
 
@@ -325,16 +331,16 @@ module KjuiTools
               normalized_value = convert_ios_to_android_format(normalized_value)
               normalized_value = quote_whitespace_edges(normalized_value)
 
-              if existing_strings[full_key]
+              if existing_strings[xml_name]
                 # Update existing string element
-                existing_strings[full_key].text = normalized_value
+                existing_strings[xml_name].text = normalized_value
               else
                 # Add new string element
                 string_elem = REXML::Element.new('string')
-                string_elem.add_attribute('name', full_key)
+                string_elem.add_attribute('name', xml_name)
                 string_elem.text = normalized_value
                 resources.add_element(string_elem)
-                Core::Logger.debug "Added string '#{full_key}' to #{lang_dir}/strings.xml"
+                Core::Logger.debug "Added string '#{xml_name}' to #{lang_dir}/strings.xml"
               end
             end
           end
@@ -370,15 +376,22 @@ module KjuiTools
           expected_keys = {}
           expected_plural_keys = {}
           managed_prefixes = []
-          @extracted_namespaces.each { |spelling| managed_prefixes << "#{spelling}_" }
+          # Both the strings.json spelling and the resource name of each
+          # prefix are managed: a name written before the resource name took
+          # its leading `_` (Core::KotlinIdentifier) is this namespace's too,
+          # and stale.
+          @extracted_namespaces.each do |spelling|
+            managed_prefixes << "#{spelling}_" << Core::KotlinIdentifier.resource_name("#{spelling}_")
+          end
           @strings_data.each do |file_prefix, file_strings|
             next unless file_strings.is_a?(Hash)
-            managed_prefixes << "#{file_prefix}_"
+            managed_prefixes << "#{file_prefix}_" << Core::KotlinIdentifier.resource_name("#{file_prefix}_")
             file_strings.each do |key, value|
+              name = Core::KotlinIdentifier.resource_name("#{file_prefix}_#{key}")
               if JsonUIShared::PluralValidator.plural_value?(value)
-                expected_plural_keys["#{file_prefix}_#{key}"] = true
+                expected_plural_keys[name] = true
               else
-                expected_keys["#{file_prefix}_#{key}"] = true
+                expected_keys[name] = true
               end
             end
           end

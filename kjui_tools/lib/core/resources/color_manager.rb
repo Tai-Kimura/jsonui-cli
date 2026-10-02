@@ -7,6 +7,7 @@ require 'rexml/formatters/pretty'
 require_relative '../logger'
 require_relative '../generated_marker'
 require_relative '../color_manager_core'
+require_relative '../kotlin_identifier'
 
 module KjuiTools
   module Core
@@ -322,21 +323,21 @@ module KjuiTools
           all_keys.each do |key|
             camel = snake_to_camel(key)
             camel = "#{camel}Color" if palette_object_names.include?(camel)
-            lines << "        val #{camel}: Int? get() = color(\"#{key}\")"
+            lines << "        val #{Core::KotlinIdentifier.declaration(camel)}: Int? get() = color(\"#{key}\")"
           end
           lines << ''
           @modes.each do |mode|
             palette = merged_palettes[mode] || {}
             obj_name = kotlin_object_name(mode)
             lines << "        /** Fixed values from `#{mode}` palette (not affected by setMode). */"
-            lines << "        object #{obj_name} {"
+            lines << "        object #{Core::KotlinIdentifier.declaration(obj_name)} {"
             palette.keys.sort.each do |key|
               camel = snake_to_camel(key)
               hex = palette[key]
               if hex.is_a?(String)
-                lines << "            val #{camel}: Int? get() = try { Color.parseColor(\"#{hex}\") } catch (e: IllegalArgumentException) { null }"
+                lines << "            val #{Core::KotlinIdentifier.declaration(camel)}: Int? get() = try { Color.parseColor(\"#{hex}\") } catch (e: IllegalArgumentException) { null }"
               else
-                lines << "            val #{camel}: Int? get() = null"
+                lines << "            val #{Core::KotlinIdentifier.declaration(camel)}: Int? get() = null"
               end
             end
             lines << '        }'
@@ -367,16 +368,16 @@ module KjuiTools
           all_keys.each do |key|
             camel = snake_to_camel(key)
             camel = "#{camel}Color" if palette_object_names.include?(camel)
-            lines << "        val #{camel}: ComposeColor? get() = color(\"#{key}\")"
+            lines << "        val #{Core::KotlinIdentifier.declaration(camel)}: ComposeColor? get() = color(\"#{key}\")"
           end
           lines << ''
           @modes.each do |mode|
             palette = merged_palettes[mode] || {}
             obj_name = kotlin_object_name(mode)
-            lines << "        object #{obj_name} {"
+            lines << "        object #{Core::KotlinIdentifier.declaration(obj_name)} {"
             palette.keys.sort.each do |key|
               camel = snake_to_camel(key)
-              lines << "            val #{camel}: ComposeColor? get() = views.#{obj_name}.#{camel}?.let { ComposeColor(it) }"
+              lines << "            val #{Core::KotlinIdentifier.declaration(camel)}: ComposeColor? get() = views.#{Core::KotlinIdentifier.declaration(obj_name)}.#{Core::KotlinIdentifier.declaration(camel)}?.let { ComposeColor(it) }"
             end
             lines << '        }'
           end

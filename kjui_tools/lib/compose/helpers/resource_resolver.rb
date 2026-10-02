@@ -7,6 +7,7 @@ require_relative '../../core/project_finder'
 require_relative '../../core/logger'
 require_relative '../../core/string_manager_core'
 require_relative '../../core/string_literals'
+require_relative '../../core/kotlin_identifier'
 require_relative 'binding_expression'
 
 module KjuiTools
@@ -309,7 +310,16 @@ module KjuiTools
             end
           end
           
+          # The resource name of a text's string: the strings.json spelling
+          # (`<namespace>_<key>`), as strings.xml writes it — a name that
+          # would start with a digit takes `_` (Core::KotlinIdentifier;
+          # string_manager.rb writes the same name).
           def find_string_key(text, config, source_path, warnings: true)
+            key = find_string_key_as_spelled(text, config, source_path, warnings: warnings)
+            key && Core::KotlinIdentifier.resource_name(key)
+          end
+
+          def find_string_key_as_spelled(text, config, source_path, warnings: true)
             strings_data = cached_strings_data
 
             # 1. Check if text matches a key in strings.json (e.g., "welcome_back"
