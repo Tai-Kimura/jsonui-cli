@@ -23,13 +23,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
   after { SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {} }
 
-  PAGE_PROPS = [{ 'name' => 'rows', 'class' => 'CollectionDataSource' },
-                { 'name' => 'target', 'class' => 'Int', 'defaultValue' => 0 }].freeze
-  PAGING = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'layout' => 'horizontal', 'paging' => true,
-             'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }.freeze
-
   def emit(node)
-    converter = described_class.new(PAGING.merge(node), 0, nil, nil, PAGE_PROPS)
+    props = [{ 'name' => 'rows', 'class' => 'CollectionDataSource' }, { 'name' => 'target', 'class' => 'Int', 'defaultValue' => 0 }]
+    paging = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'layout' => 'horizontal', 'paging' => true,
+               'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }
+    converter = described_class.new(paging.merge(node), 0, nil, nil, props)
     [converter.convert.to_s, converter.state_variables]
   end
 
@@ -58,13 +56,19 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     expect(code).to include('.onChange(of: listScrollPage) { oldValue, newValue in')
   end
 
-  it 'control: with neither a callback nor a scrollTo the TabView has no selection; a callback that is not a binding adds none' do
-    [{}, { 'onPageChanged' => 'onPage' }].each do |node|
-      code, state = emit(node)
-      expect(state).to eq([])
-      expect(code).to include('TabView {')
-      expect(code).not_to include('onPage')
-    end
+  it 'control: with neither a callback nor a scrollTo the TabView has no selection and calls nothing' do
+    code, state = emit({})
+    expect(state).to eq([])
+    expect(code).to include('TabView {')
+    expect(code).not_to include('onPage')
+  end
+
+  # The callback is declared ["string", "binding"]: a bare name is a declared
+  # form, and from jsonui-cli 1.9.6 it is called as the binding is (ticket
+  # bare-event-handler-is-dropped-without-a-warning; until then a bare name
+  # was dropped, and this file's control said so).
+  it 'a bare callback name emits what the binding emits' do
+    expect(emit('onPageChanged' => 'onPage')).to eq(emit('onPageChanged' => '@{onPage}'))
   end
 
   it 'type-checks with and without a currentPage, and with a scrollTo', :swift_compile do

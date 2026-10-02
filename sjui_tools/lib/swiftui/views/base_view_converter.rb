@@ -198,6 +198,22 @@ module SjuiTools
           @binding_handler.is_binding?(value)
         end
 
+        # A handler named by an event attribute the SSoT declares with a
+        # "string" type (onAppear, onTextChange, a Collection's / TabView's
+        # onValueChange, onItemAppear): the binding '@{name}' or the bare
+        # name, both naming the data's closure. Until jsonui-cli 1.9.6 these
+        # attributes read the binding form only and dropped a bare name with
+        # no report (ticket bare-event-handler-is-dropped-without-a-warning).
+        # A binding-only attribute (onClick, …) does not take a bare name;
+        # the binding validator reports one (binding-bare-event).
+        def handler_reference?(value)
+          is_binding?(value) || (value.is_a?(String) && value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/))
+        end
+
+        def handler_property(value)
+          extract_binding_property(value) || value.strip
+        end
+
         # The PATH a binding expression names.
         # "@{propertyName}"        -> "propertyName"
         # "@{!propertyName}"       -> "propertyName" (negation stripped)

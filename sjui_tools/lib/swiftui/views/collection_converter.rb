@@ -1206,7 +1206,7 @@ module SjuiTools
           # onValueChanged / onPageChanged are its definitions aliases (L0
           # fallback only).
           page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
-          page_changed_handler = nil unless page_changed_handler && is_binding?(page_changed_handler)
+          page_changed_handler = nil unless handler_reference?(page_changed_handler)
 
           # TabView with optional selection binding. A scrollTo and a
           # page-change callback read the selection (paging_scroll_selection):
@@ -2140,8 +2140,8 @@ module SjuiTools
 
           # onItemAppear: fire callback with index when cell appears
           on_item_appear = @component['onItemAppear']
-          if on_item_appear && is_binding?(on_item_appear)
-            prop = extract_binding_property(on_item_appear)
+          if handler_reference?(on_item_appear)
+            prop = handler_property(on_item_appear)
             add_modifier_line ".onAppear { data.#{prop}?(#{index_var}) }"
           end
         end

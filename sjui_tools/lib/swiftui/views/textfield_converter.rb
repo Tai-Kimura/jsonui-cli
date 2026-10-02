@@ -208,8 +208,8 @@ module SjuiTools
           end
 
           # Text change handler
-          # onTextChange (camelCase) -> binding format only (@{functionName})
-          if @component['onTextChange'] && is_binding?(@component['onTextChange'])
+          # onTextChange: '@{functionName}' or the bare name (handler_reference?)
+          if handler_reference?(@component['onTextChange'])
             # Get the binding variable name from text_binding
             binding_var = text_binding.gsub('$', '').gsub('.constant(', '').gsub(')', '')
             if text_binding.start_with?('$')

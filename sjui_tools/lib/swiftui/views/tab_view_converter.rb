@@ -270,7 +270,7 @@ module SjuiTools
         # its definitions aliases (L0 fallback only) — when it is a binding.
         def tab_change_handler
           handler = attr_with_alias('onValueChange', 'onTabChange', 'onPageChanged')
-          handler if handler.is_a?(String) && is_binding?(handler)
+          handler if handler_reference?(handler)
         end
 
         # `.jsonuiTabItemsEnabled(false)` for `enabled: false`, the binding
