@@ -8,6 +8,7 @@ require_relative '../core/bind_fold'
 require_relative '../core/logger'
 require_relative '../core/binding_validator_core'
 require_relative '../core/data_item_platform'
+require_relative '../core/data_class_conflict'
 require_relative '../core/type_synonyms'
 require_relative '../core/node_keys'
 require_relative '../core/config_manager'
@@ -171,6 +172,8 @@ module RjuiTools
         event_bindings = extract_event_bindings_for_type(expanded_data)
 
         # Extract data properties from expanded JSON (pass event_bindings for Event type conversion)
+        @declared_data_properties = {}.compare_by_identity
+        @data_class_conflicts = JsonUIShared::DataClassConflict.new(@current_layout)
         data_properties = extract_data_properties(expanded_data, [], true, event_bindings)
 
         # Extract onclick actions from expanded JSON
@@ -539,6 +542,57 @@ module RjuiTools
         bindings
       end
 
+      # A data[] item as this Data type writes it: TypeConverter (mode:
+      # react), then a bound Event's signature.
+      def normalize_declared_data(data_item, event_bindings)
+        normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)
+
+        # Check if this property is bound to an event and has Event type
+        prop_name = normalized['name']
+        prop_class = normalized['class'].to_s
+
+        if event_bindings[prop_name] && prop_class.include?('Event')
+          # Get event type from type_mapping.json
+          binding_info = event_bindings[prop_name]
+          event_type = Core::TypeConverter.get_event_type(
+            binding_info[:component],
+            binding_info[:attribute]
+          )
+
+          if event_type
+            # Convert Event to platform-specific type (React event type string)
+            converted_class = prop_class.gsub('Event', event_type)
+            normalized['class'] = converted_class
+            # Recalculate tsType with the converted class
+            normalized['tsType'] = Core::TypeConverter.to_typescript_type(converted_class)
+          end
+        end
+
+        normalized
+      end
+
+      # The properties a data[] item declared, by identity — the TabView
+      # properties the walk makes up are not declarations.
+      def declared_data_properties
+        @declared_data_properties ||= {}.compare_by_identity
+      end
+
+      # A later data[] item naming a declared property with another type, as
+      # TypeScript writes it (`Int` and `Float` are both `number` here). The
+      # dropped item is normalized without its defaultValue: defaults are not
+      # compared, and a default's own warnings belong to the kept one.
+      def report_data_class_conflict(kept, data_item, event_bindings)
+        return unless declared_data_properties.key?(kept)
+
+        dropped = normalize_declared_data(data_item.reject { |key, _| key == 'defaultValue' }, event_bindings)
+        @data_class_conflicts ||= JsonUIShared::DataClassConflict.new(@current_layout)
+        @data_class_conflicts.report(kept['name'], written_ts_type(kept), written_ts_type(dropped))
+      end
+
+      def written_ts_type(prop)
+        prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+      end
+
       def extract_data_properties(json_data, properties = [], is_root = true, event_bindings = {})
         if json_data.is_a?(Hash)
           # Check for data section
@@ -554,30 +608,22 @@ module RjuiTools
                 next unless JsonUIShared::DataItemPlatform.applies?(data_item, 'react')
 
                 if data_item.is_a?(Hash)
-                  # Normalize type using TypeConverter (mode: react)
-                  normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)
-
-                  # Check if this property is bound to an event and has Event type
-                  prop_name = normalized['name']
-                  prop_class = normalized['class'].to_s
-
-                  if event_bindings[prop_name] && prop_class.include?('Event')
-                    # Get event type from type_mapping.json
-                    binding_info = event_bindings[prop_name]
-                    event_type = Core::TypeConverter.get_event_type(
-                      binding_info[:component],
-                      binding_info[:attribute]
-                    )
-
-                    if event_type
-                      # Convert Event to platform-specific type (React event type string)
-                      converted_class = prop_class.gsub('Event', event_type)
-                      normalized['class'] = converted_class
-                      # Recalculate tsType with the converted class
-                      normalized['tsType'] = Core::TypeConverter.to_typescript_type(converted_class)
-                    end
+                  # One name, one member: the first declaration in document
+                  # order is kept (the root's data before its data-only
+                  # nodes), as on sjui / kjui, and a later one with another
+                  # type is said out loud (data_class_conflict.rb). Until
+                  # jsonui-cli 1.9.6 both were written — the interface and
+                  # createXxxData() each carried the name twice, which tsc
+                  # rejects whether or not the types agree (TS2300, TS1117;
+                  # ticket rjui-data-name-declared-twice-is-written-twice).
+                  kept = properties.find { |p| p['name'] == data_item['name'] }
+                  if kept
+                    report_data_class_conflict(kept, data_item, event_bindings)
+                    next
                   end
 
+                  normalized = normalize_declared_data(data_item, event_bindings)
+                  declared_data_properties[normalized] = true
                   properties << normalized
                 end
               end
