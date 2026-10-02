@@ -177,14 +177,17 @@ module KotlinCompiler
   # Compiles `source` (a file with a top-level `fun main()`) and runs it on
   # the JVM: for an arm that asks what emitted code DOES — a gate that calls
   # when it is open and not when it is shut — not only that it type-checks.
-  def run(source)
+  # `libraries` as for compile (LIBRARIES): on the compile and the run
+  # classpath both.
+  def run(source, libraries: [])
     stdlib   = newest('org.jetbrains.kotlin', 'kotlin-stdlib')
     reflect  = newest('org.jetbrains.kotlin', 'kotlin-reflect')
     annots   = newest('org.jetbrains', 'annotations')
     coroutin = newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
     trove    = newest('org.jetbrains.intellij.deps', 'trove4j')
     compiler_cp = [compiler_jar, stdlib, reflect, coroutin, annots, trove].compact.join(':')
-    target_cp   = [stdlib, reflect, annots, coroutin].compact.join(':')
+    extra       = libraries.map { |lib| newest(*LIBRARIES.fetch(lib)) }
+    target_cp   = ([stdlib, reflect, annots, coroutin] + extra).compact.join(':')
 
     Dir.mktmpdir('kjui_kotlin_run') do |dir|
       file = File.join(dir, 'Emitted.kt')
