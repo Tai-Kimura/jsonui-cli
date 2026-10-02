@@ -138,6 +138,7 @@ module SjuiTools
             require_relative '../responsive_helper'
             require_relative '../../../core/attribute_types'
             require_relative '../../../core/logger'
+            require_relative '../../../core/string_manager_core'
 
             module SjuiTools
               module SwiftUI
@@ -268,7 +269,7 @@ module SjuiTools
                       # the component itself was scaffolded from. nil when it
                       # cannot be written; the caller then passes nothing and says so.
                       # @param is_binding_attr [Boolean] if true, use $data. (Binding), otherwise data. (read-only)
-                      def format_value(value, type, is_binding_attr: false)
+                      def format_value(value, type, is_binding_attr: false, key: nil)
                         # Check if it's a binding expression @{propertyName}
                         if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
                           # Extract property name and return as binding or read-only
@@ -279,8 +280,23 @@ module SjuiTools
                         # Outside the vocabulary, kept from before it existed.
                         return format_edge_insets_value(value) if type.to_s.downcase.delete('?') == 'edgeinsets'
 
+                        # A String prop whose NAME is display text
+                        # (StringManagerCore.localized_prop? — the list jui
+                        # lint-strings checks) is the project's localized string
+                        # when strings.json has it — as a Label's text resolves:
+                        # the declared key, else the text a key holds — and the
+                        # literal otherwise; any other String prop is the literal
+                        # (variant: "bar"), as kjui writes it.
                         JsonUIShared::AttributeTypes.swift_literal(type, value) do |canonical, literal|
-                          format_color_value(literal) if canonical == 'color' && literal.is_a?(String)
+                          next nil unless literal.is_a?(String)
+
+                          case canonical
+                          when 'color' then format_color_value(literal)
+                          when 'string'
+                            next nil unless JsonUIShared::StringManagerCore.localized_prop?(key)
+
+                            lookup_string_manager_key(literal) || lookup_string_manager_by_value(literal)
+                          end
                         end
                       end
 
@@ -379,7 +395,7 @@ module SjuiTools
               lines << "                property_name = value[2..-2]"
               lines << '                params << "' + "#{actual_key}: #{data_prefix}." + '#{property_name}"'
               lines << "              else"
-              lines << "                formatted_value = format_value(value, '#{type}')"
+              lines << "                formatted_value = format_value(value, '#{type}', key: '#{actual_key}')"
               lines << "                if formatted_value"
               lines << '                  params << "' + "#{actual_key}: .constant(" + '#{formatted_value})"'
               lines << "                else"
@@ -398,7 +414,7 @@ module SjuiTools
               lines << '                params << "' + "#{actual_key}: #{data_prefix}." + '#{property_name}"'
               lines << "              else"
               lines << "                # Handle static value"
-              lines << "                formatted_value = format_value(value, '#{type}')"
+              lines << "                formatted_value = format_value(value, '#{type}', key: '#{actual_key}')"
               lines << "                if formatted_value"
               lines << '                  params << "' + "#{actual_key}: " + '#{formatted_value}"'
               lines << "                else"

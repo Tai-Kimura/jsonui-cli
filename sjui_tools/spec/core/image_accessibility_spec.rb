@@ -96,8 +96,13 @@ RSpec.describe JsonUIShared::ImageAccessibility do
       (tap::TAP_KEYS + [tap::LONG_PRESS_KEY]).each { |key| expect(common).to have_key(key) }
     end
 
-    it 'takes as naming text the localized text vocabulary, less alt (read off images)' do
-      expect(described_class::TEXT_KEYS).to eq(JsonUIShared::StringManagerCore::STRING_PROPERTIES - ['alt'])
+    # accessibilityLabel joined the vocabulary on 2026-10-03 (a custom
+    # component's prop of that name is localized). It is read here as one of
+    # ALT_KEYS on an image; whether a child's accessibilityLabel names the
+    # control it sits in was not that ruling's, so TEXT_KEYS is as it was.
+    it 'takes as naming text the localized text vocabulary, less alt and accessibilityLabel (read off images)' do
+      expect(described_class::TEXT_KEYS).to eq(JsonUIShared::StringManagerCore::STRING_PROPERTIES - %w[alt accessibilityLabel])
+      expect(described_class::ALT_KEYS).to include('accessibilityLabel')
     end
   end
 end
