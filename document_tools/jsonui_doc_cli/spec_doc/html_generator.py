@@ -147,8 +147,10 @@ def generate_spec_html(
     parts.append(prose_block(metadata.get("description", "")))
 
     # Metadata table
-    if metadata.get("author") or metadata.get("createdAt") or metadata.get("updatedAt"):
+    if metadata.get("author") or metadata.get("createdAt") or metadata.get("updatedAt") or metadata.get("layoutFile"):
         parts.append('<table class="meta-table">')
+        if metadata.get("layoutFile"):
+            parts.append(f'<tr><th>Layout File</th><td><code>{_e(metadata["layoutFile"])}</code></td></tr>')
         if metadata.get("author"):
             parts.append(f'<tr><th>Author</th><td>{_e(metadata["author"])}</td></tr>')
         if metadata.get("createdAt"):
@@ -261,6 +263,16 @@ def generate_spec_html(
                 '</tr>'
             )
         parts.append('</tbody></table>')
+        # Each element's components, as the UI Components table draws its own
+        # (description, initial state, platform, notes, children); the row
+        # above names their ids only. Until jsonui-cli 1.9.6 only the ids
+        # were drawn.
+        for n, elem in enumerate(decorative, start=1):
+            elem_components = [c for c in (elem.get("components") or []) if isinstance(c, dict)]
+            if elem_components:
+                _append_components_table(parts, elem_components, colors_map,
+                                         title=f'Components — {elem.get("id", "-")}',
+                                         initial_depth=2, wrapper_id=f"decorative-{n}")
 
     # Wrapper Views (A-6)
     wrappers = structure.get("wrapperViews") or []
@@ -319,6 +331,12 @@ def generate_spec_html(
             f'<p><strong>Collection ID:</strong> '
             f'<code>{_e(collection.get("id", "-"))}</code>{lazy_badge}</p>'
         )
+        if collection.get("description"):
+            parts.append(prose_block(collection["description"]))
+        if collection.get("cellIdProperty"):
+            parts.append(f'<p><strong>Cell ID Property:</strong> <code>{_e(collection["cellIdProperty"])}</code></p>')
+        if collection.get("insets") not in (None, ""):
+            parts.append(f'<p><strong>Insets:</strong> <code>{_e(str(collection["insets"]))}</code></p>')
 
         cell_classes = collection.get("cellClasses") or []
         if isinstance(cell_classes, list) and cell_classes:
@@ -362,7 +380,8 @@ def generate_spec_html(
             if section_rows:
                 parts.append('<h4>Sections</h4>')
                 parts.append('<table>')
-                parts.append('<thead><tr><th>#</th><th>Cell</th><th>Header</th><th>Footer</th></tr></thead>')
+                parts.append('<thead><tr><th>#</th><th>Cell</th><th>Header</th><th>Footer</th>'
+                             '<th>Description</th><th>Notes</th></tr></thead>')
                 parts.append('<tbody>')
                 for i, sec in enumerate(section_rows, start=1):
                     parts.append(
@@ -371,9 +390,14 @@ def generate_spec_html(
                         f'<td>{_format_section_ref(sec.get("cell"))}</td>'
                         f'<td>{_format_section_ref(sec.get("header"))}</td>'
                         f'<td>{_format_section_ref(sec.get("footer"))}</td>'
+                        f'<td>{_p(sec.get("description") or "-")}</td>'
+                        f'<td>{_p(sec.get("notes") or "-")}</td>'
                         '</tr>'
                     )
                 parts.append('</tbody></table>')
+
+        if collection.get("notes"):
+            parts.append(labelled_block("Notes", collection["notes"]))
 
     # TabView
     tab_view = structure.get("tabView")
@@ -381,10 +405,36 @@ def generate_spec_html(
         parts.append('<h3>TabView Structure</h3>')
         parts.append(f'<p><strong>TabView ID:</strong> <code>{_e(tab_view.get("id", "-"))}</code></p>')
         parts.append('<table>')
-        parts.append('<thead><tr><th>Tab</th><th>Title</th><th>Layout File</th></tr></thead>')
+        parts.append('<thead><tr><th>Tab</th><th>Title</th><th>Layout File</th><th>View</th>'
+                     '<th>Icon</th><th>Selected Icon</th></tr></thead>')
         parts.append('<tbody>')
         for i, tab in enumerate(tab_view.get("tabs", []), 1):
-            parts.append(f'<tr><td>{i}</td><td>{_e(tab.get("title", "-"))}</td><td><code>{_e(tab.get("layoutFile", "-"))}</code></td></tr>')
+            parts.append(
+                f'<tr><td>{i}</td><td>{_e(tab.get("title", "-"))}</td>'
+                f'<td><code>{_e(tab.get("layoutFile", "-"))}</code></td>'
+                f'<td><code>{_e(tab.get("view") or "-")}</code></td>'
+                f'<td><code>{_e(tab.get("icon") or "-")}</code></td>'
+                f'<td><code>{_e(tab.get("selectedIcon") or "-")}</code></td></tr>'
+            )
+        parts.append('</tbody></table>')
+
+    # Embeds: the screens this one embeds, by the region each fills. Until
+    # jsonui-cli 1.9.6 the page never read `structure.embeds`.
+    embeds = [e for e in (structure.get("embeds") or []) if isinstance(e, dict)]
+    if embeds:
+        parts.append('<h3>Embeds</h3>')
+        parts.append('<table>')
+        parts.append('<thead><tr><th>Region</th><th>Screen</th><th>Navigation</th><th>Params</th><th>Events</th></tr></thead>')
+        parts.append('<tbody>')
+        for emb in embeds:
+            params = ', '.join(f'{k}={v}' for k, v in (emb.get("params") or {}).items()) or '-'
+            events = ', '.join(f'{k}={v}' for k, v in (emb.get("events") or {}).items()) or '-'
+            parts.append(
+                f'<tr><td><code>{_e(emb.get("regionId", "-"))}</code></td>'
+                f'<td><code>{_e(emb.get("screen", "-"))}</code></td>'
+                f'<td>{_e(emb.get("navigationMode") or "-")}</td>'
+                f'<td>{_e(params)}</td><td>{_e(events)}</td></tr>'
+            )
         parts.append('</tbody></table>')
 
     # Custom Components
@@ -519,6 +569,8 @@ def generate_spec_html(
             parts.append('<h3>Repositories</h3>')
             for repo in repos:
                 parts.append(f'<h4>{_e(repo.get("name", "-"))}</h4>')
+                if repo.get("description"):
+                    parts.append(prose_block(repo["description"]))
                 parts.append('<ul>')
                 for method in repo.get("methods", []):
                     parts.append(f'<li>{_format_method_html(method)}</li>')
@@ -594,10 +646,10 @@ def generate_spec_html(
                 f'<span class="count-badge">{len(variables)}</span></summary>'
             )
             parts.append('<table>')
-            parts.append('<thead><tr><th>Variable</th><th>Type</th><th>Description</th><th>Notes</th></tr></thead>')
+            parts.append('<thead><tr><th>Variable</th><th>Type</th><th>Default</th><th>Description</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for var in variables:
-                parts.append(f'<tr><td><code>{_e(var.get("name", "-"))}</code></td><td>{_e(var.get("type", "-"))}</td><td>{_p(var.get("description", "-"))}</td><td>{_p(var.get("notes", "") or "-")}</td></tr>')
+                parts.append(f'<tr><td><code>{_e(var.get("name", "-"))}</code></td><td>{_e(var.get("type", "-"))}</td><td><code>{_e(_ui_variable_default(var))}</code></td><td>{_p(var.get("description", "-"))}</td><td>{_p(var.get("notes", "") or "-")}</td></tr>')
             parts.append('</tbody></table>')
             parts.append('</details>')
 
@@ -639,6 +691,8 @@ def generate_spec_html(
                         f'  - {_e(effect.get("element", "-"))}: '
                         f'{_e(effect.get("state", "-"))}{suffix}'
                     )
+                if rule.get("notes"):
+                    parts.append(f'  Notes: {_e(str(rule["notes"]))}')
                 parts.append('')
             parts.append('</pre>')
 
@@ -1537,6 +1591,25 @@ def _format_section_ref(ref: Any) -> str:
     return '-'
 
 
+def _ui_variable_default(var: dict) -> str:
+    """A UI variable's default as the schema reads it: `default` (the older
+    spelling) when given, else `defaultValue`; when both are given and differ,
+    the ignored defaultValue is named beside it, as the schema says it is.
+    `-` for neither."""
+    def text(value) -> str:
+        return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+    has_old = "default" in var and var["default"] is not None
+    has_new = "defaultValue" in var and var["defaultValue"] is not None
+    if has_old and has_new and var["default"] != var["defaultValue"]:
+        return f'{text(var["default"])} (defaultValue {text(var["defaultValue"])} ignored)'
+    if has_old:
+        return text(var["default"])
+    if has_new:
+        return text(var["defaultValue"])
+    return "-"
+
+
 def _append_components_table(
     parts: list,
     components: list,
@@ -1570,7 +1643,7 @@ def _append_components_table(
     parts.append('<table class="tree-table">')
     parts.append(
         '<thead><tr><th>Component</th><th>ID</th><th>Platform</th>'
-        '<th>Description</th><th>Bindings</th><th>Notes</th></tr></thead>'
+        '<th>Description</th><th>Initial State</th><th>Bindings</th><th>Notes</th></tr></thead>'
     )
     parts.append('<tbody>')
 
@@ -1602,6 +1675,7 @@ def _append_components_table(
         parts.append(f'<td><code>{_e(comp.get("id", "-"))}</code></td>')
         parts.append(f'<td>{_render_platform_badge(comp.get("platform"))}</td>')
         parts.append(f'<td>{_render_description_cell(comp, colors_map)}</td>')
+        parts.append(f'<td>{_p(comp.get("initialState") or "-")}</td>')
         parts.append(f'<td>{_render_bindings_cell(comp)}</td>')
         parts.append(f'<td>{_render_notes_cell(comp)}</td>')
         parts.append('</tr>')
@@ -1996,6 +2070,19 @@ def _get_html_footer(has_sidebar: bool = False) -> str:
 '''
 
 
+def _component_event_parameters_html(params: list) -> str:
+    """An exposed event's parameters: `name: type`, each with its description
+    (the schema declares one; until jsonui-cli 1.9.6 it was not drawn)."""
+    if not params:
+        return "-"
+    rows = []
+    for p in params:
+        sig = _e(f"{p.get('name', '')}: {p.get('type', '')}")
+        desc = f" — {_p(p['description'])}" if p.get("description") else ""
+        rows.append(f"<div>{sig}{desc}</div>")
+    return "".join(rows)
+
+
 def generate_component_html(
     spec_data: dict,
     all_tests_nav: dict | None = None,
@@ -2058,6 +2145,15 @@ def generate_component_html(
     parts.append('<div class="container">')
     parts.append(f'<h1>{_e(display_name)} <span class="badge badge-category">{_e(category)}</span></h1>')
     parts.append(prose_block(description))
+    # The component's name — what a layout writes — and the authorship rows,
+    # as the screen page's metadata table (until jsonui-cli 1.9.6 the
+    # component page drew neither).
+    parts.append('<table class="meta-table">')
+    parts.append(f'<tr><th>Name</th><td><code>{_e(name)}</code></td></tr>')
+    for key, label in (("author", "Author"), ("createdAt", "Created"), ("updatedAt", "Updated")):
+        if metadata.get(key):
+            parts.append(f'<tr><th>{label}</th><td>{_e(str(metadata[key]))}</td></tr>')
+    parts.append('</table>')
 
     # Props section
     # Notes, where the component schema declares them (the top level, each
@@ -2110,17 +2206,24 @@ def generate_component_html(
 
     # Structure section
     components = structure.get("components", [])
-    if components or structure.get("notes"):
+    layout = structure.get("layout") or {}
+    if components or structure.get("notes") or layout:
         parts.append('<section id="structure">')
         parts.append('<h2>Structure</h2>')
+        if layout:
+            parts.append('<h3>Layout Structure</h3>')
+            parts.append('<pre class="layout-tree">')
+            parts.append(_render_layout_tree_html(layout))
+            parts.append('</pre>')
         if components:
             parts.append('<h3>Components</h3>')
             parts.append('<table>')
-            parts.append('<thead><tr><th>Type</th><th>ID</th><th>Description</th><th>Notes</th></tr></thead>')
+            parts.append('<thead><tr><th>Type</th><th>ID</th><th>Bound To Prop</th><th>Description</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for comp in components:
                 parts.append(f'<tr><td><code>{_e(str(comp.get("type", "")))}</code></td>')
                 parts.append(f'<td><code>{_e(str(comp.get("id", "")))}</code></td>')
+                parts.append(f'<td><code>{_e(str(comp.get("boundToProp") or "-"))}</code></td>')
                 parts.append(f'<td>{_p(comp.get("description", ""))}</td>')
                 parts.append(f'<td>{_p(comp.get("notes") or "-")}</td></tr>')
             parts.append('</tbody></table>')
@@ -2159,9 +2262,8 @@ def generate_component_html(
             parts.append('<tbody>')
             for event in exposed_events:
                 params = event.get("parameters", [])
-                param_str = ", ".join([f"{p.get('name', '')}: {p.get('type', '')}" for p in params]) if params else "-"
                 parts.append(f'<tr><td><code>{_e(str(event.get("name", "")))}</code></td>')
-                parts.append(f'<td class="type">{_e(param_str)}</td>')
+                parts.append(f'<td class="type">{_component_event_parameters_html(params)}</td>')
                 parts.append(f'<td>{_p(event.get("description", ""))}</td>')
                 parts.append(f'<td>{_p(event.get("notes") or "-")}</td></tr>')
             parts.append('</tbody></table>')
@@ -2243,6 +2345,13 @@ def generate_component_markdown(spec_data: dict) -> str:
     md = f"# {display_name}\n\n"
     md += f"**Category:** {category}\n\n"
     md += f"{description}\n\n"
+    # Name and authorship, as the HTML page's metadata table.
+    md += "| | |\n|---|---|\n"
+    md += f"| Name | `{name}` |\n"
+    for key, label in (("author", "Author"), ("createdAt", "Created"), ("updatedAt", "Updated")):
+        if metadata.get(key):
+            md += f"| {label} | {metadata[key]} |\n"
+    md += "\n"
 
     # Props (notes as the HTML page renders them — see generate_component_html)
     if props or props_section.get("notes"):
@@ -2275,14 +2384,19 @@ def generate_component_markdown(spec_data: dict) -> str:
 
     # Structure
     components = structure.get("components", [])
-    if components or structure.get("notes"):
+    layout = structure.get("layout") or {}
+    if components or structure.get("notes") or layout:
         md += "## Structure\n\n"
+    if layout:
+        from .markdown_generator import _render_layout_tree
+        md += "### Layout Structure\n\n```\n" + "\n".join(_render_layout_tree(layout, 0)) + "\n```\n\n"
     if components:
         md += "### Components\n\n"
-        md += "| Type | ID | Description | Notes |\n"
-        md += "|------|----|-------------|-------|\n"
+        md += "| Type | ID | Bound To Prop | Description | Notes |\n"
+        md += "|------|----|---------------|-------------|-------|\n"
         for comp in components:
-            md += f"| `{comp.get('type', '')}` | `{comp.get('id', '')}` | {_cell(comp.get('description', ''))} | {_cell(comp.get('notes') or '-')} |\n"
+            md += (f"| `{comp.get('type', '')}` | `{comp.get('id', '')}` | `{comp.get('boundToProp') or '-'}` "
+                   f"| {_cell(comp.get('description', ''))} | {_cell(comp.get('notes') or '-')} |\n")
         md += "\n"
     if structure.get("notes"):
         md += labelled_notes(structure["notes"])
@@ -2311,8 +2425,10 @@ def generate_component_markdown(spec_data: dict) -> str:
             md += "|------|------------|-------------|-------|\n"
             for event in exposed_events:
                 params = event.get("parameters", [])
-                param_str = ", ".join([f"{p.get('name', '')}: {p.get('type', '')}" for p in params]) if params else "-"
-                md += f"| `{event.get('name', '')}` | `{param_str}` | {_cell(event.get('description', ''))} | {_cell(event.get('notes') or '-')} |\n"
+                param_str = "<br>".join(
+                    f"`{p.get('name', '')}: {p.get('type', '')}`" + (f" — {_cell(p['description'])}" if p.get("description") else "")
+                    for p in params) if params else "-"
+                md += f"| `{event.get('name', '')}` | {param_str} | {_cell(event.get('description', ''))} | {_cell(event.get('notes') or '-')} |\n"
             md += "\n"
 
         if state_mgmt.get("notes"):
