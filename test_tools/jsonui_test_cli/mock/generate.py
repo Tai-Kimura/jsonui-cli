@@ -776,6 +776,34 @@ _TYPE_CHECKS = {
 }
 
 
+def _declares_null(schema) -> bool:
+    """Whether the schema AS WRITTEN admits null, before any `$ref` is followed.
+
+    `resolve_schema` returns a `$ref`'s target, and the keywords beside the
+    `$ref` go with it — so `{"$ref": X, "nullable": true}` read as X, and a
+    null there was a violation. The API codegen reads `nullable` on the
+    property itself (jui_cli/core/openapi_loader.py `_extract_fields`,
+    `prop_body.get("nullable")`), so the two tools disagreed about one
+    property. Read here the same way: on the schema as written.
+
+    A `oneOf` / `anyOf` with a null branch (`{"type": "null"}`, a `null` type
+    member, `nullable`) admits null whichever position the branch takes;
+    `resolve_schema` keeps only the first branch, so `[null, X]` passed and
+    `[X, null]` did not. (The codegen stops on both shapes by name —
+    unknown-type / polymorphic-not-supported — so there is no reading of its
+    to agree with there.)
+    """
+    if not isinstance(schema, dict):
+        return False
+    if schema.get("nullable") is True:
+        return True
+    types = schema.get("type")
+    if types == "null" or (isinstance(types, list) and "null" in types):
+        return True
+    branches = schema.get("oneOf") or schema.get("anyOf")
+    return isinstance(branches, list) and any(_declares_null(b) for b in branches)
+
+
 def compare_to_schema(doc: OpenApiDoc, schema, value, path: str = "",
                       _depth: int = 0) -> BodyFindings:
     """Walk a body and its schema together.
@@ -789,6 +817,8 @@ def compare_to_schema(doc: OpenApiDoc, schema, value, path: str = "",
     """
     out = BodyFindings()
     if _depth > 12:
+        return out
+    if value is None and _declares_null(schema):
         return out
     schema = doc.resolve_schema(schema, _depth)
     if not isinstance(schema, dict):
