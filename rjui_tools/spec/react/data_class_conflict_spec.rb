@@ -9,23 +9,25 @@ require_relative '../spec_helper'
 require 'core/data_class_conflict'
 require 'react/data_model_generator'
 
-# One data name declared twice in the Data type rjui builds for a layout file
-# — its root's data and its data-only nodes. Until jsonui-cli 1.9.6 rjui
-# wrote every declaration: the interface and createXxxData() each carried the
-# name twice, which tsc rejects whether or not the types agree (TS2300,
-# TS1117; ticket rjui-data-name-declared-twice-is-written-twice). It now keeps
-# the first in document order, the root's data first, as sjui / kjui do, and
-# says so when the types differ (ruling 2026-10-02: a warning on every face,
-# not an error; data_class_conflict.rb — the same text as sjui / kjui).
+# One data name declared twice in the Data type rjui builds for a layout — its
+# root's data, its data-only nodes, and (from jsonui-cli 1.9.6) its includes
+# expanded inline, as sjui / kjui build theirs. Until 1.9.6 rjui wrote every
+# declaration: the interface and createXxxData() each carried the name twice,
+# which tsc rejects whether or not the types agree (TS2300, TS1117; ticket
+# rjui-data-name-declared-twice-is-written-twice). It now keeps the first in
+# document order, the root's data first, as sjui / kjui do, and says so when
+# the types differ (ruling 2026-10-02: a warning on every face, not an error;
+# data_class_conflict.rb — the same text as sjui / kjui).
 #
 # Types are compared as TypeScript writes them, so `Int` and `Float` (both
 # `number`) are one type here although they are two on sjui / kjui.
 #
-# An include is NOT where two declarations meet on this face: a partial is its
-# own component with its own Data type (createXxxData()), and the screen hands
-# it data only through the include's `data` map. So a screen and a partial
-# declaring one name with two types are two Data types here, and say nothing —
-# on sjui / kjui, which expand includes into the screen's Data type, they warn.
+# Across an include: until 1.9.6 a partial was its own component with its own
+# Data type and the screen handed it nothing, so a screen and a partial
+# declaring one name never met here. Ruling 2026-10-02 (an include draws the
+# including layout's data — design-philosophy: the parent owns the VM): the
+# screen's Data type carries its partials' declarations, so they meet, and
+# warn, as on sjui / kjui (ticket rjui-include-does-not-read-the-screens-data).
 RSpec.describe 'a data name declared twice (rjui)' do
   let(:dir) { Dir.mktmpdir('data_class_conflict') }
 
@@ -116,8 +118,10 @@ RSpec.describe 'a data name declared twice (rjui)' do
     expect(data).not_to compile_as_typescript
   end
 
-  # The boundary: across an include, two Data types — nothing to say.
-  it 'says nothing across an include' do
+  # Across an include: one Data type now — the screen's declaration is kept
+  # and the partial's, with another type, is said out loud. The partial's own
+  # Data type is still its own (it declares the name once).
+  it 'warns across an include, as sjui / kjui do' do
     layout('parts/panel', 'type' => 'View', 'id' => 'panel_root', 'data' => [item('Int', 7)],
                           'child' => [{ 'type' => 'Label', 'id' => 'p', 'text' => '@{title}' }])
     layout('screen', 'type' => 'View', 'id' => 'root', 'data' => [item('String', 'a')],
@@ -126,8 +130,24 @@ RSpec.describe 'a data name declared twice (rjui)' do
     printed, data = build
     partial_printed, partial = build('parts/panel')
 
-    expect(warnings(printed) + warnings(partial_printed)).to be_empty
+    expect(warnings(printed)).to eq([JsonUIShared::DataClassConflict.message('screen.json', 'title', 'string', 'number')])
+    expect(warnings(partial_printed)).to be_empty
+    expect(members(data)).to eq([1, 1])
     expect(data).to include('title: string;')
     expect(partial).to include('title: number;')
+  end
+
+  # The boundary of that: under an id the partial's name is prefixed, so it
+  # is another name in the screen's Data type and nothing meets.
+  it 'says nothing across an include with an id' do
+    layout('parts/panel', 'type' => 'View', 'id' => 'panel_root', 'data' => [item('Int', 7)],
+                          'child' => [{ 'type' => 'Label', 'id' => 'p', 'text' => '@{title}' }])
+    layout('screen', 'type' => 'View', 'id' => 'root', 'data' => [item('String', 'a')],
+                     'child' => [{ 'include' => 'parts/panel', 'id' => 'panel' }])
+
+    printed, data = build
+
+    expect(warnings(printed)).to be_empty
+    expect(data).to include('title: string;', 'panelTitle: number;')
   end
 end

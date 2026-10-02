@@ -93,6 +93,15 @@ class IncludeExpander:
                         included[key] = value
 
                 expanded = _apply_id_prefix(included, new_prefix)
+                # The include node's maps over the including layout's data
+                # (shared_data, then data) — shared/core/include_data_map.rb,
+                # the rule sjui / kjui / rjui apply. Read off the include node
+                # as written: its values are bindings in the including
+                # layout's scope. Until jsonui-cli 1.9.6 an object map was
+                # dropped here, as it was by sjui / kjui.
+                expanded = apply_include_data_map(
+                    expanded, include_data_map(node),
+                    lambda name: _combine_with_prefix(new_prefix, name) if new_prefix else name)
                 return self.expand(expanded, new_prefix, unresolved=unresolved,
                                    inside=inside + (path,))
 
@@ -152,6 +161,55 @@ class IncludeExpander:
         # A layout is an object; anything else is as unreadable as bad JSON
         # (it failed further on, reading the include node's keys into it).
         return tree if isinstance(tree, dict) else None
+
+
+def include_data_map(include_node: Any) -> dict[str, Any]:
+    """The include node's maps, merged: ``shared_data`` first, then ``data``.
+    An array ``data`` is not a map — it declares data, merged as before."""
+    merged: dict[str, Any] = {}
+    if isinstance(include_node, dict):
+        for key in ("shared_data", "data"):
+            if isinstance(include_node.get(key), dict):
+                merged.update(include_node[key])
+    return merged
+
+
+def apply_include_data_map(tree: Any, mapping: dict[str, Any], spelled=lambda name: name) -> Any:
+    """``JsonUIShared::IncludeDataMap.apply!`` — every ``@{name}`` whose name
+    is a map key reads the map's value: a whole-string binding takes the value
+    as it is, one inside a longer string a binding as written and a literal as
+    its text. Declarations (an array ``data``) are not bindings."""
+    if not mapping:
+        return tree
+    by_name = {spelled(str(k)): v for k, v in mapping.items()}
+
+    def rewrite(node: Any) -> Any:
+        if isinstance(node, dict):
+            for key in list(node.keys()):
+                if key == "data" and isinstance(node[key], list):
+                    continue
+                node[key] = rewrite(node[key])
+            return node
+        if isinstance(node, list):
+            return [rewrite(item) for item in node]
+        if isinstance(node, str):
+            whole = re.fullmatch(r"@\{([^}]+)\}", node)
+            if whole and whole.group(1) in by_name:
+                return by_name[whole.group(1)]
+
+            def one(match: re.Match) -> str:
+                name = match.group(1)
+                if name not in by_name:
+                    return match.group(0)
+                value = by_name[name]
+                if isinstance(value, str):
+                    return value
+                return {True: "true", False: "false", None: ""}.get(value, str(value)) \
+                    if isinstance(value, (bool, type(None))) else str(value)
+            return BINDING_RE.sub(one, node)
+        return node
+
+    return rewrite(tree)
 
 
 def _to_camel_case(s: str) -> str:

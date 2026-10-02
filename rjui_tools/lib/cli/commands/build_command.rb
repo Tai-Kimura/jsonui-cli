@@ -157,6 +157,9 @@ module RjuiTools
             end
           ).to_a
 
+          # Where an include call site reads the partial it hands data to.
+          @config['_layouts_dir'] = File.expand_path(layouts_dir)
+
           generator = React::ReactGenerator.new(@config)
           generator.unknown_type_validator = @validator
 

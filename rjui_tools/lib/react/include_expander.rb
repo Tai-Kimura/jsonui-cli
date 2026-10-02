@@ -3,12 +3,60 @@
 require 'json'
 require_relative 'style_loader'
 require_relative '../core/include_data_map'
+require_relative '../core/normalization'
+require_relative '../core/node_keys'
+require_relative '../core/data_item_platform'
 
-module SjuiTools
-  module SwiftUI
-    # Module for expanding includes inline with ID prefix support
+module RjuiTools
+  module React
+    # Expands includes inline with id prefixes — kjui's / sjui's
+    # IncludeExpander, the same rule, for the one thing rjui needs an
+    # expanded tree for: a screen's Data type. rjui DRAWS an include as a
+    # component call (converters/include_converter.rb); its data is what the
+    # expanded tree declares, as on native (ruling 2026-10-02; ticket
+    # rjui-include-does-not-read-the-screens-data — until jsonui-cli 1.9.6 a
+    # screen's Data type carried none of its partials' declarations).
+    #
+    # Each expanded include's root carries INCLUDE_ROOT, so the Data walk
+    # reads its data as it reads a layout root's.
     module IncludeExpander
+      INCLUDE_ROOT = '_jui_include_root'
+
       module_function
+
+      # Whether a node's data[] is this layout's Data type's: a layout's
+      # root, an expanded include's root, or a node that holds data alone
+      # (its type at most). The one rule the Data type and the include call
+      # site both read — the call site hands the partial exactly the names
+      # its Data type declares, and a name the type does not have is an
+      # excess property to tsc.
+      def declares_data?(node, is_root)
+        return false unless node.is_a?(Hash) && node['data'].is_a?(Array)
+
+        written = Core::NodeKeys.written(node)
+        is_root || node[INCLUDE_ROOT] || written == ['data'] || (written - %w[data type]).empty?
+      end
+
+      # The data names an (expanded) layout's Data type declares, in
+      # document order, each once.
+      def declared_names(tree, is_root = true, names = [])
+        case tree
+        when Hash
+          if declares_data?(tree, is_root)
+            tree['data'].each do |item|
+              next unless item.is_a?(Hash) && item['name']
+              next unless JsonUIShared::DataItemPlatform.applies?(item, 'react')
+
+              names << item['name'] unless names.include?(item['name'])
+            end
+          end
+          child = tree['child'] || tree['children']
+          (child.is_a?(Array) ? child : [child].compact).each { |c| declared_names(c, false, names) }
+        when Array
+          tree.each { |c| declared_names(c, false, names) }
+        end
+        names
+      end
 
       # The layouts ROOT every include path resolves from — top level and
       # nested alike (design U8, 2026-09-25). The Python normalizer, rjui and
@@ -25,6 +73,27 @@ module SjuiTools
 
       # Convert snake_case to camelCase
       # e.g., "header1_title_label" -> "header1TitleLabel"
+      SIMPLE_BINDING = /@\{([A-Za-z_][A-Za-z0-9_]*)\}/.freeze
+
+      # Every plain `@{name}` the layout binds, in document order, each once
+      # — a dotted name (`@{item.x}`, `@{this.x}`) is not one. Declarations
+      # are not bindings.
+      def bound_names(node, names = [])
+        case node
+        when Hash
+          node.each do |key, value|
+            next if key == 'data' && value.is_a?(Array)
+
+            bound_names(value, names)
+          end
+        when Array
+          node.each { |item| bound_names(item, names) }
+        when String
+          node.scan(SIMPLE_BINDING) { |(name)| names << name unless names.include?(name) }
+        end
+        names
+      end
+
       def to_camel_case(str)
         return str unless str.include?('_')
         parts = str.split('_')
@@ -62,6 +131,11 @@ module SjuiTools
           include_content = File.read(include_file_path)
           included_json = JSON.parse(include_content)
 
+          # A distributed partial may carry its own `$jui` normalization
+          # marker; it is root-level build metadata, not a renderable
+          # attribute, so it must not leak into the expanded subtree.
+          included_json.delete(Core::Normalization::MARKER_KEY)
+
           # スタイルを適用
           included_json = StyleLoader.load_and_merge(included_json)
 
@@ -88,6 +162,8 @@ module SjuiTools
               included_json[key] = value
             end
           end
+
+          included_json[INCLUDE_ROOT] = true
 
           # IDプレフィックスを適用して再帰処理
           json_data = apply_id_prefix(included_json, new_prefix)
@@ -133,7 +209,7 @@ module SjuiTools
       def apply_id_prefix(json_data, prefix)
         return json_data unless json_data.is_a?(Hash) && prefix
 
-        # data定義のnameにプレフィックスを付与 (キャメルケースで結合)
+        # data定義のnameにプレフィックスを再帰的に付与 (キャメルケースで結合)
         prefix_data_names(json_data, prefix)
 
         # 全ての文字列値の@{}参照にプレフィックスを付与

@@ -52,12 +52,13 @@ RSpec.describe 'emitted TypeScript reaches a compiler' do
   # Files under lib/react that emit no TypeScript, each read:
   NOT_TS = {
     'react/style_loader' => 'merges style JSON into a layout',
+    'react/include_expander' => 'expands layout JSON includes, for the Data type (the include is drawn by converters/include_converter)',
     'react/converters/extensions/converter_mappings' => 'maps a type to its converter class name'
   }.freeze
   TS_LIB = Dir.glob(File.join(LIB_TS, 'react', '**', '*.rb'))
               .map { |f| f.sub("#{LIB_TS}/", '').sub(/\.rb\z/, '') }
               .reject { |f| NOT_TS.key?(f) }.freeze
-  NOT_TS_CONSTANTS = %w[StyleLoader].freeze
+  NOT_TS_CONSTANTS = %w[StyleLoader IncludeExpander].freeze
 
   def self.emits_typescript?(body)
     requires = body.scan(/^\s*require(?:_relative)?\s+['"]([^'"]+)['"]/).flatten

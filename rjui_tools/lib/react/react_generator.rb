@@ -582,11 +582,16 @@ module RjuiTools
 
         # Generate data-based props interface and signature.
         # Call convention (rjui-include-data-partial-call-convention-missing):
-        # `data` is optional at every call site — bare includes render
-        # `<Name />`, data-passing includes render `<Name data={{...}} />`
-        # with a Partial, and pages/cells pass the full object. A
-        # data-consuming component merges the prop over its createXxxData()
-        # defaults so every member is present for the body's reads.
+        # `data` is optional at every call site — an include renders
+        # `<Name data={{...}} />` with a Partial (every name the included
+        # layout's Data type declares, read off the including layout's data,
+        # with the include node's maps over it — converters/
+        # include_converter.rb; until jsonui-cli 1.9.6 an include without a
+        # map rendered `<Name />` and handed nothing), an included layout
+        # that declares nothing renders `<Name />`, and pages/cells pass the
+        # full object. A data-consuming component merges the prop over its
+        # createXxxData() defaults so every member is present for the body's
+        # reads.
         include_prefix = @config['_include_id_prefix']
         uses_id_prefix = include_prefix && jsx_content.match?(/\bidPrefix\b/)
         props_interface = generate_data_props_interface(name, uses_data, data_type: data_name,
@@ -647,10 +652,12 @@ module RjuiTools
       end
 
       # Generate TypeScript interface for data-based props.
-      # `data` is always optional: bare include sites render `<Name />`,
-      # data-passing includes provide a Partial that the component merges
-      # over its createXxxData() defaults, and pages/cells pass the full
-      # object (a full XxxData is assignable to Partial<XxxData>).
+      # `data` is always optional: include sites provide a Partial (the
+      # including layout's data for the names this layout declares, maps
+      # over it) that the component merges over its createXxxData()
+      # defaults, an include of a layout that declares nothing renders
+      # `<Name />`, and pages/cells pass the full object (a full XxxData is
+      # assignable to Partial<XxxData>).
       def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false, path: false)
         data_name = data_type || name
         data_field = uses_data ? "data?: Partial<#{data_name}Data>;" : "data?: #{data_name}Data;"

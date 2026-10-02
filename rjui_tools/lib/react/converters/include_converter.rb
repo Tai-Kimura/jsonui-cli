@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
+require 'json'
 require_relative 'base_converter'
 require_relative '../../core/layout_path'
+require_relative '../include_expander'
+require_relative '../included_members'
+require_relative '../style_loader'
 
 module RjuiTools
   module React
@@ -24,12 +28,19 @@ module RjuiTools
           merged_data.merge!(attributes['shared_data']) if attributes['shared_data'].is_a?(Hash)
           merged_data.merge!(json['data']) if json['data'].is_a?(Hash)
 
-          # The partial receives a single `data` prop (Partial<XxxData> —
-          # the component merges it over its createXxxData() defaults), so
-          # the include-site map becomes one object literal, not individual
-          # props. Bindings resolve through add_viewmodel_data_prefix like
-          # every built-in converter (they reference the PARENT's data).
-          data_prop = build_data_prop(merged_data)
+          # The partial reads the including layout's data (ruling
+          # 2026-10-02; design-philosophy: an include is an inline expansion
+          # and the parent owns the VM): every name the partial's Data type
+          # declares, read off this layout's data — prefixed by the include's
+          # id, as the expanded Data type spells it — with the include node's
+          # maps over it (shared_data, then data). Until jsonui-cli 1.9.6 a
+          # bare include rendered `<Name />` and handed nothing (ticket
+          # rjui-include-does-not-read-the-screens-data).
+          #
+          # One `data` prop (Partial<XxxData> — the component merges it over
+          # its createXxxData() defaults). Map bindings resolve through
+          # add_viewmodel_data_prefix like every built-in converter.
+          data_prop = build_data_prop(merged_data, including_data_pairs(merged_data))
 
           id_attr = include_id_attr + include_path_attr(base_name)
 
@@ -73,14 +84,40 @@ module RjuiTools
           end
         end
 
-        def build_data_prop(data)
-          return '' if data.empty?
-
-          pairs = data.map do |key, value|
+        def build_data_prop(data, leading = [])
+          pairs = leading + data.map do |key, value|
             "#{key}: #{format_prop_value(value)}"
           end
+          return '' if pairs.empty?
 
           "data={{ #{pairs.join(', ')} }}"
+        end
+
+        # `member: data.<what the including layout calls it>` for each member
+        # of the partial's Data type that no map sets (IncludedMembers: its
+        # declared data, its handlers and bound values, and the names it binds
+        # without declaring — each spelled as the expanded tree spells it).
+        def including_data_pairs(map)
+          root = @config['_layouts_dir'] || (@config['layouts_directory'] && File.expand_path(@config['layouts_directory']))
+          return [] unless root
+
+          path = File.join(root, "#{json['include']}.json")
+          return [] unless File.file?(path)
+
+          tree = StyleLoader.load_and_merge(JSON.parse(File.read(path, encoding: 'UTF-8')))
+          tree = IncludeExpander.process_includes(tree, File.dirname(path), nil, root)
+          IncludedMembers.pairs(tree, include_data_prefix, map).map do |member, including|
+            "#{member}: data.#{including}"
+          end
+        end
+
+        # The include's id as the prefix of the partial's data names
+        # (IncludeExpander's rule); a bound id names no prefix.
+        def include_data_prefix
+          id = attributes['id']
+          return nil unless id.is_a?(String) && !id.empty? && !has_binding?(id)
+
+          IncludeExpander.to_camel_case(id)
         end
 
         def format_prop_value(value)

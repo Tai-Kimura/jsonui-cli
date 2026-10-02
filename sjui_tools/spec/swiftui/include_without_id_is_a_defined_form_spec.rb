@@ -124,6 +124,19 @@ RSpec.describe 'an include without an id' do
       expect(compilable_view(code, data: ['var title: String = ""'])).to compile_as_swift
     end
 
+    # An object map over the screen's data (ruling 2026-10-02; until
+    # jsonui-cli 1.9.6 sjui dropped it and drew `data.title`).
+    it "reads a map's binding in the screen's scope, and compiles" do
+      partial('style_app')
+
+      code = draw([{ 'data' => [{ 'name' => 'pageTitle', 'class' => 'String', 'defaultValue' => '' }] },
+                   { 'include' => 'parts/style_app', 'data' => { 'title' => '@{pageTitle}' } }])
+
+      expect(code).to include('"\(data.pageTitle)"')
+      expect(code).not_to include('data.title)')
+      expect(compilable_view(code, data: ['var pageTitle: String = ""', 'var title: String = ""'])).to compile_as_swift
+    end
+
     # The control: the same partial under an id reads the prefixed name, so
     # the scan above tells the two forms apart.
     it 'reads the prefixed name under an id' do
