@@ -155,8 +155,20 @@ RSpec.describe 'kjui codegen: the common stages, follow-ups' do
     'pinch' => [{ 'onPinch' => '@{onZoom}' }, 'data.onZoom?.invoke()']
   }
 
+  # A type the SSoT declares a gesture not to reach (`notApplicableTo`:
+  # onPan on a TextField / TextView / Slider, ruling 2026-10-03) carries none
+  # — the build warns instead; that is
+  # not_applicable_pan_is_not_wired_spec.rb's. Read from the declaration.
+  not_applicable = lambda do |label, gesture|
+    attr = gestures[gesture].first.keys.first
+    type = node_of.call(label)['type']
+    KjuiTools::Compose::Helpers::ModifierBuilder.declared_not_applicable?(attr, 'type' => type)
+  end
+
   it 'B6: every type and branch carries its long press, pan and pinch' do
     missing = drawn.keys.product(gestures.keys).reject do |label, gesture|
+      next true if not_applicable.call(label, gesture)
+
       attrs, marker = gestures[gesture]
       count.call(emit.call(node_of.call(label).merge(attrs)), marker) == 1
     end
@@ -165,6 +177,8 @@ RSpec.describe 'kjui codegen: the common stages, follow-ups' do
 
   it 'B6: userInteractionEnabled or enabled false emits none, and a binding gates the call' do
     open = drawn.keys.product(gestures.keys).reject do |label, gesture|
+      next true if not_applicable.call(label, gesture)
+
       attrs, marker = gestures[gesture]
       node = node_of.call(label).merge(attrs)
       shut = [{ 'userInteractionEnabled' => false }, { 'enabled' => false }].all? do |gate|

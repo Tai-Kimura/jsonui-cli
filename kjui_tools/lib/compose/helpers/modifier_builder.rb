@@ -10,6 +10,7 @@ require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
 require_relative '../../core/string_literals'
 require_relative '../../core/enum_spelling'
+require_relative '../../core/attribute_validator'
 
 module KjuiTools
   module Compose
@@ -1386,6 +1387,18 @@ module KjuiTools
           [gesture]
         end
 
+        # Whether the SSoT declares `attr` (a common attribute) not to reach
+        # this node's type — `notApplicableTo`, resolved as the validator
+        # resolves it (EditText / Input are TextField). One reader of the
+        # declaration: the build's warning and this emitter's silence agree.
+        def self.declared_not_applicable?(attr, json_data)
+          @not_applicable_validator ||= Core::AttributeValidator.new(:compose)
+          definition = @not_applicable_validator.definitions.dig('common', attr)
+          return false unless definition.is_a?(Hash)
+
+          !@not_applicable_validator.send(:not_applicable_reason, definition, json_data['type'].to_s).nil?
+        end
+
         # onPan (common attribute) → drag gesture. The handler fires on every
         # drag event with the cumulative translation since the gesture began
         # (an Offset — accumulated from per-event deltas so the payload matches
@@ -1400,6 +1413,12 @@ module KjuiTools
         def self.build_pannable(json_data, required_imports = nil)
           handler = json_data['onPan']
           return [] unless handler && is_binding?(handler)
+          # A type the SSoT declares onPan does not reach (TextField, its
+          # synonyms, TextView, Slider: the component's own drag takes the
+          # gesture) gets no pan — the build names it instead, in the words
+          # every face prints (ruling 2026-10-03). A TextView's pan was wired
+          # here and called on Android alone; the faces now agree.
+          return [] if declared_not_applicable?('onPan', json_data)
 
           # gesture_gate: `false` emits no pan; a binding gates the call.
           interaction = gesture_gate(json_data)
