@@ -69,7 +69,7 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   # declared form; kept here by name so a new leak is red and a fixed one says
   # so.
   not_numbers = {
-    'TextField' => %w[fieldId nextFocus nextFocusId onBeginEditing onBlur onEndEditing onFocus],
+    'TextField' => %w[fieldId nextFocus nextFocusId],
     'TextView' => %w[hideOnFocused], 'Radio' => %w[group],
     'WebView' => %w[userAgent], 'Web' => %w[userAgent]
   }
@@ -77,7 +77,9 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   # when the class-list reader on rel stopped raising on a string;
   # SafeAreaView's edges / safeAreaInsetPositions when the words became what
   # they reserve (SafeAreaEdges) — a binding is no declared word and reserves
-  # nothing, where it was written into the emitted edge list.)
+  # nothing, where it was written into the emitted edge list.
+  # TextField's onFocus / onBlur / onBeginEditing / onEndEditing when the four
+  # became handlers called as the data declares them — `@{h}` names h.)
 
   it 'no bound number reaches the Kotlin as the layout spelled it, nor raises' do
     expect(keys.size).to be > 200
