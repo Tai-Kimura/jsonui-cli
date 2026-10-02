@@ -222,9 +222,8 @@ module KjuiTools
                 # method name, like `onclick`) that only UIKit read. Selector
                 # names camelize, matching the rjui/sjui handling of the same
                 # attribute.
-                selector = camelize_selector(json_data['valueChange'])
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3) if has_binding
-                code += "\n" + indent("data.#{selector}?.invoke()", depth + 3)
+                code += "\n" + indent(value_change_call(json_data, view_id, index.to_s), depth + 3)
               elsif has_binding
                 # Update the bound variable
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3)
@@ -337,7 +336,7 @@ module KjuiTools
               # camelize, matching the rjui/sjui handling of the same
               # attribute.
               code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4) if has_binding
-              code += "\n" + indent("data.#{camelize_selector(json_data['valueChange'])}?.invoke()", depth + 4)
+              code += "\n" + indent(value_change_call(json_data, view_id, 'index'), depth + 4)
             elsif has_binding
               # Update the bound variable
               code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4)
@@ -387,6 +386,19 @@ module KjuiTools
         private
         
         # snake_case selector -> camelCase data-property name.
+        # `valueChange` is declared `string`: a bare selector name (camelized,
+        # as rjui/sjui read it) or a binding (SwiftJsonUI 7ea1e4a). Either is
+        # called as its declaration takes it, the index as its value — as
+        # onValueChange is. Through jsonui-cli 1.9.5 it was always `invoke()`
+        # on the raw text: `data.@{h}?.invoke()` for a binding, and no value
+        # for a one-parameter handler; neither compiled
+        # (kjui-segment-valuechange-binding-writes-the-braces).
+        def self.value_change_call(json_data, view_id, index_expr)
+          raw = json_data['valueChange'].strip
+          handler = Helpers::ModifierBuilder.is_binding?(raw) ? raw : "@{#{camelize_selector(raw)}}"
+          Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, index_expr)
+        end
+
         def self.camelize_selector(name)
           name.split('_').each_with_index.map { |w, i| i.zero? ? w : w.capitalize }.join
         end

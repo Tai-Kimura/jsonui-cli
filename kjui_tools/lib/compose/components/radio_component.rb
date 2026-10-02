@@ -294,6 +294,18 @@ module KjuiTools
           # `enabled` is the item's own control's parameter: a disabled item
           # neither selects nor calls the declared onClick.
           enabled = Helpers::ModifierBuilder.enabled_expression(json_data)
+          # onValueChange, with this radio's value — the value just written —
+          # after the selection and before onClick, as the items form calls it
+          # with its item and as both iOS faces call it (jsonui-cli f96b340e,
+          # SwiftJsonUI 7ea1e4a). Through jsonui-cli 1.9.5 the group form wrote
+          # the selection and called nothing on kjui codegen
+          # (kjui-radio-group-form-never-calls-onvaluechange).
+          handler = json_data['onValueChange']
+          if handler.is_a?(String) && Helpers::ModifierBuilder.is_binding?(handler)
+            # The radio's value: `value` when declared, else its id (sjui
+            # codegen's radio_value, KotlinJsonUI Dynamic's itemValue).
+            on_select += "; #{Helpers::ModifierBuilder.get_event_handler_invocation(handler, id, Helpers::BoundValue.text(json_data['value'] || id))}"
+          end
           select_lambda = Helpers::ModifierBuilder.with_operation_click("{ #{on_select} }", json_data)
 
           code = indent("Row(", depth)
@@ -501,7 +513,7 @@ module KjuiTools
           end
           
           # onValueChange is told the item on every tap, after the selection
-          # is written — as both iOS faces call it (read, not run; KotlinJsonUI
+          # is written and before onClick — as both iOS faces call it (read, not run; KotlinJsonUI
           # Dynamic's items path does not call it either:
           # kjui-dynamic-radio-items-never-calls-onvaluechange, measured on a
           # device). Through jsonui-cli 1.9.5 the items form
@@ -531,11 +543,11 @@ module KjuiTools
               code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
             
-            if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
-              code += "\n" + indent("                #{click}", depth)
-            end
             if (change = change_call.call(item_literal))
               code += "\n" + indent("                #{change}", depth)
+            end
+            if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
+              code += "\n" + indent("                #{click}", depth)
             end
             code += "\n" + indent("            }", depth)
             code += "\n" + indent("    ) {", depth)
@@ -551,11 +563,11 @@ module KjuiTools
               code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
             
-            if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
-              code += "\n" + indent("                #{click}", depth)
-            end
             if (change = change_call.call(item_literal))
               code += "\n" + indent("                #{change}", depth)
+            end
+            if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
+              code += "\n" + indent("                #{click}", depth)
             end
             code += "\n" + indent("            },", depth)
             required_imports&.add(:radio_colors)
