@@ -192,3 +192,79 @@ def escape_keyword(name: str, *, language: str) -> str:
         # it elsewhere.
         return name
     return name
+
+
+# --------------------------------------------------------------------------- #
+# Enum case identifiers (jui-api-model-swift-negative-integer-enum-cases-collide)
+# --------------------------------------------------------------------------- #
+
+# A minus sign that starts a number — at the start of the name or after a
+# word separator — is spelled ``minus``: the integer enum value -1 gets the
+# default case name ``value_-1`` (openapi_loader), which reads as
+# ``value_minus_1`` → Swift ``valueMinus1``, Kotlin ``VALUE_MINUS_1``. TS
+# emits the values themselves (``-1 | 0 | 1``) and names no case. Through
+# jsonui-cli 1.9.5 Swift dropped the sign (``value_-1`` and ``value_1`` were
+# both ``value1``: the enum did not compile) and Kotlin kept it as a second
+# underscore (``VALUE__1``).
+_NUMBER_MINUS_RE = re.compile(r"(^|[_\s-])-(?=\d)")
+
+
+def enum_case_source(case_name: str) -> str:
+    """The case name with a number's minus sign spelled ``minus_``."""
+    return _NUMBER_MINUS_RE.sub(lambda m: f"{m.group(1)}minus_", case_name)
+
+
+_ASCII_NON_WORD_RE = re.compile(r"[\x00-\x2f\x3a-\x40\x5b-\x5e\x60\x7b-\x7f]")
+
+
+def enum_case_problems(raw_values: list, identifiers: list[str]) -> list[str]:
+    """What keeps the emitted case identifiers from compiling, one line each.
+
+    ``identifiers`` are the emitted names in value order (backticks allowed);
+    an empty result means every name is a distinct identifier. Conservative on
+    purpose — it rejects only what no Swift / Kotlin compiler accepts, so a
+    name that compiles today is never refused: an empty name, a name of
+    underscores only, a leading digit, an ASCII character other than a
+    letter, a digit or ``_``, and two values that get one name (after the
+    naming rules: ``active`` / ``ACTIVE``, ``foo_bar`` / ``fooBar``).
+    """
+    problems: list[str] = []
+    seen: dict[str, object] = {}
+    for raw, ident in zip(raw_values, identifiers):
+        bare = ident.strip("`")
+        if not bare or set(bare) == {"_"}:
+            problems.append(f"{raw!r} gets no name ({ident!r})")
+            continue
+        if bare[0].isdigit() or _ASCII_NON_WORD_RE.search(bare):
+            problems.append(f"{raw!r} gets {ident!r}, which is no identifier")
+            continue
+        if bare in seen:
+            problems.append(f"{seen[bare]!r} and {raw!r} both get {ident!r}")
+        else:
+            seen[bare] = raw
+    return problems
+
+
+def check_enum_case_identifiers(enum, identifiers: list[str], *, language: str, source: str = "") -> None:
+    """Stop the build on an enum whose case names cannot compile.
+
+    The generator writes the names and the compiler is the next to read
+    them; a name two values share, or one that is no identifier, is caught
+    here, by name, instead of as ``invalid redeclaration`` in the app's
+    build (jui-api-model-swift-negative-integer-enum-cases-collide: 7 Swift
+    files, rc 65, with jui build at warning 0).
+    """
+    from .openapi_loader import OpenAPILoadError
+
+    raw_values = enum.string_values if enum.string_values else enum.integer_values
+    problems = enum_case_problems(list(raw_values), identifiers)
+    if problems:
+        raise OpenAPILoadError(
+            "enum-case-names",
+            f"Enum '{enum.name}' ({language}): "
+            + "; ".join(problems)
+            + ". Name the cases with x-enum-varnames on the schema "
+            "(one name per value, in order).",
+            source=source,
+            pointer=f"#/components/schemas/{enum.name}",
+        )

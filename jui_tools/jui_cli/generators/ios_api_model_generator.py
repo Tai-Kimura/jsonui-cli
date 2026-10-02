@@ -24,6 +24,8 @@ from pathlib import Path
 from ..core.generated_marker import comment_footer, comment_header
 from ..core.impl_updater import atomic_write_text
 from ..core.openapi_naming import (
+    check_enum_case_identifiers,
+    enum_case_source,
     escape_keyword,
     resolve_enum_case_for_default,
     snake_to_camel,
@@ -416,6 +418,10 @@ class IosApiModelGenerator:
         if enum.kind == PrimitiveKind.STRING:
             raw_type = "String"
             value_pairs = list(zip(enum.case_names, enum.string_values))
+            check_enum_case_identifiers(
+                enum, [escape_keyword(_swift_case_name(c), language="swift") for c, _ in value_pairs],
+                language="Swift", source=str(doc.source_path),
+            )
             lines = [f"enum {enum.name}: {raw_type}, Codable, CaseIterable, Sendable {{"]
             for case_name, raw_value in value_pairs:
                 escaped = escape_keyword(_swift_case_name(case_name), language="swift")
@@ -427,6 +433,10 @@ class IosApiModelGenerator:
         else:  # INTEGER
             raw_type = "Int"
             value_pairs_int = list(zip(enum.case_names, enum.integer_values))
+            check_enum_case_identifiers(
+                enum, [escape_keyword(_swift_case_name(c), language="swift") for c, _ in value_pairs_int],
+                language="Swift", source=str(doc.source_path),
+            )
             lines = [f"enum {enum.name}: {raw_type}, Codable, CaseIterable, Sendable {{"]
             for case_name, raw_int in value_pairs_int:
                 escaped = escape_keyword(_swift_case_name(case_name), language="swift")
@@ -662,8 +672,14 @@ def _emit_hash_body_lines(schema: SchemaDef) -> list[str]:
 
 
 def _swift_case_name(case_name: str) -> str:
-    """Enum case identifier; snake/kebab → camelCase + escape."""
-    return snake_to_camel(case_name)
+    """Enum case identifier; snake/kebab → camelCase + escape.
+
+    A number's minus sign is spelled ``minus`` first (``value_-1`` →
+    ``valueMinus1``; openapi_naming.enum_case_source), as Kotlin spells it
+    ``VALUE_MINUS_1``. Through jsonui-cli 1.9.5 the sign was dropped, so
+    -1 and 1 were both ``value1``.
+    """
+    return snake_to_camel(enum_case_source(case_name))
 
 
 def _swift_type(ftype: FieldType, *, format_native: bool = False) -> str:
@@ -1067,7 +1083,7 @@ def _emit_swift_custom_init_from_decoder(
                     )
                 covered_enum_cases.add(enum_case_raw)
                 enum_case = escape_keyword(
-                    snake_to_camel(enum_case_raw), language="swift"
+                    _swift_case_name(enum_case_raw), language="swift"
                 )
                 lines.append(f"        case .{enum_case}:")
             else:
