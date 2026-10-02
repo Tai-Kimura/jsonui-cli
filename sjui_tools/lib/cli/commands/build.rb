@@ -821,6 +821,8 @@ module SjuiTools
             end
           end
 
+          scaffold_cell_views(source_path, config, layouts_dir, view_dir, json_files)
+
           prune_layout_orphans(source_path, config, layouts_dir, view_dir)
 
           # Save cache for next build — and which layouts it did NOT build.
@@ -867,6 +869,51 @@ module SjuiTools
 
           pascal_dir = dir_path.split('/').map { |s| s.split(/[_\-]/).map(&:capitalize).join }.join('/')
           File.join(view_dir, pascal_dir, view_name)
+        end
+
+        # The cell views the generated code names and no Swift source
+        # defines: scaffolded when their layout is one this build converted
+        # (View and ViewModel, `sjui g collection`'s templates, never over an
+        # existing file), else a warning — the app would not compile. Until
+        # jsonui-cli 1.9.6 a hand-written cell layout built with warning 0
+        # and no `<Cell>View` (ticket
+        # sjui-build-does-not-scaffold-cell-views-for-hand-written-cell-layouts).
+        # A function of the tree, so it runs on a cached build too.
+        def scaffold_cell_views(source_path, config, layouts_dir, view_dir, json_files)
+          require_relative '../../swiftui/cell_view_scaffold'
+          require_relative '../../swiftui/generators/collection_generator'
+          viewmodel_dir = File.join(source_path, config['viewmodel_directory'] || 'ViewModel')
+          generated_view_path = lambda do |layout, view_name|
+            rel = Pathname.new(layout).relative_path_from(Pathname.new(layouts_dir)).to_s
+            File.join(self.class.generated_view_dir(view_dir, rel), "#{view_name}GeneratedView.swift")
+          end
+          scaffolds, missing = SjuiTools::SwiftUI::CellViewScaffold.plan(
+            layouts_dir: layouts_dir, source_path: source_path, json_files: json_files,
+            view_model_dir: viewmodel_dir, generated_view_path: generated_view_path
+          )
+          scaffolds.each do |s|
+            rel = Pathname.new(s.layout).relative_path_from(Pathname.new(layouts_dir)).to_s.sub(/\.json\z/, '')
+            generator = SjuiTools::SwiftUI::Generators::CollectionGenerator.new(rel)
+            if generator.pascal_name != s.view_name
+              missing << SjuiTools::SwiftUI::CellViewScaffold::Missing.new(
+                type: s.type, refs: [rel], reason: "the cell template would name it #{generator.pascal_name}View"
+              )
+              next
+            end
+            [[s.view_path, :cell_view_source], [s.view_model_path, :cell_view_model_source]].each do |path, source|
+              next if path.nil? || File.exist?(path)
+
+              FileUtils.mkdir_p(File.dirname(path))
+              File.write(path, generator.public_send(source))
+              Core::Logger.info "  Scaffolded cell #{File.basename(path, '.swift')}: #{path}"
+            end
+          end
+          missing.each do |m|
+            Core::Logger.warn "Collection cell #{m.refs.join(', ')} is drawn as #{m.type}, which no Swift source defines " \
+                              "and the build cannot scaffold (#{m.reason}) — the generated code will not compile. " \
+                              'Write the layout under the layouts directory, or run `sjui g collection`.'
+            @validation_errors = (@validation_errors || 0) + 1
+          end
         end
 
         # A deleted layout's outputs, by the rule the three faces share

@@ -2158,7 +2158,14 @@ module SjuiTools
           prop['defaultValue'].nil? || prop['defaultValue'] == 'nil'
         end
 
+        # The Swift view a cell / header / footer reference draws. A class
+        # method too: the build asks it which cell views the generated code
+        # will name (CellViewScaffold), by this one rule.
         def extract_view_name(class_info)
+          self.class.cell_view_name(class_info)
+        end
+
+        def self.cell_view_name(class_info)
           return nil unless class_info
 
           if class_info.is_a?(Hash)
@@ -2181,7 +2188,7 @@ module SjuiTools
           # First, convert snake_case to PascalCase if needed
           # e.g., "item_card" -> "ItemCard"
           if class_name.include?('_')
-            class_name = to_pascal_case(class_name)
+            class_name = pascal_case(class_name)
           end
 
           # Convert UIKit cell class name to SwiftUI view name
@@ -2203,6 +2210,13 @@ module SjuiTools
                       end
 
           view_name
+        end
+
+        def self.pascal_case(str)
+          snake = str.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                     .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                     .downcase
+          snake.split(/[_\-]/).map(&:capitalize).join
         end
 
         # Convert snake_case, kebab-case, camelCase, or PascalCase to PascalCase
