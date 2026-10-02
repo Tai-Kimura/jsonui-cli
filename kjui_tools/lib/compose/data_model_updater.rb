@@ -294,7 +294,11 @@ module KjuiTools
               # silently dropped them while the dynamic path resolved them.
               content += "map[\"#{name}\"] as? Color ?: (map[\"#{name}\"] as? String)?.let { com.kotlinjsonui.generated.ColorManager.compose.colorOrHex(it) } ?: #{from_map_fallback(prop, class_type, 'Color.Unspecified')}"
             when 'CollectionDataSource'
-              content += "com.kotlinjsonui.data.CollectionDataSource()"
+              # The map's value, as updateData and iOS's update(dictionary:)
+              # read it; the declared default (else an empty source) when the
+              # map has none. Through jsonui-cli 1.9.5 this wrote the empty
+              # source whatever the map held (kjui-frommap-drops-collectiondatasource).
+              content += "map[\"#{name}\"] as? com.kotlinjsonui.data.CollectionDataSource ?: #{from_map_fallback(prop, class_type, 'com.kotlinjsonui.data.CollectionDataSource()')}"
             when /^List<.*>$/
               content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
             when /^Map<.*>$/
