@@ -69,7 +69,7 @@ fixture:
      resolves both `@{name}` and bare-selector strings.
    - web: `StateHost` assigns `() => setData(...)` closures into the data prop.
 
-   A handler declares exactly one of two operation kinds:
+   A handler declares exactly one of three operation kinds:
 
    - `set: { var, value }` — invoking the closure sets the single variable
      `set.var` to the literal string `set.value` and triggers re-render of
@@ -82,6 +82,16 @@ fixture:
      `action: "push"` pushes `screen` (with optional flat string `params`);
      `action: "pop"` pops one entry (bounded at the embed root by the
      navigator itself). No mounted embed with that id → no-op.
+   - `count: { var }` — invoking the closure adds 1 to the variable
+     `count.var` (a string holding an integer: "0" → "1" → "2") and
+     re-renders. It is how a fixture tells a handler called once from one
+     called twice, which `set` cannot (from jsonui-cli 1.9.6; the event x
+     declared-form probes of 2026-10-03 measured one call per single action
+     with it). Hosts: web (this repository's host), iOS ConformanceHost
+     (SwiftJsonUI, dynamic and codegen faces — on its measurement branch at
+     1.9.6, to land with the next SwiftJsonUI release); the Android host does
+     not have it yet. The generator does not emit a `count` fixture yet, so
+     no gate depends on it until all three hosts carry it.
 
 3. **Two-way write-back** — vars bound into input components
    (`text: "@{var}"` on TextField/TextView) must update when the user (or
