@@ -380,16 +380,18 @@ def generate_spec_html(
             if section_rows:
                 parts.append('<h4>Sections</h4>')
                 parts.append('<table>')
-                parts.append('<thead><tr><th>#</th><th>Cell</th><th>Header</th><th>Footer</th>'
-                             '<th>Description</th><th>Notes</th></tr></thead>')
+                parts.append('<thead><tr><th>#</th><th>Index</th><th>Cell</th><th>Header</th><th>Footer</th>'
+                             '<th>Columns</th><th>Description</th><th>Notes</th></tr></thead>')
                 parts.append('<tbody>')
                 for i, sec in enumerate(section_rows, start=1):
                     parts.append(
                         '<tr>'
                         f'<td>{i}</td>'
+                        f'<td>{_e(str(sec["index"])) if sec.get("index") is not None else "-"}</td>'
                         f'<td>{_format_section_ref(sec.get("cell"))}</td>'
                         f'<td>{_format_section_ref(sec.get("header"))}</td>'
                         f'<td>{_format_section_ref(sec.get("footer"))}</td>'
+                        f'<td>{_e(str(sec["columns"])) if sec.get("columns") is not None else "-"}</td>'
                         f'<td>{_p(sec.get("description") or "-")}</td>'
                         f'<td>{_p(sec.get("notes") or "-")}</td>'
                         '</tr>'
@@ -1688,13 +1690,23 @@ def _append_components_table(
     parts.append('</div>')  # tree-wrapper
 
 
+def layout_node_marks(node: dict) -> str:
+    """What a layout tree node declares beside its id: ` [overlay]` when its
+    children stack, ` (z: N)` for its zIndex. The schema declares both for
+    the reader; until jsonui-cli 1.9.6 neither tree drew them."""
+    marks = " [overlay]" if node.get("overlay") is True else ""
+    if node.get("zIndex") is not None:
+        marks += f" (z: {node['zIndex']})"
+    return marks
+
+
 def _render_layout_tree_html(layout: dict) -> str:
     """Render layout structure as HTML tree."""
     lines = []
     root = layout.get("root", "root")
     children = layout.get("children", [])
 
-    lines.append(_e(root))
+    lines.append(_e(root) + _e(layout_node_marks(layout)))
 
     def render_children(children_list: list, depth: int, is_parent_last: bool) -> list[str]:
         result = []
@@ -1709,7 +1721,7 @@ def _render_layout_tree_html(layout: dict) -> str:
                 result.append(f"{indent}{prefix}{_e(child)}")
             elif isinstance(child, dict):
                 child_id = child.get("id", "?")
-                result.append(f"{indent}{prefix}{_e(child_id)}")
+                result.append(f"{indent}{prefix}{_e(child_id)}{_e(layout_node_marks(child))}")
                 nested = child.get("children", [])
                 if nested:
                     result.extend(render_children(nested, depth + 1, is_last))

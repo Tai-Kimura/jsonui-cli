@@ -105,7 +105,7 @@ def _format_platform_md(value) -> str:
     return "-"
 
 
-from .html_generator import _sub_spec_sections, _ui_variable_default
+from .html_generator import _sub_spec_sections, _ui_variable_default, layout_node_marks
 
 
 def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
@@ -315,11 +315,13 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         if section_rows:
             lines.append("#### Sections")
             lines.append("")
-            lines.append("| # | Cell | Header | Footer | Description | Notes |")
-            lines.append("|---|---|---|---|---|---|")
+            lines.append("| # | Index | Cell | Header | Footer | Columns | Description | Notes |")
+            lines.append("|---|---|---|---|---|---|---|---|")
             for i, sec in enumerate(section_rows, start=1):
                 refs = [_section_ref_md(sec.get(k)) for k in ("cell", "header", "footer")]
-                lines.append(f"| {i} | {refs[0]} | {refs[1]} | {refs[2]} "
+                index = sec["index"] if sec.get("index") is not None else "-"
+                columns = sec["columns"] if sec.get("columns") is not None else "-"
+                lines.append(f"| {i} | {index} | {refs[0]} | {refs[1]} | {refs[2]} | {columns} "
                              f"| {_cell(sec.get('description') or '-')} | {_cell(sec.get('notes') or '-')} |")
             lines.append("")
 
@@ -776,7 +778,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
 def _render_layout_tree(layout: dict, depth: int) -> list[str]:
     """Render layout structure as tree lines, every level (as the HTML page's
     tree; until jsonui-cli 1.9.6 the Markdown stopped at the second level)."""
-    lines = [("│   " * depth) + str(layout.get("root", "root"))]
+    lines = [("│   " * depth) + str(layout.get("root", "root")) + layout_node_marks(layout)]
 
     def render(children: list, prefix: str) -> None:
         for i, child in enumerate(children):
@@ -785,7 +787,7 @@ def _render_layout_tree(layout: dict, depth: int) -> list[str]:
             if isinstance(child, str):
                 lines.append(f"{prefix}{branch}{child}")
             elif isinstance(child, dict):
-                lines.append(f"{prefix}{branch}{child.get('id', '?')}")
+                lines.append(f"{prefix}{branch}{child.get('id', '?')}{layout_node_marks(child)}")
                 nested = child.get("children") or []
                 if nested:
                     render(nested, prefix + ("    " if is_last else "│   "))

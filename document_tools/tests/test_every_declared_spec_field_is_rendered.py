@@ -11,8 +11,12 @@ HTML and for the Markdown, of the component page and of the screen page:
 
 and nothing in NOT_RENDERED is rendered (a stale exemption fails too). A
 field added to a schema is therefore red until a generator draws it or it is
-named here. Enum / boolean / number leaves cannot carry a token and are not
-counted (an enum's first value, a fixed boolean / number, fills them).
+named here. A number leaf carries a prime of its own (from 7,700,001; the
+empty page holds none of them) and is counted the same way. An enum or a
+boolean cannot carry a value of its own: an enum's first value / `true`
+fills it, it is not counted, and how many there are is pinned below
+(NOT_MEASURABLE) — a new one is red until the count is moved, so it is
+looked at.
 
 Until jsonui-cli 1.9.6 the component page drew 20 of its 44 string fields
 (none of its 11 notes), the screen page 121 (HTML) / 114 (Markdown) of 170
@@ -45,9 +49,31 @@ SCREEN_NOT_RENDERED = {
 }
 
 
+#: Enum and boolean leaves, which no token can mark, by kind.
+NOT_MEASURABLE = {
+    "component": {"enum": 2, "boolean": 2},
+    "screen": {"enum": 15, "boolean": 29},
+}
+
+
+def _primes(start: int):
+    n = start
+    while True:
+        n += 1
+        if all(n % d for d in range(2, int(n ** 0.5) + 1)):
+            yield n
+
+
 def _probe(schema: dict) -> tuple[dict, dict[str, str]]:
+    probe, tokens, _ = _probe_counting(schema)
+    return probe, tokens
+
+
+def _probe_counting(schema: dict) -> tuple[dict, dict[str, str], dict[str, int]]:
     defs = schema.get("$defs") or schema.get("definitions") or {}
     tokens: dict[str, str] = {}
+    unmeasured: dict[str, int] = {}
+    primes = _primes(7_700_000)
 
     def resolve(node):
         while isinstance(node, dict) and "$ref" in node:
@@ -59,6 +85,7 @@ def _probe(schema: dict) -> tuple[dict, dict[str, str]]:
         if depth > 12 or not isinstance(node, dict):
             return None
         if "enum" in node:
+            unmeasured["enum"] = unmeasured.get("enum", 0) + 1
             return node["enum"][0]
         alternatives = node.get("oneOf") or node.get("anyOf")
         if alternatives and "type" not in node:
@@ -79,13 +106,18 @@ def _probe(schema: dict) -> tuple[dict, dict[str, str]]:
         if kind == "array":
             item = fill(node.get("items", {"type": "string"}), path + "[]", depth + 1)
             return [] if item is None else [item]
-        if kind in ("boolean", "integer", "number"):
-            return {"boolean": True, "integer": 1, "number": 1}[kind]
+        if kind == "boolean":
+            unmeasured["boolean"] = unmeasured.get("boolean", 0) + 1
+            return True
+        if kind in ("integer", "number"):
+            value = next(primes)
+            tokens[str(value)] = path
+            return value
         token = f"zqtok{len(tokens) + 1:04d}zq"
         tokens[token] = path
         return token
 
-    return fill(schema, "", 0), tokens
+    return fill(schema, "", 0), tokens, unmeasured
 
 
 def _top(path: str) -> str:
@@ -94,8 +126,10 @@ def _top(path: str) -> str:
 
 
 class EveryDeclaredSpecFieldIsRendered(unittest.TestCase):
-    def check(self, schema: dict, renderers: dict, exempt: dict[str, str]) -> None:
-        spec, tokens = _probe(schema)
+    def check(self, schema: dict, renderers: dict, exempt: dict[str, str], kind: str = "") -> None:
+        spec, tokens, unmeasured = _probe_counting(schema)
+        if kind:
+            self.assertEqual(unmeasured, NOT_MEASURABLE[kind], "enum / boolean leaves moved")
         self.assertGreater(len(tokens), 20, "the probe filled the schema")
         declared = {_top(p) for p in tokens.values()}
         self.assertEqual(set(exempt) - declared, set(), "an exemption names no declared field")
@@ -112,12 +146,12 @@ class EveryDeclaredSpecFieldIsRendered(unittest.TestCase):
     def test_component_page(self):
         self.check(COMPONENT_SPEC_SCHEMA,
                    {"html": generate_component_html, "markdown": generate_component_markdown},
-                   COMPONENT_NOT_RENDERED)
+                   COMPONENT_NOT_RENDERED, "component")
 
     def test_screen_page(self):
         self.check(SCREEN_SPEC_SCHEMA,
                    {"html": generate_spec_html, "markdown": generate_spec_markdown},
-                   SCREEN_NOT_RENDERED)
+                   SCREEN_NOT_RENDERED, "screen")
 
 
 if __name__ == "__main__":
