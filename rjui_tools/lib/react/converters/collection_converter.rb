@@ -145,9 +145,9 @@ module RjuiTools
         # collection-attributes-declared-but-not-drawn-on-some-paths).
         def page_change_handler
           handler = attributes['onValueChange']
-          return nil unless attributes['paging'] == true && handler.is_a?(String) && has_binding?(handler)
+          return nil unless attributes['paging'] == true && string_event_handler?(handler)
 
-          extract_binding_property(handler)
+          resolve_handler_property(has_binding?(handler) ? handler : string_event_name(handler))
         end
 
         def build_collection_ref_attr

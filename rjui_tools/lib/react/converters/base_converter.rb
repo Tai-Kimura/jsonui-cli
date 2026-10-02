@@ -693,6 +693,21 @@ module RjuiTools
           value.is_a?(String) && value.include?('@{')
         end
 
+        # A handler named by an event attribute the SSoT declares with a
+        # "string" type (a Collection's onValueChange / onItemAppear, TabView
+        # onValueChange): the binding '@{name}' or the bare name, both naming
+        # the data's closure. Until jsonui-cli 1.9.6 these read the binding
+        # form only and dropped a bare name with no report (ticket
+        # bare-event-handler-is-dropped-without-a-warning).
+        def string_event_handler?(value)
+          has_binding?(value) || (value.is_a?(String) && value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/))
+        end
+
+        # The handler's name, as written: '@{name}' → name, 'name' → name.
+        def string_event_name(value)
+          has_binding?(value) ? extract_raw_binding_property(value).to_s.strip : value.strip
+        end
+
         # `convert_binding` returns a JSX-braced expression (`{data.x}`).
         # Inside an object literal or a call argument the braces have to come
         # off; only the outer pair, so a template literal's `${…}` survives.

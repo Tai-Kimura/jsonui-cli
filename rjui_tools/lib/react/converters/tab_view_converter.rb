@@ -289,7 +289,7 @@ module RjuiTools
         # it as declared too (get_event_handler_invocation).
         def tab_change_call(on_change, index)
           handler = attributes['onValueChange']
-          name = handler.is_a?(String) && has_binding?(handler) ? extract_raw_binding_property(handler).to_s.strip : nil
+          name = string_event_handler?(handler) ? string_event_name(handler) : nil
           classes = config['_data_classes'] || {}
           return "#{on_change}?.(#{index})" unless name && classes.key?(name)
 
@@ -305,8 +305,8 @@ module RjuiTools
           # are the definitions aliases for TabView.
           handler = attributes['onValueChange']
 
-          if handler && has_binding?(handler)
-            extract_binding_property(handler)
+          if string_event_handler?(handler)
+            resolve_handler_property(has_binding?(handler) ? handler : string_event_name(handler))
           else
             # Generate setter from the binding. Unbound, the tab state is the
             # implicit `selectedTabIndex` the data model declares — spelling it

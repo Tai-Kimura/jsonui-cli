@@ -1014,8 +1014,11 @@ module RjuiTools
 
         # onItemAppear: re-observes when the item list changes, because the
         # observer can only watch the cells that existed when it was created.
-        if (appear = collection[:on_item_appear]) && binding_expression?(appear)
-          prop = binding_data_path(appear)
+        # A bare name is the declared "string" form (ticket
+        # bare-event-handler-is-dropped-without-a-warning): until 1.9.6 only
+        # '@{name}' was read.
+        if (appear = collection[:on_item_appear]) && (binding_expression?(appear) || bare_handler_name?(appear))
+          prop = binding_expression?(appear) ? binding_data_path(appear) : "data.#{appear.strip}"
           dep = binding_expression?(collection[:items]) ? binding_data_path(collection[:items]) : ''
           lines << "  useEffect(() => observeCollectionItems(#{ref}.current, " \
                    "(index) => #{prop}?.(index)), [#{dep}]);"
@@ -1095,6 +1098,10 @@ module RjuiTools
 
       def binding_expression?(value)
         value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
+      end
+
+      def bare_handler_name?(value)
+        value.is_a?(String) && value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
       end
 
       def binding_data_path(value)
