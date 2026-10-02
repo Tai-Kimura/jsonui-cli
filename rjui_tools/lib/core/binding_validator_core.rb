@@ -128,6 +128,7 @@ module JsonUIShared
       @two_way_attrs_by_type = build_two_way_attrs(defs)
       @boolean_attrs_by_type = build_boolean_attrs(defs)
       @known_attrs_by_type = build_known_attrs(defs)
+      @binding_only_events_by_type = build_binding_only_events(defs)
     end
 
     # Validate all bindings in a JSON component tree
@@ -527,6 +528,7 @@ module JsonUIShared
         end
 
         check_value_for_bindings(value, key, component_type)
+        next if check_bare_event(value, key, component_type)
         check_selector_declared(value, key, component_type)
 
         # UIKit-era advisory: bindings need an id to reference the view.
@@ -803,6 +805,60 @@ module JsonUIShared
       onDragStart onDrop onDragEnter onDragLeave onDragOver
       valueChange onTextChange onChange onItemAppear
     ].freeze
+
+    # binding-bare-event (warning): a bare name given to an event attribute
+    # the SSoT declares binding-only — `type` "binding" with no "string"
+    # (onClick, onLongPress, Switch / Slider / Segment / CheckBox / Radio /
+    # SelectBox onValueChange, …). The declaration admits no bare name, and
+    # the generators dropped one with no report: measured 2026-10-02 over the
+    # 21 such attributes, 19 lose a bare name on at least one face (sjui,
+    # kjui, rjui), some leaving an ERROR comment in code that still builds.
+    # An attribute declared with "string" (onAppear, onTextChange, a
+    # Collection's onValueChange, …) takes a bare name as a declared form,
+    # so a bare name there is not this rule's — a generator that drops one
+    # is the defect (ticket bare-event-handler-is-dropped-without-a-warning).
+    #
+    # Only types the SSoT declares: an app's own component uses camelCase
+    # keys as props (the known gap binding_semantics.json names). Returns
+    # true when it reported, so the undeclared-selector advice (which asks
+    # for the bare name to be declared in data) is not given as well.
+    def check_bare_event(value, attribute_name, component_type)
+      return false unless value.is_a?(String)
+
+      name = value.strip
+      return false if name.empty? || name.include?('@{')
+
+      section = resolve_component_alias(component_type)
+      return false if section == 'common' || !@attribute_definitions[section].is_a?(Hash)
+      return false unless lookup_attr_set(@binding_only_events_by_type, component_type, attribute_name)
+
+      @warnings << "#{build_context_prefix}'#{component_type}.#{attribute_name}' is the bare name '#{name}', but the attribute " \
+                   "is declared binding-only: write '@{#{name}}'. The generated code calls nothing for a bare name " \
+                   "(binding-bare-event)."
+      true
+    end
+
+    # Per type, the event attributes declared binding-only: a declared key
+    # spelled on<Upper> (component_metadata: "events keys follow
+    # on[A-Z]") whose type has "binding" and no "string", with its aliases.
+    # By the key, not the alias: CheckBox.onSrc is selectedIcon's alias.
+    def build_binding_only_events(defs)
+      result = {}
+      defs.each do |component_type, attrs|
+        next unless attrs.is_a?(Hash)
+        matched = Set.new
+        attrs.each do |attr_name, attr_def|
+          next unless attr_def.is_a?(Hash) && attr_name.match?(/\Aon[A-Z]/)
+          types = Array(attr_def['type'])
+          next unless types.include?('binding') && !types.include?('string')
+
+          matched << attr_name
+          Array(attr_def['aliases']).each { |a| matched << a }
+        end
+        result[component_type] = matched unless matched.empty?
+      end
+      result
+    end
 
     def check_selector_declared(value, attribute_name, component_type)
       return unless report_undeclared_selectors?
