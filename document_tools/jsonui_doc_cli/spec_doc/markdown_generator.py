@@ -52,6 +52,37 @@ def _is_markdown(value) -> bool:
     return is_markdown(value)
 
 
+def _components_table_md(components: list) -> list[str]:
+    """The UI Components table: a row per component, children indented."""
+    lines = ["| Component | ID | Platform | Description | Initial State | Notes |",
+             "|---|---|---|---|---|---|"]
+
+    def row(comp: dict, depth: int) -> None:
+        indent = "&nbsp;&nbsp;" * depth + ("↳ " if depth else "")
+        lines.append(
+            f"| {indent}{comp.get('type', '-')} | `{comp.get('id', '-')}` | {_format_platform_md(comp.get('platform'))} "
+            f"| {_cell(comp.get('description', '-'))} | {comp.get('initialState', '-')} | {_cell(comp.get('notes', '-') or '-')} |"
+        )
+        for child in comp.get("children", []) or []:
+            if isinstance(child, dict):
+                row(child, depth + 1)
+
+    for comp in components:
+        if isinstance(comp, dict):
+            row(comp, 0)
+    return lines
+
+
+def _section_ref_md(ref) -> str:
+    """A Collection section's cell / header / footer reference, as text."""
+    if isinstance(ref, str):
+        return f"`{ref}`" if ref else "-"
+    if isinstance(ref, dict):
+        name = ref.get("layoutFile") or ref.get("layout") or ref.get("id") or ""
+        return f"`{name}`" if name else "-"
+    return "-"
+
+
 def _format_platform_md(value) -> str:
     """Format a platform filter (string or override dict) for markdown output."""
     if not value:
@@ -74,7 +105,7 @@ def _format_platform_md(value) -> str:
     return "-"
 
 
-from .html_generator import _sub_spec_sections
+from .html_generator import _sub_spec_sections, _ui_variable_default, layout_node_marks
 
 
 def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
@@ -119,9 +150,11 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
     lines.append("")
 
     # Metadata info
-    if metadata.get("author") or metadata.get("createdAt") or metadata.get("updatedAt"):
+    if metadata.get("author") or metadata.get("createdAt") or metadata.get("updatedAt") or metadata.get("layoutFile"):
         lines.append("| | |")
         lines.append("|---|---|")
+        if metadata.get("layoutFile"):
+            lines.append(f"| Layout File | `{metadata['layoutFile']}` |")
         if metadata.get("author"):
             lines.append(f"| Author | {metadata['author']} |")
         if metadata.get("createdAt"):
@@ -169,26 +202,7 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
     lines.append("")
     components = structure.get("components", [])
     if components:
-        lines.append("| Component | ID | Platform | Description | Initial State | Notes |")
-        lines.append("|---|---|---|---|---|---|")
-
-        def _render_component_row(comp: dict, depth: int = 0) -> None:
-            comp_type = comp.get("type", "-")
-            comp_id = comp.get("id", "-")
-            platform = _format_platform_md(comp.get("platform"))
-            desc = _cell(comp.get("description", "-"))
-            initial = comp.get("initialState", "-")
-            comp_notes = _cell(comp.get("notes", "-") or "-")
-            indent = "&nbsp;&nbsp;" * depth + ("↳ " if depth else "")
-            lines.append(
-                f"| {indent}{comp_type} | `{comp_id}` | {platform} | {desc} | {initial} | {comp_notes} |"
-            )
-            for child in comp.get("children", []) or []:
-                if isinstance(child, dict):
-                    _render_component_row(child, depth + 1)
-
-        for comp in components:
-            _render_component_row(comp)
+        lines.extend(_components_table_md(components))
         lines.append("")
 
     # Decorative elements
@@ -207,6 +221,15 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 f"| {elem.get('parentId', '-') or '-'} | {comp_ids or '-'} |"
             )
         lines.append("")
+        # Each element's components, as the UI Components table (the HTML
+        # page draws them the same way; until jsonui-cli 1.9.6 neither did).
+        for elem in decorative:
+            elem_components = [c for c in (elem.get("components") or []) if isinstance(c, dict)]
+            if elem_components:
+                lines.append(f"#### Components — {elem.get('id', '-')}")
+                lines.append("")
+                lines.extend(_components_table_md(elem_components))
+                lines.append("")
 
     # Wrapper views
     wrappers = structure.get("wrapperViews") or []
@@ -249,6 +272,20 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         lines.append("")
         lines.append(f"**Collection ID:** `{collection.get('id', '-')}`")
         lines.append("")
+        # What the HTML page draws for a Collection, in the same order.
+        if collection.get("description"):
+            lines.append(str(collection["description"]))
+            lines.append("")
+        if collection.get("cellIdProperty"):
+            lines.append(f"**Cell ID Property:** `{collection['cellIdProperty']}`")
+            lines.append("")
+        if collection.get("insets") not in (None, ""):
+            lines.append(f"**Insets:** `{collection['insets']}`")
+            lines.append("")
+        cell_classes = [c for c in (collection.get("cellClasses") or []) if isinstance(c, str)]
+        if cell_classes:
+            lines.append("**Cell Classes:** " + ", ".join(f"`{c}`" for c in cell_classes))
+            lines.append("")
 
         if collection.get("header"):
             lines.append("#### Header Layout")
@@ -274,6 +311,24 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             lines.append("```")
             lines.append("")
 
+        section_rows = [sec for sec in (collection.get("sections") or []) if isinstance(sec, dict)]
+        if section_rows:
+            lines.append("#### Sections")
+            lines.append("")
+            lines.append("| # | Index | Cell | Header | Footer | Columns | Description | Notes |")
+            lines.append("|---|---|---|---|---|---|---|---|")
+            for i, sec in enumerate(section_rows, start=1):
+                refs = [_section_ref_md(sec.get(k)) for k in ("cell", "header", "footer")]
+                index = sec["index"] if sec.get("index") is not None else "-"
+                columns = sec["columns"] if sec.get("columns") is not None else "-"
+                lines.append(f"| {i} | {index} | {refs[0]} | {refs[1]} | {refs[2]} | {columns} "
+                             f"| {_cell(sec.get('description') or '-')} | {_cell(sec.get('notes') or '-')} |")
+            lines.append("")
+
+        if collection.get("notes"):
+            lines.extend(_labelled("Notes", collection["notes"]))
+            lines.append("")
+
     # TabView Structure
     tab_view = structure.get("tabView")
     if tab_view:
@@ -281,12 +336,39 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         lines.append("")
         lines.append(f"**TabView ID:** `{tab_view.get('id', '-')}`")
         lines.append("")
-        lines.append("| Tab | Title | Layout File |")
-        lines.append("|---|---|---|")
+        lines.append("| Tab | Title | Layout File | View | Icon | Selected Icon |")
+        lines.append("|---|---|---|---|---|---|")
         for i, tab in enumerate(tab_view.get("tabs", []), 1):
             title = tab.get("title", "-")
             layout_file = tab.get("layoutFile", "-")
-            lines.append(f"| {i} | {title} | `{layout_file}` |")
+            lines.append(f"| {i} | {title} | `{layout_file}` | `{tab.get('view') or '-'}` "
+                         f"| `{tab.get('icon') or '-'}` | `{tab.get('selectedIcon') or '-'}` |")
+        lines.append("")
+
+    # Embeds (the HTML page's table; until jsonui-cli 1.9.6 neither page read them)
+    embeds = [e for e in (structure.get("embeds") or []) if isinstance(e, dict)]
+    if embeds:
+        lines.append("### Embeds")
+        lines.append("")
+        lines.append("| Region | Screen | Navigation | Params | Events |")
+        lines.append("|---|---|---|---|---|")
+        for emb in embeds:
+            params = ", ".join(f"{k}={v}" for k, v in (emb.get("params") or {}).items()) or "-"
+            events = ", ".join(f"{k}={v}" for k, v in (emb.get("events") or {}).items()) or "-"
+            lines.append(f"| `{emb.get('regionId', '-')}` | `{emb.get('screen', '-')}` "
+                         f"| {emb.get('navigationMode') or '-'} | {params} | {events} |")
+        lines.append("")
+
+    # Custom components (the HTML page lists them; the Markdown did not)
+    custom_components = [c for c in (structure.get("customComponents") or []) if isinstance(c, dict)]
+    if custom_components:
+        lines.append("### Custom Components")
+        lines.append("")
+        lines.append("| Component | Specification | Description |")
+        lines.append("|---|---|---|")
+        for cc in custom_components:
+            spec_file = cc.get("specFile") or "-"
+            lines.append(f"| {cc.get('name', '-')} | `{spec_file}` | {_cell(cc.get('description', '-') or '-')} |")
         lines.append("")
 
     # Data Flow
@@ -348,6 +430,9 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                 repo_name = repo.get("name", "-")
                 lines.append(f"#### {repo_name}")
                 lines.append("")
+                if repo.get("description"):
+                    lines.append(str(repo["description"]))
+                    lines.append("")
                 methods = repo.get("methods", [])
                 if methods:
                     for method in methods:
@@ -439,14 +524,14 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
         if variables:
             lines.append("### UI Data Variables")
             lines.append("")
-            lines.append("| Variable Name | Type | Description | Notes |")
-            lines.append("|---|---|---|---|")
+            lines.append("| Variable Name | Type | Default | Description | Notes |")
+            lines.append("|---|---|---|---|---|")
             for var in variables:
                 var_name = var.get("name", "-")
                 var_type = var.get("type", "-")
                 desc = _cell(var.get("description", "-"))
                 var_notes = _cell(var.get("notes", "-") or "-")
-                lines.append(f"| `{var_name}` | {var_type} | {desc} | {var_notes} |")
+                lines.append(f"| `{var_name}` | {var_type} | `{_ui_variable_default(var)}` | {desc} | {var_notes} |")
             lines.append("")
 
         # View-local Event Handlers (ViewModel public API is under dataFlow.viewModel)
@@ -480,6 +565,8 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
                     var_name = effect.get("variableName")
                     suffix = f" [variable: {var_name}]" if var_name else ""
                     lines.append(f"  - {element}: {state}{suffix}")
+                if rule.get("notes"):
+                    lines.append(f"  Notes: {rule['notes']}")
                 lines.append("")
             lines.append("```")
             lines.append("")
@@ -689,38 +776,23 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
 
 
 def _render_layout_tree(layout: dict, depth: int) -> list[str]:
-    """Render layout structure as tree lines."""
-    lines = []
-    root = layout.get("root", "root")
-    children = layout.get("children", [])
+    """Render layout structure as tree lines, every level (as the HTML page's
+    tree; until jsonui-cli 1.9.6 the Markdown stopped at the second level)."""
+    lines = [("│   " * depth) + str(layout.get("root", "root")) + layout_node_marks(layout)]
 
-    indent = "│   " * depth
-    lines.append(f"{indent}{root}")
+    def render(children: list, prefix: str) -> None:
+        for i, child in enumerate(children):
+            is_last = i == len(children) - 1
+            branch = "└── " if is_last else "├── "
+            if isinstance(child, str):
+                lines.append(f"{prefix}{branch}{child}")
+            elif isinstance(child, dict):
+                lines.append(f"{prefix}{branch}{child.get('id', '?')}{layout_node_marks(child)}")
+                nested = child.get("children") or []
+                if nested:
+                    render(nested, prefix + ("    " if is_last else "│   "))
 
-    for i, child in enumerate(children):
-        is_last = i == len(children) - 1
-        prefix = "└── " if is_last else "├── "
-        child_indent = "│   " * depth + prefix
-
-        if isinstance(child, str):
-            lines.append(f"{child_indent}{child}")
-        elif isinstance(child, dict):
-            child_id = child.get("id", "?")
-            child_children = child.get("children", [])
-            lines.append(f"{child_indent}{child_id}")
-
-            # Render nested children
-            if child_children:
-                nested_indent = "│   " * (depth + 1) if not is_last else "    " * (depth + 1)
-                for j, nested in enumerate(child_children):
-                    nested_is_last = j == len(child_children) - 1
-                    nested_prefix = "└── " if nested_is_last else "├── "
-
-                    if isinstance(nested, str):
-                        lines.append(f"{nested_indent}{nested_prefix}{nested}")
-                    elif isinstance(nested, dict):
-                        lines.append(f"{nested_indent}{nested_prefix}{nested.get('id', '?')}")
-
+    render(layout.get("children", []) or [], "│   " * depth)
     return lines
 
 
