@@ -1202,10 +1202,17 @@ module SjuiTools
             current_page_prop = extract_binding_property(@component['currentPage'])
           end
 
-          # TabView with optional selection binding. A scrollTo pages by the
-          # selection (paging_scroll_selection): the bound currentPage, or a
-          # page state of the pager's own when there is none.
-          page_state = paging_scroll_selection(current_page_prop)
+          # Page-change callback. onValueChange is the canonical name;
+          # onValueChanged / onPageChanged are its definitions aliases (L0
+          # fallback only).
+          page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
+          page_changed_handler = nil unless page_changed_handler && is_binding?(page_changed_handler)
+
+          # TabView with optional selection binding. A scrollTo and a
+          # page-change callback read the selection (paging_scroll_selection):
+          # the bound currentPage, or a page state of the pager's own when
+          # there is none.
+          page_state = paging_scroll_selection(current_page_prop, page_changed_handler)
           if current_page_prop
             add_line "TabView(selection: $data.#{current_page_prop}) {"
           elsif page_state
@@ -1271,15 +1278,19 @@ module SjuiTools
           end
           add_line "}"
           add_modifier_line ".tabViewStyle(.page(indexDisplayMode: .never))"
-          generate_paging_scroll_to(current_page_prop ? "data.#{current_page_prop}" : page_state) if has_scroll_to?
+          selection = current_page_prop ? "data.#{current_page_prop}" : page_state
+          generate_paging_scroll_to(selection) if has_scroll_to?
 
-          # Page-change callback - guard against feedback loop.
-          # onValueChange is the canonical name; onValueChanged /
-          # onPageChanged are its definitions aliases (L0 fallback only).
-          page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
-          if page_changed_handler && is_binding?(page_changed_handler) && current_page_prop
+          # The page-change callback is called with the page the selection
+          # turns to — the bound currentPage, else the pager's own page state,
+          # as KotlinJsonUI calls it from the pager whether or not a
+          # currentPage is bound and SwiftJsonUI Dynamic from its internal
+          # page. Until jsonui-cli 1.9.6 it was emitted only with a currentPage
+          # binding, so without one the callback was dropped with no warning
+          # (ticket sjui-pager-page-change-callback-requires-currentpage-binding).
+          if page_changed_handler
             handler_call = get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
-            add_modifier_line ".onChange(of: data.#{current_page_prop}) { oldValue, newValue in"
+            add_modifier_line ".onChange(of: #{selection}) { oldValue, newValue in"
             indent do
               add_line "guard oldValue != newValue else { return }"
               add_line handler_call
@@ -1301,11 +1312,13 @@ module SjuiTools
         # the drawn sections; a String the first page whose key it is). It
         # needs the TabView's selection: the bound currentPage, else a state
         # of its own — `<id>ScrollPage`, 0 as the TabView starts — returned
-        # here, nil when there is no scrollTo or a currentPage is bound. Until
+        # here, nil when a currentPage is bound or neither a scrollTo nor a
+        # bound page-change callback reads it (the callback has read it since
+        # jsonui-cli 1.9.6). Until
         # jsonui-cli 1.9.0 the pager drew no scrollTo (and, with no currentPage,
         # no selection at all).
-        def paging_scroll_selection(current_page_prop)
-          return nil if current_page_prop || !has_scroll_to?
+        def paging_scroll_selection(current_page_prop, page_changed_handler = nil)
+          return nil if current_page_prop || (!has_scroll_to? && !page_changed_handler)
 
           name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('collection'))
           state = "#{name}ScrollPage"
