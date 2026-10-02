@@ -2018,8 +2018,11 @@ def generate_component_html(
     description = metadata.get("description", "")
     category = metadata.get("category", "other")
 
-    props = spec_data.get("props", {}).get("items", [])
-    slots = spec_data.get("slots", {}).get("items", [])
+    props_section = spec_data.get("props", {})
+    slots_section = spec_data.get("slots", {})
+    props = props_section.get("items", [])
+    slots = slots_section.get("items", [])
+    notes = spec_data.get("notes", [])
     structure = spec_data.get("structure", {})
     state_mgmt = spec_data.get("stateManagement", {})
     usage = spec_data.get("usage", {})
@@ -2057,11 +2060,17 @@ def generate_component_html(
     parts.append(prose_block(description))
 
     # Props section
-    if props:
+    # Notes, where the component schema declares them (the top level, each
+    # section and each row of props / slots / structure components /
+    # internal states / exposed events), as the screen page renders its own:
+    # a Notes column in a table, a "Notes:" block under a section, a Notes
+    # section for the top level. Until jsonui-cli 1.9.6 the component page
+    # rendered none of them (ticket doc-component-html-drops-every-notes-field).
+    if props or props_section.get("notes"):
         parts.append('<section id="props">')
         parts.append('<h2>Props</h2>')
         parts.append('<table>')
-        parts.append('<thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>')
+        parts.append('<thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th><th>Notes</th></tr></thead>')
         parts.append('<tbody>')
         for prop in props:
             required = prop.get("required", True)
@@ -2073,54 +2082,64 @@ def generate_component_html(
             parts.append(f'<td class="type">{_e(str(prop.get("type", "")))}</td>')
             parts.append(f'<td>{badge}</td>')
             parts.append(f'<td class="default">{_e(str(default_val))}</td>')
-            parts.append(f'<td>{_p(prop.get("description", ""))}</td></tr>')
+            parts.append(f'<td>{_p(prop.get("description", ""))}</td>')
+            parts.append(f'<td>{_p(prop.get("notes") or "-")}</td></tr>')
         parts.append('</tbody></table>')
+        if props_section.get("notes"):
+            parts.append(labelled_block("Notes", props_section["notes"]))
         parts.append('</section>')
 
     # Slots section
-    if slots:
+    if slots or slots_section.get("notes"):
         parts.append('<section id="slots">')
         parts.append('<h2>Slots</h2>')
         parts.append('<table>')
-        parts.append('<thead><tr><th>Name</th><th>Required</th><th>Description</th></tr></thead>')
+        parts.append('<thead><tr><th>Name</th><th>Required</th><th>Description</th><th>Notes</th></tr></thead>')
         parts.append('<tbody>')
         for slot in slots:
             required = slot.get("required", False)
             badge = '<span class="badge badge-required">Required</span>' if required else '<span class="badge badge-optional">Optional</span>'
             parts.append(f'<tr><td><code>{_e(str(slot.get("name", "")))}</code></td>')
             parts.append(f'<td>{badge}</td>')
-            parts.append(f'<td>{_p(slot.get("description", ""))}</td></tr>')
+            parts.append(f'<td>{_p(slot.get("description", ""))}</td>')
+            parts.append(f'<td>{_p(slot.get("notes") or "-")}</td></tr>')
         parts.append('</tbody></table>')
+        if slots_section.get("notes"):
+            parts.append(labelled_block("Notes", slots_section["notes"]))
         parts.append('</section>')
 
     # Structure section
     components = structure.get("components", [])
-    if components:
+    if components or structure.get("notes"):
         parts.append('<section id="structure">')
         parts.append('<h2>Structure</h2>')
-        parts.append('<h3>Components</h3>')
-        parts.append('<table>')
-        parts.append('<thead><tr><th>Type</th><th>ID</th><th>Description</th></tr></thead>')
-        parts.append('<tbody>')
-        for comp in components:
-            parts.append(f'<tr><td><code>{_e(str(comp.get("type", "")))}</code></td>')
-            parts.append(f'<td><code>{_e(str(comp.get("id", "")))}</code></td>')
-            parts.append(f'<td>{_p(comp.get("description", ""))}</td></tr>')
-        parts.append('</tbody></table>')
+        if components:
+            parts.append('<h3>Components</h3>')
+            parts.append('<table>')
+            parts.append('<thead><tr><th>Type</th><th>ID</th><th>Description</th><th>Notes</th></tr></thead>')
+            parts.append('<tbody>')
+            for comp in components:
+                parts.append(f'<tr><td><code>{_e(str(comp.get("type", "")))}</code></td>')
+                parts.append(f'<td><code>{_e(str(comp.get("id", "")))}</code></td>')
+                parts.append(f'<td>{_p(comp.get("description", ""))}</td>')
+                parts.append(f'<td>{_p(comp.get("notes") or "-")}</td></tr>')
+            parts.append('</tbody></table>')
+        if structure.get("notes"):
+            parts.append(labelled_block("Notes", structure["notes"]))
         parts.append('</section>')
 
     # State Management section
     internal_states = state_mgmt.get("internalStates", [])
     exposed_events = state_mgmt.get("exposedEvents", [])
 
-    if internal_states or exposed_events:
+    if internal_states or exposed_events or state_mgmt.get("notes"):
         parts.append('<section id="state-management">')
         parts.append('<h2>State Management</h2>')
 
         if internal_states:
             parts.append('<h3>Internal States</h3>')
             parts.append('<table>')
-            parts.append('<thead><tr><th>Name</th><th>Type</th><th>Initial Value</th><th>Description</th></tr></thead>')
+            parts.append('<thead><tr><th>Name</th><th>Type</th><th>Initial Value</th><th>Description</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for state in internal_states:
                 initial = state.get("initialValue", "-")
@@ -2129,29 +2148,33 @@ def generate_component_html(
                 parts.append(f'<tr><td><code>{_e(str(state.get("name", "")))}</code></td>')
                 parts.append(f'<td class="type">{_e(str(state.get("type", "")))}</td>')
                 parts.append(f'<td class="default">{_e(str(initial))}</td>')
-                parts.append(f'<td>{_p(state.get("description", ""))}</td></tr>')
+                parts.append(f'<td>{_p(state.get("description", ""))}</td>')
+                parts.append(f'<td>{_p(state.get("notes") or "-")}</td></tr>')
             parts.append('</tbody></table>')
 
         if exposed_events:
             parts.append('<h3>Exposed Events</h3>')
             parts.append('<table>')
-            parts.append('<thead><tr><th>Name</th><th>Parameters</th><th>Description</th></tr></thead>')
+            parts.append('<thead><tr><th>Name</th><th>Parameters</th><th>Description</th><th>Notes</th></tr></thead>')
             parts.append('<tbody>')
             for event in exposed_events:
                 params = event.get("parameters", [])
                 param_str = ", ".join([f"{p.get('name', '')}: {p.get('type', '')}" for p in params]) if params else "-"
                 parts.append(f'<tr><td><code>{_e(str(event.get("name", "")))}</code></td>')
                 parts.append(f'<td class="type">{_e(param_str)}</td>')
-                parts.append(f'<td>{_p(event.get("description", ""))}</td></tr>')
+                parts.append(f'<td>{_p(event.get("description", ""))}</td>')
+                parts.append(f'<td>{_p(event.get("notes") or "-")}</td></tr>')
             parts.append('</tbody></table>')
 
+        if state_mgmt.get("notes"):
+            parts.append(labelled_block("Notes", state_mgmt["notes"]))
         parts.append('</section>')
 
     # Usage section
     example = usage.get("example")
     used_in_screens = usage.get("usedInScreens", [])
 
-    if example or used_in_screens:
+    if example or used_in_screens or usage.get("notes"):
         parts.append('<section id="usage">')
         parts.append('<h2>Usage</h2>')
 
@@ -2166,6 +2189,17 @@ def generate_component_html(
                 parts.append(f'<li>{_e(screen)}</li>')
             parts.append('</ul>')
 
+        if usage.get("notes"):
+            parts.append(labelled_block("Notes", usage["notes"]))
+        parts.append('</section>')
+
+    if notes:
+        parts.append('<section id="notes">')
+        parts.append('<h2>Notes</h2>')
+        parts.append('<ul>')
+        for note in notes:
+            parts.append(f'<li>{_p(note)}</li>')
+        parts.append('</ul>')
         parts.append('</section>')
 
     parts.append('</div>')  # container
@@ -2186,7 +2220,7 @@ def generate_component_markdown(spec_data: dict) -> str:
     # The table-cell rule of the screen page's Markdown, not a second copy:
     # a raw newline in a cell ends the row. Imported here because
     # markdown_generator imports this module.
-    from .markdown_generator import _cell
+    from .markdown_generator import _cell, _labelled
 
     metadata = spec_data.get("metadata", {})
     name = metadata.get("name", "Component")
@@ -2194,8 +2228,14 @@ def generate_component_markdown(spec_data: dict) -> str:
     description = metadata.get("description", "")
     category = metadata.get("category", "other")
 
-    props = spec_data.get("props", {}).get("items", [])
-    slots = spec_data.get("slots", {}).get("items", [])
+    props_section = spec_data.get("props", {})
+    slots_section = spec_data.get("slots", {})
+    props = props_section.get("items", [])
+    slots = slots_section.get("items", [])
+    notes = spec_data.get("notes", [])
+
+    def labelled_notes(value) -> str:
+        return "\n".join(_labelled("Notes", value)) + "\n\n"
     structure = spec_data.get("structure", {})
     state_mgmt = spec_data.get("stateManagement", {})
     usage = spec_data.get("usage", {})
@@ -2204,73 +2244,85 @@ def generate_component_markdown(spec_data: dict) -> str:
     md += f"**Category:** {category}\n\n"
     md += f"{description}\n\n"
 
-    # Props
-    if props:
+    # Props (notes as the HTML page renders them — see generate_component_html)
+    if props or props_section.get("notes"):
         md += "## Props\n\n"
-        md += "| Name | Type | Required | Default | Description |\n"
-        md += "|------|------|----------|---------|-------------|\n"
+    if props:
+        md += "| Name | Type | Required | Default | Description | Notes |\n"
+        md += "|------|------|----------|---------|-------------|-------|\n"
         for prop in props:
             required = "Yes" if prop.get("required", True) else "No"
             default_val = prop.get("default", "-")
             if default_val is None:
                 default_val = "null"
-            md += f"| `{prop.get('name', '')}` | `{prop.get('type', '')}` | {required} | `{default_val}` | {_cell(prop.get('description', ''))} |\n"
+            md += f"| `{prop.get('name', '')}` | `{prop.get('type', '')}` | {required} | `{default_val}` | {_cell(prop.get('description', ''))} | {_cell(prop.get('notes') or '-')} |\n"
         md += "\n"
+    if props_section.get("notes"):
+        md += labelled_notes(props_section["notes"])
 
     # Slots
-    if slots:
+    if slots or slots_section.get("notes"):
         md += "## Slots\n\n"
-        md += "| Name | Required | Description |\n"
-        md += "|------|----------|-------------|\n"
+    if slots:
+        md += "| Name | Required | Description | Notes |\n"
+        md += "|------|----------|-------------|-------|\n"
         for slot in slots:
             required = "Yes" if slot.get("required", False) else "No"
-            md += f"| `{slot.get('name', '')}` | {required} | {_cell(slot.get('description', ''))} |\n"
+            md += f"| `{slot.get('name', '')}` | {required} | {_cell(slot.get('description', ''))} | {_cell(slot.get('notes') or '-')} |\n"
         md += "\n"
+    if slots_section.get("notes"):
+        md += labelled_notes(slots_section["notes"])
 
     # Structure
     components = structure.get("components", [])
-    if components:
+    if components or structure.get("notes"):
         md += "## Structure\n\n"
+    if components:
         md += "### Components\n\n"
-        md += "| Type | ID | Description |\n"
-        md += "|------|----|--------------|\n"
+        md += "| Type | ID | Description | Notes |\n"
+        md += "|------|----|-------------|-------|\n"
         for comp in components:
-            md += f"| `{comp.get('type', '')}` | `{comp.get('id', '')}` | {_cell(comp.get('description', ''))} |\n"
+            md += f"| `{comp.get('type', '')}` | `{comp.get('id', '')}` | {_cell(comp.get('description', ''))} | {_cell(comp.get('notes') or '-')} |\n"
         md += "\n"
+    if structure.get("notes"):
+        md += labelled_notes(structure["notes"])
 
     # State Management
     internal_states = state_mgmt.get("internalStates", [])
     exposed_events = state_mgmt.get("exposedEvents", [])
 
-    if internal_states or exposed_events:
+    if internal_states or exposed_events or state_mgmt.get("notes"):
         md += "## State Management\n\n"
 
         if internal_states:
             md += "### Internal States\n\n"
-            md += "| Name | Type | Initial Value | Description |\n"
-            md += "|------|------|---------------|-------------|\n"
+            md += "| Name | Type | Initial Value | Description | Notes |\n"
+            md += "|------|------|---------------|-------------|-------|\n"
             for state in internal_states:
                 initial = state.get("initialValue", "-")
                 if initial is None:
                     initial = "null"
-                md += f"| `{state.get('name', '')}` | `{state.get('type', '')}` | `{initial}` | {_cell(state.get('description', ''))} |\n"
+                md += f"| `{state.get('name', '')}` | `{state.get('type', '')}` | `{initial}` | {_cell(state.get('description', ''))} | {_cell(state.get('notes') or '-')} |\n"
             md += "\n"
 
         if exposed_events:
             md += "### Exposed Events\n\n"
-            md += "| Name | Parameters | Description |\n"
-            md += "|------|------------|-------------|\n"
+            md += "| Name | Parameters | Description | Notes |\n"
+            md += "|------|------------|-------------|-------|\n"
             for event in exposed_events:
                 params = event.get("parameters", [])
                 param_str = ", ".join([f"{p.get('name', '')}: {p.get('type', '')}" for p in params]) if params else "-"
-                md += f"| `{event.get('name', '')}` | `{param_str}` | {_cell(event.get('description', ''))} |\n"
+                md += f"| `{event.get('name', '')}` | `{param_str}` | {_cell(event.get('description', ''))} | {_cell(event.get('notes') or '-')} |\n"
             md += "\n"
+
+        if state_mgmt.get("notes"):
+            md += labelled_notes(state_mgmt["notes"])
 
     # Usage
     example = usage.get("example")
     used_in_screens = usage.get("usedInScreens", [])
 
-    if example or used_in_screens:
+    if example or used_in_screens or usage.get("notes"):
         md += "## Usage\n\n"
 
         if example:
@@ -2282,5 +2334,15 @@ def generate_component_markdown(spec_data: dict) -> str:
             for screen in used_in_screens:
                 md += f"- {screen}\n"
             md += "\n"
+
+        if usage.get("notes"):
+            md += labelled_notes(usage["notes"])
+
+    if notes:
+        md += "## Notes\n\n"
+        for note in notes:
+            # Continuation lines indented, as the screen page's Notes list.
+            md += "- " + str(note).replace("\n", "\n  ") + "\n"
+        md += "\n"
 
     return md
