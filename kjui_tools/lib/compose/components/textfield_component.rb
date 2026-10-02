@@ -638,8 +638,14 @@ module KjuiTools
           # 1.9.6 the value was written as it stood, so the binding form put
           # `data.@{h}?.invoke()` in the file — a syntax error (ticket
           # kjui-textfield-focus-events-write-the-binding-braces).
-          %w[onFocus onBlur onBeginEditing onEndEditing].each do |event|
-            handler = json_data[event]
+          # Each read is spelled out: `jui conformance coverage` counts an
+          # attribute as read only by a literal `json_data['x']`, and a
+          # computed key (`json_data[event]`) made the four read as unwired
+          # Android gaps.
+          {
+            'onFocus' => json_data['onFocus'], 'onBlur' => json_data['onBlur'],
+            'onBeginEditing' => json_data['onBeginEditing'], 'onEndEditing' => json_data['onEndEditing']
+          }.each do |event, handler|
             # A blank one ("", "   ", "@{}") names no method: no call
             # (shared/core/tap_accessibility.rb, the one predicate).
             next unless JsonUIShared::TapAccessibility.names_a_method?(handler)
