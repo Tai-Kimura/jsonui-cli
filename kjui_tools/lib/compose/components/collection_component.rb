@@ -632,6 +632,19 @@ module KjuiTools
         # scroll is in flight, the landing told once (pager_programmatic_scroll).
         # Through jsonui-cli 1.9.5 a scrollTo from 0 to 6 of 7 pages told the
         # callback [5, 6] and wrote 5 and 6 back (measured on a device).
+        # An index handler's call (onItemAppear's cell index, the pager's
+        # page) as its declaration takes it — ModifierBuilder's
+        # get_event_handler_invocation: `()` with nothing, one parameter with
+        # the index. These sites wrote `invoke(index)` by hand, which a
+        # `() -> Void` handler did not compile against
+        # (kjui-collection-index-handlers-ignore-the-declared-shape).
+        # `receiver` replaces `data.<name>` for a handler held elsewhere (the
+        # pager's rememberUpdatedState).
+        def self.index_handler_call(name, json_data, index_expr, receiver: nil)
+          call = Helpers::ModifierBuilder.get_event_handler_invocation("@{#{name}}", Helpers::ModifierBuilder.view_id(json_data), index_expr)
+          receiver ? call.sub("data.#{name}?", "#{receiver}?") : call
+        end
+
         def self.pager_scroll_code(json_data, depth, legs = nil)
           call = scroll_call(json_data, ->(animate) { "pagerState.#{animate ? 'animateScrollToPage' : 'scrollToPage'}(index)" })
           code = indent('if (index !in 0 until pageCount) return@LaunchedEffect', depth) + "\n"
@@ -664,7 +677,10 @@ module KjuiTools
           if page_prop
             code += indent("if (data.#{page_prop} != pagerState.currentPage) viewModel.updateData(mapOf(\"#{page_prop}\" to pagerState.currentPage))", depth) + "\n"
           end
-          code += indent('if (pagerState.currentPage != from) pageChangeHandler?.invoke(pagerState.currentPage)', depth) + "\n" if handled
+          if handled
+            call = index_handler_call(legs[:page_callback], legs[:node], 'pagerState.currentPage', receiver: 'pageChangeHandler')
+            code += indent("if (pagerState.currentPage != from) #{call}", depth) + "\n"
+          end
           code
         end
 
@@ -1357,7 +1373,7 @@ module KjuiTools
           code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth)
           on_item_appear = json_data['onItemAppear']
           if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
-            code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth)
+            code += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", depth)
           end
           closers = 0
           if (chrome = chrome_open(json_data, required_imports))
@@ -1685,7 +1701,7 @@ module KjuiTools
                 # onItemAppear callback
                 on_item_appear = json_data['onItemAppear']
                 if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
-                  code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth + 4)
+                  code += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", depth + 4)
                 end
                 # Wrap cell in Box for alignment
                 code += "\n" + indent("Box(", depth + 4)
@@ -1861,7 +1877,8 @@ module KjuiTools
           # outlive the composition they start in, and through 1.9.5 they
           # called the handler the data held then — a handler the ViewModel
           # set after the pager appeared was never called (measured).
-          pager_legs = (page_prop || page_callback_prop) && { page_prop: page_prop, handled: !page_callback_prop.nil? }
+          pager_legs = (page_prop || page_callback_prop) && { page_prop: page_prop, handled: !page_callback_prop.nil?,
+                                                              page_callback: page_callback_prop, node: json_data }
           if pager_legs
             code += indent("var programmaticScroll by remember { mutableStateOf(false) }", depth) + "\n"
           end
@@ -1894,7 +1911,7 @@ module KjuiTools
             code += indent("snapshotFlow { pagerState.currentPage }.drop(1).collect { page ->", depth + 1) + "\n"
             code += indent("if (!programmaticScroll) {", depth + 2) + "\n"
             code += indent("viewModel.updateData(mapOf(\"#{page_prop}\" to page))", depth + 3) + "\n" if page_prop
-            code += indent("pageChangeHandler?.invoke(page)", depth + 3) + "\n" if page_callback_prop
+            code += indent(index_handler_call(page_callback_prop, json_data, 'page', receiver: 'pageChangeHandler'), depth + 3) + "\n" if page_callback_prop
             code += indent("}", depth + 2) + "\n"
             code += indent("}", depth + 1) + "\n"
             code += indent("}", depth) + "\n"
@@ -1932,7 +1949,7 @@ module KjuiTools
           on_item_appear = json_data['onItemAppear']
           if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
             required_imports&.add(:launched_effect)
-            code += "\n" + indent("LaunchedEffect(Unit) { data.#{appear_name}?.invoke(page) }", depth + 1)
+            code += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(appear_name, json_data, 'page')} }", depth + 1)
           end
 
           # Render cell content
@@ -3154,7 +3171,7 @@ module KjuiTools
 
             on_item_appear = json_data['onItemAppear']
             if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
-              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth + 3)
+              out += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", depth + 3)
             end
 
             out += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 3)
@@ -3265,7 +3282,7 @@ module KjuiTools
             out += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 2)
             on_item_appear = json_data['onItemAppear']
             if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
-              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth + 3)
+              out += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", depth + 3)
             end
 
             out += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 3)
