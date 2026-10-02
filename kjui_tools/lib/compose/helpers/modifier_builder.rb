@@ -1913,6 +1913,19 @@ module KjuiTools
           value.is_a?(String) && value.match?(/^@\{.+\}$/)
         end
 
+        # The handler named by an event attribute the SSoT declares with a
+        # "string" type (a Collection's onValueChange / onItemAppear, TabView
+        # onValueChange): '@{name}' or the bare name, both naming the data's
+        # closure; nil for anything else. Until jsonui-cli 1.9.6 these read the
+        # binding form only and dropped a bare name with no report (ticket
+        # bare-event-handler-is-dropped-without-a-warning).
+        def self.string_event_name(value)
+          return nil unless value.is_a?(String)
+          return value.match(/\A@\{([^}]+)\}\z/)&.captures&.first&.strip if value.start_with?('@{')
+
+          value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/) ? value.strip : nil
+        end
+
         # Extract property name from binding expression
         # "@{propertyName}" -> "propertyName"
         def self.extract_binding_property(value)

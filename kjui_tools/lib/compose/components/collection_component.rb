@@ -1134,7 +1134,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # onItemAppear support - callback with index when cell appears
-          if json_data['onItemAppear'] && json_data['onItemAppear'].match(/@\{([^}]+)\}/)
+          if Helpers::ModifierBuilder.string_event_name(json_data['onItemAppear'])
             required_imports&.add(:launched_effect)
           end
 
@@ -1356,8 +1356,8 @@ module KjuiTools
           code += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth)
           code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth)
           on_item_appear = json_data['onItemAppear']
-          if on_item_appear.is_a?(String) && on_item_appear.match(/@\{([^}]+)\}/)
-            code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth)
+          if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
+            code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth)
           end
           closers = 0
           if (chrome = chrome_open(json_data, required_imports))
@@ -1684,8 +1684,8 @@ module KjuiTools
                 end
                 # onItemAppear callback
                 on_item_appear = json_data['onItemAppear']
-                if on_item_appear && on_item_appear.match(/@\{([^}]+)\}/)
-                  code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth + 4)
+                if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
+                  code += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth + 4)
                 end
                 # Wrap cell in Box for alignment
                 code += "\n" + indent("Box(", depth + 4)
@@ -1930,9 +1930,9 @@ module KjuiTools
 
           # onItemAppear callback for paging
           on_item_appear = json_data['onItemAppear']
-          if on_item_appear && on_item_appear.match(/@\{([^}]+)\}/)
+          if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
             required_imports&.add(:launched_effect)
-            code += "\n" + indent("LaunchedEffect(Unit) { data.#{$1}?.invoke(page) }", depth + 1)
+            code += "\n" + indent("LaunchedEffect(Unit) { data.#{appear_name}?.invoke(page) }", depth + 1)
           end
 
           # Render cell content
@@ -3153,8 +3153,8 @@ module KjuiTools
             end
 
             on_item_appear = json_data['onItemAppear']
-            if on_item_appear && on_item_appear.match(/@\{([^}]+)\}/)
-              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth + 3)
+            if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
+              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth + 3)
             end
 
             out += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 3)
@@ -3264,8 +3264,8 @@ module KjuiTools
             out += "\n" + indent(unique_keys_line(data_access, cell_id_prop, "eagerKeys#{index}"), depth + 2) if cell_id_prop && !auto_tracking
             out += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 2)
             on_item_appear = json_data['onItemAppear']
-            if on_item_appear && on_item_appear.match(/@\{([^}]+)\}/)
-              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only($1)}?.invoke(cellIndex) }", depth + 3)
+            if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
+              out += "\n" + indent("LaunchedEffect(Unit) { data.#{Helpers::BindingExpression.path_only(appear_name)}?.invoke(cellIndex) }", depth + 3)
             end
 
             out += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 3)

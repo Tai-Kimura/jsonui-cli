@@ -63,7 +63,7 @@ module KjuiTools
           # the user's tab choice, as web's tab button calls it. Compose read
           # no handler at all: a TabView's onValueChange was never called.
           handler = Core::Normalization.attr_lookup(json_data, 'onValueChange', 'onTabChange', 'onPageChanged')
-          tab_change = if handler.is_a?(String) && Helpers::ModifierBuilder.is_binding?(handler)
+          tab_change = if Helpers::ModifierBuilder.string_event_name(handler)
                          view_id = Helpers::ModifierBuilder.view_id(json_data)
                          ->(index) { Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, index.to_s) }
                        end
