@@ -53,13 +53,25 @@ RSpec.describe 'sjui: a scaffolded cell ViewModel reads its data' do
     end
   end
 
-  it 'the View compares and reloads by the same key' do
+  it 'the View compares and reloads by the same key, and type-checks with its ViewModel' do
     Dir.mktmpdir do |dir|
       scaffold(dir)
       view = File.read(File.join(dir, 'View', 'ProbeCell', 'ProbeCellView.swift'))
       expect(view).to include('self.cellKey = ProbeCellViewModel.cellKey(of: data)',
                               'lhs.cellKey == rhs.cellKey', '.onChange(of: cellKey)')
       expect(view).not_to include('cellId')
+
+      # The GeneratedView is the build's, from the layout; here a stand-in
+      # with the same `data:` binding the View hands it.
+      sources = [File.join(dir, 'Data', 'ProbeCellData.swift'), File.join(dir, 'ViewModel', 'ProbeCellViewModel.swift'),
+                 File.join(dir, 'View', 'ProbeCell', 'ProbeCellView.swift')]
+      code = sources.map { |p| File.read(p).gsub(/^import SwiftJsonUI\n/, '') }.join("\n") + <<~SWIFT
+        struct ProbeCellGeneratedView: View {
+            @Binding var data: ProbeCellData
+            var body: some View { Text(data.title) }
+        }
+      SWIFT
+      expect(code).to compile_as_swift
     end
   end
 end
