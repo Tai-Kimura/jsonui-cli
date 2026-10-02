@@ -6,6 +6,7 @@ require 'set'
 require_relative 'layout_variant'
 require_relative 'type_synonyms'
 require_relative 'data_item_platform'
+require_relative 'data_class_conflict'
 
 module JsonUIShared
   # Shared body of the sjui/kjui Data-model updaters: walks every layout
@@ -186,6 +187,8 @@ module JsonUIShared
       event_bindings = extract_event_bindings(expanded_data)
 
       # Extract data properties from expanded JSON (pass event_bindings for Event type conversion)
+      @declared_data_properties = {}.compare_by_identity
+      @data_class_conflicts = JsonUIShared::DataClassConflict.new(@current_layout)
       data_properties = extract_data_properties(expanded_data, [], event_bindings)
 
       # A scrollTo's class is the one its data declares: cellIdProperty
@@ -207,6 +210,26 @@ module JsonUIShared
 
       # Update the Data model file (always in root Data directory)
       update_data_file(base_name, data_properties, onclick_actions)
+    end
+
+    # The properties a data[] item declared, by identity — a name the walk
+    # made up (the <id>IsFocused and Radio group properties) is not a
+    # declaration, and a declaration it shadows is not this check's.
+    def declared_data_properties
+      @declared_data_properties ||= {}.compare_by_identity
+    end
+
+    # A later data[] item naming a declared property with another type. The
+    # types compared are the ones this face writes: the dropped item goes
+    # through finalize_data_property like the kept one did, without its
+    # defaultValue — defaults are not compared, and a default's own warnings
+    # belong to the declaration that is kept.
+    def report_data_class_conflict(kept, data_item, event_bindings)
+      return unless declared_data_properties.key?(kept)
+
+      dropped = finalize_data_property(data_item.reject { |key, _| key == 'defaultValue' }, event_bindings)
+      @data_class_conflicts ||= JsonUIShared::DataClassConflict.new(@current_layout)
+      @data_class_conflicts.report(kept['name'], kept['class'], dropped['class'])
     end
 
     # Collect all 'id' values from the JSON tree (converted to camelCase)
@@ -333,10 +356,18 @@ module JsonUIShared
               end
 
               # Check if property already exists (by name) to avoid duplicate
-              # fields in the generated Data type
-              next if properties.any? { |p| p['name'] == data_item['name'] }
+              # fields in the generated Data type. The first declaration is
+              # kept; a later one with another type is said out loud
+              # (data_class_conflict.rb — silent until jsonui-cli 1.9.6).
+              kept = properties.find { |p| p['name'] == data_item['name'] }
+              if kept
+                report_data_class_conflict(kept, data_item, event_bindings)
+                next
+              end
 
-              properties << finalize_data_property(data_item, event_bindings)
+              property = finalize_data_property(data_item, event_bindings)
+              declared_data_properties[property] = true
+              properties << property
             end
           elsif json_data['data'].is_a?(Hash)
             # Handle simple data object format from styles

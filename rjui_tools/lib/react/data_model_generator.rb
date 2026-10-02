@@ -8,12 +8,15 @@ require_relative '../core/bind_fold'
 require_relative '../core/logger'
 require_relative '../core/binding_validator_core'
 require_relative '../core/data_item_platform'
+require_relative '../core/data_class_conflict'
 require_relative '../core/type_synonyms'
 require_relative '../core/node_keys'
 require_relative '../core/config_manager'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative 'style_loader'
+require_relative 'include_expander'
+require_relative 'included_members'
 require_relative '../core/layout_variant'
 require_relative 'helpers/string_manager_helper'
 require_relative '../core/string_manager_core'
@@ -167,11 +170,22 @@ module RjuiTools
         # Expand styles before extracting data and actions
         expanded_data = StyleLoader.load_and_merge(json_data, @styles_dir)
 
+        # Includes expanded inline, as sjui / kjui build a Data type: a
+        # partial's declarations are the including screen's, prefixed by the
+        # include's id (ruling 2026-10-02 — the include draws the screen's
+        # data; until jsonui-cli 1.9.6 this Data type carried none of them).
+        # Only the Data type reads this tree: the include is still drawn as
+        # a component call, which hands the partial these names.
+        expanded_data = IncludeExpander.process_includes(expanded_data, File.dirname(json_file), nil, @layouts_dir)
+
         # Extract event bindings (handler name => component/attribute info) for Event type conversion
         event_bindings = extract_event_bindings_for_type(expanded_data)
 
         # Extract data properties from expanded JSON (pass event_bindings for Event type conversion)
+        @declared_data_properties = {}.compare_by_identity
+        @data_class_conflicts = JsonUIShared::DataClassConflict.new(@current_layout)
         data_properties = extract_data_properties(expanded_data, [], true, event_bindings)
+        add_undeclared_members(json_file, expanded_data, data_properties)
 
         # Extract onclick actions from expanded JSON
         onclick_actions = extract_onclick_actions(expanded_data)
@@ -539,14 +553,204 @@ module RjuiTools
         bindings
       end
 
+      # The names an INCLUDED layout binds without declaring them, as members
+      # of its Data type (IncludedMembers.undeclared). On sjui / kjui such a
+      # partial reads the including layout's declaration (the include is
+      # expanded into it); here the include call site hands it the value, so
+      # its Data type needs the member, typed as the including layouts
+      # declare it — their types joined when they differ, `any` when none
+      # declares it. Until jsonui-cli 1.9.6 the component read
+      # `data.<name>` off a Data type without it, which tsc rejects (TS2339;
+      # ticket rjui-partial-binding-an-undeclared-name-does-not-compile). A
+      # layout nothing includes is left as it is.
+      def add_undeclared_members(json_file, expanded, properties)
+        sites = include_sites[layout_reference(json_file)]
+        return if sites.nil? || sites.empty?
+
+        (IncludedMembers.undeclared(expanded) - properties.map { |p| p['name'] }).each do |name|
+          types = sites.filter_map { |file, node| including_type(file, node, name) }.uniq
+          properties << { 'name' => name, 'class' => nil, 'tsType' => types.empty? ? 'any' : types.join(' | '),
+                          'defaultValue' => nil }
+        end
+      end
+
+      # The include path that names a layout file: its path from the layouts
+      # root, without `.json`.
+      def layout_reference(json_file)
+        File.expand_path(json_file).sub(%r{\A#{Regexp.escape(File.expand_path(@layouts_dir))}/?}, '').sub(/\.json\z/, '')
+      end
+
+      # { include path => [[including file, include node], ...] } over every
+      # layout, read once.
+      def include_sites
+        @include_sites ||= Dir.glob(File.join(@layouts_dir, '**', '*.json')).each_with_object({}) do |file, sites|
+          next if file.include?(File.join(@layouts_dir, 'Resources')) || file.include?(File.join(@layouts_dir, 'Styles'))
+
+          tree = begin
+            JSON.parse(File.read(file, encoding: 'UTF-8'))
+          rescue JSON::ParserError
+            next
+          end
+          walk_includes(tree) { |node| (sites[node['include']] ||= []) << [file, node] }
+        end
+      end
+
+      def walk_includes(node, &block)
+        case node
+        when Hash
+          yield node if node['include'].is_a?(String)
+          node.each_value { |value| walk_includes(value, &block) }
+        when Array
+          node.each { |item| walk_includes(item, &block) }
+        end
+      end
+
+      # The TypeScript type an including layout gives `name` at one include
+      # site: a map's literal, or the declaration the map's binding — or the
+      # name, prefixed by the include's id — reads in its expanded tree.
+      def including_type(file, include_node, name)
+        map = JsonUIShared::IncludeDataMap.of(include_node).transform_keys(&:to_s)
+        if map.key?(name)
+          value = map[name]
+          return literal_ts_type(value) unless value.is_a?(String) && value.match?(/\A@\{[A-Za-z_][A-Za-z0-9_]*\}\z/)
+
+          spelled = value[2...-1]
+        else
+          id = include_node['id']
+          prefix = id.is_a?(String) && !id.empty? && !id.include?('@{') ? IncludeExpander.to_camel_case(id) : nil
+          spelled = prefix ? IncludeExpander.combine_with_prefix(prefix, name) : name
+        end
+        declared_ts_types(file)[spelled]
+      end
+
+      def literal_ts_type(value)
+        case value
+        when String then 'string'
+        when Numeric then 'number'
+        when TrueClass, FalseClass then 'boolean'
+        end
+      end
+
+      # { name => TypeScript type } for what a layout's expanded Data type
+      # declares, read once per layout.
+      def declared_ts_types(file)
+        (@declared_ts_types ||= {})[file] ||= begin
+          tree = StyleLoader.load_and_merge(JSON.parse(File.read(file, encoding: 'UTF-8')), @styles_dir)
+          tree = IncludeExpander.process_includes(tree, File.dirname(file), nil, @layouts_dir)
+          types = {}
+          collect = lambda do |node, is_root|
+            case node
+            when Hash
+              if IncludeExpander.declares_data?(node, is_root)
+                node['data'].each do |item|
+                  next unless item.is_a?(Hash) && item['name'] && !types.key?(item['name'])
+                  next unless JsonUIShared::DataItemPlatform.applies?(item, 'react')
+
+                  normalized = Core::TypeConverter.normalize_data_property(item.reject { |k, _| k == 'defaultValue' }, 'react')
+                  types[item['name']] = normalized['tsType'] || Core::TypeConverter.to_typescript_type(normalized['class'])
+                end
+              end
+              child = node['child'] || node['children']
+              (child.is_a?(Array) ? child : [child].compact).each { |c| collect.call(c, false) }
+            when Array
+              node.each { |c| collect.call(c, false) }
+            end
+          end
+          collect.call(tree, true)
+          types
+        rescue JSON::ParserError
+          {}
+        end
+      end
+
+      # The members a TabView's Data type gets without a declaration: the tab
+      # state and its setter (the converter reads `data.selectedTabIndex ??
+      # seeded` and calls `data.setSelectedTabIndex`), and one `<view>Data`
+      # per tab view. One rule for the Data type and the include call site,
+      # which hands a partial these from the including screen
+      # (IncludedMembers; ticket rjui-include-does-not-hand-a-partials-
+      # tabview-state).
+      def tab_view_members(json_data)
+        return [] unless json_data.is_a?(Hash)
+        return [] unless JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TabView' && json_data['tabs'].is_a?(Array)
+
+        # The tab state and its setter. The converter reads the state back
+        # (`data.selectedTabIndex ?? 0`) when selectedIndex is not bound, so
+        # declaring only the setter left the generated JSX referencing a
+        # property the interface does not have.
+        members = [
+          { 'name' => 'selectedTabIndex', 'class' => 'Int', 'tsType' => 'number', 'defaultValue' => nil },
+          { 'name' => 'setSelectedTabIndex', 'class' => 'Function', 'tsType' => '(index: number) => void', 'defaultValue' => nil }
+        ]
+        json_data['tabs'].each do |tab|
+          next unless tab.is_a?(Hash) && tab['view']
+
+          # Convert view name to camelCase + Data (e.g., home -> homeData, item_card -> itemCardData)
+          view_name = tab['view']
+          data_prop_name = view_name.split('_').each_with_index.map { |part, i| i == 0 ? part.downcase : part.capitalize }.join + 'Data'
+          pascal_name = view_name.split('_').map(&:capitalize).join
+          members << { 'name' => data_prop_name, 'class' => 'Object', 'tsType' => "#{pascal_name}Data", 'defaultValue' => nil }
+        end
+        members
+      end
+
+      # A data[] item as this Data type writes it: TypeConverter (mode:
+      # react), then a bound Event's signature.
+      def normalize_declared_data(data_item, event_bindings)
+        normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)
+
+        # Check if this property is bound to an event and has Event type
+        prop_name = normalized['name']
+        prop_class = normalized['class'].to_s
+
+        if event_bindings[prop_name] && prop_class.include?('Event')
+          # Get event type from type_mapping.json
+          binding_info = event_bindings[prop_name]
+          event_type = Core::TypeConverter.get_event_type(
+            binding_info[:component],
+            binding_info[:attribute]
+          )
+
+          if event_type
+            # Convert Event to platform-specific type (React event type string)
+            converted_class = prop_class.gsub('Event', event_type)
+            normalized['class'] = converted_class
+            # Recalculate tsType with the converted class
+            normalized['tsType'] = Core::TypeConverter.to_typescript_type(converted_class)
+          end
+        end
+
+        normalized
+      end
+
+      # The properties a data[] item declared, by identity — the TabView
+      # properties the walk makes up are not declarations.
+      def declared_data_properties
+        @declared_data_properties ||= {}.compare_by_identity
+      end
+
+      # A later data[] item naming a declared property with another type, as
+      # TypeScript writes it (`Int` and `Float` are both `number` here). The
+      # dropped item is normalized without its defaultValue: defaults are not
+      # compared, and a default's own warnings belong to the kept one.
+      def report_data_class_conflict(kept, data_item, event_bindings)
+        return unless declared_data_properties.key?(kept)
+
+        dropped = normalize_declared_data(data_item.reject { |key, _| key == 'defaultValue' }, event_bindings)
+        @data_class_conflicts ||= JsonUIShared::DataClassConflict.new(@current_layout)
+        @data_class_conflicts.report(kept['name'], written_ts_type(kept), written_ts_type(dropped))
+      end
+
+      def written_ts_type(prop)
+        prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+      end
+
       def extract_data_properties(json_data, properties = [], is_root = true, event_bindings = {})
         if json_data.is_a?(Hash)
           # Check for data section
           if json_data['data'] && json_data['data'].is_a?(Array)
             # Extract from root element OR data-only elements (no type, just data key)
-            written = Core::NodeKeys.written(json_data)
-            should_extract = is_root || written == ['data'] || (written - ['data', 'type']).empty?
-            if should_extract
+            if IncludeExpander.declares_data?(json_data, is_root)
               json_data['data'].each do |data_item|
                 # Another platform's item is not this Data type's (read as
                 # `jui build` reads it; until jsonui-cli 1.9.0 rjui did not
@@ -554,30 +758,22 @@ module RjuiTools
                 next unless JsonUIShared::DataItemPlatform.applies?(data_item, 'react')
 
                 if data_item.is_a?(Hash)
-                  # Normalize type using TypeConverter (mode: react)
-                  normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)
-
-                  # Check if this property is bound to an event and has Event type
-                  prop_name = normalized['name']
-                  prop_class = normalized['class'].to_s
-
-                  if event_bindings[prop_name] && prop_class.include?('Event')
-                    # Get event type from type_mapping.json
-                    binding_info = event_bindings[prop_name]
-                    event_type = Core::TypeConverter.get_event_type(
-                      binding_info[:component],
-                      binding_info[:attribute]
-                    )
-
-                    if event_type
-                      # Convert Event to platform-specific type (React event type string)
-                      converted_class = prop_class.gsub('Event', event_type)
-                      normalized['class'] = converted_class
-                      # Recalculate tsType with the converted class
-                      normalized['tsType'] = Core::TypeConverter.to_typescript_type(converted_class)
-                    end
+                  # One name, one member: the first declaration in document
+                  # order is kept (the root's data before its data-only
+                  # nodes), as on sjui / kjui, and a later one with another
+                  # type is said out loud (data_class_conflict.rb). Until
+                  # jsonui-cli 1.9.6 both were written — the interface and
+                  # createXxxData() each carried the name twice, which tsc
+                  # rejects whether or not the types agree (TS2300, TS1117;
+                  # ticket rjui-data-name-declared-twice-is-written-twice).
+                  kept = properties.find { |p| p['name'] == data_item['name'] }
+                  if kept
+                    report_data_class_conflict(kept, data_item, event_bindings)
+                    next
                   end
 
+                  normalized = normalize_declared_data(data_item, event_bindings)
+                  declared_data_properties[normalized] = true
                   properties << normalized
                 end
               end
@@ -585,39 +781,7 @@ module RjuiTools
           end
 
           # Check for TabView tabs - generate data properties for each tab's view
-          if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TabView' && json_data['tabs'].is_a?(Array)
-            # The tab state and its setter. The converter reads the state back
-            # (`data.selectedTabIndex ?? 0`) when selectedIndex is not bound, so
-            # declaring only the setter left the generated JSX referencing a
-            # property the interface does not have.
-            properties << {
-              'name' => 'selectedTabIndex',
-              'class' => 'Int',
-              'tsType' => 'number',
-              'defaultValue' => nil
-            }
-            properties << {
-              'name' => 'setSelectedTabIndex',
-              'class' => 'Function',
-              'tsType' => '(index: number) => void',
-              'defaultValue' => nil
-            }
-
-            json_data['tabs'].each do |tab|
-              if tab['view']
-                # Convert view name to camelCase + Data (e.g., home -> homeData, item_card -> itemCardData)
-                view_name = tab['view']
-                data_prop_name = view_name.split('_').each_with_index.map { |part, i| i == 0 ? part.downcase : part.capitalize }.join + 'Data'
-                pascal_name = view_name.split('_').map(&:capitalize).join
-                properties << {
-                  'name' => data_prop_name,
-                  'class' => 'Object',
-                  'tsType' => "#{pascal_name}Data",
-                  'defaultValue' => nil
-                }
-              end
-            end
-          end
+          properties.concat(tab_view_members(json_data))
 
           # Process children
           child = json_data['child'] || json_data['children']

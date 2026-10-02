@@ -91,7 +91,7 @@ module JsonUI
         { name: 'confirmationDialog', kind: :object }.freeze,
         # Corner radius (can be data binding)
         { name: 'cornerRadius', kind: :number, bindable: true }.freeze,
-        # Data model definitions for binding
+        # Data model definitions for binding: an array of declarations ({name, class, defaultValue}). On an include node an array is declarations merged into the included layout's, and an object is a map laid over the including layout's data for the included layout, after `shared_data` — `data` wins on a key both set (see `include`).
         { name: 'data', kind: :array }.freeze,
         # Default background color - hex string or color name from colors.json (binding supported)
         { name: 'defaultBackground', kind: :string, bindable: true }.freeze,
@@ -133,7 +133,7 @@ module JsonUI
         { name: 'idealHeight', kind: :number }.freeze,
         # SwiftUI .frame(idealWidth:) hint for layout system.
         { name: 'idealWidth', kind: :number }.freeze,
-        # Include another JSON layout (filename without extension)
+        # Include another JSON layout (its path from the layouts root, without extension). An include is an inline expansion: the included layout is drawn where this node is, and it reads the including layout's data — the parent owns the ViewModel. Under an `id`, the id prefixes the included layout's ids and data names, camelCase-joined (id `side` + `title` -> `sideTitle`), so the included layout's `@{title}` reads the including layout's `sideTitle`; without one it reads `title`. The include node's object maps, `shared_data` and then `data`, are laid over the including layout's data: a key is a name the included layout binds, a value is a literal or a binding read in the including layout's scope. The same on every platform and in Dynamic mode (ruling 2026-10-02). Until jsonui-cli 1.9.6 web handed an include without a map none of the including layout's data (the included layout drew its own defaults), and sjui / kjui codegen ignored an object map.
         { name: 'include', kind: :string }.freeze,
         # Place above specified view ID
         { name: 'indexAbove', kind: :string }.freeze,
@@ -263,7 +263,7 @@ module JsonUI
         { name: 'scripts', kind: :array }.freeze,
         # Shadow configuration (string 'color|offsetX|offsetY|opacity|radius' or object) [accepts: string | object]
         { name: 'shadow', kind: :raw }.freeze,
-        # Data passed to included components
+        # On an include node: an object map laid over the including layout's data for the included layout, before `data` (`data` wins on a key both set). A key is a name the included layout binds; a value is a literal or a binding read in the including layout's scope (see `include`).
         { name: 'shared_data', kind: :object }.freeze,
         # Start margin (RTL aware) (binding supported)
         { name: 'startMargin', kind: :number, bindable: true }.freeze,

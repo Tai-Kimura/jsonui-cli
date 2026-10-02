@@ -73,6 +73,8 @@ COUNT_VAR = "conformanceCount"
 COUNT_DEFAULT = 5
 FLAG_VAR = "conformanceFlag"
 MISSING_KEY = "conformanceMissing"  # deliberately never provisioned
+GREETING_VAR = "conformanceGreeting"  # a string the ViewModel composed
+UNRESOLVED_LABEL_HEIGHT = 40  # an empty text's Label stays addressable
 DEFAULT_LITERAL = "Guest"
 
 
@@ -298,18 +300,22 @@ def _binding_text(
     *,
     vars: tuple[StateVar, ...] = (),
     data_vars: tuple[DataVar, ...] = (),
+    extra_attrs: tuple[tuple[str, Any], ...] = (),
 ) -> InteractiveSpec:
     """One Label.text binding-resolution fixture: template in, exact text out.
 
     Statically assertable (waitFor + text equals) — no handlers, no mirror.
-    Unresolved-expectation templates wrap the expression in literal parens so
-    the Label never renders fully empty (a zero-size text node is not reliably
-    addressable by every platform driver).
+    Every template is ONE binding: a value that mixes literal text with a
+    binding is a build warning from jsonui-cli 1.9.6 (binding-mixed-text). An
+    unresolved expectation draws an empty text, so its Label takes a fixed
+    height (`extra_attrs`) — a zero-size text node is not reliably
+    addressable by every platform driver; until 1.9.6 the template wrapped
+    the expression in literal parens for that.
     """
     return InteractiveSpec(
         case=case,
         host="Label",
-        target_attrs=(("text", template),),
+        target_attrs=(("text", template),) + extra_attrs,
         vars=vars,
         handlers=(),
         steps=(_text_equals(rules.TARGET_ID, expected),),
@@ -330,12 +336,16 @@ _MISSING_DATA = (DataVar(MISSING_KEY, "String", NO_DEFAULT),)
 _MISSING_NODE_DATA = (DataVar(MISSING_KEY, "Object", NO_DEFAULT),)
 
 _BINDING_SEMANTICS_TEXT: tuple[InteractiveSpec, ...] = (
-    # text_flat_basic — mixed-text interpolation
+    # A string the ViewModel composed — literal text around a value — bound
+    # as one value and drawn whole. Until jsonui-cli 1.9.6 this fixture wrote
+    # `Hello @{conformanceText}!` (text_flat_basic, mixed-text interpolation);
+    # a value that mixes text with a binding is a build warning since
+    # (binding-mixed-text), and the text the screen shows is the same.
     _binding_text(
         "binding_mixed",
-        f"Hello @{{{TEXT_VAR}}}!",
+        f"@{{{GREETING_VAR}}}",
         f"Hello {BOUND_INITIAL}!",
-        vars=_TEXT_STATE,
+        vars=(StateVar(GREETING_VAR, "String", f"Hello {BOUND_INITIAL}!"),),
     ),
     # text_dot_path — nested object traversal
     _binding_text(
@@ -394,20 +404,22 @@ _BINDING_SEMANTICS_TEXT: tuple[InteractiveSpec, ...] = (
         BOUND_INITIAL,
         vars=_TEXT_STATE,
     ),
-    # text_unresolved_flat — unresolved flat key -> empty string (parens keep
-    # the Label addressable)
+    # text_unresolved_flat — unresolved flat key -> empty string (a fixed
+    # height keeps the empty Label addressable; parens until jsonui-cli 1.9.6)
     _binding_text(
         "binding_unresolved_flat",
-        f"(@{{{MISSING_KEY}}})",
-        "()",
+        f"@{{{MISSING_KEY}}}",
+        "",
         data_vars=_MISSING_DATA,
+        extra_attrs=(("height", UNRESOLVED_LABEL_HEIGHT),),
     ),
     # text_unresolved_intermediate — missing intermediate node -> empty string
     _binding_text(
         "binding_unresolved_path",
-        f"(@{{{MISSING_KEY}.name}})",
-        "()",
+        f"@{{{MISSING_KEY}.name}}",
+        "",
         data_vars=_MISSING_NODE_DATA,
+        extra_attrs=(("height", UNRESOLVED_LABEL_HEIGHT),),
     ),
     # text_number_integer — '5', never '5.0'
     _binding_text(

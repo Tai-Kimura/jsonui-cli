@@ -314,11 +314,12 @@ module SjuiTools
             warnings << "⚠️  [#{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering."
           end
 
-          # Warn if include directive is missing id in SwiftUI mode
-          if json_data.key?('include') && !json_data.key?('id')
-            loc = hierarchy || 'root'
-            warnings << "⚠️  [#{loc}] Include '#{json_data['include']}' is missing 'id'. In SwiftUI mode, included data properties need an id prefix to avoid name collisions."
-          end
+          # No warning for an include without an id: it is a defined form
+          # (shared/core/include_ids_fixture.json, design U8 — it adds no prefix,
+          # so the partial's data names are the screen's), kjui and rjui accept
+          # it, and the code generated for it is right. Until jsonui-cli 1.9.6
+          # every one warned "Include '<path>' is missing 'id'" (ticket
+          # sjui-include-without-id-warns-unconditionally).
 
           # Warn if ScrollView has multiple child views (should wrap in a single View container)
           if SwiftUI::DrawnTypes.scroll_view?(json_data['type'])

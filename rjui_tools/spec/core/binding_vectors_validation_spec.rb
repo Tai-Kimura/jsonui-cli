@@ -17,12 +17,15 @@ RSpec.describe 'shared binding vectors — validation cases (rjui)' do
   vectors = JSON.parse(File.read(vectors_path))
   validation_cases = vectors['cases'].select { |c| c['kind'] == 'validation' }
 
-  it 'exercises all validation vectors (9 expected)' do
-    expect(validation_cases.length).to eq(9)
+  # 9 errors, and from jsonui-cli 1.9.6 the six binding-mixed-text warnings
+  # (runtime interpolation cases until then).
+  it 'exercises all validation vectors (15 expected)' do
+    expect(validation_cases.length).to eq(15)
   end
 
   validation_cases.each do |c|
-    it "#{c['id']} is rejected with #{c['expectError']}" do
+    rule = c['expectError'] || c['expectWarning']
+    it "#{c['id']} is reported with #{rule}" do
       component =
         case c['context']
         when 'text', 'value'
@@ -38,11 +41,14 @@ RSpec.describe 'shared binding vectors — validation cases (rjui)' do
       validator = RjuiTools::Core::BindingValidator.new
       messages = validator.validate(component, "#{c['id']}.json")
 
-      expect(messages.any? { |m| m.include?("[#{c['expectError']}]") }).to(
+      expect(messages.any? { |m| m.include?("[#{rule}]") }).to(
         be(true),
-        "expected rule id #{c['expectError']} for vector #{c['id']}, got: #{messages.inspect}"
+        "expected rule id #{rule} for vector #{c['id']}, got: #{messages.inspect}"
       )
-      expect(validator.has_errors?).to be(true), "expected #{c['id']} to be a hard error"
+      # The severity is binding_semantics.json validatorRules'.
+      reported_as_error = validator.errors.any? { |m| m.include?("[#{rule}]") }
+      expect(reported_as_error).to be(c.key?('expectError')),
+                                   "expected #{c['id']} as #{c.key?('expectError') ? 'a hard error' : 'a warning'}"
     end
   end
 end

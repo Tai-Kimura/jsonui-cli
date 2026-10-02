@@ -661,6 +661,7 @@ module JsonUIShared
         # "first} and @{second" ('and' "not defined in data").
         exprs = value.scan(/@\{([^}]*)\}/).flatten
         unless exprs.length == 1 && value == "@{#{exprs.first}}"
+          check_mixed_text(value, attribute_name, component_type)
           note_text_uses(exprs)
           return
         end
@@ -682,6 +683,32 @@ module JsonUIShared
           check_value_for_bindings(item, "#{attribute_name}[#{index}]", component_type)
         end
       end
+    end
+
+    # binding-mixed-text (warning; ruling 2026-10-02): a value that holds a
+    # binding and is not one binding — `Title: @{x}`, `@{a} / @{b}`,
+    # `https://cdn/@{id}.png`. Composing a string is logic, and a layout holds
+    # none; and a string composed in the layout cannot be localized as one
+    # text. The ViewModel composes it and the layout binds it as one value.
+    # Until jsonui-cli 1.9.6 the SSoT declared this as text interpolation
+    # (binding_semantics.json contexts.text) and nothing said a word; sjui
+    # and rjui interpolated it, kjui drew the first binding alone.
+    #
+    # Only an attribute the SSoT declares for the component (known_attr?): an
+    # undeclared one — an extension component's own attribute — is read as
+    # that component reads it (JsonUIDocument's CodeBlock `code` shows
+    # `@{greeting}` verbatim, as its declaration says). An Embed's params are
+    # validate_embed_params_node's.
+    def check_mixed_text(value, attribute_name, component_type)
+      return if embed_params_attr?(component_type, attribute_name)
+
+      top_attr = attribute_name.to_s.split(/[.\[]/).first
+      return unless known_attr?(component_type, top_attr)
+
+      add_rule_warning('binding-mixed-text',
+                       "'#{component_type}.#{attribute_name}' mixes literal text with a binding (#{value.inspect}). " \
+                       'Compose the string in the ViewModel (it also keeps the text localizable) and bind it as one value — ' \
+                       'a layout holds no logic.')
     end
 
     # Canonical validator rules from shared/core/binding_semantics.json.

@@ -41,7 +41,12 @@ RSpec.describe RjuiTools::Core::BindingValidator, '(every @{...} in a string use
 
   it 'reads a string that starts and ends with a binding as mixed text, not as one expression' do
     warnings = validator.validate(label('@{first} and @{second}', %w[first second]), 'a.json')
-    expect(warnings).to be_empty, warnings.join("\n")
+    # From jsonui-cli 1.9.6 the value is a binding-mixed-text warning (compose
+    # it in the ViewModel); what this reads is that nothing ELSE is said —
+    # no name misread.
+    mixed, others = warnings.partition { |w| w.include?('[binding-mixed-text]') }
+    expect(mixed.size).to eq(1), warnings.join("\n")
+    expect(others).to be_empty, warnings.join("\n")
     undeclared = validator.validate(label('@{first} and @{second}', %w[someone]), 'a.json')
     expect(%w[first and second].flat_map { |n| not_defined(undeclared, n) }).to be_empty, undeclared.join("\n")
   end

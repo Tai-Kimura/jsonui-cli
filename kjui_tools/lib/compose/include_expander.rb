@@ -2,6 +2,7 @@
 
 require 'json'
 require_relative 'style_loader'
+require_relative '../core/include_data_map'
 require_relative '../core/normalization'
 
 module KjuiTools
@@ -53,6 +54,7 @@ module KjuiTools
 
         # includeがある場合、ファイルを読み込んでインライン展開する
         if json_data['include']
+          include_node = json_data
           include_file_path = File.join(layouts_root || base_dir, "#{json_data['include']}.json")
           unless File.exist?(include_file_path)
             raise "Include file not found: #{include_file_path}"
@@ -96,6 +98,15 @@ module KjuiTools
 
           # IDプレフィックスを適用して再帰処理
           json_data = apply_id_prefix(included_json, new_prefix)
+          # The include node's maps over the including layout's data
+          # (shared_data, then data — JsonUIShared::IncludeDataMap). Read
+          # off the include node as written: its values are bindings in the
+          # including layout's scope, not this include's. Until jsonui-cli
+          # 1.9.6 an object map was dropped here.
+          json_data = JsonUIShared::IncludeDataMap.apply!(
+            json_data, JsonUIShared::IncludeDataMap.of(include_node),
+            ->(name) { new_prefix ? combine_with_prefix(new_prefix, name) : name }
+          )
           json_data = process_includes(json_data, layouts_root || File.dirname(include_file_path),
                                        new_prefix, layouts_root)
           return json_data

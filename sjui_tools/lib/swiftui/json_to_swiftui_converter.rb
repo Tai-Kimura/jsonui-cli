@@ -607,11 +607,12 @@ module SjuiTools
         # Skip data definition objects (they have 'data' array but no 'type')
         return if component.key?('data') && !component.key?('type')
 
-        # Warn if include directive is missing id in SwiftUI mode
-        if component.key?('include') && !component.key?('id')
-          loc = hierarchy || 'root'
-          puts "\e[33m⚠️  [SJUI Warning] [#{@current_validation_file} #{loc}] Include '#{component['include']}' is missing 'id'. In SwiftUI mode, included data properties need an id prefix to avoid name collisions.\e[0m"
-        end
+        # No warning for an include without an id: it is a defined form
+        # (shared/core/include_ids_fixture.json, design U8 — it adds no prefix,
+        # so the partial's data names are the screen's), kjui and rjui accept
+        # it, and the code generated for it is right. Until jsonui-cli 1.9.6
+        # every one warned "Include '<path>' is missing 'id'" (ticket
+        # sjui-include-without-id-warns-unconditionally).
 
         # Warn if Collection has items binding but no sections defined
         if JsonUIShared::TypeSynonyms.section(component['type']) == 'Collection' && component['items'] && (!component['sections'] || component['sections'].empty?)

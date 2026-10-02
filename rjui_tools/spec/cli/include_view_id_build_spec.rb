@@ -218,14 +218,17 @@ RSpec.describe 'the viewId of a node inside an include, through rjui build' do
   end
 
   # Only a layout that needs the path takes it: an include that hands no
-  # viewId, and a screen no one includes, come out as they did.
+  # viewId, and a screen no one includes, come out as they did. (From
+  # jsonui-cli 1.9.6 each call site also hands the partial the including
+  # layout's data — `data={{ ... }}` after the path; the path is what this
+  # reads.)
   it 'plumbs the path through the layouts that need it, and no other' do
     components = File.join(@nested_dir, 'src', 'generated', 'components')
     read = ->(name) { File.read(File.join(components, "#{name}.tsx")) }
-    expect(read.('Home')).to include('<OuterPart jsonuiPath="0_1" />').and include('<InnerPart jsonuiPath="0_3" />')
-    expect(read.('Home')).to include('<PlainPart />')
+    expect(read.('Home')).to include('<OuterPart jsonuiPath="0_1" ').and include('<InnerPart jsonuiPath="0_3" ')
+    expect(read.('Home')).to match(/<PlainPart(?: data=\{\{[^}]*\}\})? \/>/)
     expect(read.('Home')).not_to include('jsonuiPath?: string')
-    expect(read.('OuterPart')).to include('jsonuiPath?: string').and include('<InnerPart jsonuiPath={`${jsonuiPath}_1`} />')
+    expect(read.('OuterPart')).to include('jsonuiPath?: string').and include('<InnerPart jsonuiPath={`${jsonuiPath}_1`} ')
     expect(read.('InnerPart')).to include('`selectBox_${jsonuiPath}_1`').and include('"named_box"')
     expect(read.('PlainPart')).not_to include('jsonuiPath')
   end

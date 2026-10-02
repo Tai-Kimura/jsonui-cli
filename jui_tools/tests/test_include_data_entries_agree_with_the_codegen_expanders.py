@@ -31,6 +31,9 @@ REPO = Path(__file__).resolve().parents[2]
 EXPANDERS = {
     "sjui": ("sjui_tools/lib", "swiftui/include_expander", "SjuiTools::SwiftUI::IncludeExpander"),
     "kjui": ("kjui_tools/lib", "compose/include_expander", "KjuiTools::Compose::IncludeExpander"),
+    # rjui builds a screen's Data type from the include-expanded tree too,
+    # from jsonui-cli 1.9.6 (ticket rjui-include-does-not-read-the-screens-data).
+    "rjui": ("rjui_tools/lib", "react/include_expander", "RjuiTools::React::IncludeExpander"),
 }
 
 #: One screen and its partials: an include with an `_` id and a data list of

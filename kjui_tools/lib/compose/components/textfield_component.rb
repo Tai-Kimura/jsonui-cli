@@ -623,23 +623,25 @@ module KjuiTools
             code += ",\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')})", depth + 1)
           end
           
-          # Add focus/blur event handlers
-          if json_data['onFocus']
-            code += ",\n" + indent("onFocus = { data.#{json_data['onFocus']}?.invoke() }", depth + 1)
+          # Add focus/blur event handlers. Each value names a handler, in the
+          # binding form (`@{h}`) or bare (`h`), and is called as the data
+          # declares it (ModifierBuilder.get_event_handler_invocation — no
+          # value; the viewId when the handler takes one). Until jsonui-cli
+          # 1.9.6 the value was written as it stood, so the binding form put
+          # `data.@{h}?.invoke()` in the file — a syntax error (ticket
+          # kjui-textfield-focus-events-write-the-binding-braces).
+          %w[onFocus onBlur onBeginEditing onEndEditing].each do |event|
+            handler = json_data[event]
+            # A blank one ("", "   ", "@{}") names no method: no call
+            # (shared/core/tap_accessibility.rb, the one predicate).
+            next unless JsonUIShared::TapAccessibility.names_a_method?(handler)
+
+            invocation = Helpers::ModifierBuilder.get_event_handler_invocation(
+              handler, Helpers::ModifierBuilder.view_id(json_data), nil
+            )
+            code += ",\n" + indent("#{event} = { #{invocation} }", depth + 1)
           end
 
-          if json_data['onBlur']
-            code += ",\n" + indent("onBlur = { data.#{json_data['onBlur']}?.invoke() }", depth + 1)
-          end
-
-          if json_data['onBeginEditing']
-            code += ",\n" + indent("onBeginEditing = { data.#{json_data['onBeginEditing']}?.invoke() }", depth + 1)
-          end
-
-          if json_data['onEndEditing']
-            code += ",\n" + indent("onEndEditing = { data.#{json_data['onEndEditing']}?.invoke() }", depth + 1)
-          end
-          
           # Focus management — `fieldId` is already wired above (the
           # `val focusRequester_<id> = remember { FocusRequester() }`
           # declaration + `.focusRequester(...)` modifier). Here we
