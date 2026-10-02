@@ -1877,35 +1877,45 @@ module KjuiTools
 
           # Look up the handler's type in data_definitions
           data_def = ResourceResolver.data_definitions[method_name]
+          return "data.#{method_name}?.invoke()" unless data_def && data_def['class']
 
-          if data_def && data_def['class']
-            class_type = data_def['class'].to_s
+          class_type = data_def['class'].to_s
+          id_literal = JsonUIShared::StringLiterals.kotlin(view_id)
 
-            # Check if the type has parameters (contains Event or has tuple like (String, Boolean))
-            # Pattern: ((Event) -> ...) or ((String, Type) -> ...) or ((String) -> ...)
-            if class_type.include?('Event') || class_type.match?(/\(\s*\(?\s*String\s*[,)]/)
-              # Handler expects viewId (and optionally value) arguments
-              if value_expr.nil?
-                # Click events without value - only pass viewId
-                "data.#{method_name}?.invoke(#{JsonUIShared::StringLiterals.kotlin(view_id)})"
-              else
-                "data.#{method_name}?.invoke(#{JsonUIShared::StringLiterals.kotlin(view_id)}, #{value_expr})"
-              end
-            elsif class_type.match?(/\(\s*\)\s*->/)
-              # Handler is () -> Unit (no arguments)
-              "data.#{method_name}?.invoke()"
-            elsif value_expr && class_type.match?(/\(\s*\(?\s*(Bool|Boolean|Int|Float|Double|Number|Offset)\s*\)?\s*\)\s*->/)
-              # Handler takes a single typed argument (e.g., (Bool) -> Void).
-              # Offset is the onPan gesture payload; Float covers onPinch.
-              "data.#{method_name}?.invoke(#{value_expr})"
-            else
-              # Default: assume no arguments
-              "data.#{method_name}?.invoke()"
-            end
-          else
-            # No data definition found, default to no arguments
-            "data.#{method_name}?.invoke()"
+          # `Event` is the data model's placeholder for the platform's
+          # (viewId, value) pair (DataModelUpdater#finalize_data_property).
+          if class_type.include?('Event')
+            return value_expr.nil? ? "data.#{method_name}?.invoke(#{id_literal})" : "data.#{method_name}?.invoke(#{id_literal}, #{value_expr})"
           end
+
+          # The call is the declared handler's shape — its parameter count —
+          # the shapes KotlinJsonUI Dynamic's resolveEventHandler accepts:
+          # none -> `()`; one -> the event's value when it has one, else the
+          # view id; two -> (view id, value). Through jsonui-cli 1.9.5 the shape
+          # was guessed from the spelling: a declaration starting `(String` was
+          # read as (viewId, value), so `(String) -> Void` on onTextChange got
+          # two arguments, and `(Any) -> Void` (onPan's payload) was outside
+          # the one-argument list and got none — neither compiled
+          # (kjui-text-change-callback-passes-the-id-to-a-one-parameter-handler,
+          # kjui-pan-callback-is-called-without-its-payload). Every shape that
+          # compiled then is called as it was.
+          params = handler_parameters(class_type)
+          return "data.#{method_name}?.invoke()" if params.nil? || params.empty?
+
+          if params.size == 1
+            value_expr ? "data.#{method_name}?.invoke(#{value_expr})" : "data.#{method_name}?.invoke(#{id_literal})"
+          else
+            value_expr ? "data.#{method_name}?.invoke(#{id_literal}, #{value_expr})" : "data.#{method_name}?.invoke(#{id_literal})"
+          end
+        end
+
+        # The parameter list of a declared function type — `(String, Int) ->
+        # Void`, `((Bool) -> Void)?` — or nil when the class is not one.
+        def self.handler_parameters(class_type)
+          list = class_type[/\(\s*([^()]*?)\s*\)\s*->/, 1]
+          return nil if list.nil?
+
+          list.split(',').map(&:strip).reject(&:empty?)
         end
 
         # Check if handler is binding format (@{functionName})
