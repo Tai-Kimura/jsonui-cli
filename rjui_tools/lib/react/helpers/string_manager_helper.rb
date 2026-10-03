@@ -3,6 +3,7 @@
 require 'json'
 require_relative '../../core/config_manager'
 require_relative '../../core/logger'
+require_relative '../../core/string_manager_core'
 
 module RjuiTools
   module React
@@ -96,6 +97,22 @@ module RjuiTools
           end
         end
 
+        # Display text as the StringManager reference the strings.json gives
+        # it: the declared key, else the text a key holds (by
+        # lookup_string_manager_by_value — the shared resolver, the lookup
+        # sjui and kjui make), else nil. Through jsonui-cli 1.9.7 Label,
+        # Button and the other display-text paths (convert_text_binding,
+        # text_runtime_expression) and the converter scaffold looked the key
+        # up only, so a layout text iOS and Android localized was drawn as
+        # written here (ticket rjui-display-text-is-not-looked-up-by-the-
+        # text-a-key-holds, ruling 2026-10-03).
+        def resolve_display_text(text)
+          return nil unless text.is_a?(String)
+
+          convert_string_key(text) ||
+            (text.match?(/@\{[^}]+\}/) || text.empty? ? nil : lookup_string_manager_by_value(text))
+        end
+
         # Get text with StringManager resolution
         def get_text_with_string_manager(text_content)
           return text_content unless text_content.is_a?(String)
@@ -126,24 +143,20 @@ module RjuiTools
         private
 
         # Lookup by value (e.g., "AppFinder" -> StringManager.currentLanguage.loginSampleApp)
+        # through JsonUIShared::StringManagerCore.resolve_string_reference,
+        # the one sjui and kjui call: the layout's own sections first, a
+        # string or any language of a per-language value. Until jsonui-cli
+        # 1.9.8 this face had its own scan — file order, a per-language
+        # value's FIRST language only — so the same text could land on
+        # another section's key, or on none, depending on the file.
         def lookup_string_manager_by_value(text)
           strings_data = load_strings_json
           return nil if strings_data.nil? || strings_data.empty?
 
-          strings_data.each do |file_name, file_strings|
-            next unless file_strings.is_a?(Hash)
+          resolved = JsonUIShared::StringManagerCore.resolve_string_reference(strings_data, text, own_namespaces)
+          return nil if resolved.nil?
 
-            file_strings.each do |key, value|
-              # Match against string value or first language value
-              match_value = value.is_a?(Hash) ? (value.values.first || '') : value.to_s
-              if match_value == text
-                full_key = "#{file_name}_#{key}"
-                return "{#{string_manager_reference(full_key)}}"
-              end
-            end
-          end
-
-          nil
+          "{#{string_manager_reference("#{resolved['namespace']}_#{resolved['key']}")}}"
         end
 
         # Lookup by key in strings.json, matching sjui behavior:

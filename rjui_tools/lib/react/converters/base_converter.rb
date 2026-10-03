@@ -1755,7 +1755,7 @@ module RjuiTools
         def convert_text_binding(value)
           return value unless value.is_a?(String)
 
-          if (resolved = convert_string_key(value))
+          if (resolved = resolve_display_text(value))
             return resolved
           end
 
@@ -2016,7 +2016,7 @@ module RjuiTools
           return " alt=\"#{raw}\"" if raw.empty?
           return " alt=#{convert_text_binding(raw)}" if bound_value_expr(raw)
 
-          if (resolved = convert_string_key(raw))
+          if (resolved = resolve_display_text(raw))
             " alt=#{resolved}"
           else
             jsx_attr_text('alt', raw)
@@ -2786,7 +2786,7 @@ module RjuiTools
         def text_runtime_expression(value)
           return "''" unless value.is_a?(String)
 
-          if (resolved = convert_string_key(value))
+          if (resolved = resolve_display_text(value))
             return resolved.sub(/\A\{/, '').sub(/\}\z/, '')
           end
 

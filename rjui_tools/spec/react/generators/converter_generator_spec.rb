@@ -299,10 +299,14 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
       expect(converter_code('String?')).not_to include('.inspect')
     end
 
-    it 'routes a string literal through StringManager when strings.json has it (the Label `text` contract)' do
+    # Display-text names only from 1.9.8, as sjui / kjui from 1.9.6 (ticket
+    # rjui-custom-component-string-literal-prop-is-read-as-a-string-key);
+    # what it resolves is converter_string_prop_localization_spec.rb's.
+    it 'routes a display-text string literal through StringManager when strings.json has it (the Label `text` contract)' do
       code = converter_code('String?')
-      expect(code).to include('resolved = convert_string_key(text)')
+      expect(code).to include('resolved = JsonUIShared::StringManagerCore.localized_prop?(name) && resolve_display_text(text)')
       expect(code).to include('resolved ? resolved[1..-2]')
+      expect(code).to include("format_literal(filename_value, 'String?', 'filename')")
     end
 
     it 'writes a number for Int?, and nothing for a value that is not one' do

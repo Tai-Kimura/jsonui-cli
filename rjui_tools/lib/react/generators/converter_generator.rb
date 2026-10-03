@@ -140,6 +140,7 @@ module RjuiTools
           template << "require_relative '../base_converter'"
           template << "require_relative '../../../core/attribute_types'"
           template << "require_relative '../../../core/logger'"
+          template << "require_relative '../../../core/string_manager_core'"
           template << ''
           template << 'module RjuiTools'
           template << '  module React'
@@ -257,7 +258,7 @@ module RjuiTools
             lines << "              prop_name = add_viewmodel_data_prefix(#{key}_value[2..-2])"
             lines << "              props << \"#{key}={\#{prop_name}}\""
             lines << "            elsif !#{key}_value.nil?"
-            lines << "              literal = format_literal(#{key}_value, '#{type}')"
+            lines << "              literal = format_literal(#{key}_value, '#{type}', '#{key}')"
             lines << "              if literal"
             lines << "                props << \"#{key}={\#{literal}}\""
             lines << "              else"
@@ -277,20 +278,26 @@ module RjuiTools
         # takes, by the shared vocabulary (JsonUIShared::AttributeTypes
         # .ts_literal — the table the component is scaffolded from, and the
         # rules the sjui and kjui converters write theirs by), nil when the
-        # value is not of that type. A string that is a strings.json key
-        # becomes its StringManager lookup, as the Label `text` pass does;
-        # any other string a template literal, escaped by the shared escaper
-        # (StringLiterals.ts_template_body). A list's JSON goes through
+        # value is not of that type. A String prop whose NAME is display text
+        # (StringManagerCore.localized_prop? — the list jui lint-strings
+        # checks) becomes its StringManager lookup when the value is a
+        # strings.json key or the text a key holds, as the Label `text` pass
+        # does (resolve_display_text); any other string a
+        # template literal, escaped by the shared escaper
+        # (StringLiterals.ts_template_body) — an enum-like `variant: "bar"`
+        # is never looked up, as the sjui and kjui scaffolds write it from
+        # 1.9.6 (ticket rjui-custom-component-string-literal-prop-is-read-as-
+        # a-string-key). A list's JSON goes through
         # rewrite_json_string_values, so `items: [{label: "toc_row_x"}]`
         # localizes its element fields as it always has.
         def format_literal_lines
           [
             '          # A literal the layout gives a prop, as the TypeScript its type takes (nil: it cannot be written).',
-            '          def format_literal(value, type)',
+            '          def format_literal(value, type, name)',
             '            literal = JsonUIShared::AttributeTypes.ts_literal(type, value) do |canonical, text|',
             "              next nil unless canonical == 'string' && text.is_a?(String)",
             '',
-            '              resolved = convert_string_key(text)',
+            '              resolved = JsonUIShared::StringManagerCore.localized_prop?(name) && resolve_display_text(text)',
             '              resolved ? resolved[1..-2] : "`#{JsonUIShared::StringLiterals.ts_template_body(text)}`"',
             '            end',
             '            return literal unless literal && JsonUIShared::AttributeTypes.parse(type).kind == :list',

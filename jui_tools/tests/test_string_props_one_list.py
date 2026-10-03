@@ -55,14 +55,17 @@ class OneVocabularyTest(unittest.TestCase):
                 self.assertEqual(frozenset(_ruby_vocabulary(tool)), lint)
 
     def test_the_scaffolds_ask_the_predicate(self):
-        # Neither scaffold may spell display-text names of its own: the
+        # No scaffold may spell display-text names of its own: the
         # decision is the shared predicate, so a vocabulary change reaches
-        # every converter scaffolded from this release on.
+        # every converter scaffolded from this release on. rjui's joined
+        # from 1.9.8 (rjui-custom-component-string-literal-prop-is-read-as-a-
+        # string-key); its generated format_literal names the prop `name`.
         for path in ("kjui_tools/lib/compose/generators/converter_generator.rb",
-                     "sjui_tools/lib/swiftui/generators/converter_generator.rb"):
+                     "sjui_tools/lib/swiftui/generators/converter_generator.rb",
+                     "rjui_tools/lib/react/generators/converter_generator.rb"):
             with self.subTest(path=path):
                 source = (REPO / path).read_text()
-                self.assertIn("JsonUIShared::StringManagerCore.localized_prop?(key)", source)
+                self.assertRegex(source, r"JsonUIShared::StringManagerCore\.localized_prop\?\((key|name)\)")
                 self.assertNotIn("accessibilityLabel", source)
 
 
