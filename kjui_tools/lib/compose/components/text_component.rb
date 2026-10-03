@@ -516,8 +516,15 @@ module KjuiTools
 
           component_code += "\n" + indent(")", depth)
 
-          # Wrap with VisibilityWrapper if needed
-          Helpers::VisibilityHelper.wrap_with_visibility(json_data, component_code, depth, required_imports)
+          # No VisibilityWrapper here: the exit that draws the node
+          # (ComposeBuilder#generate_component / a responsive branch's
+          # generate_non_responsive_component) wraps it, in the parent's scope,
+          # as it wraps an Image. A second one here put this wrapper — and the
+          # alignment it hoists, `Modifier.align(Alignment.Start)` on one line —
+          # inside the outer wrapper's BoxScope, where a Column's alignment
+          # does not compile (kjui-label-with-visibility-and-parent-alignment-
+          # does-not-compile).
+          component_code
         end
 
         private
@@ -829,8 +836,9 @@ module KjuiTools
 
           code += "\n" + indent(")", depth)
 
-          # Wrap with VisibilityWrapper if needed
-          Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
+          # No VisibilityWrapper here: the exit that draws the node wraps it
+          # (see generate).
+          code
         end
 
         def self.generate_with_partial_attributes_component(json_data, depth, required_imports, parent_type)
@@ -1010,8 +1018,9 @@ module KjuiTools
 
           code += "\n" + indent(")", depth)
 
-          # Wrap with VisibilityWrapper if needed
-          Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
+          # No VisibilityWrapper here: the exit that draws the node wraps it
+          # (see generate).
+          code
         end
 
         # The inside of a Kotlin string literal — the one escaper (`$`
