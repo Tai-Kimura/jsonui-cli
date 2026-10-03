@@ -250,6 +250,24 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq librsvg2-bin
           python -m pip install cairosvg
+      # test_api_model_enum_case_names.py compiles the generated Kotlin enum
+      # with java + the compiler jars from a Gradle cache (the layout
+      # kjui_tools/spec/support/kotlin_compiler.rb reads). This image has
+      # neither, so the arm skipped here and the collection gate below stopped
+      # v1.9.6's main run (37092350326) on the undeclared skip — it ran only
+      # where a developer's Gradle cache had the jars. The same JDK and the
+      # same pinned, sha256-checked jars as the kjui rspec leg.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Cache the Kotlin compiler jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches/modules-2/files-2.1
+          key: kotlinc-jars-${{ hashFiles('.github/scripts/fetch_kotlin_compiler_jars.sh') }}
+      - name: Fetch the Kotlin compiler jars (pinned, sha256-checked)
+        run: bash .github/scripts/fetch_kotlin_compiler_jars.sh
       # pytest, not `unittest discover`: the two runners disagree by 26 tests
       # here. Some modules are written pytest-style (bare asserts, `tmp_path`
       # fixtures) and `unittest discover` collects nothing from them — it walks
