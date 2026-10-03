@@ -109,7 +109,7 @@ RSpec.describe SjuiTools::Core::Resources::StringManager, 'plural support' do
   end
 
   describe '#generate_swift_file' do
-    it 'emits a count accessor routed through String.localizedStringWithFormat' do
+    it 'emits a count accessor formatted in the language the format came from' do
       write_strings_json(plural_strings)
       manager.generate_swift_file
 
@@ -117,10 +117,21 @@ RSpec.describe SjuiTools::Core::Resources::StringManager, 'plural support' do
       expect(swift).to include('public static func itemsCount(')
       expect(swift).to include('count: Int,')
       expect(swift).to include('let format = "home_items_count".localized(')
-      expect(swift).to include('return String.localizedStringWithFormat(format, count)')
+      expect(swift).to include('return String(format: format, locale: pluralLocale(bundle: bundle), count)')
+      expect(swift).not_to include('localizedStringWithFormat')
+      expect(swift.scan('fileprivate static func pluralLocale(').size).to eq(1)
       # Plain keys keep the historical shape
       expect(swift).to include('public static func title(')
       expect(swift).to include('return "home_title".localized(')
+    end
+  end
+
+  describe 'a StringManager without plural keys' do
+    it 'does not carry the plural locale helper (its bytes stay as before)' do
+      write_strings_json({ 'home' => { 'title' => { 'en' => 'Home', 'ja' => 'ホーム' } } })
+      manager.generate_swift_file
+      swift = File.read(File.join(temp_dir, 'ResourceManager/StringManager.swift'))
+      expect(swift).not_to include('pluralLocale')
     end
   end
 
