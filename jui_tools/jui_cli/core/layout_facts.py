@@ -481,20 +481,36 @@ def duplicate_ids(name: str, platforms, *, layouts_dir: Path, styles_dir: Path) 
 
 def include_id_prefix_state(version: str | None = None, literal: str | None = None) -> str:
     """`on` (prefix the ids inside an include on web; check them exactly),
-    `announce` (not yet — a release is named), or `off` (undeclared,
-    withdrawn, unreadable, or no gate_versions to read it with). *version*
+    `announce` (not yet — a release is named), `off` (undeclared,
+    withdrawn, unreadable), or `unavailable` (no gate_versions in this tree to
+    read it with — `jui build` refuses to generate web). *version*
     defaults to this toolchain's, *literal* to INCLUDE_ID_PREFIX_GATE_FROM."""
     from ..version import toolchain_version
     from . import shared_core
 
     gates = shared_core.load("gate_versions")
     if gates is None:
-        return "off"
+        # Not "off": web would then be generated without the prefix, a
+        # different file, and nothing would say so. `jui build` stops the web
+        # stage on this (INCLUDE_ID_PREFIX_UNREADABLE).
+        return "unavailable"
     literal = INCLUDE_ID_PREFIX_GATE_FROM if literal is None else literal
     version = toolchain_version() if version is None else version
     if gates.gate_is_on(version, literal):
         return "on"
     return "announce" if gates.gate_state(literal) == "release" else "off"
+
+
+#: What `jui build` prints, and why it does not run rjui, when this tree has
+#: no shared/core/gate_versions.py: whether web prefixes the ids inside an
+#: include cannot be decided, and generating without deciding writes a web
+#: tree of a different shape with nothing said. Until jsonui-cli 1.9.8 the
+#: state was "off" and rjui generated without the prefix (ticket
+#: gate-readers-without-shared-core-fall-silent-five-more).
+INCLUDE_ID_PREFIX_UNREADABLE = (
+    "ERROR: whether web prefixes the ids inside an include cannot be decided — "
+    "shared/core/gate_versions.py is not in this tool tree — so web is not generated: "
+    "run ~/.jsonui-cli/jui_tools/bin/jui, or install jui_tools editable")
 
 
 def include_id_prefix_env(version: str | None = None) -> str:

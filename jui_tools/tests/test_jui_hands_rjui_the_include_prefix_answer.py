@@ -61,3 +61,29 @@ def test_the_shipped_literal_is_one_line_the_tag_gate_reads():
     src = Path(layout_facts.__file__).read_text(encoding="utf-8")
     lines = [l for l in src.splitlines() if l.startswith("INCLUDE_ID_PREFIX_GATE_FROM")]
     assert lines == ['INCLUDE_ID_PREFIX_GATE_FROM: str | None = "1.8.121"']
+
+
+def test_without_gate_versions_rjui_is_not_run_and_the_stage_fails(on_path, monkeypatch, capsys):
+    # A tree without shared/core/gate_versions.py cannot decide whether web
+    # prefixes the ids inside an include. Until jsonui-cli 1.9.8 the answer was
+    # "off" and rjui generated web without the prefix — a different tree,
+    # nothing said (ticket gate-readers-without-shared-core-fall-silent-five-more).
+    # Now rjui is not run, the stage fails, and the line says why.
+    from jui_cli.core import shared_core
+    load = shared_core.load
+    monkeypatch.setattr(shared_core, "load", lambda name: None if name == "gate_versions" else load(name))
+    record = _stand_in(on_path, "rjui")
+    assert build_cmd._run_tool(["rjui", "build"], on_path) is False
+    assert not record.exists()
+    assert layout_facts.INCLUDE_ID_PREFIX_UNREADABLE in capsys.readouterr().out
+    assert layout_facts.include_id_prefix_state() == "unavailable"
+
+
+def test_without_gate_versions_the_other_tools_still_run(on_path, monkeypatch):
+    # The control: only web reads the decision.
+    from jui_cli.core import shared_core
+    load = shared_core.load
+    monkeypatch.setattr(shared_core, "load", lambda name: None if name == "gate_versions" else load(name))
+    record = _stand_in(on_path, "sjui")
+    assert build_cmd._run_tool(["sjui", "build"], on_path) is True
+    assert record.read_text() == "unset"
