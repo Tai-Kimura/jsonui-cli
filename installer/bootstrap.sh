@@ -468,6 +468,18 @@ install_python_tool() {
 if should_install "jui"  && [ -d "jui_tools" ];      then install_python_tool jui_tools      jui; fi
 if should_install "test" && [ -d "test_tools" ];     then install_python_tool test_tools     jsonui-test; fi
 if should_install "doc"  && [ -d "document_tools" ]; then install_python_tool document_tools jsonui-doc; fi
+# document_tools depends on `jsonui-test-cli @ git+…@vX.Y.Z#subdirectory=test_tools`,
+# so its install above REPLACED the editable jsonui-test-cli with a copy fetched
+# from GitHub — the test_tools subtree alone, with no shared/core beside it. The
+# `jsonui-test` console script then ran that copy, and `validate` printed
+# "coverage gate cannot be read" and exited 0: the coverage gate silently off
+# (ticket jui-bootstrap-doc-dep-replaces-editable-test-cli-coverage-gate-off;
+# CI avoids it with --no-deps, measured 2026-08-20). Installing test_tools again
+# puts the editable record back on this tree. Not --no-deps on document_tools:
+# that would copy its other dependencies here, a second list to drift.
+if should_install "test" && should_install "doc" && [ -d "test_tools" ] && [ -d "document_tools" ]; then
+    install_python_tool test_tools jsonui-test
+fi
 
 # jsonui-mcp-server (Claude Code MCP). Separate repo — delegate to its own
 # self-contained installer, which clones itself to ~/.jsonui-mcp-server,
