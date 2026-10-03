@@ -110,6 +110,10 @@
   attempt-1 のみ retry 許容
 - **ios-codegen / android-codegen**: 同じ fixture を生成コードで描画する 2 レーン
   （sjui/kjui 実 codegen → registry → HOST_MODE=codegen。予算は dynamic レーンと同算数）
+- ios / ios-codegen が赤のとき: `Name the failed tests` step が run の xcodebuild.log から失敗した
+  `Test Case` と `file:line: error:` を印字し（`.github/scripts/name_failed_xctests.py`、注釈にも出る）、
+  xcodebuild.log と xcresult を artifact `failure-log-ios` / `failure-log-ios-codegen` に上げる（14 日）。
+  run_conformance.sh は `tail -40` しか印字しないので、jsonui-cli 1.9.9 より前は失敗名がログに残らなかった
 - android-library-tests（105m。初回の実測は step 17.5 分 / 262 case、悪いランナーの 6 倍を見込む）: KotlinJsonUI の
   `library` / `library-dynamic` の androidTest（connectedDebugAndroidTest）を **API 35** / pixel_tablet で走らせる
   （conformance の 34 ではない。API 34 の CI emulator では IME が出ず、前面 window の読み上げも空になることがあり、

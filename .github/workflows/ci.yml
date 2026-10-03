@@ -622,6 +622,25 @@ jobs:
         # nothing about it depends on which ruby runs the suite.
         if: ${{ matrix.tool == 'rjui_tools' }}
         run: npm ci --prefix rjui_tools/spec/support
+      # The layout arms draw emitted React in headless Chromium and measure it
+      # (Collection scroll-to-cell, flow sections, horizontal lanes, RTL
+      # safe-area insets — 13 arms). From jsonui-cli 1.9.0 to 1.9.8 they were
+      # pending on every run here: no browser was installed, and the specs
+      # looked only in macOS's cache path, so installing one on this Linux
+      # leg would not have been enough either (ticket
+      # rjui-chromium-arms-never-run-in-ci; the lookup is
+      # spec/support/headless_chromium.rb now). The playwright that installs
+      # it is pinned in the same package.json. RJUI_SPEC_REQUIRE_CHROMIUM=1
+      # makes a missing browser fail those arms instead of skipping them.
+      # The Chrome apt source is dropped first for the reason the
+      # web-conformance job gives.
+      - name: Install the rjui layout arms' headless Chromium
+        if: ${{ matrix.tool == 'rjui_tools' }}
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/google-chrome.sources
+          rjui_tools/spec/support/node_modules/.bin/playwright install --with-deps --only-shell chromium
+          echo "RJUI_SPEC_REQUIRE_CHROMIUM=1" >> "$GITHUB_ENV"
       - name: rspec (bundle)
         if: ${{ matrix.bundler }}
         working-directory: ${{ matrix.tool }}

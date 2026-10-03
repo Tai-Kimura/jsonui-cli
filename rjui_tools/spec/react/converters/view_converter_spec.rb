@@ -431,7 +431,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
                          'pe-1' => 'padding-inline-end:0.25rem' }.freeze
 
       def chromium
-        Dir.glob(File.join(Dir.home, 'Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell')).max
+        HeadlessChromium.path
       end
 
       def stand_in(text)
@@ -456,7 +456,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       def paddings(jsx)
         esbuild = File.expand_path('../../support/node_modules/.bin/esbuild', __dir__)
         skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
-        skip 'no headless Chromium in the Playwright cache' unless chromium
+        HeadlessChromium.ensure!(self)
 
         classes = jsx.scan(/className="([^"]*)"/).flatten.flat_map(&:split).uniq
         plain, variant = classes.partition { |c| !c.start_with?('rtl:') }
@@ -490,7 +490,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
 
           File.write(File.join(dir, 'page.html'),
                      "<html><head><style>body{margin:0} #{css}</style></head><body><script src=\"app.js\"></script></body></html>")
-          dom, = Open3.capture2e(chromium, '--headless', '--disable-gpu', '--allow-file-access-from-files', '--dump-dom',
+          dom, = Open3.capture2e(chromium, *HeadlessChromium::FLAGS, '--allow-file-access-from-files', '--dump-dom',
                                  "file://#{File.join(dir, 'page.html')}")
           JSON.parse(dom[/PAD(\{.*?\})</m, 1] || raise("no layout in:\n#{dom}\ncss:\n#{css}"))
         end
@@ -652,6 +652,7 @@ require 'react/converters/network_image_converter'
 require 'react/converters/label_converter'
 require 'react/converters/text_view_converter'
 require 'react/converters/segment_converter'
+require_relative '../../support/headless_chromium'
 
 RSpec.describe 'pair-scan closure (web)' do
   let(:config) { { 'use_tailwind' => true } }

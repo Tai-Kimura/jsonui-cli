@@ -8,6 +8,7 @@ require 'react/react_generator'
 require 'react/converters/collection_converter'
 require 'cli/commands/build_command'
 require_relative '../support/typescript_compiler'
+require_relative '../support/headless_chromium'
 
 # What a Collection's `scrollTo` names across sections (4f ruling 2026-09-27;
 # the SSoT's Collection.scrollTo description, jsonui-cli 1.9.0):
@@ -80,7 +81,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
   end
 
   def chromium
-    Dir.glob(File.join(Dir.home, 'Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell')).max
+    HeadlessChromium.path
   end
 
   SCROLL_TO_CELL_CSS = {
@@ -98,7 +99,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
   def top_after(node, targets, renders: false, data: SCROLL_TO_CELL_DATA)
     esbuild = File.expand_path('../support/node_modules/.bin/esbuild', __dir__)
     skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
-    skip 'no headless Chromium in the Playwright cache' unless chromium
+    HeadlessChromium.ensure!(self)
 
     jsx = converted(node)
     css = jsx.scan(/className="([^"]*)"/).flatten.flat_map(&:split).uniq.map do |c|
@@ -180,7 +181,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
 
       File.write(File.join(dir, 'page.html'),
                  "<html><head><style>body{margin:0} #{css}</style></head><body><script src=\"app.js\"></script></body></html>")
-      dom, = Open3.capture2e(chromium, '--headless', '--disable-gpu', '--allow-file-access-from-files', '--dump-dom',
+      dom, = Open3.capture2e(chromium, *HeadlessChromium::FLAGS, '--allow-file-access-from-files', '--dump-dom',
                              "file://#{File.join(dir, 'page.html')}")
       JSON.parse(dom[/AT(\{.*?\})</m, 1] || raise("no result in:\n#{dom}"))
     end

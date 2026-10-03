@@ -6,6 +6,7 @@ require 'tmpdir'
 require_relative '../../spec_helper'
 require 'react/converters/collection_converter'
 require_relative '../../support/typescript_compiler'
+require_relative '../../support/headless_chromium'
 
 # A horizontal Collection's lanes and spacing on the web (4f ruling,
 # 2026-09-26; the rule sjui codegen and SwiftJsonUI Dynamic dde0628 draw):
@@ -78,7 +79,7 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
   }.freeze
 
   def chromium
-    Dir.glob(File.join(Dir.home, 'Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell')).max
+    HeadlessChromium.path
   end
 
   # { "A0" => [x, y], … } as Chromium laid the emitted JSX out: the Collection
@@ -86,7 +87,7 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
   def render(jsx)
     esbuild = File.expand_path('../../support/node_modules/.bin/esbuild', __dir__)
     skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
-    skip 'no headless Chromium in the Playwright cache' unless chromium
+    HeadlessChromium.ensure!(self)
 
     classes = jsx.scan(/className="([^"]*)"/).flatten.flat_map(&:split).uniq
     css = classes.map do |c|
@@ -127,7 +128,7 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
 
       File.write(File.join(dir, 'page.html'),
                  "<html><head><style>body{margin:0} #{css}</style></head><body><script src=\"app.js\"></script></body></html>")
-      dom, = Open3.capture2e(chromium, '--headless', '--disable-gpu', '--allow-file-access-from-files', '--dump-dom',
+      dom, = Open3.capture2e(chromium, *HeadlessChromium::FLAGS, '--allow-file-access-from-files', '--dump-dom',
                              "file://#{File.join(dir, 'page.html')}")
       JSON.parse(dom[/AT(\{.*?\})</m, 1] || raise("no layout in:\n#{dom}"))
     end
