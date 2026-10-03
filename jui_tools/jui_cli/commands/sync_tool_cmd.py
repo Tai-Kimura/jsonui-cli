@@ -717,11 +717,10 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
     # no platforms at all this returned 0 before the check below could say
     # the asked one is missing (ticket
     # jui-platform-asked-by-name-and-absent-from-config-exits-0).
-    if args.platform and args.platform not in platforms:
-        have = ", ".join(platforms) if platforms else "none"
-        from ..core.config_manager import walked_up_note
-        print(f"ERROR: platform '{args.platform}' not in {config_mgr.path} (its platforms: {have})."
-              f"{walked_up_note(config_mgr.path)}")
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, platforms)
+    if absent:
+        print(f"ERROR: {absent}")
         return 1
 
     if not platforms:

@@ -252,6 +252,10 @@ def _cmd_ls_api_models(args: argparse.Namespace) -> int:
     config = config_mgr.load()
     platforms = config.get("platforms") or {}
     target_platform = getattr(args, "platform", None)
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, platforms)
+    if absent:
+        return _emit_error(args, absent)
 
     # Compute expected schema names for orphan detection.
     expected_names: set[str] = set()
