@@ -315,7 +315,9 @@ class TestMigrateIsActuallyDriven(unittest.TestCase):
                 os.chdir(cwd)
 
             self.assertEqual(rc, 1)
-            self.assertIn("not found in config", out.getvalue())
+            # The shared sentence since jsonui-cli 1.9.10 (config_manager.absent_platform_message).
+            self.assertIn("ios was asked for", out.getvalue())
+            self.assertIn("has no such platform", out.getvalue())
 
 
 if __name__ == "__main__":

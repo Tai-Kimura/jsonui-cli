@@ -141,6 +141,37 @@ def walked_up_note(config_path) -> str:
             "submodule, it may not be initialised.")
 
 
+def named_platforms(args) -> list[str]:
+    """The platforms a command line names: `--platform X` and / or `--X-only`."""
+    named = []
+    platform = getattr(args, "platform", None)
+    if platform:
+        named.append(platform)
+    for p in ("ios", "android", "web"):
+        if getattr(args, f"{p}_only", False) and p not in named:
+            named.append(p)
+    return named
+
+
+def absent_platform_message(named, config_path, platforms) -> str | None:
+    """The ERROR text (no "ERROR:" prefix) when a named platform is not in the config read, else None.
+
+    One sentence for every command that takes a platform by name. Until
+    jsonui-cli 1.9.9 each answered on its own: build and generate project ran
+    with nothing selected and said "successfully", verify skipped every screen
+    (when a top-level layouts_directory let it resolve), and sync_tool said
+    "nothing to sync" — all rc 0 (tickets
+    jui-platform-asked-by-name-and-absent-from-config-exits-0 and
+    jui-verify-and-others-platform-asked-by-name-absent-exits-0).
+    """
+    absent = [p for p in named if p not in (platforms or {})]
+    if not absent:
+        return None
+    have = ", ".join(platforms) if platforms else "none"
+    return (f"{', '.join(absent)} was asked for, and {config_path} has no such platform "
+            f"(its platforms: {have}).{walked_up_note(config_path)}")
+
+
 class ConfigManager:
     """Manages jui.config.json read/write."""
 

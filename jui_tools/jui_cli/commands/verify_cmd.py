@@ -87,9 +87,18 @@ def cmd_verify(args: argparse.Namespace) -> int:
     config = config_mgr.load()
     spec_dir = config_mgr.spec_directory
 
+    platforms = config.get("platforms") or {}
+    # A named platform the config does not have is an ERROR. With a
+    # top-level layouts_directory it used to resolve anyway and verify every
+    # screen as "skipped (layout not found on disk)", rc 0 (ticket
+    # jui-verify-and-others-platform-asked-by-name-absent-exits-0).
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, platforms)
+    if absent:
+        print(f"ERROR: {absent}")
+        return 1
     platform = args.platform
     if platform is None:
-        platforms = config.get("platforms") or {}
         platform = next(iter(platforms), None)
     if not platform:
         print("ERROR: No platform configured. Specify --platform explicitly.")

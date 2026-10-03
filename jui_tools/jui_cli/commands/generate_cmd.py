@@ -305,6 +305,14 @@ def _cmd_generate_api(args: argparse.Namespace) -> int:
 
     config = config_mgr.load()
     platforms = config.get("platforms") or {}
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, platforms)
+    if absent:
+        if getattr(args, "as_json", False):
+            print(json.dumps({"error": absent}, indent=2, ensure_ascii=False))
+        else:
+            print(f"ERROR: {absent}")
+        return 1
 
     # Loader returns docs with kept/filtered_out already populated.
     try:
@@ -420,6 +428,13 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
         return 1
 
     config = config_mgr.load()
+    # `--ios-only` on a config without ios used to generate nothing for it and
+    # end rc 0 (ticket jui-verify-and-others-platform-asked-by-name-absent-exits-0).
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, config.get("platforms") or {})
+    if absent:
+        print(f"ERROR: {absent}")
+        return 1
     spec_dir = config_mgr.spec_directory
 
     # Collect spec files. --file scopes PER-SCREEN artifacts only (the

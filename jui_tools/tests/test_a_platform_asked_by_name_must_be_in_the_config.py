@@ -52,7 +52,7 @@ def test_sync_tool_of_a_platform_the_config_lacks_fails_before_nothing_to_sync(t
     run = _run(_superproject_with_an_empty_submodule(tmp_path), "sync_tool", "--platform", "ios")
     out = run.stdout + run.stderr
     assert run.returncode == 1, out
-    assert f"platform 'ios' not in {tmp_path / 'jui.config.json'} (its platforms: none)" in out, out
+    assert f"{ASKED}, and {tmp_path / 'jui.config.json'} has no such platform (its platforms: none)" in out, out
     assert "nothing to sync" not in out, out
 
 
@@ -101,5 +101,5 @@ def test_boundary_sync_tool_of_ios_against_a_config_that_has_ios_stays_green(tmp
     assert run.returncode == 0, out
     # The ERROR's own words — a bare "not in" also matches other lines of a
     # sync's output (it did on CI).
-    assert "platform 'ios' not in" not in out, out
+    assert "was asked for" not in out, out
     assert "DRY RUN" in out, out

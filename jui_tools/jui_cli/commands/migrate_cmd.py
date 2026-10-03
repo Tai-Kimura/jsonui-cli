@@ -39,7 +39,8 @@ def cmd_migrate_layouts(args: argparse.Namespace) -> int:
     platforms = config.get("platforms", {})
     pconfig = platforms.get(args.source_platform)
     if not pconfig:
-        print(f"ERROR: Platform '{args.source_platform}' not found in config.")
+        from ..core.config_manager import absent_platform_message
+        print(f"ERROR: {absent_platform_message([args.source_platform], config_mgr.path, platforms)}")
         return 1
 
     layouts_rel = pconfig.get("layoutsDir")
