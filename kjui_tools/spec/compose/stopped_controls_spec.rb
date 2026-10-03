@@ -57,8 +57,13 @@ RSpec.describe 'kjui a control a stop holds' do
   inner_nodes = lambda do |code, element|
     chains = code.scan(/^(.*?)\.(clickable|toggleable|selectable)\b/).map { |before, what| [what, before.end_with?(element)] }
     # A call carrying the control's own tag is its root, not an inner node.
+    # Two spellings, as stop_inner_nodes writes them: the read as the
+    # `modifier` argument, or — when the call has a `modifier = Modifier…`
+    # of its own (a Segment Tab's `<id>_tab_<n>` testTag) — in front of
+    # that chain.
     calls = code.scan(/\b(RadioButton|Checkbox|Tab)\((.*?)\n\s*\)/m).reject { |_, args| args.include?('testTagsAsResourceId') }.map do |what, args|
-      [what, args.include?("modifier = #{element.delete_prefix('.then(').delete_suffix(')').sub(/\A\.semantics/, 'Modifier.semantics')}")]
+      [what, args.include?("modifier = #{element.delete_prefix('.then(').delete_suffix(')').sub(/\A\.semantics/, 'Modifier.semantics')}") ||
+             args.include?("modifier = Modifier#{element}")]
     end
     chains + calls
   end

@@ -173,10 +173,23 @@ module KjuiTools
           
           code += "\n" + indent(") {", depth)
           
+          # `<id>_tab_<n>` on each Tab: the testTag the Android driver's
+          # selectTab waits for (ActionExecutor.kt executeSelectTab), the id
+          # rjui gives each segment button and sjui each segment. The Tabs
+          # were untagged, so a Segment could not be selected from a UI test
+          # (ticket jui-segment-tabs-carry-no-tab-ids-so-selecttab-cannot-
+          # reach-them). The Segment's own testTagsAsResourceId covers them.
+          # None without an id, like the Segment's own tag.
+          tab_tags = !json_data['id'].nil?
+          if tab_tags
+            required_imports&.add(:test_tag)
+          end
+
           # Generate tabs
           if segments.is_a?(Array)
             segments.each_with_index do |segment, index|
               code += "\n" + indent("Tab(", depth + 1)
+              code += "\n" + indent("modifier = Modifier.testTag(#{JsonUIShared::StringLiterals.kotlin("#{json_data['id']}_tab_#{index}")}),", depth + 2) if tab_tags
               # For selected comparison, handle both dynamic and static cases
               selected_comparison = is_dynamic_index ? "(#{selected_index} == #{index})" : (selected_index == index).to_s
               code += "\n" + indent("selected = #{selected_comparison},", depth + 2)

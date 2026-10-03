@@ -143,7 +143,7 @@ module KjuiTools
                 handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
                 code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) { viewModel.updateData(mapOf(\"#{variable}\" to newValue)); #{handler_call} } }", depth) + "\n"
               else
-                code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) { viewModel.updateData(mapOf(\"#{variable}\" to newValue)); data.#{json_data['onTextChange']}?.invoke() } }", depth) + "\n"
+                code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) { viewModel.updateData(mapOf(\"#{variable}\" to newValue)); #{Helpers::ModifierBuilder.get_event_handler_invocation("@{#{json_data['onTextChange']}}", view_id, 'newValue')} } }", depth) + "\n"
               end
             else
               code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) viewModel.updateData(mapOf(\"#{variable}\" to newValue)) }", depth) + "\n"
@@ -162,7 +162,7 @@ module KjuiTools
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
               code += indent("LaunchedEffect(#{state_var}) { snapshotFlow { #{state_var}.text.toString() }.drop(1).collect { newValue -> #{handler_call} } }", depth) + "\n"
             else
-              code += indent("LaunchedEffect(#{state_var}) { snapshotFlow { #{state_var}.text.toString() }.drop(1).collect { data.#{json_data['onTextChange']}?.invoke() } }", depth) + "\n"
+              code += indent("LaunchedEffect(#{state_var}) { snapshotFlow { #{state_var}.text.toString() }.drop(1).collect { newValue -> #{Helpers::ModifierBuilder.get_event_handler_invocation("@{#{json_data['onTextChange']}}", view_id, 'newValue')} } }", depth) + "\n"
             end
           end
 
