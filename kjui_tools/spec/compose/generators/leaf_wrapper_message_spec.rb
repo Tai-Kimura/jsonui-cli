@@ -74,23 +74,19 @@ RSpec.describe 'the leaf wrapper kjui writes' do
 
   it 'says what shared/core/leaf_children_vectors.json says, case by case, when run' do
     skip "kotlinc: #{KotlinCompiler.unavailable_reason}" if KotlinCompiler.unavailable_reason
-    gson = KotlinCompiler.newest('com.google.code.gson', 'gson')
-    skip 'gson is not in the Gradle cache' unless gson
+    gson = KotlinCompiler.jar('com.google.code.gson', 'gson')
+    skip "gson is not in the Gradle cache at the pinned version — fetch: #{KotlinCompiler::FETCH_HINT}" unless gson
 
     cases = JSON.parse(File.read(vectors_path))['cases']
     expect(cases.map { |c| c['expected'].nil? }.uniq).to contain_exactly(true, false)
 
     source = runner_source
 
-    stdlib = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
+    stdlib = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
     got = Dir.mktmpdir('kjui_leaf_run') do |dir|
       file = File.join(dir, 'LeafMessage.kt')
       File.write(file, source)
-      compiler_cp = [KotlinCompiler.compiler_jar, stdlib,
-                     KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-reflect'),
-                     KotlinCompiler.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'),
-                     KotlinCompiler.newest('org.jetbrains', 'annotations'),
-                     KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+      compiler_cp = KotlinCompiler.compiler_classpath
       out, status = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                                     '-no-stdlib', '-cp', [stdlib, gson].join(':'), '-d', File.join(dir, 'out'), file)
       raise "kotlinc: #{out}" unless status.success?
