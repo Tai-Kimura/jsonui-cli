@@ -2096,6 +2096,27 @@ def _gates():
     return shared_core.load("gate_versions")
 
 
+#: Printed, and `generate branch-tests` (and its --check) FAILS, when this tool
+#: tree has no shared/core/gate_versions.py — the test_tools subtree alone,
+#: what pip fetches for `jsonui-test-cli @ git+…#subdirectory=test_tools`. It
+#: announces no release, so it cannot say whether the generated tests should
+#: fail on unmatched requests, and it writes them as if they should not. Until
+#: jsonui-cli 1.9.8 the run printed this as a note and exited 0 — the same
+#: shape jsonui-cli 1.9.7 made a failure on validate's coverage gate (ticket
+#: jui-test-branch-tests-unmatched-gate-unreadable-is-a-note-not-a-failure).
+UNMATCHED_GATE_UNAVAILABLE = (
+    "unmatched-request gate cannot be read — shared/core/gate_versions.py is not in this "
+    "tool tree (the test_tools subtree alone announces no release), so this run cannot "
+    "tell whether the generated tests fail on unmatched requests and FAILS: run "
+    "~/.jsonui-cli/test_tools/jsonui-test, or install test_tools editable "
+    "(`pip install -e <jsonui-cli>/test_tools`)")
+
+
+def unmatched_gate_unavailable() -> bool:
+    """True when this tool tree cannot read shared/core/gate_versions.py."""
+    return _gates() is None
+
+
 def unmatched_gate() -> tuple[bool, str | None]:
     """(red, gate): whether unmatched requests in the act window fail the
     generated test, and the release that makes them fail (None when unset,
@@ -2117,8 +2138,7 @@ def unmatched_gate_note() -> str | None:
     it looks like it would: unreadable, or no reader in this tool tree."""
     gates = _gates()
     if gates is None:
-        return ("unmatched-request gate cannot be read — shared/core/gate_versions.py is not "
-                "in this tool tree, so this build announces no release and does not gate")
+        return UNMATCHED_GATE_UNAVAILABLE
     if gates.gate_state(UNMATCHED_GATE_FROM) == "unreadable":
         return ("unmatched-request gate "
                 + gates.state_note("UNMATCHED_GATE_FROM", UNMATCHED_GATE_FROM)
