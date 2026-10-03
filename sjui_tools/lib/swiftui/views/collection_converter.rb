@@ -1253,7 +1253,8 @@ module SjuiTools
                   end
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
-                    vars = open_cell_foreach('cellsData', page_start: drawn.empty? ? nil : 'pageStart', section_index: index)
+                    vars = open_cell_foreach('cellsData', page_start: drawn.empty? ? nil : 'pageStart', section_index: index,
+                                                         pager: true)
                     indent do
                       add_paging_cell(cell_view_name, vars, spacing)
                     end
@@ -1267,7 +1268,7 @@ module SjuiTools
             elsif (cell_view_name = legacy_paging_cell) && property_name
               add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
               indent do
-                vars = open_cell_foreach('cellsData')
+                vars = open_cell_foreach('cellsData', pager: true)
                 indent do
                   add_paging_cell(cell_view_name, vars, spacing)
                 end
@@ -1935,7 +1936,7 @@ module SjuiTools
         # cellIdProperty the ids are the cells' own keys, as before: distinct
         # unless two sections share a key (not changed here — every face
         # Collection of two or more sections has cellIdProperty).
-        def open_cell_foreach(data_source_expr, page_start: nil, section_index: nil)
+        def open_cell_foreach(data_source_expr, page_start: nil, section_index: nil, pager: false)
           cell_id_property = @component['cellIdProperty']
           auto_tracking = @component['autoChangeTrackingId'] == true
 
@@ -1971,8 +1972,9 @@ module SjuiTools
           # earlier section has it — two views answering one id left
           # SwiftUI to choose (4f round 10).
           # A String scrollTo with no cellIdProperty: the same rule on the
-          # cellIds.
-          earlier_keys = later && has_scroll_to? &&
+          # cellIds. Not a pager's: its loop is by the page (below), and its
+          # scrollTo turns the selection, so nothing would read the set.
+          earlier_keys = !pager && later && has_scroll_to? &&
                          (cell_id_property ? earlier_cell_keys(section_index) : cell_id_scroll? && earlier_cell_ids(section_index))
           add_line "let earlierKeys = #{earlier_keys}" if earlier_keys
           if keyed
@@ -1987,6 +1989,21 @@ module SjuiTools
             end
             add_line "}"
             vars = { data_var: 'cell.data', index_var: 'cell.index' }
+            if pager
+              # A pager's page is known by its place among all the pages (its
+              # tag), not by its key: with autoChangeTrackingId the key is the
+              # enriched cellId, which changes with the cell's content, and a
+              # page whose id changed during a swipe — even off screen — was
+              # removed and re-inserted, leaving the paging TabView between two
+              # pages (ticket sjui-paging-collection-uses-change-tracking-
+              # cellid-as-page-identity-and-stops-mid-swipe; 16 of 41 swipes on
+              # a consumer's book screen). KotlinJsonUI's HorizontalPager is
+              # positional too. The cellId still reaches the cell, which
+              # redraws on it. A pager's scrollTo turns the selection, not an
+              # id (generate_paging_scroll_to).
+              add_line 'ForEach(items, id: \\.index) { cell in'
+              return vars
+            end
             unless has_scroll_to?
               # No scrollTo: a cell's loop id is its key in its section,
               # [section, key] (keyed_loop_ids), when no earlier cell of the
