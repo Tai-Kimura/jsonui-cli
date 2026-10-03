@@ -235,9 +235,13 @@ def test_control_a_spec_without_a_layout_still_checks_its_components(tmp_path, a
     assert [m for _, m in _element_warnings(spec)] == ["Element 'missing' not found in components list"]
 
 
-def test_without_gate_versions_the_ids_are_still_checked_all_info(tmp_path, at, monkeypatch):
-    # A tool tree without shared/core/gate_versions.py: nothing may become a
-    # WARNING that was never announced (U5), and it says why — as INFO.
+def test_without_gate_versions_an_id_not_in_the_layout_is_an_error_that_says_why(tmp_path, at, monkeypatch):
+    # A tool tree without shared/core/gate_versions.py cannot decide whether an
+    # id not in the layout is a WARNING (U5: nothing becomes one unannounced).
+    # Until jsonui-cli 1.9.8 it listed them as INFO and the validation passed —
+    # the gate silently off; now it is an ERROR that says why and how to fix
+    # it (ticket gate-readers-without-shared-core-fall-silent-five-more). The
+    # ids are still listed, as INFO.
     at("1.8.121")
     load = validator_mod.shared_core.load
     monkeypatch.setattr(validator_mod.shared_core, "load",
@@ -246,10 +250,20 @@ def test_without_gate_versions_the_ids_are_still_checked_all_info(tmp_path, at, 
     messages = _messages(spec)
     assert ("info", "stateManagement.states[0].values[0].visibleElements", MISSING) in messages
     assert not any(lv == "warning" for lv, *_ in messages), messages
-    assert ("info", "stateManagement",
+    assert ("error", "stateManagement",
             "the level of 1 element id(s) not in detail.json cannot be decided — "
-            "shared/core/gate_versions.py is not in this tool tree; they are listed as "
-            "INFO") in messages
+            "shared/core/gate_versions.py is not in this tool tree; "
+            + validator_mod.GATE_UNREADABLE_FAILS) in messages
+
+
+def test_without_gate_versions_every_id_in_the_layout_is_no_error(tmp_path, at, monkeypatch):
+    # The control: nothing missing, so the level decides nothing.
+    at("1.8.121")
+    load = validator_mod.shared_core.load
+    monkeypatch.setattr(validator_mod.shared_core, "load",
+                        lambda name: None if name == "gate_versions" else load(name))
+    spec = _face(tmp_path, visible=["summary"])
+    assert not any(lv == "error" for lv, *_ in _messages(spec))
 
 
 class TestEveryPlatform:

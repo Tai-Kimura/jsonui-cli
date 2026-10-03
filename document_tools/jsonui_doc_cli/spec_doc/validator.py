@@ -109,6 +109,18 @@ class SpecValidationResult:
         return len(self.infos)
 
 
+#: The tail of the ERROR a spec validation gets when a gate's level cannot be
+#: decided because this tool tree has no shared/core/gate_versions.py — the
+#: document_tools subtree alone, what pip fetches for
+#: `jsonui-doc-cli @ git+…#subdirectory=document_tools`. Until jsonui-cli 1.9.8
+#: the findings were listed as INFO and the validation passed: the gate
+#: silently off (ticket gate-readers-without-shared-core-fall-silent-five-more).
+GATE_UNREADABLE_FAILS = (
+    "this validation cannot tell whether they are WARNINGs and FAILS: run "
+    "~/.jsonui-cli/document_tools/jsonui-doc, or install document_tools editable "
+    "(`pip install -e <jsonui-cli>/document_tools`)")
+
+
 #: The release from which an element id the layout does not have is a
 #: WARNING (design v4.20, P2.5): below it, an INFO and one line announcing it
 #: — the specs with a layout were never checked before, and a face holding
@@ -1146,6 +1158,12 @@ class SpecValidator:
                          f"is {why} — write the value itself, or describe it in description"),
                 level="warning" if gating else "info")
             (result.warnings if gating else result.infos).append(message)
+        if found and gates is None:
+            result.errors.append(SpecValidationMessage(
+                path=path, level="error",
+                message=(f"the level of {found} initial value(s) that do not read as their "
+                         "type cannot be decided — shared/core/gate_versions.py is not in "
+                         "this tool tree; " + GATE_UNREADABLE_FAILS)))
         if found and gates and gates.gate_state(INITIAL_VALUE_TYPE_GATE_FROM) == "release" and not gating:
             result.infos.append(SpecValidationMessage(
                 path=path, level="info",
@@ -3948,11 +3966,11 @@ class SpecValidator:
                          "— " + include_spelling_note(in_includes, layout.include_web,
                                                       include_state))))
         if missing and gates is None:
-            result.infos.append(SpecValidationMessage(
-                path="stateManagement", level="info",
+            result.errors.append(SpecValidationMessage(
+                path="stateManagement", level="error",
                 message=(f"the level of {missing} element id(s) not in {name}.json cannot "
                          "be decided — shared/core/gate_versions.py is not in this tool "
-                         "tree; they are listed as INFO")))
+                         "tree; " + GATE_UNREADABLE_FAILS)))
         if missing and gates and gates.gate_state(LAYOUT_ID_GATE_FROM) == "release" \
                 and not gating:
             result.infos.append(SpecValidationMessage(
