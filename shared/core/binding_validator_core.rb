@@ -745,9 +745,18 @@ module JsonUIShared
 
         # binding-two-way-complex: two-way bindings write back, so the
         # expression must be a single flat identifier — no '.', '[',
-        # '??', '!' and no surrounding text.
+        # '??', '!' and no surrounding text. The message names the cause the
+        # value has: a value that is not the binding alone (literal text
+        # around it, or a second binding — the value binding-mixed-text warns
+        # on) was reported as "no '.', '[', '??', '!'" whatever the expression
+        # was, so `Name: @{profileName}` pointed at characters it does not hold.
         if two_way
-          unless whole_value && expr.match?(FLAT_IDENTIFIER_RE)
+          if !whole_value
+            cause = exprs.length > 1 ? 'holds more than one binding' : 'mixes literal text with the binding'
+            flat = expr.match?(FLAT_IDENTIFIER_RE) ? '' : " — and to a flat property (no '.', '[', '??', '!')"
+            add_error('binding-two-way-complex',
+                      "Two-way binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' must be the whole value, and #{value.inspect} #{cause}. A two-way field writes back to one property, so bind it alone#{flat} and compose any text around it in the ViewModel.")
+          elsif !expr.match?(FLAT_IDENTIFIER_RE)
             add_error('binding-two-way-complex',
                       "Two-way binding '@{#{expr}}' in '#{component_type}.#{attribute_name}' must be a single flat identifier (no '.', '[', '??', '!'). Bind a flat property and derive the value in the ViewModel.")
           end

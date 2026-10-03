@@ -269,6 +269,40 @@ RSpec.describe RjuiTools::Core::BindingValidator do
         expect(messages.any? { |m| m.include?('[binding-two-way-complex]') }).to be true
       end
 
+      # The ERROR names the cause the value has. "Name: @{profileName}" was
+      # reported as "no '.', '[', '??', '!'" — characters it does not hold —
+      # and only the binding-mixed-text WARNING above it said what was wrong.
+      def two_way_errors(text)
+        validator.validate({ 'type' => 'TextField', 'text' => text })
+                 .select { |m| m.include?('[binding-two-way-complex]') }
+      end
+
+      it 'names literal text around a two-way binding as the cause, not the characters' do
+        errors = two_way_errors('Name: @{profileName}')
+        expect(errors.size).to eq(1)
+        expect(errors.first).to include('must be the whole value', '"Name: @{profileName}" mixes literal text with the binding')
+        expect(errors.first).not_to include("'??'")
+      end
+
+      it 'names a second binding as the cause' do
+        errors = two_way_errors('@{first}@{last}')
+        expect(errors.size).to eq(2)
+        expect(errors).to all(include('holds more than one binding'))
+      end
+
+      it 'names both causes when the binding around literal text is not flat' do
+        errors = two_way_errors('Name: @{user.name}')
+        expect(errors.size).to eq(1)
+        expect(errors.first).to include('mixes literal text with the binding', "to a flat property (no '.', '[', '??', '!')")
+      end
+
+      it 'keeps the flat-identifier message for a whole binding that is not flat' do
+        errors = two_way_errors('@{user.email}')
+        expect(errors.size).to eq(1)
+        expect(errors.first).to include("must be a single flat identifier (no '.', '[', '??', '!')")
+        expect(errors.first).not_to include('whole value')
+      end
+
       it 'accepts a flat identifier on a two-way attribute' do
         component = {
           'type' => 'TextField',
