@@ -30,6 +30,14 @@ module HeadlessChromium
 
   REQUIRE_ENV = 'RJUI_SPEC_REQUIRE_CHROMIUM'
 
+  # How every arm starts it. `--no-sandbox` because the CI runner (Ubuntu
+  # 24.04) restricts unprivileged user namespaces with AppArmor, and the
+  # browser then dies before drawing: "No usable sandbox!" — measured on the
+  # first CI run that had a browser (37123828134, all 13 arms). Playwright
+  # itself launches Chromium without the sandbox by default; the page is a
+  # local file the spec wrote.
+  FLAGS = %w[--headless --disable-gpu --no-sandbox].freeze
+
   def caches
     [ENV['PLAYWRIGHT_BROWSERS_PATH'],
      File.join(Dir.home, 'Library', 'Caches', 'ms-playwright'),

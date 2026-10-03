@@ -181,7 +181,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
 
       File.write(File.join(dir, 'page.html'),
                  "<html><head><style>body{margin:0} #{css}</style></head><body><script src=\"app.js\"></script></body></html>")
-      dom, = Open3.capture2e(chromium, '--headless', '--disable-gpu', '--allow-file-access-from-files', '--dump-dom',
+      dom, = Open3.capture2e(chromium, *HeadlessChromium::FLAGS, '--allow-file-access-from-files', '--dump-dom',
                              "file://#{File.join(dir, 'page.html')}")
       JSON.parse(dom[/AT(\{.*?\})</m, 1] || raise("no result in:\n#{dom}"))
     end
