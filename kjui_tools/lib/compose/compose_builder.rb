@@ -1126,7 +1126,16 @@ module KjuiTools
         # weighted: the slot is the component's minimum on both axes, as
         # SafeAreaView's root Box hands its own (propagateMinConstraints)
         min = weight.empty? ? '' : ",\n#{Helpers::CodeIndent.pad('propagateMinConstraints = true', depth + 1)}"
-        Helpers::CodeIndent.pad('Box(', depth) + Helpers::ModifierBuilder.format(modifiers, depth) + min + "\n" +
+        # One modifier per line, `Modifier` on its own, as a built-in's chain:
+        # a wrapper that re-scopes its content (VisibilityWrapper's content is
+        # a BoxScope) hoists the `.weight(` / `.align(` lines it finds there
+        # onto itself, in the parent's scope, and a responsive section is
+        # extracted with its parent's receiver by the same lines. Written on
+        # one line (`Modifier.align(Alignment.Start)` — format's shortcut
+        # for a single modifier) they stayed inside the wrapper: a Column's
+        # alignment in VisibilityWrapper's BoxScope did not compile, and a
+        # weight there no longer reached the parent.
+        Helpers::CodeIndent.pad('Box(', depth) + Helpers::ModifierBuilder.format(['Modifier'] + modifiers, depth) + min + "\n" +
           Helpers::CodeIndent.pad(') {', depth) + "\n" +
           Helpers::CodeIndent.shift(code.rstrip, 1) + "\n" +
           Helpers::CodeIndent.pad('}', depth)
