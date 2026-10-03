@@ -83,9 +83,12 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     # the String "3" reached section 0's fourth cell, which has no key, over
     # the later section's cell keyed "3"; "1:7" the later section's eighth
     # cell, which has no key; "1:y2" the later section's cell keyed "y2".
+    # Not the pager: from jsonui-cli 1.9.10 a pager's loop id is its page's
+    # place and its scrollTo turns the selection, never a loop id (ticket
+    # sjui-paging-collection-uses-change-tracking-cellid-as-page-identity-and-
+    # stops-mid-swipe; collection_pager_page_identity_spec.rb).
     def keyed_scroll_routes
-      section_scroll_routes.merge('sectioned List' => { 'listStyle' => 'plain' }, 'horizontal' => { 'layout' => 'horizontal' },
-                                  'pager' => { 'layout' => 'horizontal', 'paging' => true })
+      section_scroll_routes.merge('sectioned List' => { 'listStyle' => 'plain' }, 'horizontal' => { 'layout' => 'horizontal' })
     end
 
     # A section's targets: the cells' keys, each taken by the first cell
