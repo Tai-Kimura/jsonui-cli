@@ -252,13 +252,18 @@ class TestTheGateVersion:
         assert not cc.gate_is_on("999.0.0", literal)
         assert not cc.gate_is_on("1.8.119", literal)
 
-    def test_a_tree_without_gate_versions_never_gates_and_says_so(self, monkeypatch):
+    def test_a_tree_without_gate_versions_cannot_say_and_says_how_to_fix(self, monkeypatch):
+        # Until 1.9.7 the line ended "does not gate" and the run exited 0 —
+        # the gate silently off (jui-bootstrap-doc-dep-replaces-editable-test-
+        # cli-coverage-gate-off). The run's rc is TestUnreadableGate's.
         monkeypatch.setattr(cc, "_gates", lambda: None)
         monkeypatch.setattr(cc, "VALIDATE_GATE_FROM", "1.8.120")
         assert cc.gate_state() == "unavailable" and not cc.gate_is_on("9.9.9")
-        assert cc._gate_line("9.9.9") == (
-            "coverage gate cannot be read — shared/core/gate_versions.py is not in this "
-            "tool tree, so this build announces no release and does not gate")
+        assert cc.gate_unreadable()
+        assert cc._gate_line("9.9.9") == cc.GATE_UNREADABLE
+        assert "FAILS" in cc.GATE_UNREADABLE
+        assert "~/.jsonui-cli/test_tools/jsonui-test" in cc.GATE_UNREADABLE
+        assert "pip install -e <jsonui-cli>/test_tools" in cc.GATE_UNREADABLE
 
     def test_the_on_line_names_the_release_it_shipped_as(self, monkeypatch):
         # v1.8.120 announced "1.8.121"; it shipped as 1.9.0. The literal stays
@@ -379,3 +384,36 @@ class TestXxxiAtTheTag:
         assert 'validate_gate_version.py" "$VER"' in text
         assert '--repo "$R" "$BRANCH" "$PREV"' in text   # the previous tag's tree, too
         assert 'ck "validate gate version (xxxi)"' in text
+
+
+# ------------------------------------------- a tree that cannot read its gate ---
+
+class TestUnreadableGate:
+    """A tool tree without shared/core cannot read gate_versions.py. When
+    coverage ran, validate FAILS and says why (cc.GATE_UNREADABLE); until
+    jsonui-cli 1.9.7 it passed with a note — what installer/bootstrap.sh's
+    `jsonui-test` console script ran (jui-bootstrap-doc-dep-replaces-editable-
+    test-cli-coverage-gate-off). The control: the same project with the gate
+    readable passes; a project coverage does not apply to still passes."""
+
+    def test_a_clean_project_fails_when_the_gate_cannot_be_read(self, tmp_path, validate, monkeypatch):
+        root = _clean(tmp_path)
+        rc, out = validate(root, gate=BELOW)
+        assert rc == 0 and "Result: PASSED" in out, out          # control: readable, clean
+        monkeypatch.setattr(cc, "_gates", lambda: None)
+        rc, out = validate(root, gate=BELOW)
+        assert rc == 1, out
+        assert "Result: FAILED" in out
+        assert "Coverage: FAILED (gate unreadable in this tool tree)" in _summary(out)
+        assert cc.GATE_UNREADABLE in _section(out)
+
+    def test_a_project_coverage_does_not_apply_to_still_passes(self, tmp_path, validate, monkeypatch):
+        root = tmp_path / "plain"
+        (root / "tests").mkdir(parents=True)
+        (root / "jui.config.json").write_text(json.dumps({"platforms": ["web"]}), encoding="utf-8")
+        _with_test(root)
+        monkeypatch.setattr(cc, "_gates", lambda: None)
+        rc, out = validate(root)
+        assert rc == 0, out
+        assert any(line.startswith("coverage not applicable:") for line in _section(out)), out
+

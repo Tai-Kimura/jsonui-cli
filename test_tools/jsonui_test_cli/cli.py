@@ -413,13 +413,18 @@ def cmd_validate(args):
     # that when it gates, `Result:`, the summary line and the exit code are
     # three readings of one decision — not a PASSED followed by a FAILED.
     # A run stopped by its own errors says coverage did not run.
-    from .contracts_coverage import gate_is_on, validate_section
+    from .contracts_coverage import gate_is_on, gate_unreadable, validate_section
     coverage_lines, coverage_gate = validate_section(
         _project_root(getattr(args, "config", None)), __version__,
         skipped=getattr(args, "no_coverage_check", False),
         blocked_by=total_errors or (1 if mock_rc else 0))
     coverage_gates = gate_is_on(__version__) and coverage_gate is not None
-    coverage_fails = coverage_gates and coverage_gate["fails"]
+    # Coverage ran, and this tree cannot read whether it gates: a FAILED run,
+    # not a PASSED one with a note (GATE_UNREADABLE says why and how to fix).
+    # Until jsonui-cli 1.9.7 it exited 0 — the instrument not run, read as
+    # passed.
+    coverage_unreadable = coverage_gate is not None and gate_unreadable()
+    coverage_fails = (coverage_gates and coverage_gate["fails"]) or coverage_unreadable
 
     # Summary
     print(f"\n{'='*50}")
@@ -460,7 +465,9 @@ def cmd_validate(args):
         summary += f", Info: {total_infos} (not counted)"
     # Only once it gates: before that the section reports and moves nothing,
     # and a field on every run would be a standing line.
-    if coverage_gates:
+    if coverage_unreadable:
+        summary += ", Coverage: FAILED (gate unreadable in this tool tree)"
+    elif coverage_gates:
         summary += (f", Coverage: {'FAILED' if coverage_fails else 'passed'} "
                     f"(exit {coverage_gate['exit']}"
                     + (f"; {'; '.join(coverage_gate['why'])}" if coverage_gate["why"] else "")

@@ -1388,6 +1388,26 @@ VALIDATE_NOTICE = (
     "release note")
 
 
+#: Printed, and the run FAILS, when coverage ran but the gate cannot be read.
+#: A tool tree without shared/core (the test_tools subtree alone — what pip
+#: fetches for `jsonui-test-cli @ git+…#subdirectory=test_tools`) announces no
+#: release, so it cannot say whether the gate is on. Until jsonui-cli 1.9.7 that
+#: run exited 0 — the gate silently off, and installer/bootstrap.sh put the
+#: `jsonui-test` console script on exactly that copy (ticket
+#: jui-bootstrap-doc-dep-replaces-editable-test-cli-coverage-gate-off).
+GATE_UNREADABLE = (
+    "coverage gate cannot be read — shared/core/gate_versions.py is not in this tool tree "
+    "(the test_tools subtree alone announces no release), so this run cannot tell whether "
+    "coverage gates it and FAILS: run ~/.jsonui-cli/test_tools/jsonui-test, or install "
+    "test_tools editable (`pip install -e <jsonui-cli>/test_tools`, which installer/bootstrap.sh "
+    "does from jsonui-cli 1.9.7)")
+
+
+def gate_unreadable() -> bool:
+    """True when this tool tree cannot read shared/core/gate_versions.py."""
+    return _gates() is None
+
+
 def gate_state(gate_from: str | None = None) -> str:
     """`undeclared`, `withdrawn`, `unreadable` or `release` of
     VALIDATE_GATE_FROM (or *gate_from*) — only `release` ever gates — or
@@ -1460,8 +1480,7 @@ def _gate_line(version: str) -> str:
     if state == "release":
         return VALIDATE_NOTICE.format(version=VALIDATE_GATE_FROM)
     if state == "unavailable":
-        return ("coverage gate cannot be read — shared/core/gate_versions.py is not in "
-                "this tool tree, so this build announces no release and does not gate")
+        return GATE_UNREADABLE
     return "coverage gate " + _gates().state_note("VALIDATE_GATE_FROM", VALIDATE_GATE_FROM)
 
 
