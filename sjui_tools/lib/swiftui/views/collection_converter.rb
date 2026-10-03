@@ -1972,8 +1972,9 @@ module SjuiTools
           # earlier section has it — two views answering one id left
           # SwiftUI to choose (4f round 10).
           # A String scrollTo with no cellIdProperty: the same rule on the
-          # cellIds.
-          earlier_keys = later && has_scroll_to? &&
+          # cellIds. Not a pager's: its loop is by the page (below), and its
+          # scrollTo turns the selection, so nothing would read the set.
+          earlier_keys = !pager && later && has_scroll_to? &&
                          (cell_id_property ? earlier_cell_keys(section_index) : cell_id_scroll? && earlier_cell_ids(section_index))
           add_line "let earlierKeys = #{earlier_keys}" if earlier_keys
           if keyed

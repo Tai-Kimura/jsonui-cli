@@ -56,4 +56,53 @@ RSpec.describe 'sjui: a pager page is known by its place' do
     expect(code).not_to include('let targets: [AnyHashable]')
     expect(code).to include('.onChange(of: data.target)', 'data.page = found')
   end
+
+  # The scrollTo's first-section-wins key set (earlierKeys) is the keyed
+  # loop's: a pager reads none of it, so it is not emitted there — an unread
+  # `let` is a warning in a consumer's build and a pass over every earlier
+  # section's cells on each redraw.
+  it 'emits no earlier-section key set for a pager with a scrollTo' do
+    expect(convert(sections.merge('scrollTo' => '@{target}'))).not_to include('earlierKeys')
+    expect(convert(sections.merge('scrollTo' => '@{target}', 'paging' => false))).to include('let earlierKeys =')
+  end
+
+  # The page style aside (the macOS SDK the suite type-checks against has no
+  # `.page`), as in collection_paging_pages_spec.
+  def compilable(codes)
+    styled = codes.map { |code| code.lines.reject { |l| l.include?('.tabViewStyle(.page(') }.join }
+    expect(styled.join).not_to include('.page(')
+    <<~SWIFT
+      #{EmittedSwift::COLLECTION_DATA_SOURCE_STUB}
+      #{cell_view_stub('ACellView', 'BCellView')}
+      extension Array where Element == [String: Any] {
+          func reconfigured(cellIdProperty: String?, autoChangeTrackingId: Bool) -> [[String: Any]] { self }
+      }
+      struct TestData { var rows: CollectionDataSource? = nil; var page: Int = 0; var target: String = "" }
+      struct EmittedHost: View {
+          @State var data = TestData()
+          var body: some View {
+              VStack {
+      #{styled.join("\n")}
+              }
+          }
+      }
+    SWIFT
+  end
+
+  def pager_codes
+    [convert(sections), convert(sections.merge('scrollTo' => '@{target}')), convert('cellClasses' => ['ACell'])]
+  end
+
+  it 'the emitted Swift type-checks: sections, sections with a scrollTo, the class list', :swift_compile do
+    expect(compilable(pager_codes)).to compile_as_swift
+  end
+
+  # compile_as_swift reads the exit status only; an unread value is a warning.
+  it 'and leaves no value unread', :swift_compile do
+    reason = SwiftCompiler.unavailable_reason
+    skip reason if reason
+    result = SwiftCompiler.type_check(compilable(pager_codes))
+    expect(result).to be_success, result.output
+    expect(result.output.lines.grep(/warning:.*never used/)).to be_empty, result.output
+  end
 end
