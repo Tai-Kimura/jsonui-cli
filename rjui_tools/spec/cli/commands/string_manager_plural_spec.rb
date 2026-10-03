@@ -150,6 +150,33 @@ RSpec.describe 'StringManager plural emit' do
         .to raise_error(JsonUIShared::PluralValidator::ValidationError)
     end
 
+    # A plural entry without its own forms for a language the strings.json
+    # uses is an ERROR on every face (the shared validator). Until 1.9.10 it
+    # was filled with the default language's forms and selected by the
+    # missing language's rules ("1 notes" in ja).
+    it 'raises when a plural entry lacks a language the strings.json uses, naming the key, the language and the set' do
+      config = base_config(ts: true)
+      write_resources_strings(config, { 'home' => {
+        'title' => { 'en' => 'Home', 'ja' => 'ホーム' },
+        'note_count' => { 'en' => { 'plural' => { 'one' => '{count} note', 'other' => '{count} notes' } } }
+      } })
+      logged = []
+      allow(RjuiTools::Core::Logger).to receive(:error) { |m| logged << m }
+      expect { run_update(config) }.to raise_error(JsonUIShared::PluralValidator::ValidationError)
+      expect(logged.join("\n")).to include('home.note_count: a plural entry needs its own forms for every ' \
+                                           'language of this strings.json — missing ja (languages here: en, ja)')
+    end
+
+    it 'boundary: every language present raises nothing' do
+      config = base_config(ts: true)
+      write_resources_strings(config, { 'home' => {
+        'title' => { 'en' => 'Home', 'ja' => 'ホーム' },
+        'note_count' => { 'en' => { 'plural' => { 'one' => '{count} note', 'other' => '{count} notes' } },
+                          'ja' => { 'plural' => { 'other' => '{count}件' } } }
+      } })
+      expect { run_update(config) }.not_to raise_error
+    end
+
     it 'raises for a CLDR-invalid category (en zero)' do
       config = base_config(ts: true)
       write_resources_strings(config, { 'home' => { 'k' => {
