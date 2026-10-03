@@ -68,6 +68,13 @@ def test_a_config_with_other_platforms_names_them_and_says_nothing_about_walking
 
 def test_boundary_the_same_ask_against_a_config_that_has_it_stays_green(tmp_path):
     (tmp_path / "web" / "src" / "Layouts").mkdir(parents=True)  # what `rjui init` makes
+    # A project-local rjui that does nothing: jui resolves it before PATH, so
+    # this arm does not depend on an rjui installed on the machine (it was
+    # green locally through the installed one and red on CI without it).
+    rjui = tmp_path / "web" / "rjui_tools" / "bin" / "rjui"
+    rjui.parent.mkdir(parents=True)
+    rjui.write_text("#!/bin/sh\nexit 0\n")
+    rjui.chmod(0o755)
     (tmp_path / "jui.config.json").write_text(json.dumps(
         {"project_name": "MyApp", "platforms": {"web": {"root": "web"}}}))
     run = _run(tmp_path, "build", "--platform", "web")
@@ -92,5 +99,7 @@ def test_boundary_sync_tool_of_ios_against_a_config_that_has_ios_stays_green(tmp
     run = _run(tmp_path, "sync_tool", "--platform", "ios", "--dry-run", "--from", str(source))
     out = run.stdout + run.stderr
     assert run.returncode == 0, out
-    assert "not in" not in out, out
+    # The ERROR's own words — a bare "not in" also matches other lines of a
+    # sync's output (it did on CI).
+    assert "platform 'ios' not in" not in out, out
     assert "DRY RUN" in out, out
