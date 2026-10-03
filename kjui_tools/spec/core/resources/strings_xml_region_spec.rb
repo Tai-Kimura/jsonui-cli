@@ -42,7 +42,7 @@ RSpec.describe KjuiTools::Core::Resources::StringManager, 'the generated region 
     REXML::Document.new(xml).root.elements.to_a.to_h { |e| [e.attributes['name'], e.to_s] }
   end
 
-  def outside_region(xml)
+  def hand_part(xml)
     xml.split('JsonUI generated strings (kjui): begin').first
   end
 
@@ -59,7 +59,7 @@ RSpec.describe KjuiTools::Core::Resources::StringManager, 'the generated region 
                                                    '<string name="home_footer">Hand footer</string>')
     File.write(xml_path, hand)
     after = build(shared)
-    expect(outside_region(after)).to include('My App').and include('Hand footer')
+    expect(hand_part(after)).to include('My App').and include('Hand footer')
     expect(after.scan(/name=["']home_title["']/).size).to eq(1)
   end
 
@@ -75,8 +75,8 @@ RSpec.describe KjuiTools::Core::Resources::StringManager, 'the generated region 
     old = pairs(File.read(xml_path))
     after = build(shared)
     expect(pairs(after)).to eq(old)
-    expect(outside_region(after)).to include('app_name')
-    expect(outside_region(after)).not_to include('home_title')
+    expect(hand_part(after)).to include('app_name')
+    expect(hand_part(after)).not_to include('home_title')
     expect(KjuiTools::Core::Logger).to have_received(:info).with(%r{values/strings.xml: moved 1 entry into the generated region \(1 hand-written left outside\)})
   end
 
@@ -85,7 +85,7 @@ RSpec.describe KjuiTools::Core::Resources::StringManager, 'the generated region 
     File.write(xml_path, File.read(xml_path).sub('<resources>', "<resources>\n    <string name=\"home_title\">Stray</string>"))
     after = build(shared)
     expect(after.scan(/name=["']home_title["']/).size).to eq(1)
-    expect(outside_region(after)).not_to include('home_title')
+    expect(hand_part(after)).not_to include('home_title')
   end
 
   it 'is idempotent: a second build with nothing changed writes the same bytes' do

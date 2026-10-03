@@ -339,7 +339,7 @@ module SjuiTools
         end
 
         def cleanup_tmp_files
-          FileUtils.rm_f(@extracted_strings_file) if File.exist?(@extracted_strings_file)
+          FileUtils.rm_f(@extracted_strings_file) if @extracted_strings_file && File.exist?(@extracted_strings_file)
         end
 
         def cache_strings_file(file_path)
