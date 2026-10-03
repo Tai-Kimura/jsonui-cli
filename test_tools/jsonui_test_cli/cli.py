@@ -2000,6 +2000,7 @@ def cmd_generate_branch_tests(args):
     for screen, error in failures:
         print(f"  [FAILED]  {screen}: {error}", file=sys.stderr)
 
+    from .branch_tests import UNMATCHED_GATE_UNAVAILABLE, unmatched_gate_unavailable
     if check:
         from .branch_tests import orphaned_sub_spec_artefacts
         rc = _branch_check_summary(
@@ -2011,6 +2012,10 @@ def cmd_generate_branch_tests(args):
             # generated cannot be compared to what is on disk either.
             print(f"{len(failures)} screen(s) could not be generated, so they "
                   f"were not checked.", file=sys.stderr)
+            return 1
+        if unmatched_gate_unavailable():
+            # The expected files were generated as if nothing gated them.
+            print(UNMATCHED_GATE_UNAVAILABLE, file=sys.stderr)
             return 1
         return rc
     if failures:
@@ -2037,6 +2042,11 @@ def cmd_generate_branch_tests(args):
     if unmatched_gate_note():
         print(unmatched_gate_note())
     _print_branch_toolchain(len(reports))
+    # The files are written; the run still FAILS when it could not read
+    # whether they gate (UNMATCHED_GATE_UNAVAILABLE, printed just above).
+    # Until jsonui-cli 1.9.8 this exited 0.
+    if unmatched_gate_unavailable():
+        return 1
     return 0
 
 

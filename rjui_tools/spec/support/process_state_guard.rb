@@ -57,7 +57,8 @@ module ProcessStateGuard
   # there, the next one does not see it.
   MANAGED = {
     'JsonUI::StageFailures.@entries' => 'the stage ledger, emptied at the start of every spec file',
-    'JsonUI::StageFailures.@written' => 'the stage ledger, emptied at the start of every spec file'
+    'JsonUI::StageFailures.@written' => 'the stage ledger, emptied at the start of every spec file',
+    'JsonUI::StageFailures.@blocked_layouts' => 'the stage ledger, emptied at the start of every spec file'
   }.freeze
 
   module_function

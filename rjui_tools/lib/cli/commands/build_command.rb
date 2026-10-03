@@ -68,6 +68,14 @@ module RjuiTools
             exit 1
           end
 
+          # Bindings first, for every layout: a layout whose bindings carry an
+          # ERROR is not written by any writer below (Data, component,
+          # ViewModel, hook) — its generated files stay as the last good build
+          # left them (StageFailures.block_layout). Until jsonui-cli 1.9.8 the
+          # bindings were checked inside the component loop, after the Data
+          # models were written, so a failed build had already replaced them.
+          prevalidate_bindings(layouts_dir)
+
           # Update Data models from JSON data sections
           update_data_models
 
@@ -190,8 +198,9 @@ module RjuiTools
               # Validate JSON attributes
               validate_component(json_content, json_file)
 
-              # Validate binding expressions for business logic
-              validate_bindings(json_content, json_file)
+              # Bindings were validated before any writer ran
+              # (prevalidate_bindings); a layout with an ERROR is not written.
+              next if JsonUI::StageFailures.layout_blocked?(json_file)
 
               # Shared layout checks (autoChangeTrackingId without cellIdProperty, etc.)
               shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
@@ -274,7 +283,7 @@ module RjuiTools
                 v_json = React::StyleLoader.load_and_merge(v_json)
                 @validator.normalized = Core::Normalization.canonicalized?(v_json)
                 validate_component(v_json, variant_file)
-                validate_bindings(v_json, variant_file)
+                next if JsonUI::StageFailures.layout_blocked?(variant_file)
                 v_shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
                   v_json, source_path: File.basename(variant_file),
                   extension_definitions: Core::AttributeValidator.extension_definitions(:react)
@@ -355,6 +364,9 @@ module RjuiTools
           # Error-severity canonical binding rules (binding_semantics.json
           # validatorRules) always fail the build
           if @binding_errors.any?
+            # Which layouts were not written (StageFailures.block_layout) —
+            # said before the exit, which used to come before the ledger.
+            JsonUI::StageFailures.report!(Core::Logger)
             Core::Logger.error("Build failed: #{@binding_errors.size} binding error(s)")
             exit 1
           end
@@ -381,10 +393,19 @@ module RjuiTools
           extension_glob = @config['typescript'] ? '*.tsx' : '*.jsx'
           all_generated = Dir.glob(File.join(components_dir, '**', extension_glob))
 
+          # A layout `jui build` refused (StageFailures.block_layout) produced
+          # nothing this run; its component (and its variants') stay as the
+          # last build left them, so they are not orphans.
+          blocked = JsonUI::StageFailures.blocked_layouts.keys.map do |f|
+            to_pascal_case(JsonUIShared::LayoutVariant.split(File.basename(f, '.json')).first)
+          end
+
           removed = []
           all_generated.each do |path|
             abs = File.expand_path(path)
             next if expected_set.include?(abs)
+            name = File.basename(path, File.extname(path))
+            next if blocked.any? { |b| name == b || (name.start_with?(b) && name.end_with?('Variant')) }
             File.delete(path)
             removed << path
           end
@@ -803,6 +824,26 @@ module RjuiTools
             end
           end
           puts
+        end
+
+        # Every layout's bindings (variants included), before anything is
+        # written; a layout with an ERROR is blocked. A layout that cannot be
+        # read is left to the stage that reads it, which reports it.
+        def prevalidate_bindings(layouts_dir)
+          Dir.glob(File.join(layouts_dir, '**', '*.json')).sort.each do |file|
+            next if file.include?(File.join(layouts_dir, 'Resources')) ||
+                    file.include?(File.join(layouts_dir, 'Styles'))
+
+            begin
+              json = React::StyleLoader.load_and_merge(JSON.parse(File.read(file, encoding: 'UTF-8')))
+            rescue StandardError
+              next
+            end
+            before = @binding_errors.size
+            validate_bindings(json, file)
+            found = @binding_errors.size - before
+            JsonUI::StageFailures.block_layout(file, "#{found} binding error(s)") if found.positive?
+          end
         end
 
         # Validate binding expressions for business logic

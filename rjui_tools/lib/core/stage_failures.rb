@@ -46,6 +46,30 @@ module JsonUI
       def clear!
         @entries = []
         @written = 0
+        @blocked_layouts = {}
+      end
+
+      # A layout whose bindings carry an ERROR is not written: its generated
+      # files (view, Data, ViewModel, hook — every writer asks
+      # `layout_blocked?`) stay as the last good build left them, and the
+      # stage line says so. Until jsonui-cli 1.9.8 the build wrote them and
+      # then exited 1 — a failed build that had replaced good files with
+      # broken ones (ticket failed-build-writes-the-generated-files). Keyed by
+      # the absolute path, so a relative and an absolute spelling are one.
+      def block_layout(path, reason)
+        key = File.expand_path(path.to_s)
+        return if blocked_layouts.key?(key)
+
+        blocked_layouts[key] = reason.to_s
+        record('layout', "#{path} was not written: #{reason} — its generated files are the last build's")
+      end
+
+      def layout_blocked?(path)
+        blocked_layouts.key?(File.expand_path(path.to_s))
+      end
+
+      def blocked_layouts
+        @blocked_layouts ||= {}
       end
 
       # The closing line of a build: the success line only when nothing

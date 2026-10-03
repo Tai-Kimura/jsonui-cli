@@ -155,6 +155,36 @@ module KjuiTools
         # The layouts refused while building: each mark is a layout and where
         # its build began in the stage ledger, so its stretch runs to the next
         # mark (or the end).
+        # The bindings of every layout this run builds, and of its variants,
+        # before any writer runs — counted as the build loop counted them
+        # (warnings into the summary). build_file writes a base with its
+        # variants, so an ERROR in either blocks the base, which is refused
+        # (not cached).
+        def prevalidate_bindings(files, layouts_dir, binding_validator)
+          files.each do |json_file|
+            found = 0
+            [json_file, *JsonUIShared::LayoutVariant.variants_for(json_file).values].each do |file|
+              rel = Pathname.new(file).relative_path_from(Pathname.new(layouts_dir)).to_s
+              begin
+                json = JSON.parse(File.read(file))
+              rescue StandardError
+                next # the build loop reports a layout it cannot read
+              end
+              warnings = binding_validator.validate(json, rel)
+              @binding_errors.concat(binding_validator.errors)
+              found += binding_validator.errors.length
+              next if warnings.empty?
+
+              @validation_warnings.concat(warnings)
+              Core::Logger.warn "  #{warnings.length} binding warning(s) in #{rel}"
+            end
+            next if found.zero?
+
+            JsonUI::StageFailures.block_layout(json_file, "#{found} binding error(s)")
+            (@refused_layouts ||= []) << json_file
+          end
+        end
+
         def refused_in(marks)
           entries = JsonUI::StageFailures.entries
           marks.each_with_index.map do |(file, start), i|
@@ -424,14 +454,23 @@ module KjuiTools
             end
           end
 
+          # Initialize validators if validation is enabled
+          validator = options[:validate] ? Core::AttributeValidator.new(:compose) : nil
+          binding_validator = options[:validate] ? Core::BindingValidator.new : nil
+
+          # Bindings first, for every layout this run builds (variants
+          # included — build_file writes them with their base): one whose
+          # bindings carry an ERROR is not written by any writer below, Data
+          # or Compose, and is not cached (StageFailures.block_layout). Until
+          # jsonui-cli 1.9.8 they were checked in the build loop, after the
+          # Data models were written.
+          require_relative '../../core/stage_failures'
+          prevalidate_bindings(files_to_update, layouts_dir, binding_validator) if binding_validator
+
           # Update data models first (always run to ensure data models are in sync)
           require_relative '../../compose/data_model_updater'
           data_updater = Compose::DataModelUpdater.new
           data_updater.update_data_models(files_to_update)
-
-          # Initialize validators if validation is enabled
-          validator = options[:validate] ? Core::AttributeValidator.new(:compose) : nil
-          binding_validator = options[:validate] ? Core::BindingValidator.new : nil
 
           # Validation is a function of the TREE, not of build history.
           #
@@ -494,22 +533,15 @@ module KjuiTools
                 end
               end
 
-              # Validate bindings for business logic
-              if binding_validator
-                binding_warnings = binding_validator.validate(json_data, relative_path)
-                # The validator resets per validate() call — collect
-                # error-severity canonical violations for build failure
-                @binding_errors.concat(binding_validator.errors)
-                if binding_warnings.any?
-                  @validation_warnings.concat(binding_warnings)
-                  Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
-                end
-              end
+              # Bindings were validated before any writer ran
+              # (prevalidate_bindings); a layout with an ERROR — in itself or
+              # a variant — is not written and not cached.
+              next if JsonUI::StageFailures.layout_blocked?(json_file)
 
               # Validate variant files with the same validators (they are
               # not in json_files — the builder emits them with the base)
               JsonUIShared::LayoutVariant.variants_for(json_file).each_value do |variant_file|
-                next unless validator || binding_validator
+                next unless validator
                 variant_rel = Pathname.new(variant_file).relative_path_from(Pathname.new(layouts_dir)).to_s
                 begin
                   variant_data = JSON.parse(File.read(variant_file))
@@ -527,14 +559,6 @@ module KjuiTools
                     @validation_warnings.concat(v_warnings.map { |w| "[#{variant_rel}] #{w}" })
                     @validation_errors += v_warnings.length
                     Core::Logger.warn "  #{v_warnings.length} attribute warning(s) in #{variant_rel}"
-                  end
-                end
-                if binding_validator
-                  v_binding_warnings = binding_validator.validate(variant_data, variant_rel)
-                  @binding_errors.concat(binding_validator.errors)
-                  if v_binding_warnings.any?
-                    @validation_warnings.concat(v_binding_warnings)
-                    Core::Logger.warn "  #{v_binding_warnings.length} binding warning(s) in #{variant_rel}"
                   end
                 end
               end

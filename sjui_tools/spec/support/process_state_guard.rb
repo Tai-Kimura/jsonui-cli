@@ -62,7 +62,8 @@ module ProcessStateGuard
   MANAGED = {
     'SjuiTools::Core::Logger.@level' => 'set to :info before every example',
     'JsonUI::StageFailures.@entries' => 'the stage ledger, emptied at the start of every spec file',
-    'JsonUI::StageFailures.@written' => 'the stage ledger, emptied at the start of every spec file'
+    'JsonUI::StageFailures.@written' => 'the stage ledger, emptied at the start of every spec file',
+    'JsonUI::StageFailures.@blocked_layouts' => 'the stage ledger, emptied at the start of every spec file'
   }.freeze
 
   module_function

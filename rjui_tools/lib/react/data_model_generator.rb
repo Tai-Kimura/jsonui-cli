@@ -64,6 +64,10 @@ module RjuiTools
         ensure_unique_layout_basenames!(json_files)
 
         json_files.each do |json_file|
+          # A layout `jui build` refused (an ERROR in its bindings) keeps its
+          # last generated files (StageFailures.block_layout).
+          next if defined?(JsonUI::StageFailures) && JsonUI::StageFailures.layout_blocked?(json_file)
+
           process_json_file(json_file)
         end
       end

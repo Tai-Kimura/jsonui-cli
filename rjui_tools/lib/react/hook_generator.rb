@@ -56,6 +56,8 @@ module RjuiTools
         # Find corresponding JSON layout
         json_file = find_json_file(base_name)
         return unless json_file
+        # A layout `jui build` refused keeps its last hook (StageFailures.block_layout).
+        return if defined?(JsonUI::StageFailures) && JsonUI::StageFailures.layout_blocked?(json_file)
 
         # Extract TextField bindings and event handlers from JSON
         json_content = File.read(json_file, encoding: 'UTF-8')

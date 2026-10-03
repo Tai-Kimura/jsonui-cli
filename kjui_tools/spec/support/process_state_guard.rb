@@ -68,6 +68,7 @@ module ProcessStateGuard
   MANAGED = {
     'JsonUI::StageFailures.@entries' => 'the stage ledger, emptied at the start of every spec file',
     'JsonUI::StageFailures.@written' => 'the stage ledger, emptied at the start of every spec file',
+    'JsonUI::StageFailures.@blocked_layouts' => 'the stage ledger, emptied at the start of every spec file',
     # The emitters' name counters: a build resets them (ComposeBuilder,
     # reset_counter! for each layout); spec_helper does the same at the start
     # of every spec file, so no file's emitted names start where another's
