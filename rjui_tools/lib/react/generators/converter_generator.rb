@@ -281,7 +281,8 @@ module RjuiTools
         # value is not of that type. A String prop whose NAME is display text
         # (StringManagerCore.localized_prop? — the list jui lint-strings
         # checks) becomes its StringManager lookup when the value is a
-        # strings.json key, as the Label `text` pass does; any other string a
+        # strings.json key or the text a key holds, as the Label `text` pass
+        # does (resolve_display_text); any other string a
         # template literal, escaped by the shared escaper
         # (StringLiterals.ts_template_body) — an enum-like `variant: "bar"`
         # is never looked up, as the sjui and kjui scaffolds write it from
@@ -296,7 +297,7 @@ module RjuiTools
             '            literal = JsonUIShared::AttributeTypes.ts_literal(type, value) do |canonical, text|',
             "              next nil unless canonical == 'string' && text.is_a?(String)",
             '',
-            '              resolved = JsonUIShared::StringManagerCore.localized_prop?(name) && convert_string_key(text)',
+            '              resolved = JsonUIShared::StringManagerCore.localized_prop?(name) && resolve_display_text(text)',
             '              resolved ? resolved[1..-2] : "`#{JsonUIShared::StringLiterals.ts_template_body(text)}`"',
             '            end',
             '            return literal unless literal && JsonUIShared::AttributeTypes.parse(type).kind == :list',

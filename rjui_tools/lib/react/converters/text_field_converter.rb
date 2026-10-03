@@ -170,10 +170,13 @@ module RjuiTools
               attrs << " placeholder={#{attribute_expression(placeholder)}}"
             elsif resolved != placeholder && resolved.include?('{')
               attrs << " placeholder={#{resolved.gsub(/^\{|\}$/, '')}}"
-            elsif (string_resolved = convert_string_key(placeholder))
-              # strings.json key -> StringManager, matching sjui's hint
-              # contract (get_text_with_string_manager). Unregistered keys
-              # and plain literals fall through unchanged.
+            elsif (string_resolved = resolve_display_text(placeholder))
+              # The strings.json key, else the text a key holds ->
+              # StringManager (resolve_display_text), as sjui's hint
+              # (get_text_with_string_manager) and kjui's resolve. Until
+              # jsonui-cli 1.9.8 this was the key only: the comment named
+              # get_text_with_string_manager, which nothing here called.
+              # Text no entry holds falls through unchanged.
               attrs << " placeholder=#{string_resolved}"
             else
               attrs << jsx_attr_text('placeholder', placeholder)

@@ -304,7 +304,7 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     # what it resolves is converter_string_prop_localization_spec.rb's.
     it 'routes a display-text string literal through StringManager when strings.json has it (the Label `text` contract)' do
       code = converter_code('String?')
-      expect(code).to include('resolved = JsonUIShared::StringManagerCore.localized_prop?(name) && convert_string_key(text)')
+      expect(code).to include('resolved = JsonUIShared::StringManagerCore.localized_prop?(name) && resolve_display_text(text)')
       expect(code).to include('resolved ? resolved[1..-2]')
       expect(code).to include("format_literal(filename_value, 'String?', 'filename')")
     end

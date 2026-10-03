@@ -752,7 +752,7 @@ module RjuiTools
         # resolution ladder the plain-text path walks.
         def linkify_text_prop
           text = attributes['text'] || ''
-          if (resolved = convert_string_key(text))
+          if (resolved = resolve_display_text(text))
             " text=#{resolved}"
           elsif has_binding?(text)
             " text={#{bound_value_expr(text)}}"
