@@ -86,6 +86,7 @@ module SjuiTools
             if w.is_a?(Numeric) && h.is_a?(Numeric)
               @modifier_bag.append(:component_specific, ".frame(width: #{w}, height: #{h}, alignment: #{positional_alignment})")
               @modifier_bag.append(:component_specific, ".clipped()")
+              @modifier_bag.append(:component_specific, HIT_SHAPE)
             else
               # A frame that is not two numbers (matchParent, weight): the
               # unscaled image is drawn whole, past the frame — a 64pt image
@@ -202,8 +203,16 @@ module SjuiTools
           axes << 'minWidth: 0, maxWidth: .infinity' unless wrap_axis?(@component['width'])
           axes << 'minHeight: 0, maxHeight: .infinity' unless wrap_axis?(@component['height'])
           @modifier_bag.append(:component_specific, ".frame(#{axes.join(', ')}, alignment: #{alignment})") if axes.any?
-          @modifier_bag.register(:clip_to_bounds, '.clipped()')
+          @modifier_bag.register(:clip_to_bounds, ['.clipped()', HIT_SHAPE])
         end
+
+        # `.clipped()` crops what is drawn, not what is hit: SwiftUI hit-tests
+        # the image's whole filled size, so the overflow — invisible after the
+        # crop — took the taps meant for the element beside it (jsonui-cli
+        # 1.9.6 to 1.9.7; ticket sjui-aspectfill-image-takes-touches-outside-
+        # its-frame, measured with SwiftJsonUI's AspectFillHitProbeUITests).
+        # The hit shape is the frame's rectangle, right after every crop.
+        HIT_SHAPE = '.contentShape(Rectangle())'
 
         def wrap_axis?(value)
           value.nil? || value.to_s == 'wrapContent'
