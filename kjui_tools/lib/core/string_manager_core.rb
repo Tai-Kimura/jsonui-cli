@@ -136,12 +136,17 @@ module JsonUIShared
     #
     # A value is a string, or a string per language (`{"en": …, "ja": …}`,
     # the shape jsonui-localize writes). A plain string that is the text
-    # wins; only when no section holds one is a per-language value whose
-    # language is the text looked for — so every text that resolved before
-    # jsonui-cli 1.9.8 resolves to the same key, and a text that resolved
-    # to nothing may now find its per-language entry (measured on two
-    # consumer apps: 28 texts would otherwise have moved from a plain-string
-    # key to a per-language entry earlier in the same section). Through
+    # wins, in any section, as through jsonui-cli 1.9.7; only when no section
+    # holds one is a per-language value whose language is the text looked
+    # for, and then only in the layout's OWN sections, and never for an empty
+    # text. So every text that resolved before 1.9.8 resolves to the same
+    # key, a text that resolved to nothing may now find its own section's
+    # per-language entry, and no text newly lands in a section the layout
+    # does not own — measured on two consumer apps before these limits: 28
+    # texts would have moved from a plain-string key to a per-language entry
+    # earlier in the same section, `""` resolved to an entry with an empty
+    # language, and a masked-password hint resolved to another screen's
+    # section, each a warning the build had not printed. Through
     # 1.9.7 only a plain string matched, so sjui and kjui never looked a
     # per-language entry up by its text while rjui's own lookup did (its
     # first language, in file order) — ticket
@@ -156,7 +161,10 @@ module JsonUIShared
       return nil unless strings_data.is_a?(Hash)
 
       matches = string_matches(strings_data) { |value| value == text }
-      matches = string_matches(strings_data) { |value| value_holds_text?(value, text) } if matches.empty?
+      if matches.empty? && !text.to_s.empty?
+        owned_sections = strings_data.select { |namespace, _| own_namespaces.include?(namespace) }
+        matches = string_matches(owned_sections) { |value| value_holds_text?(value, text) }
+      end
       return nil if matches.empty?
 
       # map + compact, NOT filter_map. This file is vendored into kjui_tools

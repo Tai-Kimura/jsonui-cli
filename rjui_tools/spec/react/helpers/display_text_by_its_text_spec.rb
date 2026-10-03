@@ -29,8 +29,8 @@ RSpec.describe 'rjui: display text by the text a key holds' do
     FileUtils.mkdir_p(resources)
     # `other` comes first: file order alone would pick its key.
     File.write(File.join(resources, 'strings.json'), JSON.generate(
-      'other' => { 'shared_word' => { 'en' => 'Shared', 'ja' => '共有' } },
-      'screen' => { 'tone_bold_short' => { 'en' => 'BOLD', 'ja' => '太字' },
+      'other' => { 'shared_word' => { 'en' => 'Shared', 'ja' => '共有' }, 'elsewhere' => { 'en' => 'Elsewhere', 'ja' => 'よそ' } },
+      'screen' => { 'tone_bold_short' => { 'en' => 'BOLD', 'ja' => '太字' }, 'blank' => { 'en' => '', 'ja' => '' },
                     'greeting' => 'Hello', 'search_hint' => { 'en' => 'Search', 'ja' => '検索' }, 'bold' => 'BOLD',
                     'shared_word' => { 'en' => 'Shared', 'ja' => '共有' } }
     ))
@@ -91,5 +91,17 @@ RSpec.describe 'rjui: display text by the text a key holds' do
     [label('検索'), label('Shared'), label('BOLD'), button('Search')].each do |jsx|
       expect(TypeScriptCompiler.component(jsx)).to compile_as_typescript.with_ambient(ambient)
     end
+  end
+
+  # The per-language pass looks in the layout's own sections only, and not
+  # for an empty text: a text no plain string holds stays as written rather
+  # than landing in another screen's section (a warning 1.9.7 did not print),
+  # and `""` does not match an entry with an empty language.
+  it "does not look a per-language value up in a section the layout does not own" do
+    expect(label('Elsewhere')).not_to include('StringManager.')
+  end
+
+  it 'does not look an empty text up, though an entry has an empty language' do
+    expect(label('')).not_to include('StringManager.')
   end
 end
