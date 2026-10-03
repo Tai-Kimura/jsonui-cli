@@ -35,7 +35,7 @@
       "unresolved": "platformEventContract"
     },
     "twoWay": {
-      "description": "Two-way bindings (TextField text, Switch isOn, ...). The expression must be a single flat identifier: no dots, no brackets, no '??', no '!'. This keeps write-back and change-handler wiring trivially derivable on every platform.",
+      "description": "Two-way bindings (TextField text, Switch isOn, ...). The whole value must be one binding of a single flat identifier: no literal text around it, no second binding, and no dots, no brackets, no '??', no '!' in the expression. This keeps write-back and change-handler wiring trivially derivable on every platform.",
       "interpolation": false,
       "features": [],
       "unresolved": "attributeDefault"
@@ -118,7 +118,7 @@
   },
   "validatorRules": [
     {"id": "binding-double-default", "severity": "error", "context": "any", "rule": "More than one '??' in a single binding expression."},
-    {"id": "binding-two-way-complex", "severity": "error", "context": "twoWay", "rule": "Two-way binding expression is not a single flat identifier (contains '.', '[', '??', or '!')."},
+    {"id": "binding-two-way-complex", "severity": "error", "context": "twoWay", "rule": "A two-way value is not one flat binding: the whole value must be a single flat identifier binding — no literal text mixed with it, no second binding, and no '.', '[', '??', or '!' in the expression."},
     {"id": "binding-negation-context", "severity": "error", "context": "text|embedParams|nameRef|twoWay", "rule": "'!' negation used outside a boolean value context."},
     {"id": "binding-default-in-params", "severity": "error", "context": "embedParams", "rule": "'??' default used in an embed params leaf (defaults belong to the embedded screen's data section)."},
     {"id": "binding-params-array", "severity": "error", "context": "embedParams", "rule": "Array anywhere inside params (pre-existing rule from the embed isolated+params track; restated here)."},
