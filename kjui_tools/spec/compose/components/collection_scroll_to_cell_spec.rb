@@ -509,15 +509,14 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
 
   def compile_and_run(routes)
 
-    stdlib = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
-    coroutines = KotlinCompiler.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
-    reflect = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-reflect')
-    annotations = KotlinCompiler.newest('org.jetbrains', 'annotations')
+    stdlib = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    coroutines = KotlinCompiler.jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    reflect = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annotations = KotlinCompiler.jar('org.jetbrains', 'annotations')
     Dir.mktmpdir('kjui_scroll') do |dir|
       files = { 'Emitted.kt' => program(routes), 'Stubs.kt' => KJ_SCROLL_STUBS }.merge(KJ_SCROLL_QUALIFIED)
       files.each { |name, source| File.write(File.join(dir, name), source) }
-      compiler_cp = [KotlinCompiler.compiler_jar, stdlib, reflect, coroutines, annotations,
-                     KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+      compiler_cp = KotlinCompiler.compiler_classpath
       out, status = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                                     '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
                                     '-d', File.join(dir, 'out'), *files.keys.map { |name| File.join(dir, name) })

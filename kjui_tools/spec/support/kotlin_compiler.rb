@@ -28,19 +28,74 @@ module KotlinCompiler
   # GRADLE_USER_HOME is Gradle's own override of ~/.gradle; CI fills a cache
   # at the default place with .github/scripts/fetch_kotlin_compiler_jars.sh.
   GRADLE_HOME = ENV.fetch('GRADLE_USER_HOME') { File.join(Dir.home, '.gradle') }
-  GRADLE_MODULES = File.join(GRADLE_HOME, 'caches', 'modules-2', 'files-2.1')
 
-  def newest(group, artifact)
-    Dir.glob(File.join(GRADLE_MODULES, group, artifact, '**', "#{artifact}-*.jar"))
-       .reject { |p| p.include?('sources') || p.include?('javadoc') }
-       .sort.last
+  # The versions CI compiles with, read from the one list that fetches them
+  # (the fetch script's `jars=(...)`: group, artifact, version, sha256).
+  # Until 1.9.10 the harness took the NEWEST jar in the cache instead — on a
+  # developer machine kotlin-compiler-embeddable 2.4.20 where CI pins 2.1.0,
+  # so a local arm type-checked against a compiler CI never uses — and found
+  # it with `Dir.glob(caches/**)` on every call: 13.4s over a 42G cache,
+  # ~130 calls a suite (ticket kjui-spec-kotlinc-harness-globs-the-whole-
+  # gradle-cache-and-picks-the-newest-compiler). A jar is now looked up in
+  # its own directory, at the pinned version, once per process.
+  FETCH_SCRIPT = File.expand_path('../../../.github/scripts/fetch_kotlin_compiler_jars.sh', __dir__)
+  FETCH_HINT = 'bash .github/scripts/fetch_kotlin_compiler_jars.sh (puts the pinned jars in the Gradle cache)'
+
+  def pinned_versions(script = FETCH_SCRIPT)
+    return {} unless File.file?(script)
+
+    File.read(script)[/^jars=\((.*?)^\)/m, 1].to_s.scan(/"([^"\s]+) ([^"\s]+) ([^"\s]+) [0-9a-f]{64}"/)
+        .to_h { |group, artifact, version| [[group, artifact], version] }
+  end
+
+  PINNED = pinned_versions.freeze
+
+  # The jar of `artifact` at its pinned version under `home`'s module cache,
+  # or nil: an exact version, never the newest present (2.4.20 beside 2.1.0
+  # is not 2.1.0, and 1.9 sorts after 1.10 as a string).
+  def resolve(group, artifact, home: GRADLE_HOME, pinned: PINNED)
+    version = pinned[[group, artifact]]
+    return nil unless version
+
+    dir = File.join(home, 'caches', 'modules-2', 'files-2.1', group, artifact, version)
+    Dir.glob(File.join(dir, '*', "#{artifact}-#{version}.jar")).min
+  end
+
+  # resolve, once per process for the cache this run reads.
+  def jar(group, artifact)
+    @jars ||= {}
+    key = [group, artifact]
+    return @jars[key] if @jars.key?(key)
+
+    @jars[key] = resolve(group, artifact)
   end
 
   def compiler_jar
-    Dir.glob(File.join(GRADLE_HOME, 'caches', '**',
-                       'kotlin-compiler-embeddable-*.jar'))
-       .reject { |p| p.include?('sources') }
-       .sort.last
+    jar('org.jetbrains.kotlin', 'kotlin-compiler-embeddable')
+  end
+
+  def compiler_version
+    PINNED[%w[org.jetbrains.kotlin kotlin-compiler-embeddable]]
+  end
+
+  # The compiler's own classpath — one place, for compile, run and the specs
+  # that drive K2JVMCompiler themselves.
+  def compiler_classpath
+    [compiler_jar,
+     jar('org.jetbrains.kotlin', 'kotlin-stdlib'),
+     jar('org.jetbrains.kotlin', 'kotlin-reflect'),
+     jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'),
+     jar('org.jetbrains', 'annotations'),
+     jar('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+  end
+
+  # Printed once, the first time a run asks whether it can compile, so a
+  # local run and CI's say which compiler their arms used.
+  def announce
+    return if @announced
+
+    @announced = true
+    warn "[kotlinc] kotlin-compiler-embeddable #{compiler_version} (#{compiler_jar}) on #{java_bin}"
   end
 
   HOMEBREW_JAVA = '/opt/homebrew/opt/openjdk@17/bin/java'
@@ -115,11 +170,15 @@ module KotlinCompiler
       return 'no JDK 17 at /opt/homebrew/opt/openjdk@17, no KOTLINC_JAVA, ' \
              "no JAVA_HOME with Java #{ACCEPTED_JAVA_MAJORS.min}-#{ACCEPTED_JAVA_MAJORS.max}"
     end
-    return 'no kotlin-compiler-embeddable in the Gradle cache' unless compiler_jar
+    return "no pinned versions read from #{FETCH_SCRIPT}" if PINNED.empty?
 
-    missing = REQUIRED.reject { |g, a| newest(g, a) }
-    return "not in the Gradle cache: #{missing.map { |g, a| "#{g}:#{a}" }.join(', ')}" if missing.any?
+    missing = ([%w[org.jetbrains.kotlin kotlin-compiler-embeddable]] + REQUIRED).reject { |g, a| jar(g, a) }
+    if missing.any?
+      return "not in the Gradle cache at the pinned version: " \
+             "#{missing.map { |g, a| "#{g}:#{a}:#{PINNED[[g, a]]}" }.join(', ')} — fetch: #{FETCH_HINT}"
+    end
 
+    announce
     nil
   end
 
@@ -141,17 +200,16 @@ module KotlinCompiler
   LIBRARIES = { gson: %w[com.google.code.gson gson] }.freeze
 
   def compile(source, libraries: [])
-    stdlib   = newest('org.jetbrains.kotlin', 'kotlin-stdlib')
-    reflect  = newest('org.jetbrains.kotlin', 'kotlin-reflect')
-    annots   = newest('org.jetbrains', 'annotations')
-    coroutin = newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
-    trove    = newest('org.jetbrains.intellij.deps', 'trove4j')
+    stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annots   = jar('org.jetbrains', 'annotations')
+    coroutin = jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
 
     # The compiler's own classpath and the compiled file's target classpath
     # are different sets; conflating them fails inside the compiler with
     # NoClassDefFoundError instead of a diagnostic about the source.
-    compiler_cp = [compiler_jar, stdlib, reflect, coroutin, annots, trove].compact.join(':')
-    extra       = libraries.map { |lib| newest(*LIBRARIES.fetch(lib)) }
+    compiler_cp = compiler_classpath
+    extra       = libraries.map { |lib| jar(*LIBRARIES.fetch(lib)) }
     target_cp   = ([stdlib, reflect, annots, coroutin] + extra).compact.join(':')
 
     Dir.mktmpdir('kjui_kotlin') do |dir|
@@ -180,13 +238,12 @@ module KotlinCompiler
   # `libraries` as for compile (LIBRARIES): on the compile and the run
   # classpath both.
   def run(source, libraries: [])
-    stdlib   = newest('org.jetbrains.kotlin', 'kotlin-stdlib')
-    reflect  = newest('org.jetbrains.kotlin', 'kotlin-reflect')
-    annots   = newest('org.jetbrains', 'annotations')
-    coroutin = newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
-    trove    = newest('org.jetbrains.intellij.deps', 'trove4j')
-    compiler_cp = [compiler_jar, stdlib, reflect, coroutin, annots, trove].compact.join(':')
-    extra       = libraries.map { |lib| newest(*LIBRARIES.fetch(lib)) }
+    stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annots   = jar('org.jetbrains', 'annotations')
+    coroutin = jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    compiler_cp = compiler_classpath
+    extra       = libraries.map { |lib| jar(*LIBRARIES.fetch(lib)) }
     target_cp   = ([stdlib, reflect, annots, coroutin] + extra).compact.join(':')
 
     Dir.mktmpdir('kjui_kotlin_run') do |dir|
@@ -218,9 +275,9 @@ RSpec::Matchers.define :compile_as_kotlin do |*libraries|
       RSpec::Core::Pending.mark_skipped!(example, message) if example
       raise RSpec::Core::Pending::SkipDeclaredInExample, message
     end
-    missing = libraries.reject { |lib| KotlinCompiler.newest(*KotlinCompiler::LIBRARIES.fetch(lib)) }
+    missing = libraries.reject { |lib| KotlinCompiler.jar(*KotlinCompiler::LIBRARIES.fetch(lib)) }
     unless missing.empty?
-      message = "compile_as_kotlin: not in the Gradle cache: #{missing.join(', ')}"
+      message = "compile_as_kotlin: not in the Gradle cache at the pinned version: #{missing.join(', ')} — fetch: #{KotlinCompiler::FETCH_HINT}"
       raise KotlinCompiler::Unavailable, message if ENV['KJUI_REQUIRE_KOTLINC'] == '1'
 
       example = RSpec.current_example

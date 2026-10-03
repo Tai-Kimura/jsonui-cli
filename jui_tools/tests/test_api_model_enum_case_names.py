@@ -21,13 +21,13 @@ UPPER_SNAKE name the same words, and TS's union is the value list.
 """
 from __future__ import annotations
 
-import glob
 import os
 import re
 import shutil
 import subprocess
 import tempfile
 import unittest
+from functools import lru_cache
 from pathlib import Path
 
 from jui_cli.core.openapi_loader import OpenAPILoadError, parse_swagger
@@ -173,24 +173,48 @@ class UnnameableEnumsTests(unittest.TestCase):
                 android.generate_enum_source(enum, doc)
 
 
-def _kotlin_compiler():
-    """java + the Kotlin compiler jars from the Gradle cache, as kjui_tools' spec/support/kotlin_compiler.rb takes them."""
-    home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
-    mods = home / "caches" / "modules-2" / "files-2.1"
+FETCH_SCRIPT = Path(__file__).resolve().parents[2] / ".github" / "scripts" / "fetch_kotlin_compiler_jars.sh"
+FETCH_HINT = "bash .github/scripts/fetch_kotlin_compiler_jars.sh"
 
-    def newest(group, artifact):
-        jars = [p for p in glob.glob(str(mods / group / artifact / "**" / f"{artifact}-*.jar"), recursive=True)
-                if "sources" not in p and "javadoc" not in p]
-        return sorted(jars)[-1] if jars else None
 
-    compiler = newest("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
-    parts = [compiler, newest("org.jetbrains.kotlin", "kotlin-stdlib"), newest("org.jetbrains.kotlin", "kotlin-reflect"),
-             newest("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm"), newest("org.jetbrains", "annotations"),
-             newest("org.jetbrains.kotlin", "kotlin-daemon-embeddable"), newest("org.jetbrains.intellij.deps", "trove4j")]
-    java = next((j for j in ("/opt/homebrew/opt/openjdk@17/bin/java", shutil.which("java")) if j and os.path.exists(j)), None)
-    if not compiler or not java:
+def _pinned(script: Path = FETCH_SCRIPT) -> dict[tuple[str, str], str]:
+    """The versions CI compiles with — the fetch script's `jars=(...)` list (group, artifact, version, sha256)."""
+    if not script.is_file():
+        return {}
+    block = re.search(r"^jars=\((.*?)^\)", script.read_text(), re.M | re.S)
+    rows = re.findall(r'"(\S+) (\S+) (\S+) [0-9a-f]{64}"', block.group(1)) if block else []
+    return {(group, artifact): version for group, artifact, version in rows}
+
+
+def _pinned_jar(home: Path, group: str, artifact: str, pinned: dict[tuple[str, str], str]) -> str | None:
+    """The jar at its pinned version, or None — an exact version, never the newest present
+    (until 1.9.10 this took `sorted(...)[-1]`: 2.4.20 beside a pinned 2.1.0, and 1.9 over 1.10 as strings)."""
+    version = pinned.get((group, artifact))
+    if version is None:
         return None
-    return java, ":".join(p for p in parts if p), newest("org.jetbrains.kotlin", "kotlin-stdlib")
+    found = sorted((home / "caches" / "modules-2" / "files-2.1" / group / artifact / version).glob(f"*/{artifact}-{version}.jar"))
+    return str(found[0]) if found else None
+
+
+@lru_cache(maxsize=1)
+def _kotlin_compiler():
+    """java + the Kotlin compiler at the versions CI pins, as kjui_tools' spec/support/kotlin_compiler.rb takes them.
+
+    (java, compiler classpath, stdlib, compiler version), or (None, reason) when a compile cannot be attempted."""
+    home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+    pinned = _pinned()
+    names = [("org.jetbrains.kotlin", "kotlin-compiler-embeddable"), ("org.jetbrains.kotlin", "kotlin-stdlib"),
+             ("org.jetbrains.kotlin", "kotlin-reflect"), ("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm"),
+             ("org.jetbrains", "annotations"), ("org.jetbrains.intellij.deps", "trove4j")]
+    jars = {name: _pinned_jar(home, *name, pinned) for name in names}
+    missing = [f"{g}:{a}:{pinned.get((g, a))}" for (g, a), j in jars.items() if j is None]
+    java = next((j for j in ("/opt/homebrew/opt/openjdk@17/bin/java", shutil.which("java")) if j and os.path.exists(j)), None)
+    if missing:
+        return None, f"not in the Gradle cache at the pinned version: {', '.join(missing)} — fetch: {FETCH_HINT}"
+    if java is None:
+        return None, "no java"
+    version = pinned[("org.jetbrains.kotlin", "kotlin-compiler-embeddable")]
+    return java, ":".join(jars.values()), jars[("org.jetbrains.kotlin", "kotlin-stdlib")], version
 
 
 class GeneratedSourceCompilesTests(unittest.TestCase):
@@ -219,17 +243,54 @@ class GeneratedSourceCompilesTests(unittest.TestCase):
 
     def test_kotlin_compiles(self):
         found = _kotlin_compiler()
-        if found is None:
-            self.skipTest("no Kotlin compiler in the Gradle cache / no java")
-        java, compiler_cp, stdlib = found
+        if found[0] is None:
+            self.skipTest(found[1])
+        java, compiler_cp, stdlib, version = found
+        print(f"[kotlinc] kotlin-compiler-embeddable {version} on {java}")
         with tempfile.TemporaryDirectory() as tmp:
             paths = self._write(Path(tmp), "kotlin")
             r = subprocess.run([java, "-cp", compiler_cp, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
                                 "-no-stdlib", "-cp", stdlib, "-d", str(Path(tmp) / "out"), *paths],
                                capture_output=True, text=True)
             errors = [l for l in (r.stdout + r.stderr).splitlines() if "error:" in l]
-            self.assertEqual(errors, [])
+            self.assertEqual(errors, [], f"kotlin-compiler-embeddable {version}")
             self.assertTrue(list((Path(tmp) / "out").rglob("*.class")), "kotlinc wrote no class")
+
+
+class PinnedResolverTests(unittest.TestCase):
+    """The resolver takes the pinned version, not the newest present."""
+
+    def _place(self, home: Path, group: str, artifact: str, version: str) -> None:
+        d = home / "caches" / "modules-2" / "files-2.1" / group / artifact / version / "f00d"
+        d.mkdir(parents=True)
+        (d / f"{artifact}-{version}.jar").write_bytes(b"")
+
+    def test_reads_the_fetch_scripts_pins(self):
+        pinned = _pinned()
+        self.assertEqual(pinned[("org.jetbrains.kotlin", "kotlin-compiler-embeddable")], "2.1.0")
+        self.assertEqual(len(pinned), len(re.findall(r'^\s+"\S+ \S+ \S+ [0-9a-f]{64}"$', FETCH_SCRIPT.read_text(), re.M)))
+
+    def test_takes_the_pinned_compiler_beside_a_newer_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._place(home, "org.jetbrains.kotlin", "kotlin-compiler-embeddable", "2.4.20")
+            self._place(home, "org.jetbrains.kotlin", "kotlin-compiler-embeddable", "2.1.0")
+            got = _pinned_jar(home, "org.jetbrains.kotlin", "kotlin-compiler-embeddable", _pinned())
+            self.assertTrue(got.endswith("kotlin-compiler-embeddable-2.1.0.jar"), got)
+
+    def test_takes_1_10_over_1_9_when_1_10_is_pinned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._place(home, "g", "lib", "1.9")
+            self._place(home, "g", "lib", "1.10")
+            self.assertTrue(_pinned_jar(home, "g", "lib", {("g", "lib"): "1.10"}).endswith("lib-1.10.jar"))
+            self.assertTrue(_pinned_jar(home, "g", "lib", {("g", "lib"): "1.9"}).endswith("lib-1.9.jar"))
+
+    def test_finds_nothing_when_only_another_version_is_there(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._place(home, "org.jetbrains.kotlin", "kotlin-compiler-embeddable", "2.4.20")
+            self.assertIsNone(_pinned_jar(home, "org.jetbrains.kotlin", "kotlin-compiler-embeddable", _pinned()))
 
 
 if __name__ == "__main__":

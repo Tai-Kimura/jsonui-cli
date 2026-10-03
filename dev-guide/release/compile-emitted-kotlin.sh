@@ -53,35 +53,46 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-G="$HOME/.gradle/caches/modules-2/files-2.1"
-newest() {  # group artifact -> newest cached jar, or empty
-    find "$G/$1/$2" -name "$2-*.jar" 2>/dev/null \
-        | grep -v -e sources -e javadoc | sort -V | tail -1
+G="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1"
+FETCH="${JSONUI_KOTLIN_PINS:-$REPO/.github/scripts/fetch_kotlin_compiler_jars.sh}"  # override: the gate's own test only
+FETCH_HINT="bash .github/scripts/fetch_kotlin_compiler_jars.sh"
+
+# The compiler and its core jars are taken at the versions CI pins — the
+# fetch script's `jars=(...)` list, the one source — at that exact version.
+# Until 1.9.10 this took the newest in the cache (`find ~/.gradle/caches`
+# over the whole cache, then `sort -V | tail -1`): kotlin-compiler-embeddable
+# 2.4.20 on the release machine where CI compiles with 2.1.0. A gate that is
+# missing its pinned compiler FAILS (exit 2); it does not fall back.
+pinned_version() {  # group artifact -> the version the fetch script pins, or empty
+    sed -n '/^jars=(/,/^)/p' "$FETCH" | awk -v g="$1" -v a="$2" '{ gsub(/"/, ""); if ($1 == g && $2 == a) print $3 }'
 }
-need() {
-    local jar; jar="$(newest "$1" "$2")"
+pinned() {  # group artifact -> the jar at its pinned version, or exit 2
+    local version jar
+    version="$(pinned_version "$1" "$2")"
+    if [ -z "$version" ]; then
+        echo "CANNOT ATTEMPT: $1:$2 has no pinned version in $FETCH" >&2
+        exit 2
+    fi
+    jar="$(ls "$G/$1/$2/$version"/*/"$2-$version.jar" 2>/dev/null | head -1)"
     if [ -z "$jar" ]; then
-        echo "CANNOT ATTEMPT: $1:$2 is not in the Gradle cache" >&2
-        echo "  (build an Android consumer once, or add the dependency)" >&2
+        echo "CANNOT ATTEMPT: $1:$2:$version (pinned) is not in the Gradle cache — fetch: $FETCH_HINT" >&2
         exit 2
     fi
     printf '%s' "$jar"
 }
-
 # The compiler runs on the JVM and needs its own dependencies on its own
 # classpath; the emitted file needs a different set on the target one. They
 # are separate, and conflating them is how the first attempt at this failed
 # with NoClassDefFoundError inside the compiler rather than a diagnostic
 # about the file.
-KOTLINC="$(find "$HOME/.gradle/caches" -name 'kotlin-compiler-embeddable-*.jar' 2>/dev/null | sort -V | tail -1)"
-[ -n "$KOTLINC" ] || { echo "CANNOT ATTEMPT: no kotlin-compiler-embeddable in the Gradle cache" >&2; exit 2; }
-KOTLIN_VERSION="$(basename "$KOTLINC" .jar | sed 's/kotlin-compiler-embeddable-//')"
+KOTLINC="$(pinned org.jetbrains.kotlin kotlin-compiler-embeddable)" || exit 2
+KOTLIN_VERSION="$(pinned_version org.jetbrains.kotlin kotlin-compiler-embeddable)"
 
-STDLIB="$(need org.jetbrains.kotlin kotlin-stdlib)"
-REFLECT="$(need org.jetbrains.kotlin kotlin-reflect)"
-ANNOTATIONS="$(need org.jetbrains annotations)"
-COROUTINES="$(need org.jetbrains.kotlinx kotlinx-coroutines-core-jvm)"
-TROVE="$(newest org.jetbrains.intellij.deps trove4j)"
+STDLIB="$(pinned org.jetbrains.kotlin kotlin-stdlib)" || exit 2
+REFLECT="$(pinned org.jetbrains.kotlin kotlin-reflect)" || exit 2
+ANNOTATIONS="$(pinned org.jetbrains annotations)" || exit 2
+COROUTINES="$(pinned org.jetbrains.kotlinx kotlinx-coroutines-core-jvm)" || exit 2
+TROVE="$(pinned org.jetbrains.intellij.deps trove4j)" || exit 2
 
 COMPILER_CP="$KOTLINC:$STDLIB:$REFLECT:$COROUTINES:$ANNOTATIONS${TROVE:+:$TROVE}"
 
@@ -95,8 +106,11 @@ for pair in \
     "com.squareup.okio okio-jvm" \
     "junit junit" \
     "org.hamcrest hamcrest-core" ; do
-    TARGET_CP="$TARGET_CP:$(need $pair)"
+    jar="$(pinned $pair)" || exit 2
+    echo "target: $(basename "$jar") (pinned)"
+    TARGET_CP="$TARGET_CP:$jar"
 done
+echo "kotlin-compiler-embeddable $KOTLIN_VERSION (pinned): $KOTLINC"
 
 JAVA_HOME_21="$(/usr/libexec/java_home -v 21 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null)"
 [ -n "$JAVA_HOME_21" ] || { echo "CANNOT ATTEMPT: no JDK 17+ found" >&2; exit 2; }

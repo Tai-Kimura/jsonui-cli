@@ -172,14 +172,13 @@ RSpec.describe 'kjui codegen: a grid per section' do
     skip "compile: #{KotlinCompiler.unavailable_reason}" if KotlinCompiler.unavailable_reason
 
     source = program(functions)
-    stdlib = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
-    coroutines = KotlinCompiler.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
-    reflect = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-reflect')
-    annotations = KotlinCompiler.newest('org.jetbrains', 'annotations')
+    stdlib = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    coroutines = KotlinCompiler.jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    reflect = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annotations = KotlinCompiler.jar('org.jetbrains', 'annotations')
     Dir.mktmpdir('kjui_run') do |dir|
       File.write(File.join(dir, 'Emitted.kt'), source)
-      compiler_cp = [KotlinCompiler.compiler_jar, stdlib, reflect, coroutines, annotations,
-                     KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+      compiler_cp = KotlinCompiler.compiler_classpath
       out, status = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                                     '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
                                     '-d', File.join(dir, 'out'), File.join(dir, 'Emitted.kt'))

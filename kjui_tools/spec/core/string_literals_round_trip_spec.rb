@@ -26,10 +26,8 @@ RSpec.describe 'JsonUIShared::StringLiterals.kotlin' do
       skip "#{reason}: the round trip is UNMEASURED here"
     end
     k = KotlinCompiler
-    stdlib = k.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
-    compiler = [k.compiler_jar, stdlib, k.newest('org.jetbrains.kotlin', 'kotlin-reflect'),
-                k.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'), k.newest('org.jetbrains', 'annotations'),
-                k.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+    stdlib = k.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    compiler = k.compiler_classpath
     program = "fun main() {\n" + TEXTS.map do |text|
       "  println(#{JsonUIShared::StringLiterals.kotlin(text)}.codePoints().toArray().joinToString(\",\", \"[\", \"]\"))"
     end.join("\n") + "\n}\n"

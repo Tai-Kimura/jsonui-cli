@@ -54,10 +54,8 @@ RSpec.describe 'a String defaultValue reads the same on every kjui path' do
 
   kotlin_values = lambda do |expressions|
     k = KotlinCompiler
-    stdlib = k.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
-    compiler = [k.compiler_jar, stdlib, k.newest('org.jetbrains.kotlin', 'kotlin-reflect'),
-                k.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'), k.newest('org.jetbrains', 'annotations'),
-                k.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+    stdlib = k.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    compiler = k.compiler_classpath
     run = lambda do |exprs|
       program = "fun main() {\n" + exprs.map do |e|
         "  println((#{e}).codePoints().toArray().joinToString(\",\", \"[\", \"]\"))"
@@ -144,10 +142,8 @@ RSpec.describe 'a String defaultValue reads the same on every kjui path' do
     end
     expect(emitted).to all(be_a(String))
     k = KotlinCompiler
-    stdlib = k.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
-    compiler = [k.compiler_jar, stdlib, k.newest('org.jetbrains.kotlin', 'kotlin-reflect'),
-                k.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'), k.newest('org.jetbrains', 'annotations'),
-                k.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+    stdlib = k.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    compiler = k.compiler_classpath
     program = "fun main() {\n" + emitted.each_with_index.map do |e, i|
       "  val v#{i}: String? = #{e}\n  println(v#{i}?.codePoints()?.toArray()?.joinToString(\",\", \"[\", \"]\") ?: \"nil\")"
     end.join("\n") + "\n}\n"
