@@ -265,6 +265,25 @@ jobs:
           path: |
             conformance/results/ios.results.json
             conformance/artifacts/ios/
+      # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
+      # xcodebuild, and on a failure it exits before saying where the full
+      # log is; run 37112820775 failed "1 failure" with no test name in the
+      # job log (ticket conformance-ios-failure-name-is-not-in-the-ci-log).
+      # The log is in the run's own staging dir — this job's runner holds
+      # one, /tmp/jsonui-conformance-ios.<pid>.<rand>.
+      - name: Name the failed tests
+        if: failure()
+        run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios.*/xcodebuild.log
+      - name: Upload the xcodebuild log and the xcresult
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-log-ios
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            /tmp/jsonui-conformance-ios.*/xcodebuild.log
+            SwiftJsonUI/ConformanceHost/build/DerivedData/Logs/Test/*.xcresult
 
   # ------------------------------------------------------------------ #
   # iOS codegen — the SAME fixtures through the sjui-GENERATED SwiftUI
@@ -330,6 +349,25 @@ jobs:
           path: |
             conformance/codegen/ios.results.json
             conformance/artifacts/ios-codegen/
+      # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
+      # xcodebuild, and on a failure it exits before saying where the full
+      # log is; run 37112820775 failed "1 failure" with no test name in the
+      # job log (ticket conformance-ios-failure-name-is-not-in-the-ci-log).
+      # The log is in the run's own staging dir — this job's runner holds
+      # one, /tmp/jsonui-conformance-ios-codegen.<pid>.<rand>.
+      - name: Name the failed tests
+        if: failure()
+        run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios-codegen.*/xcodebuild.log
+      - name: Upload the xcodebuild log and the xcresult
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-log-ios-codegen
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            /tmp/jsonui-conformance-ios-codegen.*/xcodebuild.log
+            SwiftJsonUI/ConformanceHost/build/DerivedData/Logs/Test/*.xcresult
 
   # ------------------------------------------------------------------ #
   # Android — KotlinJsonUI Compose dynamic host on a headless emulator
