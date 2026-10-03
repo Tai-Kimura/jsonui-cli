@@ -26,7 +26,7 @@ RSpec.describe KotlinCompiler do
 
   it 'reads the pinned versions from the fetch script CI runs' do
     script = File.read(described_class::FETCH_SCRIPT)
-    lines = script[/^jars=\((.*?)^\)/m, 1].lines.grep(/\S/)
+    lines = script[/^jars=\((.*?)^\)/m, 1].lines.grep(/^\s+"\S+ \S+ \S+ \h{64}"$/) # the rows, not the comments
     expect(described_class::PINNED.size).to eq(lines.size)
     expect(described_class::PINNED[%w[org.jetbrains.kotlin kotlin-compiler-embeddable]]).to eq(script[/kotlin-compiler-embeddable (\S+) /, 1])
     expect(described_class.compiler_version).to eq('2.1.0')

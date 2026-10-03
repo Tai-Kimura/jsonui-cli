@@ -26,6 +26,18 @@ jars=(
   "org.jetbrains.kotlinx kotlinx-coroutines-core-jvm 1.10.2 5ca175b38df331fd64155b35cd8cae1251fa9ee369709b36d42e0a288ccce3fd"
   "org.jetbrains.intellij.deps trove4j 1.0.20200330 c5fd725bffab51846bf3c77db1383c60aaaebfe1b7fe2f00d23fe1b7df0a439d"
   "com.google.code.gson gson 2.13.1 94855942d4992f112946d3de1c334e709237b8126d8130bf07807c018a4a2120"
+  # dev-guide/release/compile-emitted-kotlin.sh's target libraries: the
+  # branch-test runtime compiles against them. At versions whose Kotlin
+  # metadata 2.1.0 reads — the newest in a cache (serialization 1.11.0,
+  # metadata 2.3.0) is "compiled with an incompatible version of Kotlin".
+  "org.jetbrains.kotlinx kotlinx-coroutines-test-jvm 1.10.2 590a549f8c1db590c9d98a8a20424a1f581a34162a369e6a6bd884ce7d36d3d7"
+  "org.jetbrains.kotlinx kotlinx-serialization-json-jvm 1.8.0 7b7c445880cef94dc464f4733da1b33b94bee78805041ea08ae06e8507e4620e"
+  "org.jetbrains.kotlinx kotlinx-serialization-core-jvm 1.8.0 d3c94e9d829bba6e0c4cd3ae478a40846dd49d5475d6707877be853976afe416"
+  "com.squareup.okhttp3 mockwebserver 4.12.0 6784673687f4ac8f21679b9d4bc7cdb46e1a1ce1be9d3133b36bede59a741561"
+  "com.squareup.okhttp3 okhttp 4.12.0 b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0"
+  "com.squareup.okio okio-jvm 3.6.0 67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412"
+  "junit junit 4.13.2 8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3"
+  "org.hamcrest hamcrest-core 1.3 66fdef91e9739348df7a096aa384a5685f4e875584cce89386a7a47251c4d8e9"
 )
 
 sha256() { sha256sum "$1" | cut -d' ' -f1; }
