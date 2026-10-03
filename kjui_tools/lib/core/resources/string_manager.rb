@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'set'
 require 'fileutils'
 require 'rexml/document'
 require 'pathname'
@@ -284,165 +285,138 @@ module KjuiTools
           resources = doc.root
           Core::Logger.debug "Processing #{@strings_data.keys.length} files..."
 
-          # Build a hash of existing strings for faster lookup
-          existing_strings = {}
-          resources.elements.each('string') do |elem|
-            name = elem.attributes['name']
-            existing_strings[name] = elem if name
-          end
-          existing_plurals = {}
-          resources.elements.each('plurals') do |elem|
-            name = elem.attributes['name']
-            existing_plurals[name] = elem if name
-          end
-          Core::Logger.debug "Found #{existing_strings.keys.length} existing strings"
+          # kjui's entries live in a marked region, rewritten from strings.json
+          # on every build; everything outside it is the app's and is not
+          # touched (ticket face-strings-json-keeps-a-section-the-shared-copy-
+          # removed). Until 1.9.10 kjui upserted into the whole file and
+          # pruned only inside a namespace a layout or a section claims, so a
+          # key whose layout and section were both gone stayed forever —
+          # nothing told it from a hand-written one. The region is what tells
+          # them apart now, as Localizable.strings's auto-generated section
+          # does on iOS.
+          generated = generated_string_elements(lang_dir)
+          generated_names = generated.map { |elem| elem.attributes['name'] }.to_set
 
-          # Add new strings from strings.json (now structured by file)
+          children = resources.children.to_a
+          begin_at = children.index { |n| region_mark?(n, REGION_BEGIN) }
+          end_at = children.index { |n| region_mark?(n, REGION_END) }
+          has_region = begin_at && end_at && end_at > begin_at
+          inside = has_region ? children[(begin_at + 1)...end_at] : []
+          outside = has_region ? children[0...begin_at] + children[(end_at + 1)..] : children
+
+          # Which entries outside the region are kjui's:
+          #   - one under a name this build generates — always (two elements
+          #     of one name do not compile; the generator's name is its own);
+          #   - on the first build with a region (the file has none yet), also
+          #     one inside a namespace a layout or a section claims (the rule
+          #     the old prune used): it moves into the region, and if
+          #     strings.json no longer declares it, it is gone with the rest
+          #     of the region's stale keys. Everything else stays outside.
+          managed = managed_prefixes
+          moved = outside.select do |node|
+            next false unless node.is_a?(REXML::Element) && %w[string plurals].include?(node.name)
+
+            name = node.attributes['name'].to_s
+            generated_names.include?(name) ||
+              (!has_region && managed.any? { |prefix| name.start_with?(prefix) })
+          end
+          kept_outside = outside - moved
+
+          # A build that extracted nothing does not judge: strings.json may be
+          # another writer's (jui copies the shared one over this tree), so the
+          # region's entries it no longer declares are kept, as the old prune
+          # declined to prune.
+          carried = []
+          unless @extraction_ran
+            carried = (inside + moved).select do |node|
+              node.is_a?(REXML::Element) && !generated_names.include?(node.attributes['name'].to_s)
+            end
+            Core::Logger.info(
+              "Did not prune #{lang_dir}/strings.xml: no strings were extracted this build, " \
+              "so strings.json is not this build's own output (#{carried.size} key(s) left unjudged)"
+            )
+          end
+
+          resources.children.to_a.each { |node| resources.delete(node) }
+          kept_outside.each { |node| resources.add(node) unless node.is_a?(REXML::Text) && node.to_s.strip.empty? }
+          resources.add(REXML::Comment.new(" #{REGION_BEGIN} "))
+          (generated + carried).each { |elem| resources.add_element(elem) }
+          resources.add(REXML::Comment.new(" #{REGION_END} "))
+
+          if !has_region
+            Core::Logger.info "#{lang_dir}/strings.xml: moved #{moved.size} entr#{moved.size == 1 ? 'y' : 'ies'} into the " \
+                              "generated region (#{kept_outside.count { |n| n.is_a?(REXML::Element) }} hand-written left outside)"
+          elsif moved.any?
+            Core::Logger.info "#{lang_dir}/strings.xml: moved #{moved.size} entr#{moved.size == 1 ? 'y' : 'ies'} named as " \
+                              "kjui generates into the generated region: #{moved.map { |n| n.attributes['name'] }.join(', ')}"
+          end
+          stale = (inside.select { |n| n.is_a?(REXML::Element) } + (has_region ? [] : moved))
+                  .map { |n| n.attributes['name'].to_s } - generated_names.to_a - carried.map { |n| n.attributes['name'].to_s }
+          Core::Logger.info(stale.empty? ? "Nothing to prune in #{lang_dir}/strings.xml" :
+                                           "Pruned #{stale.size} stale strings from #{lang_dir}/strings.xml")
+
+          write_strings_xml(doc, strings_xml_file, lang_dir)
+        end
+
+        REGION_BEGIN = 'JsonUI generated strings (kjui): begin. Rewritten from strings.json on every build; write your own strings outside this region.'
+        REGION_END = 'JsonUI generated strings (kjui): end'
+
+        def region_mark?(node, text)
+          node.is_a?(REXML::Comment) && node.to_s.strip == text
+        end
+
+        # The namespaces a layout or a section claims (both spellings, and the
+        # resource-name spelling of each) — the old prune's managed set, now
+        # used once, to tell kjui's entries on the first build with a region.
+        def managed_prefixes
+          prefixes = []
+          @extracted_namespaces.each do |spelling|
+            prefixes << "#{spelling}_" << Core::KotlinIdentifier.resource_name("#{spelling}_")
+          end
           @strings_data.each do |file_prefix, file_strings|
             next unless file_strings.is_a?(Hash)
-            Core::Logger.debug "Processing #{file_prefix} with #{file_strings.keys.length} strings..."
+
+            prefixes << "#{file_prefix}_" << Core::KotlinIdentifier.resource_name("#{file_prefix}_")
+          end
+          prefixes.uniq
+        end
+
+        # The region's elements for lang_dir, in strings.json order — the
+        # sections, then each section's keys.
+        def generated_string_elements(lang_dir)
+          holder = REXML::Element.new('resources')
+          @strings_data.each do |file_prefix, file_strings|
+            next unless file_strings.is_a?(Hash)
+
             file_strings.each do |key, value|
-              # Create full key with file prefix
               full_key = "#{file_prefix}_#{key}"
-              # The name the resource is written under: an Android resource
-              # cannot start with a digit (a layout whose path does) —
-              # Core::KotlinIdentifier. Translations are still looked up by
-              # full_key, the strings.json spelling.
+              # An Android resource cannot start with a digit (a layout whose
+              # path does) — Core::KotlinIdentifier. Translations are looked up
+              # by full_key, the strings.json spelling.
               xml_name = Core::KotlinIdentifier.resource_name(full_key)
 
               # Plural entries compile to <plurals> (R.plurals); VM/Compose
               # code reads them via pluralStringResource / getQuantityString.
               if JsonUIShared::PluralValidator.plural_value?(value)
-                upsert_plurals_element(resources, existing_plurals, xml_name, value, lang_dir)
+                upsert_plurals_element(holder, {}, xml_name, value, lang_dir)
                 next
               end
 
-              # Use translated value if available for this language
-              translated_value = get_translated_value(full_key, value, lang_dir)
-              # Preserve \n as literal \\n for Android (renders as newline at runtime).
-              # The value is NOT trimmed and its whitespace runs are NOT folded:
-              # see quote_whitespace_edges for why, and what replaces it.
-              # Escape for Android XML strings (android_string_escape):
-              # - \, ", ' and a leading @ / ? are backslash-escaped for the Android resource compiler
-              # - &, <, > are handled by REXML's .text= (auto-escapes to &amp; etc.)
-              normalized_value = android_string_escape(translated_value)
-              # Convert iOS format specifiers to Android format
-              # %@ -> %s, %N$@ -> %N$s (positional)
+              # Not trimmed, whitespace runs not folded (quote_whitespace_edges);
+              # \, ", ' and a leading @ / ? escaped for the resource compiler
+              # (android_string_escape); &, <, > by REXML's text=; iOS format
+              # specifiers converted (%@ -> %s, %N$@ -> %N$s).
+              normalized_value = android_string_escape(get_translated_value(full_key, value, lang_dir))
               normalized_value = convert_ios_to_android_format(normalized_value)
               normalized_value = quote_whitespace_edges(normalized_value)
 
-              if existing_strings[xml_name]
-                # Update existing string element
-                existing_strings[xml_name].text = normalized_value
-              else
-                # Add new string element
-                string_elem = REXML::Element.new('string')
-                string_elem.add_attribute('name', xml_name)
-                string_elem.text = normalized_value
-                resources.add_element(string_elem)
-                Core::Logger.debug "Added string '#{xml_name}' to #{lang_dir}/strings.xml"
-              end
+              string_elem = REXML::Element.new('string')
+              string_elem.add_attribute('name', xml_name)
+              string_elem.text = normalized_value
+              holder.add_element(string_elem)
             end
           end
-
-          # Prune stale keys: a key inside a JsonUI-managed namespace that
-          # strings.json no longer declares was removed from the SSoT and
-          # must not survive here (same semantics as iOS
-          # Localizable.strings). Keys outside the managed namespace are
-          # never touched.
-          #
-          # The namespace is derived from the LAYOUTS as well as from the
-          # sections, because a section's prefix leaves the managed set
-          # together with its keys: deleting `summary_cell` from
-          # strings.json used to orphan `summary_cell_label` here
-          # FOREVER, since nothing left in strings.json claimed the prefix.
-          # A layout keeps claiming its own namespace after its section is
-          # gone, which is exactly the case that recurs — jui build
-          # overwrites this tree's strings.json wholesale from the shared
-          # copy, so a section can vanish from under live keys without the
-          # layout moving.
-          #
-          # Both spellings count. kjui names a section by the relative
-          # path and sjui by the basename (a deliberate divergence — see
-          # StringManagerCore.namespace_candidates, which is the one place
-          # that convention is written down); a file written by either
-          # extractor is the same file's namespace.
-          #
-          # NOT covered, deliberately: a key whose layout AND section are
-          # both gone. Nothing derivable distinguishes it from a key the
-          # app author wrote by hand, and deleting the second kind is the
-          # worse failure. Those need a ledger or a mark in the generated
-          # file; both are open designs.
-          expected_keys = {}
-          expected_plural_keys = {}
-          managed_prefixes = []
-          # Both the strings.json spelling and the resource name of each
-          # prefix are managed: a name written before the resource name took
-          # its leading `_` (Core::KotlinIdentifier) is this namespace's too,
-          # and stale.
-          @extracted_namespaces.each do |spelling|
-            managed_prefixes << "#{spelling}_" << Core::KotlinIdentifier.resource_name("#{spelling}_")
-          end
-          @strings_data.each do |file_prefix, file_strings|
-            next unless file_strings.is_a?(Hash)
-            managed_prefixes << "#{file_prefix}_" << Core::KotlinIdentifier.resource_name("#{file_prefix}_")
-            file_strings.each do |key, value|
-              name = Core::KotlinIdentifier.resource_name("#{file_prefix}_#{key}")
-              if JsonUIShared::PluralValidator.plural_value?(value)
-                expected_plural_keys[name] = true
-              else
-                expected_keys[name] = true
-              end
-            end
-          end
-          managed_prefixes.uniq!
-          stale = existing_strings.reject do |name, _elem|
-            expected_keys[name] ||
-              managed_prefixes.none? { |prefix| name.start_with?(prefix) }
-          end
-          stale_plurals = existing_plurals.reject do |name, _elem|
-            expected_plural_keys[name] ||
-              managed_prefixes.none? { |prefix| name.start_with?(prefix) }
-          end
-
-          # Three states, so that "declined to judge" can never be read as
-          # "judged and found nothing". The prune deletes on the strength
-          # of strings.json; when this build did not re-derive strings.json
-          # from the layouts, the file may be another writer's — jui build
-          # copies the shared one over this tree — and its silence about a
-          # key is not evidence the key is stale.
-          unless @extraction_ran
-            candidates = stale.size + stale_plurals.size
-            Core::Logger.info(
-              "Did not prune #{lang_dir}/strings.xml: no strings were " \
-              "extracted this build, so strings.json is not this build's " \
-              "own output (#{candidates} key(s) left unjudged)"
-            )
-            write_strings_xml(doc, strings_xml_file, lang_dir)
-            return
-          end
-
-          pruned_count = 0
-          stale.each do |name, elem|
-            resources.delete_element(elem)
-            pruned_count += 1
-            Core::Logger.debug "Pruned stale string '#{name}' from #{lang_dir}/strings.xml"
-          end
-          # Same rule for <plurals>: prunes keys removed from strings.json
-          # AND the stale twin left behind when a key switches between the
-          # flat and plural forms.
-          stale_plurals.each do |name, elem|
-            resources.delete_element(elem)
-            pruned_count += 1
-            Core::Logger.debug "Pruned stale plurals '#{name}' from #{lang_dir}/strings.xml"
-          end
-          if pruned_count > 0
-            Core::Logger.info "Pruned #{pruned_count} stale strings from #{lang_dir}/strings.xml"
-          else
-            Core::Logger.info "Nothing to prune in #{lang_dir}/strings.xml"
-          end
-
-          write_strings_xml(doc, strings_xml_file, lang_dir)
+          holder.elements.to_a.each { |elem| holder.delete_element(elem) }
         end
 
         # Write updated XML with custom formatting to prevent multiline strings
