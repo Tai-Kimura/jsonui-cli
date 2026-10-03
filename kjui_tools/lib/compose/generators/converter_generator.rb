@@ -227,9 +227,18 @@ module KjuiTools
                         # built-in one. If this converter applies one itself —
                         # calls the node's handler (`data.<name>`) or writes
                         # `.alpha(` — kjui does not apply that one again.
+                        #
+                        # The weight and the alignment in the parent are not
+                        # in it either: kjui applies them around the component,
+                        # in the parent's scope (a Box that hands the weighted
+                        # slot to the component as its minimum). `build_size`
+                        # takes `parent_type` so a weighted axis is left to that
+                        # slot, as a built-in component leaves it; until
+                        # jsonui-cli 1.9.8 it was given nil, and no converter
+                        # from this template applied a weight at all.
                         modifiers = []
                         modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-                        modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
+                        modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
                         modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
