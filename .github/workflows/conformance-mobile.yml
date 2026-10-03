@@ -30,10 +30,18 @@ on:
         required: false
         default: master
         type: string
+      # The two probe switches default to TRUE (jsonui-cli 1.9.8): a dispatch is
+      # almost always the check before a tag, and with `false` a dispatch that
+      # forgot the flag went green with the probes skipped — 1.9.7's tag was
+      # judged on such a run (9 library-dynamic probes skipped). Lower one with
+      # `-f android_probes=false`. The schedule has no inputs, so `inputs.*`
+      # is empty there and the `&& '1' || '0'` below stays '0' / 'false': the
+      # weekly run is unchanged (as `inputs.swiftjsonui_ref || 'master'`
+      # already relies on).
       image_probes:
-        description: "Also run the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) in both iOS jobs"
+        description: "Also run the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) in both iOS jobs (default true; the schedule runs without them)"
         required: false
-        default: false
+        default: true
         type: boolean
       kotlinjsonui_ref:
         description: "KotlinJsonUI ref (branch, tag or SHA) the three Android jobs check out"
@@ -41,9 +49,9 @@ on:
         default: main
         type: string
       android_probes:
-        description: "Also run the opt-in probes in KotlinJsonUI's device tests (every instrumentation argument a test compares to \"1\")"
+        description: "Also run the opt-in probes in KotlinJsonUI's device tests (every instrumentation argument a test compares to \"1\"; default true; the schedule runs without them)"
         required: false
-        default: false
+        default: true
         type: boolean
 
 concurrency:

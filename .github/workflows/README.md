@@ -72,6 +72,10 @@ gh workflow run conformance-mobile.yml -f swiftjsonui_ref=<sjui-release-branch> 
     -f kotlinjsonui_ref=<kjui-release-branch> -f android_probes=true
 ```
 
+`image_probes` and `android_probes` default to `true` (from jsonui-cli 1.9.8):
+a dispatch that forgets them still raises the probes; lower one with
+`-f android_probes=false`. The schedule has no inputs and runs without them.
+
 `swiftjsonui_ref` (default `master`) is the SwiftJsonUI ref both iOS jobs
 check out, and `kotlinjsonui_ref` (default `main`) the KotlinJsonUI ref the
 three Android jobs check out; each job prints the ref and the commit it got.
