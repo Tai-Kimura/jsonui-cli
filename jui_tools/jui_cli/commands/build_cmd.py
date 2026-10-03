@@ -1316,125 +1316,36 @@ def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None
             print(f"Distributed {count} style(s) → {platform}{suffix}")
 
 
-def _merge_strings_into(src_file, dest) -> "tuple[int, list[str]]":
-    """Distribute strings.json by MERGE, not overwrite.
+def _distribute_strings_into(src_file, dest) -> int:
+    """Distribute strings.json by COPY: the face copy is the shared copy's
+    bytes, and this build's extraction adds what the face's layouts derive.
 
-    The face-side copy has two writers with opposite policies: this
-    distributor, and the platform extractors (sjui/kjui build), which append
-    sections derived from face layouts and allowlisted literals and never
-    delete anything. A copy2 here silently reverted every section an
-    extractor had added — whichever tool ran last decided the file's
-    content, and no gate reads the output side (measured 2026-09-01: both
-    multi-platform faces diverged, three hash lineages each, and neither
-    face has anything fixing the build order).
-
-    The ruling this implements: the face copy is A DISTRIBUTION TARGET PLUS
-    AN EXTRACTOR APPEND AREA. Sections the SSoT declares are the SSoT's —
-    overwritten unconditionally. Sections only the face copy has are the
-    extractors' — preserved, and NAMED in the output, because a section
+    Until 1.9.10 this MERGED: sections the shared copy declares were
+    overwritten and sections only the face copy had were kept — "a section
     deleted from the SSoT whose layout is also gone will now survive here
-    forever (the same orphan family the kjui prune fix closed), and naming
-    the kept sections on every build is what keeps that drift visible
-    instead of silent.
+    forever", as the merge's own note said. The face copy is gitignored, so
+    two checkouts of one commit built different tracked string resources: a
+    section removed from the shared strings.json stayed in strings.xml,
+    Localizable.strings and the web StringManager on the machine that had
+    built it before (ticket face-strings-json-keeps-a-section-the-shared-
+    copy-removed). The merge existed because the face extractors append
+    sections from the layouts and a plain copy reverted them; each extractor
+    now derives them from EVERY layout on every build (sjui included, which
+    extracted from the changed files only), so the copy reverts nothing a
+    build does not put back.
 
-    An unreadable destination is replaced wholesale — merge needs a
-    readable base, and preserving bytes we cannot parse would preserve a
-    corruption.
-
-    Keeping a face-only section WHOLE was too generous. Measured 2026-09-04
-    on a face: a section minted under one spelling of a layout's name
-    (`store_info_store_edit_sheet`) kept keys the SSoT also declares under
-    the other spelling (`store_edit_sheet`), and the Android resolver
-    preferred the face-local one — so a layout corrected in the SSoT kept
-    resolving to the stale copy, forever, in a file that is gitignored and
-    therefore invisible to everyone but the machine that built it.
-
-    So the append area may hold only what the SSoT does not: a face-local
-    key whose NAME the SSoT declares anywhere is dropped and named. A
-    section left with nothing is not carried at all, which is what finally
-    removes a stale one.
-
-    ⚠ The comparison is by key name across the whole SSoT, not within a
-    matching section: section names differ precisely in the case this
-    fixes, so there is no section to match on. A face-local key that
-    innocently shares a name with an unrelated SSoT key is therefore
-    dropped too — visibly, by name, on every build.
-
-    Returns (sections distributed, kept section names, shadowed
-    "section.key" names, count of sections emptied)."""
-    src_data = json.loads(src_file.read_text(encoding="utf-8"))
+    Written only on a change, so an unchanged file keeps its mtime. Returns
+    the number of sections distributed."""
+    text = src_file.read_text(encoding="utf-8")
+    sections = json.loads(text)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    kept: "list[str]" = []
-    shadowed: "list[str]" = []
-    emptied = 0
-    merged = dict(src_data)
-    ssot_keys = {
-        name
-        for section in src_data.values() if isinstance(section, dict)
-        for name in section
-    }
-    if dest.exists():
-        try:
-            existing = json.loads(dest.read_text(encoding="utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            print(f"  strings.json at {dest} was unreadable — replaced wholesale")
-            existing = {}
-        if isinstance(existing, dict):
-            for key, value in existing.items():
-                if key in merged:
-                    continue
-                if not isinstance(value, dict):
-                    # Not a section shape; nothing to compare key-wise.
-                    merged[key] = value
-                    kept.append(key)
-                    continue
-                surviving = {k: v for k, v in value.items() if k not in ssot_keys}
-                shadowed.extend(f"{key}.{k}" for k in value if k in ssot_keys)
-                if surviving:
-                    merged[key] = surviving
-                    kept.append(key)
-                else:
-                    # Everything it held is the SSoT's, or it held nothing:
-                    # not carried, which is how a stale section disappears.
-                    emptied += 1
-    # No face-local sections -> distribute the SOURCE BYTES verbatim. Four
-    # web-only faces have nothing appended, and re-serialising for them
-    # would move every byte-hashing gate (face fingerprints) once for a
-    # formatting change that distributes nothing. Merge formatting is the
-    # price of having something to merge, and only then.
-    if not kept:
-        text = src_file.read_text(encoding="utf-8")
-    else:
-        text = json.dumps(merged, ensure_ascii=False, indent=2) + "\n"
     try:
         if dest.read_text(encoding="utf-8") == text:
-            return (len(src_data), kept, shadowed, emptied)
+            return len(sections)
     except (OSError, ValueError, UnicodeDecodeError):
         pass
     dest.write_text(text, encoding="utf-8")
-    return (len(src_data), kept, shadowed, emptied)
-
-
-def _report_strings_merge(platform: str, kept, shadowed, emptied) -> None:
-    """One line for what the append area kept, and a named line per key the
-    SSoT took back. Silence when there was nothing to say.
-
-    The ⚠ lines are one per key and each one counts as a build warning
-    under the consumers' rule (measured: the rulebook expression counts
-    2 for 2 such lines and 0 for the summary lines, in three locales).
-    So do not truncate them for readability ("… and N more") — that
-    would lower a gate's count, not just shorten the display. They stay
-    until the key is declared in the SSoT; that is the only way out."""
-    if kept:
-        print(f"  strings.json → {platform}: kept {len(kept)} face-local "
-              f"section(s) ({len(shadowed)} key(s) shadowed by SSoT → dropped, "
-              f"{emptied} empty section(s) skipped): {', '.join(sorted(kept))}")
-    elif shadowed or emptied:
-        print(f"  strings.json → {platform}: kept 0 face-local section(s) "
-              f"({len(shadowed)} key(s) shadowed by SSoT → dropped, "
-              f"{emptied} empty section(s) skipped)")
-    for name in sorted(shadowed):
-        print(f"  ⚠ {name} shadowed by SSoT → dropped")
+    return len(sections)
 
 
 def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> None:
@@ -1468,8 +1379,7 @@ def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> N
                 rel = src_file.relative_to(resources_src)
                 dest = resources_dest / rel
                 if src_file.name == "strings.json":
-                    _, kept, shadowed, emptied = _merge_strings_into(src_file, dest)
-                    _report_strings_merge(platform, kept, shadowed, emptied)
+                    _distribute_strings_into(src_file, dest)
                     count += 1
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1480,8 +1390,7 @@ def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> N
         if strings_src and strings_src.exists():
             if not resources_src.exists() or resources_src not in strings_src.parents:
                 dest = resources_dest / "strings.json"
-                _, kept, shadowed, emptied = _merge_strings_into(strings_src, dest)
-                _report_strings_merge(platform, kept, shadowed, emptied)
+                _distribute_strings_into(strings_src, dest)
                 count += 1
 
         if count:
