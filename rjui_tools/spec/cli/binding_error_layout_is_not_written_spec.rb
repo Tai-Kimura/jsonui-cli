@@ -65,7 +65,11 @@ RSpec.describe 'rjui build: a layout with a binding ERROR is not written' do
     @good_before = digests(outputs('GoodForm'))
 
     # The ERROR: a two-way field whose value mixes literal text with a binding.
-    File.write(File.join(@layouts, 'bad_form.json'), JSON.generate(layout('Name: @{profileName}', 'Bad')))
+    # Its label changes too, so the refused layout's output WOULD differ if it
+    # were written (a face drawing the mixed value as the bare binding would
+    # otherwise emit the same file, and the byte-for-byte arm would hold on the
+    # parent for the wrong reason).
+    File.write(File.join(@layouts, 'bad_form.json'), JSON.generate(layout('Name: @{profileName}', 'Bad Changed')))
     File.write(File.join(@layouts, 'good_form.json'), JSON.generate(layout('@{profileName}', 'After')))
     @log2, @status2 = build
     @bad_after = digests(outputs('BadForm'))

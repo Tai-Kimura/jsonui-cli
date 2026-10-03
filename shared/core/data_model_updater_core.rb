@@ -77,11 +77,19 @@ module JsonUIShared
       if files_to_update && !files_to_update.empty?
         puts "  Updating data models for #{files_to_update.length} modified files..."
         files_to_update.each do |json_file|
+          # A layout the build refused (an ERROR in its bindings) keeps its
+          # last Data file (JsonUI::StageFailures.block_layout).
+          next if defined?(JsonUI::StageFailures) && JsonUI::StageFailures.layout_blocked?(json_file)
+
           process_json_file(json_file)
         end
       else
         puts "  Updating data models for #{all_json_files.length} files..."
         all_json_files.each do |json_file|
+          # A layout the build refused (an ERROR in its bindings) keeps its
+          # last Data file (JsonUI::StageFailures.block_layout).
+          next if defined?(JsonUI::StageFailures) && JsonUI::StageFailures.layout_blocked?(json_file)
+
           process_json_file(json_file)
         end
       end

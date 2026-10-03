@@ -167,6 +167,35 @@ module SjuiTools
         # The layouts refused while converting: each mark is a layout and
         # where its conversion began in the stage ledger, so its stretch runs
         # to the next mark (or the end).
+        # The bindings of every layout this run writes, and of its variants,
+        # before any writer runs — counted as the conversion loop counted
+        # them (warnings into the summary and, for --strict, the error
+        # count). A layout with an ERROR is blocked and refused (not cached).
+        def prevalidate_bindings(files, variants_by_base, layouts_dir, binding_validator)
+          files.each do |json_file|
+            [json_file, *(variants_by_base[json_file] || {}).values].each do |file|
+              rel = Pathname.new(file).relative_path_from(Pathname.new(layouts_dir)).to_s
+              begin
+                json = JSON.parse(File.read(file))
+              rescue StandardError
+                next # the conversion loop reports a layout it cannot read
+              end
+              warnings = binding_validator.validate(json, rel)
+              errors = binding_validator.errors
+              @binding_errors.concat(errors)
+              if warnings.any?
+                @validation_warnings.concat(warnings)
+                @validation_errors += warnings.length
+                Core::Logger.warn "  #{warnings.length} binding warning(s) in #{rel}"
+              end
+              next if errors.empty?
+
+              JsonUI::StageFailures.block_layout(file, "#{errors.length} binding error(s)")
+              (@refused_layouts ||= []) << json_file
+            end
+          end
+        end
+
         def refused_in(marks)
           entries = JsonUI::StageFailures.entries
           marks.each_with_index.map do |(file, start), i|
@@ -566,6 +595,15 @@ module SjuiTools
           validate_partial_layouts(partial_files)
 
           # Update Data models if any files need updating
+          # Bindings first, for every layout this run writes (variants
+          # included): one whose bindings carry an ERROR is not written by any
+          # writer below — Data, GeneratedView, variants — and is not cached,
+          # so the next build converts it again (StageFailures.block_layout).
+          # Until jsonui-cli 1.9.8 they were checked in the conversion loop,
+          # after the Data models were written.
+          require_relative '../../core/stage_failures'
+          prevalidate_bindings(files_to_update, variants_by_base, layouts_dir, binding_validator) if binding_validator
+
           if files_to_update.any?
             Core::Logger.info "Updating #{files_to_update.length} of #{json_files.length} files..."
             data_updater = SjuiTools::SwiftUI::DataModelUpdater.new
@@ -633,23 +671,11 @@ module SjuiTools
                 end
               end
 
-              # Validate bindings for business logic
-              if binding_validator
-                binding_warnings = binding_validator.validate(json_data, relative_path)
-                # The validator resets per validate() call — collect
-                # error-severity canonical violations for build failure
-                @binding_errors.concat(binding_validator.errors)
-                if binding_warnings.any?
-                  @validation_warnings.concat(binding_warnings)
-                  # --strict gates on these too. The flag says "validation
-                  # errors" and a binding warning is a validation finding, but
-                  # only attribute warnings were counted: measured 2026-09-04,
-                  # a tree reporting four findings still exited 0 under
-                  # --strict because all four came from the binding validator.
-                  @validation_errors += binding_warnings.length
-                  Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
-                end
-              end
+              # Bindings were validated before any writer ran
+              # (prevalidate_bindings, which counts their warnings for
+              # --strict as this block did); a layout with an ERROR is not
+              # written and not cached.
+              next if JsonUI::StageFailures.layout_blocked?(json_file)
 
               # Extract includes and styles for cache tracking
               includes = cache_manager.extract_includes(json_data)
@@ -755,6 +781,8 @@ module SjuiTools
               variant_struct = variant_structs[cls]
               variant_swift_file = File.join(File.dirname(swift_file), "#{variant_struct}.swift")
               variant_source = variant_rel.sub(/\.json$/, '')
+              # A variant with a binding ERROR is not written (prevalidate_bindings).
+              next if JsonUI::StageFailures.layout_blocked?(variant_file)
 
               begin
                 variant_json = JSON.parse(File.read(variant_file))
@@ -765,16 +793,6 @@ module SjuiTools
                     @validation_warnings.concat(warnings.map { |w| "[#{variant_rel}] #{w}" })
                     @validation_errors += warnings.length
                     Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{variant_rel}"
-                  end
-                end
-                if binding_validator
-                  binding_warnings = binding_validator.validate(variant_json, variant_rel)
-                  @binding_errors.concat(binding_validator.errors)
-                  if binding_warnings.any?
-                    @validation_warnings.concat(binding_warnings)
-                    # Same as the primary path: --strict counts binding findings.
-                    @validation_errors += binding_warnings.length
-                    Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{variant_rel}"
                   end
                 end
               rescue => ex
