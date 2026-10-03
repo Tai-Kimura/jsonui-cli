@@ -1058,7 +1058,7 @@ module KjuiTools
         else
           code = result
         end
-        code = app_component_stages(json_data, own_code, code, depth)
+        code = app_component_stages(json_data, own_code, code, depth, parent_type)
         lifecycle_at_leaf(json_data, code, depth, own_code: own_code)
       end
 
@@ -1092,7 +1092,19 @@ module KjuiTools
       # whose data name its own code already calls (`data.<name>`, in the code
       # it emitted for this node, not in its children's), or `.alpha(` in that
       # code. The scaffold says so to whoever writes a converter.
-      def app_component_stages(json_data, own_code, code, depth)
+      #
+      # Its weight and its alignment in the parent too (build_weight,
+      # build_alignment — a Row child's alignTop / centerVertical, a Column
+      # child's alignLeft / centerHorizontal — as a built-in leaf takes them;
+      # both are the parent's scope, so they go on the Box, the parent's
+      # child). The scaffold never applied it — `weight: 1` and no width
+      # drew the component at its own minimum, a Canvas ~0 wide, where sjui's
+      # scaffold (apply_modifiers) fills the slot. The Box takes the weight
+      # and hands the slot to the component as its minimum
+      # (propagateMinConstraints), so a converter written before this — one
+      # the app keeps and does not re-scaffold — fills it as it is. A
+      # converter whose own code applies `.weight(` / `.align(` keeps its own.
+      def app_component_stages(json_data, own_code, code, depth, parent_type = nil)
         return code unless code.is_a?(String) && !code.empty?
 
         node = json_data.dup
@@ -1101,12 +1113,20 @@ module KjuiTools
           node.delete(key) if self.class.converter_calls_any?(own_code, names)
         end
         node.delete('alpha') if own_code.include?('.alpha(')
-        modifiers = Helpers::ModifierBuilder.build_alpha(node, @required_imports) +
+        # a weight is a Row / Column child's only (BoxScope has none)
+        weighted = %w[Row Column].include?(parent_type) && !own_code.include?('.weight(')
+        weight = weighted ? Helpers::ModifierBuilder.build_weight(node, parent_type) : []
+        align = own_code.include?('.align(') ? [] : Helpers::ModifierBuilder.build_alignment(node, @required_imports, parent_type)
+        modifiers = weight + align +
+                    Helpers::ModifierBuilder.build_alpha(node, @required_imports) +
                     Helpers::ModifierBuilder.build_clickable(node, @required_imports)
         return code if modifiers.empty?
 
         @required_imports&.add(:box)
-        Helpers::CodeIndent.pad('Box(', depth) + Helpers::ModifierBuilder.format(modifiers, depth) + "\n" +
+        # weighted: the slot is the component's minimum on both axes, as
+        # SafeAreaView's root Box hands its own (propagateMinConstraints)
+        min = weight.empty? ? '' : ",\n#{Helpers::CodeIndent.pad('propagateMinConstraints = true', depth + 1)}"
+        Helpers::CodeIndent.pad('Box(', depth) + Helpers::ModifierBuilder.format(modifiers, depth) + min + "\n" +
           Helpers::CodeIndent.pad(') {', depth) + "\n" +
           Helpers::CodeIndent.shift(code.rstrip, 1) + "\n" +
           Helpers::CodeIndent.pad('}', depth)
