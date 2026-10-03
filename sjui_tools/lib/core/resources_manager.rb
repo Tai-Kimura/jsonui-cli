@@ -69,7 +69,9 @@ module SjuiTools
         # Process strings through StringManager
         @string_manager.process_strings(processed_files, processed_count, skipped_count, @config)
         
-        # Process colors through ColorManager
+        # Process colors through ColorManager — extraction from the changed
+        # files, the undefined-name stubs from every layout
+        @color_manager.layout_files = json_files
         @color_manager.process_colors(processed_files, processed_count, skipped_count, @config)
         # TODO: Process dimensions
         # TODO: Process other resources

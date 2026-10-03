@@ -164,7 +164,10 @@ RSpec.describe KjuiTools::Core::Resources::ColorManager do
       expect(content).to include('#FF1A1A1A')
     end
 
-    it 'adds defined_colors only when colors.json does not have the key' do
+    # defined_colors.json is not read (ticket kjui-defined-colors-json-never-
+    # prunes-and-leaks-tree-history-into-color-manager): a value written into
+    # it no longer reaches colors.xml. No consumer ledger carries a value.
+    it 'does not add a value from a stale defined_colors.json' do
       colors_dir = File.join(temp_dir, 'src/main/res/values')
       FileUtils.mkdir_p(colors_dir)
 
@@ -187,7 +190,7 @@ RSpec.describe KjuiTools::Core::Resources::ColorManager do
 
       content = File.read(File.join(colors_dir, 'colors.xml'))
       expect(content).to include('primary')
-      expect(content).to include('secondary')
+      expect(content).not_to include('secondary')
     end
   end
 

@@ -40,6 +40,9 @@ module KjuiTools
 
           extract_colors(processed_files)
           save_colors_json if any_extracted? || @migrated
+          # every layout (build.rb hands all_json_files): the stubs and the
+          # ledger come from what they reference now, nothing carried over
+          collect_undefined_references(processed_files)
           save_defined_colors_json
 
           # Unconditional: see generate_color_manager_kotlin. The emit

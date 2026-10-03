@@ -75,6 +75,7 @@ RSpec.describe SjuiTools::Core::ResourcesManager do
       color_manager = instance_double(SjuiTools::Core::Resources::ColorManager)
       allow(string_manager).to receive(:process_strings)
       allow(color_manager).to receive(:process_colors)
+      allow(color_manager).to receive(:layout_files=)
       manager.instance_variable_set(:@string_manager, string_manager)
       manager.instance_variable_set(:@color_manager, color_manager)
     end
@@ -127,6 +128,17 @@ RSpec.describe SjuiTools::Core::ResourcesManager do
       )
 
       manager.process_resource_extraction(layouts_dir)
+    end
+
+    # ticket kjui-defined-colors-json-never-prunes-…: extraction gets the
+    # changed files, the undefined-name stubs every layout — an unchanged one
+    # included, or its references would need the ledger to carry them.
+    it 'hands the color manager every layout, unchanged ones included' do
+      color_manager = manager.instance_variable_get(:@color_manager)
+      expect(color_manager).to receive(:layout_files=).with([match(/test\.json$/)])
+      expect(color_manager).to receive(:process_colors).with([], 0, 1, anything)
+
+      manager.process_resource_extraction(layouts_dir, { 'test.json' => Time.now.to_i + 1000 })
     end
   end
 

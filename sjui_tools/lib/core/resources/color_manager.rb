@@ -31,6 +31,12 @@ module SjuiTools
           @defined_colors_data = load_defined_colors_json
         end
 
+        # Every layout of the build. Extraction runs on the changed files only
+        # (ResourcesManager compares mtimes), but the ColorManager stubs and
+        # the ledger are what ALL the layouts reference now — read, not
+        # carried over in defined_colors.json (see collect_undefined_references).
+        attr_writer :layout_files
+
         def process_colors(processed_files, processed_count, skipped_count, config)
           if processed_files.any?
             Core::Logger.info "Extracting colors from #{processed_count} files (#{skipped_count} skipped)..."
@@ -38,9 +44,10 @@ module SjuiTools
             extract_colors(processed_files)
 
             save_colors_json if any_extracted? || @migrated
-
-            save_defined_colors_json
           end
+
+          collect_undefined_references(@layout_files || processed_files)
+          save_defined_colors_json
 
           generate_color_manager_swift if @config['resource_manager_directory']
         end
