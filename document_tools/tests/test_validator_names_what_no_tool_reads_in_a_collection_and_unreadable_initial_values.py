@@ -124,3 +124,31 @@ def test_from_the_release_it_is_a_warning_and_withdrawn_never(monkeypatch):
 
 def test_the_release_is_the_one_jui_verify_counts_from():
     assert validator_mod.INITIAL_VALUE_TYPE_GATE_FROM == "1.9.1"
+
+
+def _without_gate_versions(monkeypatch):
+    load = validator_mod.shared_core.load
+    monkeypatch.setattr(validator_mod.shared_core, "load",
+                        lambda name: None if name == "gate_versions" else load(name))
+
+
+def test_without_gate_versions_an_unreadable_initial_value_is_an_error_that_says_why(monkeypatch):
+    # A tool tree without shared/core/gate_versions.py cannot decide whether it
+    # is a WARNING. Until jsonui-cli 1.9.8 it was INFO and the validation
+    # passed — the gate silently off (ticket
+    # gate-readers-without-shared-core-fall-silent-five-more).
+    _without_gate_versions(monkeypatch)
+    result = SpecValidator().validate_data(_spec(variables=[_var("prose")]))
+    # (The minimal spec carries an unrelated error of its own: "At least one
+    # component is required"; only this gate's line is read.)
+    assert [m.message for m in result.errors if "cannot be decided" in m.message] == [
+        "the level of 1 initial value(s) that do not read as their type cannot be decided — "
+        "shared/core/gate_versions.py is not in this tool tree; " + validator_mod.GATE_UNREADABLE_FAILS]
+    assert "~/.jsonui-cli/document_tools/jsonui-doc" in validator_mod.GATE_UNREADABLE_FAILS
+
+
+def test_without_gate_versions_a_readable_initial_value_is_no_error(monkeypatch):
+    # The control: nothing unreadable, so the level decides nothing.
+    _without_gate_versions(monkeypatch)
+    result = SpecValidator().validate_data(_spec(variables=[_var(["a", "b"])]))
+    assert [m for m in result.errors if "cannot be decided" in m.message] == []

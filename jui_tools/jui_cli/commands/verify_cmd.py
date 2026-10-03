@@ -332,6 +332,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "on": "counted by `--fail-on-diff`",
             "announce": (f"reported only — from jsonui-cli {INITIAL_VALUE_GATE_FROM} "
                          f"`--fail-on-diff` counts these"),
+            "unavailable": INITIAL_VALUE_GATE_UNREADABLE,
         }.get(value_gate, "reported only — `--fail-on-diff` does not count these")
         print(
             f"\n**WARNING: {len(initial_values)} initial value(s) a spec declares that "
@@ -386,7 +387,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     coverage_gap = bool(coverage.missing_specs or coverage.missing_layouts)
     if args.fail_on_diff and (
         any(r.has_diff for r in results) or data_orphans or api_drift
-        or (initial_values and value_gate == "on")
+        or (initial_values and value_gate in ("on", "unavailable"))
         or (require_coverage and coverage_gap)
     ):
         return 1
@@ -560,16 +561,29 @@ from ..core.layout_data import (  # noqa: E402
 INITIAL_VALUE_GATE_FROM: str | None = "1.9.1"
 
 
+#: How the initial-value finding is labelled, and why `--fail-on-diff` fails
+#: on it, when this tree has no shared/core/gate_versions.py and so cannot say
+#: whether `--fail-on-diff` counts it. Until jsonui-cli 1.9.8 the state was
+#: "off" and the line said "reported only": the gate silently off (ticket
+#: gate-readers-without-shared-core-fall-silent-five-more).
+INITIAL_VALUE_GATE_UNREADABLE = (
+    "whether `--fail-on-diff` counts these cannot be decided — "
+    "shared/core/gate_versions.py is not in this tool tree — so `--fail-on-diff` FAILS: "
+    "run ~/.jsonui-cli/jui_tools/bin/jui, or install jui_tools editable")
+
+
 def initial_value_gate_state(version: str | None = None, literal: str | None = None) -> str:
     """`on` (counted by --fail-on-diff), `announce` (a release is named, not
-    reached) or `off` (undeclared, withdrawn, unreadable, or no gate_versions
-    to read it with). *version* defaults to this toolchain's, *literal* to
+    reached), `off` (undeclared, withdrawn, unreadable) or `unavailable` (no
+    gate_versions in this tree to read it with — --fail-on-diff fails). *version* defaults to this toolchain's, *literal* to
     INITIAL_VALUE_GATE_FROM."""
     from ..version import toolchain_version
 
     gates = shared_core.load("gate_versions")
     if gates is None:
-        return "off"
+        # Not "off": this tree cannot say (ticket
+        # gate-readers-without-shared-core-fall-silent-five-more).
+        return "unavailable"
     literal = INITIAL_VALUE_GATE_FROM if literal is None else literal
     version = toolchain_version() if version is None else version
     if gates.gate_is_on(version, literal):

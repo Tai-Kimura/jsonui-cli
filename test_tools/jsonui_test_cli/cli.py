@@ -189,6 +189,16 @@ def cmd_validate(args):
     # release is announced, the one line that says when "on no layout"
     # becomes a WARNING. A run that checked none says why instead of a clean
     # line; a `test.appOwnedIds` entry no step of the run named is named.
+    # Set below when ids are on no layout and this tree cannot decide their
+    # level: the run FAILS (element_ids.LEVEL_UNKNOWN_FAILS says why and how
+    # to fix it). Until jsonui-cli 1.9.8 they were listed as INFO and the run
+    # passed — the gate silently off (ticket
+    # gate-readers-without-shared-core-fall-silent-five-more).
+    # Decided apart from the printing, so --quiet fails the same run.
+    from .validation.element_ids import level_unknown as _element_level_unknown
+    import jsonui_test_cli as _jtc
+    element_level_unknown = bool(element_totals["missing"]) and \
+        _element_level_unknown(_jtc.__version__) is not None
     if element_totals["named"] and not args.quiet:
         from .validation.element_ids import gate_notice, level_unknown, unnamed_app_owned
         print(f"\n[INFO] element ids: {element_totals['named']} named in the steps — "
@@ -211,8 +221,9 @@ def cmd_validate(args):
             if notice:
                 print(f"[INFO] {notice}")
             elif unknown:
-                print(f"[INFO] the level of {element_totals['missing']} element id(s) on no "
-                      f"layout cannot be decided — {unknown}; they are listed as INFO")
+                from .validation.element_ids import LEVEL_UNKNOWN_FAILS
+                print(f"[ERROR] the level of {element_totals['missing']} element id(s) on no "
+                      f"layout cannot be decided — {unknown}; " + LEVEL_UNKNOWN_FAILS)
 
     # Mock contract drift, on the same gate. `--check` existed but nothing
     # called it, so a mock encoding a contract the server does not have kept
@@ -425,10 +436,11 @@ def cmd_validate(args):
     # passed.
     coverage_unreadable = coverage_gate is not None and gate_unreadable()
     coverage_fails = (coverage_gates and coverage_gate["fails"]) or coverage_unreadable
+    gate_fails = coverage_fails or element_level_unknown
 
     # Summary
     print(f"\n{'='*50}")
-    status = ("PASSED" if total_errors == 0 and mock_rc == 0 and not coverage_fails
+    status = ("PASSED" if total_errors == 0 and mock_rc == 0 and not gate_fails
               else "FAILED")
     print(f"Result: {status}")
     summary = f"Files: {files_checked}, Errors: {total_errors}, Warnings: {total_warnings}"
@@ -496,7 +508,7 @@ def cmd_validate(args):
 
     # After the install (red-check xxiv): a coverage failure does not keep
     # valid tests off the devices, and the summary above already said FAILED.
-    if coverage_fails:
+    if gate_fails:
         return 1
     return 0
 

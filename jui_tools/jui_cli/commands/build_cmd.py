@@ -1055,8 +1055,12 @@ def _run_tool(cmd: list[str], cwd: Path) -> bool:
         # Design U8: whether web prefixes the ids inside an include is decided
         # HERE, once, from INCLUDE_ID_PREFIX_GATE_FROM; rjui only follows it
         # (run standalone it keeps the old spelling and says so).
-        from ..core.layout_facts import include_id_prefix_env
-        extra = {"JSONUI_INCLUDE_ID_PREFIX": include_id_prefix_env()}
+        from ..core.layout_facts import INCLUDE_ID_PREFIX_UNREADABLE, include_id_prefix_env
+        decision = include_id_prefix_env()
+        if decision == "unavailable":
+            print(f"  {INCLUDE_ID_PREFIX_UNREADABLE}")
+            return False
+        extra = {"JSONUI_INCLUDE_ID_PREFIX": decision}
     actual_cmd, env = tool_command(cmd, cwd, extra=extra)
 
     try:

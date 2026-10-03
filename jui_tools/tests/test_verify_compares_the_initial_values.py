@@ -411,3 +411,33 @@ def test_an_entry_without_a_default_value_does_not_carry_an_empty_list(project, 
     _external(project, [_var("options", "Array(OptionRow)", defaultValue=[])],
               {"data": [{"name": "options", "class": klass}]})
     assert "'options' is [] — layouts/home.json gives it no defaultValue" in _verify()[1]
+
+
+def _without_gate_versions(monkeypatch):
+    from jui_cli.core import shared_core
+    load = shared_core.load
+    monkeypatch.setattr(shared_core, "load", lambda name: None if name == "gate_versions" else load(name))
+
+
+def test_without_gate_versions_fail_on_diff_fails_on_them_and_says_why(project, monkeypatch):
+    # A tree without shared/core/gate_versions.py cannot say whether
+    # --fail-on-diff counts them. Until jsonui-cli 1.9.8 the state was "off"
+    # and they were "reported only" — the gate silently off (ticket
+    # gate-readers-without-shared-core-fall-silent-five-more).
+    from jui_cli.commands.verify_cmd import INITIAL_VALUE_GATE_UNREADABLE
+    _without_gate_versions(monkeypatch)
+    _external(project, [_var("v", "Int", defaultValue=0)], {"data": [{"name": "v", "class": "Int",
+                                                                      "defaultValue": 1}]})
+    rc, said = _verify(fail_on_diff=True)
+    assert rc == 1, said
+    assert INITIAL_VALUE_GATE_UNREADABLE in said
+    assert _verify(fail_on_diff=False)[0] == 0          # without the flag verify never fails
+
+
+def test_without_gate_versions_agreeing_values_still_pass(project, monkeypatch):
+    # The control: nothing differs, so the gate decides nothing.
+    _without_gate_versions(monkeypatch)
+    _external(project, [_var("v", "Int", defaultValue=1)], {"data": [{"name": "v", "class": "Int",
+                                                                      "defaultValue": 1}]})
+    rc, said = _verify(fail_on_diff=True)
+    assert rc == 0, said

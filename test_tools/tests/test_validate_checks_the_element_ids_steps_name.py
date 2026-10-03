@@ -394,16 +394,56 @@ def test_from_the_release_it_counts_as_a_warning_and_announces_nothing(tmp_path,
     assert "become WARNING" not in out
 
 
-def test_without_gate_versions_they_stay_info_and_the_run_says_why(tmp_path, at, monkeypatch):
-    # A tool tree without shared/core/gate_versions.py: nothing may become a
-    # WARNING that was never announced, and the run says why.
+def _cli_args(tmp_path, steps, extra):
+    cfg = _face(tmp_path, None)
+    _test(tmp_path, steps)
+    from jsonui_test_cli.cli import main
+    import sys
+    argv, cwd = sys.argv, os.getcwd()
+    out = io.StringIO()
+    try:
+        os.chdir(cfg.parent)
+        sys.argv = ["jsonui-test", "validate", "../tests", "--no-install", "--no-mock-check",
+                    "--no-coverage-check", *extra]
+        with contextlib.redirect_stdout(out):
+            rc = main()
+    finally:
+        sys.argv = argv
+        os.chdir(cwd)
+    return rc, out.getvalue()
+
+
+def test_without_gate_versions_an_id_on_no_layout_fails_the_run_and_says_why(tmp_path, at, monkeypatch):
+    # A tool tree without shared/core/gate_versions.py cannot decide whether
+    # an id on no layout is a WARNING. Until 1.9.8 it listed them as INFO and
+    # the run passed — the gate silently off (ticket
+    # gate-readers-without-shared-core-fall-silent-five-more); now it FAILS
+    # and says how to fix it.
     at("1.8.121")
     monkeypatch.setattr(element_ids, "_gates", lambda: None)
     rc, out = _cli(tmp_path, [{"action": "tap", "id": "sample_toggle"}])
-    assert rc == 0
-    assert re.search(r"^Files: \d+, Errors: 0, Warnings: 0, Info: 1 \(not counted\)$", out, re.M)
-    assert ("[INFO] the level of 1 element id(s) on no layout cannot be decided — "
-            "shared/core/gate_versions.py is not in this tool tree; they are listed as INFO") in out
+    assert rc == 1, out
+    assert "Result: FAILED" in out
+    assert ("[ERROR] the level of 1 element id(s) on no layout cannot be decided — "
+            "shared/core/gate_versions.py is not in this tool tree; "
+            + element_ids.LEVEL_UNKNOWN_FAILS) in out
+    assert "~/.jsonui-cli/test_tools/jsonui-test" in element_ids.LEVEL_UNKNOWN_FAILS
+
+
+def test_without_gate_versions_quiet_fails_the_same_run(tmp_path, at, monkeypatch):
+    at("1.8.121")
+    monkeypatch.setattr(element_ids, "_gates", lambda: None)
+    rc, out = _cli_args(tmp_path, [{"action": "tap", "id": "sample_toggle"}], ["--quiet"])
+    assert rc == 1, out
+
+
+def test_without_gate_versions_every_id_on_a_layout_still_passes(tmp_path, at, monkeypatch):
+    # The control: nothing on no layout, so the level decides nothing.
+    at("1.8.121")
+    monkeypatch.setattr(element_ids, "_gates", lambda: None)
+    rc, out = _cli(tmp_path, [{"action": "tap", "id": "root"}])
+    assert rc == 0, out
+    assert "cannot be decided" not in out
 
 
 @pytest.mark.parametrize("element, hint", [("sample_toggle", False), ("zz_unrelated", True)])

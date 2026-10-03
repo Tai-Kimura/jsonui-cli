@@ -156,6 +156,8 @@ push せず、rsync/sync_tool による同期のみ。
 1. 両ライブラリの release 枝を push する（main でもタグでもないので、消費側には届かない）。
 2. `gh workflow run conformance-mobile.yml -R Tai-Kimura/jsonui-cli --ref <jsonui-cli の検証する枝>
    -f swiftjsonui_ref=<SJUI の枝> -f image_probes=true -f kotlinjsonui_ref=<KJUI の枝> -f android_probes=true`
+   （jsonui-cli 1.9.8 から 2 つの probe は**既定で true**。下ろすときだけ `=false` を書く。1.9.7 のタグは、
+   旗を書き忘れた dispatch（probe 9 本が skip）の緑で判定された。schedule は入力を持たないので probe なしのまま）
 3. **全 job の緑**を見てから、SPM のタグと Maven の publish に進む。読むのは緑だけではない:
    各 job が印字する ref と HEAD が撃った枝か、`android-library-tests` の skip の名前、probe の印字。
    Maven の publish は取り消せない。
