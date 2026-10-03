@@ -11,14 +11,15 @@ module JsonUIShared
   # error), and rjui wrote every one, which tsc rejects (ticket rjui-data-
   # name-declared-twice-is-written-twice).
   #
-  # What "one Data type" is differs per face, and each face reports only what
-  # it merges:
-  #   sjui / kjui   the screen with its includes expanded inline
-  #                 (data_model_updater_core.rb), so a partial and the screen
-  #                 declaring one name meet here;
-  #   rjui          one layout file — its root's data and its data-only
-  #                 nodes. A partial is its own component with its own Data
-  #                 type there, so declarations across an include never meet.
+  # "One Data type" is the screen with its includes expanded inline, on every
+  # face, and each face reports what it merges there — so a partial and the
+  # screen declaring one name meet here; under an include id they are two
+  # names (the id prefixes the partial's) and say nothing:
+  #   sjui / kjui   data_model_updater_core.rb;
+  #   rjui          data_model_generator.rb, from jsonui-cli 1.9.6 (the
+  #                 include still draws as a component call; until then the
+  #                 Data type read one layout file, and declarations across
+  #                 an include never met there).
   #
   # Types are compared as the face writes them — after its TypeConverter
   # normalization (and the Event signature) — so two spellings of one type
