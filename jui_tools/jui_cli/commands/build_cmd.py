@@ -268,6 +268,15 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     config = config_mgr.load()
     platforms = config.get("platforms", {})
+    # A platform asked for by name that this config does not have is an
+    # ERROR. It used to build nothing and say "successfully" with rc 0 — on a
+    # submodule that was not initialised, `cd bar && jui build --platform ios`
+    # walks up to the superproject's config and reports 0 generated files as
+    # success (ticket jui-platform-asked-by-name-and-absent-from-config-exits-0).
+    absent = _named_platforms_absent(args, platforms)
+    if absent:
+        print(_named_platforms_absent_error(absent, config_mgr.path, platforms))
+        return 1
     clean = ["--clean"] if args.clean else []
     failed = []
     clock = _StageClock()
@@ -3045,6 +3054,19 @@ def _tracked_scope(present_keys: list[str]) -> dict:
     """
     from ..core import generation_manifest
     return generation_manifest.tracked_scope(present_keys)
+
+
+def _named_platforms_absent(args, platforms) -> list[str]:
+    """The platforms named by `--platform X` / `--X-only` that `platforms` lacks."""
+    named = [p for p in ("ios", "android", "web") if getattr(args, f"{p}_only", False)]
+    return [p for p in named if p not in (platforms or {})]
+
+
+def _named_platforms_absent_error(absent, config_path, platforms) -> str:
+    from ..core import config_manager
+    have = ", ".join(platforms) if platforms else "none"
+    return (f"ERROR: {', '.join(absent)} was asked for, and {config_path} has no such platform "
+            f"(its platforms: {have}).{config_manager.walked_up_note(config_path)}")
 
 
 def _apply_platform_alias(args) -> None:

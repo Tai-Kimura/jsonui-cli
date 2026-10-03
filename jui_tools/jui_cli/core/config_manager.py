@@ -133,6 +133,14 @@ def _shape_name(value: Any) -> str:
     }.get(type(value), type(value).__name__)
 
 
+def walked_up_note(config_path) -> str:
+    """Said by an ERROR about a named platform when the config read is not in the current directory: jui walked up to it."""
+    if Path(config_path).resolve().parent == Path.cwd().resolve():
+        return ""
+    return (" That config is above this directory — jui walked up to it; if this directory is a "
+            "submodule, it may not be initialised.")
+
+
 class ConfigManager:
     """Manages jui.config.json read/write."""
 
