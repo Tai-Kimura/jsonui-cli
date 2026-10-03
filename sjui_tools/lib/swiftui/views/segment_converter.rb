@@ -69,7 +69,7 @@ module SjuiTools
             items.each_with_index do |item, index|
               # Unescaped: the helper escapes what it writes back
               localized_text = get_text_with_string_manager("\"#{item}\"")
-              add_line "Text(#{localized_text}).tag(#{index})"
+              add_line "Text(#{localized_text}).tag(#{index})#{tab_identifier(index)}"
             end
           end
           add_line "}"
@@ -92,6 +92,23 @@ module SjuiTools
         end
 
         private
+
+        # `<id>_tab_<n>` on each segment: the id every driver's selectTab
+        # looks for (iOS ActionExecutor executeSelectTab, Android and web the
+        # same pattern), and the one rjui gives each segment button. The
+        # segments were id-less, so a Segment could not be selected from a UI
+        # test on iOS — the fallback looks in the tab bar, which a segmented
+        # Picker is not (ticket
+        # jui-segment-tabs-carry-no-tab-ids-so-selecttab-cannot-reach-them).
+        # Measured 2026-10-03 (iOS 26.5 simulator, Xcode 26.6): an identifier
+        # on a segment's Text reaches XCUITest as that segment's button, and a
+        # tap on it selects the segment. None without an id, like the
+        # Segment's own identifier.
+        def tab_identifier(index)
+          return '' unless @component['id']
+
+          ".accessibilityIdentifier(#{swift_string_literal("#{@component['id']}_tab_#{index}")})"
+        end
 
         # valueChange — the selector-based handler, string only: its own
         # attribute in the definitions (Segment.valueChange, "Value change
