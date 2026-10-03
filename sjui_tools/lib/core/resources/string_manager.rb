@@ -245,8 +245,8 @@ module SjuiTools
             end
 
             # Plural keys compile to a sibling .stringsdict (Apple's standard
-            # plural mechanism); NSLocalizedString resolves them through
-            # String.localizedStringWithFormat in the generated accessors.
+            # plural mechanism); the generated accessors format them with
+            # String(format:locale:) in the language the format came from.
             update_stringsdict_file(full_path, strings_data)
           end
 
@@ -493,6 +493,45 @@ module SjuiTools
           }
         end
 
+        def plural_keys_in?(strings_data)
+          strings_data.any? do |file_name, strings|
+            strings.is_a?(Hash) && !file_name.start_with?('_') &&
+              strings.values.any? { |v| JsonUIShared::PluralValidator.plural_value?(v) }
+          end
+        end
+
+        # Emitted only when a plural accessor needs it, so a StringManager
+        # without plurals keeps its bytes. It answers "which language did
+        # `.localized(...)` take the format from" the way SwiftJsonUI's
+        # String.localized does: the caller's bundle (an <lang>.lproj bundle
+        # by its name — its preferredLocalizations do not say), else the
+        # in-app language when its .lproj exists, else the main bundle's.
+        def plural_locale_helper
+          [
+            "    /// The language a plural format came from, so its CLDR category is picked",
+            "    /// in that language and not by the device locale.",
+            "    fileprivate static func pluralLocale(bundle: Bundle?) -> Locale {",
+            "        if let bundle = bundle {",
+            "            if bundle.bundleURL.pathExtension == \"lproj\" {",
+            "                return Locale(identifier: bundle.bundleURL.deletingPathExtension().lastPathComponent)",
+            "            }",
+            "            if let language = bundle.preferredLocalizations.first {",
+            "                return Locale(identifier: language)",
+            "            }",
+            "        }",
+            "        if let language = String.currentLanguage,",
+            "           Bundle.main.path(forResource: language, ofType: \"lproj\") != nil {",
+            "            return Locale(identifier: language)",
+            "        }",
+            "        if let language = Bundle.main.preferredLocalizations.first {",
+            "            return Locale(identifier: language)",
+            "        }",
+            "        return Locale.current",
+            "    }",
+            ""
+          ]
+        end
+
         def generate_swift_content(strings_data)
           # Deterministic marker header — no timestamp. A Time.now header
           # here used to make every build rewrite StringManager.swift,
@@ -560,8 +599,12 @@ module SjuiTools
               full_key = "#{file_name}_#{key}"
 
               if JsonUIShared::PluralValidator.plural_value?(value)
-                # Plural key: the format lives in Localizable.stringsdict and
-                # String.localizedStringWithFormat picks the CLDR category.
+                # Plural key: the format lives in Localizable.stringsdict, and
+                # the CLDR category is picked in the language the format came
+                # from (pluralLocale below). Until jsonui-cli 1.9.10 this was
+                # String.localizedStringWithFormat, which picks it by the
+                # DEVICE locale: device ja-JP with the app in en drew
+                # "1 notes" (ticket sjui-plural-accessor-picks-category-by-device-locale).
                 content << "        public static func #{Core::SwiftIdentifier.declaration(func_name)}("
                 content << "            count: Int,"
                 content << "            tableName: String? = nil,"
@@ -575,7 +618,7 @@ module SjuiTools
                 content << "                value: value,"
                 content << "                comment: comment"
                 content << "            )"
-                content << "            return String.localizedStringWithFormat(format, count)"
+                content << "            return String(format: format, locale: pluralLocale(bundle: bundle), count)"
                 content << "        }"
                 content << ""
                 next
@@ -600,6 +643,8 @@ module SjuiTools
             content << "    }"
             content << ""
           end
+
+          content.concat(plural_locale_helper) if plural_keys_in?(strings_data)
 
           content << "}"
           content << ""

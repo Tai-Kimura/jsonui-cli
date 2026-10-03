@@ -106,6 +106,18 @@ module JsonUIShared
       errors = []
       return errors unless strings_data.is_a?(Hash)
 
+      # The languages a plural entry must cover: every language code any
+      # entry of this strings.json uses — data every face reads the same, so
+      # the answer does not depend on which face builds. A plural entry
+      # without its own forms for one of them used to be filled with the
+      # default language's forms (plural_forms' fallback) and then selected by
+      # the MISSING language's rules: ja on en forms drew "1 notes". Android
+      # cannot do otherwise — its resources pick the category by the
+      # configured language — so the three faces agree only when there is no
+      # fill-in to do (ticket plural-entry-missing-a-language-is-filled-and-
+      # selected-by-another-languages-rules).
+      language_set = languages_in(strings_data)
+
       strings_data.each do |file_name, file_strings|
         next unless file_strings.is_a?(Hash)
 
@@ -119,6 +131,14 @@ module JsonUIShared
             next
           end
           next unless plural_value?(value)
+
+          missing = language_set - value.keys.map(&:to_s)
+          if missing.any?
+            errors << "#{where}: a plural entry needs its own forms for every language of this " \
+                      "strings.json — missing #{missing.join(', ')} (languages here: " \
+                      "#{language_set.join(', ')}). Another language's forms would be selected " \
+                      'by these languages\' plural rules (e.g. "1 notes")'
+          end
 
           value.each do |lang, entry|
             unless entry.is_a?(Hash) && entry.key?('plural')
@@ -176,6 +196,21 @@ module JsonUIShared
       end
 
       errors
+    end
+
+    # Every language code used by any multi-language entry, sorted.
+    def languages_in(strings_data)
+      langs = []
+      strings_data.each_value do |file_strings|
+        next unless file_strings.is_a?(Hash)
+
+        file_strings.each_value do |value|
+          next unless value.is_a?(Hash) && !value.key?('plural')
+
+          langs.concat(value.keys.map(&:to_s))
+        end
+      end
+      langs.uniq.sort
     end
 
     # Detect layout string attributes that reference a plural key (either the

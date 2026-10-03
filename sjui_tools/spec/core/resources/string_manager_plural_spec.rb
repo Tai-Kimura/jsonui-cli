@@ -109,7 +109,7 @@ RSpec.describe SjuiTools::Core::Resources::StringManager, 'plural support' do
   end
 
   describe '#generate_swift_file' do
-    it 'emits a count accessor routed through String.localizedStringWithFormat' do
+    it 'emits a count accessor formatted in the language the format came from' do
       write_strings_json(plural_strings)
       manager.generate_swift_file
 
@@ -117,10 +117,21 @@ RSpec.describe SjuiTools::Core::Resources::StringManager, 'plural support' do
       expect(swift).to include('public static func itemsCount(')
       expect(swift).to include('count: Int,')
       expect(swift).to include('let format = "home_items_count".localized(')
-      expect(swift).to include('return String.localizedStringWithFormat(format, count)')
+      expect(swift).to include('return String(format: format, locale: pluralLocale(bundle: bundle), count)')
+      expect(swift).not_to include('localizedStringWithFormat')
+      expect(swift.scan('fileprivate static func pluralLocale(').size).to eq(1)
       # Plain keys keep the historical shape
       expect(swift).to include('public static func title(')
       expect(swift).to include('return "home_title".localized(')
+    end
+  end
+
+  describe 'a StringManager without plural keys' do
+    it 'does not carry the plural locale helper (its bytes stay as before)' do
+      write_strings_json({ 'home' => { 'title' => { 'en' => 'Home', 'ja' => 'ホーム' } } })
+      manager.generate_swift_file
+      swift = File.read(File.join(temp_dir, 'ResourceManager/StringManager.swift'))
+      expect(swift).not_to include('pluralLocale')
     end
   end
 
@@ -147,6 +158,31 @@ RSpec.describe SjuiTools::Core::Resources::StringManager, 'plural support' do
 
       expect { manager.process_strings([], 0, 0, config) }
         .to raise_error(JsonUIShared::PluralValidator::ValidationError)
+    end
+
+    # A plural entry without its own forms for a language the strings.json
+    # uses is an ERROR on every face (the shared validator). Until 1.9.10 it
+    # was filled with the default language's forms and selected by the
+    # missing language's rules ("1 notes" in ja).
+    it 'raises when a plural entry lacks a language the strings.json uses, naming the key, the language and the set' do
+      write_strings_json({ 'home' => {
+        'title' => { 'en' => 'Home', 'ja' => 'ホーム' },
+        'note_count' => { 'en' => { 'plural' => { 'one' => '{count} note', 'other' => '{count} notes' } } }
+      } })
+      logged = []
+      allow(SjuiTools::Core::Logger).to receive(:error) { |m| logged << m }
+      expect { manager.process_strings([], 0, 0, config) }.to raise_error(JsonUIShared::PluralValidator::ValidationError)
+      expect(logged.join("\n")).to include('home.note_count: a plural entry needs its own forms for every ' \
+                                           'language of this strings.json — missing ja (languages here: en, ja)')
+    end
+
+    it 'boundary: every language present raises nothing' do
+      write_strings_json({ 'home' => {
+        'title' => { 'en' => 'Home', 'ja' => 'ホーム' },
+        'note_count' => { 'en' => { 'plural' => { 'one' => '{count} note', 'other' => '{count} notes' } },
+                          'ja' => { 'plural' => { 'other' => '{count}件' } } }
+      } })
+      expect { manager.process_strings([], 0, 0, config) }.not_to raise_error
     end
 
     it 'raises for a CLDR-invalid category (en zero)' do
