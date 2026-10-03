@@ -4,6 +4,7 @@ require 'json'
 require 'set'
 require 'compose/compose_builder'
 require 'core/type_synonyms'
+require_relative '../support/kotlin_compiler'
 
 # App components standing in for ones in a project's components/extensions
 # directory.
@@ -103,6 +104,67 @@ RSpec.describe 'kjui codegen: an app component\'s weight and alignment in its pa
     expect(code).not_to include('.weight(')
     expect(code).not_to include('propagateMinConstraints')
     expect(code).to include('.align(')
+  end
+
+  # Compiled, against Compose's scopes as Compose types them: RowScope and
+  # ColumnScope have `weight`, BoxScope has none; a Row child aligns by an
+  # Alignment.Vertical, a Column child by an Alignment.Horizontal, a Box child
+  # by an Alignment. A weight in a Box, or a Column's alignment in a Row, does
+  # not compile here as it does not in an app.
+  def scopes
+    <<~KT
+      open class Modifier { companion object : Modifier() }
+      class Dp(val value: Int)
+      val Int.dp: Dp get() = Dp(this)
+      fun Modifier.requiredHeight(height: Dp): Modifier = this
+      fun Modifier.padding(start: Dp = 0.dp, end: Dp = 0.dp): Modifier = this
+      interface Alignment {
+          interface Vertical
+          interface Horizontal
+          companion object {
+              val Top: Vertical = object : Vertical {}
+              val Bottom: Vertical = object : Vertical {}
+              val CenterVertically: Vertical = object : Vertical {}
+              val Start: Horizontal = object : Horizontal {}
+              val End: Horizontal = object : Horizontal {}
+              val CenterHorizontally: Horizontal = object : Horizontal {}
+              val TopStart: Alignment = object : Alignment {}
+              val TopEnd: Alignment = object : Alignment {}
+              val BottomStart: Alignment = object : Alignment {}
+              val BottomEnd: Alignment = object : Alignment {}
+              val CenterStart: Alignment = object : Alignment {}
+              val CenterEnd: Alignment = object : Alignment {}
+              val Center: Alignment = object : Alignment {}
+          }
+      }
+      class BiasAlignment(val horizontalBias: Float, val verticalBias: Float) : Alignment
+      interface RowScope {
+          fun Modifier.weight(weight: Float, fill: Boolean = true): Modifier = this
+          fun Modifier.align(alignment: Alignment.Vertical): Modifier = this
+      }
+      interface ColumnScope {
+          fun Modifier.weight(weight: Float, fill: Boolean = true): Modifier = this
+          fun Modifier.align(alignment: Alignment.Horizontal): Modifier = this
+      }
+      interface BoxScope { fun Modifier.align(alignment: Alignment): Modifier = this }
+      fun Row(modifier: Modifier = Modifier, content: RowScope.() -> Unit) { object : RowScope {}.content() }
+      fun Column(modifier: Modifier = Modifier, content: ColumnScope.() -> Unit) { object : ColumnScope {}.content() }
+      fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart,
+              propagateMinConstraints: Boolean = false, content: BoxScope.() -> Unit = {}) { object : BoxScope {}.content() }
+      fun ProbeBar(modifier: Modifier = Modifier) {}
+    KT
+  end
+
+  {
+    'a Row (weight, alignTop)' => ['horizontal', { 'weight' => 1, 'alignTop' => true }, '.weight(1f)'],
+    'a Column (heightWeight, centerHorizontal)' => ['vertical', { 'heightWeight' => 2, 'centerHorizontal' => true }, '.weight(2f)'],
+    'a Box (weight given, alignBottom + alignRight)' => [nil, { 'weight' => 1, 'alignBottom' => true, 'alignRight' => true }, '.align(']
+  }.each do |parent, (orientation, attrs, emitted)|
+    it "emits Kotlin that compiles in #{parent}" do
+      code = emit(row({ 'type' => 'ProbeBar', 'id' => 'bar' }.merge(attrs), orientation))
+      expect(code).to include(emitted) # what the arm is about is in the code compiled (control)
+      expect("#{scopes}\nfun emitted() {\n#{code}\n}\n").to compile_as_kotlin
+    end
   end
 
   # The census, kept: for every SSoT common attribute, an app's component gets
