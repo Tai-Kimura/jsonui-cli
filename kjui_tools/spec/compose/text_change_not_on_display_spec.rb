@@ -46,7 +46,10 @@ RSpec.describe 'kjui onTextChange without a text binding: an edit, not the displ
 
     it "#{type}: a bare handler name is told the same way" do
       code, = emit(type, 'onTextChange' => 'h')
-      expect(code).to include('snapshotFlow { textFieldState_f.text.toString() }.drop(1).collect { data.h?.invoke() }')
+      # The bare name is called as its declaration takes it — here
+      # `(String) -> Void`, the text (kjui-bare-ontextchange-ignores-the-
+      # declared-shape; it was `invoke()`, which did not compile).
+      expect(code).to include('snapshotFlow { textFieldState_f.text.toString() }.drop(1).collect { newValue -> data.h?.invoke(newValue) }')
     end
 
     it "#{type}: the bound form keeps its comparison (control)" do
