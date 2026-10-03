@@ -8,6 +8,7 @@ require 'core/config_manager'
 require 'react/converters/label_converter'
 require 'react/converters/button_converter'
 require 'react/converters/text_field_converter'
+require_relative '../../support/typescript_compiler'
 
 # Display text written as the text a strings.json key holds resolves to that
 # key — a plain string or any language of a per-language value, the layout's
@@ -79,5 +80,16 @@ RSpec.describe 'rjui: display text by the text a key holds' do
   it 'keeps a text a plain string holds on that key, before a per-language entry that holds it too' do
     expect(label('BOLD')).to include('StringManager.currentLanguage.screenBold')
     expect(label('BOLD')).not_to include('screenToneBoldShort')
+  end
+
+  # Labels and a Button: a TextField's JSX needs the screen's refs and state,
+  # which a fragment does not carry; its placeholder writes the same reference.
+  it 'emits Labels and a Button that type-check against the StringManager they name', :aggregate_failures do
+    ambient = <<~TS
+      declare const StringManager: { currentLanguage: { [key: string]: string } };
+    TS
+    [label('検索'), label('Shared'), label('BOLD'), button('Search')].each do |jsx|
+      expect(TypeScriptCompiler.component(jsx)).to compile_as_typescript.with_ambient(ambient)
+    end
   end
 end

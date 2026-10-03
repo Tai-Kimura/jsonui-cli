@@ -10,6 +10,7 @@ require 'core/project_finder'
 require 'compose/helpers/resource_resolver'
 require 'compose/components/text_component'
 require 'compose/components/textfield_component'
+require_relative '../../support/kotlin_compiler'
 
 # Display text written as the text a strings.json key holds resolves to that
 # key — a plain string or any language of a per-language value, the layout's
@@ -82,5 +83,20 @@ RSpec.describe 'kjui: display text by the text a key holds' do
   it 'keeps a text a plain string holds on that key, before a per-language entry that holds it too' do
     expect(label('BOLD')).to include('stringResource(R.string.screen_bold)')
     expect(label('BOLD')).not_to include('screen_tone_bold_short')
+  end
+
+  # The references, not the whole emit: kotlinc here has no Compose, and what
+  # this lookup decides is which R.string the Text and the hint name. The
+  # stub declares only the keys the examples expect, so a reference to any
+  # other name does not compile.
+  it 'emits string references that compile against the R.string the strings.json gives' do
+    emitted = [label('検索'), label('Shared'), label('BOLD'), hint('Search')].join("\n")
+    calls = emitted.scan(/stringResource\(R\.string\.\w+\)/).uniq
+    expect(calls.size).to eq(3)
+    expect(<<~KOTLIN).to compile_as_kotlin
+      object R { object string { const val screen_search_hint = 1; const val screen_shared_word = 2; const val screen_bold = 3 } }
+      fun stringResource(id: Int): String = id.toString()
+      fun probe(): List<String> = listOf(#{calls.join(', ')})
+    KOTLIN
   end
 end
