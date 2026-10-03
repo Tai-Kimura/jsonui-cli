@@ -132,6 +132,16 @@ def gate_notice(version: str) -> str | None:
     return None
 
 
+#: The tail of the line validate prints, and the reason it FAILS, when ids
+#: are on no layout and their level cannot be decided (`level_unknown`): the
+#: tree cannot say whether they are WARNINGs. Until jsonui-cli 1.9.8 they were
+#: listed as INFO and the run passed.
+LEVEL_UNKNOWN_FAILS = (
+    "this run cannot tell whether they are WARNINGs and FAILS: run "
+    "~/.jsonui-cli/test_tools/jsonui-test, or install test_tools and document_tools editable "
+    "(`pip install -e <jsonui-cli>/test_tools`, `pip install -e <jsonui-cli>/document_tools`)")
+
+
 def level_unknown(version: str) -> str | None:
     """Why the level cannot be decided (then everything stays INFO), or None."""
     if _gates() is None:
