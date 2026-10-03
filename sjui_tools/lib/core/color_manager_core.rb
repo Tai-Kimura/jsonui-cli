@@ -260,15 +260,48 @@ module JsonUIShared
       DEFAULT_MODE_NAME
     end
 
+    # defined_colors.json is an OUTPUT, not an input: what this build's
+    # layouts reference that no palette defines. Until 1.9.10 each face
+    # loaded it, merged what the run found, and handed every key to the
+    # generated ColorManager — so a key stayed after the last layout naming
+    # it was gone. The file was gitignored on one consumer face, and two
+    # checkouts of one commit generated different tracked ColorManagers
+    # (8 accessor lines for two names no tracked file holds); tracked on
+    # another, a stale key was frozen in (ticket kjui-defined-colors-json-
+    # never-prunes-and-leaks-tree-history-into-color-manager). It is no
+    # longer read: collect_undefined_references builds the set each run from
+    # the layouts, and the ledger and the ColorManager stubs are that set.
     def load_defined_colors_json
-      return {} unless File.exist?(@defined_colors_file)
+      {}
+    end
 
-      begin
-        JSON.parse(File.read(@defined_colors_file))
-      rescue JSON::ParserError => e
-        logger.warn "Failed to parse defined_colors.json: #{e.message}"
-        {}
+    # The colour names the given layouts reference that no palette (declared
+    # or extracted this run) defines — the same test extraction applies
+    # (replace_colors_recursive / process_and_replace_color), run read-only
+    # over EVERY layout, not only the files this run extracted from: a face
+    # that extracts incrementally (sjui, by mtime) would otherwise know only
+    # its changed files, which is why the ledger used to carry the rest.
+    # Nothing is written; the extraction state is put back. Sorted, so the
+    # stubs and the ledger are a function of the layouts alone.
+    def collect_undefined_references(files)
+      saved_undefined = @undefined_colors
+      saved_extracted = @extracted_colors.each_with_object(Hash.new { |h, k| h[k] = {} }) { |(m, p), acc| acc[m] = p.dup }
+      @undefined_colors = {}
+      @defined_colors_data = {}
+      files.each do |file|
+        next unless File.file?(file)
+
+        begin
+          replace_colors_recursive(JSON.parse(File.read(file)))
+        rescue JSON::ParserError
+          next
+        end
       end
+      found = @undefined_colors.keys.sort
+      @defined_colors_data = found.to_h { |key| [key, nil] }
+      @undefined_colors = saved_undefined
+      @extracted_colors = saved_extracted
+      @defined_colors_data
     end
 
     def save_colors_json
@@ -317,8 +350,10 @@ module JsonUIShared
     def save_defined_colors_json
       return if load_failed?
 
-      @defined_colors_data.merge!(@undefined_colors)
-
+      # @defined_colors_data is collect_undefined_references's set — built
+      # from the layouts this run, nothing carried over. The pruning below
+      # stays as the guard it was: a name the palette defines is not a stub.
+      #
       # The ledger is a picture of what is STILL undefined, not a log of what
       # ever was. `merge!` only ever added, so a key kept its `null` line
       # after the colour was defined and the file answered the question it

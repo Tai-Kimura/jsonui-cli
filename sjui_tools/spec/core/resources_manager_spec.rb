@@ -75,6 +75,7 @@ RSpec.describe SjuiTools::Core::ResourcesManager do
       color_manager = instance_double(SjuiTools::Core::Resources::ColorManager)
       allow(string_manager).to receive(:process_strings)
       allow(color_manager).to receive(:process_colors)
+      allow(color_manager).to receive(:layout_files=)
       manager.instance_variable_set(:@string_manager, string_manager)
       manager.instance_variable_set(:@color_manager, color_manager)
     end
@@ -102,16 +103,18 @@ RSpec.describe SjuiTools::Core::ResourcesManager do
       manager.process_resource_extraction(layouts_dir)
     end
 
-    it 'skips unchanged files' do
+    # Strings come from EVERY layout, an unchanged one too: the face
+    # strings.json is the shared copy jui distributed, and a section derived
+    # from a layout is put back by extracting it (ticket face-strings-json-
+    # keeps-a-section-the-shared-copy-removed). Colour extraction still skips
+    # the unchanged file.
+    it 'extracts strings from an unchanged file too, colours only from changed ones' do
       last_updated = { 'test.json' => Time.now.to_i + 1000 }
       string_manager = manager.instance_variable_get(:@string_manager)
-      
-      expect(string_manager).to receive(:process_strings).with(
-        [],
-        0,
-        1,
-        anything
-      )
+      color_manager = manager.instance_variable_get(:@color_manager)
+
+      expect(string_manager).to receive(:process_strings).with([match(/test\.json$/)], 1, 0, anything)
+      expect(color_manager).to receive(:process_colors).with([], 0, 1, anything)
 
       manager.process_resource_extraction(layouts_dir, last_updated)
     end
@@ -127,6 +130,17 @@ RSpec.describe SjuiTools::Core::ResourcesManager do
       )
 
       manager.process_resource_extraction(layouts_dir)
+    end
+
+    # ticket kjui-defined-colors-json-never-prunes-…: extraction gets the
+    # changed files, the undefined-name stubs every layout — an unchanged one
+    # included, or its references would need the ledger to carry them.
+    it 'hands the color manager every layout, unchanged ones included' do
+      color_manager = manager.instance_variable_get(:@color_manager)
+      expect(color_manager).to receive(:layout_files=).with([match(/test\.json$/)])
+      expect(color_manager).to receive(:process_colors).with([], 0, 1, anything)
+
+      manager.process_resource_extraction(layouts_dir, { 'test.json' => Time.now.to_i + 1000 })
     end
   end
 

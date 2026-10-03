@@ -66,10 +66,16 @@ module SjuiTools
           end
         end
         
-        # Process strings through StringManager
-        @string_manager.process_strings(processed_files, processed_count, skipped_count, @config)
+        # Strings from EVERY layout, not the changed ones: jui distributes the
+        # shared strings.json by copy, so the face copy holds only what this
+        # build extracts — a section derived from an unchanged layout is put
+        # back by extracting it again, not carried in the face copy (ticket
+        # face-strings-json-keeps-a-section-the-shared-copy-removed).
+        @string_manager.process_strings(json_files, json_files.size, 0, @config)
         
-        # Process colors through ColorManager
+        # Process colors through ColorManager — extraction from the changed
+        # files, the undefined-name stubs from every layout
+        @color_manager.layout_files = json_files
         @color_manager.process_colors(processed_files, processed_count, skipped_count, @config)
         # TODO: Process dimensions
         # TODO: Process other resources

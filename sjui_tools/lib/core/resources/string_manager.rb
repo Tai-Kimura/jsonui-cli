@@ -47,8 +47,13 @@ module SjuiTools
         def process_json_files(json_files)
           ensure_tmp_directory
 
-          # Load existing extracted strings from tmp
-          extracted_data = load_extracted_strings
+          # From nothing: the layouts handed in are every layout of the build
+          # (ResourcesManager), and the face strings.json they are merged into
+          # is the shared copy jui just distributed — a tmp file a previous,
+          # interrupted run left would carry its strings over (ticket
+          # face-strings-json-keeps-a-section-the-shared-copy-removed).
+          cleanup_tmp_files
+          extracted_data = { 'strings' => {} }
 
           json_files.each do |json_file|
             begin
@@ -334,7 +339,7 @@ module SjuiTools
         end
 
         def cleanup_tmp_files
-          FileUtils.rm_f(@extracted_strings_file) if File.exist?(@extracted_strings_file)
+          FileUtils.rm_f(@extracted_strings_file) if @extracted_strings_file && File.exist?(@extracted_strings_file)
         end
 
         def cache_strings_file(file_path)

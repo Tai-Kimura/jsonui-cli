@@ -48,17 +48,18 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
     expect(ledger_after_save).to eq({})
   end
 
-  it 'keeps a name no palette defines' do
+  # Not read (ticket kjui-defined-colors-json-never-prunes-and-leaks-tree-
+  # history-into-color-manager): a name only the old file holds — no palette
+  # defines it, no layout names it — is gone after the save, whichever mode
+  # carried it. The ledger is what the layouts reference now.
+  it 'drops a name only the old ledger holds' do
     write_palette('brand_primary' => '#221C10')
     File.write(ledger_path, JSON.pretty_generate('never_declared' => nil))
 
-    expect(ledger_after_save).to eq('never_declared' => nil)
+    expect(ledger_after_save).to eq({})
   end
 
-  # Resolution is mode-agnostic from the layout side — a layout names a key,
-  # not a mode — so a colour carried by one mode only is defined, and a
-  # ledger that kept it would report a working colour as missing.
-  it 'drops a name carried by one mode only' do
+  it 'drops a name carried by one mode only, and one no layout names' do
     write_palette(
       'modes' => %w[light dark], 'fallback_mode' => 'light',
       'light' => { 'brand_primary' => '#221C10' },
@@ -66,7 +67,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
     )
     File.write(ledger_path, JSON.pretty_generate('dusk_only' => nil, 'never_declared' => nil))
 
-    expect(ledger_after_save).to eq('never_declared' => nil)
+    expect(ledger_after_save).to eq({})
   end
 
   # Removing the caller's gate made this run on every build, which on a face
@@ -149,7 +150,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       [dir, JSON.parse(File.read(File.join(res, 'defined_colors.json'))), log]
     end
 
-    it 'drops the newly defined name, keeps the still-missing one, adds the new one' do
+    it 'drops the newly defined name and the one no layout names, adds the new one' do
       dir, ledger, log = build_project(
         layout_color: 'freshly_missing',
         ledger: { 'was_missing_now_defined' => nil, 'still_missing' => nil },
@@ -157,7 +158,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       )
 
       expect(ledger).not_to have_key('was_missing_now_defined'), "#{ledger.inspect}\n#{log}"
-      expect(ledger).to have_key('still_missing'), "#{ledger.inspect}\n#{log}"
+      expect(ledger).not_to have_key('still_missing'), "#{ledger.inspect}\n#{log}" # no layout names it
       expect(ledger).to have_key('freshly_missing'), "#{ledger.inspect}\n#{log}"
     ensure
       FileUtils.rm_rf(dir) if dir
@@ -178,7 +179,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       )
 
       expect(ledger).not_to have_key('was_missing_now_defined'), "#{ledger.inspect}\n#{log}"
-      expect(ledger).to have_key('still_missing'), "#{ledger.inspect}\n#{log}"
+      expect(ledger).to eq({}), "#{ledger.inspect}\n#{log}" # still_missing: no layout names it
     ensure
       FileUtils.rm_rf(dir) if dir
     end
@@ -202,4 +203,5 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       FileUtils.rm_rf(dir) if dir
     end
   end
+
 end

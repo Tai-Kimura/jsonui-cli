@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'tmpdir'
+require 'json'
+require 'fileutils'
 require_relative '../../../lib/core/resources/color_manager'
 require_relative '../../../lib/core/logger'
 
@@ -900,5 +902,65 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
       )
       expect(code).to include('const SYSTEM_MODE_MAPPING = Object.freeze({')
     end
+  end
+end
+
+# The generated ColorManager from the same layouts and colors.json, with and
+# without a stale defined_colors.json — moved here from the ledger spec, which
+# asserts the ledger only; this one asserts the generated code (and is on the
+# emitted-code compiler gate's list as this spec).
+RSpec.describe RjuiTools::Core::Resources::ColorManager, 'from what the layouts reference' do
+  let(:temp_dir) { Dir.mktmpdir('color_manager_stubs') }
+  let(:resources_dir) { File.join(temp_dir, 'Resources') }
+  let(:ledger_path) { File.join(resources_dir, 'defined_colors.json') }
+
+  before { FileUtils.mkdir_p(resources_dir) }
+  after { FileUtils.rm_rf(temp_dir) }
+
+  def write_palette(palette)
+    File.write(File.join(resources_dir, 'colors.json'), JSON.pretty_generate(palette))
+  end
+
+  # kjui-defined-colors-json-never-prunes-and-leaks-tree-history-into-color-
+  # manager: the generated ColorManager is a function of the layouts and
+  # colors.json. A stale defined_colors.json — gitignored and different per
+  # checkout, or tracked with a key frozen in — added its keys as accessors.
+  let(:cfg) { { 'resource_manager_directory' => 'ResourceManager', 'generated_directory' => 'generated' } }
+
+  def layout_file
+    path = File.join(temp_dir, 'Layouts', 'panel.json')
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, JSON.generate(
+      'type' => 'View', 'id' => 'root',
+      'child' => [{ 'type' => 'Label', 'id' => 'a', 'text' => 'x', 'fontColor' => 'still_named' },
+                  { 'type' => 'View', 'id' => 'b', 'background' => 'brand_primary' }]
+    ))
+    path
+  end
+
+  def emitted(ledger)
+    write_palette('brand_primary' => '#221C10')
+    ledger ? File.write(ledger_path, JSON.pretty_generate(ledger)) : FileUtils.rm_f(ledger_path)
+    manager = described_class.new(cfg, temp_dir, resources_dir)
+    manager.process_colors([layout_file], 1, 0, cfg)
+    manager.apply_to_color_assets
+    File.read(File.join(temp_dir, 'generated', 'ColorManager.js'))
+  end
+
+  it 'is byte-identical with and without a stale ledger carrying extra keys' do
+    without = emitted(nil)
+    with_stale = emitted('dark_surface' => nil, 'overlay_dark' => nil, 'still_named' => nil)
+    expect(with_stale).to eq(without)
+  end
+
+  it 'has no accessor for a key only the ledger holds, and one for a name a layout references' do
+    code = emitted('dark_surface' => nil, 'overlay_dark' => nil)
+    expect(code).not_to match(/darkSurface|dark_surface|overlayDark|overlay_dark/)
+    expect(code).to match(/stillNamed|still_named/) # control: a referenced undefined name keeps its stub
+  end
+
+  it 'leaves the ledger holding what the layouts reference now' do
+    emitted('dark_surface' => nil)
+    expect(JSON.parse(File.read(ledger_path))).to eq('still_named' => nil)
   end
 end

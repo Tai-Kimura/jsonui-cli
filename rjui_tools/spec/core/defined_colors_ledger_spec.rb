@@ -46,17 +46,18 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
     expect(ledger_after_save).to eq({})
   end
 
-  it 'keeps a name no palette defines' do
+  # Not read (ticket kjui-defined-colors-json-never-prunes-and-leaks-tree-
+  # history-into-color-manager): a name only the old file holds — no palette
+  # defines it, no layout names it — is gone after the save, whichever mode
+  # carried it. The ledger is what the layouts reference now.
+  it 'drops a name only the old ledger holds' do
     write_palette('brand_primary' => '#221C10')
     File.write(ledger_path, JSON.pretty_generate('never_declared' => nil))
 
-    expect(ledger_after_save).to eq('never_declared' => nil)
+    expect(ledger_after_save).to eq({})
   end
 
-  # Resolution is mode-agnostic from the layout side — a layout names a key,
-  # not a mode — so a colour carried by one mode only is defined, and a
-  # ledger that kept it would report a working colour as missing.
-  it 'drops a name carried by one mode only' do
+  it 'drops a name carried by one mode only, and one no layout names' do
     write_palette(
       'modes' => %w[light dark], 'fallback_mode' => 'light',
       'light' => { 'brand_primary' => '#221C10' },
@@ -64,7 +65,7 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
     )
     File.write(ledger_path, JSON.pretty_generate('dusk_only' => nil, 'never_declared' => nil))
 
-    expect(ledger_after_save).to eq('never_declared' => nil)
+    expect(ledger_after_save).to eq({})
   end
 
   # Removing the caller's gate made this run on every build, which on a face
@@ -106,4 +107,5 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
 
     expect(File.exist?(ledger_path)).to be true
   end
+
 end
