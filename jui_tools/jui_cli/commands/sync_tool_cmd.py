@@ -713,6 +713,17 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
     project_root = config_mgr.project_root
     platforms = config.get("platforms", {})
 
+    # A platform asked for by name is checked before "nothing to sync": with
+    # no platforms at all this returned 0 before the check below could say
+    # the asked one is missing (ticket
+    # jui-platform-asked-by-name-and-absent-from-config-exits-0).
+    if args.platform and args.platform not in platforms:
+        have = ", ".join(platforms) if platforms else "none"
+        from ..core.config_manager import walked_up_note
+        print(f"ERROR: platform '{args.platform}' not in {config_mgr.path} (its platforms: {have})."
+              f"{walked_up_note(config_mgr.path)}")
+        return 1
+
     if not platforms:
         print("No platforms configured in jui.config.json; nothing to sync.")
         return 0
@@ -731,9 +742,6 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
     # Filter to just the requested platform if asked.
     targets = platforms.items()
     if args.platform:
-        if args.platform not in platforms:
-            print(f"ERROR: platform '{args.platform}' not in jui.config.json (have: {', '.join(platforms)})")
-            return 1
         targets = [(args.platform, platforms[args.platform])]
 
     totals = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0, "shared_core": 0, "unsynced": 0}
