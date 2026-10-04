@@ -40,7 +40,7 @@ CASE = re.compile(r"^Test Case '-\[(?P<module>[\w.]+?)\.(?P<cls>\w+) (?P<test>\w
 ALL_TESTS = re.compile(r"^Test Suite 'All tests' (passed|failed)")
 EXECUTED = re.compile(r"^\s*Executed (\d+) tests?, ")
 VERDICTS = ("passed", "failed", "skipped")
-# One line per tap, printed by SwiftJsonUI's ConformanceHost (8815b51+):
+# One line per tap, printed by SwiftJsonUI's ConformanceHost (c016de9+):
 #   TAP_TIMING <fixture id> <element id> +<seconds>s <exists/hittable/frame>
 TAP_TIMING = re.compile(r"^TAP_TIMING (?P<fixture>\S+) (?P<id>\S+) \+(?P<at>[0-9.]+)s")
 
@@ -101,7 +101,7 @@ def tap_timing(found: dict, out=sys.stdout) -> None:
     older than the line prints nothing here and says so."""
     taps = sorted(found.get("taps", []))
     if not taps:
-        print("[tap timing] no TAP_TIMING lines — a host before SwiftJsonUI 8815b51, or no tap ran",
+        print("[tap timing] no TAP_TIMING lines — a host before SwiftJsonUI c016de9, or no tap ran",
               file=out)
         return
     seconds = [t[0] for t in taps]
