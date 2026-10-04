@@ -38,7 +38,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     code = emit('cellIdProperty' => 'cellId')
     expect(cell_lines(code)).to eq([
       'ACellView(data: { () -> [String: Any] in var refreshed = cell.data; refreshed["cellId"] = CellIdGenerator.autoId(from: cell.data, ' \
-      'primaryKey: cell.data["cellId"] != nil ? "cellId" : "cellId", fallbackIndex: cell.index); return refreshed }()).equatable()'
+      'primaryKey: "cellId", fallbackIndex: cell.index); return refreshed }()).equatable()'
     ])
     # The loop still knows the cell by its key: no content in its id.
     expect(code).to include('IdentifiedCellItem(id: ').and include('ForEach(zip(ids, items)')
@@ -53,7 +53,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   it 'no cellIdProperty: keyed on the data\'s own "cellId", else on its place' do
     expect(cell_lines(emit({})).first)
       .to include('var refreshed = cellData;')
-      .and include('primaryKey: cellData["cellId"] != nil ? "cellId" : "cellId", fallbackIndex: cellIndex')
+      .and include('primaryKey: "cellId", fallbackIndex: cellIndex')
+  end
+
+  # Only another cellIdProperty has a choice to write: with none, or "cellId"
+  # itself, the data's own "cellId" and the fallback are one name (1.9.11
+  # wrote `… ? "cellId" : "cellId"`).
+  it 'writes the choice of primary key only when there is one' do
+    [cell_lines(emit('cellIdProperty' => 'cellId')).first, cell_lines(emit({})).first].each do |line|
+      expect(line).to include('primaryKey: "cellId", fallbackIndex: ')
+      expect(line).not_to include('? "cellId" : "cellId"')
+    end
+    expect(cell_lines(emit('cellIdProperty' => 'key')).first).to include('? "cellId" : "key"')
   end
 
   it 'autoChangeTrackingId with cellIdProperty: the data is already enriched so, and passes as it is' do
