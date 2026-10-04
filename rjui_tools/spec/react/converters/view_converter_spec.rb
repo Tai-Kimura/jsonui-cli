@@ -342,10 +342,141 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       expect(body).to include('right-0')
     end
 
+    # The axis a constraint does not name keeps the absolute child's static
+    # position. In a block that was below the anchor (web y 170 where the
+    # zstack default is y 0, frame-parity inventory 2026-10-05; ticket
+    # rjui-relative-child-stacks-on-the-axis-it-does-not-align). A grid puts
+    # an absolute child's static position at the content box's start.
+    it 'is a grid without an orientation, so the free axis starts at the container default' do
+      result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                                    'alignLeftView' => 'header' }])
+      root = result.lines.first[/className="([^"]*)"/, 1].split
+      expect(root).to include('grid', 'content-start')
+    end
+
+    it 'stays a flex container when an orientation is declared' do
+      result = create_converter({
+        'type' => 'View', 'orientation' => 'vertical',
+        'child' => [header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                              'alignLeftView' => 'header' }]
+      }).convert
+      expect(result.lines.first[/className="([^"]*)"/, 1].split).not_to include('grid')
+    end
+
     it 'leaves a plain overlay untouched' do
       result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B' }])
       expect(result).not_to include('ref=')
       expect(result.lines.find { |l| l.include?('id="header"') }).to include('absolute inset-0')
+    end
+  end
+
+  # A plain overlay sized wrapContent on an axis measured 0 on that axis on
+  # web: every child was absolute, and an absolute child does not size its
+  # container. It stacks the children in one grid cell instead, each placed
+  # where its absolute counterpart sat (frame-parity inventory 2026-10-05;
+  # rjui-wrapcontent-view-collapses-around-overlaid-children).
+  describe 'an overlay sized from its children' do
+    let(:box) { { 'type' => 'View', 'width' => 40, 'height' => 40 } }
+
+    def overlay(size, children)
+      create_converter({ 'type' => 'View', 'id' => 'target', 'child' => children }.merge(size)).convert
+    end
+
+    def line_of(result, id)
+      result.lines.find { |l| l.include?("id=\"#{id}\"") }
+    end
+
+    %w[width height].each do |axis|
+      it "stacks the children in one grid cell when #{axis} is wrapContent" do
+        other = axis == 'width' ? 'height' : 'width'
+        result = overlay({ axis => 'wrapContent', other => 200 },
+                         [box.merge('id' => 'a'), box.merge('id' => 'b')])
+        expect(line_of(result, 'target').split('"')[-2].split).to include('grid')
+        %w[a b].each do |id|
+          classes = line_of(result, id)[/className="([^"]*)"/, 1].split
+          expect(classes).to include('col-start-1', 'row-start-1')
+          expect(classes).not_to include('absolute')
+        end
+      end
+    end
+
+    it 'places each child where the absolute overlay placed it' do
+      result = overlay({ 'width' => 'wrapContent', 'height' => 'wrapContent' }, [
+                         box.merge('id' => 'sized'),
+                         { 'type' => 'View', 'id' => 'fill' },
+                         box.merge('id' => 'br', 'alignBottom' => true, 'alignRight' => true),
+                         box.merge('id' => 'mid', 'centerInParent' => true),
+                         box.merge('id' => 'bottom', 'alignBottom' => true)
+                       ])
+      expect(line_of(result, 'sized')).to include('self-start justify-self-start')
+      expect(line_of(result, 'fill')).to include('self-stretch justify-self-stretch')
+      expect(line_of(result, 'br')).to include('self-end [justify-self:right]')
+      expect(line_of(result, 'mid')).to include('self-center justify-self-center')
+      expect(line_of(result, 'bottom')).to include('self-end justify-self-start')
+    end
+
+    it 'keeps the absolute overlay when no axis is wrapContent' do
+      result = overlay({ 'width' => 200, 'height' => 200 }, [box.merge('id' => 'a'), box.merge('id' => 'b')])
+      expect(line_of(result, 'a')).to include('absolute')
+      expect(line_of(result, 'target')).not_to include('grid')
+    end
+  end
+
+  # A row's children start the cross axis unless a gravity says otherwise
+  # (gravityDefaults: top|start on every container). The flex default,
+  # `align-items: stretch`, drew a child without a height at the row's full
+  # height on web only (frame-parity inventory 2026-10-05; ticket
+  # rjui-stack-stretches-children-on-the-cross-axis).
+  describe "a row's cross axis" do
+    def row_classes(extra)
+      create_converter({
+        'type' => 'View', 'id' => 'row', 'width' => 300, 'height' => 200,
+        'child' => [{ 'type' => 'Label', 'id' => 'b', 'text' => 'B' }]
+      }.merge(extra)).convert.lines.first[/className="([^"]*)"/, 1].split
+    end
+
+    it 'starts at the top by default' do
+      expect(row_classes('orientation' => 'horizontal')).to include('items-start')
+    end
+
+    it 'follows a gravity that names the vertical axis, with no second items-* class' do
+      classes = row_classes('orientation' => 'horizontal', 'gravity' => 'centerVertical')
+      expect(classes.grep(/\Aitems-/)).to eq(['items-center'])
+    end
+
+    it 'keeps the top when the gravity names only the horizontal axis' do
+      expect(row_classes('orientation' => 'horizontal', 'gravity' => 'right')).to include('items-start', 'justify-end')
+    end
+
+    it 'gives way to a static centerInParent / centerHorizontal' do
+      expect(row_classes('orientation' => 'horizontal', 'centerInParent' => true).grep(/\Aitems-/)).to eq(['items-center'])
+      expect(row_classes('orientation' => 'horizontal', 'centerHorizontal' => true).grep(/\Aitems-/)).to eq(['items-center'])
+    end
+
+    it 'keeps the start under a bound centerInParent, whose inline style wins while true' do
+      expect(row_classes('orientation' => 'horizontal', 'centerInParent' => '@{c}')).to include('items-start')
+    end
+
+    it 'leaves a column alone' do
+      expect(row_classes('orientation' => 'vertical').grep(/\Aitems-/)).to be_empty
+    end
+
+    # A CheckBox or Radio with a label lays its own parts out as a row and
+    # writes its own items-center after the base classes. A default start
+    # beside it was a second items-* class, and stylesheet order let the start
+    # win: the box moved off the label's centre line (CheckBox / Radio
+    # spacing and orientation-horizontal fixtures, caught by the web
+    # screenshots while this was being fixed).
+    it 'is not added to a control that lays its own parts out as a row' do
+      require 'react/converters/toggle_converter'
+      require 'react/converters/radio_converter'
+      node = { 'id' => 't', 'width' => 200, 'height' => 'wrapContent', 'text' => 'S',
+               'orientation' => 'horizontal', 'spacing' => 16 }
+      [RjuiTools::React::Converters::ToggleConverter.new(node.merge('type' => 'CheckBox'), default_config),
+       RjuiTools::React::Converters::RadioConverter.new(node.merge('type' => 'Radio'), default_config)].each do |conv|
+        classes = conv.convert_node(2).lines.first[/className="([^"]*)"/, 1].split
+        expect(classes.grep(/\Aitems-/)).to eq(['items-center'])
+      end
     end
   end
 

@@ -84,12 +84,29 @@ module RjuiTools
           true
         end
 
+        # Whether this element's children start the cross axis by default
+        # (ViewConverter says yes for a row). No here: a converter that lays
+        # its own parts out as a row — a CheckBox or Radio with a label —
+        # writes its own items-* after this point, and a second items-* class
+        # would be decided by stylesheet order, not by the order written.
+        def cross_axis_start_by_default?(_classes)
+          false
+        end
+
+        # A flex row whose classes so far name no cross-axis alignment.
+        def row_without_cross_axis_class?(classes)
+          lays_out_children? &&
+            JsonUIShared::EnumSpelling.lowered(attributes['orientation'], 'View', 'orientation') == 'horizontal' &&
+            classes.none? { |c| c.to_s.split.any? { |t| t.start_with?('items-') } }
+        end
+
         # The classes that lay the node's children out — orientation, gravity
         # and direction, as build_class_name maps them — for the inner element
         # of a converter whose own box does not (lays_out_children?).
         def children_layout_classes
           classes = [TailwindMapper.map_orientation(attributes['orientation'])]
           classes.concat(gravity_classes) if attributes['gravity']
+          classes << 'items-start' if cross_axis_start_by_default?(classes)
           if attributes['direction'] && attributes['orientation']
             classes << TailwindMapper.map_direction(attributes['direction'], attributes['orientation'])
           end
@@ -111,8 +128,13 @@ module RjuiTools
           # Compute responsive info up front so we know which keys are overridden
           @responsive_result = ResponsiveHelper.build_responsive(json)
 
-          # Overlay child (absolute positioning within parent)
-          if json['_overlay']
+          # Overlay child. A stacked overlay (ViewConverter#stacked_overlay?)
+          # puts every child in the one grid cell; any other overlay positions
+          # it absolutely within the parent.
+          if json['_overlay'] == 'stack'
+            classes << 'col-start-1 row-start-1'
+            classes << stack_position_classes
+          elsif json['_overlay']
             classes << 'absolute'
             position = overlay_position_classes
             classes << position unless position.empty?
@@ -524,6 +546,17 @@ module RjuiTools
           # `flex-none` — the exact opposite of what a weight is for.
           weight = bound_number_style('flexGrow', attributes['weight'])
           classes << TailwindMapper.map_flex_grow(weight) if weight
+          # A bound weight replaces the declared size on its axis the way the
+          # static spelling does (`flex-1` is `flex: 1 1 0%`): grow from a zero
+          # basis. Setting only flexGrow left the basis `auto`, i.e. the
+          # declared width, so two weight-1 siblings split the LEFTOVER space
+          # and came out 412 : 612 instead of equal (ticket
+          # rjui-bound-weight-keeps-the-declared-width-as-a-basis). A weight
+          # that resolves to 0 keeps its basis, as static `flex-none` does.
+          if (weight_expr = bound_value_expr(attributes['weight']))
+            dynamic_styles['flexBasis'] = "Number(#{weight_expr}) > 0 ? 0 : undefined"
+            classes << 'min-w-0 min-h-0'
+          end
 
           # Self-centering (for non-View elements like Image, Label)
           # centerHorizontal: center this element horizontally within parent
@@ -571,6 +604,7 @@ module RjuiTools
 
           # Gravity alignment - pass orientation for correct flexbox mapping
           classes.concat(gravity_classes) if attributes['gravity'] && lays_out_children?
+          classes << 'items-start' if cross_axis_start_by_default?(classes)
 
           # Layout direction — child ORDER, not text direction.
           #
@@ -2384,6 +2418,45 @@ module RjuiTools
           end
 
           [vertical, horizontal].compact.join(' ')
+        end
+
+        # The grid-cell spelling of overlay_position_classes, placing a stacked
+        # child where its absolute counterpart sits: an axis with an
+        # instruction aligns that way (left / right physically, as left-0 /
+        # right-0 are); the other axis of a child with an
+        # instruction on one axis only sits at the start, shrunk to fit (the
+        # absolute static position); a child with no instruction fills the
+        # cell (inset-0) unless it is explicitly sized (the static position
+        # again). Both axes are always spelled so a container's gravity
+        # classes cannot move the child the way they never moved an absolute
+        # one.
+        def stack_position_classes
+          center_all = attributes['centerInParent']
+
+          vertical =
+            if center_all || attributes['centerVertical']
+              'self-center'
+            elsif attributes['alignBottom']
+              'self-end'
+            elsif attributes['alignTop']
+              'self-start'
+            end
+
+          horizontal =
+            if center_all || attributes['centerHorizontal']
+              'justify-self-center'
+            elsif attributes['alignRight']
+              '[justify-self:right]'
+            elsif attributes['alignLeft']
+              '[justify-self:left]'
+            end
+
+          if vertical.nil? && horizontal.nil?
+            return 'self-start justify-self-start' if explicitly_sized?
+            return 'self-stretch justify-self-stretch'
+          end
+
+          "#{vertical || 'self-start'} #{horizontal || 'justify-self-start'}"
         end
 
         # Both dimensions declared as concrete numbers — the child cannot be

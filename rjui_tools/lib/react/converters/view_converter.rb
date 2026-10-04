@@ -171,7 +171,23 @@ module RjuiTools
               # `position`, so the winner is decided by stylesheet order, not
               # class order (Tailwind emits `relative` last, which would undo
               # the absolute placement).
-              classes << 'relative' unless json['_overlay']
+              classes << 'relative' unless json['_overlay'] == true
+              # A grid, too, when a child is constrained against a sibling:
+              # the constrained child is absolute, and the axis its
+              # constraint does not name keeps its static position. In a
+              # block that is below the siblings before it in the flow; the
+              # static position of an absolute child of a grid is the content
+              # box's start, which is the container default the zstack
+              # declares (rjui-relative-child-stacks-on-the-axis-it-does-not-
+              # align). The unconstrained children are left to the grid's auto
+              # placement, one per row, as the block flow placed them —
+              # `content-start` keeps those rows at their content height
+              # instead of stretching them over a taller container.
+              if stacked_overlay?
+                classes << 'grid'
+              elsif relative_positioned_children?
+                classes << 'grid content-start'
+              end
             else
               # No orientation + single child = simple wrapper
               classes.unshift('flex flex-col')
@@ -182,7 +198,7 @@ module RjuiTools
           # containing block its inline offsets resolve against — including when
           # an orientation already made it a flex container, where the sibling
           # constraint is the reason the child leaves the flow at all.
-          if relative_positioned_children? && !json['_overlay'] && !classes.include?('relative')
+          if relative_positioned_children? && json['_overlay'] != true && !classes.include?('relative')
             classes << 'relative'
           end
 
@@ -267,6 +283,26 @@ module RjuiTools
         end
 
         # Count UI children (excluding data-only elements)
+        # A row's children start the cross axis (the top) unless a gravity
+        # says otherwise: the container default is top|start on every
+        # container (attribute_semantics.json -> gravityDefaults), and a child
+        # is not stretched. A flex row's own default, `align-items: stretch`,
+        # drew every child without a height at the row's full height on web
+        # only (frame-parity inventory 2026-10-05; ticket
+        # rjui-stack-stretches-children-on-the-cross-axis). A column is left
+        # alone: its cross axis is the width.
+        #
+        # A static centerHorizontal / centerInParent writes this element's
+        # items-center below, which replaces the start: two items-* classes
+        # would be decided by stylesheet order, not by the order written. A
+        # bound one is an inline style that wins over the class while true,
+        # and the start applies again when it is false.
+        def cross_axis_start_by_default?(classes)
+          row_without_cross_axis_class?(classes) &&
+            !(attributes['centerHorizontal'] && !bound_value_expr(attributes['centerHorizontal'])) &&
+            !(attributes['centerInParent'] && !bound_value_expr(attributes['centerInParent']))
+        end
+
         def ui_children_count
           arr = child_array
           return 0 unless arr.is_a?(Array)
@@ -277,6 +313,18 @@ module RjuiTools
         # No orientation + multiple UI children = overlay (FrameLayout)
         def overlay_layout?
           child_array.is_a?(Array) && ui_children_count > 1 && !attributes['orientation']
+        end
+
+        # A plain overlay sized from its children (wrapContent on an axis)
+        # stacks them in one grid cell instead of positioning them absolutely:
+        # an absolute child does not size its container, which measured 0 on
+        # the wrapped axis where the other platforms measure the largest child
+        # (rjui-wrapcontent-view-collapses-around-overlaid-children). Overlays
+        # with a sibling constraint keep the absolute path the constraint's
+        # inline offsets are written for.
+        def stacked_overlay?
+          overlay_layout? && !relative_positioned_children? &&
+            (attributes['width'] == 'wrapContent' || attributes['height'] == 'wrapContent')
         end
 
         #: align*OfView / align*View / alignCenter*View on a child. MUST stay in
@@ -329,7 +377,11 @@ module RjuiTools
               # constraint pointing at it meaningless.
               absolute = relative_positioned?(child) ||
                          (overlay_layout? && !relative_positioned_children?)
-              child = child.merge('_overlay' => true) if absolute
+              if stacked_overlay?
+                child = child.merge('_overlay' => 'stack')
+              elsif absolute
+                child = child.merge('_overlay' => true)
+              end
               converter = create_converter_for_child(child)
               converter.convert_node(indent + 2)
             end.compact.join("\n")

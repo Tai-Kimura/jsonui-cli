@@ -309,7 +309,13 @@ module RjuiTools
           # unprefixed base class already applies at every width.
           classes = new_classes - base_classes
 
-          resets = { 'items' => 'items-stretch', 'justify' => 'justify-normal' }
+          # A View row's cross axis goes back to its start, the default
+          # ViewConverter#cross_axis_start_by_default? gives it; anything else
+          # to the flex default.
+          orientation = overrides['orientation'] || component['orientation']
+          row = JsonUIShared::TypeSynonyms.drawn_type(component['type']) == 'View' &&
+                JsonUIShared::EnumSpelling.lowered(orientation, 'View', 'orientation') == 'horizontal'
+          resets = { 'items' => row ? 'items-start' : 'items-stretch', 'justify' => 'justify-normal' }
           # A Label's lines (label_gravity_text_align): back to the start.
           resets['text'] = 'text-start' if label_row?(component)
           resets.each do |axis, reset|

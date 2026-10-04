@@ -248,9 +248,12 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
           }
           result = described_class.build_responsive(component)
 
-          # left in a row = justify-start; base items-center must be reset
+          # left in a row = justify-start; base items-center must be reset —
+          # to a row's default cross-axis start, not the flex default stretch
+          # (gravityDefaults; rjui-stack-stretches-children-on-the-cross-axis)
           expect(result[:classes]).to include('max-md:justify-start')
-          expect(result[:classes]).to include('max-md:items-stretch')
+          expect(result[:classes]).to include('max-md:items-start')
+          expect(result[:classes]).not_to include('max-md:items-stretch')
         end
 
         it 're-emits base gravity when only orientation is overridden' do
