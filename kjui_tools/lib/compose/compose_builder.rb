@@ -1228,10 +1228,18 @@ module KjuiTools
           # A container that wraps itself in a scope (an id-less ScrollView's
           # `run { }`) draws its children one level deeper.
           offset = result[:child_depth_offset].to_i
+          declared = Set.new
           children.each_with_index do |child, child_index|
             child_depth = (wrapper ? depth + 2 : depth + 1) + offset
             child_code = generate_component(child, child_depth, layout_type)
             next if child_code.empty?
+            # A per-child wrapper (`item { }`) already gives each child a scope
+            # of its own, and a decorator rewrites the child's own text.
+            unless wrapper || decorator
+              child_code = in_own_scope_if_its_locals_clash(child_code, child_depth, declared) do
+                generate_component(child, child_depth + 1, layout_type)
+              end
+            end
             child_code = decorator.call(child, child_code, child_depth, child_index) if decorator
 
             if wrapper
@@ -1254,6 +1262,43 @@ module KjuiTools
           json_data ? ContainerContent.new(code) : code
         else
           result
+        end
+      end
+
+      # Sibling children are statements of one Kotlin block, so a local a
+      # child declares at its own depth (a Collection's hoisted `section0` /
+      # `cellData0` / `enrichedData0`, any `val` an emitter puts beside its
+      # call) is in its siblings' scope too. Two such children declared one
+      # name twice and the file did not compile ("Conflicting declarations:
+      # local val section0" — three sibling Collections with no visibility,
+      # ticket kjui-sibling-collections-redeclare-section-locals-in-one-scope;
+      # a child with visibility sits in its VisibilityWrapper's lambda and
+      # never met the next one). A child whose locals clash with an earlier
+      # sibling's is generated one level deeper in a `run { }` of its own, as
+      # an id-less ScrollView keeps its state; the first claimant, and every
+      # child whose names are new, is emitted as before. `declared` is the
+      # block's: the names its earlier children declared in it.
+      def in_own_scope_if_its_locals_clash(child_code, child_depth, declared)
+        names = locals_declared_in_the_enclosing_block(child_code)
+        if (names & declared.to_a).empty?
+          declared.merge(names)
+          return child_code
+        end
+
+        indent('run {', child_depth) + "\n" + yield + "\n" + indent('}', child_depth)
+      end
+
+      # The `val` / `var` names a child's code declares outside every brace
+      # it opens: the ones that land in the block the child is a statement
+      # of. By brace depth, not indentation — a VisibilityWrapper's content
+      # is emitted at the wrapper's own indentation, inside its lambda. A
+      # brace inside a string template (`"${id}"`) opens and closes on its
+      # line, so the count is per line.
+      def locals_declared_in_the_enclosing_block(child_code)
+        braces = 0
+        child_code.each_line.with_object([]) do |line, names|
+          names << Regexp.last_match(1) if braces.zero? && line =~ /\A\s*va[lr] ([A-Za-z_][A-Za-z0-9_]*)\b/
+          braces += line.count('{') - line.count('}')
         end
       end
 
@@ -1361,9 +1406,15 @@ module KjuiTools
         code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
         code += "\n" + indent(") {", depth)
 
+        declared = Set.new
         children.each do |child|
           child_code = generate_component(child, depth + 1, container)
-          code += "\n" + child_code unless child_code.empty?
+          next if child_code.empty?
+
+          child_code = in_own_scope_if_its_locals_clash(child_code, depth + 1, declared) do
+            generate_component(child, depth + 2, container)
+          end
+          code += "\n" + child_code
         end
 
         code += "\n" + indent("}", depth)
@@ -1528,9 +1579,15 @@ module KjuiTools
         code += "\n" + effects.chomp unless effects.empty?
 
         code += "\n" + indent("item {", depth + 1)
+        declared = Set.new
         scroll_children.each do |scroll_child|
           child_code = generate_component(scroll_child, depth + 2)
-          code += "\n" + child_code unless child_code.empty?
+          next if child_code.empty?
+
+          child_code = in_own_scope_if_its_locals_clash(child_code, depth + 2, declared) do
+            generate_component(scroll_child, depth + 3)
+          end
+          code += "\n" + child_code
         end
         code += "\n" + indent("}", depth + 1)
 
@@ -1575,9 +1632,15 @@ module KjuiTools
         effects = lifecycle_effects(child_data, depth + 1)
         code += "\n" + effects.chomp unless effects.empty?
 
+        declared = Set.new
         view_children.each do |view_child|
           child_code = generate_component(view_child, depth + 1, container)
-          code += "\n" + child_code unless child_code.empty?
+          next if child_code.empty?
+
+          child_code = in_own_scope_if_its_locals_clash(child_code, depth + 1, declared) do
+            generate_component(view_child, depth + 2, container)
+          end
+          code += "\n" + child_code
         end
 
         code += "\n" + indent("}", depth)
