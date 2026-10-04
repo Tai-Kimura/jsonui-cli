@@ -81,6 +81,27 @@ class RecordXCTestsTest(unittest.TestCase):
                                      str(Path(tmp) / "x.txt")]), 1)
         self.assertEqual(R.main([]), 1)
 
+    # The tap timing distribution (SwiftJsonUI ConformanceHost prints one
+    # TAP_TIMING line per tap): a number to look at, not a wait.
+    def test_the_tap_timing_lines_become_a_distribution_with_the_fastest_named(self):
+        lines = "".join(
+            f"TAP_TIMING Switch/f{i} target +{at:.3f}s exists=true hittable=true frame=(0,0,1,1)\n"
+            for i, at in enumerate([1.2, 0.4, 3.0, 1.1, 0.9, 2.2, 1.0, 1.4, 0.7, 5.0, 1.3])
+        )
+        found = R.read_log(GREEN_RUN + lines)
+        printed = io.StringIO()
+        R.tap_timing(found, out=printed)
+        text = printed.getvalue()
+        self.assertIn("[tap timing] 11 tap(s) after the fixture marker: min 0.400s, p10 0.700s, "
+                      "median 1.200s, p90 3.000s, max 5.000s", text)
+        self.assertIn("fastest: +0.400s Switch/f1 (target)", text)
+        self.assertEqual(text.count("fastest:"), 5)
+
+    def test_a_log_without_tap_timing_says_so(self):
+        printed = io.StringIO()
+        R.tap_timing(R.read_log(GREEN_RUN), out=printed)
+        self.assertIn("no TAP_TIMING lines", printed.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
