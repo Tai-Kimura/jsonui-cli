@@ -178,7 +178,7 @@ module RjuiTools
           # height may be a keyword ("wrapContent" / "matchParent") — only a
           # numeric height can be translated into vertical padding.
           padding_class = if attributes['height'].is_a?(Numeric)
-            "py-#{TailwindMapper::PADDING_MAP[attributes['height'] / 4] || (attributes['height'] / 4)}"
+            "py-#{TailwindMapper.spacing_value(attributes['height'] / 4)}"
           else
             'py-2'
           end
