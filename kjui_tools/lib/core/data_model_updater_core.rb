@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative 'layout_variant'
+require_relative 'screen_index'
 require_relative 'type_synonyms'
 require_relative 'data_item_platform'
 require_relative 'data_class_conflict'
@@ -67,7 +68,7 @@ module JsonUIShared
       all_json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
         # Skip Resources and Styles folders (styles don't need data models)
         # and responsive variant files (data contract is base-canonical)
-        next true if file.include?('/Resources/') || file.include?('/Styles/') ||
+        next true if !JsonUIShared::ScreenIndex.layout_path?(@layouts_dir, file) ||
                      JsonUIShared::LayoutVariant.variant?(file)
         skip_layout_file_extra?(file)
       end

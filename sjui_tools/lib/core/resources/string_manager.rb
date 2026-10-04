@@ -10,6 +10,7 @@ require_relative '../logger'
 require_relative '../generated_marker'
 require_relative '../plural_validator'
 require_relative '../layout_variant'
+require_relative '../screen_index'
 require_relative '../string_manager_core'
 require_relative '../string_literals'
 require_relative '../swift_identifier'
@@ -266,8 +267,8 @@ module SjuiTools
             return
           end
 
-          layout_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
-            file.include?(File.join(@layouts_dir, 'Resources'))
+          layout_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).select do |file|
+            JsonUIShared::ScreenIndex.layout_path?(@layouts_dir, file)
           end
           validate_plural_strings_data!(strings_data, layout_files, Core::Logger)
         end

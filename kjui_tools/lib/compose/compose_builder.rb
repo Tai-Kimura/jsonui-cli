@@ -174,7 +174,7 @@ module KjuiTools
       def build(options = {})
         # Get all JSON files but exclude Resources folder
         json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
-          file.include?('/Resources/') ||
+          !JsonUIShared::ScreenIndex.layout_path?(@layouts_dir, file) ||
             JsonUIShared::LayoutVariant.variant?(file)
         end
 

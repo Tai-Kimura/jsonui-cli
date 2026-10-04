@@ -10,6 +10,7 @@ require_relative '../kotlin_identifier'
 require_relative '../generated_marker'
 require_relative '../plural_validator'
 require_relative '../string_manager_core'
+require_relative '../screen_index'
 
 module KjuiTools
   module Core
@@ -120,8 +121,8 @@ module KjuiTools
         end
 
         def layout_files
-          Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
-            file.include?('/Resources/')
+          Dir.glob(File.join(layouts_dir, '**/*.json')).select do |file|
+            JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
           end
         end
 

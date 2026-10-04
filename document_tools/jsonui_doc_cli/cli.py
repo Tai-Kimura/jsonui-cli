@@ -1221,7 +1221,12 @@ def _layouts_naming_component(component_file: Path, layouts_dir):
         return None
     needle = f'"{name}"'
     hits = []
+    from jui_cli.core.screen_identity import is_layout_path
+
     for layout in sorted(Path(layouts_dir).rglob("*.json")):
+        # A resource file naming the component (strings.json) is no use of it.
+        if not is_layout_path(layout, layouts_dir):
+            continue
         try:
             if needle in layout.read_text(encoding="utf-8", errors="ignore"):
                 hits.append(layout.name)

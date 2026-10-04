@@ -6,6 +6,7 @@ require_relative '../command_base'
 require_relative '../../core/project_finder'
 require_relative '../../core/config_manager'
 require_relative '../../core/layout_variant'
+require_relative '../../core/screen_index'
 
 module SjuiTools
   module CLI
@@ -43,6 +44,7 @@ module SjuiTools
           if files.empty?
             layouts_dir = File.join(source_path, config['layouts_directory'])
             files = Dir.glob(File.join(layouts_dir, '**/*.json'))
+                        .select { |f| JsonUIShared::ScreenIndex.layout_path?(layouts_dir, f) }
                         .reject { |f| JsonUIShared::LayoutVariant.variant?(f) }
           else
             # Convert relative paths to absolute

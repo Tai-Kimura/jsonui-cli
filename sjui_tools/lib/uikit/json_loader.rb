@@ -94,8 +94,8 @@ module SjuiTools
         end
         
         Dir.glob("#{@layout_path}/**/*.json") do |file|
-          # Skip Resources folder
-          next if file.include?("#{@layout_path}/Resources/")
+          # Resources / Styles hold no layout (ScreenIndex.layout_path?)
+          next unless JsonUIShared::ScreenIndex.layout_path?(@layout_path, file)
           # Skip responsive variant files — UIKit mode is out of scope for
           # the v1 variant-file mechanism (SwiftUI/Compose/React only)
           next if JsonUIShared::LayoutVariant.variant?(file)

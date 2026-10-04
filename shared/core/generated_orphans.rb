@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'set'
+require_relative 'screen_index'
 
 # What a deleted layout leaves behind, and which of it the build may delete.
 #
@@ -87,7 +88,7 @@ module JsonUIShared
 
       Dir.glob(File.join(layouts_dir, '**', '*.json')).sort.flat_map do |path|
         rel = path.sub(%r{\A#{Regexp.escape(layouts_dir)}/}, '')
-        next [] if rel.start_with?('Resources/', 'Styles/')
+        next [] unless JsonUIShared::ScreenIndex.layout_path?(layouts_dir, path)
 
         stem, size_class = File.basename(path, '.json').split('@', 2)
         dir = File.dirname(rel)

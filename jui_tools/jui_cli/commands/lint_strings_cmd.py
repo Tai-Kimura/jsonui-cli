@@ -92,6 +92,7 @@ from typing import Any
 
 from ..core.config_manager import ConfigManager
 from ..core.normalizer import AliasTable, Canonicalizer, StyleMerger
+from ..core.screen_identity import is_layout_path
 from .lint_strings_usage import UsageReport, collect_usage
 
 ALLOWLIST_FILENAME = ".jui-strings-allowlist.json"
@@ -747,7 +748,10 @@ def collect_findings(
     style_merger = StyleMerger(styles_dir) if styles_dir.exists() else None
 
     layouts_dir = config_mgr.layouts_directory
-    skip_prefixes = {"Resources"}
+    # The layout rule (screen_identity.is_layout_path: Resources / Styles at
+    # any depth below the root), plus the configured styles directory when it
+    # sits under the layouts under a name of its own.
+    skip_prefixes: set[str] = set()
     if styles_dir.exists() and layouts_dir in styles_dir.parents:
         skip_prefixes.add(styles_dir.relative_to(layouts_dir).parts[0])
 
@@ -765,7 +769,7 @@ def collect_findings(
         # includes whom (see _own_sections_map).
         for src_file in sorted(layouts_dir.rglob("*.json")):
             rel = src_file.relative_to(layouts_dir)
-            if rel.parts[0] in skip_prefixes:
+            if not is_layout_path(src_file, layouts_dir) or rel.parts[0] in skip_prefixes:
                 continue
             try:
                 tree = json.loads(src_file.read_text(encoding="utf-8"))

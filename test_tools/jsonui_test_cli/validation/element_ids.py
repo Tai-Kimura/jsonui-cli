@@ -198,15 +198,15 @@ class ProjectIds:
 
     def __init__(self, layouts_dir: Path, styles_dir: Path, app_owned=()):
         from jui_cli.core import layout_facts as lf
-        from jui_cli.core.screen_identity import NON_LAYOUT_SUBTREES
+        from jui_cli.core.screen_identity import is_layout_path
 
         self.layouts_dir = layouts_dir
         self.styles_dir = styles_dir
         names = []
         for path in sorted(layouts_dir.rglob("*.json")):
-            rel = path.relative_to(layouts_dir)
-            if NON_LAYOUT_SUBTREES.intersection(rel.parts[:-1]):
+            if not is_layout_path(path, layouts_dir):
                 continue
+            rel = path.relative_to(layouts_dir)
             names.append(str(rel.with_suffix("")))
         prefixed, plain = set(), set()
         for name in names:

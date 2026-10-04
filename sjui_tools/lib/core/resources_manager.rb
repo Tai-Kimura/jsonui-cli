@@ -7,6 +7,7 @@ require_relative 'project_finder'
 require_relative 'logger'
 require_relative 'resources/string_manager'
 require_relative 'resources/color_manager'
+require_relative 'screen_index'
 
 module SjuiTools
   module Core
@@ -37,8 +38,8 @@ module SjuiTools
         Core::Logger.info "Processing resource extraction..."
         
         # Get all JSON files (excluding Resources folder)
-        json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
-          file.include?(File.join(layouts_dir, 'Resources'))
+        json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).select do |file|
+          JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
         end
         
         # Filter changed files

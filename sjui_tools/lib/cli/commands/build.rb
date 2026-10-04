@@ -502,8 +502,8 @@ module SjuiTools
           # Process all JSON files in Layouts directory
           partial_files = []
           json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
-            # Skip Resources folder
-            next true if file.include?(File.join(layouts_dir, 'Resources'))
+            # Resources / Styles hold no layout (ScreenIndex.layout_path?)
+            next true unless JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
             # Skip responsive variant files (home@regular.json) — they are
             # converted alongside their base screen, never as standalone
             # screens (jui build's variant gate enforces the contract)
