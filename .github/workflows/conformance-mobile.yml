@@ -313,7 +313,9 @@ jobs:
           name: xctests-ios
           if-no-files-found: warn
           retention-days: 7
-          path: /tmp/jsonui-conformance-ios.ci/xctests.txt
+          path: |
+            /tmp/jsonui-conformance-ios.ci/xctests.txt
+            /tmp/jsonui-conformance-ios.ci/tap_timing.txt
       # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
       # xcodebuild, and on a failure it exits before saying where the full
       # log is; run 37112820775 failed "1 failure" with no test name in the
@@ -418,7 +420,9 @@ jobs:
           name: xctests-ios-codegen
           if-no-files-found: warn
           retention-days: 7
-          path: /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
+          path: |
+            /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
+            /tmp/jsonui-conformance-ios-codegen.ci/tap_timing.txt
       # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
       # xcodebuild, and on a failure it exits before saying where the full
       # log is; run 37112820775 failed "1 failure" with no test name in the
@@ -1082,3 +1086,4 @@ jobs:
             /tmp/jsonui-conformance-ios.ci/results/ios.results.json
             /tmp/jsonui-conformance-ios.ci/xcodebuild.log
             /tmp/jsonui-conformance-ios.ci/artifacts/ios/*__post_tap_failure.png
+            /tmp/jsonui-conformance-ios.ci/tap_timing.txt
