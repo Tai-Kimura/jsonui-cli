@@ -788,26 +788,6 @@
       "note": ""
     },
     {
-      "fixture": "common/alignLeftView__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "codegen-innocent, library gap (android): the sibling constraint reaches the emitted Compose and the render does not move. ios and web place it. Family: relative-position-container-mode.",
-      "note": ""
-    },
-    {
-      "fixture": "common/alignTopView__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "active"
-      },
-      "reason": "codegen-innocent, library gap (android): the sibling constraint reaches the emitted Compose and the render does not move. ios and web place it. Family: relative-position-container-mode.",
-      "note": "Joined to the alignLeftView row by 51-G: same mechanism, measured — the relative-position spellings are honoured by DynamicConstraintLayoutComponent, and this fixture's parent is a plain View (DynamicContainerComponent), where the spelling is only in the known set. 51-C measured the codegen half independently and agrees: the kjui codegen switches the parent to a ConstraintLayout when a child carries a relative-position spelling (compose_builder.rb#has_relative_positioning_in_children?, modifier_builder.rb:1148), so the family boundary is the same on both android paths. The gap is the whole family of 10 spellings (alignTop/Bottom/Left/RightView + alignTop/Bottom/Left/RightOfView + alignCenterVertical/HorizontalView), not this spelling alone. Owner: G, plan 51 — not expected to close in this train; if it does not, it carries to the next one with the owner named."
-    },
-    {
       "fixture": "common/alignment__bottom",
       "platforms": {
         "android": "active",

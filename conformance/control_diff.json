@@ -2406,6 +2406,7 @@
     {
       "fixture": "common/alignLeftView__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
@@ -2469,6 +2470,7 @@
     {
       "fixture": "common/alignTopView__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ]
