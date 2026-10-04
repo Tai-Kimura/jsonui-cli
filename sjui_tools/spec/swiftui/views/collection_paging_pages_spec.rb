@@ -126,7 +126,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
               let section = dataSource.sections[0]
               if let cellsData = section.cells?.data {
                   ForEach(Array(cellsData.enumerated()), id: \.offset) { cellIndex, cellData in
-                      CardCellView(data: { () -> [String: Any] in var refreshed = cellData; refreshed["cellId"] = CellIdGenerator.autoId(from: cellData, primaryKey: cellData["cellId"] != nil ? "cellId" : "cellId", fallbackIndex: cellIndex); return refreshed }()).equatable()
+                      CardCellView(data: { () -> [String: Any] in var refreshed = cellData; refreshed["cellId"] = CellIdGenerator.autoId(from: cellData, primaryKey: "cellId", fallbackIndex: cellIndex); return refreshed }()).equatable()
                           .padding(.horizontal, 4.0)
                           .accessibilityIdentifier("carousel_item_\(cellIndex)")
                           .tag(cellIndex)

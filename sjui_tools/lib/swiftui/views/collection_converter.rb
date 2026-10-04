@@ -1908,10 +1908,15 @@ module SjuiTools
           data = vars[:data_var]
           return data if @component['autoChangeTrackingId'] == true && @component['cellIdProperty']
 
+          # The data's own "cellId" first, else the cellIdProperty value. With
+          # no cellIdProperty, or "cellId" itself, both are "cellId", and the
+          # choice is not written (until 1.9.12 it was, as `… ? "cellId" :
+          # "cellId"`).
           key = @component['cellIdProperty'] || 'cellId'
+          primary = key == 'cellId' ? '"cellId"' : "#{data}[\"cellId\"] != nil ? \"cellId\" : \"#{key}\""
           "{ () -> [String: Any] in var refreshed = #{data}; " \
             "refreshed[\"cellId\"] = CellIdGenerator.autoId(from: #{data}, " \
-            "primaryKey: #{data}[\"cellId\"] != nil ? \"cellId\" : \"#{key}\", fallbackIndex: #{vars[:index_var]}); " \
+            "primaryKey: #{primary}, fallbackIndex: #{vars[:index_var]}); " \
             "return refreshed }()"
         end
 
