@@ -167,6 +167,48 @@ def read_frames(path: Path) -> tuple[dict | None, list[str]]:
     return (None if errors else doc), errors
 
 
+#: Weight keys and the axis they divide (`weight` is widthWeight's shorthand).
+WEIGHT_AXES = {"weight": "x", "widthWeight": "x", "heightWeight": "y"}
+
+
+def weighted_axes(layout) -> dict[str, set[str]]:
+    """``{id: axes}`` for every declared id whose own node or an ancestor
+    declares a weight: on those axes the declared reading is PROPORTIONAL to
+    the root, so it is required (see :func:`proportional_agrees`). An id after
+    a weighted sibling is not included — a fixed-size view pushed to the far
+    edge is placed from that edge, not proportionally."""
+    out: dict[str, set[str]] = {}
+
+    def walk(node, inherited: frozenset) -> None:
+        if isinstance(node, dict):
+            own = {axis for key, axis in WEIGHT_AXES.items() if node.get(key) not in (None, 0, "0")}
+            axes = inherited | own
+            node_id = node.get("id")
+            if isinstance(node_id, str) and node_id and node_id != "root" and axes:
+                out.setdefault(node_id, set()).update(axes)
+            for key, value in node.items():
+                if key != "_generated":
+                    walk(value, frozenset(axes))
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, inherited)
+
+    walk(layout, frozenset())
+    return out
+
+
+def proportional_agrees(start_a: float, size_a: float, root_a: float,
+                        start_b: float, size_b: float, root_b: float) -> bool:
+    """The declared reading of a weighted axis: the start is the same fraction
+    of the root on both, and the size is either the same fraction (the
+    weighted view itself) or the same length (a fixed-size child inside it).
+    Compared in b's units: a's numbers scaled by root_b / root_a."""
+    if root_a <= 0 or root_b <= 0:
+        return False
+    scale = root_b / root_a
+    return _near(start_a * scale, start_b) and (_near(size_a * scale, size_b) or _near(size_a, size_b))
+
+
 def declared_ids(layout) -> list[str]:
     """Every ``id`` a layout declares, in document order, ``root`` excluded."""
     out: list[str] = []
@@ -196,12 +238,14 @@ def _near(a: float, b: float) -> bool:
     return abs(a - b) <= TOLERANCE
 
 
-#: The readings, in the order a report names the one that held: the near
+#: The readings, in the order a report names the one that held. `proportional`
+#: is never one of the alternatives an axis may agree by: it is the declared
+#: reading of a weighted axis, required there and only there (measure()). The near
 #: edge first, because that is the reading a root-relative frame states
 #: directly. An agreement held ONLY by a later reading is the one to check
 #: against the declaration — roots of a lucky size can let a wrong placement
 #: through the far edge or the centre.
-READINGS = ("near", "stretched", "centred", "far")
+READINGS = ("near", "proportional", "stretched", "centred", "far")
 
 
 def axis_readings(start_a: float, size_a: float, root_a: float,
@@ -343,6 +387,7 @@ def measure(
         except (OSError, ValueError, TypeError):
             layout = None
         ids = declared_ids(layout) if layout is not None else []
+        weighted = weighted_axes(layout) if layout is not None else {}
         if not ids:
             out._name(NO_DECLARED_IDS, fid)
             continue
@@ -399,13 +444,29 @@ def measure(
                 continue
             names = sorted(present)
             agree = {}
-            held = {"x": frozenset(READINGS), "y": frozenset(READINGS)}
+            held: dict[str, frozenset | None] = {"x": None, "y": None}
             for i, p in enumerate(names):
                 for q in names[i + 1:]:
                     x, y = frame_readings(present[p], docs[p]["root"],
                                           present[q], docs[q]["root"])
+                    # A weighted axis must agree by its declared reading,
+                    # whatever else agrees: two roots of a lucky size can make
+                    # a proportional split look centred (weight__static's
+                    # boxes did, 2026-10-05).
+                    for axis, readings in (("x", x), ("y", y)):
+                        if axis in weighted.get(element_id, ()):
+                            pos, size = ("x", "width") if axis == "x" else ("y", "height")
+                            ok = proportional_agrees(
+                                present[p][pos], present[p][size], docs[p]["root"][size],
+                                present[q][pos], present[q][size], docs[q]["root"][size])
+                            readings = frozenset({"proportional"}) if ok else frozenset()
+                            if axis == "x":
+                                x = readings
+                            else:
+                                y = readings
                     agree[(p, q)] = bool(x) and bool(y)
-                    held = {"x": held["x"] & x, "y": held["y"] & y}
+                    held = {"x": x if held["x"] is None else held["x"] & x,
+                            "y": y if held["y"] is None else held["y"] & y}
             odd = outliers(agree, names)
             if odd:
                 out.disagreed.append(Disagreement(

@@ -324,6 +324,57 @@ class Readings(unittest.TestCase):
         self.assertEqual(sorted(i for _, i in r.agreed), ["anchor", "target"])
 
 
+class Weighted(unittest.TestCase):
+    """A weighted axis is judged by its declared reading, proportional."""
+
+    LAYOUT = {"type": "View", "id": "root", "orientation": "horizontal", "child": [
+        {"type": "View", "id": "rival", "width": 0, "height": 200, "weight": 1},
+        {"type": "View", "id": "target", "width": 0, "height": 200, "weight": 1,
+         "child": [{"type": "View", "id": "box_a", "width": 40, "height": 40}]},
+    ]}
+
+    def _measure(self, web_target_x, android_target_x=640):
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            t.fixture("common/weight__static", self.LAYOUT)
+            for p in ("android", "web"):
+                w = ROOTS[p]["width"]
+                tx = android_target_x if p == "android" else web_target_x
+                t.frames(p, "common/weight__static", {
+                    "rival": f(0, 0, tx, 200), "target": f(tx, 0, w - tx, 200), "box_a": f(tx, 0, 40, 40)})
+            manifest = t.write()
+            return fp.measure(Path(d), manifest, t.results(), ["android", "web"])
+
+    def test_the_weighted_ids_and_their_children_are_named_from_the_declaration(self):
+        self.assertEqual(fp.weighted_axes(self.LAYOUT), {"rival": {"x"}, "target": {"x"}, "box_a": {"x"}})
+
+    def test_an_even_split_agrees_by_proportion(self):
+        r = self._measure(512)  # web root 1024, android 1280: both halves
+        self.assertEqual(r.disagreed, [])
+        self.assertEqual(r.readings[("common/weight__static", "box_a")]["x"], {"proportional"})
+
+    def test_a_split_that_agrees_only_by_a_lucky_reading_is_red(self):
+        # box_a 40 wide at 620 of 1280 and at 492 of 1024: both centred
+        # (620 + 20 - 640 = 0, 492 + 20 - 512 = 0), so the four readings agree;
+        # by proportion 620 is 496 of 1024, 4 away from 492, so it is red.
+        self.assertTrue(fp.axis_agrees(620, 40, 1280, 492, 40, 1024))
+        r = self._measure(492, android_target_x=620)
+        self.assertIn("box_a", {d.id for d in r.disagreed})
+
+    def test_a_split_that_disagrees_everywhere_is_red(self):
+        r = self._measure(412)
+        self.assertEqual({d.id for d in r.disagreed}, {"rival", "target", "box_a"})
+
+    def test_weight__static_box_no_longer_rests_on_centred(self):
+        r = self._measure(512)
+        self.assertNotIn("centred", r.readings[("common/weight__static", "box_a")]["x"])
+
+    def test_proportional_agrees_scales_by_the_roots(self):
+        self.assertTrue(fp.proportional_agrees(640, 640, 1280, 512, 512, 1024))
+        self.assertTrue(fp.proportional_agrees(640, 40, 1280, 512, 40, 1024))   # fixed child
+        self.assertFalse(fp.proportional_agrees(640, 640, 1280, 412, 612, 1024))
+
+
 class NotCompared(unittest.TestCase):
     """Everything that cannot be compared is counted on its own line."""
 
@@ -490,7 +541,7 @@ class Report(unittest.TestCase):
         self.assertIn("UNRECORDED", section)
         self.assertIn(f"- not compared — {fp.ID_ABSENT}: 0", section)
         self.assertIn("Agreements by reading (the first that held for every pair, per axis): "
-                      "x: near 14, stretched 0, centred 0, far 0, mixed 0", section)
+                      "x: near 14, proportional 0, stretched 0, centred 0, far 0, mixed 0", section)
         self.assertIn("Agreed other than from the near edge on some axis: 0", section)
 
 
