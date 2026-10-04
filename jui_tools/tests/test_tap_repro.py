@@ -50,6 +50,30 @@ class TapReproTest(unittest.TestCase):
             self.assertEqual(test["source"]["layout"], "fixtures/Loop/clip_002.layout.json")
             self.assertTrue((root / "fixtures/Loop/clip_002.layout.json").is_file())
 
+    def test_make_after_visual_puts_the_preceding_visual_fixture_in_front(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "conformance"
+            src = REPO_ROOT / "conformance"
+            (root / "fixtures").mkdir(parents=True)
+            manifest = json.loads((src / "manifest.json").read_text())
+            (root / "manifest.json").write_text(json.dumps(manifest))
+            wanted = [fid for fid, _ in T.SOURCES] + [v[0] for v in T.VISUAL_BEFORE.values()]
+            for fid in wanted:
+                f = next(x for x in manifest["fixtures"] if x["id"] == fid)
+                for k in ("layout", "test"):
+                    (root / f[k]).parent.mkdir(parents=True, exist_ok=True)
+                    (root / f[k]).write_text((src / f[k]).read_text())
+            self.assertEqual(T.make(root, 2, after_visual=True), 0)
+            loop = [f for f in json.loads((root / "manifest.json").read_text())["fixtures"]
+                    if f["id"].startswith("Loop/")]
+            self.assertEqual([f["id"] for f in loop[:4]],
+                             ["Loop/swvis_001", "Loop/sw_001", "Loop/clipvis_001", "Loop/clip_001"])
+            self.assertEqual([f["class"] for f in loop[:4]], ["visual", "interactive", "visual", "interactive"])
+            # The visual copy keeps the step that captures app.screenshot() — the
+            # path this hypothesis is about.
+            steps = json.loads((root / "fixtures/Loop/swvis_001.test.json").read_text())["cases"][0]["steps"]
+            self.assertIn("screenshot", [s.get("action") for s in steps])
+
     def judge_on(self, results, expected):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "r.json"

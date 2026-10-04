@@ -63,6 +63,11 @@ on:
         required: false
         default: '150'
         type: string
+      tap_repro_after_visual:
+        description: 'tap_repro only: put the visual fixture that preceded each CI miss in front of every interactive copy'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: conformance-mobile-${{ github.ref }}
@@ -1045,7 +1050,7 @@ jobs:
       - name: Install xcodeproj gem
         run: gem install xcodeproj --no-document
       - name: Add the loop fixtures
-        run: python3 .github/scripts/tap_repro.py make conformance "${{ inputs.tap_repro_repeats || '150' }}"
+        run: python3 .github/scripts/tap_repro.py make conformance "${{ inputs.tap_repro_repeats || '150' }}" ${{ inputs.tap_repro_after_visual && '--after-visual' || '' }}
       - name: Sync fixtures + vendor the iOS test-runner driver
         run: SwiftJsonUI/ConformanceHost/scripts/sync_fixtures.sh
       - name: Generate ConformanceHost.xcodeproj
@@ -1061,7 +1066,8 @@ jobs:
         if: always()
         run: |
           repeats="${{ inputs.tap_repro_repeats || '150' }}"
-          python3 .github/scripts/tap_repro.py judge /tmp/jsonui-conformance-ios.ci/results/ios.results.json "$((repeats * 2))"
+          per=${{ inputs.tap_repro_after_visual && '4' || '2' }}
+          python3 .github/scripts/tap_repro.py judge /tmp/jsonui-conformance-ios.ci/results/ios.results.json "$((repeats * per))"
       - name: Tap timing and the per-test record
         if: always()
         run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt

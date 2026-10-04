@@ -34,20 +34,35 @@ SOURCES = (
     ("Switch/onValueChange__callback_fire", "sw"),
     ("common/clipToBounds__hit_overflow_true", "clip"),
 )
+# The fixture that ran just before each miss in CI (manifest order): a visual
+# fixture of the same component, which captures app.screenshot() before the
+# batch advances. --after-visual puts it in front of each interactive copy.
+VISUAL_BEFORE = {
+    "Switch/onValueChange__callback_fire": ("Switch/thumbTintColor__binding", "swvis"),
+    "common/clipToBounds__hit_overflow_true": ("common/clipToBounds__binding", "clipvis"),
+}
 PREFIX = "Loop/"
 
 
-def make(conformance: Path, repeats: int) -> int:
+def make(conformance: Path, repeats: int, after_visual: bool = False) -> int:
     manifest_path = conformance / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     by_id = {f["id"]: f for f in manifest["fixtures"]}
-    missing = [fid for fid, _ in SOURCES if fid not in by_id]
+    wanted = [fid for fid, _ in SOURCES]
+    if after_visual:
+        wanted += [VISUAL_BEFORE[fid][0] for fid, _ in SOURCES]
+    missing = [fid for fid in wanted if fid not in by_id]
     if missing:
         print(f"error: the manifest has no {missing}", file=sys.stderr)
         return 1
+    order = []
+    for fid, tag in SOURCES:
+        if after_visual:
+            order.append(VISUAL_BEFORE[fid])
+        order.append((fid, tag))
     added = []
     for i in range(1, repeats + 1):
-        for fid, tag in SOURCES:
+        for fid, tag in order:
             fixture = copy.deepcopy(by_id[fid])
             stem = f"fixtures/Loop/{tag}_{i:03d}"
             fixture["id"] = f"{PREFIX}{tag}_{i:03d}"
@@ -62,7 +77,10 @@ def make(conformance: Path, repeats: int) -> int:
             added.append(fixture)
     manifest["fixtures"] += added
     manifest_path.write_text(json.dumps(manifest, indent=1))
-    print(f"[tap repro] added {len(added)} loop fixture(s): {repeats} x {len(SOURCES)}, alternating")
+    shape = "visual -> interactive pairs" if after_visual else "alternating"
+    print(f"[tap repro] added {len(added)} loop fixture(s): {repeats} x {len(order)}, {shape}")
+    for fixture in added[:4]:
+        print(f"  {fixture['id']} ({fixture['class']})")
     return 0
 
 
@@ -94,11 +112,11 @@ def judge(results_path: Path, expected: int, out=sys.stdout) -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) == 3 and argv[0] == "make":
-        return make(Path(argv[1]), int(argv[2]))
+    if len(argv) in (3, 4) and argv[0] == "make" and (len(argv) == 3 or argv[3] == "--after-visual"):
+        return make(Path(argv[1]), int(argv[2]), after_visual=len(argv) == 4)
     if len(argv) == 3 and argv[0] == "judge":
         return judge(Path(argv[1]), int(argv[2]))
-    print("usage: tap_repro.py make <conformance dir> <repeats> | judge <results.json> <expected>",
+    print("usage: tap_repro.py make <conformance dir> <repeats> [--after-visual] | judge <results.json> <expected>",
           file=sys.stderr)
     return 1
 
