@@ -1511,10 +1511,18 @@ module KjuiTools
         end
         code += "\n"
 
+        # On this path every child draws its margins as padding (the View
+        # and component generators below call build_margins), so each
+        # sibling's ref box includes them: a child aligned to one adds its
+        # margin to reach the drawn box (ModifierBuilder.margin_padding_terms).
+        anchor_paddings = children.each_with_object({}) do |child, map|
+          map[child['id']] = Helpers::ModifierBuilder.margin_padding_terms(child) if child.is_a?(Hash) && child['id']
+        end
+
         # Generate children with constraints
         children.each do |child|
           next unless child.is_a?(Hash)
-          child_code = generate_safe_area_child_with_constraints(child, depth + 1)
+          child_code = generate_safe_area_child_with_constraints(child, depth + 1, anchor_paddings)
           code += "\n" + child_code unless child_code.empty?
         end
 
@@ -1522,12 +1530,12 @@ module KjuiTools
         code
       end
 
-      def generate_safe_area_child_with_constraints(child_data, depth)
+      def generate_safe_area_child_with_constraints(child_data, depth, anchor_paddings = {})
         ref_name = child_data['id']
         component_type = child_data['type'] || 'View'
 
         # Build constraints for this child
-        constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data)
+        constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings)
 
         # Generate the component based on the type it is drawn as (an app's
         # component as written; an HStack is a View with orientation
