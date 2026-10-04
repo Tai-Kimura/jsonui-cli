@@ -114,6 +114,10 @@
   `Test Case` と `file:line: error:` を印字し（`.github/scripts/name_failed_xctests.py`、注釈にも出る）、
   xcodebuild.log と xcresult を artifact `failure-log-ios` / `failure-log-ios-codegen` に上げる（14 日）。
   run_conformance.sh は `tail -40` しか印字しないので、jsonui-cli 1.9.9 より前は失敗名がログに残らなかった
+- **tap-repro**（dispatch で `tap_repro=true` のときだけ。ほかの 7 job はすべて止まる）: iOS Dynamic で 2 つの interactive
+  fixture（Switch/onValueChange__callback_fire と common/clipToBounds__hit_overflow_true）を別 id の複製で交互に
+  `tap_repro_repeats` 回ずつ回し、取りこぼしを数えて分類する（`.github/scripts/tap_repro.py`、SwiftJsonUI 8815b51 の
+  post-tap 行: 2 回目の tap で通れば touch 未達、通らなければ handler 不応答）。予算 90 分（固定 ~18.5 分 + 300 本 ~32.5 分）
 - ios / ios-codegen は緑でも赤でも `Record every XCTest result` が全テストの結果行（passed / failed / skipped）を
   クラスごとに 1 行で数えて印字し（`.github/scripts/record_xctests.py`、`Executed N tests` と突き合わせる）、
   行そのものを artifact `xctests-ios` / `xctests-ios-codegen` に上げる（7 日）。staging は suite step の env で

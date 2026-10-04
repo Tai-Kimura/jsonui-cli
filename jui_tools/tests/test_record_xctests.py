@@ -96,6 +96,11 @@ class RecordXCTestsTest(unittest.TestCase):
                       "median 1.200s, p90 3.000s, max 5.000s", text)
         self.assertIn("fastest: +0.400s Switch/f1 (target)", text)
         self.assertEqual(text.count("fastest:"), 5)
+        self.assertIn("slowest: +5.000s Switch/f9 (target)", text)
+        self.assertEqual(text.count("slowest:"), 5)
+        # No tap is named twice: 11 taps, 5 fastest + 5 slowest of the rest.
+        named = [line.split()[-2] for line in text.splitlines() if "fastest:" in line or "slowest:" in line]
+        self.assertEqual(len(named), len(set(named)))
 
     def test_a_log_without_tap_timing_says_so(self):
         printed = io.StringIO()

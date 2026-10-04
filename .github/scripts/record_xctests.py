@@ -114,6 +114,12 @@ def tap_timing(found: dict, out=sys.stdout) -> None:
           file=out)
     for at, fixture, element in taps[:5]:
         print(f"  fastest: +{at:.3f}s {fixture} ({element})", file=out)
+    # The slow tail by name too: the time runs from the fixture marker, so it
+    # includes the steps before the tap (waits, asserts) — a tail of 4-7 s in
+    # CI, against 1.1-1.8 s locally under load, is only readable with the
+    # fixtures that make it.
+    for at, fixture, element in sorted(taps[5:], reverse=True)[:5]:
+        print(f"  slowest: +{at:.3f}s {fixture} ({element})", file=out)
 
 
 def main(argv: list[str]) -> int:
