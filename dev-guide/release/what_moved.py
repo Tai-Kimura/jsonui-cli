@@ -90,9 +90,11 @@ SURFACES = [
     # results schema the SwiftJsonUI / KotlinJsonUI / web hosts implement,
     # and the coverage / report pages the gate prints. No face reads them.
     # Unclassified until 2026-09-26 (jsonui-cli 1.9.0), when the host
-    # contract's §4 data shape grew a section's header / footer data.
+    # contract's §4 data shape grew a section's header / footer data. The
+    # frames schema (2026-10-05) is the same kind of contract, for the
+    # drivers, written as JSON Schema.
     ("conformance documents — the hosts' contract and the gate's pages, maintainer side",
-     r"^conformance/[A-Za-z_]+\.md$"),
+     r"^conformance/([A-Za-z_]+\.md|[a-z_]+\.schema\.json)$"),
     # install.sh (the clone-and-install script at the root) is the installer's
     # other entry; unclassified until jsonui-cli 1.9.0 changed its Ruby floor.
     ("release procedure / installer — maintainer side only",

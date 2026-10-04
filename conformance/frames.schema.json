@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Tai-Kimura/jsonui-cli/conformance/frames.schema.json",
+  "title": "Conformance frames — where each declared id was drawn",
+  "description": "Written by a platform driver beside each visual fixture's screenshot, as artifacts/<platform>/<screenshot name>.frames.json, and named by results[].frames. `jui conformance gate --frame-parity` compares the frames of the same id across platforms. Contract and rationale: RESULTS_SCHEMA.md, section `frames`. The tolerance is not part of this file; the gate declares it in one place (frame_parity.py).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixture",
+    "platform",
+    "source",
+    "root",
+    "frames"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "fixture": {
+      "description": "manifest.fixtures[].id, e.g. common/alignTopView__static.",
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "enum": [
+        "ios",
+        "android",
+        "web"
+      ]
+    },
+    "source": {
+      "description": "What the driver read the frames from, so a disagreement can be traced to the instrument as well as to the renderer.",
+      "enum": [
+        "xcuielement-frame",
+        "a11y-node-bounds",
+        "get-bounding-client-rect",
+        "compose-layout-coordinates"
+      ]
+    },
+    "density": {
+      "description": "Device pixels per layout unit, the number the driver divided by to write layout units (Android: DisplayMetrics.density; iOS: the screen scale; web: devicePixelRatio). Recorded so a size mismatch can be traced to the conversion. Optional.",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "root": {
+      "description": "The box the frames are measured from, in the platform's layout units (iOS pt, Android dp, web CSS px) and in the coordinate space the driver read it in. Every frame in `frames` is relative to this box's origin, and the gate reads its width and height for the far-edge and centred readings. Per platform: web — the page (the viewport at scroll 0), because CSS margin collapsing lets the first child's top margin escape #root and every container above it (measured: alignTopView's #root and #app-root both start at y=120); Android — the element with id `root` (its Compose layout coordinates in the window); iOS — the host's canvas, read from two corner markers: on SwiftUI the element carrying the `root` id reports the box around its children (measured: alignTopView's root read 200 x 200 at y=182), and a matchParent root fills the canvas; a root not matchParent on both axes is not recorded (RESULTS_SCHEMA.md).",
+      "$ref": "#/$defs/frame"
+    },
+    "frames": {
+      "description": "Every element the driver found that carries an id: its frame relative to the origin of `root`, in layout units — the same numbers a layout JSON declares (a 50 x 50 view at topMargin 120 is {x:…, y:120, width:50, height:50}). Must contain the element with id `root`, normally at {x:0, y:0} (on web it can sit lower, where margin collapsing moved it). The gate reads the ids the fixture's layout declares from the layout file, so an id the driver did not find is absent here, never written as a zero frame.",
+      "type": "object",
+      "required": [
+        "root"
+      ],
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/frame"
+      }
+    },
+    "duplicates": {
+      "description": "Ids the driver found on more than one element. A duplicated id is not comparable (which element is it?) and is left out of `frames`; the gate counts it as not compared.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0
+        },
+        "clipped": {
+          "description": "true when the source reports only the visible part of an element (Android a11y bounds are cut at the screen edge) and this frame touches that edge, so the real frame may be larger. A clipped frame is not judged; the gate counts it. Omit when false.",
+          "const": true
+        }
+      }
+    }
+  }
+}

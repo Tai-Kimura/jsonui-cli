@@ -25,6 +25,11 @@ Checks, per selected platform:
 - with ``--cross-effect``: activeness agreement across the selected
   platforms (see :mod:`.cross_effect`) — unrecorded findings and stale
   ``cross_effect.json`` entries fail under env ``local``, notice elsewhere
+- with ``--frame-parity``: where each declared id was drawn, compared across
+  the selected platforms (see :mod:`.frame_parity`) — unrecorded
+  disagreements, stale ``frame_parity.json`` entries and a declared frames
+  host with no frames fail under every env (a frame is layout geometry, not a
+  renderer's pixels); what could not be compared is printed per reason
 
 Ratchets (``conformance/gate_ratchet.json``): ``missing_artifact`` counts
 baseline entries whose fixture produced no screenshot this run — the way a
@@ -54,6 +59,7 @@ from typing import Sequence
 from .baseline import DEFAULT_ENV
 from .visual_stability import screenshot_name
 from . import cross_effect as cross_effect_mod
+from . import frame_parity as frame_parity_mod
 from .report import ReportSummary, generate_report
 
 RATCHET_FILENAME = "gate_ratchet.json"
@@ -151,6 +157,7 @@ def evaluate(
     env: str = DEFAULT_ENV,
     parity: bool = False,
     cross_effect: bool = False,
+    frame_parity: bool = False,
     inert_complete: bool = False,
     codegen_effect: bool = False,
     ledger_keys: bool = True,
@@ -188,6 +195,13 @@ def evaluate(
             )
             outcome.problems.extend(problems)
             outcome.notices.extend(notices)
+
+    if frame_parity:
+        problems, notices = judge_frame_parity(
+            conformance_dir, platforms, results_dir=results_dir
+        )
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
 
     if inert_complete:
         if not visual:
@@ -386,6 +400,7 @@ def evaluate(
 FIXTURE_KEYED_LEDGERS = (
     ("control_diff.json", "fixture"),
     ("cross_effect.json", "fixture"),
+    ("frame_parity.json", "fixture"),
     ("inert_audit.json", "fixture"),
 )
 
@@ -400,6 +415,7 @@ UNREVIEWED_MARKER = "unreviewed-initial-measurement"
 #: whose verdict is still :data:`UNREVIEWED_MARKER` is measured but unjudged.
 ADJUDICATION_LEDGERS = (
     ("cross_effect.json", ("reason",)),
+    ("frame_parity.json", ("reason",)),
     ("inert_audit.json", ("reason",)),
     ("value_discrimination.json", ("owner", "reason")),
     ("codegen_effect.json", ("owner", "reason")),
@@ -1463,5 +1479,91 @@ def judge_cross_effect(
             f"cross-effect OK ({', '.join(selected)}): {judged} fixture(s) judged, "
             f"{verdict.accepted} accepted finding(s) on ledger, "
             f"{verdict.contract_verified} contract expectation(s) verified"
+        )
+    return problems, notices
+
+
+def judge_frame_parity(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    *,
+    results_dir: Path | None = None,
+    ledger: dict | None = None,
+    expected_hosts: frozenset[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Judge cross-platform frame parity. ``(problems, notices)``.
+
+    Fails in every env: a frame is the layout engine's geometry, which does
+    not move with the renderer's pixels the way activeness does.
+    """
+    from .report import load_platform_results, manifest_identity
+
+    problems: list[str] = []
+    notices: list[str] = []
+    conformance_dir = Path(conformance_dir)
+    selected = list(dict.fromkeys(platforms))
+    if len(selected) < 2:
+        problems.append(
+            "--frame-parity needs at least two selected platforms — frames on "
+            f"{selected or ['(none)']} alone compare nothing"
+        )
+        return problems, notices
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        problems.append(f"--frame-parity: manifest not found: {manifest_path}")
+        return problems, notices
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash, render_equivalent = manifest_identity(manifest_path, conformance_dir)
+    results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
+    results = {p: loaded[p].results for p in selected if p in loaded}
+
+    result = frame_parity_mod.measure(conformance_dir, manifest, results, selected)
+    if ledger is None:
+        ledger = frame_parity_mod.load_ledger(frame_parity_mod.ledger_path(conformance_dir))
+    verdict = frame_parity_mod.check(result, ledger)
+    hosts = frame_parity_mod.EXPECTED_FRAME_HOSTS if expected_hosts is None else expected_hosts
+
+    for p in selected:
+        wrote = result.frames_by_platform.get(p, 0)
+        missing = result.missing_by_platform.get(p, 0)
+        if p in hosts and missing:
+            problems.append(
+                f"frame parity: {p} is a declared frames host "
+                f"(frame_parity.EXPECTED_FRAME_HOSTS) and wrote no frames for {missing} "
+                f"visual fixture(s) — the driver stopped writing them, or the declaration is stale"
+            )
+        elif p not in hosts and wrote:
+            notices.append(
+                f"frame parity: {p} wrote frames for {wrote} fixture(s) but is not in "
+                "frame_parity.EXPECTED_FRAME_HOSTS — declare it so that losing them fails"
+            )
+
+    if verdict.unrecorded:
+        shown = "\n    ".join(d.table() for d in verdict.unrecorded[:10])
+        more = f"\n    … {len(verdict.unrecorded) - 10} more" if len(verdict.unrecorded) > 10 else ""
+        problems.append(
+            f"frame parity: {len(verdict.unrecorded)} id(s) drawn in different places "
+            f"(* = outlier) and not in {frame_parity_mod.LEDGER_NAME} — fix the platform, "
+            f"or record the platform idiom with a reason:\n    {shown}{more}"
+        )
+    if verdict.stale:
+        problems.append(
+            f"frame parity: {len(verdict.stale)} stale {frame_parity_mod.LEDGER_NAME} "
+            f"entr(y/ies) — the measurement no longer supports them: {'; '.join(verdict.stale[:8])}"
+        )
+    if verdict.unverified:
+        notices.append(
+            f"frame parity: {len(verdict.unverified)} {frame_parity_mod.LEDGER_NAME} "
+            f"entr(y/ies) not compared this run: {', '.join(verdict.unverified[:8])}"
+        )
+    notices.append(frame_parity_mod.summarize(result, verdict))
+    notices.extend(frame_parity_mod.not_compared_lines(result))
+    if result.fixtures_compared == 0:
+        # A requested judgment with nothing to judge fails: "OK" over an empty
+        # population is the silent pass this check exists to remove.
+        problems.append(
+            "frame parity: 0 fixtures compared — nothing was judged (see the "
+            "not-compared lines); a check that judged nothing is not a pass"
         )
     return problems, notices

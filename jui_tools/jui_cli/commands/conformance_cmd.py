@@ -228,6 +228,20 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
             "elsewhere). Needs ≥2 selected platforms and the visual checks."
         ),
     )
+    gate.add_argument(
+        "--frame-parity",
+        action="store_true",
+        dest="frame_parity",
+        help=(
+            "Also compare where each declared id was drawn across the selected "
+            "platforms, from the .frames.json each driver writes beside a visual "
+            "fixture's screenshot (conformance/frames.schema.json). A disagreement "
+            "fails unless frame_parity.json accepts it with a reason; stale entries "
+            "fail; a declared frames host with no frames fails; a run that compares "
+            "nothing fails. What could not be compared is printed per reason. Fails "
+            "in every env. Needs ≥2 selected platforms."
+        ),
+    )
 
     compat = sub.add_parser(
         "compat-doc",
@@ -1940,6 +1954,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             env=env,
             parity=bool(getattr(args, "parity", False)),
             cross_effect=bool(getattr(args, "cross_effect", False)),
+            frame_parity=bool(getattr(args, "frame_parity", False)),
             inert_complete=bool(getattr(args, "inert_complete", False)),
             codegen_effect=bool(getattr(args, "codegen_effect", False)),
             ledger_keys=bool(getattr(args, "ledger_keys", True)),
@@ -2004,5 +2019,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
         checks += f" / visual + ratchets OK (env {env})"
     if getattr(args, "cross_effect", False):
         checks += " / cross-effect OK"
+    if getattr(args, "frame_parity", False):
+        checks += " / frame parity OK"
     print(f"conformance gate: OK ({', '.join(selected)} — {checks})")
     return 0
