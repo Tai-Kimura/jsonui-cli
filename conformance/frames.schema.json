@@ -68,6 +68,15 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "fallbacks": {
+      "description": "Ids the driver could not read the intended way and read from a fallback instead (Android: no TestTagElement found, so the semantics node's position, which Material3 widens for some controls). The gate fails on any: the reader did not read what it declares in `source`.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     }
   },
   "$defs": {

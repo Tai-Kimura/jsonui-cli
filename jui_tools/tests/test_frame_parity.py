@@ -138,7 +138,8 @@ class SchemaAndReader(unittest.TestCase):
                          {"schemaVersion", "fixture", "platform", "source", "root", "frames"})
         self.assertEqual(set(self.schema["$defs"]["frame"]["required"]), {"x", "y", "width", "height"})
         good = {"schemaVersion": 1, "fixture": "a/b__c", "platform": "ios", "source": "xcuielement-frame",
-                "density": 3, "root": f(0, 0, 1, 1), "frames": {"root": f(0, 0, 1, 1)}, "duplicates": []}
+                "density": 3, "root": f(0, 0, 1, 1), "frames": {"root": f(0, 0, 1, 1)}, "duplicates": [],
+                "fallbacks": []}
         self.assertEqual(set(good), doc_keys)
         self.assertEqual(fp.validate(good), [])
         # Every key the schema names is accepted; one it does not is refused.
@@ -444,7 +445,7 @@ class NotCompared(unittest.TestCase):
         lines = fp.not_compared_lines(r)
         self.assertIn(f"not compared — {fp.ID_ABSENT}: 1: android: a/oneIdMissing__x #target", lines)
         self.assertIn(f"not compared — {fp.NO_FRAMES_FILE}: 2", lines)
-        self.assertEqual(len(lines), 9)  # every reason printed, zero or not
+        self.assertEqual(len(lines), 10)  # every reason printed, zero or not
 
     def test_a_reason_the_driver_gives_is_its_own_line(self):
         # iOS cannot read the canvas of a root that does not fill it; the host
@@ -468,6 +469,29 @@ class NotCompared(unittest.TestCase):
         self.assertEqual(r.named[fp.UNREADABLE], ["ios: a/both__x (frames and framesUnrecorded both set)"])
         # The other two platforms still compare the fixture.
         self.assertIn(("a/sized__x", "target"), r.agreed)
+
+    def test_a_fallback_is_named_not_compared_and_fails_the_gate(self):
+        # A Compose upgrade renaming TestTagElement sends the Android reader to
+        # the semantics node's position; the host lists those ids in
+        # `fallbacks`. The gate must not compare them and must go red.
+        with tempfile.TemporaryDirectory() as d:
+            t = align_tree(Path(d), "2.43.4")
+            doc_path = Path(d) / "artifacts/android/common_alignTopView__static.frames.json"
+            doc = json.loads(doc_path.read_text())
+            doc["fallbacks"] = ["target"]
+            doc_path.write_text(json.dumps(doc))
+            t.write()
+            r = fp.measure(Path(d), json.loads((Path(d) / "manifest.json").read_text()), t.results(), list(fp.PLATFORMS))
+            problems, _ = judge_frame_parity(Path(d), list(fp.PLATFORMS), expected_hosts=frozenset())
+        self.assertEqual(r.fallbacks, ["android: common/alignTopView__static #target"])
+        self.assertEqual(r.named[fp.FALLBACK], ["android: common/alignTopView__static #target"])
+        self.assertTrue(any("read by a driver fallback" in p for p in problems), problems)
+
+    def test_no_fallback_no_fallback_problem(self):
+        with tempfile.TemporaryDirectory() as d:
+            align_tree(Path(d), "2.43.4").write()
+            problems, _ = judge_frame_parity(Path(d), list(fp.PLATFORMS), expected_hosts=frozenset())
+        self.assertFalse(any("fallback" in p for p in problems), problems)
 
     def test_a_run_that_compares_nothing_fails(self):
         with tempfile.TemporaryDirectory() as d:

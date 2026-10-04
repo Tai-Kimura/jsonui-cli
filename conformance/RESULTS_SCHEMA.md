@@ -230,6 +230,12 @@ At each visual fixture's `screenshot` step, the driver writes
   did not record. A missing id is absent, never a zero frame.
 - **Duplicates are named, not guessed.** An id found on more than one element
   goes in `duplicates` and stays out of `frames`.
+- **A fallback is named, and fails.** A driver that could not read an id the
+  way its `source` says, and read it another way, lists the id in
+  `fallbacks` (Android: no TestTagElement found, so the semantics node's
+  position, which Material3 widens by 10 dp for Slider / Progress). The gate
+  does not compare a fallback frame and fails on any, so a Compose upgrade
+  that renames the internal class is red, not a quiet regression.
 - **Clipping is named.** A source that reports only the visible part of an
   element (Android a11y bounds stop at the screen edge) marks a frame that
   touches that edge `"clipped": true`. The gate does not judge a clipped frame

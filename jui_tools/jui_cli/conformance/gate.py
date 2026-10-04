@@ -1548,6 +1548,13 @@ def judge_frame_parity(
                 "frame_parity.EXPECTED_FRAME_HOSTS — declare it so that losing them fails"
             )
 
+    if result.fallbacks:
+        problems.append(
+            f"frame parity: {len(result.fallbacks)} id(s) read by a driver fallback, not the "
+            f"way the frames' `source` declares (Android: no TestTagElement found — a Compose "
+            f"upgrade renamed it, and the reader is back to semantics bounds): "
+            f"{'; '.join(result.fallbacks[:8])}{' …' if len(result.fallbacks) > 8 else ''}"
+        )
     if verdict.unrecorded:
         shown = "\n    ".join(d.table() for d in verdict.unrecorded[:10])
         more = f"\n    … {len(verdict.unrecorded) - 10} more" if len(verdict.unrecorded) > 10 else ""

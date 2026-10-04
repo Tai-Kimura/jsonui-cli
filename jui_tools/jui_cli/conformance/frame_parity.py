@@ -84,6 +84,7 @@ TOO_FEW_PLATFORMS = "fewer than two platforms have frames for this fixture"
 ID_ABSENT = "frames file present, declared id absent"
 DUPLICATE = "id found on more than one element"
 CLIPPED = "frame clipped at the screen edge"
+FALLBACK = "driver read the id by a fallback (frames[].fallbacks)"
 ROOT_ABSENT = "frames file has no usable root box (clipped, or no root element)"
 
 
@@ -120,7 +121,8 @@ def validate(doc) -> list[str]:
     if not isinstance(doc, dict):
         return ["not an object"]
     errors = []
-    allowed = {"schemaVersion", "fixture", "platform", "source", "density", "root", "frames", "duplicates"}
+    allowed = {"schemaVersion", "fixture", "platform", "source", "density", "root", "frames", "duplicates",
+               "fallbacks"}
     extra = set(doc) - allowed
     if extra:
         errors.append(f"unknown key(s) {sorted(extra)}")
@@ -152,6 +154,10 @@ def validate(doc) -> list[str]:
                 if not isinstance(name, str) or not name:
                     errors.append("frames: an empty id")
                 errors.extend(_frame_errors(frame, f"frames.{name}"))
+    if "fallbacks" in doc:
+        fb = doc["fallbacks"]
+        if not isinstance(fb, list) or not all(isinstance(d, str) and d for d in fb) or len(set(fb)) != len(fb):
+            errors.append("fallbacks: not a list of distinct ids")
     if "duplicates" in doc:
         dups = doc["duplicates"]
         if not isinstance(dups, list) or not all(isinstance(d, str) and d for d in dups):
@@ -355,6 +361,8 @@ class FrameParityResult:
     frames_by_platform: dict[str, int] = field(default_factory=dict)
     #: platform -> visual fixtures in scope that had no frames file
     missing_by_platform: dict[str, int] = field(default_factory=dict)
+    #: "<platform>: <fixture> #<id>" read by a driver fallback — the gate fails on any
+    fallbacks: list[str] = field(default_factory=list)
 
     def _name(self, reason: str, item: str) -> None:
         self.not_compared[reason] += 1
@@ -437,6 +445,10 @@ def measure(
         for element_id in ids:
             present: dict[str, dict] = {}
             for p, doc in docs.items():
+                if element_id in (doc.get("fallbacks") or []):
+                    out._name(FALLBACK, f"{p}: {fid} #{element_id}")
+                    out.fallbacks.append(f"{p}: {fid} #{element_id}")
+                    continue
                 if element_id in (doc.get("duplicates") or []):
                     out._name(DUPLICATE, f"{p}: {fid} #{element_id}")
                     continue
@@ -593,11 +605,11 @@ def not_compared_lines(result: FrameParityResult, limit: int = 8) -> list[str]:
     sees the whole population and a reason that disappears is visible."""
     lines = []
     for reason in (NO_DECLARED_IDS, NO_FRAMES_FILE, DRIVER_UNRECORDED, UNREADABLE, ROOT_ABSENT,
-                   TOO_FEW_PLATFORMS, ID_ABSENT, DUPLICATE, CLIPPED):
+                   TOO_FEW_PLATFORMS, ID_ABSENT, DUPLICATE, CLIPPED, FALLBACK):
         count = result.not_compared.get(reason, 0)
         line = f"not compared — {reason}: {count}"
         names = result.named.get(reason) or []
-        if names and reason in (ID_ABSENT, DUPLICATE, CLIPPED, UNREADABLE, DRIVER_UNRECORDED):
+        if names and reason in (ID_ABSENT, DUPLICATE, CLIPPED, UNREADABLE, DRIVER_UNRECORDED, FALLBACK):
             line += ": " + "; ".join(names[:limit]) + (" …" if len(names) > limit else "")
         lines.append(line)
     return lines
