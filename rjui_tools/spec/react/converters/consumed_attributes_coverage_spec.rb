@@ -167,7 +167,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       src
       url
     ],
-    'progress_converter.rb' => %w[barHeight height maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value],
+    'progress_converter.rb' => %w[barHeight height maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value width],
     'radio_converter.rb' => %w[
       checked
       enabled
@@ -212,9 +212,10 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       selectedTabIndex
       tintColor
       valueChange
+      width
     ],
     'select_box_converter.rb' => %w[background borderColor caretAttributes colorScheme datePickerMode datePickerStyle dateStringFormat enabled font fontColor fontSize hint hintColor items labelAttributes maximumDate minimumDate minuteInterval multiple onChange onValueChange onValueChanged placeholder placeholderColor prompt selectItemType selectedDate selectedIndex selectedItem selectedValue size textAlign value],
-    'slider_converter.rb' => %w[enabled maximum maximumTrackTintColor minimum minimumTrackTintColor onValueChange progressTintColor range step tintColor trackTintColor value],
+    'slider_converter.rb' => %w[enabled maximum maximumTrackTintColor minimum minimumTrackTintColor onValueChange progressTintColor range step tintColor trackTintColor value width],
     'switch_converter.rb' => %w[checked enabled isOn label offTintColor onTintColor onValueChange text thumbTintColor tint tintColor trackTintColor value],
     'tab_view_converter.rb' => %w[background enabled height onValueChange selectedIndex showLabels tabBarBackground tabs tintColor unselectedColor width],
     'text_field_converter.rb' => %w[
