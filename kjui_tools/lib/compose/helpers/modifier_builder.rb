@@ -1620,7 +1620,57 @@ module KjuiTools
           ]
         end
         
-        def self.build_relative_positioning(json_data)
+        # The padding a ConstraintLayout child draws AROUND its declared box
+        # when its margins are applied as padding — a child with no
+        # positioning constraint of its own (ConstraintLayoutComponent strips
+        # the margins of the others and consumes them in linkTo()): per edge,
+        # the dp terms build_margins adds on that edge. Its createRef() box
+        # includes them, so a sibling aligned to it must add the matching
+        # term to reach the box it DRAWS. Until jsonui-cli 1.9.15 it did not:
+        # an anchor with topMargin / leftMargin 120 had its ref at 0..170,
+        # and a sibling aligned to its top, left or centre landed at 0 / 85
+        # while iOS and web put it at 120 / 145 (ticket
+        # kjui-relative-align-view-measures-the-anchor-with-its-margin). The
+        # far edges were right by accident: the margin sits on the near side.
+        def self.margin_padding_terms(json_data)
+          terms = { top: [], bottom: [], start: [], end: [] }
+          return terms unless json_data.is_a?(Hash)
+
+          add = lambda do |edge, value|
+            next if value.nil? || (value.is_a?(Numeric) && value.zero?)
+
+            terms[edge] << BoundValue.dp(value)
+          end
+          margins = json_data['margins']
+          if margins.is_a?(Array) && margins.length == 4
+            add.call(:top, margins[0]); add.call(:end, margins[1])
+            add.call(:bottom, margins[2]); add.call(:start, margins[3])
+          elsif margins.is_a?(Array) && margins.length == 1
+            terms.each_key { |edge| add.call(edge, margins[0]) }
+          elsif !margins.nil? && !margins.is_a?(Array)
+            terms.each_key { |edge| add.call(edge, margins) }
+          end
+          { 'topMargin' => :top, 'bottomMargin' => :bottom, 'leftMargin' => :start, 'rightMargin' => :end,
+            'startMargin' => :start, 'endMargin' => :end }.each do |key, edge|
+            next unless json_data[key]
+            next if json_data[key].is_a?(Numeric) && json_data[key].zero?
+
+            terms[edge] << margin_value(json_data[key])
+          end
+          terms
+        end
+
+        # `, margin = <sum>` for a linkTo, or '' when nothing is added.
+        def self.link_margin(terms)
+          terms = terms.compact.reject(&:empty?)
+          return '' if terms.empty?
+
+          ", margin = #{terms.length == 1 ? terms.first : "(#{terms.join(' + ')})"}"
+        end
+
+        # anchor_paddings: id => margin_padding_terms of the siblings whose
+        # margins are drawn as padding (ConstraintLayoutComponent passes them).
+        def self.build_relative_positioning(json_data, anchor_paddings = {})
           # These attributes require ConstraintLayout
           # They generate constraint references instead of modifiers
           constraints = []
@@ -1637,67 +1687,60 @@ module KjuiTools
             bottom_margin = json_data['margins'][2].to_s + ".dp" unless json_data['bottomMargin']
             start_margin = json_data['margins'][3].to_s + ".dp" unless json_data['leftMargin']
           end
-          
-          # Relative to other views
-          if json_data['alignTopOfView']
-            margin = has_constraint_margin?(bottom_margin) ? ", margin = #{bottom_margin}" : ""
-            constraints << "bottom.linkTo(#{json_data['alignTopOfView']}.top#{margin})"
+
+          own = ->(m) { has_constraint_margin?(m) ? m : nil }
+          pulled = ->(m) { has_constraint_margin?(m) ? "(-#{m})" : nil }
+          pad = ->(anchor, edge) { (anchor_paddings[anchor] || {})[edge] || [] }
+
+          # Relative to other views: the child's own margin is the gap, and
+          # the anchor's margin on the facing edge is INSIDE its ref box, so
+          # it is subtracted — `bottom.linkTo(a.top, margin = m)` puts the
+          # bottom at a.top - m, and the drawn top is a.top + the margin.
+          neg = ->(terms) { terms.map { |t| "(-#{t})" } }
+          if (a = json_data['alignTopOfView'])
+            constraints << "bottom.linkTo(#{a}.top#{link_margin([own.(bottom_margin), *neg.(pad.(a, :top))])})"
           end
 
-          if json_data['alignBottomOfView']
-            margin = has_constraint_margin?(top_margin) ? ", margin = #{top_margin}" : ""
-            constraints << "top.linkTo(#{json_data['alignBottomOfView']}.bottom#{margin})"
+          if (a = json_data['alignBottomOfView'])
+            constraints << "top.linkTo(#{a}.bottom#{link_margin([own.(top_margin), *neg.(pad.(a, :bottom))])})"
           end
 
-          if json_data['alignLeftOfView']
-            margin = has_constraint_margin?(end_margin) ? ", margin = #{end_margin}" : ""
-            constraints << "end.linkTo(#{json_data['alignLeftOfView']}.start#{margin})"
+          if (a = json_data['alignLeftOfView'])
+            constraints << "end.linkTo(#{a}.start#{link_margin([own.(end_margin), *neg.(pad.(a, :start))])})"
           end
 
-          if json_data['alignRightOfView']
-            margin = has_constraint_margin?(start_margin) ? ", margin = #{start_margin}" : ""
-            constraints << "start.linkTo(#{json_data['alignRightOfView']}.end#{margin})"
+          if (a = json_data['alignRightOfView'])
+            constraints << "start.linkTo(#{a}.end#{link_margin([own.(start_margin), *neg.(pad.(a, :end))])})"
           end
 
-          # Align edges with other views
-          # For align operations, use negative margins to move in the expected direction
-          if json_data['alignTopView']
-            # alignTop with topMargin means move DOWN from the aligned position
-            # linkTo margin pushes away, so use negative to pull closer (move down)
-            margin = has_constraint_margin?(top_margin) ? ", margin = (-#{top_margin})" : ""
-            constraints << "top.linkTo(#{json_data['alignTopView']}.top#{margin})"
+          # Align edges with other views: the anchor's drawn edge (its margin
+          # inward), then the child's own margin pulls it the expected way —
+          # linkTo's margin pushes away, so the own term is negated.
+          if (a = json_data['alignTopView'])
+            constraints << "top.linkTo(#{a}.top#{link_margin([*pad.(a, :top), pulled.(top_margin)])})"
           end
 
-          if json_data['alignBottomView']
-            # alignBottom with bottomMargin means move UP from the aligned position
-            # linkTo margin pushes away, so use negative to pull closer (move up)
-            margin = has_constraint_margin?(bottom_margin) ? ", margin = (-#{bottom_margin})" : ""
-            constraints << "bottom.linkTo(#{json_data['alignBottomView']}.bottom#{margin})"
+          if (a = json_data['alignBottomView'])
+            constraints << "bottom.linkTo(#{a}.bottom#{link_margin([*pad.(a, :bottom), pulled.(bottom_margin)])})"
           end
 
-          if json_data['alignLeftView']
-            # alignLeft with leftMargin means move RIGHT from the aligned position
-            # linkTo margin pushes away, so use negative to pull closer (move right)
-            margin = has_constraint_margin?(start_margin) ? ", margin = (-#{start_margin})" : ""
-            constraints << "start.linkTo(#{json_data['alignLeftView']}.start#{margin})"
+          if (a = json_data['alignLeftView'])
+            constraints << "start.linkTo(#{a}.start#{link_margin([*pad.(a, :start), pulled.(start_margin)])})"
           end
 
-          if json_data['alignRightView']
-            # alignRight with rightMargin means move LEFT from the aligned position
-            # linkTo margin pushes away, so use negative to pull closer (move left)
-            margin = has_constraint_margin?(end_margin) ? ", margin = (-#{end_margin})" : ""
-            constraints << "end.linkTo(#{json_data['alignRightView']}.end#{margin})"
+          if (a = json_data['alignRightView'])
+            constraints << "end.linkTo(#{a}.end#{link_margin([*pad.(a, :end), pulled.(end_margin)])})"
           end
 
-          # Center with other views
-          if json_data['alignCenterVerticalView']
-            constraints << "top.linkTo(#{json_data['alignCenterVerticalView']}.top)"
-            constraints << "bottom.linkTo(#{json_data['alignCenterVerticalView']}.bottom)"
+          # Center with other views: between the anchor's drawn edges.
+          if (a = json_data['alignCenterVerticalView'])
+            constraints << "top.linkTo(#{a}.top#{link_margin(pad.(a, :top))})"
+            constraints << "bottom.linkTo(#{a}.bottom#{link_margin(pad.(a, :bottom))})"
           end
 
-          if json_data['alignCenterHorizontalView']
-            constraints << "start.linkTo(#{json_data['alignCenterHorizontalView']}.start)"
-            constraints << "end.linkTo(#{json_data['alignCenterHorizontalView']}.end)"
+          if (a = json_data['alignCenterHorizontalView'])
+            constraints << "start.linkTo(#{a}.start#{link_margin(pad.(a, :start))})"
+            constraints << "end.linkTo(#{a}.end#{link_margin(pad.(a, :end))})"
           end
 
           # Parent constraints

@@ -132,6 +132,15 @@ module KjuiTools
             end
           end
 
+          # The siblings whose margins are drawn as padding (not stripped):
+          # a sibling aligned to one adds its margin to reach the drawn box
+          # (ModifierBuilder.margin_padding_terms).
+          anchor_paddings = hash_children.each_with_index.each_with_object({}) do |(child, index), map|
+            next if has_positioning_constraints?(child)
+
+            map[child['id'] || "view_#{index}"] = Helpers::ModifierBuilder.margin_padding_terms(child)
+          end
+
           {
             code: code,
             children: prepared_children,
@@ -142,7 +151,7 @@ module KjuiTools
             # linkTo() must read the margins — resolve the ORIGINAL child by
             # index (order is preserved 1:1 with prepared_children).
             child_decorator: lambda do |_child, child_code, child_depth, index|
-              inject_constrain_as(hash_children[index], child_code, child_depth, index)
+              inject_constrain_as(hash_children[index], child_code, child_depth, index, anchor_paddings)
             end
           }
         end
@@ -155,9 +164,9 @@ module KjuiTools
           marginRight marginStart marginEnd
         ].freeze
 
-        def self.inject_constrain_as(child_data, component_code, depth, index)
+        def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {})
           ref_name = child_data['id'] || "view_#{index}"
-          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data)
+          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings)
           constraint_content = constraints.any? ? constraints.map { |c| indent(c, depth + 2) }.join("\n") : ""
           block = "modifier = Modifier.constrainAs(#{ref_name}) {"
           block += "\n#{constraint_content}" unless constraint_content.empty?
