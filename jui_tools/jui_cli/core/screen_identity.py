@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -42,11 +43,35 @@ NON_SCREEN_REFERENCE_LIST_KEYS: tuple[str, ...] = ("cellClasses",)
 #: Roles a layout may declare explicitly on its root node.
 VALID_ROLES: tuple[str, ...] = ("screen", "cell", "partial")
 
-#: Directories under the layout root that hold resources rather than layouts.
-#: Their contents are skipped entirely — a resource file is referenced by
-#: nobody, so without this it would default to a screen and grow a marker.
-#: Canon: screenId.nonLayoutSubtrees.
-NON_LAYOUT_SUBTREES: frozenset[str] = frozenset({"Resources", "Styles"})
+@lru_cache(maxsize=None)
+def non_layout_subtrees() -> frozenset[str]:
+    """Directories under the layout root that hold resources rather than
+    layouts. Their contents are skipped entirely — a resource file is
+    referenced by nobody, so without this it would default to a screen and
+    grow a marker.
+
+    Read from the canon (screenId.nonLayoutSubtrees), not written here: the
+    Ruby reader (shared/core/screen_index.rb) holds the only other spelling,
+    because the vendored platform tools ship without shared/core, and a test
+    holds it to the canon. Read on first use, not at import — a jui tree
+    without shared/core imports this module before the command can name
+    what is missing."""
+    return frozenset(load_canon()["screenId"]["nonLayoutSubtrees"])
+
+
+def is_layout_path(path: Path | str, layouts_dir: Path | str) -> bool:
+    """Is ``path`` (a .json at or under ``layouts_dir``) a layout?
+
+    Not when a directory between ``layouts_dir`` and the file is one of
+    non_layout_subtrees() — judged on the path RELATIVE to the layout root, so
+    a ``Resources`` directory above the root (in the project's own path) does
+    not hide every layout. The one rule every layout enumerator reads (ticket
+    layout-enumerators-count-resources-json-as-layouts)."""
+    try:
+        rel = Path(path).resolve().relative_to(Path(layouts_dir).resolve())
+    except ValueError:
+        rel = Path(path).relative_to(Path(layouts_dir))
+    return not non_layout_subtrees().intersection(rel.parts[:-1])
 
 MARKER_PREFIX = "__screen_"
 
@@ -210,9 +235,8 @@ class ScreenIndex:
 
 def _iter_layout_files(layouts_dir: Path) -> Iterable[Path]:
     for path in sorted(layouts_dir.rglob("*.json")):
-        if NON_LAYOUT_SUBTREES.intersection(path.relative_to(layouts_dir).parts[:-1]):
-            continue
-        yield path
+        if is_layout_path(path, layouts_dir):
+            yield path
 
 
 def _load(path: Path) -> Any:

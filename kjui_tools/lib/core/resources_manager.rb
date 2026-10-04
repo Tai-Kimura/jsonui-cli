@@ -7,6 +7,7 @@ require_relative 'project_finder'
 require_relative 'logger'
 require_relative 'resources/string_manager'
 require_relative 'resources/color_manager'
+require_relative 'screen_index'
 
 module KjuiTools
   module Core
@@ -39,8 +40,8 @@ module KjuiTools
         skipped_count = 0
 
         json_files.each do |json_file|
-          # Skip files in Resources directory only
-          if json_file.include?('/Resources/')
+          # Resources / Styles hold no layout (ScreenIndex.layout_path?)
+          unless JsonUIShared::ScreenIndex.layout_path?(@layouts_dir, json_file)
             skipped_count += 1
             next
           end

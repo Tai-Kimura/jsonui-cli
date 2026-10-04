@@ -8,6 +8,7 @@ require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/type_synonyms'
 require_relative 'style_loader'
+require_relative '../core/screen_index'
 
 module RjuiTools
   module React
@@ -81,6 +82,9 @@ module RjuiTools
 
         patterns.each do |pattern|
           Dir.glob(pattern).each do |file|
+            # Resources/strings.json is no layout named "strings"
+            next unless JsonUIShared::ScreenIndex.layout_path?(@layouts_dir, file)
+
             file_base = File.basename(file, '.json')
             if file_base.downcase == snake_name.downcase ||
                file_base.downcase == base_name.downcase

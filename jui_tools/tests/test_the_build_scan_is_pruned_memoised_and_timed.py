@@ -53,6 +53,7 @@ import jui_cli.commands.build_cmd as build_cmd  # noqa: E402
 from jui_cli.commands import lint_generated_cmd as lg  # noqa: E402
 from jui_cli.core import generation_manifest as gm  # noqa: E402
 from jui_cli.core.config_manager import ConfigManager  # noqa: E402
+from jui_cli.core.screen_identity import is_layout_path  # noqa: E402
 
 #: The build's own warning-count expression (see the lint-strings comment in
 #: `build_cmd.cmd_build`). Progress lines must never match it.
@@ -126,7 +127,11 @@ def _reference_generated_dirs(cm, excluded) -> set:
 
 
 def _reference_collect_targets(cm) -> list:
-    """`_collect_targets` as 1.8.110 shipped it (step 2 rglob'd, then filtered)."""
+    """`_collect_targets` as 1.8.110 shipped it (step 2 rglob'd, then filtered).
+
+    Its Resources/Styles test is the shared one (is_layout_path), not the
+    `_is_resource_or_style` it had then — that one read the absolute path, so
+    a project under a directory named Resources lost every layout."""
     config = cm.load()
     lint_cfg = config.get("lint", {}) if isinstance(config, dict) else {}
     extra = lint_cfg.get("exclude_dir_names", []) if isinstance(lint_cfg, dict) else []
@@ -134,7 +139,7 @@ def _reference_collect_targets(cm) -> list:
     targets = []
     for platform_layouts in sorted(lg._layout_distribution_dirs(cm)):
         for jf in platform_layouts.rglob("*.json"):
-            if lg._is_resource_or_style(jf) or lg._is_excluded(jf, excluded_names):
+            if not is_layout_path(jf, platform_layouts) or lg._is_excluded(jf, excluded_names):
                 continue
             targets.append(("json", jf))
     for root in lg._platform_roots(cm):

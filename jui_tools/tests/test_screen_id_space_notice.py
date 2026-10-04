@@ -48,6 +48,9 @@ class ScreenIdSpaceNoticeTests(unittest.TestCase):
         (self.repo / "other" / "config.json").write_text("{}\n", encoding="utf-8")
         (self.layouts / "home.json").write_text(_layout(), encoding="utf-8")
         (self.layouts / "detail.json").write_text(_layout(), encoding="utf-8")
+        # A tracked resource file under the layout root, as a consumer keeps one.
+        (self.layouts / "Resources").mkdir()
+        (self.layouts / "Resources" / "defined_colors.json").write_text('{"dark_surface": null}\n', encoding="utf-8")
         _git(self.repo, "init", "-q", ".")
         _git(self.repo, "config", "user.email", "t@example.invalid")
         _git(self.repo, "config", "user.name", "t")
@@ -87,6 +90,27 @@ class ScreenIdSpaceNoticeTests(unittest.TestCase):
         doc["child"] = [{"type": "Label", "text": "x"}]
         (self.layouts / "detail.json").write_text(json.dumps(doc), encoding="utf-8")
         self.assertEqual(self.changes(), [])
+
+    # ticket layout-enumerators-count-resources-json-as-layouts: a file under
+    # Resources / Styles is no screen, so adding or deleting one moved no id
+    # (a consumer deleting Resources/defined_colors.json was told
+    # "defined_colors (deleted)").
+    def test_deleting_a_resource_file_is_not_a_move(self):
+        (self.layouts / "Resources" / "defined_colors.json").unlink()
+        self.assertEqual(self.changes(), [])
+
+    def test_adding_a_resource_or_style_file_is_not_a_move(self):
+        (self.layouts / "Resources" / "x.json").write_text("{}\n", encoding="utf-8")
+        (self.layouts / "sheets" / "Styles").mkdir(parents=True)
+        (self.layouts / "sheets" / "Styles" / "card.json").write_text("{}\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")  # staged, so porcelain names each file
+        self.assertEqual(self.changes(), [])
+
+    def test_a_layout_beside_the_resources_is_still_a_move(self):
+        (self.layouts / "Resources" / "x.json").write_text("{}\n", encoding="utf-8")
+        (self.layouts / "profile.json").write_text(_layout(), encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        self.assertEqual(self.changes(), ["profile (added)"])
 
     def test_a_change_outside_the_layout_root_is_not_a_move(self):
         (self.repo / "other" / "config.json").write_text('{"a":1}\n', encoding="utf-8")

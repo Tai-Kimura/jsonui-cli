@@ -524,6 +524,20 @@ class CollectFindingsTest(unittest.TestCase):
         self.assertEqual(report.findings, [])
         self.assertEqual(report.scanned_layouts, 1)
 
+    # The rule is a directory at any depth below the root, as the screen index
+    # reads it (screen_identity.is_layout_path); lint-strings skipped a
+    # top-level Resources only (ticket layout-enumerators-count-resources-
+    # json-as-layouts).
+    def test_a_nested_styles_tree_is_not_scanned_and_a_layout_beside_it_is(self):
+        self.fx.write_layout("home.json", {"type": "Label", "text": "login_title"})
+        nested = self.fx.root / "docs/screens/layouts/sheets/Styles"
+        nested.mkdir(parents=True)
+        (nested / "card.json").write_text(json.dumps({"type": "Label", "text": "Raw"}), encoding="utf-8")
+        report = self.fx.collect()
+        self.assertEqual(report.scanned_layouts, 1)
+        self.fx.write_layout("sheets/detail.json", {"type": "Label", "text": "login_title"})
+        self.assertEqual(self.fx.collect().scanned_layouts, 2)
+
     def test_allowlisted_literal_with_reason_is_clean(self):
         self.fx.write_layout("home.json", {"type": "Label", "text": "ACMECORP"})
         self.fx.write_allowlist(
