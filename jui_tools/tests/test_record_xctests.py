@@ -107,6 +107,45 @@ class RecordXCTestsTest(unittest.TestCase):
         R.tap_timing(R.read_log(GREEN_RUN), out=printed)
         self.assertIn("no TAP_TIMING lines", printed.getvalue())
 
+    # The distribution and the fastest / slowest five are made of each
+    # fixture's FIRST tap; a multi-step fixture's later taps (Embed: push, then
+    # two pops) are listed apart. These are the shapes of the local run that
+    # replaced v1.9.15's unavailable log (9 lines).
+    def test_first_taps_make_the_distribution_and_later_taps_are_listed_apart(self):
+        rows = [("Embed/pop_boundary", "push-button", 1.043, 1.043, 1),
+                ("Embed/pop_boundary", "pop-button", 3.975, 2.893, 2),
+                ("Embed/pop_boundary", "pop-button", 6.879, 2.860, 3)]
+        rows += [(f"common/f{i}", "target", 1.08 + i / 100, 1.08 + i / 100, 1) for i in range(6)]
+        lines = "".join(f"TAP_TIMING {f} {i} +{at:.3f}s prev=+{prev:.3f}s n={n} exists=true hittable=true frame=(0,0,1,1)\n"
+                        for f, i, at, prev, n in rows)
+        printed = io.StringIO()
+        R.tap_timing(R.read_log(GREEN_RUN + lines), out=printed)
+        text = printed.getvalue()
+        self.assertIn("[tap timing] 7 first tap(s) of their fixture after the fixture marker: min 1.043s", text)
+        self.assertIn("max 1.130s", text)
+        self.assertIn("driver's waitFor reaching its first check", text)
+        dist = [l for l in text.splitlines() if "fastest:" in l or "slowest:" in l]
+        self.assertFalse(any("pop-button" in l for l in dist), text)
+        self.assertIn("[tap timing] 2 later tap(s) of multi-step fixtures (n>=2), apart:", text)
+        self.assertIn("later: Embed/pop_boundary (pop-button, tap 2): prev +2.893s, +3.975s from the marker", text)
+        self.assertIn("later: Embed/pop_boundary (pop-button, tap 3): prev +2.860s, +6.879s from the marker", text)
+        self.assertNotIn("no n= / prev=", text)
+
+    def test_the_raw_lines_are_kept_beside_the_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "xcodebuild.log"
+            log.write_text(GREEN_RUN + "TAP_TIMING Switch/a target +1.100s prev=+1.100s n=1 x\n")
+            self.assertEqual(R.main([str(log), str(Path(tmp) / "rec" / "xctests.txt")]), 0)
+            self.assertEqual((Path(tmp) / "rec" / "tap_timing.txt").read_text(),
+                             "TAP_TIMING Switch/a target +1.100s prev=+1.100s n=1 x\n")
+
+    def test_old_lines_without_prev_fall_back_to_the_marker_and_say_so(self):
+        lines = "TAP_TIMING Switch/a target +7.000s exists=true hittable=true frame=(0,0,1,1)\n"
+        printed = io.StringIO()
+        R.tap_timing(R.read_log(GREEN_RUN + lines), out=printed)
+        self.assertIn("1 tap(s) after the fixture marker: min 7.000s", printed.getvalue())
+        self.assertIn("no n= / prev= on these lines", printed.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

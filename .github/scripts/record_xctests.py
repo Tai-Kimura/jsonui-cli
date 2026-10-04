@@ -42,7 +42,11 @@ EXECUTED = re.compile(r"^\s*Executed (\d+) tests?, ")
 VERDICTS = ("passed", "failed", "skipped")
 # One line per tap, printed by SwiftJsonUI's ConformanceHost (c016de9+):
 #   TAP_TIMING <fixture id> <element id> +<seconds>s <exists/hittable/frame>
-TAP_TIMING = re.compile(r"^TAP_TIMING (?P<fixture>\S+) (?P<id>\S+) \+(?P<at>[0-9.]+)s")
+TAP_TIMING = re.compile(r"^TAP_TIMING (?P<fixture>\S+) (?P<id>\S+) \+(?P<at>[0-9.]+)s"
+                        r"(?: prev=\+(?P<prev>[0-9.]+)s n=(?P<n>\d+))?")
+# SwiftJsonUI 8931208 added `prev=+<s>s n=<k>`: seconds since the last
+# action that could change the screen (the marker for a fixture's first tap)
+# and which tap of the fixture it is. A line without them is an older host's.
 
 
 def read_log(text: str) -> dict:
@@ -69,7 +73,13 @@ def read_log(text: str) -> dict:
     for raw in text.splitlines():
         m = TAP_TIMING.match(raw.strip())
         if m:
-            taps.append((float(m.group("at")), m.group("fixture"), m.group("id")))
+            taps.append({
+                "at": float(m.group("at")),
+                "prev": float(m.group("prev")) if m.group("prev") else None,
+                "n": int(m.group("n")) if m.group("n") else None,
+                "fixture": m.group("fixture"),
+                "id": m.group("id"),
+            })
     return {"cases": cases, "executed": executed, "taps": taps}
 
 
@@ -95,31 +105,57 @@ def summarize(found: dict, out=sys.stdout) -> None:
 
 
 def tap_timing(found: dict, out=sys.stdout) -> None:
-    """How soon after each fixture was shown its taps landed — a distribution
-    to look at, not a wait (ticket
-    ios-dynamic-interactive-fixture-tap-not-delivered-intermittently). A host
-    older than the line prints nothing here and says so."""
-    taps = sorted(found.get("taps", []))
+    """How soon each tap landed — a distribution to look at, not a wait
+    (ticket ios-dynamic-interactive-fixture-tap-not-delivered-intermittently).
+
+    The distribution and the fastest / slowest five are made of each
+    fixture's FIRST tap (n=1): every first tap follows the same steps
+    (waitFor root -> asserts -> tap), so their times compare. A fixture's later
+    taps (n>=2) follow its own earlier steps — Embed's pops come after a push,
+    a navigation and a second waitFor, which made v1.9.13's and v1.9.15's
+    4-7 s tails — so they are listed apart with n, prev= (seconds since the
+    last screen-changing action) and the time from the marker. Lines from a
+    host before prev= / n= carry only the marker time; then every tap is in
+    the distribution, ordered by it, and the summary says so."""
+    taps = found.get("taps", [])
     if not taps:
         print("[tap timing] no TAP_TIMING lines — a host before SwiftJsonUI c016de9, or no tap ran",
               file=out)
         return
-    seconds = [t[0] for t in taps]
+    has_n = all(t["n"] is not None for t in taps)
+    first = [t for t in taps if t["n"] == 1] if has_n else list(taps)
+    later = sorted((t for t in taps if has_n and t["n"] > 1),
+                   key=lambda t: (t["fixture"], t["n"]))
+    first.sort(key=lambda t: (t["at"], t["fixture"], t["id"]))
+    seconds = [t["at"] for t in first]
 
     def pct(p: float) -> float:
         return seconds[min(len(seconds) - 1, int(p * (len(seconds) - 1) + 0.5))]
 
-    print(f"[tap timing] {len(taps)} tap(s) after the fixture marker: min {seconds[0]:.3f}s, "
-          f"p10 {pct(0.10):.3f}s, median {pct(0.50):.3f}s, p90 {pct(0.90):.3f}s, max {seconds[-1]:.3f}s",
+    which = "first tap(s) of their fixture" if has_n else "tap(s)"
+    if seconds:
+        print(f"[tap timing] {len(first)} {which} after the fixture marker: min {seconds[0]:.3f}s, "
+              f"p10 {pct(0.10):.3f}s, median {pct(0.50):.3f}s, p90 {pct(0.90):.3f}s, "
+              f"max {seconds[-1]:.3f}s", file=out)
+    print("  (most of a first tap's ~1.0 s is the driver's waitFor reaching its first check, "
+          "not the tap: an element already there is still found ~1.04 s after the wait starts)",
           file=out)
-    for at, fixture, element in taps[:5]:
-        print(f"  fastest: +{at:.3f}s {fixture} ({element})", file=out)
-    # The slow tail by name too: the time runs from the fixture marker, so it
-    # includes the steps before the tap (waits, asserts) — a tail of 4-7 s in
-    # CI, against 1.1-1.8 s locally under load, is only readable with the
-    # fixtures that make it.
-    for at, fixture, element in sorted(taps[5:], reverse=True)[:5]:
-        print(f"  slowest: +{at:.3f}s {fixture} ({element})", file=out)
+    if not has_n:
+        print("  (no n= / prev= on these lines — a host before SwiftJsonUI 8931208; "
+              "a multi-step fixture's later taps are in this distribution and look slow)", file=out)
+
+    def name(t: dict) -> str:
+        return f"+{t['at']:.3f}s {t['fixture']} ({t['id']})"
+
+    for t in first[:5]:
+        print(f"  fastest: {name(t)}", file=out)
+    for t in sorted(first[5:], key=lambda t: (t["at"], t["fixture"], t["id"]), reverse=True)[:5]:
+        print(f"  slowest: {name(t)}", file=out)
+    if later:
+        print(f"[tap timing] {len(later)} later tap(s) of multi-step fixtures (n>=2), apart:", file=out)
+        for t in later:
+            print(f"  later: {t['fixture']} ({t['id']}, tap {t['n']}): prev +{t['prev']:.3f}s, "
+                  f"+{t['at']:.3f}s from the marker", file=out)
 
 
 def main(argv: list[str]) -> int:
@@ -134,6 +170,12 @@ def main(argv: list[str]) -> int:
     found = read_log(log.read_text(errors="replace"))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("".join(line + "\n" for _, line in found["cases"].values()))
+    # The TAP_TIMING lines as printed, beside the record: a future way of
+    # reading them can be re-run on this run (they lived only in
+    # xcodebuild.log, which no step uploads).
+    raw = [line.strip() for line in log.read_text(errors="replace").splitlines()
+           if line.strip().startswith("TAP_TIMING ")]
+    (out_path.parent / "tap_timing.txt").write_text("".join(line + "\n" for line in raw))
     summarize(found)
     tap_timing(found)
     return 0
