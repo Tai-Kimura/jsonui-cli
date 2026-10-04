@@ -114,6 +114,10 @@
   `Test Case` と `file:line: error:` を印字し（`.github/scripts/name_failed_xctests.py`、注釈にも出る）、
   xcodebuild.log と xcresult を artifact `failure-log-ios` / `failure-log-ios-codegen` に上げる（14 日）。
   run_conformance.sh は `tail -40` しか印字しないので、jsonui-cli 1.9.9 より前は失敗名がログに残らなかった
+- ios / ios-codegen は緑でも赤でも `Record every XCTest result` が全テストの結果行（passed / failed / skipped）を
+  クラスごとに 1 行で数えて印字し（`.github/scripts/record_xctests.py`、`Executed N tests` と突き合わせる）、
+  行そのものを artifact `xctests-ios` / `xctests-ios-codegen` に上げる（7 日）。staging は suite step の env で
+  `/tmp/jsonui-conformance-ios[-codegen].ci` に固定（run_conformance.sh 自前の staging は緑の run で消えるため）
 - android-library-tests（105m。初回の実測は step 17.5 分 / 262 case、悪いランナーの 6 倍を見込む）: KotlinJsonUI の
   `library` / `library-dynamic` の androidTest（connectedDebugAndroidTest）を **API 35** / pixel_tablet で走らせる
   （conformance の 34 ではない。API 34 の CI emulator では IME が出ず、前面 window の読み上げも空になることがあり、
