@@ -375,7 +375,30 @@ class NotCompared(unittest.TestCase):
         lines = fp.not_compared_lines(r)
         self.assertIn(f"not compared — {fp.ID_ABSENT}: 1: android: a/oneIdMissing__x #target", lines)
         self.assertIn(f"not compared — {fp.NO_FRAMES_FILE}: 2", lines)
-        self.assertEqual(len(lines), 8)  # every reason printed, zero or not
+        self.assertEqual(len(lines), 9)  # every reason printed, zero or not
+
+    def test_a_reason_the_driver_gives_is_its_own_line(self):
+        # iOS cannot read the canvas of a root that does not fill it; the host
+        # says so in the results entry instead of writing a guess.
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            fid = "a/sized__x"
+            t.fixture(fid, align_layout("alignTopView"))
+            t.frames("web", fid, {"anchor": ANCHOR, "target": ALIGN["alignTopView"][0]})
+            t.frames("android", fid, {"anchor": ANCHOR, "target": ALIGN["alignTopView"][0]})
+            t.entries["ios"].append({"id": fid, "status": "pass", "framesUnrecorded": "root-not-fill"})
+            t.fixture("a/both__x", align_layout("alignTopView"))
+            t.frames("ios", "a/both__x", {"anchor": ANCHOR, "target": ALIGN["alignTopView"][0]})
+            t.entries["ios"][-1]["framesUnrecorded"] = "root-not-fill"
+            for p in ("web", "android"):
+                t.frames(p, "a/both__x", {"anchor": ANCHOR, "target": ALIGN["alignTopView"][0]})
+            manifest = t.write()
+            r = fp.measure(Path(d), manifest, t.results(), list(fp.PLATFORMS))
+        self.assertEqual(r.named[fp.DRIVER_UNRECORDED], ["ios: a/sized__x (root-not-fill)"])
+        self.assertEqual(r.not_compared[fp.NO_FRAMES_FILE], 0)
+        self.assertEqual(r.named[fp.UNREADABLE], ["ios: a/both__x (frames and framesUnrecorded both set)"])
+        # The other two platforms still compare the fixture.
+        self.assertIn(("a/sized__x", "target"), r.agreed)
 
     def test_a_run_that_compares_nothing_fails(self):
         with tempfile.TemporaryDirectory() as d:

@@ -72,6 +72,7 @@ EXPECTED_FRAME_HOSTS: frozenset[str] = frozenset({
 # not-compared reasons, each counted on its own line
 NO_DECLARED_IDS = "fixture declares no id besides root"
 NO_FRAMES_FILE = "platform wrote no frames file for this fixture"
+DRIVER_UNRECORDED = "driver could not record frames (results[].framesUnrecorded)"
 UNREADABLE = "frames file unreadable or not the schema"
 TOO_FEW_PLATFORMS = "fewer than two platforms have frames for this fixture"
 ID_ABSENT = "frames file present, declared id absent"
@@ -350,6 +351,15 @@ def measure(
         for p in scope:
             entry = results.get(p, {}).get(fid)
             path = _frames_path(conformance_dir, entry) if entry else None
+            unrecorded = entry.get("framesUnrecorded") if isinstance(entry, dict) else None
+            if path is not None and unrecorded:
+                # Both a file and a reason it could not be written: the entry
+                # contradicts itself, which is unreadable, not a choice.
+                out._name(UNREADABLE, f"{p}: {fid} (frames and framesUnrecorded both set)")
+                continue
+            if path is None and isinstance(unrecorded, str) and unrecorded:
+                out._name(DRIVER_UNRECORDED, f"{p}: {fid} ({unrecorded})")
+                continue
             if path is None or not path.is_file():
                 out.missing_by_platform[p] = out.missing_by_platform.get(p, 0) + 1
                 out._name(NO_FRAMES_FILE, f"{p}: {fid}")
@@ -504,12 +514,12 @@ def not_compared_lines(result: FrameParityResult, limit: int = 8) -> list[str]:
     involved — the names. Every reason is printed even at zero, so a reader
     sees the whole population and a reason that disappears is visible."""
     lines = []
-    for reason in (NO_DECLARED_IDS, NO_FRAMES_FILE, UNREADABLE, ROOT_ABSENT, TOO_FEW_PLATFORMS,
-                   ID_ABSENT, DUPLICATE, CLIPPED):
+    for reason in (NO_DECLARED_IDS, NO_FRAMES_FILE, DRIVER_UNRECORDED, UNREADABLE, ROOT_ABSENT,
+                   TOO_FEW_PLATFORMS, ID_ABSENT, DUPLICATE, CLIPPED):
         count = result.not_compared.get(reason, 0)
         line = f"not compared — {reason}: {count}"
         names = result.named.get(reason) or []
-        if names and reason in (ID_ABSENT, DUPLICATE, CLIPPED, UNREADABLE):
+        if names and reason in (ID_ABSENT, DUPLICATE, CLIPPED, UNREADABLE, DRIVER_UNRECORDED):
             line += ": " + "; ".join(names[:limit]) + (" …" if len(names) > limit else "")
         lines.append(line)
     return lines

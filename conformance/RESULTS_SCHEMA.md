@@ -93,6 +93,7 @@ One file per platform, written atomically after a full suite run:
 | `results[].detail` | on non-pass | human-readable failure/skip reason (single line) |
 | `results[].screenshot` | optional | artifact path relative to `conformance/` (visual fixtures should always set it) |
 | `results[].frames` | per declaration | artifact path of the fixture's `.frames.json`, relative to `conformance/` — see `frames` below. Set beside every `screenshot` by the platforms in `frame_parity.EXPECTED_FRAME_HOSTS` |
+| `results[].framesUnrecorded` | when the driver could not write frames | why, in place of `frames` (never both): `root-not-fill` (iOS: the root does not fill the canvas, so its origin cannot be read), `canvas-marker-missing`, or `error: <short text>`. The gate counts it on its own not-compared line, named per platform and fixture |
 | `webMarkers` | per declaration | run-level census of the Web load-marker wait — see below. Required of the platforms named in `gate.EXPECTED_WEB_MARKER_HOSTS`, optional for the rest |
 
 ### `webMarkers` — asserting that a Web capture waited for the page to paint
