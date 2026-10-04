@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Tai-Kimura/jsonui-cli/conformance/frames.schema.json",
+  "title": "Conformance frames — where each declared id was drawn",
+  "description": "Written by a platform driver beside each visual fixture's screenshot, as artifacts/<platform>/<screenshot name>.frames.json, and named by results[].frames. `jui conformance gate --frame-parity` compares the frames of the same id across platforms. Contract and rationale: RESULTS_SCHEMA.md, section `frames`. The tolerance is not part of this file; the gate declares it in one place (frame_parity.py).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "fixture", "platform", "source", "root", "frames"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "fixture": {
+      "description": "manifest.fixtures[].id, e.g. common/alignTopView__static.",
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "enum": ["ios", "android", "web"]
+    },
+    "source": {
+      "description": "What the driver read the frames from, so a disagreement can be traced to the instrument as well as to the renderer.",
+      "enum": ["xcuielement-frame", "a11y-node-bounds", "get-bounding-client-rect"]
+    },
+    "root": {
+      "description": "The frame of the element with id `root`, in the platform's layout units (iOS pt, Android dp, web CSS px) and in the coordinate space the driver read it in. Informational: the gate compares `frames`, which are relative to this origin.",
+      "$ref": "#/$defs/frame"
+    },
+    "frames": {
+      "description": "Every element the driver found that carries an id: its frame relative to the root's origin, in layout units — the same numbers a layout JSON declares (a 50 x 50 view at topMargin 120 is {x:…, y:120, width:50, height:50}). Must contain `root` itself, at {x:0, y:0}. The gate reads the ids the fixture's layout declares from the layout file, so an id the driver did not find is absent here, never written as a zero frame.",
+      "type": "object",
+      "required": ["root"],
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/frame" }
+    },
+    "duplicates": {
+      "description": "Ids the driver found on more than one element. A duplicated id is not comparable (which element is it?) and is left out of `frames`; the gate counts it as not compared.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "minimum": 0 },
+        "height": { "type": "number", "minimum": 0 },
+        "clipped": {
+          "description": "true when the source reports only the visible part of an element (Android a11y bounds are cut at the screen edge) and this frame touches that edge, so the real frame may be larger. A clipped frame is not judged; the gate counts it. Omit when false.",
+          "const": true
+        }
+      }
+    }
+  }
+}
