@@ -73,8 +73,8 @@ module RjuiTools
             # `spacing` = control-to-label gap, same reading as kjui's checkbox.
             # A bound value used to be interpolated into the arbitrary value
             # and produced `gap-[@{v}px]`, a class that matches nothing;
-            # `bound_length_style` sends it to the inline `gap` instead.
-            spacing = bound_spacing_style('gap', attributes['spacing'])
+            # `bound_rem_style` sends it to the inline `gap` instead.
+            spacing = bound_rem_style('gap', attributes['spacing'])
             classes << 'flex items-center'
             classes << (spacing ? "gap-#{TailwindMapper.spacing_value(spacing)}" : 'gap-2')
           end

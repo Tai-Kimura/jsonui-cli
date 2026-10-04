@@ -136,7 +136,7 @@ module RjuiTools
             css = color.to_s.start_with?('#') ? color : "var(--color-#{color})"
             parts << "color: '#{css}'"
           end
-          parts << "fontSize: '#{attrs['fontSize']}px'" if attrs['fontSize']
+          parts << "fontSize: '#{TailwindMapper.rem(attrs['fontSize'])}'" if attrs['fontSize']
           parts << "fontFamily: #{JsonUIShared::StringLiterals.ts_single(attrs['font'])}" if attrs['font']
           { text: hint, parts: parts }
         end
@@ -464,7 +464,7 @@ module RjuiTools
             end
 
           elsif attributes['lineHeight']
-            @dynamic_styles['lineHeight'] = "'#{attributes['lineHeight']}px'"
+            @dynamic_styles['lineHeight'] = "'#{TailwindMapper.rem(attributes['lineHeight'])}'"
           end
 
           # A highlight lineHeightMultiple. Line height is a unitless multiplier
@@ -617,7 +617,7 @@ module RjuiTools
         # solve, so the inline style is safe here and only here.
         def build_partial_style(partial)
           styles = []
-          styles << "fontSize: '#{partial['fontSize']}px'" if partial['fontSize']
+          styles << "fontSize: '#{TailwindMapper.rem(partial['fontSize'])}'" if partial['fontSize']
           styles << "fontWeight: '#{partial['fontWeight']}'" if partial['fontWeight']
           styles << "color: #{color_style_expr(partial['fontColor'])}" if has_binding?(partial['fontColor'])
           styles.join(', ')
@@ -666,7 +666,7 @@ module RjuiTools
             # lineOffset is declared on underline only, and strikethrough must
             # not invent one.
             offset = spec['lineOffset']
-            classes << "underline-offset-[#{offset}px]" if attr == 'underline' && offset.is_a?(Numeric)
+            classes << "underline-offset-[#{TailwindMapper.rem(offset)}]" if attr == 'underline' && offset.is_a?(Numeric)
           end
 
           # `underline` and `line-through` are two utilities writing ONE CSS

@@ -2179,8 +2179,15 @@ module RjuiTools
             )#{cleanup_ret} {
               if (!el) return () => {};
 
-              const declared = options.fontSize ?? parseFloat(getComputedStyle(el).fontSize) ?? 0;
+              // Sizes are in the layout's units (px at a 16px root) and are
+              // written as rem, N / 16, as the static text-[Nrem] classes
+              // are: a px write would pin the text against the browser's font
+              // size. A computed size is in real px, so it comes back through
+              // the root's size.
+              const root = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+              const declared = options.fontSize ?? (parseFloat(getComputedStyle(el).fontSize) * 16 / root);
               if (!declared) return () => {};
+              const size = (v#{is_ts ? ': number' : ''}) => (v / 16) + 'rem';
               // 0.5 when autoShrink is declared without a floor — the same
               // fallback sjui's SwiftUI label converter uses, so the three
               // platforms shrink to the same place. A factor at or above 1 is
@@ -2189,7 +2196,7 @@ module RjuiTools
               const floor = Math.max(1, declared * Math.min(factor, 1));
 
               const fit = () => {
-                el.style.fontSize = declared + 'px';
+                el.style.fontSize = size(declared);
                 if (floor >= declared || !overflows(el)) return;
                 // Bisect rather than step: a 4px search space converges in
                 // ~5 reflows instead of one per pixel.
@@ -2197,10 +2204,10 @@ module RjuiTools
                 let hi = declared;
                 for (let i = 0; i < 8 && hi - lo > 0.5; i++) {
                   const mid = (lo + hi) / 2;
-                  el.style.fontSize = mid + 'px';
+                  el.style.fontSize = size(mid);
                   if (overflows(el)) { hi = mid; } else { lo = mid; }
                 }
-                el.style.fontSize = lo + 'px';
+                el.style.fontSize = size(lo);
               };
 
               fit();

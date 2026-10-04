@@ -139,7 +139,7 @@ module RjuiTools
         end
 
         def map_font_size(size)
-          FONT_SIZE_MAP[size] || "text-[#{size}px]"
+          FONT_SIZE_MAP[size] || "text-[#{rem(size)}]"
         end
 
         def map_corner_radius(radius)

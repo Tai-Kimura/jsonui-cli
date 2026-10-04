@@ -258,7 +258,7 @@ module RjuiTools
         # solve, so the inline style is safe here and only here.
         def build_partial_style(partial)
           styles = []
-          styles << "fontSize: '#{partial['fontSize']}px'" if partial['fontSize']
+          styles << "fontSize: '#{TailwindMapper.rem(partial['fontSize'])}'" if partial['fontSize']
           styles << "fontWeight: '#{partial['fontWeight']}'" if partial['fontWeight']
           styles << "color: #{color_style_expr(partial['fontColor'])}" if has_binding?(partial['fontColor'])
           styles.join(', ')

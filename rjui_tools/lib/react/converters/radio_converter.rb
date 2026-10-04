@@ -171,7 +171,7 @@ module RjuiTools
         # folds into the root's own inline `gap` and the class falls back to
         # the historical default.
         def root_item_gap_class
-          spacing = bound_spacing_style('gap', attributes['spacing'])
+          spacing = bound_rem_style('gap', attributes['spacing'])
           spacing ? "gap-#{TailwindMapper.spacing_value(spacing)}" : 'gap-2'
         end
 

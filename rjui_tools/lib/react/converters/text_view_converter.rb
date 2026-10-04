@@ -106,7 +106,7 @@ module RjuiTools
           # targets ::placeholder rather than the textarea's own text.
           hint_font_size = hint_bag['fontSize'] || attributes['hintFontSize']
           if hint_font_size
-            classes << "placeholder:text-[#{hint_font_size.to_i}px]"
+            classes << "placeholder:text-[#{TailwindMapper.rem(hint_font_size.to_i)}]"
           end
           if (hint_font_name = hint_bag['font'] || attributes['hintFont'])
             hint_font = TailwindMapper.map_font(hint_font_name)

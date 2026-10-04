@@ -431,7 +431,7 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
         'hintLineHeightMultiple' => 1.5
       }).convert
 
-      expect(result).to include('placeholder:text-[14px]')
+      expect(result).to include('placeholder:text-[0.875rem]')
       expect(result).to include('placeholder:font-bold')
       expect(result).to include('placeholder:leading-[1.5]')
       # The textarea's own text must not pick these up.

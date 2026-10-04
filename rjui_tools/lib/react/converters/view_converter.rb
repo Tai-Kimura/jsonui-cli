@@ -210,7 +210,7 @@ module RjuiTools
           # Gap/Spacing. A bound value fell through the PADDING_MAP lookup to
           # its own raw text and built `gap-@{v}`, a class that matches
           # nothing.
-          spacing_value = bound_spacing_style('gap', attributes['spacing'])
+          spacing_value = bound_rem_style('gap', attributes['spacing'])
           if spacing_value
             classes << "gap-#{TailwindMapper.spacing_value(spacing_value)}"
           end

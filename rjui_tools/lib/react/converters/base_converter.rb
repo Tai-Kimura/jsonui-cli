@@ -185,7 +185,7 @@ module RjuiTools
 
           # Padding (array format)
           classes << TailwindMapper.map_padding(
-            bound_spacing_style('padding', attributes['padding'] || attributes['paddings'])
+            bound_rem_style('padding', attributes['padding'] || attributes['paddings'])
           )
 
           # Individual paddings (topPadding, bottomPadding, leftPadding, rightPadding)
@@ -314,16 +314,16 @@ module RjuiTools
             # Bindings still need a regular CSS prop entry so the runtime
             # value can update; the provider only sees the static spec.
             if font_size_attr && !font_size_attr.is_a?(Numeric) && has_binding?(font_size_attr.to_s)
-              @dynamic_styles['fontSize'] = convert_binding(font_size_attr.to_s)
+              bound_rem_style('fontSize', font_size_attr)
             end
             if font_weight_attr.is_a?(String) && has_binding?(font_weight_attr)
               @dynamic_styles['fontWeight'] = convert_binding(font_weight_attr)
             end
           else
-            # Font size. A bound size is a px inline style — no Tailwind
+            # Font size. A bound size is a rem inline style — no Tailwind
             # class can carry a value that exists only at runtime, and
             # `map_font_size` used to build the dead class `text-[@{v}px]`.
-            font_size_value = bound_length_style('fontSize', font_size_attr)
+            font_size_value = bound_rem_style('fontSize', font_size_attr)
             classes << TailwindMapper.map_font_size(font_size_value) if font_size_value
 
             # Font - can be weight name (bold, semibold) or font family alias (monospace).
@@ -920,7 +920,7 @@ module RjuiTools
         # the declared-but-unread ledger — and a helper that resolved the names
         # itself would blind both, quietly inventing sixteen coverage gaps.
         def static_spacing(css_property, value)
-          bound_spacing_style(css_property, value)
+          bound_rem_style(css_property, value)
         end
 
         # ------------------------------------------------------------------
@@ -1024,10 +1024,11 @@ module RjuiTools
           nil
         end
 
-        # A bound spacing length (padding, margin, gap): rem, N / 16, as the
-        # static spacing classes are (TailwindMapper.spacing_value; ticket
+        # A bound length that follows the browser's font size (padding,
+        # margin, gap, fontSize): rem, N / 16, as the static classes are
+        # (TailwindMapper.spacing_value / TailwindMapper.rem; ticket
         # rjui-spacing-px-does-not-follow-the-browser-font-size).
-        def bound_spacing_style(css_property, value)
+        def bound_rem_style(css_property, value)
           expr = bound_value_expr(value)
           return value unless expr
 
