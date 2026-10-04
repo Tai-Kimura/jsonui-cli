@@ -40,6 +40,9 @@ CASE = re.compile(r"^Test Case '-\[(?P<module>[\w.]+?)\.(?P<cls>\w+) (?P<test>\w
 ALL_TESTS = re.compile(r"^Test Suite 'All tests' (passed|failed)")
 EXECUTED = re.compile(r"^\s*Executed (\d+) tests?, ")
 VERDICTS = ("passed", "failed", "skipped")
+# One line per tap, printed by SwiftJsonUI's ConformanceHost (c016de9+):
+#   TAP_TIMING <fixture id> <element id> +<seconds>s <exists/hittable/frame>
+TAP_TIMING = re.compile(r"^TAP_TIMING (?P<fixture>\S+) (?P<id>\S+) \+(?P<at>[0-9.]+)s")
 
 
 def read_log(text: str) -> dict:
@@ -62,7 +65,12 @@ def read_log(text: str) -> dict:
             if e:
                 executed = int(e.group(1))
                 after_all = False
-    return {"cases": cases, "executed": executed}
+    taps = []
+    for raw in text.splitlines():
+        m = TAP_TIMING.match(raw.strip())
+        if m:
+            taps.append((float(m.group("at")), m.group("fixture"), m.group("id")))
+    return {"cases": cases, "executed": executed, "taps": taps}
 
 
 def summarize(found: dict, out=sys.stdout) -> None:
@@ -86,6 +94,28 @@ def summarize(found: dict, out=sys.stdout) -> None:
               f"says it executed {executed}", file=out)
 
 
+def tap_timing(found: dict, out=sys.stdout) -> None:
+    """How soon after each fixture was shown its taps landed — a distribution
+    to look at, not a wait (ticket
+    ios-dynamic-interactive-fixture-tap-not-delivered-intermittently). A host
+    older than the line prints nothing here and says so."""
+    taps = sorted(found.get("taps", []))
+    if not taps:
+        print("[tap timing] no TAP_TIMING lines — a host before SwiftJsonUI c016de9, or no tap ran",
+              file=out)
+        return
+    seconds = [t[0] for t in taps]
+
+    def pct(p: float) -> float:
+        return seconds[min(len(seconds) - 1, int(p * (len(seconds) - 1) + 0.5))]
+
+    print(f"[tap timing] {len(taps)} tap(s) after the fixture marker: min {seconds[0]:.3f}s, "
+          f"p10 {pct(0.10):.3f}s, median {pct(0.50):.3f}s, p90 {pct(0.90):.3f}s, max {seconds[-1]:.3f}s",
+          file=out)
+    for at, fixture, element in taps[:5]:
+        print(f"  fastest: +{at:.3f}s {fixture} ({element})", file=out)
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("usage: record_xctests.py <xcodebuild.log> <out.txt>", file=sys.stderr)
@@ -99,6 +129,7 @@ def main(argv: list[str]) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("".join(line + "\n" for _, line in found["cases"].values()))
     summarize(found)
+    tap_timing(found)
     return 0
 
 
