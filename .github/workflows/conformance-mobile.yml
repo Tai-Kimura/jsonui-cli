@@ -231,8 +231,20 @@ jobs:
           SIMULATOR_OS: "26"
         run: |
           set -euo pipefail
-          xcode=$(xcodebuild -version | head -1 | cut -d' ' -f2)
-          build=$(xcodebuild -version | tail -1 | cut -d' ' -f3)
+          # Read once, then cut with bash: piping xcodebuild into `head`
+          # closed the pipe under it, and xcodebuild died on the write
+          # ("NSFileHandleOperationException … Broken pipe", exit 134) —
+          # run 37160603791's ios job, before the suite (ticket
+          # conformance-toolchain-step-pipes-xcodebuild-into-head).
+          version=$(xcodebuild -version)
+          first=${version%%$'\n'*}
+          last=${version##*$'\n'}
+          xcode=${first#Xcode }
+          build=${last#Build version }
+          if [ -z "$xcode" ] || [ -z "$build" ] || [ "$xcode" = "$first" ] || [ "$build" = "$last" ]; then
+            echo "::error::xcodebuild -version did not read as 'Xcode X' / 'Build version Y': $version" >&2
+            exit 1
+          fi
           sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
           # ⚠️ APPLIES THE SAME PIN THE RUN WILL APPLY. This took rs[-1] — the
           # newest INSTALLED iOS runtime — while the suite picked its own. When
@@ -255,6 +267,9 @@ jobs:
           # prefix stripped); "0" when not dispatched with image_probes.
           TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ inputs.image_probes && '1' || '0' }}
           TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ inputs.image_probes && '1' || '0' }}
+          # A fixed staging of the caller's (kept after a green run, for the
+          # per-test record below); /tmp, as run_conformance.sh's own.
+          CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios.ci
         run: SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Upload results
         if: always()
@@ -265,12 +280,29 @@ jobs:
           path: |
             conformance/results/ios.results.json
             conformance/artifacts/ios/
+      # 🔻 RECORD EVERY TEST, GREEN OR RED. A green run used to keep no
+      # per-test result: run 37154953027 passed 99 tests and its logs held no
+      # line of the pager probe's class, so "the probe passed" could only be
+      # inferred (ticket conformance-ios-passing-tests-leave-no-per-test-record).
+      # The staging is named above so it survives a green run (a staging of
+      # run_conformance.sh's own is removed when the run succeeds).
+      - name: Record every XCTest result
+        if: always()
+        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt
+      - name: Upload the per-test record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctests-ios
+          if-no-files-found: warn
+          retention-days: 7
+          path: /tmp/jsonui-conformance-ios.ci/xctests.txt
       # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
       # xcodebuild, and on a failure it exits before saying where the full
       # log is; run 37112820775 failed "1 failure" with no test name in the
       # job log (ticket conformance-ios-failure-name-is-not-in-the-ci-log).
       # The log is in the run's own staging dir — this job's runner holds
-      # one, /tmp/jsonui-conformance-ios.<pid>.<rand>.
+      # one, /tmp/jsonui-conformance-ios.ci (named in the suite step's env).
       - name: Name the failed tests
         if: failure()
         run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios.*/xcodebuild.log
@@ -335,6 +367,9 @@ jobs:
           # Pinned, not "whatever is newest" — see run_conformance.sh.
           SIMULATOR_OS: "26"
           HOST_MODE: codegen
+          # A fixed staging of the caller's (kept after a green run, for the
+          # per-test record below); /tmp, as run_conformance.sh's own.
+          CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios-codegen.ci
           TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ inputs.image_probes && '1' || '0' }}
           TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ inputs.image_probes && '1' || '0' }}
         run: |
@@ -349,12 +384,29 @@ jobs:
           path: |
             conformance/codegen/ios.results.json
             conformance/artifacts/ios-codegen/
+      # 🔻 RECORD EVERY TEST, GREEN OR RED. A green run used to keep no
+      # per-test result: run 37154953027 passed 99 tests and its logs held no
+      # line of the pager probe's class, so "the probe passed" could only be
+      # inferred (ticket conformance-ios-passing-tests-leave-no-per-test-record).
+      # The staging is named above so it survives a green run (a staging of
+      # run_conformance.sh's own is removed when the run succeeds).
+      - name: Record every XCTest result
+        if: always()
+        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
+      - name: Upload the per-test record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctests-ios-codegen
+          if-no-files-found: warn
+          retention-days: 7
+          path: /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
       # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
       # xcodebuild, and on a failure it exits before saying where the full
       # log is; run 37112820775 failed "1 failure" with no test name in the
       # job log (ticket conformance-ios-failure-name-is-not-in-the-ci-log).
       # The log is in the run's own staging dir — this job's runner holds
-      # one, /tmp/jsonui-conformance-ios-codegen.<pid>.<rand>.
+      # one, /tmp/jsonui-conformance-ios-codegen.ci (named in the suite step's env).
       - name: Name the failed tests
         if: failure()
         run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios-codegen.*/xcodebuild.log
