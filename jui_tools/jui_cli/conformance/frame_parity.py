@@ -38,7 +38,8 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 FRAMES_SCHEMA_VERSION = 1
-SOURCES = frozenset({"xcuielement-frame", "a11y-node-bounds", "get-bounding-client-rect"})
+SOURCES = frozenset({"xcuielement-frame", "a11y-node-bounds", "get-bounding-client-rect",
+                     "compose-layout-coordinates"})
 PLATFORMS = ("ios", "android", "web")
 LEDGER_NAME = "frame_parity.json"
 
@@ -62,7 +63,11 @@ TOLERANCE = 1.5
 #: silent state: the run where a driver stops writing frames looks exactly like
 #: the run before any driver started (same reasoning as EXPECTED_WEB_MARKER_HOSTS
 #: in gate.py). Grow this in the commit that teaches a driver to write frames.
-EXPECTED_FRAME_HOSTS: frozenset[str] = frozenset()
+EXPECTED_FRAME_HOSTS: frozenset[str] = frozenset({
+    # conformance/hosts/web/scripts/run.ts writes frames beside every
+    # screenshot from 2026-10-05.
+    "web",
+})
 
 # not-compared reasons, each counted on its own line
 NO_DECLARED_IDS = "fixture declares no id besides root"
@@ -72,7 +77,7 @@ TOO_FEW_PLATFORMS = "fewer than two platforms have frames for this fixture"
 ID_ABSENT = "frames file present, declared id absent"
 DUPLICATE = "id found on more than one element"
 CLIPPED = "frame clipped at the screen edge"
-ROOT_ABSENT = "frames file has no usable root frame"
+ROOT_ABSENT = "frames file has no usable root box (clipped, or no root element)"
 
 
 # --------------------------------------------------------------------------- #
@@ -108,7 +113,7 @@ def validate(doc) -> list[str]:
     if not isinstance(doc, dict):
         return ["not an object"]
     errors = []
-    allowed = {"schemaVersion", "fixture", "platform", "source", "root", "frames", "duplicates"}
+    allowed = {"schemaVersion", "fixture", "platform", "source", "density", "root", "frames", "duplicates"}
     extra = set(doc) - allowed
     if extra:
         errors.append(f"unknown key(s) {sorted(extra)}")
@@ -123,6 +128,10 @@ def validate(doc) -> list[str]:
         errors.append(f"platform {doc['platform']!r} is not one of {list(PLATFORMS)}")
     if "source" in doc and doc["source"] not in SOURCES:
         errors.append(f"source {doc['source']!r} is not one of {sorted(SOURCES)}")
+    if "density" in doc:
+        d = doc["density"]
+        if isinstance(d, bool) or not isinstance(d, (int, float)) or d <= 0:
+            errors.append("density: not a positive number")
     if "root" in doc:
         errors.extend(_frame_errors(doc["root"], "root"))
     frames = doc.get("frames")
@@ -349,8 +358,9 @@ def measure(
             if doc is None:
                 out._name(UNREADABLE, f"{p}: {fid} ({'; '.join(errors[:2])})")
                 continue
-            root = doc["frames"].get("root")
-            if root is None or root.get("clipped"):
+            # The reference box is the top-level root (the root element on
+            # iOS / Android, the fixture's container on web — see the schema).
+            if doc["root"].get("clipped") or "root" not in doc["frames"]:
                 out._name(ROOT_ABSENT, f"{p}: {fid}")
                 continue
             out.frames_by_platform[p] = out.frames_by_platform.get(p, 0) + 1
@@ -382,15 +392,15 @@ def measure(
             held = {"x": frozenset(READINGS), "y": frozenset(READINGS)}
             for i, p in enumerate(names):
                 for q in names[i + 1:]:
-                    x, y = frame_readings(present[p], docs[p]["frames"]["root"],
-                                          present[q], docs[q]["frames"]["root"])
+                    x, y = frame_readings(present[p], docs[p]["root"],
+                                          present[q], docs[q]["root"])
                     agree[(p, q)] = bool(x) and bool(y)
                     held = {"x": held["x"] & x, "y": held["y"] & y}
             odd = outliers(agree, names)
             if odd:
                 out.disagreed.append(Disagreement(
                     fixture=fid, id=element_id, outliers=odd, frames=present,
-                    roots={p: docs[p]["frames"]["root"] for p in present},
+                    roots={p: docs[p]["root"] for p in present},
                 ))
             else:
                 out.agreed.append((fid, element_id))

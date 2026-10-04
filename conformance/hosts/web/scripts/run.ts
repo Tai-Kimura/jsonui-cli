@@ -70,6 +70,87 @@ interface ResultEntry {
   status: 'pass' | 'fail' | 'error' | 'skipped';
   detail: string;
   screenshot?: string;
+  frames?: string;
+}
+
+interface Frame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Where each element that carries an id was drawn, for the gate's frame
+ * parity (conformance/frames.schema.json; RESULTS_SCHEMA.md `frames`).
+ * getBoundingClientRect, in CSS px, 2 decimals, relative to the page's
+ * origin (the viewport at scroll 0), not to #root: CSS margin collapsing lets
+ * the first child's top margin escape #root, #app-root and body alike
+ * (measured: alignTopView's #root and #app-root both start at y = 120 while
+ * the anchor is at 120 and the target where iOS draws it), so any element's
+ * origin would shift every frame. The page is the fixture's screen, as the
+ * root view is on iOS and Android. Only the fixture's own tree is read. An element
+ * with no box (display: none, not rendered) is left out, as the other
+ * platforms' accessibility trees leave it out; an id on more than one element
+ * goes in `duplicates`. Returns null when the fixture has no single #root, so
+ * the gate counts "no frames file" instead of reading a guess.
+ */
+async function captureFrames(page: Page, fixtureId: string): Promise<object | null> {
+  const read = await page.evaluate(() => {
+    const host = document.getElementById('app-root');
+    if (!host) return null;
+    const found = new Map<string, Element[]>();
+    for (const el of Array.from(host.querySelectorAll('[id]'))) {
+      if (el.getClientRects().length === 0) continue;
+      const list = found.get(el.id) ?? [];
+      list.push(el);
+      found.set(el.id, list);
+    }
+    const roots = found.get('root') ?? [];
+    if (roots.length !== 1) return null;
+    const box = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, width: r.width, height: r.height };
+    };
+    // The page at scroll 0: the viewport's size, origin (0, 0).
+    const rootBox = {
+      x: -window.scrollX,
+      y: -window.scrollY,
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight,
+    };
+    const frames: Record<string, { x: number; y: number; width: number; height: number }> = {};
+    const duplicates: string[] = [];
+    for (const [id, els] of found) {
+      if (els.length > 1) {
+        duplicates.push(id);
+        continue;
+      }
+      const b = box(els[0]);
+      frames[id] = { x: b.x - rootBox.x, y: b.y - rootBox.y, width: b.width, height: b.height };
+    }
+    return { root: rootBox, frames, duplicates, density: window.devicePixelRatio };
+  });
+  if (!read) return null;
+  const round = (f: Frame): Frame => ({
+    x: Math.round(f.x * 100) / 100,
+    y: Math.round(f.y * 100) / 100,
+    width: Math.round(f.width * 100) / 100,
+    height: Math.round(f.height * 100) / 100,
+  });
+  const frames: Record<string, Frame> = {};
+  for (const id of Object.keys(read.frames).sort()) frames[id] = round(read.frames[id]);
+  const doc: Record<string, unknown> = {
+    schemaVersion: 1,
+    fixture: fixtureId,
+    platform: 'web',
+    source: 'get-bounding-client-rect',
+    density: read.density,
+    root: round(read.root),
+    frames,
+  };
+  if (read.duplicates.length > 0) doc.duplicates = read.duplicates.sort();
+  return doc;
 }
 
 const manifestPath = path.join(conformanceDir, 'manifest.json');
@@ -172,6 +253,7 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
   const assertions = new AssertionExecutor(page, 10000);
 
   let screenshot: string | undefined;
+  let frames: string | undefined;
   try {
     await page.goto(`${baseUrl}/fixture/${fixture.id}`, { waitUntil: 'load' });
     // Pages are reused across fixtures per worker, and the mouse stays where
@@ -242,6 +324,18 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
           }
           fs.writeFileSync(file, image);
           screenshot = `artifacts/web/${name}.png`;
+          // Frames are read at the moment the screenshot was taken. A failure
+          // to read them leaves the fixture's verdict alone; the gate counts
+          // the missing file.
+          try {
+            const doc = await captureFrames(page, fixture.id);
+            if (doc) {
+              fs.writeFileSync(path.join(artifactsDir, `${name}.frames.json`), JSON.stringify(doc, null, 2) + '\n');
+              frames = `artifacts/web/${name}.frames.json`;
+            }
+          } catch (err) {
+            console.warn(`[run] frames not captured: ${fixture.id}: ${err instanceof Error ? err.message : err}`);
+          }
         } else if (step.action !== undefined) {
           await actions.execute(step);
         } else if (step.assert !== undefined) {
@@ -251,12 +345,12 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
         }
       }
     }
-    return { id: fixture.id, status: 'pass', detail: '', screenshot };
+    return { id: fixture.id, status: 'pass', detail: '', screenshot, frames };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = classifyThrow(message);
     const pageErrorSuffix = pageErrors.length > 0 ? ` | pageerror: ${singleLine(pageErrors[0])}` : '';
-    return { id: fixture.id, status, detail: singleLine(message) + pageErrorSuffix, screenshot };
+    return { id: fixture.id, status, detail: singleLine(message) + pageErrorSuffix, screenshot, frames };
   } finally {
     page.off('pageerror', onPageError);
   }
@@ -345,6 +439,7 @@ async function main(): Promise<void> {
     results: ordered.map((r) => {
       const entry: Record<string, unknown> = { id: r.id, status: r.status, detail: r.detail };
       if (r.screenshot) entry.screenshot = r.screenshot;
+      if (r.frames) entry.frames = r.frames;
       return entry;
     }),
   };

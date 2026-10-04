@@ -197,9 +197,14 @@ At each visual fixture's `screenshot` step, the driver writes
 - **Units are the layout's.** iOS points, Android dp (px / density), web CSS
   px — the numbers a layout JSON declares. Round to 2 decimals.
 - **Relative to the root.** Every frame is relative to the origin of the
-  element with id `root`, which removes status bars, safe areas and window
-  chrome. `frames.root` is therefore `{x: 0, y: 0, …}`; `root` at the top level
-  keeps the absolute frame for reading a failure.
+  top-level `root` box, which removes status bars, safe areas and window
+  chrome. On iOS and Android that box is the element with id `root`, so
+  `frames.root` is `{x: 0, y: 0, …}`. On web it is the page (the viewport
+  at scroll 0): CSS margin collapsing lets the first child's top margin escape
+  `#root` and every container above it (measured: alignTopView's `#root` and
+  `#app-root` both start at y = 120 while the anchor is at 120 and the target
+  where iOS draws it), so `frames.root` can sit below 0. The gate takes the root's width and height from the top-level
+  `root`.
 - **Record what you find; the gate knows what was declared.** The driver writes
   every element that carries an id. The gate takes the ids the fixture's
   layout declares from the layout file and names the declared ids a platform
@@ -210,9 +215,13 @@ At each visual fixture's `screenshot` step, the driver writes
   element (Android a11y bounds stop at the screen edge) marks a frame that
   touches that edge `"clipped": true`. The gate does not judge a clipped frame
   and counts it.
-- **Sources:** iOS `XCUIElement.frame` (`xcuielement-frame`), Android the a11y
-  node bounds divided by density (`a11y-node-bounds`), web
-  `getBoundingClientRect` (`get-bounding-client-rect`).
+- **Sources:** iOS `XCUIElement.frame` (`xcuielement-frame`); Android the
+  conformance host's in-process Compose layout coordinates of each testTag,
+  px divided by density (`compose-layout-coordinates`) — not the a11y bounds,
+  which stop at the screen edge and would mark exactly the misplaced views
+  `clipped` (`a11y-node-bounds` stays in the enum for a driver that has
+  nothing better); web `getBoundingClientRect` (`get-bounding-client-rect`).
+  `density` records the number the driver divided by.
 
 The gate (`jui conformance gate --frame-parity`) compares the same id across
 platforms. The tolerance is declared once, in `frame_parity.py`, with its

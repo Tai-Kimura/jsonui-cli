@@ -138,7 +138,7 @@ class SchemaAndReader(unittest.TestCase):
                          {"schemaVersion", "fixture", "platform", "source", "root", "frames"})
         self.assertEqual(set(self.schema["$defs"]["frame"]["required"]), {"x", "y", "width", "height"})
         good = {"schemaVersion": 1, "fixture": "a/b__c", "platform": "ios", "source": "xcuielement-frame",
-                "root": f(0, 0, 1, 1), "frames": {"root": f(0, 0, 1, 1)}, "duplicates": []}
+                "density": 3, "root": f(0, 0, 1, 1), "frames": {"root": f(0, 0, 1, 1)}, "duplicates": []}
         self.assertEqual(set(good), doc_keys)
         self.assertEqual(fp.validate(good), [])
         # Every key the schema names is accepted; one it does not is refused.
@@ -166,6 +166,8 @@ class SchemaAndReader(unittest.TestCase):
             {**good, "frames": {"root": f(0, 0, 1, 1, clipped=False)}},
             {**good, "duplicates": ["a", "a"]},
             {**good, "fixture": ""},
+            {**good, "density": 0},
+            {**good, "density": "2"},
         ]
         for doc in bad:
             self.assertTrue(fp.validate(doc), doc)
@@ -299,6 +301,29 @@ class Readings(unittest.TestCase):
         self.assertEqual(fp.not_near_agreements(r), ["a/pinRight__x #badge (x=far)"])
 
 
+    def test_web_measures_from_its_container_where_margin_collapse_moves_root(self):
+        # Measured on the web host (alignTopView, 2026-10-05): the anchor's top
+        # margin collapses through #root (and #app-root), so #root's own box
+        # starts at y=120 while its children sit where iOS draws them. Frames
+        # are relative to the page, and the gate takes the root's size from
+        # the top-level root, so the shifted #root moves nothing.
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            fid = "common/alignTopView__static"
+            t.fixture(fid, align_layout("alignTopView"))
+            for p in ("ios", "android"):
+                t.frames(p, fid, {"anchor": ANCHOR, "target": ALIGN["alignTopView"][0]})
+            web_root = f(0, 0, 1024, 768)
+            t.frames("web", fid, {}, raw={
+                "schemaVersion": 1, "fixture": fid, "platform": "web", "source": SOURCE["web"],
+                "root": web_root, "frames": {"root": f(0, 120, 1024, 768), "anchor": ANCHOR,
+                                             "target": ALIGN["alignTopView"][0]}})
+            manifest = t.write()
+            r = fp.measure(Path(d), manifest, t.results(), list(fp.PLATFORMS))
+        self.assertEqual(r.disagreed, [])
+        self.assertEqual(sorted(i for _, i in r.agreed), ["anchor", "target"])
+
+
 class NotCompared(unittest.TestCase):
     """Everything that cannot be compared is counted on its own line."""
 
@@ -325,8 +350,10 @@ class NotCompared(unittest.TestCase):
             t.fixture("a/clippedRoot__x", align_layout("alignTopView"))
             for p in ("ios", "web"):
                 t.frames(p, "a/clippedRoot__x", {"anchor": ANCHOR, "target": ALIGN["alignTopView"][0]})
-            t.frames("android", "a/clippedRoot__x", {"root": f(0, 0, 1280, 752, clipped=True),
-                                                     "anchor": ANCHOR, "target": ALIGN["alignTopView"][1]})
+            t.frames("android", "a/clippedRoot__x", {}, raw={
+                "schemaVersion": 1, "fixture": "a/clippedRoot__x", "platform": "android",
+                "source": SOURCE["android"], "root": f(0, 48, 1280, 752, clipped=True),
+                "frames": {"root": f(0, 0, 1280, 752), "anchor": ANCHOR, "target": ALIGN["alignTopView"][1]}})
             manifest = t.write()
             r = fp.measure(Path(d), manifest, t.results(), list(fp.PLATFORMS))
         nc = r.not_compared
@@ -385,8 +412,13 @@ class Declaration(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertTrue(any("android wrote frames for 10" in n for n in notices), notices)
 
-    def test_the_declaration_starts_empty_until_a_driver_writes_frames(self):
-        self.assertEqual(fp.EXPECTED_FRAME_HOSTS, frozenset())
+    def test_the_declaration_names_the_drivers_that_write_frames(self):
+        # Grown in the commit that teaches a driver to write frames: web (the
+        # conformance host's run.ts) first; ios and android join with theirs.
+        self.assertEqual(fp.EXPECTED_FRAME_HOSTS, frozenset({"web"}))
+        run_ts = (SCHEMA.parent / "hosts" / "web" / "scripts" / "run.ts").read_text()
+        self.assertIn(".frames.json", run_ts)
+        self.assertIn("source: 'get-bounding-client-rect'", run_ts)
 
 
 class Ledger(unittest.TestCase):
