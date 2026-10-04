@@ -118,11 +118,15 @@
   クラスごとに 1 行で数えて印字し（`.github/scripts/record_xctests.py`、`Executed N tests` と突き合わせる）、
   行そのものを artifact `xctests-ios` / `xctests-ios-codegen` に上げる（7 日）。staging は suite step の env で
   `/tmp/jsonui-conformance-ios[-codegen].ci` に固定（run_conformance.sh 自前の staging は緑の run で消えるため）
-- android-library-tests（105m。初回の実測は step 17.5 分 / 262 case、悪いランナーの 6 倍を見込む）: KotlinJsonUI の
-  `library` / `library-dynamic` の androidTest（connectedDebugAndroidTest）を **API 35** / pixel_tablet で走らせる
+- android-library-tests（125m。初回の実測は step 17.5 分 / 262 case。2026-10-04 時点の直近 5 本は 17.8〜26.3 分 /
+  394 case で、host の probe を足して (26.3 + 8) × 3 ≈ 103 → step 110）: KotlinJsonUI の
+  `library` / `library-dynamic` / `conformance-host` の androidTest（connectedDebugAndroidTest）を **API 35** / pixel_tablet で走らせる。
+  host の ConformanceSuiteTest は除外する（android の job が run_conformance.sh で走らせる）。host の probe 13 クラスは
+  2026-10-04 までどの CI でも走っておらず、そのうち TapRoleProbeTest は KotlinJsonUI 14c075b 以来赤のままだった
   （conformance の 34 ではない。API 34 の CI emulator では IME が出ず、前面 window の読み上げも空になることがあり、
   焦点を要する腕が emulator を測ってしまう。matrix run 36197930038 で 34 は赤、35 は緑、画面キーボードの設定は無関係）。判定は結果 XML から（`.github/scripts/kjui_device_tests.py`）:
-  失敗 / error / 結果の無いモジュール / **@Test を持つのに結果に 1 件も無いクラス**が赤。skip は名前で印字。
+  失敗 / error / 結果の無いモジュール / **@Test を持つのに結果に 1 件も無いクラス** / **device test を持つのに、この job が走らせず
+  `UNREACHED_MODULES` に理由つきで名前も無いモジュール**が赤。skip は名前で印字。sample-app は理由つきで名指しされている
   2026-09-26 まで、この 2 モジュールの androidTest はどの CI でも走っていなかった
 - dispatch の入力: `swiftjsonui_ref`（iOS 2 job）/ `image_probes` / `kotlinjsonui_ref`（Android 3 job）/
   `android_probes`（テストが `getArguments().getString("x") == "1"` と比べる旗をすべて立てる。旗の一覧は

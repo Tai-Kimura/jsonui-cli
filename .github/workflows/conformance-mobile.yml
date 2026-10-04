@@ -712,9 +712,13 @@ jobs:
 
   # ------------------------------------------------------------------ #
   # Android device tests — KotlinJsonUI's own instrumented tests
-  # (library and library-dynamic, src/androidTest). No other job runs them:
-  # KotlinJsonUI's ci.yml runs the JVM units, and the android job above runs
-  # the conformance host's suite. Until 2026-09-26 an arm written there was
+  # (library, library-dynamic and conformance-host, src/androidTest; the
+  # host's ConformanceSuiteTest is left out, the android jobs above run it).
+  # No other job runs them: KotlinJsonUI's ci.yml runs the JVM units. The
+  # host's 13 probe classes ran nowhere until 2026-10-04 (ticket
+  # kjui-conformance-host-androidtest-probes-never-run-in-ci); one had been
+  # red since KotlinJsonUI 14c075b. kjui_device_tests.py also fails on a
+  # module with device tests that it neither runs nor names. Until 2026-09-26 an arm written there was
   # green on a developer's emulator and nowhere else. Judged from the results
   # XML (.github/scripts/kjui_device_tests.py), not from Gradle's exit alone:
   # a class with @Test and no case in the results is red.
@@ -728,7 +732,11 @@ jobs:
     # degraded runner is ~6x slower on the emulator part, so allow ~80 of
     # the 90-minute step. Step 90, job 105 (attempt < step < job). A
     # cancelled run here means suspect this number first.
-    timeout-minutes: 105
+    # 2026-10-04, conformance-host's probes added: the step took 17.8-26.3
+    # min over the last 5 runs (library + library-dynamic, 394 cases); the
+    # host adds 34 cases and its app build, ~5 min locally, taken as ~8 on
+    # CI. (26.3 + 8) x 3 = 103, so step 110, job 125.
+    timeout-minutes: 125
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -748,7 +756,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Run KotlinJsonUI device tests (emulator)
-        timeout-minutes: 90
+        timeout-minutes: 110
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ANDROID_PROBES: ${{ inputs.android_probes && 'true' || 'false' }}

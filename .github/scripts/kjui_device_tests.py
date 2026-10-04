@@ -25,7 +25,16 @@ Two commands:
                          - a class that has @Test in source but no case in the
                            results. Such a class did not run: a filter, a crash
                            before it, or a module that was not built. Gradle
-                           can exit 0 over it.
+                           can exit 0 over it;
+                         - a module of the checkout with @Test in its
+                           src/androidTest that this job does not run and that
+                           UNREACHED_MODULES does not name with a reason.
+
+conformance-host is run here for its probes (2026-10-04, ticket
+kjui-conformance-host-androidtest-probes-never-run-in-ci): 13 probe classes
+sat in its androidTest, and the `android` job instruments ConformanceSuiteTest
+only. One of them, TapRoleProbeTest, had been red since KotlinJsonUI 14c075b
+(2026-09-26) without anyone seeing it.
 """
 from __future__ import annotations
 
@@ -34,7 +43,24 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-MODULES = ("library", "library-dynamic")
+MODULES = ("library", "library-dynamic", "conformance-host")
+
+# A class a module holds that this job leaves out, and the job that runs it.
+# kjui_device_tests.sh passes these as notClass.
+RUN_ELSEWHERE = {
+    ("conformance-host", "com.kotlinjsonui.conformance.ConformanceSuiteTest"):
+        "the android and android-codegen jobs run it (conformance-host/scripts/run_conformance.sh)",
+}
+
+# A module with device tests that no CI invocation runs, and why. A module
+# with @Test in its androidTest must be in MODULES or here.
+UNREACHED_MODULES = {
+    "sample-app": "ViewModelDrivenImeTest measures what the platform does (KotlinJsonUI 413553f, "
+                  "the Android 17 lane's question): its ViewModel-raises-the-keyboard arm records "
+                  "that API 35 ignores keyboardController.show() without a user gesture, which is "
+                  "an answer, not a regression guard; the app also signs with a debug keystore the "
+                  "repository does not carry",
+}
 
 FLAG = re.compile(r'getArguments\(\)\s*\.getString\("([A-Za-z0-9_]+)"\)\s*==\s*"1"')
 # Top-level classes only: a declaration at column 0. A nested helper declared
@@ -62,12 +88,18 @@ def flags(kjui: Path) -> list[str]:
 
 
 def test_classes(kjui: Path, module: str) -> set[str]:
-    """Simple names of the classes whose body holds an @Test.
+    """Simple names of the classes whose body holds an @Test, less the ones
+    RUN_ELSEWHERE names for this module.
 
     Each @Test is assigned to the last top-level `class` declared before it in
     the file. An abstract class runs only through its subclasses, so it is left
     out.
     """
+    elsewhere = {fq.rsplit(".", 1)[-1] for (m, fq) in RUN_ELSEWHERE if m == module}
+    return _declared(kjui, module) - elsewhere
+
+
+def _declared(kjui: Path, module: str) -> set[str]:
     names: set[str] = set()
     for path in _sources(kjui, module):
         text = path.read_text(encoding="utf-8")
@@ -77,6 +109,21 @@ def test_classes(kjui: Path, module: str) -> set[str]:
             if owner and not owner[-1][2]:
                 names.add(owner[-1][1])
     return names
+
+
+def modules_with_device_tests(kjui: Path) -> list[str]:
+    """Every top-level module of the checkout whose src/androidTest holds an @Test."""
+    found = []
+    for child in sorted(p for p in kjui.iterdir() if p.is_dir()):
+        root = child / "src" / "androidTest"
+        if root.is_dir() and any(TEST.search(f.read_text(encoding="utf-8")) for f in root.rglob("*.kt")):
+            found.append(child.name)
+    return found
+
+
+def unreached(kjui: Path) -> list[str]:
+    """Modules with device tests that this job does not run and nothing names."""
+    return [m for m in modules_with_device_tests(kjui) if m not in MODULES and m not in UNREACHED_MODULES]
 
 
 def _results(kjui: Path, module: str) -> list[Path]:
@@ -133,6 +180,14 @@ def judge(kjui: Path) -> int:
             problems.append(f"{module}: {failed} failed")
         if not_run:
             problems.append(f"{module}: {len(not_run)} class(es) with @Test did not run")
+    for module in modules_with_device_tests(kjui):
+        if module in UNREACHED_MODULES:
+            print(f"== {module}: not run by this job — {UNREACHED_MODULES[module]}")
+    for (module, fq), why in sorted(RUN_ELSEWHERE.items()):
+        print(f"== {module}: {fq.rsplit('.', 1)[-1]} left out here — {why}")
+    for module in unreached(kjui):
+        problems.append(f"{module}: has @Test in src/androidTest and no CI invocation runs it "
+                        "(add it to MODULES, or name it in UNREACHED_MODULES with the reason)")
     if problems:
         for p in problems:
             print(f"error: {p}", file=sys.stderr)
@@ -141,8 +196,8 @@ def judge(kjui: Path) -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[0] not in ("flags", "judge"):
-        print("usage: kjui_device_tests.py flags|judge <KotlinJsonUI checkout>", file=sys.stderr)
+    if len(argv) != 2 or argv[0] not in ("flags", "judge", "not-class"):
+        print("usage: kjui_device_tests.py flags|judge|not-class <KotlinJsonUI checkout>", file=sys.stderr)
         return 2
     kjui = Path(argv[1])
     if not (kjui / "library").is_dir():
@@ -151,6 +206,10 @@ def main(argv: list[str]) -> int:
     if argv[0] == "flags":
         for name in flags(kjui):
             print(name)
+        return 0
+    if argv[0] == "not-class":
+        # One comma-separated value for -Pandroid.testInstrumentationRunnerArguments.notClass.
+        print(",".join(sorted(fq for (_, fq) in RUN_ELSEWHERE)))
         return 0
     return judge(kjui)
 

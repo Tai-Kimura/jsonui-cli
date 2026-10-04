@@ -3,8 +3,11 @@
 # action. The action's `script:` runs one line at a time, so the logic lives
 # here.
 #
-# Runs library's and library-dynamic's connectedDebugAndroidTest on the booted
-# emulator, then judges from the results XML (kjui_device_tests.py judge).
+# Runs library's, library-dynamic's and conformance-host's
+# connectedDebugAndroidTest on the booted emulator, then judges from the
+# results XML (kjui_device_tests.py judge). conformance-host's suite class is
+# left out (notClass): the android jobs run it; its probes run here (ticket
+# kjui-conformance-host-androidtest-probes-never-run-in-ci).
 # Gradle's exit code alone is not the verdict: a class that never ran is not a
 # failure to Gradle.
 #
@@ -25,7 +28,8 @@ set -uo pipefail
 kjui=${1:?usage: kjui_device_tests.sh <KotlinJsonUI checkout>}
 here=$(cd "$(dirname "$0")" && pwd)
 evidence="$kjui/device-evidence"
-test_packages=(com.kotlinjsonui.test com.kotlinjsonui.dynamic.test)
+test_packages=(com.kotlinjsonui.test com.kotlinjsonui.dynamic.test
+               com.kotlinjsonui.conformance com.kotlinjsonui.conformance.test)
 
 # Best effort: a bigger ring buffer so a ~15-minute run's early lines survive
 # to the dump, and a clean start so the dump is this run's.
@@ -59,9 +63,15 @@ else
   echo "opt-in probes: off (dispatch with android_probes=true to raise them)"
 fi
 
+# The classes another job runs (kjui_device_tests.py RUN_ELSEWHERE).
+not_class=$(python3 "$here/kjui_device_tests.py" not-class "$kjui") || exit 2
+echo "left out here (run by another job): $not_class"
+
 rc=0
 (cd "$kjui" && ./gradlew --no-daemon --continue \
   :library:connectedDebugAndroidTest :library-dynamic:connectedDebugAndroidTest \
+  :conformance-host:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.notClass="$not_class" \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
   ${args[@]+"${args[@]}"}) || rc=$?
 echo "gradle exit: $rc"

@@ -99,7 +99,7 @@ class KjuiDeviceTestsJudge(unittest.TestCase):
         return rc, out.getvalue() + err.getvalue()
 
     def _green_tree(self):
-        for module, cls in (("library", "ATest"), ("library-dynamic", "BTest")):
+        for module, cls in (("library", "ATest"), ("library-dynamic", "BTest"), ("conformance-host", "HProbeTest")):
             self.tree.source(module, cls, TEST_CLASS.format(name=cls))
             self.tree.results(module, "\n".join([_case(cls, "one"), _case(cls, "two")]))
 
@@ -176,6 +176,55 @@ class KjuiDeviceTestsJudge(unittest.TestCase):
         rc, text = self._judge()
         self.assertEqual(1, rc, text)
         self.assertIn("library-dynamic: no results", text)
+
+    # -- reach: every module and class with device tests is run or named ----
+
+    def test_a_module_with_device_tests_that_nothing_runs_is_red(self):
+        # The ticket's shape: tests in a module no invocation reaches.
+        self._green_tree()
+        (self.tree.root / "orphan-app" / "src" / "androidTest").mkdir(parents=True)
+        (self.tree.root / "orphan-app" / "src" / "androidTest" / "OTest.kt").write_text(TEST_CLASS.format(name="OTest"))
+        rc, text = self._judge()
+        self.assertEqual(1, rc, text)
+        self.assertIn("orphan-app: has @Test in src/androidTest and no CI invocation runs it", text)
+
+    def test_a_named_unreached_module_is_green_and_says_why(self):
+        self._green_tree()
+        (self.tree.root / "sample-app" / "src" / "androidTest").mkdir(parents=True)
+        (self.tree.root / "sample-app" / "src" / "androidTest" / "STest.kt").write_text(TEST_CLASS.format(name="STest"))
+        rc, text = self._judge()
+        self.assertEqual(0, rc, text)
+        self.assertIn("== sample-app: not run by this job — ViewModelDrivenImeTest measures", text)
+
+    def test_a_module_without_device_tests_is_not_counted(self):
+        # Control: an androidTest dir with no @Test is not a module to reach.
+        self._green_tree()
+        (self.tree.root / "empty-app" / "src" / "androidTest").mkdir(parents=True)
+        (self.tree.root / "empty-app" / "src" / "androidTest" / "Helper.kt").write_text("class Helper")
+        self.assertNotIn("empty-app", K.modules_with_device_tests(self.tree.root))
+        self.assertEqual(0, self._judge()[0])
+
+    def test_the_suite_class_another_job_runs_is_not_expected_here(self):
+        self._green_tree()
+        self.tree.source("conformance-host", "ConformanceSuiteTest", TEST_CLASS.format(name="ConformanceSuiteTest"))
+        self.assertNotIn("ConformanceSuiteTest", K.test_classes(self.tree.root, "conformance-host"))
+        rc, text = self._judge()
+        self.assertEqual(0, rc, text)
+        self.assertIn("ConformanceSuiteTest left out here — the android and android-codegen jobs run it", text)
+
+    def test_a_host_probe_that_did_not_run_is_red(self):
+        # The probes are what this change reaches: one with no case is NOT RUN.
+        self._green_tree()
+        self.tree.source("conformance-host", "TapRoleProbeTest", TEST_CLASS.format(name="TapRoleProbeTest"))
+        rc, text = self._judge()
+        self.assertEqual(1, rc, text)
+        self.assertIn("NOT RUN  TapRoleProbeTest", text)
+
+    def test_not_class_names_what_another_job_runs(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(0, K.main(["not-class", str(self.tree.root)]))
+        self.assertEqual("com.kotlinjsonui.conformance.ConformanceSuiteTest", out.getvalue().strip())
 
     # -- switches -----------------------------------------------------------
 
