@@ -160,8 +160,10 @@
   renderer の画素ではないため）。入力は各ドライバが screenshot の隣に書く `.frames.json`
   （`conformance/frames.schema.json`、RESULTS_SCHEMA.md の `frames` 節）。許容差は
   `frame_parity.TOLERANCE` の 1 か所だけ。比べられなかったものは理由ごとに 1 行ずつ件数を印字し、
-  1 件も比べられなかった run は赤になる。**ドライバが frames を書くまでは、CI の引数に入れない**。
-  入れるのは、ドライバが frames を書き始め、`EXPECTED_FRAME_HOSTS` にその面を宣言する commit で。
+  1 件も比べられなかった run は赤になる。3 面（web / android / ios）とも frames を書き、
+  `EXPECTED_FRAME_HOSTS` に宣言済み。CI（conformance-mobile.yml）には dispatch の input
+  `frame_parity`（既定 false）として入れてあり、**既定では走らない**（schedule も input を持たないので off）。
+  有効にするのは、`frame_parity.json` と裁定が今の食い違いを閉じた後に、input の既定を true にする 1 行で。
 
 **CI 予算の鉄則**（過去の実測から）: cancelled はまず timeout 到達を疑う。fixture を増やしたら
 再採寸する（ローカル実測 × 5-7 倍が CI 目安）。attempt < step < job の算数を workflow コメントに書く。

@@ -506,8 +506,8 @@ class Declaration(unittest.TestCase):
 
     def test_the_declaration_names_the_drivers_that_write_frames(self):
         # Grown in the commit that teaches a driver to write frames: web (the
-        # conformance host's run.ts) first; ios and android join with theirs.
-        self.assertEqual(fp.EXPECTED_FRAME_HOSTS, frozenset({"web"}))
+        # conformance host's run.ts), then android and ios.
+        self.assertEqual(fp.EXPECTED_FRAME_HOSTS, frozenset({"web", "android", "ios"}))
         run_ts = (SCHEMA.parent / "hosts" / "web" / "scripts" / "run.ts").read_text()
         self.assertIn(".frames.json", run_ts)
         self.assertIn("source: 'get-bounding-client-rect'", run_ts)

@@ -67,6 +67,12 @@ EXPECTED_FRAME_HOSTS: frozenset[str] = frozenset({
     # conformance/hosts/web/scripts/run.ts writes frames beside every
     # screenshot from 2026-10-05.
     "web",
+    # KotlinJsonUI conformance-host (ConformanceFrames, compose layout
+    # coordinates), from the 2.43.5 train.
+    "android",
+    # SwiftJsonUI ConformanceHost (canvas-relative XCUIElement frames, the
+    # framesUnrecorded reason for a root that does not fill the canvas).
+    "ios",
 })
 
 # not-compared reasons, each counted on its own line
