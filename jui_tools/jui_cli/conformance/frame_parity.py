@@ -173,8 +173,10 @@ WEIGHT_AXES = {"weight": "x", "widthWeight": "x", "heightWeight": "y"}
 
 def weighted_axes(layout) -> dict[str, set[str]]:
     """``{id: axes}`` for every declared id whose own node or an ancestor
-    declares a weight: on those axes the declared reading is PROPORTIONAL to
-    the root, so it is required (see :func:`proportional_agrees`). An id after
+    declares a weight: on those axes the declared readings are the two a
+    weight produces — PROPORTIONAL to the root (see :func:`proportional_agrees`)
+    when the weights share the whole root, STRETCHED (the same gap at both
+    ends) when fixed-size siblings take their part first — and nothing else. An id after
     a weighted sibling is not included — a fixed-size view pushed to the far
     edge is placed from that edge, not proportionally."""
     out: dict[str, set[str]] = {}
@@ -459,7 +461,16 @@ def measure(
                             ok = proportional_agrees(
                                 present[p][pos], present[p][size], docs[p]["root"][size],
                                 present[q][pos], present[q][size], docs[q]["root"][size])
-                            readings = frozenset({"proportional"}) if ok else frozenset()
+                            # A weighted view beside fixed-size siblings takes
+                            # what the root leaves after them: the same gap at
+                            # both ends, not the same fraction (triage,
+                            # 2026-10-05: a weight-1 view next to a fixed 200
+                            # read root - 200 on both). That is "stretched",
+                            # the other reading a weight declares.
+                            held_w = frozenset({"proportional"}) if ok else frozenset()
+                            if "stretched" in readings:
+                                held_w = held_w | {"stretched"}
+                            readings = held_w
                             if axis == "x":
                                 x = readings
                             else:

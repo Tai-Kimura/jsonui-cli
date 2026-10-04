@@ -369,6 +369,24 @@ class Weighted(unittest.TestCase):
         r = self._measure(512)
         self.assertNotIn("centred", r.readings[("common/weight__static", "box_a")]["x"])
 
+    def test_a_weight_beside_a_fixed_sibling_agrees_by_stretch(self):
+        # triage's case: rival weight 1, width 0, beside a fixed 200 —
+        # root - 200 on both (1080 of 1280, 824 of 1024). Not proportional;
+        # the same gap at both ends.
+        layout = {"type": "View", "id": "root", "orientation": "horizontal", "child": [
+            {"type": "View", "id": "rival", "width": 0, "height": 200, "weight": 1},
+            {"type": "View", "id": "fixed", "width": 200, "height": 200}]}
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            t.fixture("a/fixedSibling__x", layout)
+            for p in ("android", "web"):
+                w = ROOTS[p]["width"]
+                t.frames(p, "a/fixedSibling__x", {"rival": f(0, 0, w - 200, 200), "fixed": f(w - 200, 0, 200, 200)})
+            manifest = t.write()
+            r = fp.measure(Path(d), manifest, t.results(), ["android", "web"])
+        self.assertEqual(r.disagreed, [])
+        self.assertEqual(r.readings[("a/fixedSibling__x", "rival")]["x"], {"stretched"})
+
     def test_proportional_agrees_scales_by_the_roots(self):
         self.assertTrue(fp.proportional_agrees(640, 640, 1280, 512, 512, 1024))
         self.assertTrue(fp.proportional_agrees(640, 40, 1280, 512, 40, 1024))   # fixed child
