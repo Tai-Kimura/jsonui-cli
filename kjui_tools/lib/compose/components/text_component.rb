@@ -467,11 +467,16 @@ module KjuiTools
           # is already passed". Same consolidation `maxLines`/`overflow` got
           # above, and for the same reason. An explicit `minimumScaleFactor`
           # wins: it names the floor, where `autoShrink` only implies 0.5.
+          #
+          # Auto size does not imply one line: the text wraps as any Label does
+          # and shrinks only when it overflows a bounded box, so under a
+          # wrapContent height nothing shrinks (attribute_semantics
+          # autoShrink.requiresBoundedAxis, ruling 51-E, web is canon; ticket
+          # kjui-label-autoshrink-shrinks-when-the-height-can-grow). `lines`
+          # still sets maxLines and its Ellipsis above.
           auto_size_factor = nil
           if json_data['autoShrink']
             auto_size_factor = 0.5
-            max_lines_value ||= '1'
-            overflow_value ||= 'TextOverflow.Ellipsis'
           end
 
           # Minimum scale factor (auto-shrink text) using TextAutoSize
@@ -479,8 +484,6 @@ module KjuiTools
             # Same `.to_f` freeze as lineHeightMultiple: a bound factor made
             # minFontSize 0.sp (plan 49 lane C: Label.minimumScaleFactor).
             auto_size_factor = json_data['minimumScaleFactor']
-            max_lines_value ||= '1'
-            overflow_value ||= 'TextOverflow.Ellipsis'
           end
 
           if auto_size_factor

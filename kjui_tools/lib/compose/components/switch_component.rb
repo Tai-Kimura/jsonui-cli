@@ -329,10 +329,28 @@ module KjuiTools
             out += "\n" + indent("fontWeight = #{font_weight},", depth + 2)
           end
 
-          # weight(1f) on the label pushes the Switch to the far edge, which is
-          # what you want on either side.
-          out += "\n" + indent("modifier = Modifier.weight(1f)", depth + 2)
+          # weight(1f) on the label pushes the Switch to the far edge of a Row
+          # whose width is decided, on either side. Under a wrapContent width
+          # there is no far edge (label_fills_row?).
+          if label_fills_row?(json_data)
+            out += "\n" + indent("modifier = Modifier.weight(1f)", depth + 2)
+          else
+            out = out.sub(/,\z/, '')
+          end
           out + "\n" + indent(")", depth + 1)
+        end
+
+        # Whether the label takes the rest of the row (`weight(1f)`): only when
+        # the Switch's own width is decided — a declared width other than
+        # wrapContent, or a weight. A weighted child makes Compose's Row take
+        # its whole max width, so under wrapContent a labelled Switch drew as
+        # wide as its parent (1280 where web wraps to the label and the switch;
+        # ticket kjui-labelled-switch-fills-the-parent-width-under-wrapcontent).
+        # Same rule as KotlinJsonUI Dynamic's DynamicSwitchComponent.labelFillsRow.
+        def self.label_fills_row?(json_data)
+          return true if json_data.key?('weight')
+          width = json_data['width']
+          !width.nil? && width != 'wrapContent'
         end
 
         private

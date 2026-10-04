@@ -98,7 +98,12 @@ module KjuiTools
             required_imports&.add(:launched_effect)
             required_imports&.add(:scroll_by)
             code += indent("LaunchedEffect(Unit) {", depth) + "\n"
-            code += indent("val consumed = #{state_var}.scrollBy(1e9f)", depth + 1) + "\n"
+            # 16777216f (2^24), not 1e9f: scrollBy reports `delta − leftover`
+            # in float32, and near 1e9 floats are 64 apart, so a 1200 px extent
+            # came back as 1216 and the centre started 8 px (4 dp) short
+            # (ticket kjui-scrollview-center-anchor-is-off-by-4). Below 2^24
+            # every integer is exact. Same delta as KotlinJsonUI Dynamic.
+            code += indent("val consumed = #{state_var}.scrollBy(16777216f)", depth + 1) + "\n"
             code += indent("#{state_var}.scrollBy(-consumed / 2f)", depth + 1) + "\n" if anchor == 'center'
             code += indent("}", depth) + "\n"
           end
@@ -172,6 +177,17 @@ module KjuiTools
 
           code += "\n" + indent(") {", depth)
           code += "\n" + indent("item {", depth + 1) unless paging
+          # A LazyRow measures its items with the viewport's height as the
+          # cross-axis max, so a child declaring more (content 600 in a
+          # 200-high ScrollView) was cut to 200 and centred. Unbounded and
+          # top-anchored, it keeps its declared height from y 0, as web does
+          # (ticket kjui-horizontal-scrollview-clamps-content-height-to-the-
+          # viewport). Same wrapper as KotlinJsonUI Dynamic.
+          unbounded_row = is_horizontal
+          if unbounded_row
+            required_imports&.add(:alignment)
+            code += "\n" + indent(UNBOUNDED_ROW_OPEN, depth + 2) unless paging
+          end
           
           # Process children
           children = json_data['child'] || []
@@ -190,6 +206,7 @@ module KjuiTools
           # (`wrapContentWidth/Height(Alignment.*)`) work in any scope, so the
           # ScopeFree branch of build_alignment routes through those instead.
           closing = paging ? "\n" + indent("}", depth) : "\n" + indent("}", depth + 1) + "\n" + indent("}", depth)
+          closing = "\n" + indent("}", depth + 2) + closing if unbounded_row && !paging
           if scoped
             code = indent("run {", outer_depth) + "\n" + code
             closing += "\n" + indent("}", outer_depth)
@@ -201,11 +218,16 @@ module KjuiTools
             layout_type: 'ScopeFree',
             json_data: json_data
           }
-          result[:child_depth_offset] = 1 if scoped
-          result[:child_wrapper] = { open: 'item {', close: '}' } if paging
+          result[:child_depth_offset] = (scoped ? 1 : 0) + (unbounded_row && !paging ? 1 : 0)
+          result.delete(:child_depth_offset) if result[:child_depth_offset].zero?
+          if paging
+            result[:child_wrapper] = unbounded_row ? { open: "item { #{UNBOUNDED_ROW_OPEN}", close: '} }' } : { open: 'item {', close: '}' }
+          end
           result
         end
         
+        UNBOUNDED_ROW_OPEN = 'Row(modifier = Modifier.wrapContentHeight(align = Alignment.Top, unbounded = true)) {'.freeze
+
         private
         
         def self.indent(text, level)

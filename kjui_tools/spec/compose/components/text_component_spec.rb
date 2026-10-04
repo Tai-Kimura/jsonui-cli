@@ -349,10 +349,30 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to eq('')
     end
 
-    it 'generates text with minimumScaleFactor' do
+    # Auto size does not imply one line: the text wraps and shrinks only when
+    # it overflows a bounded box (attribute_semantics autoShrink
+    # .requiresBoundedAxis, 51-E; ticket kjui-label-autoshrink-shrinks-when-
+    # the-height-can-grow). Through 1.9.15 it added maxLines = 1 + Ellipsis.
+    it 'generates text with minimumScaleFactor, without forcing one line' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'minimumScaleFactor' => 0.5 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('maxLines = 1')
+      expect(result).to include('autoSize = TextAutoSize.StepBased(')
+      expect(result).not_to include('maxLines =')
+      expect(result).not_to include('overflow =')
+    end
+
+    it 'generates text with autoShrink, without forcing one line' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'autoShrink' => true }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('autoSize = TextAutoSize.StepBased(')
+      expect(result).not_to include('maxLines =')
+      expect(result).not_to include('overflow =')
+    end
+
+    it 'keeps a declared lines beside autoShrink' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'autoShrink' => true, 'lines' => 2 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('maxLines = 2')
       expect(result).to include('overflow = TextOverflow.Ellipsis')
     end
 
@@ -436,7 +456,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         expect(result.scan('overflow =').size).to eq(1)
       end
 
-      it 'emits autoSize + single maxLines/overflow when autoShrink + lineBreakMode: clip combine (lineBreakMode wins)' do
+      it 'emits autoSize + a single overflow when autoShrink + lineBreakMode: clip combine (lineBreakMode wins)' do
         json_data = {
           'type' => 'Text', 'text' => 'Test', 'fontSize' => 14,
           'autoShrink' => true, 'lineBreakMode' => 'Clip'
@@ -444,8 +464,9 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         result = described_class.generate(json_data, 0, required_imports)
         expect(result.scan('overflow =').size).to eq(1)
         expect(result).to include('overflow = TextOverflow.Clip')
-        expect(result.scan('maxLines =').size).to eq(1)
-        expect(result).to include('maxLines = 1')
+        # autoShrink no longer implies one line (kjui-label-autoshrink-
+        # shrinks-when-the-height-can-grow).
+        expect(result.scan('maxLines =').size).to eq(0)
       end
 
       it 'lines: 0 still emits Int.MAX_VALUE with no overflow (preserved semantics)' do

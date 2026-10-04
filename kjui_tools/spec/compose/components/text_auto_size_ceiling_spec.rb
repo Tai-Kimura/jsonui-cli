@@ -15,15 +15,15 @@ RSpec.describe 'kjui Label auto-size: fontSize is the ceiling' do
   def auto_size(node)
     KjuiTools::Compose::Components::TextComponent
       .generate({ 'type' => 'Label', 'id' => 'l', 'text' => 'Hi' }.merge(node), 0, Set.new)
-      .lines.grep(/autoSize =/).map(&:strip).first
+      .lines.grep(/autoSize =/).map { |l| l.strip.chomp(',') }.first
   end
 
   it 'passes fontSize as maxFontSize, the factor of it as minFontSize' do
     # Through 1.9.5: autoSize = TextAutoSize.StepBased(minFontSize = 7.2.sp),
     expect(auto_size('fontSize' => 12, 'minimumScaleFactor' => 0.6))
-      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = 7.2.sp, maxFontSize = 12.0.sp),')
+      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = 7.2.sp, maxFontSize = 12.0.sp)')
     expect(auto_size('autoShrink' => true))
-      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = 7.0.sp, maxFontSize = 14.0.sp),')
+      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = 7.0.sp, maxFontSize = 14.0.sp)')
   end
 
   it 'passes a bound fontSize as both bounds' do
