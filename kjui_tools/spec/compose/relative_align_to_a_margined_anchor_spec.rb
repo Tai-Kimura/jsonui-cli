@@ -72,6 +72,7 @@ RSpec.describe 'kjui codegen: relative alignment to a margined anchor' do
     expect(links(emitted('alignLeftView', anchor: anchor))).to eq(['start.linkTo(anchor.start, margin = 40.dp)'])
     expect(links(emitted('alignRightView', anchor: anchor))).to eq(['end.linkTo(anchor.end, margin = 20.dp)'])
     expect(links(emitted('alignRightOfView', anchor: anchor))).to eq(['start.linkTo(anchor.end, margin = (-20.dp))'])
+    expect(links(emitted('alignBottomOfView', anchor: anchor))).to eq(['top.linkTo(anchor.bottom, margin = (-30.dp))'])
   end
 
   it "adds the target's own margin to the anchor's, as before" do
