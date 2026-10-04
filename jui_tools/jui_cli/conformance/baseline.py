@@ -160,7 +160,9 @@ def _load_pillow():
 #: verdict (494 active / 111 inert, unchanged) — backgrounds that reach the
 #: top edge continue below it. Neither the Dynamic Island nor the home
 #: indicator is rendered in these captures (measured, same runs), so the
-#: bottom stays 0.
+#: bottom stays 0. Nothing in the host keeps the indicator away, so the gate
+#: holds it: ``home_indicator`` (tests/test_conformance_home_indicator.py)
+#: fails an iOS run whose screenshots carry the pill's pixels, and names them.
 #:
 #: ios LOCAL takes the same crop, for the same glyphs. The band is not stable
 #: across simulator INSTANCES either: two "iPhone 16 Pro / iOS 18.6" devices

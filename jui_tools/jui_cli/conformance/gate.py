@@ -60,6 +60,7 @@ from .baseline import DEFAULT_ENV
 from .visual_stability import screenshot_name
 from . import cross_effect as cross_effect_mod
 from . import frame_parity as frame_parity_mod
+from . import home_indicator as home_indicator_mod
 from .report import ReportSummary, generate_report
 
 RATCHET_FILENAME = "gate_ratchet.json"
@@ -176,6 +177,14 @@ def evaluate(
     if ratchet is None:
         ratchet = load_ratchet(conformance_dir)
     outcome = judge(summary, platforms, visual=visual, ratchet=ratchet, env=env)
+
+    # The iOS baselines assume the home indicator is never drawn (they hash the
+    # bottom of the picture); a screenshot that shows it is a run that changed
+    # what they compare (home_indicator).
+    if visual and "ios" in platforms:
+        problems, notices = home_indicator_mod.judge(conformance_dir)
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
 
     if cross_effect:
         if not visual:
