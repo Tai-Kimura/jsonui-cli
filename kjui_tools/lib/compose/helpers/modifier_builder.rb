@@ -377,6 +377,33 @@ module KjuiTools
           align && ".wrapContentHeight(align = #{align})"
         end
 
+        # The key a View container injects into a child that declares a
+        # numeric size: where, per axis, the container places that child
+        # ([h, v], bias −1 start / top, 0 centre, 1 end / bottom).
+        OVERFLOW_BIAS_KEY = '__overflowBias'
+
+        # A declared size is requiredWidth / requiredHeight, and an
+        # over-constrained required size is coerced and its content CENTRED,
+        # so a 300 child of a 200 Box drew at (−50, −50) whatever the
+        # container said (ticket kjui-oversized-child-is-centred-and-cut-to-
+        # its-parent; web puts it at the container's corner, or overflows both
+        # sides when centred). With the container's placement injected, an
+        # unbounded wrapContent in front places the declared box where the
+        # container puts the child; a child that fits reads the same size and
+        # place as before. KotlinJsonUI Dynamic emits the same chain
+        # (ModifierBuilder.declaredSize).
+        def self.overflow_wrapper(json_data, axis, required_imports = nil)
+          bias = json_data[OVERFLOW_BIAS_KEY]
+          return nil unless bias.is_a?(Array) && bias.size == 2
+
+          required_imports&.add(:bias_alignment)
+          if axis == :width
+            ".wrapContentWidth(align = BiasAlignment.Horizontal(#{bias[0].to_f}f), unbounded = true)"
+          else
+            ".wrapContentHeight(align = BiasAlignment.Vertical(#{bias[1].to_f}f), unbounded = true)"
+          end
+        end
+
         def self.build_size(json_data, parent_type = nil, required_imports = nil)
           modifiers = []
           weight_axis = weighted_axis(json_data, parent_type)
@@ -391,6 +418,7 @@ module KjuiTools
               elsif frame['width'] == 'wrapContent'
                 modifiers << ".wrapContentWidth()"
               else
+                overflow_wrapper(json_data, :width, required_imports)&.then { |w| modifiers << w }
                 modifiers << ".requiredWidth(#{process_dimension(frame['width'])})"
               end
             end
@@ -400,6 +428,7 @@ module KjuiTools
               elsif frame['height'] == 'wrapContent'
                 modifiers << ".wrapContentHeight()"
               else
+                overflow_wrapper(json_data, :height, required_imports)&.then { |w| modifiers << w }
                 modifiers << ".requiredHeight(#{process_dimension(frame['height'])})"
               end
             end
@@ -480,6 +509,7 @@ module KjuiTools
             # clipToBounds overflow probes byte-identical on android — the
             # child could never overflow, so the FALSE face was unexpressible
             # at the measurement layer (2026-08-08, run 31160838024 pixels).
+            overflow_wrapper(json_data, :width, required_imports)&.then { |w| modifiers << w }
             modifiers << ".requiredWidth(#{process_dimension(json_data['width'])})"
             modifiers << width_constraint if width_constraint
           end
@@ -534,6 +564,7 @@ module KjuiTools
             modifiers << ".height(#{process_dimension(json_data['height'])})"
             modifiers << height_constraint if height_constraint
           elsif explicit_height
+            overflow_wrapper(json_data, :height, required_imports)&.then { |w| modifiers << w }
             modifiers << ".requiredHeight(#{process_dimension(json_data['height'])})"
             modifiers << height_constraint if height_constraint
           elsif parent_type == 'Column' && (json_data['weight'] || json_data['heightWeight'])

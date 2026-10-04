@@ -215,6 +215,7 @@ module KjuiTools
           # composable above; its children render plain, so they must NOT be
           # distributed to here.
           distribute_main_axis!(children, json_data['distribution'], layout) unless fill_distribution
+          inject_overflow_bias!(children, layout, gravity, json_data) unless fill_distribution
 
           # Return structure for parent to process children. `layout_type` is
           # what the children see as parent_type: inside DistributionFillRow/
@@ -226,6 +227,93 @@ module KjuiTools
         
         private
         
+        # Where the container places a child that declares a numeric size, per
+        # axis ([h, v], bias −1 start / top, 0 centre, 1 end / bottom), injected
+        # for the size stage (ModifierBuilder.overflow_wrapper). An
+        # over-constrained declared size was coerced and centred whatever the
+        # container said (ticket kjui-oversized-child-is-centred-and-cut-to-its-
+        # parent). Each axis is read off what this file and build_alignment
+        # actually emit for the child — its own `.align(…)`, else the
+        # container's contentAlignment / cross-axis alignment / main-axis
+        # gravity — so the wrapper anchors the box exactly where Compose places
+        # the child. KotlinJsonUI Dynamic computes the same biases
+        # (DynamicContainerComponent.boxBias / columnBias / rowBias / axisBias).
+        # A bound (`@{…}`) child placement is decided at run time and is not
+        # read here; the container's own placement stands in for it.
+        def self.inject_overflow_bias!(children, layout, gravity, json_data)
+          return unless %w[Box Column Row].include?(layout)
+
+          parts = gravity_parts_of(gravity)
+          parent_h = axis_bias_of(parts, %w[left], %w[right], %w[centerHorizontal center])
+          parent_v = axis_bias_of(parts, %w[top], %w[bottom], %w[centerVertical center])
+          # A gravity-less rightToLeft Column anchors its children at the
+          # trailing edge (add_gravity_settings).
+          parent_h = 1.0 if layout == 'Column' && json_data['direction'] == 'rightToLeft' && parts.empty?
+          if layout == 'Box' && (box = resolve_box_alignment(parts))
+            parent_h, parent_v = ALIGNMENT_BIAS.fetch(box.sub('Alignment.', ''))
+          end
+
+          children.each do |child|
+            next unless child.is_a?(Hash) && declares_numeric_size?(child)
+
+            own = Helpers::ModifierBuilder.build_alignment(child, nil, layout).first
+            own_bias = own && !own.include?('when') ? alignment_bias_of(own) : nil
+            h, v = parent_h, parent_v
+            case layout
+            when 'Box' then h, v = own_bias if own_bias
+            when 'Column' then h = own_bias[0] if own_bias
+            when 'Row' then v = own_bias[1] if own_bias
+            end
+            child[Helpers::ModifierBuilder::OVERFLOW_BIAS_KEY] = [h, v]
+          end
+        end
+
+        # Compose's named alignments as [horizontal, vertical] bias. A
+        # one-axis name leaves the other axis nil.
+        ALIGNMENT_BIAS = {
+          'TopStart' => [-1.0, -1.0], 'TopCenter' => [0.0, -1.0], 'TopEnd' => [1.0, -1.0],
+          'CenterStart' => [-1.0, 0.0], 'Center' => [0.0, 0.0], 'CenterEnd' => [1.0, 0.0],
+          'BottomStart' => [-1.0, 1.0], 'BottomCenter' => [0.0, 1.0], 'BottomEnd' => [1.0, 1.0],
+          'Start' => [-1.0, nil], 'CenterHorizontally' => [0.0, nil], 'End' => [1.0, nil],
+          'Top' => [nil, -1.0], 'CenterVertically' => [nil, 0.0], 'Bottom' => [nil, 1.0]
+        }.freeze
+
+        # The bias of an emitted `.align(…)`.
+        def self.alignment_bias_of(emitted)
+          if (m = emitted.match(/BiasAlignment\((-?[\d.]+)f,\s*(-?[\d.]+)f\)/))
+            [m[1].to_f, m[2].to_f]
+          elsif (m = emitted.match(/Alignment\.(\w+)/))
+            ALIGNMENT_BIAS[m[1]]
+          end
+        end
+
+        # −1 start, 1 end, 0 centre, start when the gravity names none
+        # (gravityDefaults). Start, end, centre: Dynamic's axisBias order.
+        def self.axis_bias_of(parts, starts, ends, centers)
+          return -1.0 if parts.any? { |g| starts.include?(g) }
+          return 1.0 if parts.any? { |g| ends.include?(g) }
+          return 0.0 if parts.any? { |g| centers.include?(g) }
+
+          -1.0
+        end
+
+        def self.gravity_parts_of(gravity)
+          return [] if gravity.nil?
+
+          gravity.is_a?(Array) ? gravity.map { |g| g.to_s.strip } : gravity.to_s.split('|').map(&:strip)
+        end
+
+        # A numeric width or height (or a frame): the only nodes the size stage
+        # wraps. Same predicate as KotlinJsonUI Dynamic's declaresNumericSize.
+        def self.declares_numeric_size?(child)
+          return true if child['frame'].is_a?(Hash)
+
+          %w[width height].any? do |key|
+            v = child[key]
+            v.is_a?(Numeric) || (v.is_a?(String) && v.match?(/\A\d+(\.\d+)?\z/))
+          end
+        end
+
         # Give each child of a `fillEqually` container its equal share of the
         # main axis. Mutates the child hashes, the way the dynamic component
         # injects into the child JSON — `build_weight` is what emits, so the

@@ -1,0 +1,127 @@
+# frozen_string_literal: true
+
+require 'set'
+require 'json'
+require 'compose/compose_builder'
+require 'compose/components/container_component'
+require 'compose/helpers/modifier_builder'
+require_relative '../support/kotlin_compiler'
+
+# kjui-oversized-child-is-centred-and-cut-to-its-parent: a declared size is
+# requiredWidth / requiredHeight, and an over-constrained required size is
+# coerced and its content centred — a 300 child of a 200 Box drew at
+# (−50, −50) whatever the gravity. The container now hands each child with a
+# numeric size where it places it ([h, v] bias), and the size stage anchors
+# the declared box there with an unbounded wrapContent. KotlinJsonUI Dynamic
+# computes the same biases (DynamicContainerComponent.boxBias / columnBias /
+# rowBias / axisBias); its device arms are OversizedChildPlacementTest.
+RSpec.describe 'kjui codegen: an oversized child sits where its container places it' do
+  def key = KjuiTools::Compose::Helpers::ModifierBuilder::OVERFLOW_BIAS_KEY
+
+  def bias(layout, gravity, child, json_data = {})
+    children = [child]
+    KjuiTools::Compose::Components::ContainerComponent.send(:inject_overflow_bias!, children, layout, gravity, json_data)
+    children.first[key]
+  end
+
+  let(:big) { { 'type' => 'View', 'width' => 300, 'height' => 300 } }
+
+  describe 'a Box' do
+    it 'puts the child at its corner by default' do
+      expect(bias('Box', nil, big.dup)).to eq([-1.0, -1.0])
+    end
+
+    it 'centres it when its gravity is center' do
+      expect(bias('Box', 'center', big.dup)).to eq([0.0, 0.0])
+    end
+
+    it 'puts it at the end when its gravity is right and bottom' do
+      expect(bias('Box', %w[right bottom], big.dup)).to eq([1.0, 1.0])
+    end
+
+    # The wrapper follows what this Box's contentAlignment emit says, which
+    # resolves each axis centre-first (resolve_box_alignment); the per-axis
+    # main-axis rule of a Column / Row is start-first. A gravity naming both
+    # left and centerHorizontal is where the two readings part.
+    it 'reads the Box\'s emitted contentAlignment, not the start-first axis rule' do
+      expect(bias('Box', %w[left centerHorizontal], big.dup)).to eq([0.0, -1.0])
+    end
+
+    it 'lets the child\'s own placement win' do
+      expect(bias('Box', 'center', big.merge('alignRight' => true))).to eq([1.0, -1.0])
+    end
+
+    it 'leaves a bound placement to the container (decided at run time)' do
+      expect(bias('Box', 'center', big.merge('alignRight' => '@{r}'))).to eq([0.0, 0.0])
+    end
+  end
+
+  describe 'a Column or Row' do
+    it 'takes a Column\'s cross-axis alignment and main-axis gravity' do
+      expect(bias('Column', %w[centerHorizontal bottom], big.dup)).to eq([0.0, 1.0])
+      expect(bias('Column', nil, big.merge('alignRight' => true))).to eq([1.0, -1.0])
+    end
+
+    it 'anchors a gravity-less rightToLeft Column at the trailing edge, as it places its children' do
+      expect(bias('Column', nil, big.dup, 'direction' => 'rightToLeft')).to eq([1.0, -1.0])
+    end
+
+    it 'takes a Row\'s cross-axis alignment and main-axis gravity' do
+      expect(bias('Row', %w[centerVertical right], big.dup)).to eq([1.0, 0.0])
+      expect(bias('Row', nil, big.merge('alignBottom' => true))).to eq([-1.0, 1.0])
+    end
+  end
+
+  it 'gives only a child with a numeric size the placement' do
+    expect(bias('Box', 'center', { 'type' => 'View', 'width' => 'matchParent', 'height' => 'wrapContent' })).to be_nil
+    expect(bias('Box', 'center', { 'type' => 'View', 'width' => '@{w}' })).to be_nil
+    expect(bias('Box', 'center', { 'type' => 'View', 'width' => '120' })).to eq([0.0, 0.0])
+  end
+
+  describe 'the size stage' do
+    def size(node) = KjuiTools::Compose::Helpers::ModifierBuilder.build_size(node, nil, Set.new)
+
+    it 'puts the unbounded wrapContent in front of each required size' do
+      expect(size(big.merge(key => [0.0, 1.0]))).to eq([
+        '.wrapContentWidth(align = BiasAlignment.Horizontal(0.0f), unbounded = true)',
+        '.requiredWidth(300.dp)',
+        '.wrapContentHeight(align = BiasAlignment.Vertical(1.0f), unbounded = true)',
+        '.requiredHeight(300.dp)'
+      ])
+    end
+
+    it 'leaves a node the container did not place as it was (control)' do
+      expect(size(big.dup)).to eq(['.requiredWidth(300.dp)', '.requiredHeight(300.dp)'])
+    end
+
+    it 'does the same for a frame' do
+      out = size({ 'type' => 'View', 'frame' => { 'width' => 300, 'height' => 300 }, key => [1.0, -1.0] })
+      expect(out.first).to eq('.wrapContentWidth(align = BiasAlignment.Horizontal(1.0f), unbounded = true)')
+    end
+  end
+
+  it 'compiles: a centred Box holding an oversized child, through the builder' do
+    layout = { 'type' => 'View', 'id' => 'box', 'width' => 200, 'height' => 200, 'gravity' => 'center',
+               'child' => [{ 'type' => 'View', 'id' => 'kid', 'width' => 300, 'height' => 300 }] }
+    code = KjuiTools::Compose::ComposeBuilder.new.send(:generate_component, layout, 1, 'Box')
+    expect(code).to include('.wrapContentWidth(align = BiasAlignment.Horizontal(0.0f), unbounded = true)')
+    expect(<<~KT).to compile_as_kotlin
+      interface Modifier { companion object : Modifier }
+      val Int.dp: Int get() = this
+      fun Modifier.requiredWidth(d: Int): Modifier = this
+      fun Modifier.requiredHeight(d: Int): Modifier = this
+      fun Modifier.testTag(t: String): Modifier = this
+      class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
+      fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
+      interface Alignment { companion object { val Center: Alignment = object : Alignment {} } }
+      class BiasAlignment { class Horizontal(val bias: Float); class Vertical(val bias: Float) }
+      fun Modifier.wrapContentWidth(align: BiasAlignment.Horizontal, unbounded: Boolean): Modifier = this
+      fun Modifier.wrapContentHeight(align: BiasAlignment.Vertical, unbounded: Boolean): Modifier = this
+      interface BoxScope
+      fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment? = null, content: BoxScope.() -> Unit = {}) {}
+      fun BoxScope.host() {
+      #{code}
+      }
+    KT
+  end
+end
