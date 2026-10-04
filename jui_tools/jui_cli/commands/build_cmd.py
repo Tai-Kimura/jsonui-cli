@@ -13,6 +13,7 @@ import sys
 import time
 from pathlib import Path
 
+from ..core.screen_identity import is_layout_path
 from ..core.config_manager import ConfigManager
 from ..core.generated_marker import json_marker
 from ..core.image_converter import ImageConverter
@@ -1924,7 +1925,7 @@ def _check_isolated_embed_constraints(
 
     isolated_targets: dict[str, list[str]] = {}
     for layout_path in sorted(layouts_dir.rglob("*.json")):
-        if "Resources" in layout_path.parts:
+        if not is_layout_path(layout_path, layouts_dir):
             continue
         try:
             layout = json.loads(layout_path.read_text(encoding="utf-8"))

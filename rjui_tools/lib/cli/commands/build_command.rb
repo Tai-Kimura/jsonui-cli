@@ -105,11 +105,10 @@ module RjuiTools
           # (INCLUDE_ID_PREFIX_GATE_FROM) and hands the answer over.
           apply_include_id_prefix_decision
 
-          all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
-            # Skip Resources folder (colors.json, strings.json, etc.)
-            # Skip Styles folder (reusable style definitions, not components)
-            file.include?(File.join(layouts_dir, 'Resources')) ||
-              file.include?(File.join(layouts_dir, 'Styles'))
+          # Resources (colors.json, strings.json, …) and Styles (reusable style
+          # definitions) hold no layout — the one rule, ScreenIndex.layout_path?
+          all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).select do |file|
+            JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
           end
           # Responsive variant files (home@regular.json) are generated
           # alongside their base screen, never standalone (06 track).
@@ -428,7 +427,7 @@ module RjuiTools
           # Python web_generator used to emit subdir-aware paths.
           layouts_dir = @config['layouts_directory']
           expected_names = Dir.glob(File.join(layouts_dir, '**', '*.json'))
-            .reject { |f| f.include?('/Resources/') || f.include?('/Styles/') }
+            .select { |f| JsonUIShared::ScreenIndex.layout_path?(layouts_dir, f) }
             .reject { |f| JsonUIShared::LayoutVariant.variant?(f) }
             .map { |f| to_pascal_case(File.basename(f, '.json')) }
             .to_set
@@ -831,8 +830,7 @@ module RjuiTools
         # read is left to the stage that reads it, which reports it.
         def prevalidate_bindings(layouts_dir)
           Dir.glob(File.join(layouts_dir, '**', '*.json')).sort.each do |file|
-            next if file.include?(File.join(layouts_dir, 'Resources')) ||
-                    file.include?(File.join(layouts_dir, 'Styles'))
+            next unless JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
 
             begin
               json = React::StyleLoader.load_and_merge(JSON.parse(File.read(file, encoding: 'UTF-8')))
@@ -1023,8 +1021,8 @@ module RjuiTools
             # reference plural keys directly (VM-only in v1 — converters
             # inline layout strings statically and cannot pass a count).
             plural_errors.concat(JsonUIShared::PluralValidator.validate_strings(shared_strings))
-            layout_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
-              file.include?(File.join(layouts_dir, 'Resources'))
+            layout_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).select do |file|
+              JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
             end
             plural_errors.concat(
               JsonUIShared::PluralValidator.validate_layout_references(shared_strings, layout_files)

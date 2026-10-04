@@ -24,6 +24,8 @@ import argparse
 import fnmatch
 import json
 import os
+
+from ..core.screen_identity import is_layout_path
 from pathlib import Path
 
 
@@ -503,7 +505,7 @@ def _collect_targets(config_mgr) -> list[tuple[str, Path]]:
     # hand-editable and intentionally marker-free.
     for platform_layouts in sorted(_layout_distribution_dirs(config_mgr)):
         for jf in platform_layouts.rglob("*.json"):
-            if _is_resource_or_style(jf):
+            if not is_layout_path(jf, platform_layouts):
                 continue
             if _is_excluded(jf, excluded_names):
                 continue
@@ -610,11 +612,6 @@ def _scan_code_tree(directory: Path) -> list[tuple[str, Path]]:
         if f.is_file() and f.suffix in CODE_EXTENSIONS:
             out.append(("code", f))
     return out
-
-
-def _is_resource_or_style(path: Path) -> bool:
-    parts = set(path.parts)
-    return "Resources" in parts or "Styles" in parts
 
 
 def _check_file(kind: str, path: Path, sentinel: str, end_line: str) -> str:

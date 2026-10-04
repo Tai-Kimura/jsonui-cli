@@ -75,6 +75,21 @@ module JsonUIShared
     # layout (a hand-written page). They are real navigation destinations,
     # so they enter the index as screens. Each entry is a bare id or the
     # object form `{ "id" => ..., "group" => ... }`.
+    # Is +path+ (a .json at or under +root+) a layout? Not when a directory
+    # between +root+ and the file is one of NON_LAYOUT_SUBTREES — judged on
+    # the path RELATIVE to the root, so a `Resources` directory above the
+    # root (in the project's own path) hides no layout, as
+    # `file.include?('/Resources/')` did. The one rule every layout
+    # enumerator reads (ticket layout-enumerators-count-resources-json-as-
+    # layouts); jui_cli.core.screen_identity.is_layout_path is the Python
+    # reader of the same canon.
+    def self.layout_path?(root, path)
+      prefix = "#{root.to_s.chomp(File::SEPARATOR)}#{File::SEPARATOR}"
+      rel = path.to_s.delete_prefix(prefix)
+      dirs = File.dirname(rel).split(File::SEPARATOR)
+      (dirs & NON_LAYOUT_SUBTREES).empty?
+    end
+
     def self.build(layouts_dir, app_owned_screens: nil)
       index = new
       index.send(:load!, layouts_dir, app_owned_screens)
@@ -247,10 +262,7 @@ module JsonUIShared
 
     def layout_files(layouts_dir)
       root = layouts_dir.to_s
-      Dir.glob(File.join(root, '**', '*.json')).sort.reject do |path|
-        dirs = File.dirname(path).delete_prefix(root).split(File::SEPARATOR)
-        (dirs & NON_LAYOUT_SUBTREES).any?
-      end
+      Dir.glob(File.join(root, '**', '*.json')).sort.select { |path| self.class.layout_path?(root, path) }
     end
 
     def load_json(path)

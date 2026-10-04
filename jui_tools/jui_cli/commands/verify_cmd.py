@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..core import shared_core
+from ..core.screen_identity import is_layout_path
 
 
 # Identifiers that look like type names (PascalCase, no separators).
@@ -764,6 +765,10 @@ def _screen_id_space_changes(layouts_root: Path) -> list[str]:
             continue
         absolute = (repo_root / name).resolve()
         if watched not in absolute.parents:
+            continue
+        # A resource or style file (Layouts/Resources/defined_colors.json) is
+        # no screen: adding or deleting one moved no id.
+        if not is_layout_path(absolute, watched):
             continue
         base = absolute.name[: -len(".json")]
         if code[0] == "R" or " -> " in path:

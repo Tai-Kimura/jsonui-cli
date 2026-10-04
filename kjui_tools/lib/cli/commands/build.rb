@@ -9,6 +9,7 @@ require_relative '../../core/attribute_validator'
 require_relative '../../core/binding_validator'
 require_relative '../../core/normalization'
 require_relative '../../core/layout_variant'
+require_relative '../../core/screen_index'
 require_relative '../../core/generated_orphans'
 
 module KjuiTools
@@ -395,8 +396,8 @@ module KjuiTools
           @refused_layouts = []
 
           # Process all JSON files in Layouts directory (excluding Resources folder)
-          all_json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
-            file.include?('/Resources/')
+          all_json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).select do |file|
+            JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
           end
           # Responsive variant files (home@regular.json) are built alongside
           # their base screen, never standalone — but they stay in the
