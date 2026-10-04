@@ -136,7 +136,7 @@ module RjuiTools
             css = color.to_s.start_with?('#') ? color : "var(--color-#{color})"
             parts << "color: '#{css}'"
           end
-          parts << "fontSize: '#{attrs['fontSize']}px'" if attrs['fontSize']
+          parts << "fontSize: '#{TailwindMapper.rem(attrs['fontSize'])}'" if attrs['fontSize']
           parts << "fontFamily: #{JsonUIShared::StringLiterals.ts_single(attrs['font'])}" if attrs['font']
           { text: hint, parts: parts }
         end
@@ -464,7 +464,7 @@ module RjuiTools
             end
 
           elsif attributes['lineHeight']
-            @dynamic_styles['lineHeight'] = "'#{attributes['lineHeight']}px'"
+            @dynamic_styles['lineHeight'] = "'#{TailwindMapper.rem(attributes['lineHeight'])}'"
           end
 
           # A highlight lineHeightMultiple. Line height is a unitless multiplier
@@ -478,19 +478,19 @@ module RjuiTools
             if edge_inset.is_a?(Array)
               case edge_inset.length
               when 1
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])}'"
               when 2
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px #{edge_inset[1]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])}'"
               when 3
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px #{edge_inset[1]}px #{edge_inset[2]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])} #{TailwindMapper.rem(edge_inset[2])}'"
               when 4
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px #{edge_inset[1]}px #{edge_inset[2]}px #{edge_inset[3]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])} #{TailwindMapper.rem(edge_inset[2])} #{TailwindMapper.rem(edge_inset[3])}'"
               end
             elsif edge_inset.is_a?(String) && edge_inset.include?('|')
               parts = edge_inset.split('|').map(&:to_i)
-              @dynamic_styles['padding'] = "'#{parts.map { |p| "#{p}px" }.join(' ')}'"
+              @dynamic_styles['padding'] = "'#{parts.map { |p| TailwindMapper.rem(p) }.join(' ')}'"
             else
-              @dynamic_styles['padding'] = "'#{edge_inset.to_i}px'"
+              @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset.to_i)}'"
             end
           end
 
@@ -617,7 +617,7 @@ module RjuiTools
         # solve, so the inline style is safe here and only here.
         def build_partial_style(partial)
           styles = []
-          styles << "fontSize: '#{partial['fontSize']}px'" if partial['fontSize']
+          styles << "fontSize: '#{TailwindMapper.rem(partial['fontSize'])}'" if partial['fontSize']
           styles << "fontWeight: '#{partial['fontWeight']}'" if partial['fontWeight']
           styles << "color: #{color_style_expr(partial['fontColor'])}" if has_binding?(partial['fontColor'])
           styles.join(', ')
@@ -666,7 +666,7 @@ module RjuiTools
             # lineOffset is declared on underline only, and strikethrough must
             # not invent one.
             offset = spec['lineOffset']
-            classes << "underline-offset-[#{offset}px]" if attr == 'underline' && offset.is_a?(Numeric)
+            classes << "underline-offset-[#{TailwindMapper.rem(offset)}]" if attr == 'underline' && offset.is_a?(Numeric)
           end
 
           # `underline` and `line-through` are two utilities writing ONE CSS

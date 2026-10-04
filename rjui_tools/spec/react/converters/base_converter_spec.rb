@@ -69,7 +69,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'paddingStart' => 16
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('ps-[16px]')
+        expect(classes).to include('ps-[1rem]')
       end
 
       it 'maps paddingEnd to pe- class' do
@@ -78,7 +78,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'paddingEnd' => 8
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('pe-[8px]')
+        expect(classes).to include('pe-[0.5rem]')
       end
     end
 
@@ -90,8 +90,8 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'paddingRight' => 8
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('pt-[16px]')
-        expect(classes).to include('pr-[8px]')
+        expect(classes).to include('pt-[1rem]')
+        expect(classes).to include('pr-[0.5rem]')
       end
 
       it 'maps insets to padding' do
@@ -100,8 +100,8 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'insets' => [16, 8]
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('py-[16px]')
-        expect(classes).to include('px-[8px]')
+        expect(classes).to include('py-[1rem]')
+        expect(classes).to include('px-[0.5rem]')
       end
 
       it 'maps insetHorizontal to horizontal padding' do
@@ -110,7 +110,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'insetHorizontal' => 16
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('px-[16px]')
+        expect(classes).to include('px-[1rem]')
       end
     end
 
@@ -121,7 +121,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'startMargin' => 16
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('ms-[16px]')
+        expect(classes).to include('ms-[1rem]')
       end
 
       it 'maps endMargin to me- class' do
@@ -130,7 +130,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'endMargin' => 8
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('me-[8px]')
+        expect(classes).to include('me-[0.5rem]')
       end
     end
 
@@ -495,19 +495,19 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
     it 'routes a bound padding into the inline style as px' do
       converter = create_converter({ 'type' => 'View', 'paddingTop' => '@{gap}' })
       expect(converter.send(:build_class_name)).not_to include('pt-')
-      expect(converter.send(:build_style_attr)).to include('paddingTop: `${data.gap}px`')
+      expect(converter.send(:build_style_attr)).to include('paddingTop: `${Number(data.gap) / 16}rem`')
     end
 
     it 'reads the alternate spelling of the same side' do
       converter = create_converter({ 'type' => 'View', 'topPadding' => '@{gap}' })
       converter.send(:build_class_name)
-      expect(converter.send(:build_style_attr)).to include('paddingTop: `${data.gap}px`')
+      expect(converter.send(:build_style_attr)).to include('paddingTop: `${Number(data.gap) / 16}rem`')
     end
 
     it 'routes a bound margin into the inline style as px' do
       converter = create_converter({ 'type' => 'View', 'bottomMargin' => '@{gap}' })
       expect(converter.send(:build_class_name)).not_to include('mb-')
-      expect(converter.send(:build_style_attr)).to include('marginBottom: `${data.gap}px`')
+      expect(converter.send(:build_style_attr)).to include('marginBottom: `${Number(data.gap) / 16}rem`')
     end
 
     it 'keeps the RTL spellings logical rather than physical' do
@@ -516,8 +516,8 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
       })
       converter.send(:build_class_name)
       style = converter.send(:build_style_attr)
-      expect(style).to include('paddingInlineStart: `${data.lead}px`')
-      expect(style).to include('marginInlineEnd: `${data.trail}px`')
+      expect(style).to include('paddingInlineStart: `${Number(data.lead) / 16}rem`')
+      expect(style).to include('marginInlineEnd: `${Number(data.trail) / 16}rem`')
     end
 
     it 'covers every side of both properties' do
@@ -532,7 +532,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
       style = converter.send(:build_style_attr)
       %w[paddingTop paddingRight paddingBottom paddingLeft
          marginTop marginRight marginBottom marginLeft].each do |property|
-        expect(style).to include("#{property}: `${data.")
+        expect(style).to include("#{property}: `${Number(data.")
       end
     end
 
@@ -545,10 +545,10 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
         'paddingStart' => 4, 'leftPadding' => 12
       })
       classes = converter.send(:build_class_name)
-      expect(classes).to include('pt-[8px]')
-      expect(classes).to include('pl-[12px]')
-      expect(classes).to include('ps-[4px]')
-      expect(classes).to include('mt-[16px]')
+      expect(classes).to include('pt-[0.5rem]')
+      expect(classes).to include('pl-[0.75rem]')
+      expect(classes).to include('ps-[0.25rem]')
+      expect(classes).to include('mt-[1rem]')
       expect(converter.send(:build_style_attr)).to eq('')
     end
   end

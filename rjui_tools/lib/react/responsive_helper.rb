@@ -63,7 +63,7 @@ module RjuiTools
             # text-sm -> md:text-sm
             "#{prefix}#{mapped}"
           else
-            "#{prefix}text-[#{v}px]"
+            "#{prefix}text-[#{TailwindMapper.rem(v)}]"
           end
         },
         'padding' => ->(v, prefix) {

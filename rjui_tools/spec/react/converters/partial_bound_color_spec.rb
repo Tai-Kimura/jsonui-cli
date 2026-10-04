@@ -89,7 +89,7 @@ RSpec.describe 'a bound colour in partialAttributes' do
         # while dropping the class the same partial still needs.
         out = emit(klass, { 'range' => '@{r}', 'fontColor' => '@{c}',
                             'fontSize' => 14 }, type)
-        expect(out).to include("fontSize: '14px'")
+        expect(out).to include("fontSize: '0.875rem'")
         expect(out).to include('color: ColorManager.resolveColor(data.c)')
       end
     end

@@ -268,7 +268,7 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("paddingLeft: '16px'")
+        expect(result).to include("paddingLeft: '1rem'")
       end
     end
 

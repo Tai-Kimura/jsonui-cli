@@ -119,20 +119,20 @@ module RjuiTools
             if inset.is_a?(Array)
               case inset.length
               when 1
-                @dynamic_styles['padding'] = "'#{inset[0]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])}'"
               when 2
-                @dynamic_styles['padding'] = "'#{inset[0]}px #{inset[1]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])} #{TailwindMapper.rem(inset[1])}'"
               when 4
-                @dynamic_styles['padding'] = "'#{inset[0]}px #{inset[1]}px #{inset[2]}px #{inset[3]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])} #{TailwindMapper.rem(inset[1])} #{TailwindMapper.rem(inset[2])} #{TailwindMapper.rem(inset[3])}'"
               end
             elsif inset.is_a?(Hash)
               top = inset['top'] || 0
               right = inset['right'] || 0
               bottom = inset['bottom'] || 0
               left = inset['left'] || 0
-              @dynamic_styles['padding'] = "'#{top}px #{right}px #{bottom}px #{left}px'"
+              @dynamic_styles['padding'] = "'#{[top, right, bottom, left].map { |v| TailwindMapper.rem(v) }.join(' ')}'"
             else
-              @dynamic_styles['padding'] = "'#{inset}px'"
+              @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset)}'"
             end
           end
 

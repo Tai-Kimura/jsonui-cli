@@ -57,9 +57,9 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
   describe 'flow sections' do
     it 'two sections: a column of two wraps, the blocks spaced as the lines' do
       jsx = convert(FLOW_TWO_SECTIONS.merge('lineSpacing' => 4, 'columnSpacing' => 10))
-      expect(root_classes(jsx)).to include('flex', 'flex-col', 'gap-y-[4px]')
+      expect(root_classes(jsx)).to include('flex', 'flex-col', 'gap-y-[0.25rem]')
       expect(root_classes(jsx)).not_to include('flex-wrap')
-      expect(wraps(jsx)).to eq(['flex flex-row flex-wrap content-start gap-x-[10px] gap-y-[4px]'] * 2), jsx
+      expect(wraps(jsx)).to eq(['flex flex-row flex-wrap content-start gap-x-[0.625rem] gap-y-[0.25rem]'] * 2), jsx
       expect(jsx.index('BCell')).to be > jsx.index('</div>') # section 1 in the second wrap
     end
 
@@ -67,7 +67,7 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
       [FLOW_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell' }]),
        { 'layout' => 'flow', 'cellClasses' => ['ACell'] }].each do |extra|
         jsx = convert(extra.merge('lineSpacing' => 4))
-        expect(root_classes(jsx)).to include('flex-row', 'flex-wrap', 'gap-y-[4px]')
+        expect(root_classes(jsx)).to include('flex-row', 'flex-wrap', 'gap-y-[0.25rem]')
         expect(wraps(jsx)).to eq([]), jsx
       end
     end
@@ -77,7 +77,7 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
        [{ 'cell' => 'ACell', 'footer' => 'FCell' }],
        [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }]].each do |sections|
         jsx = convert(FLOW_TWO_SECTIONS.merge('sections' => sections, 'lineSpacing' => 4))
-        expect(root_classes(jsx)).to include('flex', 'flex-col', 'gap-y-[4px]')
+        expect(root_classes(jsx)).to include('flex', 'flex-col', 'gap-y-[0.25rem]')
         expect(wraps(jsx).size).to eq(1), jsx
         wrap = jsx[/<div className="flex flex-row flex-wrap[^"]*">.*?<\/div>/m]
         expect(wrap).not_to match(/HCell|FCell/), jsx
@@ -88,12 +88,12 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
   # Every declaration that decides a gap, on the grid and on the one-wrap flow.
   GAP_CASES = {
     {} => [],
-    { 'itemSpacing' => 6 } => ['gap-[6px]'],
-    { 'lineSpacing' => 4 } => ['gap-y-[4px]'],
-    { 'columnSpacing' => 10 } => ['gap-x-[10px]'],
-    { 'columnSpacing' => 10, 'itemSpacing' => 6 } => ['gap-x-[10px]', 'gap-y-[6px]'],
-    { 'lineSpacing' => 4, 'itemSpacing' => 6 } => ['gap-x-[6px]', 'gap-y-[4px]'],
-    { 'lineSpacing' => 4, 'columnSpacing' => 10 } => ['gap-x-[10px]', 'gap-y-[4px]']
+    { 'itemSpacing' => 6 } => ['gap-[0.375rem]'],
+    { 'lineSpacing' => 4 } => ['gap-y-[0.25rem]'],
+    { 'columnSpacing' => 10 } => ['gap-x-[0.625rem]'],
+    { 'columnSpacing' => 10, 'itemSpacing' => 6 } => ['gap-x-[0.625rem]', 'gap-y-[0.375rem]'],
+    { 'lineSpacing' => 4, 'itemSpacing' => 6 } => ['gap-x-[0.375rem]', 'gap-y-[0.25rem]'],
+    { 'lineSpacing' => 4, 'columnSpacing' => 10 } => ['gap-x-[0.625rem]', 'gap-y-[0.25rem]']
   }.freeze
 
   { 'grid' => { 'columns' => 2, 'sections' => [{ 'cell' => 'ACell' }] },
@@ -132,10 +132,10 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
     classes = jsx.scan(/className="([^"]*)"/).flatten.flat_map(&:split).uniq
     css = classes.map do |c|
       rule = TAILWIND_FLOW[c] ||
-             (c =~ /\Agap-\[(\d+)px\]\z/ && "gap:#{Regexp.last_match(1)}px") ||
-             (c =~ /\Agap-x-\[(\d+)px\]\z/ && "column-gap:#{Regexp.last_match(1)}px") ||
-             (c =~ /\Agap-y-\[(\d+)px\]\z/ && "row-gap:#{Regexp.last_match(1)}px") or raise "no definition for #{c}"
-      ".#{c.gsub(/[\[\]]/) { |ch| "\\#{ch}" }} { #{rule} }"
+             (c =~ /\Agap-\[([\d.]+)rem\]\z/ && "gap:#{Regexp.last_match(1)}rem") ||
+             (c =~ /\Agap-x-\[([\d.]+)rem\]\z/ && "column-gap:#{Regexp.last_match(1)}rem") ||
+             (c =~ /\Agap-y-\[([\d.]+)rem\]\z/ && "row-gap:#{Regexp.last_match(1)}rem") or raise "no definition for #{c}"
+      ".#{c.gsub(/[\[\].]/) { |ch| "\\#{ch}" }} { #{rule} }"
     end.join("\n")
     Dir.mktmpdir('rjui_flow') do |dir|
       File.write(File.join(dir, 'app.jsx'), <<~JSX)
@@ -219,14 +219,14 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
       [GRID_TWO_SECTIONS, GRID_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell', 'header' => 'HCell' }])].each do |shape|
         jsx = convert(shape)
         # A scroll container of its own, as the list and the flow are (jsonui-cli 1.9.0).
-        expect(root_classes(jsx)).to eq(%w[flex flex-col overflow-y-auto gap-y-[4px]]), jsx
-        expect(jsx.scan(/<div className="(grid [^"]*)">/).flatten.uniq).to eq(['grid grid-cols-2 gap-x-[10px] gap-y-[4px]']), jsx
+        expect(root_classes(jsx)).to eq(%w[flex flex-col overflow-y-auto gap-y-[0.25rem]]), jsx
+        expect(jsx.scan(/<div className="(grid [^"]*)">/).flatten.uniq).to eq(['grid grid-cols-2 gap-x-[0.625rem] gap-y-[0.25rem]']), jsx
       end
     end
 
     it 'control: one section, no header or footer — the one grid as before' do
       jsx = convert(GRID_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell' }]))
-      expect(root_classes(jsx)).to include('grid', 'grid-cols-2', 'gap-x-[10px]', 'gap-y-[4px]')
+      expect(root_classes(jsx)).to include('grid', 'grid-cols-2', 'gap-x-[0.625rem]', 'gap-y-[0.25rem]')
       expect(jsx).not_to include('<div className="grid')
     end
 

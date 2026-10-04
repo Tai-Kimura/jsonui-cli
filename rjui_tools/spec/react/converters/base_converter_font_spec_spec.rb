@@ -104,7 +104,7 @@ RSpec.describe 'BaseConverter FontSpec routing' do
       style_attr = converter.send(:build_style_attr)
       expect(style_attr).not_to match(/size:/)
       # The binding still flows into the inline style as a regular fontSize entry.
-      expect(style_attr).to include('fontSize: data.size')
+      expect(style_attr).to include('fontSize: `${Number(data.size) / 16}rem`')
     end
   end
 

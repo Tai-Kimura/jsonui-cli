@@ -106,7 +106,7 @@ module RjuiTools
           # targets ::placeholder rather than the textarea's own text.
           hint_font_size = hint_bag['fontSize'] || attributes['hintFontSize']
           if hint_font_size
-            classes << "placeholder:text-[#{hint_font_size.to_i}px]"
+            classes << "placeholder:text-[#{TailwindMapper.rem(hint_font_size.to_i)}]"
           end
           if (hint_font_name = hint_bag['font'] || attributes['hintFont'])
             hint_font = TailwindMapper.map_font(hint_font_name)
@@ -189,14 +189,14 @@ module RjuiTools
             if inset.is_a?(Array)
               case inset.length
               when 1
-                @dynamic_styles['padding'] = "'#{inset[0]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])}'"
               when 2
-                @dynamic_styles['padding'] = "'#{inset[0]}px #{inset[1]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])} #{TailwindMapper.rem(inset[1])}'"
               when 4
-                @dynamic_styles['padding'] = "'#{inset[0]}px #{inset[1]}px #{inset[2]}px #{inset[3]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])} #{TailwindMapper.rem(inset[1])} #{TailwindMapper.rem(inset[2])} #{TailwindMapper.rem(inset[3])}'"
               end
             else
-              @dynamic_styles['padding'] = "'#{inset}px'"
+              @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset)}'"
             end
           end
 

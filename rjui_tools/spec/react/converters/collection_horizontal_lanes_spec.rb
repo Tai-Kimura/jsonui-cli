@@ -36,7 +36,7 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
   # [gridTemplateRows, columnGap, rowGap] of each lane grid, in order.
   def lane_grids(jsx)
     jsx.scan(/<div className="grid grid-flow-col[^"]*" style=\{\{ (.*?) \}\}>/).flatten.map do |style|
-      [style[/gridTemplateRows: ('[^']*'|`[^`]*`)/, 1], style[/columnGap: '(\w+)'/, 1], style[/rowGap: '(\w+)'/, 1]]
+      [style[/gridTemplateRows: ('[^']*'|`[^`]*`)/, 1], style[/columnGap: '([\w.]+)'/, 1], style[/rowGap: '([\w.]+)'/, 1]]
     end
   end
 
@@ -44,7 +44,7 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
 
   it "a section's lanes are its own columns, else the Collection's; one lane keeps the flex row" do
     jsx = convert('columns' => 2, 'lineSpacing' => 8, 'columnSpacing' => 4, 'sections' => LANE_SECTIONS)
-    expect(lane_grids(jsx)).to eq([["'repeat(2, minmax(0, 1fr))'", '8px', '4px'], ["'repeat(3, minmax(0, 1fr))'", '8px', '4px']]), jsx
+    expect(lane_grids(jsx)).to eq([["'repeat(2, minmax(0, 1fr))'", '0.5rem', '0.25rem'], ["'repeat(3, minmax(0, 1fr))'", '0.5rem', '0.25rem']]), jsx
     expect(jsx.index('BCell')).to be > jsx.index('</div>') # section 1 sits in the row, after section 0's grid
     expect(lane_grids(convert('columns' => 2, 'lazy' => 'none', 'sections' => LANE_SECTIONS.first(1))).size).to eq(1)
   end
@@ -61,11 +61,11 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
   end
 
   it 'the row is spaced along the scroll axis by lineSpacing, else itemSpacing — never columnSpacing' do
-    gap = ->(extra) { convert({ 'sections' => LANE_SECTIONS.first(1) }.merge(extra))[/className="[^"]*\bgap-\[(\w+)\]/, 1] }
-    expect(gap.call('lineSpacing' => 8, 'itemSpacing' => 5, 'columnSpacing' => 3)).to eq('8px')
-    expect(gap.call('itemSpacing' => 5, 'columnSpacing' => 3)).to eq('5px')
+    gap = ->(extra) { convert({ 'sections' => LANE_SECTIONS.first(1) }.merge(extra))[/className="[^"]*\bgap-\[([\w.]+)\]/, 1] }
+    expect(gap.call('lineSpacing' => 8, 'itemSpacing' => 5, 'columnSpacing' => 3)).to eq('0.5rem')
+    expect(gap.call('itemSpacing' => 5, 'columnSpacing' => 3)).to eq('0.3125rem')
     expect(gap.call('columnSpacing' => 3)).to be_nil
-    expect(gap.call('paging' => true, 'lineSpacing' => 8, 'itemSpacing' => 5)).to eq('8px')
+    expect(gap.call('paging' => true, 'lineSpacing' => 8, 'itemSpacing' => 5)).to eq('0.5rem')
   end
 
   # Tailwind's own definitions of the classes the emit uses (tailwindcss.com
@@ -91,8 +91,8 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
 
     classes = jsx.scan(/className="([^"]*)"/).flatten.flat_map(&:split).uniq
     css = classes.map do |c|
-      rule = TAILWIND[c] || (c =~ /\Agap-\[(\d+)px\]\z/ && "gap:#{Regexp.last_match(1)}px") or raise "no definition for #{c}"
-      ".#{c.gsub(/[\[\]]/) { |ch| "\\#{ch}" }} { #{rule} }"
+      rule = TAILWIND[c] || (c =~ /\Agap-\[([\d.]+)rem\]\z/ && "gap:#{Regexp.last_match(1)}rem") or raise "no definition for #{c}"
+      ".#{c.gsub(/[\[\].]/) { |ch| "\\#{ch}" }} { #{rule} }"
     end.join("\n")
     Dir.mktmpdir('rjui_lanes') do |dir|
       File.write(File.join(dir, 'app.jsx'), <<~JSX)

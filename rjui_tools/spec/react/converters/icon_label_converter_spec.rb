@@ -28,7 +28,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png' })
         result = converter.convert
         expect(result).to include('flex-row')
-        expect(result).to include('mr-[5px]')
+        expect(result).to include('mr-[0.3125rem]')
       end
     end
 
@@ -37,7 +37,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png', 'iconPosition' => 'Right' })
         result = converter.convert
         expect(result).to include('flex-row-reverse')
-        expect(result).to include('ml-[5px]')
+        expect(result).to include('ml-[0.3125rem]')
       end
     end
 
@@ -46,7 +46,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png', 'iconPosition' => 'Top' })
         result = converter.convert
         expect(result).to include('flex-col')
-        expect(result).to include('mb-[5px]')
+        expect(result).to include('mb-[0.3125rem]')
       end
     end
 
@@ -55,7 +55,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png', 'iconPosition' => 'Bottom' })
         result = converter.convert
         expect(result).to include('flex-col-reverse')
-        expect(result).to include('mt-[5px]')
+        expect(result).to include('mt-[0.3125rem]')
       end
     end
 
@@ -63,7 +63,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
       it 'applies custom margin' do
         converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Text', 'icon' => 'icon.png', 'iconMargin' => 8 })
         result = converter.convert
-        expect(result).to include('mr-[8px]')
+        expect(result).to include('mr-[0.5rem]')
       end
     end
 

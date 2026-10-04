@@ -171,17 +171,17 @@ module RjuiTools
         # folds into the root's own inline `gap` and the class falls back to
         # the historical default.
         def root_item_gap_class
-          spacing = bound_length_style('gap', attributes['spacing'])
-          spacing ? "gap-[#{spacing}px]" : 'gap-2'
+          spacing = bound_rem_style('gap', attributes['spacing'])
+          spacing ? "gap-#{TailwindMapper.spacing_value(spacing)}" : 'gap-2'
         end
 
         # Inner-label shape: [class, style attribute]. The root's style
         # cannot reach these labels, so a bound gap becomes theirs.
         def item_gap_parts
           spacing = attributes['spacing']
-          return [spacing ? "gap-[#{spacing}px]" : 'gap-2', ''] unless (expr = bound_value_expr(spacing))
+          return [spacing ? "gap-#{TailwindMapper.spacing_value(spacing)}" : 'gap-2', ''] unless (expr = bound_value_expr(spacing))
 
-          ['gap-2', style_attr_for({ 'gap' => "`${#{expr}}px`" })]
+          ['gap-2', style_attr_for({ 'gap' => "`${Number(#{expr}) / 16}rem`" })]
         end
 
         # A single radio with no group selection still honours `checked` —

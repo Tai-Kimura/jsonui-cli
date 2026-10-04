@@ -30,22 +30,22 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
   end
 
   it 'four values are [top, right, bottom, left], exact' do
-    expect(padding('insets' => [0, 0, 0, 30])).to eq(%w[pl-[30px]])
-    expect(padding('insets' => [1, 2, 3, 4])).to eq(%w[pt-[1px] pr-[2px] pb-[3px] pl-[4px]])
-    expect(padding('insets' => [2.5, 0, 0, 0])).to eq(%w[pt-[2.5px]])
+    expect(padding('insets' => [0, 0, 0, 30])).to eq(%w[pl-[1.875rem]])
+    expect(padding('insets' => [1, 2, 3, 4])).to eq(%w[pt-[0.0625rem] pr-[0.125rem] pb-[0.1875rem] pl-[0.25rem]])
+    expect(padding('insets' => [2.5, 0, 0, 0])).to eq(%w[pt-[0.15625rem]])
   end
 
   it 'the string form, one value and two values' do
-    expect(padding('insets' => '1|2|3|4')).to eq(%w[pt-[1px] pr-[2px] pb-[3px] pl-[4px]])
-    expect(padding('insets' => '6|30')).to eq(%w[pt-[6px] pr-[30px] pb-[6px] pl-[30px]])
-    expect(padding('insets' => [10])).to eq(%w[pt-[10px] pr-[10px] pb-[10px] pl-[10px]])
+    expect(padding('insets' => '1|2|3|4')).to eq(%w[pt-[0.0625rem] pr-[0.125rem] pb-[0.1875rem] pl-[0.25rem]])
+    expect(padding('insets' => '6|30')).to eq(%w[pt-[0.375rem] pr-[1.875rem] pb-[0.375rem] pl-[1.875rem]])
+    expect(padding('insets' => [10])).to eq(%w[pt-[0.625rem] pr-[0.625rem] pb-[0.625rem] pl-[0.625rem]])
   end
 
   it 'insetHorizontal and insetVertical are added per edge' do
-    expect(padding('insets' => [4, 20], 'insetHorizontal' => 10)).to eq(%w[pt-[4px] pr-[30px] pb-[4px] pl-[30px]])
+    expect(padding('insets' => [4, 20], 'insetHorizontal' => 10)).to eq(%w[pt-[0.25rem] pr-[1.875rem] pb-[0.25rem] pl-[1.875rem]])
     expect(padding('insets' => [2, 0, 0, 30], 'insetHorizontal' => 4, 'insetVertical' => 8))
-      .to eq(%w[pt-[10px] pr-[4px] pb-[8px] pl-[34px]])
-    expect(padding('insetHorizontal' => 13)).to eq(%w[pr-[13px] pl-[13px]])
+      .to eq(%w[pt-[0.625rem] pr-[0.25rem] pb-[0.5rem] pl-[2.125rem]])
+    expect(padding('insetHorizontal' => 13)).to eq(%w[pr-[0.8125rem] pl-[0.8125rem]])
   end
 
   it 'any other value pads nothing' do
@@ -55,14 +55,14 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
   end
 
   it 'a pager keeps its snap points inside the insets' do
-    expect(padding('layout' => 'horizontal', 'paging' => true, 'insets' => [0, 0, 0, 30])).to eq(%w[pl-[30px] scroll-pl-[30px]])
+    expect(padding('layout' => 'horizontal', 'paging' => true, 'insets' => [0, 0, 0, 30])).to eq(%w[pl-[1.875rem] scroll-pl-[1.875rem]])
   end
 
   it 'a bound value in the array: the four edges inline' do
     jsx = convert('insets' => ['@{top}', 0, 0, 30], 'insetVertical' => 2)
-    expect(jsx).to include('paddingTop: `${((Number(data.top) || 0) + 2)}px`')
-    expect(jsx).to include("paddingLeft: '30px'")
-    expect(jsx).to include("paddingBottom: '2px'")
+    expect(jsx).to include('paddingTop: `${Number(((Number(data.top) || 0) + 2)) / 16}rem`')
+    expect(jsx).to include("paddingLeft: '1.875rem'")
+    expect(jsx).to include("paddingBottom: '0.125rem'")
   end
 
   it 'the Collections it emits type-check' do

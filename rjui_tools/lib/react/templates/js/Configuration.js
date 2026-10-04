@@ -35,7 +35,7 @@ function defaultCss(spec) {
   if (spec.weight !== void 0) {
     css.fontWeight = spec.weight;
   }
-  if (spec.size !== void 0) css.fontSize = `${spec.size}px`;
+  if (spec.size !== void 0) css.fontSize = `${spec.size / 16}rem`;
   if (spec.italic) css.fontStyle = "italic";
   return css;
 }

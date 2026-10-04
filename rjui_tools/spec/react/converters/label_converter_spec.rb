@@ -208,7 +208,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       # lineOffset is declared on underline only, and strikethrough must not
       # invent one.
       it 'applies lineOffset to underline and never to strikethrough' do
-        expect(classes_for('underline' => { 'lineOffset' => 3 })).to include('underline-offset-[3px]')
+        expect(classes_for('underline' => { 'lineOffset' => 3 })).to include('underline-offset-[0.1875rem]')
         expect(classes_for('strikethrough' => { 'lineOffset' => 3 })).not_to include('underline-offset')
       end
 
@@ -296,7 +296,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("padding: '10px'")
+        expect(result).to include("padding: '0.625rem'")
       end
 
       it 'handles 2-element array' do
@@ -307,7 +307,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("padding: '10px 20px'")
+        expect(result).to include("padding: '0.625rem 1.25rem'")
       end
 
       it 'handles 4-element array' do
@@ -318,7 +318,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("padding: '10px 20px 30px 40px'")
+        expect(result).to include("padding: '0.625rem 1.25rem 1.875rem 2.5rem'")
       end
 
       it 'handles pipe-separated string' do
@@ -329,7 +329,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("padding: '10px 20px 30px 40px'")
+        expect(result).to include("padding: '0.625rem 1.25rem 1.875rem 2.5rem'")
       end
     end
 
@@ -640,7 +640,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include("fontSize: '24px'")
+      expect(result).to include("fontSize: '1.5rem'")
     end
 
     it 'ignores `background`, which partialAttributes does not declare' do
@@ -988,8 +988,8 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter, 'web-only text attr
   end
 
   # lineHeight is the CSS property directly, in px.
-  it 'emits lineHeight in px' do
-    expect(label('lineHeight' => 28)).to include("lineHeight: '28px'")
+  it 'emits lineHeight in rem' do
+    expect(label('lineHeight' => 28)).to include("lineHeight: '1.75rem'")
   end
 
   # The cross-platform spellings are the multiplier and the extra spacing, so

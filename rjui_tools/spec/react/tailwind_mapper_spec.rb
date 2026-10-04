@@ -66,15 +66,15 @@ RSpec.describe RjuiTools::React::TailwindMapper do
 
   describe '.map_rtl_paddings' do
     it 'maps paddingStart to ps- class' do
-      expect(described_class.map_rtl_paddings(16, nil)).to eq('ps-[16px]')
+      expect(described_class.map_rtl_paddings(16, nil)).to eq('ps-[1rem]')
     end
 
     it 'maps paddingEnd to pe- class' do
-      expect(described_class.map_rtl_paddings(nil, 8)).to eq('pe-[8px]')
+      expect(described_class.map_rtl_paddings(nil, 8)).to eq('pe-[0.5rem]')
     end
 
     it 'maps both paddingStart and paddingEnd' do
-      expect(described_class.map_rtl_paddings(16, 8)).to eq('ps-[16px] pe-[8px]')
+      expect(described_class.map_rtl_paddings(16, 8)).to eq('ps-[1rem] pe-[0.5rem]')
     end
 
     it 'returns empty string when both are nil' do
@@ -84,15 +84,15 @@ RSpec.describe RjuiTools::React::TailwindMapper do
 
   describe '.map_rtl_margins' do
     it 'maps startMargin to ms- class' do
-      expect(described_class.map_rtl_margins(16, nil)).to eq('ms-[16px]')
+      expect(described_class.map_rtl_margins(16, nil)).to eq('ms-[1rem]')
     end
 
     it 'maps endMargin to me- class' do
-      expect(described_class.map_rtl_margins(nil, 8)).to eq('me-[8px]')
+      expect(described_class.map_rtl_margins(nil, 8)).to eq('me-[0.5rem]')
     end
 
     it 'maps both startMargin and endMargin' do
-      expect(described_class.map_rtl_margins(16, 8)).to eq('ms-[16px] me-[8px]')
+      expect(described_class.map_rtl_margins(16, 8)).to eq('ms-[1rem] me-[0.5rem]')
     end
 
     it 'returns empty string when both are nil' do
@@ -102,17 +102,17 @@ RSpec.describe RjuiTools::React::TailwindMapper do
 
   describe '.map_insets' do
     it 'delegates to map_padding for array format' do
-      expect(described_class.map_insets([16, 8])).to eq('py-[16px] px-[8px]')
+      expect(described_class.map_insets([16, 8])).to eq('py-[1rem] px-[0.5rem]')
     end
 
     it 'delegates to map_padding for single value' do
-      expect(described_class.map_insets(16)).to eq('p-[16px]')
+      expect(described_class.map_insets(16)).to eq('p-[1rem]')
     end
   end
 
   describe '.map_inset_horizontal' do
     it 'maps to px- class' do
-      expect(described_class.map_inset_horizontal(16)).to eq('px-[16px]')
+      expect(described_class.map_inset_horizontal(16)).to eq('px-[1rem]')
     end
 
     it 'returns empty string for nil' do
@@ -120,30 +120,30 @@ RSpec.describe RjuiTools::React::TailwindMapper do
     end
 
     it 'writes the px value (jsonui-cli 1.9.14; it rounded to px-3.5 before)' do
-      expect(described_class.map_inset_horizontal(15)).to eq('px-[15px]')
+      expect(described_class.map_inset_horizontal(15)).to eq('px-[0.9375rem]')
     end
   end
 
   describe '.map_padding' do
     context 'with single value' do
       it 'maps to p- class' do
-        expect(described_class.map_padding(16)).to eq('p-[16px]')
+        expect(described_class.map_padding(16)).to eq('p-[1rem]')
       end
     end
 
     context 'with 2-element array' do
       it 'maps to py- and px- classes' do
-        expect(described_class.map_padding([16, 8])).to eq('py-[16px] px-[8px]')
+        expect(described_class.map_padding([16, 8])).to eq('py-[1rem] px-[0.5rem]')
       end
     end
 
     context 'with 4-element array' do
       it 'maps to individual padding classes' do
         result = described_class.map_padding([16, 8, 4, 12])
-        expect(result).to include('pt-[16px]')
-        expect(result).to include('pr-[8px]')
-        expect(result).to include('pb-[4px]')
-        expect(result).to include('pl-[12px]')
+        expect(result).to include('pt-[1rem]')
+        expect(result).to include('pr-[0.5rem]')
+        expect(result).to include('pb-[0.25rem]')
+        expect(result).to include('pl-[0.75rem]')
       end
     end
   end
@@ -151,23 +151,23 @@ RSpec.describe RjuiTools::React::TailwindMapper do
   describe '.map_margin' do
     context 'with single value' do
       it 'maps to m- class' do
-        expect(described_class.map_margin(16)).to eq('m-[16px]')
+        expect(described_class.map_margin(16)).to eq('m-[1rem]')
       end
     end
 
     context 'with 2-element array' do
       it 'maps to my- and mx- classes' do
-        expect(described_class.map_margin([16, 8])).to eq('my-[16px] mx-[8px]')
+        expect(described_class.map_margin([16, 8])).to eq('my-[1rem] mx-[0.5rem]')
       end
     end
 
     context 'with 4-element array' do
       it 'maps to individual margin classes' do
         result = described_class.map_margin([16, 8, 4, 12])
-        expect(result).to include('mt-[16px]')
-        expect(result).to include('mr-[8px]')
-        expect(result).to include('mb-[4px]')
-        expect(result).to include('ml-[12px]')
+        expect(result).to include('mt-[1rem]')
+        expect(result).to include('mr-[0.5rem]')
+        expect(result).to include('mb-[0.25rem]')
+        expect(result).to include('ml-[0.75rem]')
       end
     end
   end
@@ -175,15 +175,15 @@ RSpec.describe RjuiTools::React::TailwindMapper do
   describe '.map_individual_paddings' do
     it 'maps individual padding values' do
       result = described_class.map_individual_paddings(16, 8, 4, 12)
-      expect(result).to include('pt-[16px]')
-      expect(result).to include('pr-[8px]')
-      expect(result).to include('pb-[4px]')
-      expect(result).to include('pl-[12px]')
+      expect(result).to include('pt-[1rem]')
+      expect(result).to include('pr-[0.5rem]')
+      expect(result).to include('pb-[0.25rem]')
+      expect(result).to include('pl-[0.75rem]')
     end
 
     it 'handles partial values' do
       result = described_class.map_individual_paddings(16, nil, nil, nil)
-      expect(result).to eq('pt-[16px]')
+      expect(result).to eq('pt-[1rem]')
     end
 
     it 'returns empty string when all nil' do
@@ -194,15 +194,15 @@ RSpec.describe RjuiTools::React::TailwindMapper do
   describe '.map_individual_margins' do
     it 'maps individual margin values' do
       result = described_class.map_individual_margins(16, 8, 4, 12)
-      expect(result).to include('mt-[16px]')
-      expect(result).to include('mr-[8px]')
-      expect(result).to include('mb-[4px]')
-      expect(result).to include('ml-[12px]')
+      expect(result).to include('mt-[1rem]')
+      expect(result).to include('mr-[0.5rem]')
+      expect(result).to include('mb-[0.25rem]')
+      expect(result).to include('ml-[0.75rem]')
     end
 
     it 'handles partial values' do
       result = described_class.map_individual_margins(nil, nil, 8, nil)
-      expect(result).to eq('mb-[8px]')
+      expect(result).to eq('mb-[0.5rem]')
     end
   end
 

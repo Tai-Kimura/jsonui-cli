@@ -37,7 +37,7 @@ export interface FontSpec {
     | 'thin'
     | 'heavy'
     | string;
-  /** Maps to JSON `fontSize` (px). */
+  /** Maps to JSON `fontSize` (layout px; written as rem, N / 16). */
   size?: number;
   /** Reserved — JsonUI has no `italic` attribute yet, generator always emits false. */
   italic?: boolean;
@@ -72,7 +72,7 @@ function defaultCss(spec: FontSpec): React.CSSProperties {
   if (spec.weight !== undefined) {
     css.fontWeight = spec.weight as React.CSSProperties['fontWeight'];
   }
-  if (spec.size !== undefined) css.fontSize = `${spec.size}px`;
+  if (spec.size !== undefined) css.fontSize = `${spec.size / 16}rem`;
   if (spec.italic) css.fontStyle = 'italic';
   return css;
 }
