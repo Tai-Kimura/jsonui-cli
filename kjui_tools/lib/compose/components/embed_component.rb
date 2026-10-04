@@ -147,7 +147,6 @@ module KjuiTools
         # click and the disabled semantics, not build_clickable's blocker again.
         def self.build_embed_modifier(json_data, depth, required_imports, parent_type)
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           # userInteractionEnabled stops this node and
           # what is in it (ModifierBuilder.build_interaction_blocker); this
           # component builds no clickable, which is where it came from.
@@ -158,6 +157,10 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))

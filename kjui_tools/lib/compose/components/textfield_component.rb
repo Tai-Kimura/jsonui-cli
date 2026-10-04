@@ -319,13 +319,17 @@ module KjuiTools
           if has_margins
             # Box modifier with margins
             box_modifiers = []
-            box_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             box_modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             if is_hidden
               required_imports&.add(:alpha)
+              box_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
               box_modifiers << ".alpha(0f)"
             else
               box_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+              # testTag after margins and offset, before alpha: the tagged box (resource-id
+              # bounds, TalkBack focus) is the drawn box. Ticket
+              # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+              box_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
               box_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
             # Shadow after alpha, the View slot; declared on `common` and
@@ -391,15 +395,19 @@ module KjuiTools
           else
             # Regular modifiers for CustomTextField (size, margins, and weight, padding goes to contentPadding)
             modifiers = []
-            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
             if is_hidden
               required_imports&.add(:alpha)
+              modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
               modifiers << ".alpha(0f)"
             else
               modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+              # testTag after margins and offset, before alpha: the tagged box (resource-id
+              # bounds, TalkBack focus) is the drawn box. Ticket
+              # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+              modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
               modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
             modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline(json_data, required_imports)))

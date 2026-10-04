@@ -29,16 +29,17 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       expect(required_imports).to include(:box)
     end
 
-    # byte-identical to 1.8.104 but for the order 1.9.0 gives the clients:
-    # before the first load, as webview_component.rb and Dynamic set them
+    # byte-identical to 1.8.104 but for the order 1.9.0 gives the clients
+    # (before the first load, as webview_component.rb and Dynamic set them) and
+    # the testTag after the size (2.43.5: the tag follows the placing stages)
     it 'leaves a static url inside the Box as 1.8.104 drew it, the clients set before the load' do
       result = described_class.generate({ 'type' => 'Web', 'id' => 'wv', 'url' => 'https://example.com' }, 0, required_imports)
       expect(result).to eq(<<~KOTLIN.chomp)
         Box(
             modifier = Modifier
+                .fillMaxSize()
                 .testTag("wv")
                 .semantics { testTagsAsResourceId = true }
-                .fillMaxSize()
         ) {
             AndroidView(
                 factory = { context ->

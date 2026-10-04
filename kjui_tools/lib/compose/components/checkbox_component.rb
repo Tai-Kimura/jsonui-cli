@@ -59,7 +59,6 @@ module KjuiTools
 
             # Build modifiers for Row
             modifiers = []
-            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             # userInteractionEnabled stops this node and
             # what is in it (ModifierBuilder.build_interaction_blocker); this
             # component builds no clickable, which is where it came from.
@@ -67,6 +66,10 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+            # testTag after margins and offset, before alpha: the tagged box (resource-id
+            # bounds, TalkBack focus) is the drawn box. Ticket
+            # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             modifiers.concat(decoration_stages(json_data, required_imports, labelled: true))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
@@ -149,7 +152,6 @@ module KjuiTools
 
             # Build modifiers
             modifiers = []
-            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             # userInteractionEnabled stops this node and
             # what is in it (ModifierBuilder.build_interaction_blocker); this
             # component builds no clickable, which is where it came from.
@@ -157,6 +159,10 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+            # testTag after margins and offset, before alpha: the tagged box (resource-id
+            # bounds, TalkBack focus) is the drawn box. Ticket
+            # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             modifiers.concat(decoration_stages(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
@@ -277,7 +283,6 @@ module KjuiTools
           # slot); dropping them left the button at its 48dp default, which
           # shifted the glyph and let the button's shape clip it.
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           # userInteractionEnabled stops this node and
           # what is in it (ModifierBuilder.build_interaction_blocker); this
           # component builds no clickable, which is where it came from.
@@ -285,6 +290,10 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(decoration_stages(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))

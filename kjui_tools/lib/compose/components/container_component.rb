@@ -48,7 +48,6 @@ module KjuiTools
           modifiers = []
 
           # Add testTag and contentDescription for UI testing
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # 1. Alignment within parent (Box.align, Row.align, Column.align)
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
@@ -68,6 +67,10 @@ module KjuiTools
 
           # 4. Alpha/opacity - BEFORE background so alpha applies to background too
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
 
           # 4.5 Shadow — declared `shadow` never reached containers on the

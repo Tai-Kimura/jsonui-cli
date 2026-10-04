@@ -1126,7 +1126,6 @@ module KjuiTools
           modifiers = []
 
           # Add testTag and contentDescription for UI testing
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # 1. Margins first (outer spacing)
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
@@ -1149,6 +1148,10 @@ module KjuiTools
 
           # 3. Alpha + Background (clip + background)
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -1813,10 +1816,13 @@ module KjuiTools
 
           # Build modifiers
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -2165,10 +2171,13 @@ module KjuiTools
 
           # Build modifiers
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -2483,10 +2492,13 @@ module KjuiTools
 
           # Build modifiers
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -2665,10 +2677,13 @@ module KjuiTools
           items_property = json_data['items']
 
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -2822,7 +2837,6 @@ module KjuiTools
 
           # Build outer modifier
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           width_value = json_data['width']
           height_value = json_data['height']
@@ -2838,6 +2852,10 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))

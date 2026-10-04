@@ -102,10 +102,13 @@ module KjuiTools
           
           # Build modifiers
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           # shadow → border: the View slots before the click. The background
           # is the WebView's own (setBackgroundColor above), so the border

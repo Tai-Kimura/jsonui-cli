@@ -179,7 +179,7 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
   stages.each_key { |stage| cell_arm.call('CircleView', { 'type' => 'CircleView' }, stage) }
 
   # ... in the order KotlinJsonUI Dynamic applies them
-  # (DynamicCircleViewComponent): testTag → margins → size → offset → alpha →
+  # (DynamicCircleViewComponent): margins → size → offset → testTag → alpha →
   # shadow(circle) → clip(circle) → clip(cornerRadius) → border(circle) →
   # background → clickable → padding. Judged by position in one emission
   # that carries every stage.
@@ -187,8 +187,8 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     every = stages.reject { |name, _| %w[enabled userInteraction].include?(name) }.values.reduce({}) { |acc, attrs| acc.merge(attrs) }
     code = emit.call({ 'type' => 'CircleView' }.merge(every))
     order = [
-      ['testTag', '.testTag("n")'], ['margins', markers['margins'].first], ['size', '.requiredWidth(111.dp)'],
-      ['offset', markers['offset'].first], ['alpha', markers['alpha'].first], ['shadow', '.dropShadow(shape = CircleShape'],
+      ['margins', markers['margins'].first], ['size', '.requiredWidth(111.dp)'],
+      ['offset', markers['offset'].first], ['testTag', '.testTag("n")'], ['alpha', markers['alpha'].first], ['shadow', '.dropShadow(shape = CircleShape'],
       ['clip(circle)', '.clip(CircleShape)'], ['clip(cornerRadius)', markers['cornerRadius'].first],
       ['border(circle)', '.border(2.dp, Color(android.graphics.Color.parseColor("#FF0000")), CircleShape)'],
       ['background', markers['background'].first], ['clickable', '.clickable'], ['padding', markers['padding'].first]

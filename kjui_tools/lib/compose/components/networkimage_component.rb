@@ -107,7 +107,6 @@ module KjuiTools
           modifiers = []
 
           # Add testTag and contentDescription for UI testing
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # Margins first (outer spacing, before size)
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
@@ -121,6 +120,10 @@ module KjuiTools
 
           # clip/background (after size, before padding)
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))

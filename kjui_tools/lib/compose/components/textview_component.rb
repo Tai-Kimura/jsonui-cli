@@ -205,7 +205,6 @@ module KjuiTools
           if has_margins
             # Box modifier with margins
             box_modifiers = []
-            box_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             box_modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             box_modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
             # A text field is a control whose own tap focuses it: an outer
@@ -265,6 +264,10 @@ module KjuiTools
             end
 
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+            # testTag after the box's margins and the offset, before alpha: the
+            # tagged box (resource-id bounds, TalkBack focus) is the drawn
+            # field. Ticket kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+            textfield_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: TextFieldComponent.shadow_outline(json_data, required_imports)))
             # No clickable stage here: the Box around the field carries it
@@ -288,7 +291,6 @@ module KjuiTools
           else
             # Regular modifiers for CustomTextField
             modifiers = []
-            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
             # Size - default to fillMaxWidth for text areas (same
             # flexible-height stripping as the margins branch above).
@@ -325,6 +327,10 @@ module KjuiTools
 
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+            # testTag after margins and offset, before alpha: the tagged box (resource-id
+            # bounds, TalkBack focus) is the drawn box. Ticket
+            # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: TextFieldComponent.shadow_outline(json_data, required_imports)))
             # A text field is a control whose own tap focuses it: an outer

@@ -325,7 +325,6 @@ module KjuiTools
           modifiers = []
 
           # Add testTag and contentDescription for UI testing
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # Visibility is the wrapper's (VisibilityHelper); this call registers its
           # imports. Its modifier — the alpha — is not taken here: it sat right
@@ -347,6 +346,10 @@ module KjuiTools
           #    wrapContentHeight for `gravity: center` vertical centering)
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
 
           # 3. Shadow before background
@@ -790,13 +793,16 @@ module KjuiTools
           # id testTag first, via the shared ModifierBuilder (single source of
           # truth every other component uses) so a partial-attributes node is
           # findable by By.res(id) — parity with iOS accessibilityIdentifier.
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           # alpha and shadow, declared on `common`, were dropped on this branch
           # (kjui-dynamic-components-that-skip-the-common-modifiers, Label).
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
@@ -962,7 +968,6 @@ module KjuiTools
           # id testTag first, via the shared ModifierBuilder (single source of
           # truth every other component uses) so a partial-attributes node is
           # findable by By.res(id) — parity with iOS accessibilityIdentifier.
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
@@ -970,6 +975,10 @@ module KjuiTools
           # alpha, shadow and the background (its border and corner clip),
           # declared on `common`, were dropped on this branch
           # (kjui-dynamic-components-that-skip-the-common-modifiers, Label).
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))

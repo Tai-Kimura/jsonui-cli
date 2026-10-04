@@ -1373,7 +1373,6 @@ module KjuiTools
         # trap: kwargs threaded through components/ miss compose_builder.rb's
         # inline helpers (plan 49 lane C, D's measurement).
         modifiers = ["Modifier"]
-        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, @required_imports))
         # userInteractionEnabled stops the safe area and what is in it
         # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
         modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))
@@ -1432,6 +1431,11 @@ module KjuiTools
       def safe_area_decoration_stages(json_data)
         modifiers = []
         modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
+        # testTag after margins and offset, before alpha: the tagged box (resource-id
+        # bounds, TalkBack focus) is the drawn box. Ticket
+        # kjui-a11y-bounds-of-a-margined-view-include-its-margin. Both SafeArea
+        # chains reach it through here.
+        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, @required_imports))
         modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
@@ -1471,7 +1475,6 @@ module KjuiTools
         # declared size first (this one opened with a fixed `.fillMaxSize()`),
         # the full-size default only when the dimension is undeclared.
         modifiers = ["Modifier"]
-        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, @required_imports))
         # userInteractionEnabled stops the safe area and what is in it
         # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
         modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))

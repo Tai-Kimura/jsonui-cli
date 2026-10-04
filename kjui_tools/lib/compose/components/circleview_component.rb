@@ -30,7 +30,6 @@ module KjuiTools
           required_imports&.add(:circle_shape)
 
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           # The declared width / height, as on every component; without them,
           # the legacy `size` (Dynamic reads it the same way).
@@ -40,6 +39,10 @@ module KjuiTools
             modifiers << ".size(#{legacy_size(json_data)}.dp)"
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: 'CircleShape'))
           modifiers << '.clip(CircleShape)'
