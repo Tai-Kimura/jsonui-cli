@@ -649,10 +649,16 @@ module RjuiTools
         #: (#C6C6C8 separator, #F2F2F7 grouped background) — the same
         #: constants the chrome imitates. The spacing is rem (16px / 8px at the
         #: default root), as every spacing is (TailwindMapper.spacing_value).
+        #: The chrome stays inside the declared box: insetGrouped's inset is
+        #: padding, and its rounded fill is clipped to the inset, the order
+        #: KotlinJsonUI draws it in (padding, clip, background). A margin
+        #: moved the box itself — x 16 on web where the declaration puts it at
+        #: x 0 (frame-parity inventory 2026-10-05; ticket
+        #: rjui-insetgrouped-collection-moves-its-own-box).
         LIST_STYLE_CHROME = {
           'plain' => [].freeze,
           'grouped' => %w[bg-[#F2F2F7]].freeze,
-          'insetgrouped' => %w[bg-[#F2F2F7] rounded-[10px] mx-[1rem]].freeze,
+          'insetgrouped' => %w[bg-[#F2F2F7] px-[1rem] [clip-path:inset(0_1rem_round_10px)]].freeze,
           'sidebar' => %w[bg-[#F2F2F7] rounded-[8px] px-[0.5rem]].freeze
         }.freeze
 

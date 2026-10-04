@@ -111,9 +111,18 @@ RSpec.describe 'rjui spacing is the declared length' do
 
   it "the Collection's list-style chrome spaces in rem too" do
     chrome = RjuiTools::React::Converters::CollectionConverter::LIST_STYLE_CHROME
-    expect(chrome['insetgrouped']).to include('mx-[1rem]')
+    expect(chrome['insetgrouped']).to include('px-[1rem]', '[clip-path:inset(0_1rem_round_10px)]')
     expect(chrome['sidebar']).to include('px-[0.5rem]')
     expect(chrome.values.flatten.grep(/\A-?(p[trblxyse]?|m[trblxyse]?|gap)-\[[\d.]+px\]\z/)).to eq([])
+  end
+
+  # The chrome is drawn inside the declared box. insetGrouped's inset was a
+  # margin, which moved the box: x 16 on web where the declaration and
+  # Android put it at x 0 (frame-parity inventory 2026-10-05; ticket
+  # rjui-insetgrouped-collection-moves-its-own-box).
+  it "no list-style chrome moves the Collection's own box" do
+    chrome = RjuiTools::React::Converters::CollectionConverter::LIST_STYLE_CHROME
+    expect(chrome.values.flatten.grep(/\A-?m[trblxyse]?-/)).to eq([])
   end
 
   it 'the emitted Views and Buttons type-check' do
