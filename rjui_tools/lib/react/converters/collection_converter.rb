@@ -102,8 +102,8 @@ module RjuiTools
         def horizontal_lanes_open(lanes, indent)
           rows = lanes.match?(/\A\d+\z/) ? "'repeat(#{lanes}, minmax(0, 1fr))'" : "`repeat(${#{lanes}}, minmax(0, 1fr))`"
           style = { 'gridTemplateRows' => rows }
-          (along = horizontal_scroll_spacing) && style['columnGap'] = "'#{along}px'"
-          (between = horizontal_lane_spacing) && style['rowGap'] = "'#{between}px'"
+          (along = horizontal_scroll_spacing) && style['columnGap'] = "'#{TailwindMapper.rem(along)}'"
+          (between = horizontal_lane_spacing) && style['rowGap'] = "'#{TailwindMapper.rem(between)}'"
           "#{indent_str(indent)}<div className=\"grid grid-flow-col auto-cols-max items-start justify-items-start shrink-0\"#{style_attr_for(style)}>"
         end
 
@@ -284,7 +284,7 @@ module RjuiTools
             end
             if flow_per_section?
               row_gap = grid_row_gap
-              classes << "gap-y-[#{row_gap}px]" if row_gap
+              classes << "gap-y-#{TailwindMapper.spacing_value(row_gap)}" if row_gap
             else
               classes.concat(grid_gap_classes)
             end
@@ -304,7 +304,7 @@ module RjuiTools
             # rule, horizontal_scroll_spacing). This read columnSpacing
             # first until jsonui-cli 1.9.0; columnSpacing spaces the lanes.
             spacing = horizontal_scroll_spacing
-            classes << "gap-[#{spacing}px]" if spacing
+            classes << "gap-#{TailwindMapper.spacing_value(spacing)}" if spacing
           elsif !columns_binding && columns == 1
             # List style (single column). A binding-form `columns` can't
             # reach this branch — the runtime count is unknown at codegen
@@ -317,7 +317,7 @@ module RjuiTools
             end
             # lineSpacing for vertical spacing between items
             spacing = attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
-            classes << "gap-[#{spacing}px]" if spacing
+            classes << "gap-#{TailwindMapper.spacing_value(spacing)}" if spacing
             # listStyle / hideSeparator — the List chrome, on the one branch
             # that IS a list (sjui parity: TableConverter takes the List path
             # only for the unsectioned single-column shape).
@@ -329,7 +329,7 @@ module RjuiTools
             classes << 'flex flex-col'
             classes.concat(vertical_scroll_classes(is_lazy, lazy_expr))
             row_gap = grid_row_gap
-            classes << "gap-y-[#{row_gap}px]" if row_gap
+            classes << "gap-y-#{TailwindMapper.spacing_value(row_gap)}" if row_gap
           else
             # Grid layout
             classes << 'grid'
@@ -387,10 +387,10 @@ module RjuiTools
           content_inset = attributes['contentInset']
           if content_inset.is_a?(Array) && content_inset.length == 4
             top, left, bottom, right = content_inset
-            classes << "pt-[#{top}px]" if top&.positive?
-            classes << "pl-[#{left}px]" if left&.positive?
-            classes << "pb-[#{bottom}px]" if bottom&.positive?
-            classes << "pr-[#{right}px]" if right&.positive?
+            classes << "pt-#{TailwindMapper.spacing_value(top)}" if top&.positive?
+            classes << "pl-#{TailwindMapper.spacing_value(left)}" if left&.positive?
+            classes << "pb-#{TailwindMapper.spacing_value(bottom)}" if bottom&.positive?
+            classes << "pr-#{TailwindMapper.spacing_value(right)}" if right&.positive?
           end
 
           # The content insets: insets with insetHorizontal / insetVertical,
@@ -478,7 +478,7 @@ module RjuiTools
             styles = paging? ? %w[padding scrollPadding] : %w[padding]
             styles.each do |base|
               %w[Top Right Bottom Left].zip(edges).each do |side, e|
-                dynamic_styles["#{base}#{side}"] = e.is_a?(String) ? "`${#{e}}px`" : "'#{css_px(e)}px'"
+                dynamic_styles["#{base}#{side}"] = e.is_a?(String) ? "`${Number(#{e}) / 16}rem`" : "'#{TailwindMapper.rem(e)}'"
               end
             end
             return classes
@@ -487,8 +487,8 @@ module RjuiTools
           %w[t r b l].zip(edges).each do |side, e|
             next if e.zero?
 
-            classes << "p#{side}-[#{css_px(e)}px]"
-            classes << "scroll-p#{side}-[#{css_px(e)}px]" if paging?
+            classes << "p#{side}-#{TailwindMapper.spacing_value(e)}"
+            classes << "scroll-p#{side}-#{TailwindMapper.spacing_value(e)}" if paging?
           end
           classes
         end
@@ -578,11 +578,11 @@ module RjuiTools
           line = attributes['lineSpacing']
           column = attributes['columnSpacing']
           both = attributes['itemSpacing'] || attributes['spacing']
-          return both ? ["gap-[#{both}px]"] : [] if line.nil? && column.nil?
+          return both ? ["gap-#{TailwindMapper.spacing_value(both)}"] : [] if line.nil? && column.nil?
 
           row = line || both
           col = column || both
-          [[col && "gap-x-[#{col}px]", row && "gap-y-[#{row}px]"].compact.join(' ')]
+          [[col && "gap-x-#{TailwindMapper.spacing_value(col)}", row && "gap-y-#{TailwindMapper.spacing_value(row)}"].compact.join(' ')]
         end
 
         def grid_row_gap

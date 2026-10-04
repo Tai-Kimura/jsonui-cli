@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'bigdecimal'
 require_relative '../core/logger'
 require_relative '../core/enum_spelling'
 
@@ -661,24 +662,37 @@ module RjuiTools
         end
 
         # The value part of a spacing class (padding, margin, gap): the
-        # declared length in px, as an arbitrary value — `[22px]`, `[16px]`,
-        # `[0px]` — never a step of Tailwind's spacing scale. A layout length
-        # is a device-independent pixel on iOS and Android; a scale step is a
-        # rem (`p-4` = 1rem), which follows the root font size a viewer's
-        # browser setting changes. The Collection's insets have been written
-        # this way since jsonui-cli 1.9.0.
+        # declared length as rem, N / 16 — `[1.625rem]` for 26, `[0.75rem]`
+        # for 12, `[0rem]` for 0 — never a step of Tailwind's spacing scale.
+        # At the default 16px root it is the declared px exactly; a viewer
+        # who raises the browser's default font size gets spacing that grows
+        # with the text, as the scale steps did (the text's own classes are
+        # rem). Division by 16 is exact in decimal (1/16 = 0.0625), and it is
+        # done in BigDecimal, so no length picks up a float tail.
         #
-        # Until 1.9.14 every length was rounded to the NEAREST scale step
-        # (closest_padding over PADDING_MAP): 22 drew 20px, 3 drew 2px, 26
-        # drew 24px — silently, on web only (ticket
-        # rjui-spacing-rounds-to-the-tailwind-scale). Its special cases: nil
-        # gave '0' (p-0), 0 gave '0', 1 gave 'px'; now [0px], [0px], [1px].
-        # A non-number passes through as written.
+        # History: until 1.9.14 every length was rounded to the NEAREST scale
+        # step (22 drew 20px; ticket rjui-spacing-rounds-to-the-tailwind-
+        # scale); 1.9.14 wrote the exact length in px, which stopped spacing
+        # following the browser's font size (ticket
+        # rjui-spacing-px-does-not-follow-the-browser-font-size); 1.9.15
+        # writes the exact length in rem. A non-number passes through as
+        # written.
         def spacing_value(value)
-          return '[0px]' if value.nil?
+          return '[0rem]' if value.nil?
           return value.to_s unless value.is_a?(Numeric)
 
-          "[#{value == value.to_i ? value.to_i : value}px]"
+          "[#{rem(value)}]"
+        end
+
+        # A spacing length for CSS (an inline style, a calc): N / 16 rem, the
+        # same value spacing_value writes into a class. A numeric string
+        # reads as its number; anything else is written as it always was, in
+        # px.
+        def rem(value)
+          number = value.is_a?(Numeric) ? value : (Float(value.to_s) rescue nil)
+          return "#{value}px" if number.nil?
+
+          "#{(BigDecimal(number.to_s) / 16).to_s('F').sub(/\.0\z/, '')}rem"
         end
 
         # Insets (alternative padding format - same as padding array)

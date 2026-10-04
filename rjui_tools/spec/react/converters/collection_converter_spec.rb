@@ -65,7 +65,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
       it 'maps lineSpacing to the line gap and itemSpacing to the in-line gap' do
         converter = create_converter({ 'class' => 'Collection', 'layout' => 'flow',
                                        'lineSpacing' => 4, 'itemSpacing' => 8, 'cellClasses' => ['ItemCell'] })
-        expect(converter.convert).to include('gap-x-[8px] gap-y-[4px]')
+        expect(converter.convert).to include('gap-x-[0.5rem] gap-y-[0.25rem]')
       end
 
       it 'wins over the horizontalScroll boolean (declared layout first, like sjui/kjui)' do
@@ -81,7 +81,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
       it 'applies gap spacing' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'itemSpacing' => 8 })
         result = converter.convert
-        expect(result).to include('gap-[8px]')
+        expect(result).to include('gap-[0.5rem]')
       end
     end
 
@@ -92,21 +92,21 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
     # honoured it.
     context 'with columnSpacing' do
       # Between the columns only (attribute_semantics.json ->
-      # collectionSpacing): until jsonui-cli 1.9.0 this wrote `gap-[8px]`,
+      # collectionSpacing): until jsonui-cli 1.9.0 this wrote `gap-[0.5rem]`,
       # which spaced the rows by it too.
       it 'applies it as the column gap of a grid, and only there' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
                                        'columns' => 2, 'columnSpacing' => 8 })
         result = converter.convert
-        expect(result).to include('gap-x-[8px]')
-        expect(result).not_to include('gap-[8px]')
+        expect(result).to include('gap-x-[0.5rem]')
+        expect(result).not_to include('gap-[0.5rem]')
         expect(result).not_to include('gap-y-')
       end
 
       it 'applies it as the in-line gap of a flow layout' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
                                        'layout' => 'flow', 'columnSpacing' => 8, 'lineSpacing' => 4 })
-        expect(converter.convert).to include('gap-x-[8px] gap-y-[4px]')
+        expect(converter.convert).to include('gap-x-[0.5rem] gap-y-[0.25rem]')
       end
 
       # The columns take columnSpacing ahead of itemSpacing; the rows, with no
@@ -116,8 +116,8 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
                                        'columns' => 2, 'columnSpacing' => 8, 'itemSpacing' => 16 })
         result = converter.convert
-        expect(result).to include('gap-x-[8px] gap-y-[16px]')
-        expect(result).not_to include('gap-[8px]')
+        expect(result).to include('gap-x-[0.5rem] gap-y-[1rem]')
+        expect(result).not_to include('gap-[0.5rem]')
       end
     end
 
@@ -200,10 +200,10 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
       it 'applies padding from insets' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'contentInset' => [10, 20, 10, 20] })
         result = converter.convert
-        expect(result).to include('pt-[10px]')
-        expect(result).to include('pl-[20px]')
-        expect(result).to include('pb-[10px]')
-        expect(result).to include('pr-[20px]')
+        expect(result).to include('pt-[0.625rem]')
+        expect(result).to include('pl-[1.25rem]')
+        expect(result).to include('pb-[0.625rem]')
+        expect(result).to include('pr-[1.25rem]')
       end
     end
 

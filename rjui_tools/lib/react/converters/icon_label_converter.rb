@@ -149,10 +149,10 @@ module RjuiTools
           # both mobile dynamic converters) — 4 was an rjui-only deviation.
           margin = attributes['iconMargin'] || attributes['spacing'] || 5
           margin_class = case icon_position
-                        when 'top' then "mb-[#{margin}px]"
-                        when 'bottom' then "mt-[#{margin}px]"
-                        when 'right' then "ml-[#{margin}px]"
-                        else "mr-[#{margin}px]" # left is default
+                        when 'top' then "mb-#{TailwindMapper.spacing_value(margin)}"
+                        when 'bottom' then "mt-#{TailwindMapper.spacing_value(margin)}"
+                        when 'right' then "ml-#{TailwindMapper.spacing_value(margin)}"
+                        else "mr-#{TailwindMapper.spacing_value(margin)}" # left is default
                         end
           classes << margin_class
 

@@ -102,12 +102,7 @@ module RjuiTools
 
         def inset_with_own(own, side)
           inset = "env(safe-area-inset-#{side})"
-          own.positive? ? "calc(#{format_px(own)}px + #{inset})" : inset
-        end
-
-        # 8.0px reads as a mistake; 8px does not.
-        def format_px(value)
-          value == value.to_i ? value.to_i.to_s : value.to_s
+          own.positive? ? "calc(#{TailwindMapper.rem(own)} + #{inset})" : inset
         end
 
         def safe_area_edges
@@ -215,7 +210,7 @@ module RjuiTools
           # Gap/Spacing. A bound value fell through the PADDING_MAP lookup to
           # its own raw text and built `gap-@{v}`, a class that matches
           # nothing.
-          spacing_value = bound_length_style('gap', attributes['spacing'])
+          spacing_value = bound_spacing_style('gap', attributes['spacing'])
           if spacing_value
             classes << "gap-#{TailwindMapper.spacing_value(spacing_value)}"
           end

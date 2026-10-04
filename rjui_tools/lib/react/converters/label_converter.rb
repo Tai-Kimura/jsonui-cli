@@ -478,19 +478,19 @@ module RjuiTools
             if edge_inset.is_a?(Array)
               case edge_inset.length
               when 1
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])}'"
               when 2
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px #{edge_inset[1]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])}'"
               when 3
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px #{edge_inset[1]}px #{edge_inset[2]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])} #{TailwindMapper.rem(edge_inset[2])}'"
               when 4
-                @dynamic_styles['padding'] = "'#{edge_inset[0]}px #{edge_inset[1]}px #{edge_inset[2]}px #{edge_inset[3]}px'"
+                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])} #{TailwindMapper.rem(edge_inset[2])} #{TailwindMapper.rem(edge_inset[3])}'"
               end
             elsif edge_inset.is_a?(String) && edge_inset.include?('|')
               parts = edge_inset.split('|').map(&:to_i)
-              @dynamic_styles['padding'] = "'#{parts.map { |p| "#{p}px" }.join(' ')}'"
+              @dynamic_styles['padding'] = "'#{parts.map { |p| TailwindMapper.rem(p) }.join(' ')}'"
             else
-              @dynamic_styles['padding'] = "'#{edge_inset.to_i}px'"
+              @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset.to_i)}'"
             end
           end
 

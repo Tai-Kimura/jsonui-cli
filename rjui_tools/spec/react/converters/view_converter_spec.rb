@@ -17,7 +17,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
 
   describe '#build_class_name' do
     context 'with spacing' do
-      it 'adds gap class for spacing (16px -> gap-4)' do
+      it 'adds gap class for spacing (1rem -> gap-4)' do
         converter = create_converter({
           'type' => 'View',
           'orientation' => 'horizontal',
@@ -28,10 +28,10 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
         })
         classes = converter.send(:build_class_name)
         # 16px maps to Tailwind gap-4
-        expect(classes).to include('gap-[16px]')
+        expect(classes).to include('gap-[1rem]')
       end
 
-      it 'maps spacing to Tailwind gap values (8px -> gap-2)' do
+      it 'maps spacing to Tailwind gap values (0.5rem -> gap-2)' do
         converter = create_converter({
           'type' => 'View',
           'orientation' => 'vertical',
@@ -40,7 +40,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
         })
         classes = converter.send(:build_class_name)
         # 8px maps to Tailwind gap-2
-        expect(classes).to include('gap-[8px]')
+        expect(classes).to include('gap-[0.5rem]')
       end
     end
 
@@ -129,7 +129,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
           'spacing' => 12, 'distribution' => 'equalSpacing', 'child' => []
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('gap-[12px]')
+        expect(classes).to include('gap-[0.75rem]')
         expect(classes).not_to match(/justify-/)
       end
 
@@ -139,7 +139,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
           'distribution' => 'fill', 'child' => [{ 'type' => 'View', 'id' => 'a' }]
         }
         out = create_converter(node).convert_node(2)
-        expect(out).to include('gap-[12px]')
+        expect(out).to include('gap-[0.75rem]')
         expect(out).to match(/id="a"[^>]*\bgrow\b/)
       end
     end
@@ -391,22 +391,22 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     # alone would silently delete the padding the layout asked for.
     it "folds the element's own padding into a calc" do
       expect(styled('safeAreaInsetPositions' => ['top'], 'paddings' => [8, 4, 8, 4]))
-        .to include("paddingTop: 'calc(8px + env(safe-area-inset-top))'")
+        .to include("paddingTop: 'calc(0.5rem + env(safe-area-inset-top))'")
       expect(styled('safeAreaInsetPositions' => ['leading'], 'paddingStart' => 12))
-        .to include('[--jui-safe-start:calc(12px_+_env(safe-area-inset-left))]')
-        .and include('rtl:[--jui-safe-start:calc(12px_+_env(safe-area-inset-right))]')
+        .to include('[--jui-safe-start:calc(0.75rem_+_env(safe-area-inset-left))]')
+        .and include('rtl:[--jui-safe-start:calc(0.75rem_+_env(safe-area-inset-right))]')
       expect(styled('safeAreaInsetPositions' => ['top'], 'padding' => 6))
-        .to include("paddingTop: 'calc(6px + env(safe-area-inset-top))'")
+        .to include("paddingTop: 'calc(0.375rem + env(safe-area-inset-top))'")
     end
 
     # A physical padding stays on its side: in RTL the start is the right
     # side, so the right padding (not the left) is what the inset adds to.
     it "folds the padding of the side the start is on in each direction" do
       result = styled('safeAreaInsetPositions' => %w[leading trailing], 'paddings' => [0, 5, 0, 7])
-      expect(result).to include('[--jui-safe-start:calc(7px_+_env(safe-area-inset-left))]')
-      expect(result).to include('rtl:[--jui-safe-start:calc(5px_+_env(safe-area-inset-right))]')
-      expect(result).to include('[--jui-safe-end:calc(5px_+_env(safe-area-inset-right))]')
-      expect(result).to include('rtl:[--jui-safe-end:calc(7px_+_env(safe-area-inset-left))]')
+      expect(result).to include('[--jui-safe-start:calc(0.4375rem_+_env(safe-area-inset-left))]')
+      expect(result).to include('rtl:[--jui-safe-start:calc(0.3125rem_+_env(safe-area-inset-right))]')
+      expect(result).to include('[--jui-safe-end:calc(0.3125rem_+_env(safe-area-inset-right))]')
+      expect(result).to include('rtl:[--jui-safe-end:calc(0.4375rem_+_env(safe-area-inset-left))]')
     end
 
     it 'ignores an unknown edge and emits nothing when absent' do
@@ -427,8 +427,8 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     # plain ones — so the RTL value wins by order, as here.
     describe 'drawn in both reading directions' do
       STAND_IN = { 'left' => '11px', 'right' => '22px', 'top' => '33px', 'bottom' => '44px' }.freeze
-      TAILWIND_PLAIN = { 'shrink-0' => 'flex-shrink:0', 'ps-[4px]' => 'padding-inline-start:4px',
-                         'pe-[4px]' => 'padding-inline-end:4px' }.freeze
+      TAILWIND_PLAIN = { 'shrink-0' => 'flex-shrink:0', 'ps-[0.25rem]' => 'padding-inline-start:0.25rem',
+                         'pe-[0.25rem]' => 'padding-inline-end:0.25rem' }.freeze
 
       def chromium
         HeadlessChromium.path
@@ -665,15 +665,15 @@ RSpec.describe 'pair-scan closure (web)' do
     r = conv(RjuiTools::React::Converters::RadioConverter,
              'type' => 'Radio', 'label' => 'Opt', 'spacing' => 12, 'checked' => true).convert
     expect(r).to include('Opt')
-    expect(r).to include('gap-[12px]')
+    expect(r).to include('gap-[0.75rem]')
     expect(r).to include('defaultChecked')
   end
 
   it 'CheckBox (ToggleConverter): spacing replaces the fixed gap' do
     r = conv(RjuiTools::React::Converters::ToggleConverter,
              'type' => 'CheckBox', 'label' => 'A', 'spacing' => 10).convert
-    expect(r).to include('gap-[10px]')
-    expect(r).not_to include('gap-[8px]')
+    expect(r).to include('gap-[0.625rem]')
+    expect(r).not_to include('gap-[0.5rem]')
   end
 
   it 'Collection: horizontalScroll flips direction; indicators and inset map like ScrollView' do
@@ -766,7 +766,7 @@ RSpec.describe 'backlog closure group 2 (web)' do
     r = RjuiTools::React::Converters::CollectionConverter.new(
       { 'type' => 'Collection', 'insetVertical' => 16, 'items' => '@{rows}' }, config
     ).convert
-    expect(r).to include('pt-[16px] pb-[16px]')
+    expect(r).to include('pt-[1rem] pb-[1rem]')
   end
 
   it 'common.indexAbove degrades to z 1, and an explicit zIndex wins' do

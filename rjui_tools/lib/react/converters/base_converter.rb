@@ -130,7 +130,8 @@ module RjuiTools
             # Use calc to account for margins
             total_margin = (left_margin.is_a?(Numeric) ? left_margin : 0) +
                           (right_margin.is_a?(Numeric) ? right_margin : 0)
-            @dynamic_styles['width'] = "'calc(100% - #{total_margin}px)'"
+            # In rem, as the margins themselves are (TailwindMapper.rem).
+            @dynamic_styles['width'] = "'calc(100% - #{TailwindMapper.rem(total_margin)})'"
           else
             classes << TailwindMapper.map_width(attributes['width'])
           end
@@ -184,7 +185,7 @@ module RjuiTools
 
           # Padding (array format)
           classes << TailwindMapper.map_padding(
-            bound_length_style('padding', attributes['padding'] || attributes['paddings'])
+            bound_spacing_style('padding', attributes['padding'] || attributes['paddings'])
           )
 
           # Individual paddings (topPadding, bottomPadding, leftPadding, rightPadding)
@@ -919,7 +920,7 @@ module RjuiTools
         # the declared-but-unread ledger — and a helper that resolved the names
         # itself would blind both, quietly inventing sixteen coverage gaps.
         def static_spacing(css_property, value)
-          bound_length_style(css_property, value)
+          bound_spacing_style(css_property, value)
         end
 
         # ------------------------------------------------------------------
@@ -1020,6 +1021,17 @@ module RjuiTools
           return value unless expr
 
           dynamic_styles[css_property] = "`${#{expr}}px`"
+          nil
+        end
+
+        # A bound spacing length (padding, margin, gap): rem, N / 16, as the
+        # static spacing classes are (TailwindMapper.spacing_value; ticket
+        # rjui-spacing-px-does-not-follow-the-browser-font-size).
+        def bound_spacing_style(css_property, value)
+          expr = bound_value_expr(value)
+          return value unless expr
+
+          dynamic_styles[css_property] = "`${Number(#{expr}) / 16}rem`"
           nil
         end
 

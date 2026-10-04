@@ -41,7 +41,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
 
   it 'padding only: a padding box around the scroll container' do
     box, scroller = boxes(convert('padding' => 16))
-    expect(padding(box)).to eq(%w[p-[16px]])
+    expect(padding(box)).to eq(%w[p-[1rem]])
     expect(classes(box)).to include('w-[300px]', 'h-[100px]', 'bg-[#EEEEEE]', 'flex', 'flex-col')
     expect(box).not_to include('id=')
     expect(padding(scroller)).to eq([])
@@ -52,38 +52,38 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
   it 'insets only: one box, as before' do
     jsx = convert('insets' => [0, 0, 0, 30])
     expect(boxes(jsx).size).to eq(1)
-    expect(padding(boxes(jsx).first)).to eq(%w[pl-[30px]])
+    expect(padding(boxes(jsx).first)).to eq(%w[pl-[1.875rem]])
     expect(classes(boxes(jsx).first)).to include('w-[300px]', 'bg-[#EEEEEE]', 'overflow-y-auto')
   end
 
   it 'both, static: the padding on the box, the insets on the scroll container' do
     box, scroller = boxes(convert('padding' => 16, 'insets' => [0, 0, 0, 30]))
-    expect(padding(box)).to eq(%w[p-[16px]])
-    expect(padding(scroller)).to eq(%w[pl-[30px]])
+    expect(padding(box)).to eq(%w[p-[1rem]])
+    expect(padding(scroller)).to eq(%w[pl-[1.875rem]])
   end
 
   it 'a bound inset writes its four edges on the scroll container, not over the padding' do
     box, scroller = boxes(convert('padding' => 16, 'insets' => ['@{top}', 0, 0, 30]))
-    expect(padding(box)).to eq(%w[p-[16px]])
+    expect(padding(box)).to eq(%w[p-[1rem]])
     expect(box).not_to include('style=')
-    expect(scroller).to include('paddingTop: `${(Number(data.top) || 0)}px`', "paddingLeft: '30px'")
+    expect(scroller).to include('paddingTop: `${Number((Number(data.top) || 0)) / 16}rem`', "paddingLeft: '1.875rem'")
   end
 
   it 'per-edge padding with insets, and paddings with insetHorizontal' do
     box, scroller = boxes(convert('paddingLeft' => 12, 'insets' => [0, 0, 0, 30]))
-    expect(padding(box)).to eq(%w[pl-[12px]])
-    expect(padding(scroller)).to eq(%w[pl-[30px]])
+    expect(padding(box)).to eq(%w[pl-[0.75rem]])
+    expect(padding(scroller)).to eq(%w[pl-[1.875rem]])
 
     box, scroller = boxes(convert('paddings' => [8, 16], 'insetHorizontal' => 10))
-    expect(padding(box)).to eq(%w[py-[8px] px-[16px]])
-    expect(padding(scroller)).to eq(%w[pr-[10px] pl-[10px]])
+    expect(padding(box)).to eq(%w[py-[0.5rem] px-[1rem]])
+    expect(padding(scroller)).to eq(%w[pr-[0.625rem] pl-[0.625rem]])
   end
 
   it 'a bound padding is the box\'s inline style' do
     box, scroller = boxes(convert('padding' => '@{pad}', 'insets' => [0, 0, 0, 30]))
-    expect(box).to include('style={{ padding: `${data.pad}px` }}')
+    expect(box).to include('style={{ padding: `${Number(data.pad) / 16}rem` }}')
     expect(scroller).not_to include('style=')
-    expect(padding(scroller)).to eq(%w[pl-[30px]])
+    expect(padding(scroller)).to eq(%w[pl-[1.875rem]])
   end
 
   it 'a padding that pads nothing keeps one box' do

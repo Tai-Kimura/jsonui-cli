@@ -125,7 +125,7 @@ module RjuiTools
 
           # Text padding left
           if attributes['textPaddingLeft']
-            @dynamic_styles['paddingLeft'] = "'#{attributes['textPaddingLeft']}px'"
+            @dynamic_styles['paddingLeft'] = "'#{TailwindMapper.rem(attributes['textPaddingLeft'])}'"
           end
 
           # Shadow

@@ -169,7 +169,7 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("padding: '16px'")
+        expect(result).to include("padding: '1rem'")
       end
 
       it 'handles 2-element array' do
@@ -179,7 +179,7 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("padding: '10px 20px'")
+        expect(result).to include("padding: '0.625rem 1.25rem'")
       end
 
       it 'handles 4-element array' do
@@ -189,7 +189,7 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include("padding: '10px 20px 30px 40px'")
+        expect(result).to include("padding: '0.625rem 1.25rem 1.875rem 2.5rem'")
       end
     end
 
