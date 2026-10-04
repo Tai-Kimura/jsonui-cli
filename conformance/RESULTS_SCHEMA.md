@@ -198,13 +198,31 @@ At each visual fixture's `screenshot` step, the driver writes
   px — the numbers a layout JSON declares. Round to 2 decimals.
 - **Relative to the root.** Every frame is relative to the origin of the
   top-level `root` box, which removes status bars, safe areas and window
-  chrome. On iOS and Android that box is the element with id `root`, so
+  chrome. On Android that box is the element with id `root`; on iOS it is the
+  host's canvas, which a matchParent root fills (below). On both,
   `frames.root` is `{x: 0, y: 0, …}`. On web it is the page (the viewport
   at scroll 0): CSS margin collapsing lets the first child's top margin escape
   `#root` and every container above it (measured: alignTopView's `#root` and
   `#app-root` both start at y = 120 while the anchor is at 120 and the target
   where iOS draws it), so `frames.root` can sit below 0. The gate takes the root's width and height from the top-level
   `root`.
+- **The iOS root box is the host's canvas, not the `root` element.** On
+  SwiftUI the element that carries the `root` id reports the box around its
+  children, not the frame the layout gave it (measured on SwiftJsonUI's
+  ConformanceHost, iOS 26.5: alignTopView's `root` read 200 x 200 at y = 182,
+  the union of its anchor and target, where the root fills the 402 x 778
+  canvas; every frame relative to it was 120 off). So the host reads the
+  canvas the fixture is drawn in, from two 1 x 1 markers at its top-left
+  (`conformance_origin`) and bottom-right (`conformance_current_<id>`)
+  corners, and passes it as the root. A matchParent root fills that canvas,
+  so the canvas is the root's frame. A root that is not matchParent on both
+  axes (4 of 1131 fixtures on 2026-10-05, sized and centred in the canvas)
+  has no readable origin. The host does not write its frames and prints
+  `FRAMES_UNRECORDED <fixture> <reason>`, and the gate counts that fixture as
+  no frames file. The host's markers are not layout ids and are not recorded.
+  `XCUIElement.frame` is not cut at the screen edge (measured: an anchor moved
+  to x = 380 read 50 wide, past the 402-pt screen), so iOS frames carry no
+  `clipped`.
 - **Record what you find; the gate knows what was declared.** The driver writes
   every element that carries an id. The gate takes the ids the fixture's
   layout declares from the layout file and names the declared ids a platform
