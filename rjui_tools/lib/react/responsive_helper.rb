@@ -55,8 +55,7 @@ module RjuiTools
           end
         },
         'spacing' => ->(v, prefix) {
-          tw = TailwindMapper::PADDING_MAP[v] || v
-          "#{prefix}gap-#{tw}"
+          "#{prefix}gap-#{TailwindMapper.spacing_value(v)}"
         },
         'fontSize' => ->(v, prefix) {
           mapped = TailwindMapper::FONT_SIZE_MAP[v]
@@ -354,8 +353,7 @@ module RjuiTools
         def map_responsive_padding(value, prefix)
           case value
           when Numeric
-            tw = TailwindMapper::PADDING_MAP[value] || value
-            "#{prefix}p-#{tw}"
+            "#{prefix}p-#{TailwindMapper.spacing_value(value)}"
           when Array
             map_responsive_padding_array(value, prefix)
           else
@@ -366,18 +364,15 @@ module RjuiTools
         def map_responsive_padding_array(arr, prefix)
           case arr.length
           when 1
-            tw = TailwindMapper::PADDING_MAP[arr[0]] || arr[0]
-            "#{prefix}p-#{tw}"
+            "#{prefix}p-#{TailwindMapper.spacing_value(arr[0])}"
           when 2
-            twy = TailwindMapper::PADDING_MAP[arr[0]] || arr[0]
-            twx = TailwindMapper::PADDING_MAP[arr[1]] || arr[1]
-            "#{prefix}py-#{twy} #{prefix}px-#{twx}"
+            "#{prefix}py-#{TailwindMapper.spacing_value(arr[0])} #{prefix}px-#{TailwindMapper.spacing_value(arr[1])}"
           when 4
             [
-              "#{prefix}pt-#{TailwindMapper::PADDING_MAP[arr[0]] || arr[0]}",
-              "#{prefix}pr-#{TailwindMapper::PADDING_MAP[arr[1]] || arr[1]}",
-              "#{prefix}pb-#{TailwindMapper::PADDING_MAP[arr[2]] || arr[2]}",
-              "#{prefix}pl-#{TailwindMapper::PADDING_MAP[arr[3]] || arr[3]}"
+              "#{prefix}pt-#{TailwindMapper.spacing_value(arr[0])}",
+              "#{prefix}pr-#{TailwindMapper.spacing_value(arr[1])}",
+              "#{prefix}pb-#{TailwindMapper.spacing_value(arr[2])}",
+              "#{prefix}pl-#{TailwindMapper.spacing_value(arr[3])}"
             ].join(' ')
           else
             nil

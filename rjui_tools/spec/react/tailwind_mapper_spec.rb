@@ -119,8 +119,8 @@ RSpec.describe RjuiTools::React::TailwindMapper do
       expect(described_class.map_inset_horizontal(nil)).to eq('')
     end
 
-    it 'finds closest Tailwind value' do
-      expect(described_class.map_inset_horizontal(15)).to eq('px-3.5')  # 15 is closer to 14 (px-3.5)
+    it 'keeps a value off the scale exact (jsonui-cli 1.9.14; it rounded to px-3.5 before)' do
+      expect(described_class.map_inset_horizontal(15)).to eq('px-[15px]')
     end
   end
 

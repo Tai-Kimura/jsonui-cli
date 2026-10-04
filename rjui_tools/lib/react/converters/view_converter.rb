@@ -217,8 +217,7 @@ module RjuiTools
           # nothing.
           spacing_value = bound_length_style('gap', attributes['spacing'])
           if spacing_value
-            spacing = TailwindMapper::PADDING_MAP[spacing_value] || spacing_value
-            classes << "gap-#{spacing}"
+            classes << "gap-#{TailwindMapper.spacing_value(spacing_value)}"
           end
 
           # Distribution. Only the GAP half is a justify-content — the SIZE

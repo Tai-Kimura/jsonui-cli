@@ -896,7 +896,8 @@ module RjuiTools
         # The same contract for the per-side spacing attributes, which the SSoT
         # also declares as `["number", "binding"]`.
         #
-        # Without this a bound value reached `TailwindMapper.closest_padding`,
+        # Without this a bound value reached `TailwindMapper.closest_padding`
+        # (TailwindMapper.spacing_value since jsonui-cli 1.9.15),
         # which does `(k - value).abs` over the spacing scale and raised
         # `TypeError: String can't be coerced into Integer` — `jui build` on a
         # layout written exactly the way the SSoT describes ABORTED. Sixteen
@@ -908,8 +909,9 @@ module RjuiTools
         # Returns the value to hand the Tailwind mapper, and nil once the
         # binding has been routed to the inline style. Deliberately additive:
         # a numeric value is returned untouched and takes the byte-identical
-        # path it took before, because `closest_padding` is the road every
-        # STATIC padding travels and moving that would move every fixture.
+        # path it took before, because the spacing mapper is the road every
+        # STATIC padding travels. (Since 1.9.15 that road no longer rounds to
+        # the Tailwind scale: TailwindMapper.spacing_value.)
         #
         # It takes the VALUE, not the attribute names, so the subscript reads
         # stay at the call site. Two scanners look for them there — this tree's
