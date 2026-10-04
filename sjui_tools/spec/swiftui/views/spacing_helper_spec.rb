@@ -67,15 +67,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::SpacingHelper do
     end
 
     context 'with array padding [4 values]' do
-      # JsonUI paddings format is [top, left, bottom, right]
-      it 'applies all four paddings' do
+      # The SSoT's common.paddings is [top, right, bottom, left], as
+      # SwiftJsonUI Dynamic and Compose read it. This example pinned
+      # [top, left, bottom, right] until jsonui-cli 1.9.14 (ticket
+      # sjui-four-value-paddings-read-as-top-left-bottom-right).
+      it 'applies all four paddings as [top, right, bottom, left]' do
         helper.component = { 'paddings' => [5, 10, 15, 20] }
         helper.apply_padding
 
         expect(helper.generated_code).to include('.padding(.top, 5)')
-        expect(helper.generated_code).to include('.padding(.leading, 10)')
+        expect(helper.generated_code).to include('.padding(.trailing, 10)')
         expect(helper.generated_code).to include('.padding(.bottom, 15)')
-        expect(helper.generated_code).to include('.padding(.trailing, 20)')
+        expect(helper.generated_code).to include('.padding(.leading, 20)')
       end
     end
 

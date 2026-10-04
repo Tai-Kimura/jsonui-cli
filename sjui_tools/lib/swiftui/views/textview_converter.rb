@@ -166,6 +166,12 @@ module SjuiTools
             # TextView.edgeInset off the coverage gap ledger.
             inset = @component['containerInset'] || @component['edgeInset'] ||
                     @component['paddings']
+            # A four-value `paddings` is [top, right, bottom, left] (the SSoT's
+            # common.paddings; SwiftJsonUI Dynamic reads a TextView's paddings
+            # so through getPadding). containerInset keeps [top, left, bottom,
+            # right], as Dynamic's TextView reads it. Until jsonui-cli 1.9.14
+            # paddings was read as containerInset is.
+            from_paddings = !@component['containerInset'] && !@component['edgeInset'] && @component['paddings']
             if inset
               if inset.is_a?(Array)
                 case inset.length
@@ -174,7 +180,8 @@ module SjuiTools
                 when 2
                   add_line "containerInset: EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[0]}, trailing: #{inset[1]}),"
                 when 4
-                  add_line "containerInset: EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[2]}, trailing: #{inset[3]}),"
+                  leading, trailing = from_paddings ? [inset[3], inset[1]] : [inset[1], inset[3]]
+                  add_line "containerInset: EdgeInsets(top: #{inset[0]}, leading: #{leading}, bottom: #{inset[2]}, trailing: #{trailing}),"
                 end
               else
                 add_line "containerInset: EdgeInsets(top: #{inset}, leading: #{inset}, bottom: #{inset}, trailing: #{inset}),"
