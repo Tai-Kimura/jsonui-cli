@@ -15,8 +15,9 @@ require 'react/responsive_helper'
 # and Android draw the declared value. A spelling that missed the map
 # (`PADDING_MAP[v] || v`: the View's gap, the responsive overrides, the
 # Segment) wrote `gap-22`, which Tailwind v4 reads as 22 x 0.25rem = 88px.
-# A step of the scale keeps its name (16 -> p-4); any other length is an
-# arbitrary value, as the Collection's insets have been since 1.9.0.
+# Every length is an arbitrary px value (16 -> p-[16px]), never a scale step
+# (a rem, which follows the viewer's root font size), as the Collection's
+# insets have been since 1.9.0.
 RSpec.describe 'rjui spacing is the declared length' do
   C = RjuiTools::React::Converters
   TM = RjuiTools::React::TailwindMapper
@@ -28,15 +29,16 @@ RSpec.describe 'rjui spacing is the declared length' do
   end
 
   describe 'TailwindMapper.spacing_value' do
-    it 'a step of the scale keeps its name; any other length is exact' do
-      expect(TM.spacing_value(16)).to eq('4')
-      expect(TM.spacing_value(16.0)).to eq('4')
-      expect(TM.spacing_value(1)).to eq('px')
+    it 'every length is its px value — a step of the old scale too' do
+      expect(TM.spacing_value(16)).to eq('[16px]')
+      expect(TM.spacing_value(16.0)).to eq('[16px]')
+      expect(TM.spacing_value(1)).to eq('[1px]')
+      expect(TM.spacing_value(0)).to eq('[0px]')
       expect(TM.spacing_value(22)).to eq('[22px]')
       expect(TM.spacing_value(3)).to eq('[3px]')
       expect(TM.spacing_value(2.5)).to eq('[2.5px]')
       expect(TM.spacing_value(100)).to eq('[100px]')
-      expect(TM.spacing_value(nil)).to eq('0')
+      expect(TM.spacing_value(nil)).to eq('[0px]')
     end
   end
 
@@ -47,13 +49,13 @@ RSpec.describe 'rjui spacing is the declared length' do
         expect(spacing_classes(converter, { 'paddingLeft' => 22, 'paddingTop' => 3 }, type, base))
           .to contain_exactly('pt-[3px]', 'pl-[22px]')
         expect(spacing_classes(converter, { 'paddings' => [1, 2, 3, 4] }, type, base))
-          .to eq(%w[pt-px pr-0.5 pb-[3px] pl-1])
+          .to eq(%w[pt-[1px] pr-[2px] pb-[3px] pl-[4px]])
         expect(spacing_classes(converter, { 'margins' => [3, 22, 5, 7] }, type, base))
           .to eq(%w[mt-[3px] mr-[22px] mb-[5px] ml-[7px]])
       end
 
-      it 'a step of the scale is spelled as before' do
-        expect(spacing_classes(converter, { 'paddings' => [16, 8] }, type, base)).to eq(%w[py-4 px-2])
+      it 'a step of the old scale is its px value too' do
+        expect(spacing_classes(converter, { 'paddings' => [16, 8] }, type, base)).to eq(%w[py-[16px] px-[8px]])
       end
     end
   end
@@ -62,14 +64,14 @@ RSpec.describe 'rjui spacing is the declared length' do
     expect(spacing_classes(C::ViewConverter, { 'orientation' => 'horizontal', 'spacing' => 22 }, 'View'))
       .to include('gap-[22px]')
     expect(spacing_classes(C::ViewConverter, { 'orientation' => 'horizontal', 'spacing' => 8 }, 'View'))
-      .to include('gap-2')
+      .to include('gap-[8px]')
   end
 
   it 'the responsive overrides spell spacing the same way' do
     mappers = RjuiTools::React::ResponsiveHelper::ATTRIBUTE_MAPPERS
     expect(mappers['padding'].call(22, 'md:')).to eq('md:p-[22px]')
-    expect(mappers['padding'].call([1, 2, 3, 22], 'md:')).to eq('md:pt-px md:pr-0.5 md:pb-[3px] md:pl-[22px]')
-    expect(mappers['padding'].call([3, 16], 'md:')).to eq('md:py-[3px] md:px-4')
+    expect(mappers['padding'].call([1, 2, 3, 22], 'md:')).to eq('md:pt-[1px] md:pr-[2px] md:pb-[3px] md:pl-[22px]')
+    expect(mappers['padding'].call([3, 16], 'md:')).to eq('md:py-[3px] md:px-[16px]')
     expect(mappers['spacing'].call(22, 'md:')).to eq('md:gap-[22px]')
   end
 

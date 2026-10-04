@@ -6,14 +6,6 @@ require_relative '../core/enum_spelling'
 module RjuiTools
   module React
     class TailwindMapper
-      # Padding mapping (px to Tailwind)
-      PADDING_MAP = {
-        0 => '0', 1 => 'px', 2 => '0.5', 4 => '1', 6 => '1.5',
-        8 => '2', 10 => '2.5', 12 => '3', 14 => '3.5', 16 => '4',
-        20 => '5', 24 => '6', 28 => '7', 32 => '8', 36 => '9',
-        40 => '10', 44 => '11', 48 => '12', 56 => '14', 64 => '16'
-      }.freeze
-
       # Font size mapping
       FONT_SIZE_MAP = {
         12 => 'text-xs', 14 => 'text-sm', 16 => 'text-base',
@@ -668,20 +660,25 @@ module RjuiTools
           classes.join(' ')
         end
 
-        # The value part of a spacing class (padding, margin, gap): the scale
-        # step's name only when the length IS a step of PADDING_MAP (16 -> '4'),
-        # else the exact length as an arbitrary value (22 -> '[22px]', as the
-        # Collection's insets have been since jsonui-cli 1.9.0). Until 1.9.15
-        # every length was rounded to the NEAREST step: 22 drew 20px, 3 drew
-        # 2px, and 3 / 5 / 7 one px off — silently, on web only (ticket
-        # rjui-spacing-rounds-to-the-tailwind-scale). A non-number passes
-        # through as written.
+        # The value part of a spacing class (padding, margin, gap): the
+        # declared length in px, as an arbitrary value — `[22px]`, `[16px]`,
+        # `[0px]` — never a step of Tailwind's spacing scale. A layout length
+        # is a device-independent pixel on iOS and Android; a scale step is a
+        # rem (`p-4` = 1rem), which follows the root font size a viewer's
+        # browser setting changes. The Collection's insets have been written
+        # this way since jsonui-cli 1.9.0.
+        #
+        # Until 1.9.14 every length was rounded to the NEAREST scale step
+        # (closest_padding over PADDING_MAP): 22 drew 20px, 3 drew 2px, 26
+        # drew 24px — silently, on web only (ticket
+        # rjui-spacing-rounds-to-the-tailwind-scale). Its special cases: nil
+        # gave '0' (p-0), 0 gave '0', 1 gave 'px'; now [0px], [0px], [1px].
+        # A non-number passes through as written.
         def spacing_value(value)
-          return '0' if value.nil?
+          return '[0px]' if value.nil?
           return value.to_s unless value.is_a?(Numeric)
 
-          exact = value == value.to_i ? value.to_i : value
-          PADDING_MAP.fetch(exact) { "[#{exact}px]" }
+          "[#{value == value.to_i ? value.to_i : value}px]"
         end
 
         # Insets (alternative padding format - same as padding array)

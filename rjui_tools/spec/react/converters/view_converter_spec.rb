@@ -28,7 +28,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
         })
         classes = converter.send(:build_class_name)
         # 16px maps to Tailwind gap-4
-        expect(classes).to include('gap-4')
+        expect(classes).to include('gap-[16px]')
       end
 
       it 'maps spacing to Tailwind gap values (8px -> gap-2)' do
@@ -40,7 +40,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
         })
         classes = converter.send(:build_class_name)
         # 8px maps to Tailwind gap-2
-        expect(classes).to include('gap-2')
+        expect(classes).to include('gap-[8px]')
       end
     end
 
@@ -129,7 +129,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
           'spacing' => 12, 'distribution' => 'equalSpacing', 'child' => []
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('gap-3')
+        expect(classes).to include('gap-[12px]')
         expect(classes).not_to match(/justify-/)
       end
 
@@ -139,7 +139,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
           'distribution' => 'fill', 'child' => [{ 'type' => 'View', 'id' => 'a' }]
         }
         out = create_converter(node).convert_node(2)
-        expect(out).to include('gap-3')
+        expect(out).to include('gap-[12px]')
         expect(out).to match(/id="a"[^>]*\bgrow\b/)
       end
     end
@@ -427,8 +427,8 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     # plain ones — so the RTL value wins by order, as here.
     describe 'drawn in both reading directions' do
       STAND_IN = { 'left' => '11px', 'right' => '22px', 'top' => '33px', 'bottom' => '44px' }.freeze
-      TAILWIND_PLAIN = { 'shrink-0' => 'flex-shrink:0', 'ps-1' => 'padding-inline-start:0.25rem',
-                         'pe-1' => 'padding-inline-end:0.25rem' }.freeze
+      TAILWIND_PLAIN = { 'shrink-0' => 'flex-shrink:0', 'ps-[4px]' => 'padding-inline-start:4px',
+                         'pe-[4px]' => 'padding-inline-end:4px' }.freeze
 
       def chromium
         HeadlessChromium.path
@@ -673,7 +673,7 @@ RSpec.describe 'pair-scan closure (web)' do
     r = conv(RjuiTools::React::Converters::ToggleConverter,
              'type' => 'CheckBox', 'label' => 'A', 'spacing' => 10).convert
     expect(r).to include('gap-[10px]')
-    expect(r).not_to include('gap-2')
+    expect(r).not_to include('gap-[8px]')
   end
 
   it 'Collection: horizontalScroll flips direction; indicators and inset map like ScrollView' do

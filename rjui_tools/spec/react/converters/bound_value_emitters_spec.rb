@@ -216,7 +216,7 @@ RSpec.describe 'bound value emitters' do
     it 'keeps the static shorthand class and lets the bound side override one edge' do
       out = view('padding' => 8, 'topPadding' => '@{t}')
 
-      expect(out).to include('p-2')
+      expect(out).to include('p-[8px]')
       expect(out).to include('paddingTop: `${data.t}px`')
     end
   end
@@ -373,7 +373,7 @@ RSpec.describe 'bound value emitters' do
     it 'still maps a numeric cornerRadius and spacing to classes' do
       out = view('cornerRadius' => 8, 'orientation' => 'horizontal', 'spacing' => 4)
       expect(out).to include('rounded-lg')
-      expect(out).to include('gap-1')
+      expect(out).to include('gap-[4px]')
       expect(out).not_to include('style={{')
     end
 

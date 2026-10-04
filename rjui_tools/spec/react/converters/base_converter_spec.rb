@@ -69,7 +69,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'paddingStart' => 16
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('ps-4')
+        expect(classes).to include('ps-[16px]')
       end
 
       it 'maps paddingEnd to pe- class' do
@@ -78,7 +78,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'paddingEnd' => 8
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('pe-2')
+        expect(classes).to include('pe-[8px]')
       end
     end
 
@@ -90,8 +90,8 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'paddingRight' => 8
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('pt-4')
-        expect(classes).to include('pr-2')
+        expect(classes).to include('pt-[16px]')
+        expect(classes).to include('pr-[8px]')
       end
 
       it 'maps insets to padding' do
@@ -100,8 +100,8 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'insets' => [16, 8]
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('py-4')
-        expect(classes).to include('px-2')
+        expect(classes).to include('py-[16px]')
+        expect(classes).to include('px-[8px]')
       end
 
       it 'maps insetHorizontal to horizontal padding' do
@@ -110,7 +110,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'insetHorizontal' => 16
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('px-4')
+        expect(classes).to include('px-[16px]')
       end
     end
 
@@ -121,7 +121,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'startMargin' => 16
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('ms-4')
+        expect(classes).to include('ms-[16px]')
       end
 
       it 'maps endMargin to me- class' do
@@ -130,7 +130,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'endMargin' => 8
         })
         classes = converter.send(:build_class_name)
-        expect(classes).to include('me-2')
+        expect(classes).to include('me-[8px]')
       end
     end
 
@@ -545,10 +545,10 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
         'paddingStart' => 4, 'leftPadding' => 12
       })
       classes = converter.send(:build_class_name)
-      expect(classes).to include('pt-2')
-      expect(classes).to include('pl-3')
-      expect(classes).to include('ps-1')
-      expect(classes).to include('mt-4')
+      expect(classes).to include('pt-[8px]')
+      expect(classes).to include('pl-[12px]')
+      expect(classes).to include('ps-[4px]')
+      expect(classes).to include('mt-[16px]')
       expect(converter.send(:build_style_attr)).to eq('')
     end
   end

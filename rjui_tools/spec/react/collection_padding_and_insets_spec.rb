@@ -41,7 +41,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
 
   it 'padding only: a padding box around the scroll container' do
     box, scroller = boxes(convert('padding' => 16))
-    expect(padding(box)).to eq(%w[p-4])
+    expect(padding(box)).to eq(%w[p-[16px]])
     expect(classes(box)).to include('w-[300px]', 'h-[100px]', 'bg-[#EEEEEE]', 'flex', 'flex-col')
     expect(box).not_to include('id=')
     expect(padding(scroller)).to eq([])
@@ -58,24 +58,24 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
 
   it 'both, static: the padding on the box, the insets on the scroll container' do
     box, scroller = boxes(convert('padding' => 16, 'insets' => [0, 0, 0, 30]))
-    expect(padding(box)).to eq(%w[p-4])
+    expect(padding(box)).to eq(%w[p-[16px]])
     expect(padding(scroller)).to eq(%w[pl-[30px]])
   end
 
   it 'a bound inset writes its four edges on the scroll container, not over the padding' do
     box, scroller = boxes(convert('padding' => 16, 'insets' => ['@{top}', 0, 0, 30]))
-    expect(padding(box)).to eq(%w[p-4])
+    expect(padding(box)).to eq(%w[p-[16px]])
     expect(box).not_to include('style=')
     expect(scroller).to include('paddingTop: `${(Number(data.top) || 0)}px`', "paddingLeft: '30px'")
   end
 
   it 'per-edge padding with insets, and paddings with insetHorizontal' do
     box, scroller = boxes(convert('paddingLeft' => 12, 'insets' => [0, 0, 0, 30]))
-    expect(padding(box)).to eq(%w[pl-3])
+    expect(padding(box)).to eq(%w[pl-[12px]])
     expect(padding(scroller)).to eq(%w[pl-[30px]])
 
     box, scroller = boxes(convert('paddings' => [8, 16], 'insetHorizontal' => 10))
-    expect(padding(box)).to eq(%w[py-2 px-4])
+    expect(padding(box)).to eq(%w[py-[8px] px-[16px]])
     expect(padding(scroller)).to eq(%w[pr-[10px] pl-[10px]])
   end
 
