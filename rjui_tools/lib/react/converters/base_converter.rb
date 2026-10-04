@@ -536,8 +536,14 @@ module RjuiTools
 
           # The SIZE half of the parent's `distribution`. An explicit `weight`
           # below is the more specific declaration and wins the same axis, the
-          # way an explicit size wins over a bound one.
-          if (parent_distribution = json['_parent_distribution']) && !attributes['weight']
+          # way an explicit size wins over a bound one. So does an explicit
+          # size on the distribution axis (distribution.explicitChildSizeWins:
+          # "fill and fillEqually do not override a declared child size"):
+          # fillEqually's zero basis drew a width-60 child at an equal share,
+          # and fill's grow drew it past 60 (frame-parity inventory
+          # 2026-10-05; ticket rjui-fillequally-overrides-a-childs-declared-width).
+          if (parent_distribution = json['_parent_distribution']) && !attributes['weight'] &&
+             !explicit_size?(parent_row? ? 'width' : 'height')
             classes << DISTRIBUTION_CHILD_CLASS[parent_distribution]
           end
 
@@ -1227,6 +1233,13 @@ module RjuiTools
           'equalspacing' => 'justify-between',
           'equalcentering' => 'justify-around'
         }.freeze
+
+        # Whether the parent lays its children out as a row (its orientation,
+        # passed down as `_parent_orientation`, in any declared spelling).
+        def parent_row?
+          orientation = json['_parent_orientation']
+          JsonUIShared::EnumSpelling.lowered(orientation, 'View', 'orientation') == 'horizontal'
+        end
 
         # The lowercased SIZE value this container declares, or nil.
         def distribution_size_value

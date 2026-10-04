@@ -480,6 +480,48 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     end
   end
 
+  # distribution's SIZE half (fill / fillEqually) yields to a size the child
+  # declares on the distribution axis (attribute_semantics.json distribution
+  # .explicitChildSizeWins). fillEqually's `flex-1` drew a width-60 child at
+  # an equal 100 on web where Android draws 60 (frame-parity inventory
+  # 2026-10-05; ticket rjui-fillequally-overrides-a-childs-declared-width).
+  describe "a declared size inside a distribution's size half" do
+    def child_classes(orientation, distribution, child)
+      result = create_converter({
+        'type' => 'View', 'id' => 'stack', 'width' => 300, 'height' => 200,
+        'orientation' => orientation, 'distribution' => distribution,
+        'child' => [child.merge('id' => 'c'), { 'type' => 'Label', 'id' => 'free', 'text' => 'F' }]
+      }).convert
+      [result.lines.find { |l| l.include?('id="c"') }, result.lines.find { |l| l.include?('id="free"') }]
+        .map { |l| l[/className="([^"]*)"/, 1].split }
+    end
+
+    it 'keeps the declared width in a fillEqually row, while an undeclared sibling takes its share' do
+      sized, free = child_classes('horizontal', 'fillEqually', { 'type' => 'View', 'width' => 60, 'height' => 40 })
+      expect(sized).to include('w-[60px]', 'shrink-0')
+      expect(sized).not_to include('flex-1')
+      expect(free).to include('flex-1')
+    end
+
+    it 'does not grow a declared width in a fill row' do
+      sized, free = child_classes('horizontal', 'fill', { 'type' => 'View', 'width' => 60, 'height' => 40 })
+      expect(sized).not_to include('grow')
+      expect(free).to include('grow')
+    end
+
+    it 'reads the axis from the parent: a column keeps a declared height, not a width' do
+      by_height, = child_classes('vertical', 'fillEqually', { 'type' => 'View', 'width' => 60, 'height' => 40 })
+      expect(by_height).not_to include('flex-1')
+      by_width_only, = child_classes('vertical', 'fillEqually', { 'type' => 'View', 'width' => 60 })
+      expect(by_width_only).to include('flex-1')
+    end
+
+    it 'treats a bound size on the axis as declared' do
+      sized, = child_classes('horizontal', 'fillEqually', { 'type' => 'View', 'width' => '@{w}', 'height' => 40 })
+      expect(sized).not_to include('flex-1')
+    end
+  end
+
   # safeAreaInsetPositions — which edges reserve the safe area. On web that is
   # `env(safe-area-inset-*)` padding: the notch, the home indicator, a rounded
   # display's corners.
