@@ -524,6 +524,17 @@ module RjuiTools
           # `flex-none` — the exact opposite of what a weight is for.
           weight = bound_number_style('flexGrow', attributes['weight'])
           classes << TailwindMapper.map_flex_grow(weight) if weight
+          # A bound weight replaces the declared size on its axis the way the
+          # static spelling does (`flex-1` is `flex: 1 1 0%`): grow from a zero
+          # basis. Setting only flexGrow left the basis `auto`, i.e. the
+          # declared width, so two weight-1 siblings split the LEFTOVER space
+          # and came out 412 : 612 instead of equal (ticket
+          # rjui-bound-weight-keeps-the-declared-width-as-a-basis). A weight
+          # that resolves to 0 keeps its basis, as static `flex-none` does.
+          if (weight_expr = bound_value_expr(attributes['weight']))
+            dynamic_styles['flexBasis'] = "Number(#{weight_expr}) > 0 ? 0 : undefined"
+            classes << 'min-w-0 min-h-0'
+          end
 
           # Self-centering (for non-View elements like Image, Label)
           # centerHorizontal: center this element horizontally within parent

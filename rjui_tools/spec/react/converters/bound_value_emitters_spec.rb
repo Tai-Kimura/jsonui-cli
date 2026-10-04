@@ -79,6 +79,15 @@ RSpec.describe 'bound value emitters' do
       expect(out).to include('flexGrow: data.w')
     end
 
+    # The static spelling is `flex: 1 1 0%`; a bound weight that sets only
+    # flexGrow keeps the declared width as its basis and splits the leftover
+    # (ticket rjui-bound-weight-keeps-the-declared-width-as-a-basis).
+    it 'grows a bound weight from a zero basis, and keeps the basis for a weight of 0' do
+      out = view('weight' => '@{w}', 'width' => 200)
+      expect(out).to include('flexBasis: Number(data.w) > 0 ? 0 : undefined')
+      expect(out).to include('min-w-0 min-h-0')
+    end
+
     it 'does not freeze a bound lineSpacing to a 1.0 multiplier via to_f' do
       out = label('lineSpacing' => '@{s}', 'fontSize' => 16)
       expect(out).to include('lineHeight: ((16) + (data.s)) / (16)')
