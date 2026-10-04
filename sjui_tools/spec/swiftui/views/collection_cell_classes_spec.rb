@@ -51,7 +51,7 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
   describe 'a single declared cellClass' do
     it 'renders every item with that cell view' do
       code = emit(base.merge('cellClasses' => ['ItemCollectionViewCell']))
-      expect(code).to include('ItemView(data: cellData)')
+      expect(code).to include('ItemView(data: { () -> [String: Any] in var refreshed = cellData; ')
     end
 
     it 'stops emitting the runtime-name placeholder' do
@@ -91,7 +91,7 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
       # The fix has to apply where the placeholder lives, not only where the
       # first examples looked.
       code = emit(base.merge('columns' => 2, 'cellClasses' => ['ItemCollectionViewCell']))
-      expect(code).to include('ItemView(data: cellData)')
+      expect(code).to include('ItemView(data: { () -> [String: Any] in var refreshed = cellData; ')
       expect(code).not_to include('\\(viewName)')
     end
   end
@@ -154,7 +154,7 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
     it 'control: with items, the grid draws the header, cells and footer' do
       code = emit({ 'type' => 'Collection', 'id' => 'target', 'columns' => 2, 'items' => '@{rows}',
                     'sections' => [{ 'cell' => 'RowCell', 'header' => 'HeadCell', 'footer' => 'FootCell' }] })
-      expect(code).to include('HeadCellView(data: headerData)').and include('RowCellView(data: cellData)').and include('FootCellView(data: footerData)')
+      expect(code).to include('HeadCellView(data: headerData)').and include('RowCellView(data: { () -> [String: Any] in var refreshed = cellData; ').and include('FootCellView(data: footerData)')
     end
 
     it 'the empty grid type-checks', :swift_compile do
@@ -205,6 +205,9 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
         struct ItemView: View {
             init(data: Any) {}
             var body: some View { Text("cell") }
+        }
+        enum CellIdGenerator {
+            static func autoId(from data: [String: Any], primaryKey: String, fallbackIndex: Int) -> String { primaryKey }
         }
         struct TestData { var rows: CollectionDataSource? = nil }
 

@@ -94,7 +94,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     it 'a CollectionDataSource: the first data section, a page per cell' do
       code = convert('cellClasses' => ['ACell'])
       expect(code).to include('if let dataSource = data.rows, let cellsData = dataSource.sections.first?.cells?.data {')
-      expect(code.scan('ACellView(data: cellData)').size).to eq(1)
+      expect(code.scan('ACellView(data: { () -> [String: Any] in var refreshed = cellData; ').size).to eq(1)
       expect(code).to include('.tag(cellIndex)')
     end
 
@@ -103,7 +103,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
                'cellClasses' => ['ACell'] }
       code = described_class.new(node, 0, nil, nil, [{ 'name' => 'rows', 'class' => '[ACellData]', 'defaultValue' => '[]' }]).convert.to_s
       expect(code).to include('if let cellsData = Optional(data.rows.map({ $0.toDictionary() })) {')
-      expect(code.scan('ACellView(data: cellData)').size).to eq(1)
+      expect(code.scan('ACellView(data: { () -> [String: Any] in var refreshed = cellData; ').size).to eq(1)
     end
 
     it 'no items: no page (the validator names it)' do
@@ -126,7 +126,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
               let section = dataSource.sections[0]
               if let cellsData = section.cells?.data {
                   ForEach(Array(cellsData.enumerated()), id: \.offset) { cellIndex, cellData in
-                      CardCellView(data: cellData).equatable()
+                      CardCellView(data: { () -> [String: Any] in var refreshed = cellData; refreshed["cellId"] = CellIdGenerator.autoId(from: cellData, primaryKey: cellData["cellId"] != nil ? "cellId" : "cellId", fallbackIndex: cellIndex); return refreshed }()).equatable()
                           .padding(.horizontal, 4.0)
                           .accessibilityIdentifier("carousel_item_\(cellIndex)")
                           .tag(cellIndex)

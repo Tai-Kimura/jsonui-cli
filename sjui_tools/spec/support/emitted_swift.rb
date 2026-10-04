@@ -53,6 +53,12 @@ module EmittedSwift
         init(id: String, index: Int, data: [String: Any]) { self.id = id; self.index = index; self.data = data }
         static func == (lhs: IdentifiedCellItem, rhs: IdentifiedCellItem) -> Bool { lhs.id == rhs.id && lhs.index == rhs.index }
     }
+    // SwiftJsonUI/Classes/SwiftUI/CellIdGenerator.swift (public since 10.x;
+    // this signature as of 10.29.5): the "cellId" every cell is handed
+    // (CollectionConverter#cell_data_arg).
+    enum CellIdGenerator {
+        static func autoId(from data: [String: Any], primaryKey: String, fallbackIndex: Int) -> String { primaryKey }
+    }
   SWIFT
 
   # `CollectionStackView`, the container the emitted collection code wraps

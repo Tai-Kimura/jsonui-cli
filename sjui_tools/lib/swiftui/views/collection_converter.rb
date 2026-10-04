@@ -413,7 +413,7 @@ module SjuiTools
                           maybe_indent(lanes) do
                             vars = open_cell_foreach('cellsData', section_index: index)
                             indent do
-                              add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                              add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                               generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
 
                               apply_cell_frame
@@ -458,7 +458,7 @@ module SjuiTools
                         maybe_indent(lanes) do
                           vars = open_cell_foreach('cellsData')
                           indent do
-                            add_line "#{cell_class_name}(data: #{vars[:data_var]})"
+                            add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
                             generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame
                             # Add accessibilityIdentifier for test automation (tapItem action)
@@ -551,7 +551,7 @@ module SjuiTools
                           indent do
                             vars = open_cell_foreach('cellsData', section_index: index)
                             indent do
-                              add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                              add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                               generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
 
                               apply_cell_frame(grid: true)
@@ -929,7 +929,7 @@ module SjuiTools
                     maybe_indent(lanes) do
                       vars = open_cell_foreach('cellsData', section_index: index)
                       indent do
-                        add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                        add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                         generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                         apply_cell_frame
                         apply_cell_item_identifier(vars[:index_var])
@@ -953,7 +953,7 @@ module SjuiTools
                   maybe_indent(lanes) do
                     vars = open_cell_foreach('cellsData')
                     indent do
-                      add_line "#{cell_class_name}(data: #{vars[:data_var]})"
+                      add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
                       apply_cell_item_identifier(vars[:index_var])
@@ -1014,7 +1014,7 @@ module SjuiTools
                         indent do
                           vars = open_cell_foreach('cellsData', section_index: index)
                           indent do
-                            add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                             generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame(grid: true)
                             apply_cell_item_identifier(vars[:index_var])
@@ -1144,7 +1144,7 @@ module SjuiTools
                         indent do
                           vars = open_cell_foreach('cellsData', section_index: index)
                           indent do
-                            add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                             generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame
                             apply_cell_item_identifier(vars[:index_var])
@@ -1171,7 +1171,7 @@ module SjuiTools
                   indent do
                     vars = open_cell_foreach('cellsData')
                     indent do
-                      add_line "#{cell_class_name}(data: #{vars[:data_var]})"
+                      add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
                       apply_cell_item_identifier(vars[:index_var])
@@ -1404,7 +1404,7 @@ module SjuiTools
         # its pageStart). The address counts as the tag does, as kjui's pager
         # test tag and rjui's item id do (round 7).
         def add_paging_cell(cell_view_name, vars, spacing)
-          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+          add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
           generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
           apply_cell_frame
           if spacing > 0
@@ -1479,7 +1479,7 @@ module SjuiTools
                       indent do
                         vars = open_cell_foreach('cellsData', section_index: index)
                         indent do
-                          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                          add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                           generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                           apply_cell_frame
                           apply_cell_item_identifier(vars[:index_var])
@@ -1506,7 +1506,7 @@ module SjuiTools
                   indent do
                     vars = open_cell_foreach('cellsData')
                     indent do
-                      add_line "#{cell_class_name}(data: #{vars[:data_var]})"
+                      add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
                       apply_cell_item_identifier(vars[:index_var])
@@ -1887,6 +1887,32 @@ module SjuiTools
               [[0, is_optional ? "(data.#{property_name}?.sections.first?.cells?.data ?? [])" : "(data.#{property_name}.sections.first?.cells?.data ?? [])"]]
             end
           enriched ? lists.map { |j, cells| [j, enriched_cells(cells)] } : lists
+        end
+
+        # The data a cell is drawn with: its own, with "cellId" rewritten to
+        # CellIdGenerator.autoId of it — "<its cellId, else its cellIdProperty
+        # value, else its place>_<hash of the rest of its content>". The loop
+        # still knows the cell by its key (open_cell_foreach), so nothing is
+        # re-inserted; the cell's view gets a "cellId" that changes when its
+        # content does. The cell views `sjui g collection` and `sjui build`
+        # scaffold (app-owned once written) are Equatable on that "cellId",
+        # re-read their data on its change and guard setData on it, so a cell
+        # whose key stayed fixed while its data changed kept the old data on
+        # iOS while Android redrew it (ticket ios-cell-ignores-data-change-
+        # when-cellid-is-fixed-android-updates: 0 of 6 cells on the
+        # ConformanceHost probe, 0 of 8 on a consumer's tabs). Rewritten here,
+        # in generated code, it reaches every app's scaffold on its next
+        # build. With autoChangeTrackingId (and cellIdProperty) the data is
+        # already enriched so (enriched_cells), and passes as it is.
+        def cell_data_arg(vars)
+          data = vars[:data_var]
+          return data if @component['autoChangeTrackingId'] == true && @component['cellIdProperty']
+
+          key = @component['cellIdProperty'] || 'cellId'
+          "{ () -> [String: Any] in var refreshed = #{data}; " \
+            "refreshed[\"cellId\"] = CellIdGenerator.autoId(from: #{data}, " \
+            "primaryKey: #{data}[\"cellId\"] != nil ? \"cellId\" : \"#{key}\", fallbackIndex: #{vars[:index_var]}); " \
+            "return refreshed }()"
         end
 
         # `cells` as a keyed loop reads its keys: with autoChangeTrackingId
@@ -2330,7 +2356,7 @@ module SjuiTools
                   indent do
                     vars = open_cell_foreach('cellsData', section_index: index)
                     indent do
-                      add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                      add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame(grid: !own_columns.nil?)
                       # Add accessibilityIdentifier for test automation (tapItem action)
@@ -2432,7 +2458,7 @@ module SjuiTools
                   # `<CellView data={item} />`. iOS printed a placeholder,
                   # so the same layout rendered cells on two faces and
                   # debug text on the third.
-                  add_line "#{cell_view}(data: cellData)"
+                  add_line "#{cell_view}(data: #{cell_data_arg(data_var: 'cellData', index_var: 'cellIndex')})"
                   generate_cell_identity('cellIndex', every_section: true)
                   apply_cell_frame(grid: columns_is_multi?)
                   apply_cell_item_identifier('cellIndex')
@@ -2547,7 +2573,7 @@ module SjuiTools
           indent do
             vars = open_cell_foreach('cellsData')
             indent do
-              add_line "#{cell_view}(data: #{vars[:data_var]})"
+              add_line "#{cell_view}(data: #{cell_data_arg(vars)})"
               generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
               apply_cell_frame(grid: columns_is_multi?)
               apply_cell_item_identifier(vars[:index_var])

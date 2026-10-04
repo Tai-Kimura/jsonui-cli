@@ -31,7 +31,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('axis: .vertical')
       expect(code).to include('if let dataSource = data.items, dataSource.sections.count > 0 {')
       expect(code).to include('let section = dataSource.sections[0]')
-      expect(code).to include('FooCellView(data: cellData).equatable()')
+      expect(code).to include('FooCellView(data: { () -> [String: Any] in var refreshed = cellData; ').and include('return refreshed }()).equatable()')
     end
   end
 
@@ -75,7 +75,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
 
     it 'tags cells, halves the item spacing as padding, and stamps the item identifier' do
       code = convert(component)
-      expect(code).to include('PageCellView(data: cellData).equatable()')
+      expect(code).to include('PageCellView(data: { () -> [String: Any] in var refreshed = cellData; ').and include('return refreshed }()).equatable()')
       expect(code).to include('.padding(.horizontal, 4.0)')
       expect(code).to include('.accessibilityIdentifier("pager_item_\\(cellIndex)")')
       expect(code).to include('.tag(cellIndex)')
@@ -105,11 +105,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('if data.items.sections.count > 0 {')
       expect(code).to include('if data.items.sections.count > 1 {')
       expect(code).to include('let section = data.items.sections[1]')
-      expect(code).to include('ACellView(data: cellData).equatable()')
+      expect(code).to include('ACellView(data: { () -> [String: Any] in var refreshed = cellData; ').and include('return refreshed }()).equatable()')
       # Section 1's ForEach ids are its own (round 8): repeating section 0's
       # offsets, a lazy stack dropped its cells.
       expect(code).to include('ForEach(cellsData.enumerated().map { IdentifiedCellItem(id: "1:\\($0.offset)", index: $0.offset, data: $0.element) }) { cell in')
-      expect(code).to include('BCellView(data: cell.data).equatable()')
+      expect(code).to include('BCellView(data: { () -> [String: Any] in var refreshed = cell.data; ').and include('return refreshed }()).equatable()')
       expect(code).to include('.frame(height: 44, alignment: .topLeading)')
       expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cellIndex)")')
       expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cell.index)")')
@@ -156,7 +156,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       )
       expect(code).to include('if let dataSource = data.rows {')
       expect(code).to include('ForEach(Array(dataSource.sections.enumerated()), id: \\.offset) { sectionIndex, section in')
-      expect(code).to include('GridCellView(data: cellData)')
+      expect(code).to include('GridCellView(data: { () -> [String: Any] in var refreshed = cellData; ')
       expect(code).not_to include('TODO')
       expect(code).not_to include('Text("\\(viewName)')
       expect(code).to include('.frame(height: 40, alignment: .topLeading)')
@@ -221,7 +221,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('VStack(spacing: 0) {')
       expect(code).to include('if let dataSource = data.tags, dataSource.sections.count > 0 {')
       expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {')
-      expect(code).to include('TagCellView(data: cellData).equatable()')
+      expect(code).to include('TagCellView(data: { () -> [String: Any] in var refreshed = cellData; ').and include('return refreshed }()).equatable()')
       expect(code).to include('.accessibilityIdentifier("flw_item_\\(cellIndex)")')
     end
 
@@ -232,7 +232,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       )
       expect(code).to include('if let dataSource = data.tags, let cellsData = dataSource.sections.first?.cells?.data {')
       expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {')
-      expect(code).to include('TagCellView(data: cellData)')
+      expect(code).to include('TagCellView(data: { () -> [String: Any] in var refreshed = cellData; ')
       expect(code).not_to include('.equatable()')
     end
 
@@ -260,7 +260,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('GHeadView(data: headerData)')
       expect(code).to include('if let footerData = section.footer?.data {')
       expect(code).to include('GFootView(data: footerData)')
-      expect(code).to include('GCellView(data: cellData).equatable()')
+      expect(code).to include('GCellView(data: { () -> [String: Any] in var refreshed = cellData; ').and include('return refreshed }()).equatable()')
       expect(code).to include('.frame(height: 30, alignment: .topLeading)')
     end
 
@@ -273,8 +273,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('if data.rows.sections.count > 0 {')
       expect(code).to include('if data.rows.sections.count > 1 {')
       expect(code).to include('let section = data.rows.sections[1]')
-      expect(code).to include('ACellView(data: cellData).equatable()')
-      expect(code).to include('BCellView(data: cell.data).equatable()')
+      expect(code).to include('ACellView(data: { () -> [String: Any] in var refreshed = cellData; ').and include('return refreshed }()).equatable()')
+      expect(code).to include('BCellView(data: { () -> [String: Any] in var refreshed = cell.data; ').and include('return refreshed }()).equatable()')
     end
 
     # These were bare siblings of the LazyVGrid until 1.9.0, so the
