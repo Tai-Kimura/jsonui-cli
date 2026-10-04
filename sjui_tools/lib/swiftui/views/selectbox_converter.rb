@@ -262,7 +262,9 @@ module SjuiTools
                 when 2
                   add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[1]}, bottom: #{padding[0]}, trailing: #{padding[1]})"
                 when 4
-                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[1]}, bottom: #{padding[2]}, trailing: #{padding[3]})"
+                  # [top, right, bottom, left], as spacing_helper reads it
+                  # (until jsonui-cli 1.9.14: [top, left, bottom, right]).
+                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[3]}, bottom: #{padding[2]}, trailing: #{padding[1]})"
                 end
               else
                 add_line "padding: EdgeInsets(top: #{padding}, leading: #{padding}, bottom: #{padding}, trailing: #{padding})"

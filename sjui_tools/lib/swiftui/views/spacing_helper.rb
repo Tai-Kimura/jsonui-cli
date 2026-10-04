@@ -30,11 +30,18 @@ module SjuiTools
                 @modifier_bag.append(:padding, ".padding(.horizontal, #{padding_value(padding[1])})")
                 @modifier_bag.append(:padding, ".padding(.vertical, #{padding_value(padding[0])})")
               when 4
-                # 上、左、下、右の順 (JsonUI format: [top, left, bottom, right])
+                # [top, right, bottom, left] — the SSoT's common.paddings, as
+                # SwiftJsonUI Dynamic (edgeInsetsFromArray) and both Compose
+                # paths read it. Until jsonui-cli 1.9.14 this read
+                # [top, left, bottom, right], so a four-value paddings with
+                # different left and right values was padded the other way
+                # round from Dynamic (ticket
+                # sjui-four-value-paddings-read-as-top-left-bottom-right). The
+                # modifiers keep their order: equal sides emit what they did.
                 @modifier_bag.append(:padding, ".padding(.top, #{padding_value(padding[0])})")
-                @modifier_bag.append(:padding, ".padding(.leading, #{padding_value(padding[1])})")
+                @modifier_bag.append(:padding, ".padding(.leading, #{padding_value(padding[3])})")
                 @modifier_bag.append(:padding, ".padding(.bottom, #{padding_value(padding[2])})")
-                @modifier_bag.append(:padding, ".padding(.trailing, #{padding_value(padding[3])})")
+                @modifier_bag.append(:padding, ".padding(.trailing, #{padding_value(padding[1])})")
               end
             else
               @modifier_bag.append(:padding, ".padding(#{padding_value(padding)})")
