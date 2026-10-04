@@ -13,6 +13,8 @@ setup(
     version=_VERSION,
     description="JsonUI cross-platform project tool",
     packages=find_packages(),
+    # The iOS home-indicator template the conformance gate compares against.
+    package_data={"jui_cli.conformance": ["data/*.png"]},
     python_requires=">=3.11",
     install_requires=[
         "watchdog>=4.0.0",
