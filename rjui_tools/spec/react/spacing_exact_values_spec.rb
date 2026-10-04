@@ -6,6 +6,7 @@ require_relative '../support/typescript_compiler'
 require 'react/converters/view_converter'
 require 'react/converters/button_converter'
 require 'react/converters/segment_converter'
+require 'react/converters/collection_converter'
 require 'react/responsive_helper'
 
 # A declared spacing is drawn at its declared length (ticket
@@ -106,6 +107,13 @@ RSpec.describe 'rjui spacing is the declared length' do
                                   { 'use_tailwind' => true }).convert
     expect(jsx).to include('py-[0.4375rem]')
     expect(jsx).not_to match(/\bpy-7\b/)
+  end
+
+  it "the Collection's list-style chrome spaces in rem too" do
+    chrome = RjuiTools::React::Converters::CollectionConverter::LIST_STYLE_CHROME
+    expect(chrome['insetgrouped']).to include('mx-[1rem]')
+    expect(chrome['sidebar']).to include('px-[0.5rem]')
+    expect(chrome.values.flatten.grep(/\A-?(p[trblxyse]?|m[trblxyse]?|gap)-\[[\d.]+px\]\z/)).to eq([])
   end
 
   it 'the emitted Views and Buttons type-check' do

@@ -647,12 +647,13 @@ module RjuiTools
         #: vocabulary); an unrecognised value falls back to plain, which is
         #: the declared default. The greys are the iOS system list colours
         #: (#C6C6C8 separator, #F2F2F7 grouped background) — the same
-        #: constants the chrome imitates.
+        #: constants the chrome imitates. The spacing is rem (16px / 8px at the
+        #: default root), as every spacing is (TailwindMapper.spacing_value).
         LIST_STYLE_CHROME = {
           'plain' => [].freeze,
           'grouped' => %w[bg-[#F2F2F7]].freeze,
-          'insetgrouped' => %w[bg-[#F2F2F7] rounded-[10px] mx-[16px]].freeze,
-          'sidebar' => %w[bg-[#F2F2F7] rounded-[8px] px-[8px]].freeze
+          'insetgrouped' => %w[bg-[#F2F2F7] rounded-[10px] mx-[1rem]].freeze,
+          'sidebar' => %w[bg-[#F2F2F7] rounded-[8px] px-[0.5rem]].freeze
         }.freeze
 
         # The List chrome, or nothing when the collection never asked to be
