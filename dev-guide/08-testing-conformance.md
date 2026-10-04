@@ -155,6 +155,14 @@
   どちらも manifestHash が旧）。**glass のように manifest が動いた変更の後は、
   local 面の再レンダまでが 1 セット**。
 
+  📐 **`--frame-parity`**（2026-10-05、frame_parity.py）は、宣言された id が**どこに描かれたか**を
+  面どうしで比べる。上の 3 つと違い **env に依らず赤**になる（frame は layout の幾何で、
+  renderer の画素ではないため）。入力は各ドライバが screenshot の隣に書く `.frames.json`
+  （`conformance/frames.schema.json`、RESULTS_SCHEMA.md の `frames` 節）。許容差は
+  `frame_parity.TOLERANCE` の 1 か所だけ。比べられなかったものは理由ごとに 1 行ずつ件数を印字し、
+  1 件も比べられなかった run は赤になる。**ドライバが frames を書くまでは、CI の引数に入れない**。
+  入れるのは、ドライバが frames を書き始め、`EXPECTED_FRAME_HOSTS` にその面を宣言する commit で。
+
 **CI 予算の鉄則**（過去の実測から）: cancelled はまず timeout 到達を疑う。fixture を増やしたら
 再採寸する（ローカル実測 × 5-7 倍が CI 目安）。attempt < step < job の算数を workflow コメントに書く。
 

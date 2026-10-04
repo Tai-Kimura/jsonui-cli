@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted cross-platform frame disagreements: one entry per (fixture, id) that a platform draws in a different place, with the platforms that are the outliers and the reason (a platform idiom, never a known bug). `jui conformance gate --frame-parity` fails on a disagreement with no entry, and on an entry the measurement no longer supports (the id now agrees, or other platforms are the outliers). The tolerance is frame_parity.TOLERANCE; frames come from the drivers (frames.schema.json). Reason 'unreviewed-initial-measurement' marks a row recorded but not yet ruled on. HAND-MAINTAINED, NOT GENERATED.",
+  "entries": []
+}

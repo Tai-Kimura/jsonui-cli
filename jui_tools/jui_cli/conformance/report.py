@@ -862,6 +862,15 @@ def generate_report(
         enum_values=enum_values,
     )
 
+    # Frame parity: only when some platform recorded frames, so a report of
+    # runs that predate the drivers' frames is byte-identical to before.
+    if any(isinstance(e, dict) and e.get("frames") for p in platforms for e in p.results.values()):
+        from . import frame_parity as frame_parity_mod
+
+        content = content.rstrip("\n") + "\n\n" + frame_parity_mod.report_section(
+            conformance_dir, manifest, platforms
+        )
+
     if out_path is None:
         out_path = conformance_dir / "REPORT.md"
     out_path = Path(out_path)
