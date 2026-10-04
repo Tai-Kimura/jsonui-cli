@@ -172,7 +172,22 @@ module RjuiTools
               # class order (Tailwind emits `relative` last, which would undo
               # the absolute placement).
               classes << 'relative' unless json['_overlay'] == true
-              classes << 'grid' if stacked_overlay?
+              # A grid, too, when a child is constrained against a sibling:
+              # the constrained child is absolute, and the axis its
+              # constraint does not name keeps its static position. In a
+              # block that is below the siblings before it in the flow; the
+              # static position of an absolute child of a grid is the content
+              # box's start, which is the container default the zstack
+              # declares (rjui-relative-child-stacks-on-the-axis-it-does-not-
+              # align). The unconstrained children are left to the grid's auto
+              # placement, one per row, as the block flow placed them —
+              # `content-start` keeps those rows at their content height
+              # instead of stretching them over a taller container.
+              if stacked_overlay?
+                classes << 'grid'
+              elsif relative_positioned_children?
+                classes << 'grid content-start'
+              end
             else
               # No orientation + single child = simple wrapper
               classes.unshift('flex flex-col')

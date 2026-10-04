@@ -342,6 +342,27 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       expect(body).to include('right-0')
     end
 
+    # The axis a constraint does not name keeps the absolute child's static
+    # position. In a block that was below the anchor (web y 170 where the
+    # zstack default is y 0, frame-parity inventory 2026-10-05; ticket
+    # rjui-relative-child-stacks-on-the-axis-it-does-not-align). A grid puts
+    # an absolute child's static position at the content box's start.
+    it 'is a grid without an orientation, so the free axis starts at the container default' do
+      result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                                    'alignLeftView' => 'header' }])
+      root = result.lines.first[/className="([^"]*)"/, 1].split
+      expect(root).to include('grid', 'content-start')
+    end
+
+    it 'stays a flex container when an orientation is declared' do
+      result = create_converter({
+        'type' => 'View', 'orientation' => 'vertical',
+        'child' => [header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
+                              'alignLeftView' => 'header' }]
+      }).convert
+      expect(result.lines.first[/className="([^"]*)"/, 1].split).not_to include('grid')
+    end
+
     it 'leaves a plain overlay untouched' do
       result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B' }])
       expect(result).not_to include('ref=')
