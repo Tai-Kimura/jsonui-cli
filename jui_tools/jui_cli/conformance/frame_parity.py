@@ -186,29 +186,53 @@ def _near(a: float, b: float) -> bool:
     return abs(a - b) <= TOLERANCE
 
 
-def axis_agrees(start_a: float, size_a: float, root_a: float,
-                start_b: float, size_b: float, root_b: float) -> bool:
-    """One axis of two frames, each relative to its own root (origin and size).
+#: The readings, in the order a report names the one that held: the near
+#: edge first, because that is the reading a root-relative frame states
+#: directly. An agreement held ONLY by a later reading is the one to check
+#: against the declaration — roots of a lucky size can let a wrong placement
+#: through the far edge or the centre.
+READINGS = ("near", "stretched", "centred", "far")
 
-    Agrees when any reading of a layout puts both in the same place:
-    from the near edge, from the far edge, centred in the root, or stretched
-    between both edges. When the roots are the same size the four collapse to
-    "same start, same size".
+
+def axis_readings(start_a: float, size_a: float, root_a: float,
+                  start_b: float, size_b: float, root_b: float) -> frozenset[str]:
+    """Which readings put both frames in the same place on one axis.
+
+    Each frame is relative to its own root (origin and size). From the near
+    edge, from the far edge, centred in the root, or stretched between both
+    edges. When the roots are the same size the four collapse to "same start,
+    same size".
     """
     same_size = _near(size_a, size_b)
     end_gap_a = root_a - (start_a + size_a)
     end_gap_b = root_b - (start_b + size_b)
-    near_edge = same_size and _near(start_a, start_b)
-    far_edge = same_size and _near(end_gap_a, end_gap_b)
-    centred = same_size and _near(start_a + size_a / 2 - root_a / 2,
-                                  start_b + size_b / 2 - root_b / 2)
-    stretched = _near(start_a, start_b) and _near(end_gap_a, end_gap_b)
-    return near_edge or far_edge or centred or stretched
+    held = set()
+    if same_size and _near(start_a, start_b):
+        held.add("near")
+    if same_size and _near(end_gap_a, end_gap_b):
+        held.add("far")
+    if same_size and _near(start_a + size_a / 2 - root_a / 2, start_b + size_b / 2 - root_b / 2):
+        held.add("centred")
+    if _near(start_a, start_b) and _near(end_gap_a, end_gap_b):
+        held.add("stretched")
+    return frozenset(held)
+
+
+def axis_agrees(start_a: float, size_a: float, root_a: float,
+                start_b: float, size_b: float, root_b: float) -> bool:
+    """Agrees when any reading holds (:func:`axis_readings`)."""
+    return bool(axis_readings(start_a, size_a, root_a, start_b, size_b, root_b))
+
+
+def frame_readings(a: dict, root_a: dict, b: dict, root_b: dict) -> tuple[frozenset, frozenset]:
+    """``(x readings, y readings)`` that hold for two frames."""
+    return (axis_readings(a["x"], a["width"], root_a["width"], b["x"], b["width"], root_b["width"]),
+            axis_readings(a["y"], a["height"], root_a["height"], b["y"], b["height"], root_b["height"]))
 
 
 def frames_agree(a: dict, root_a: dict, b: dict, root_b: dict) -> bool:
-    return (axis_agrees(a["x"], a["width"], root_a["width"], b["x"], b["width"], root_b["width"])
-            and axis_agrees(a["y"], a["height"], root_a["height"], b["y"], b["height"], root_b["height"]))
+    x, y = frame_readings(a, root_a, b, root_b)
+    return bool(x) and bool(y)
 
 
 def outliers(agree: dict[tuple[str, str], bool], platforms: Sequence[str]) -> list[str]:
@@ -257,6 +281,9 @@ class FrameParityResult:
     fixtures_compared: int = 0
     #: (fixture, id) pairs compared on two or more platforms that agree
     agreed: list[tuple[str, str]] = field(default_factory=list)
+    #: (fixture, id) -> {"x": readings, "y": readings} that held for EVERY
+    #: compared pair of platforms — the reading the agreement rests on
+    readings: dict[tuple[str, str], dict[str, frozenset]] = field(default_factory=dict)
     disagreed: list[Disagreement] = field(default_factory=list)
     #: reason -> count, every reason on its own line
     not_compared: Counter = field(default_factory=Counter)
@@ -352,10 +379,13 @@ def measure(
                 continue
             names = sorted(present)
             agree = {}
+            held = {"x": frozenset(READINGS), "y": frozenset(READINGS)}
             for i, p in enumerate(names):
                 for q in names[i + 1:]:
-                    agree[(p, q)] = frames_agree(present[p], docs[p]["frames"]["root"],
-                                                 present[q], docs[q]["frames"]["root"])
+                    x, y = frame_readings(present[p], docs[p]["frames"]["root"],
+                                          present[q], docs[q]["frames"]["root"])
+                    agree[(p, q)] = bool(x) and bool(y)
+                    held = {"x": held["x"] & x, "y": held["y"] & y}
             odd = outliers(agree, names)
             if odd:
                 out.disagreed.append(Disagreement(
@@ -364,6 +394,38 @@ def measure(
                 ))
             else:
                 out.agreed.append((fid, element_id))
+                out.readings[(fid, element_id)] = held
+    return out
+
+
+def first_reading(held: frozenset) -> str:
+    """The reading a report names for an agreement: the first in READINGS that
+    held. ``"mixed"`` when the pairs agreed by different readings and none
+    held for all of them."""
+    for name in READINGS:
+        if name in held:
+            return name
+    return "mixed"
+
+
+def reading_counts(result: FrameParityResult) -> dict[str, Counter]:
+    """``{"x": Counter(reading -> ids), "y": …}`` over the agreed ids."""
+    counts = {"x": Counter(), "y": Counter()}
+    for held in result.readings.values():
+        for axis in ("x", "y"):
+            counts[axis][first_reading(held[axis])] += 1
+    return counts
+
+
+def not_near_agreements(result: FrameParityResult) -> list[str]:
+    """Agreed ids where an axis agreed only by a reading other than the near
+    edge. These are the ones to hold against the declaration: an agreement a
+    lucky pair of root sizes could have made."""
+    out = []
+    for (fid, element_id), held in sorted(result.readings.items()):
+        axes = [f"{axis}={first_reading(held[axis])}" for axis in ("x", "y") if "near" not in held[axis]]
+        if axes:
+            out.append(f"{fid} #{element_id} ({', '.join(axes)})")
     return out
 
 
@@ -476,5 +538,15 @@ def report_section(conformance_dir: Path, manifest: dict, platform_results: Iter
             lines.append(f"| {d.fixture} | {d.id} | " + " | ".join(cells)
                          + f" | {', '.join(d.outliers)} | {'accepted' if d.key in accepted else 'UNRECORDED'} |")
         lines.append("")
+    counts = reading_counts(result)
+    lines.append("Agreements by reading (the first that held for every pair, per axis): "
+                 + "; ".join(f"{axis}: " + ", ".join(f"{name} {counts[axis].get(name, 0)}"
+                                                    for name in (*READINGS, "mixed"))
+                             for axis in ("x", "y")))
+    lines.append("")
+    off_near = not_near_agreements(result)
+    lines.append(f"Agreed other than from the near edge on some axis: {len(off_near)}"
+                 + (" — " + "; ".join(off_near[:20]) + (" …" if len(off_near) > 20 else "") if off_near else ""))
+    lines.append("")
     lines += [f"- {line}" for line in not_compared_lines(result)]
     return "\n".join(lines) + "\n"

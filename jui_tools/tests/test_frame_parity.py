@@ -245,6 +245,60 @@ class AlignControls(unittest.TestCase):
                 self.assertTrue(any(n.startswith("frame parity (") for n in notices))
 
 
+class Readings(unittest.TestCase):
+    """Which reading an agreement rests on, so a lucky root size that lets a
+    wrong placement through the far edge or the centre can be found."""
+
+    def test_each_reading_is_named(self):
+        self.assertEqual(fp.axis_readings(120, 50, 402, 120, 50, 1280), {"near"})
+        self.assertEqual(fp.axis_readings(342, 50, 402, 1220, 50, 1280), {"far"})
+        self.assertEqual(fp.axis_readings(176, 50, 402, 615, 50, 1280), {"centred"})
+        self.assertEqual(fp.axis_readings(16, 370, 402, 16, 1248, 1280), {"stretched"})
+        # Equal roots: the readings collapse onto one placement.
+        self.assertEqual(fp.axis_readings(120, 50, 400, 120, 50, 400), {"near", "far", "centred", "stretched"})
+
+    def test_the_align_fixtures_agree_from_the_near_edge_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            t = align_tree(Path(d), "2.43.4")
+            manifest = t.write()
+            r = fp.measure(Path(d), manifest, t.results(), list(fp.PLATFORMS))
+        counts = fp.reading_counts(r)
+        self.assertEqual(counts["x"]["near"], 20)
+        self.assertEqual(counts["y"]["near"], 20)
+        self.assertEqual(fp.not_near_agreements(r), [])
+
+    def test_an_agreement_that_holds_only_from_the_far_edge_is_listed(self):
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            t.fixture("a/pinRight__x", {"type": "View", "id": "root", "child": [{"type": "View", "id": "badge"}]})
+            for p in ("ios", "android", "web"):
+                w = ROOTS[p]["width"]
+                t.frames(p, "a/pinRight__x", {"badge": f(w - 60, 10, 50, 20)})
+            manifest = t.write()
+            r = fp.measure(Path(d), manifest, t.results(), list(fp.PLATFORMS))
+        self.assertEqual(r.disagreed, [])
+        self.assertEqual(fp.not_near_agreements(r), ["a/pinRight__x #badge (x=far)"])
+        self.assertEqual(fp.reading_counts(r)["x"]["far"], 1)
+
+
+    def test_the_reading_named_is_the_one_every_pair_shares(self):
+        # iOS and web the same width (every reading holds between them), the
+        # Android tablet wider (only the far edge holds against either). The
+        # agreement rests on the far edge; the iOS-web pair alone would say
+        # "near" and hide it.
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            t.fixture("a/pinRight__x", {"type": "View", "id": "root", "child": [{"type": "View", "id": "badge"}]})
+            for p, w in (("ios", 402), ("web", 402), ("android", 1280)):
+                root = f(0, 0, w, 778)
+                t.frames(p, "a/pinRight__x", {}, raw={
+                    "schemaVersion": 1, "fixture": "a/pinRight__x", "platform": p, "source": SOURCE[p],
+                    "root": root, "frames": {"root": root, "badge": f(w - 60, 10, 50, 20)}})
+            manifest = t.write()
+            r = fp.measure(Path(d), manifest, t.results(), list(fp.PLATFORMS))
+        self.assertEqual(fp.not_near_agreements(r), ["a/pinRight__x #badge (x=far)"])
+
+
 class NotCompared(unittest.TestCase):
     """Everything that cannot be compared is counted on its own line."""
 
@@ -380,6 +434,9 @@ class Report(unittest.TestCase):
         self.assertIn("0,0 200x200", section)
         self.assertIn("UNRECORDED", section)
         self.assertIn(f"- not compared — {fp.ID_ABSENT}: 0", section)
+        self.assertIn("Agreements by reading (the first that held for every pair, per axis): "
+                      "x: near 14, stretched 0, centred 0, far 0, mixed 0", section)
+        self.assertIn("Agreed other than from the near edge on some axis: 0", section)
 
 
 if __name__ == "__main__":
