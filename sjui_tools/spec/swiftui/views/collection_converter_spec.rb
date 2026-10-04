@@ -347,7 +347,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         # and kjui and rjui already did exactly that. iOS was the outlier.
         code = described_class.new(component.merge('items' => '@{rows}')).convert
 
-        expect(code).to include('ItemView(data: cellData)')
+        expect(code).to include('ItemView(data: { () -> [String: Any] in var refreshed = cellData; ')
         expect(code).not_to include('TODO')
       end
 
