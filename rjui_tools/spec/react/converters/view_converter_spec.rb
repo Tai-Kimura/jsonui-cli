@@ -422,6 +422,64 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     end
   end
 
+  # A row's children start the cross axis unless a gravity says otherwise
+  # (gravityDefaults: top|start on every container). The flex default,
+  # `align-items: stretch`, drew a child without a height at the row's full
+  # height on web only (frame-parity inventory 2026-10-05; ticket
+  # rjui-stack-stretches-children-on-the-cross-axis).
+  describe "a row's cross axis" do
+    def row_classes(extra)
+      create_converter({
+        'type' => 'View', 'id' => 'row', 'width' => 300, 'height' => 200,
+        'child' => [{ 'type' => 'Label', 'id' => 'b', 'text' => 'B' }]
+      }.merge(extra)).convert.lines.first[/className="([^"]*)"/, 1].split
+    end
+
+    it 'starts at the top by default' do
+      expect(row_classes('orientation' => 'horizontal')).to include('items-start')
+    end
+
+    it 'follows a gravity that names the vertical axis, with no second items-* class' do
+      classes = row_classes('orientation' => 'horizontal', 'gravity' => 'centerVertical')
+      expect(classes.grep(/\Aitems-/)).to eq(['items-center'])
+    end
+
+    it 'keeps the top when the gravity names only the horizontal axis' do
+      expect(row_classes('orientation' => 'horizontal', 'gravity' => 'right')).to include('items-start', 'justify-end')
+    end
+
+    it 'gives way to a static centerInParent / centerHorizontal' do
+      expect(row_classes('orientation' => 'horizontal', 'centerInParent' => true).grep(/\Aitems-/)).to eq(['items-center'])
+      expect(row_classes('orientation' => 'horizontal', 'centerHorizontal' => true).grep(/\Aitems-/)).to eq(['items-center'])
+    end
+
+    it 'keeps the start under a bound centerInParent, whose inline style wins while true' do
+      expect(row_classes('orientation' => 'horizontal', 'centerInParent' => '@{c}')).to include('items-start')
+    end
+
+    it 'leaves a column alone' do
+      expect(row_classes('orientation' => 'vertical').grep(/\Aitems-/)).to be_empty
+    end
+
+    # A CheckBox or Radio with a label lays its own parts out as a row and
+    # writes its own items-center after the base classes. A default start
+    # beside it was a second items-* class, and stylesheet order let the start
+    # win: the box moved off the label's centre line (CheckBox / Radio
+    # spacing and orientation-horizontal fixtures, caught by the web
+    # screenshots while this was being fixed).
+    it 'is not added to a control that lays its own parts out as a row' do
+      require 'react/converters/toggle_converter'
+      require 'react/converters/radio_converter'
+      node = { 'id' => 't', 'width' => 200, 'height' => 'wrapContent', 'text' => 'S',
+               'orientation' => 'horizontal', 'spacing' => 16 }
+      [RjuiTools::React::Converters::ToggleConverter.new(node.merge('type' => 'CheckBox'), default_config),
+       RjuiTools::React::Converters::RadioConverter.new(node.merge('type' => 'Radio'), default_config)].each do |conv|
+        classes = conv.convert_node(2).lines.first[/className="([^"]*)"/, 1].split
+        expect(classes.grep(/\Aitems-/)).to eq(['items-center'])
+      end
+    end
+  end
+
   # safeAreaInsetPositions — which edges reserve the safe area. On web that is
   # `env(safe-area-inset-*)` padding: the notch, the home indicator, a rounded
   # display's corners.

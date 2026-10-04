@@ -84,12 +84,29 @@ module RjuiTools
           true
         end
 
+        # Whether this element's children start the cross axis by default
+        # (ViewConverter says yes for a row). No here: a converter that lays
+        # its own parts out as a row — a CheckBox or Radio with a label —
+        # writes its own items-* after this point, and a second items-* class
+        # would be decided by stylesheet order, not by the order written.
+        def cross_axis_start_by_default?(_classes)
+          false
+        end
+
+        # A flex row whose classes so far name no cross-axis alignment.
+        def row_without_cross_axis_class?(classes)
+          lays_out_children? &&
+            JsonUIShared::EnumSpelling.lowered(attributes['orientation'], 'View', 'orientation') == 'horizontal' &&
+            classes.none? { |c| c.to_s.split.any? { |t| t.start_with?('items-') } }
+        end
+
         # The classes that lay the node's children out — orientation, gravity
         # and direction, as build_class_name maps them — for the inner element
         # of a converter whose own box does not (lays_out_children?).
         def children_layout_classes
           classes = [TailwindMapper.map_orientation(attributes['orientation'])]
           classes.concat(gravity_classes) if attributes['gravity']
+          classes << 'items-start' if cross_axis_start_by_default?(classes)
           if attributes['direction'] && attributes['orientation']
             classes << TailwindMapper.map_direction(attributes['direction'], attributes['orientation'])
           end
@@ -587,6 +604,7 @@ module RjuiTools
 
           # Gravity alignment - pass orientation for correct flexbox mapping
           classes.concat(gravity_classes) if attributes['gravity'] && lays_out_children?
+          classes << 'items-start' if cross_axis_start_by_default?(classes)
 
           # Layout direction — child ORDER, not text direction.
           #

@@ -283,6 +283,26 @@ module RjuiTools
         end
 
         # Count UI children (excluding data-only elements)
+        # A row's children start the cross axis (the top) unless a gravity
+        # says otherwise: the container default is top|start on every
+        # container (attribute_semantics.json -> gravityDefaults), and a child
+        # is not stretched. A flex row's own default, `align-items: stretch`,
+        # drew every child without a height at the row's full height on web
+        # only (frame-parity inventory 2026-10-05; ticket
+        # rjui-stack-stretches-children-on-the-cross-axis). A column is left
+        # alone: its cross axis is the width.
+        #
+        # A static centerHorizontal / centerInParent writes this element's
+        # items-center below, which replaces the start: two items-* classes
+        # would be decided by stylesheet order, not by the order written. A
+        # bound one is an inline style that wins over the class while true,
+        # and the start applies again when it is false.
+        def cross_axis_start_by_default?(classes)
+          row_without_cross_axis_class?(classes) &&
+            !(attributes['centerHorizontal'] && !bound_value_expr(attributes['centerHorizontal'])) &&
+            !(attributes['centerInParent'] && !bound_value_expr(attributes['centerInParent']))
+        end
+
         def ui_children_count
           arr = child_array
           return 0 unless arr.is_a?(Array)
