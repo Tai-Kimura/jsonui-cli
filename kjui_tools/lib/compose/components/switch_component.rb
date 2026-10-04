@@ -6,6 +6,7 @@ require_relative '../helpers/inherited_tint'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/static_seed'
 require_relative '../../core/enum_spelling'
+require_relative 'button_component'
 
 module KjuiTools
   module Compose
@@ -346,11 +347,11 @@ module KjuiTools
         # its whole max width, so under wrapContent a labelled Switch drew as
         # wide as its parent (1280 where web wraps to the label and the switch;
         # ticket kjui-labelled-switch-fills-the-parent-width-under-wrapcontent).
-        # Same rule as KotlinJsonUI Dynamic's DynamicSwitchComponent.labelFillsRow.
+        # The rule a Button's own width is read by (ButtonComponent.bounded_width?);
+        # KotlinJsonUI Dynamic's DynamicSwitchComponent.labelFillsRow reads it the
+        # same way.
         def self.label_fills_row?(json_data)
-          return true if json_data.key?('weight')
-          width = json_data['width']
-          !width.nil? && width != 'wrapContent'
+          ButtonComponent.bounded_width?(json_data)
         end
 
         private

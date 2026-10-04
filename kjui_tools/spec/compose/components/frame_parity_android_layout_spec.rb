@@ -35,6 +35,16 @@ RSpec.describe 'kjui codegen: layout boxes the frame-parity inventory found off'
     it 'weights the label when the width is decided (the Switch goes to the far edge)' do
       expect(switch('width' => 300)).to include('modifier = Modifier.weight(1f)')
       expect(switch('width' => 'matchParent')).to include('modifier = Modifier.weight(1f)')
+      expect(switch('widthWeight' => 1)).to include('modifier = Modifier.weight(1f)')
+      expect(switch('width' => 'wrap_content')).not_to include('Modifier.weight(1f)')
+    end
+
+    # kjui-dynamic-toggle-is-not-drawn-as-its-canonical-switch: Toggle is
+    # Switch's alias and is drawn by the same emit, so it follows the same rule.
+    it 'gives a Toggle the same rule' do
+      toggle = ->(node) { KjuiTools::Compose::Components::SwitchComponent.generate({ 'type' => 'Toggle', 'label' => 'Sample' }.merge(node), 0, Set.new) }
+      expect(toggle.call('width' => 'wrapContent')).not_to include('Modifier.weight(1f)')
+      expect(toggle.call('width' => 'matchParent')).to include('modifier = Modifier.weight(1f)')
     end
 
     it 'weights the label for a trailing label too' do
