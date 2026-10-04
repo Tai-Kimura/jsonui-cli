@@ -44,7 +44,7 @@
       "exclusiveMinimum": 0
     },
     "root": {
-      "description": "The box the frames are measured from, in the platform's layout units (iOS pt, Android dp, web CSS px) and in the coordinate space the driver read it in. Every frame in `frames` is relative to this box's origin, and the gate reads its width and height for the far-edge and centred readings. Per platform: web — the page (the viewport at scroll 0), because CSS margin collapsing lets the first child's top margin escape #root and every container above it (measured: alignTopView's #root and #app-root both start at y=120); Android — the element with id `root` (its Compose layout coordinates in the window); iOS — the element with id `root` (its XCUIElement frame).",
+      "description": "The box the frames are measured from, in the platform's layout units (iOS pt, Android dp, web CSS px) and in the coordinate space the driver read it in. Every frame in `frames` is relative to this box's origin, and the gate reads its width and height for the far-edge and centred readings. Per platform: web — the page (the viewport at scroll 0), because CSS margin collapsing lets the first child's top margin escape #root and every container above it (measured: alignTopView's #root and #app-root both start at y=120); Android — the element with id `root` (its Compose layout coordinates in the window); iOS — the host's canvas, read from two corner markers: on SwiftUI the element carrying the `root` id reports the box around its children (measured: alignTopView's root read 200 x 200 at y=182), and a matchParent root fills the canvas; a root not matchParent on both axes is not recorded (RESULTS_SCHEMA.md).",
       "$ref": "#/$defs/frame"
     },
     "frames": {
