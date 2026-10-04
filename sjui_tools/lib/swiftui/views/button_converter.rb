@@ -254,27 +254,11 @@ module SjuiTools
               add_line "borderColor: #{get_swiftui_color(@component['borderColor'])},"
             end
 
-            # Paddings（paddings配列 or 個別指定 leftPadding/rightPadding/paddingTop/paddingBottom）
-            if @component['paddings']
-              padding = @component['paddings']
-              if padding.is_a?(Array)
-                case padding.length
-                when 1
-                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[0]}, bottom: #{padding[0]}, trailing: #{padding[0]}),"
-                when 2
-                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[1]}, bottom: #{padding[0]}, trailing: #{padding[1]}),"
-                when 4
-                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[1]}, bottom: #{padding[2]}, trailing: #{padding[3]}),"
-                end
-              else
-                add_line "padding: EdgeInsets(top: #{padding}, leading: #{padding}, bottom: #{padding}, trailing: #{padding}),"
-              end
-            elsif @component['leftPadding'] || @component['rightPadding'] || @component['paddingTop'] || @component['paddingBottom']
-              top = @component['paddingTop'] || 0
-              left = @component['leftPadding'] || @component['paddingLeft'] || 0
-              bottom = @component['paddingBottom'] || 0
-              right = @component['rightPadding'] || @component['paddingRight'] || 0
-              add_line "padding: EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}),"
+            # The Button's padding is its content padding: StateAwareButtonView
+            # pads the label inside its background and border, as Compose's
+            # contentPadding does (button_content_insets).
+            if (insets = button_content_insets)
+              add_line "padding: EdgeInsets(top: #{insets[0]}, leading: #{insets[1]}, bottom: #{insets[2]}, trailing: #{insets[3]}),"
             end
 
             # Enabled state
@@ -407,6 +391,42 @@ module SjuiTools
             "    #{no_value_call(extract_binding_property(handler))}",
             "})"
           ])
+        end
+
+        # [top, leading, bottom, trailing] of a Button's content padding, or nil
+        # when none is declared — read as SwiftJsonUI Dynamic reads a Button's
+        # (DynamicHelpers.getPadding) and KotlinJsonUI's contentPadding does:
+        # `paddings` / `padding` (one value, [vertical, horizontal], or [top,
+        # right, bottom, left]), else each edge, paddingStart / paddingEnd
+        # before paddingLeft / paddingRight, then the declared aliases
+        # leftPadding / rightPadding / topPadding / bottomPadding. Until
+        # jsonui-cli 1.9.14 this face entered the edge branch only on
+        # leftPadding / rightPadding / paddingTop / paddingBottom, so a Button
+        # with the canonical paddingLeft / paddingRight alone emitted no
+        # padding and its label ran to the border (ticket
+        # sjui-button-drops-padding-left-right); `padding`, paddingStart /
+        # paddingEnd and topPadding / bottomPadding were never read, and a
+        # four-value `paddings` put its right value on the leading edge. A
+        # number is written as declared; a binding is read from the data.
+        def button_content_insets
+          edge = ->(value) { value.nil? ? 0 : (bound_number(value) || value) }
+          base = @component['paddings'] || @component['padding']
+          unless base.nil?
+            values = base.is_a?(Array) ? base : [base]
+            return case values.length
+                   when 1 then Array.new(4, edge.(values[0]))
+                   when 2 then [edge.(values[0]), edge.(values[1]), edge.(values[0]), edge.(values[1])]
+                   when 4 then [edge.(values[0]), edge.(values[3]), edge.(values[2]), edge.(values[1])]
+                   end
+          end
+
+          top = @component['paddingTop'] || @component['topPadding']
+          leading = @component['paddingStart'] || @component['paddingLeft'] || @component['leftPadding']
+          bottom = @component['paddingBottom'] || @component['bottomPadding']
+          trailing = @component['paddingEnd'] || @component['paddingRight'] || @component['rightPadding']
+          return nil if [top, leading, bottom, trailing].all?(&:nil?)
+
+          [top, leading, bottom, trailing].map { |v| edge.(v) }
         end
 
         def apply_padding_to_text
