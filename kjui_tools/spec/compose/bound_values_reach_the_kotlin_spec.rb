@@ -238,7 +238,9 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   # --- Label: the standard order, on every branch -----------------------------
   stage_attrs = { 'id' => 'n', 'margins' => [7, 7, 7, 7], 'width' => 111, 'height' => 53, 'offsetX' => 3, 'offsetY' => 3,
                   'alpha' => 0.5, 'shadow' => '#000000|0|2|0.5|4', 'background' => '#3366CC', 'paddings' => [5, 5, 5, 5] }
-  order = ['.testTag("n")', '.padding(top = 7.dp', '.requiredWidth(111.dp)', '.absoluteOffset(x = 3.dp', '.alpha(0.5f)',
+  # testTag after the margins and the offset (ticket
+  # kjui-a11y-bounds-of-a-margined-view-include-its-margin).
+  order = ['.padding(top = 7.dp', '.requiredWidth(111.dp)', '.absoluteOffset(x = 3.dp', '.testTag("n")', '.alpha(0.5f)',
            '.dropShadow(', '.background(Color(', '.padding(top = 5.dp']
   label_branches = {
     'Label' => { 'type' => 'Label', 'text' => 'hello' },
@@ -248,7 +250,7 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   }
 
   label_branches.each do |label, node|
-    it "#{label}: testTag → margins → size → offset → alpha → shadow → background → padding" do
+    it "#{label}: margins → size → offset → testTag → alpha → shadow → background → padding" do
       code = emit.call(node.merge(stage_attrs))
       at = order.map { |marker| code.index(marker) }
       expect(at).to all(be_a(Integer)), "#{order.zip(at).inspect}\n#{code}"

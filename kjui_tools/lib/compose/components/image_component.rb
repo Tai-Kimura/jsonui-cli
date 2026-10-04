@@ -40,7 +40,6 @@ module KjuiTools
           modifiers = []
 
           # Add testTag and contentDescription for UI testing
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # Margins (outer spacing) - must be applied BEFORE size in Compose
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
@@ -70,6 +69,10 @@ module KjuiTools
 
           # Padding (inner spacing) - applied after size
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           # shadow → background (border + clip + background): the View slots.
           # Both were declared on `common` and dropped here

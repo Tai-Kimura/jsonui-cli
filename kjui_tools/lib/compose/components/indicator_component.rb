@@ -53,7 +53,6 @@ module KjuiTools
           modifiers = []
 
           # Add testTag and contentDescription for UI testing
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # Size, in the size slot after the margins. A declared length
           # (a number or a bound number) wins over the style's size and goes
@@ -78,6 +77,10 @@ module KjuiTools
             modifiers << ".size(#{Helpers::BoundValue.dp(style_size)})"
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           # shadow → background (border + clip + background): the View slots.
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))

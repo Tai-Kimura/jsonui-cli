@@ -321,7 +321,6 @@ module KjuiTools
           
           # Build modifiers
           modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # Ensure fillMaxWidth if width is not specified for date pickers
           if is_date_picker && !json_data['width']
@@ -331,6 +330,10 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           # Cast in the outline the SelectBox draws: its cornerRadius, which the
           # library defaults to 8 (`cornerRadius: Int = 8`, KotlinJsonUI

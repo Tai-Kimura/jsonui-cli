@@ -124,13 +124,17 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
         expect(template).to include('ModifierBuilder.build_test_tag')
       end
 
-      it 'builds the testTag before the geometry modifiers' do
-        # Same order the built-ins use (see button_component.rb). Asserted
+      it 'builds the testTag after the margins and the offset' do
+        # Same rule the built-ins follow (see button_component.rb): the tagged
+        # box — resource-id bounds, TalkBack's focus — is the drawn box, so the
+        # tag comes after the stages that place the view (ticket
+        # kjui-a11y-bounds-of-a-margined-view-include-its-margin). Asserted
         # because a modifier list is order-sensitive and "present somewhere"
         # is a weaker claim than the built-ins actually satisfy.
         template = generator.send(:converter_template)
-        expect(template.index('ModifierBuilder.build_test_tag'))
-          .to be < template.index('ModifierBuilder.build_size')
+        tag = template.index('ModifierBuilder.build_test_tag')
+        expect(tag).to be > template.index('ModifierBuilder.build_margins')
+        expect(tag).to be > template.index('ModifierBuilder.build_offset')
       end
     end
 

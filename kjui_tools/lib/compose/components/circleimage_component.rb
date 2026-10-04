@@ -69,7 +69,6 @@ module KjuiTools
           modifiers = []
 
           # Add testTag and contentDescription for UI testing
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
           # Margins are the outer spacing: before (outside) the size. They sat
           # after the size and the circle clip, where they padded the inside of
@@ -95,6 +94,10 @@ module KjuiTools
           # move and fade with the image. They sat after the background
           # (kjui-dynamic-components-that-skip-the-common-modifiers, B2).
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
 
           # Circular clip: CircleShape lives in foundation.shape (registered under

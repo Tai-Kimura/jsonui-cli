@@ -237,11 +237,14 @@ module KjuiTools
                         # jsonui-cli 1.9.8 it was given nil, and no converter
                         # from this template applied a weight at all.
                         modifiers = []
-                        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
                         modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+                        # testTag after the margins and the offset: the tagged box
+                        # (resource-id bounds, TalkBack focus) is the drawn box. Ticket
+                        # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+                        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
 
                         if is_container
