@@ -231,8 +231,20 @@ jobs:
           SIMULATOR_OS: "26"
         run: |
           set -euo pipefail
-          xcode=$(xcodebuild -version | head -1 | cut -d' ' -f2)
-          build=$(xcodebuild -version | tail -1 | cut -d' ' -f3)
+          # Read once, then cut with bash: piping xcodebuild into `head`
+          # closed the pipe under it, and xcodebuild died on the write
+          # ("NSFileHandleOperationException … Broken pipe", exit 134) —
+          # run 37160603791's ios job, before the suite (ticket
+          # conformance-toolchain-step-pipes-xcodebuild-into-head).
+          version=$(xcodebuild -version)
+          first=${version%%$'\n'*}
+          last=${version##*$'\n'}
+          xcode=${first#Xcode }
+          build=${last#Build version }
+          if [ -z "$xcode" ] || [ -z "$build" ] || [ "$xcode" = "$first" ] || [ "$build" = "$last" ]; then
+            echo "::error::xcodebuild -version did not read as 'Xcode X' / 'Build version Y': $version" >&2
+            exit 1
+          fi
           sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
           # ⚠️ APPLIES THE SAME PIN THE RUN WILL APPLY. This took rs[-1] — the
           # newest INSTALLED iOS runtime — while the suite picked its own. When
