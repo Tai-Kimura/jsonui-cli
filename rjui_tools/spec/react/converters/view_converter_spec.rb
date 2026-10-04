@@ -349,6 +349,58 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     end
   end
 
+  # A plain overlay sized wrapContent on an axis measured 0 on that axis on
+  # web: every child was absolute, and an absolute child does not size its
+  # container. It stacks the children in one grid cell instead, each placed
+  # where its absolute counterpart sat (frame-parity inventory 2026-10-05;
+  # rjui-wrapcontent-view-collapses-around-overlaid-children).
+  describe 'an overlay sized from its children' do
+    let(:box) { { 'type' => 'View', 'width' => 40, 'height' => 40 } }
+
+    def overlay(size, children)
+      create_converter({ 'type' => 'View', 'id' => 'target', 'child' => children }.merge(size)).convert
+    end
+
+    def line_of(result, id)
+      result.lines.find { |l| l.include?("id=\"#{id}\"") }
+    end
+
+    %w[width height].each do |axis|
+      it "stacks the children in one grid cell when #{axis} is wrapContent" do
+        other = axis == 'width' ? 'height' : 'width'
+        result = overlay({ axis => 'wrapContent', other => 200 },
+                         [box.merge('id' => 'a'), box.merge('id' => 'b')])
+        expect(line_of(result, 'target').split('"')[-2].split).to include('grid')
+        %w[a b].each do |id|
+          classes = line_of(result, id)[/className="([^"]*)"/, 1].split
+          expect(classes).to include('col-start-1', 'row-start-1')
+          expect(classes).not_to include('absolute')
+        end
+      end
+    end
+
+    it 'places each child where the absolute overlay placed it' do
+      result = overlay({ 'width' => 'wrapContent', 'height' => 'wrapContent' }, [
+                         box.merge('id' => 'sized'),
+                         { 'type' => 'View', 'id' => 'fill' },
+                         box.merge('id' => 'br', 'alignBottom' => true, 'alignRight' => true),
+                         box.merge('id' => 'mid', 'centerInParent' => true),
+                         box.merge('id' => 'bottom', 'alignBottom' => true)
+                       ])
+      expect(line_of(result, 'sized')).to include('self-start justify-self-start')
+      expect(line_of(result, 'fill')).to include('self-stretch justify-self-stretch')
+      expect(line_of(result, 'br')).to include('self-end [justify-self:right]')
+      expect(line_of(result, 'mid')).to include('self-center justify-self-center')
+      expect(line_of(result, 'bottom')).to include('self-end justify-self-start')
+    end
+
+    it 'keeps the absolute overlay when no axis is wrapContent' do
+      result = overlay({ 'width' => 200, 'height' => 200 }, [box.merge('id' => 'a'), box.merge('id' => 'b')])
+      expect(line_of(result, 'a')).to include('absolute')
+      expect(line_of(result, 'target')).not_to include('grid')
+    end
+  end
+
   # safeAreaInsetPositions — which edges reserve the safe area. On web that is
   # `env(safe-area-inset-*)` padding: the notch, the home indicator, a rounded
   # display's corners.

@@ -111,8 +111,13 @@ module RjuiTools
           # Compute responsive info up front so we know which keys are overridden
           @responsive_result = ResponsiveHelper.build_responsive(json)
 
-          # Overlay child (absolute positioning within parent)
-          if json['_overlay']
+          # Overlay child. A stacked overlay (ViewConverter#stacked_overlay?)
+          # puts every child in the one grid cell; any other overlay positions
+          # it absolutely within the parent.
+          if json['_overlay'] == 'stack'
+            classes << 'col-start-1 row-start-1'
+            classes << stack_position_classes
+          elsif json['_overlay']
             classes << 'absolute'
             position = overlay_position_classes
             classes << position unless position.empty?
@@ -2395,6 +2400,45 @@ module RjuiTools
           end
 
           [vertical, horizontal].compact.join(' ')
+        end
+
+        # The grid-cell spelling of overlay_position_classes, placing a stacked
+        # child where its absolute counterpart sits: an axis with an
+        # instruction aligns that way (left / right physically, as left-0 /
+        # right-0 are); the other axis of a child with an
+        # instruction on one axis only sits at the start, shrunk to fit (the
+        # absolute static position); a child with no instruction fills the
+        # cell (inset-0) unless it is explicitly sized (the static position
+        # again). Both axes are always spelled so a container's gravity
+        # classes cannot move the child the way they never moved an absolute
+        # one.
+        def stack_position_classes
+          center_all = attributes['centerInParent']
+
+          vertical =
+            if center_all || attributes['centerVertical']
+              'self-center'
+            elsif attributes['alignBottom']
+              'self-end'
+            elsif attributes['alignTop']
+              'self-start'
+            end
+
+          horizontal =
+            if center_all || attributes['centerHorizontal']
+              'justify-self-center'
+            elsif attributes['alignRight']
+              '[justify-self:right]'
+            elsif attributes['alignLeft']
+              '[justify-self:left]'
+            end
+
+          if vertical.nil? && horizontal.nil?
+            return 'self-start justify-self-start' if explicitly_sized?
+            return 'self-stretch justify-self-stretch'
+          end
+
+          "#{vertical || 'self-start'} #{horizontal || 'justify-self-start'}"
         end
 
         # Both dimensions declared as concrete numbers — the child cannot be

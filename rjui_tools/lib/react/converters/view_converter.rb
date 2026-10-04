@@ -171,7 +171,8 @@ module RjuiTools
               # `position`, so the winner is decided by stylesheet order, not
               # class order (Tailwind emits `relative` last, which would undo
               # the absolute placement).
-              classes << 'relative' unless json['_overlay']
+              classes << 'relative' unless json['_overlay'] == true
+              classes << 'grid' if stacked_overlay?
             else
               # No orientation + single child = simple wrapper
               classes.unshift('flex flex-col')
@@ -182,7 +183,7 @@ module RjuiTools
           # containing block its inline offsets resolve against — including when
           # an orientation already made it a flex container, where the sibling
           # constraint is the reason the child leaves the flow at all.
-          if relative_positioned_children? && !json['_overlay'] && !classes.include?('relative')
+          if relative_positioned_children? && json['_overlay'] != true && !classes.include?('relative')
             classes << 'relative'
           end
 
@@ -279,6 +280,18 @@ module RjuiTools
           child_array.is_a?(Array) && ui_children_count > 1 && !attributes['orientation']
         end
 
+        # A plain overlay sized from its children (wrapContent on an axis)
+        # stacks them in one grid cell instead of positioning them absolutely:
+        # an absolute child does not size its container, which measured 0 on
+        # the wrapped axis where the other platforms measure the largest child
+        # (rjui-wrapcontent-view-collapses-around-overlaid-children). Overlays
+        # with a sibling constraint keep the absolute path the constraint's
+        # inline offsets are written for.
+        def stacked_overlay?
+          overlay_layout? && !relative_positioned_children? &&
+            (attributes['width'] == 'wrapContent' || attributes['height'] == 'wrapContent')
+        end
+
         #: align*OfView / align*View / alignCenter*View on a child. MUST stay in
         #: sync with ReactGenerator#relative_constraint_for, which builds the
         #: spec the hoisted effect applies.
@@ -329,7 +342,11 @@ module RjuiTools
               # constraint pointing at it meaningless.
               absolute = relative_positioned?(child) ||
                          (overlay_layout? && !relative_positioned_children?)
-              child = child.merge('_overlay' => true) if absolute
+              if stacked_overlay?
+                child = child.merge('_overlay' => 'stack')
+              elsif absolute
+                child = child.merge('_overlay' => true)
+              end
               converter = create_converter_for_child(child)
               converter.convert_node(indent + 2)
             end.compact.join("\n")

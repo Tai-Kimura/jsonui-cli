@@ -309,7 +309,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       tintColor
     ],
     'toggle_converter.rb' => %w[checked enabled icon isOn label onTintColor onValueChange selectedIcon spacing src text tint tintColor value],
-    'view_converter.rb' => %w[bottomPadding centerHorizontal centerInParent centerVertical distribution draggable flexWrap height highlightBackground highlighted leftPadding onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings rightPadding safeAreaInsetPositions spacing topPadding],
+    'view_converter.rb' => %w[bottomPadding centerHorizontal centerInParent centerVertical distribution draggable flexWrap height highlightBackground highlighted leftPadding onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings rightPadding safeAreaInsetPositions spacing topPadding width],
     'web_converter.rb' => %w[accessibilityLabel allow allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading sandbox scrollEnabled src title url]
   }.freeze
 
