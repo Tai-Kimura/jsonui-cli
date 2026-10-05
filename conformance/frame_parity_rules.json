@@ -1,7 +1,20 @@
 {
   "schemaVersion": 1,
-  "_comment": "The hand-written half of frame_parity.json: which cross-platform frame disagreements are a platform idiom (category 3), on which fields, and why. `jui conformance frame-parity --update` measures, applies these rules (the first rule whose fixture / id globs match wins; fields: the fields allowed to differ), and writes frame_parity.json. A matched id that also differs OUTSIDE its rule's fields is not ledgered and is named, so a defect cannot ride in with an idiom on the same id. A rule with no fields keeps its ids out on purpose. HAND-MAINTAINED.",
+  "_comment": "The hand-written half of frame_parity.json: which cross-platform frame disagreements are a platform idiom (category 3), on which fields, and why. `jui conformance frame-parity --update` measures, applies these rules (the first rule whose fixture / id globs match wins; fields: the fields allowed to differ), and writes frame_parity.json. A matched id that also differs OUTSIDE its rule's fields is not ledgered and is named, so a defect cannot ride in with an idiom on the same id. A rule with no fields keeps its ids out on purpose. `expected` ({host: {field: value}}) pins the named faces to a stated amount within the gate's tolerance, the unnamed faces must agree, or the id is refused. HAND-MAINTAINED.",
   "rules": [
+    {
+      "fixture": "Label/lineHeightMultiple__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 166.71
+        }
+      },
+      "reason": "iOS draws no multiple on the first line (SwiftUI has no per-line height; 2026-10-05 user instruction, attribute_semantics lineHeightMultipleBase): five lines of L 20.33 at m 1.8 are L + 4 x m x L = 166.71, (m - 1) x L = 16.27 short of 5 x m x L. Pinned to that amount: any other iOS height, or Android and web apart, is refused"
+    },
     {
       "fixture": "__control/Label__wrap-max",
       "id": "target",

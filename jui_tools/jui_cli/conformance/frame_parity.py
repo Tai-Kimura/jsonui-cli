@@ -679,7 +679,14 @@ def load_rules(path) -> list[dict]:
     which fields, and why. Each rule: ``fixture`` (fnmatch glob over the
     fixture id), ``id`` (glob, default ``*``), ``fields`` (the fields allowed
     to differ — any other field that differs keeps the id OUT of the ledger),
-    ``reason`` (required, one line)."""
+    ``reason`` (required, one line).
+
+    ``expected`` (optional) narrows a rule to a known amount: ``{host: {field:
+    value}}``. Each named host's field must be within TOLERANCE of the value,
+    and the hosts it does not name must agree among themselves, or the id is
+    refused. It is for a difference the rulings accept by a stated amount
+    (iOS lineHeightMultiple: no multiple on the first line, so (m - 1) x L
+    short) — "height may differ" would also accept any other height."""
     path = Path(path)
     if not path.is_file():
         return []
@@ -687,17 +694,24 @@ def load_rules(path) -> list[dict]:
     for i, rule in enumerate(rules):
         missing = [k for k in ("fixture", "reason") if not rule.get(k)] + (["fields"] if "fields" not in rule else [])
         bad = [f for f in rule.get("fields", []) if f not in FIELDS]
+        for host, values in (rule.get("expected") or {}).items():
+            if not isinstance(values, dict):
+                bad.append(f"expected.{host}")
+                continue
+            bad += [f"expected.{host}.{f}" for f, v in values.items()
+                    if f not in rule.get("fields", []) or not isinstance(v, (int, float))]
         if missing or bad:
             raise ValueError(f"{RULES_NAME} rule {i}: missing {missing}, unknown fields {bad}")
     return rules
 
 
-def differing_fields(d: "Disagreement") -> set[str]:
+def differing_fields(d: "Disagreement", hosts: Iterable[str] | None = None) -> set[str]:
     """Fields on which the faces' frames are more than TOLERANCE apart.
     Position fields are compared by the readings (a far-edge view differs in
-    x between roots of different sizes and still agrees), sizes directly."""
+    x between roots of different sizes and still agrees), sizes directly.
+    ``hosts`` limits the comparison to those faces."""
     out = set()
-    names = sorted(d.frames)
+    names = sorted(h for h in d.frames if hosts is None or h in hosts)
     for i, p in enumerate(names):
         for q in names[i + 1:]:
             a, b, ra, rb = d.frames[p], d.frames[q], d.roots[p], d.roots[q]
@@ -736,9 +750,26 @@ def ledger_from_rules(result: FrameParityResult, rules: list[dict]) -> tuple[lis
         if outside:
             refused.append(f"{d.fixture} #{d.id}: differs in {sorted(outside)} outside the rule's {rule['fields']}")
             continue
+        if (off := _off_expected(d, rule.get("expected") or {})):
+            refused.append(f"{d.fixture} #{d.id}: {off}")
+            continue
         entries.append({"fixture": d.fixture, "id": d.id, "outliers": sorted(d.outliers),
                         "fields": sorted(differing_fields(d)), "reason": rule["reason"]})
     return entries, refused
+
+
+def _off_expected(d: "Disagreement", expected: dict) -> str | None:
+    """Why a rule's ``expected`` does not hold for ``d``, or None."""
+    for host, values in sorted(expected.items()):
+        frame = d.frames.get(host)
+        if frame is None:
+            return f"no {host} frame for the rule's expected {values}"
+        for field, value in sorted(values.items()):
+            if not _near(frame[field], value):
+                return f"{host} {field} {frame[field]:g} is not the rule's expected {value:g} (tolerance {TOLERANCE:g})"
+    if expected and (rest := differing_fields(d, [h for h in d.frames if h not in expected])):
+        return f"the faces the rule's expected does not name differ in {sorted(rest)}"
+    return None
 
 
 def write_ledger(path, entries: list[dict]) -> None:
