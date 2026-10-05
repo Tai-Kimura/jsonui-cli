@@ -395,6 +395,93 @@
       },
       "ruling": "2026-09-26 (4f, round 5 of the Collection audit). Until jsonui-cli 1.9.0 no declaration said what an undeclared Collection spacing draws, and the paths had each picked one: 0 everywhere except the flow route on iOS — sjui codegen 8 between cells, lines and section blocks; SwiftJsonUI Dynamic 8 on the lazy flow (its section blocks the ScrollView's own stack spacing) and `x > 0 ? x : 8` on the `lazy: none` flow, so a declared 0 drew 8. Android and web drew 0. The ruling: 0, flow included, on every route and every path. Declared HERE and not as a `default` in attribute_definitions.json, on purpose: a `default` there changes the attribute's kind — the conformance fixture generator writes the declared default as the fixture's value, the inert audit lists it, and attr codegen carries it into the generated tables — and the rule is per route, which one scalar cannot say. `sectionSpacing` is lineSpacing's alias (definitions `aliases`). Toolchain comments point here.",
       "observable": {}
+    },
+    "backgroundSafeArea": {
+      "attributes": [
+        "common.background"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). When a view with a background touches the canvas edge next to a safe-area inset (the status-bar band above it), iOS painting the background into that band is an accepted iOS idiom; Android and web stopping at the view's frame are equally correct. The view's layout frame is the same on every face; only the paint may reach the band. Measured: SwiftUI's default for a background touching a safe-area edge (iOS frame y -62, height +62 or more, 340 ids), Android and web y 0. Not a reason to move the layout box.",
+      "observable": {}
+    },
+    "borderContentBox": {
+      "attributes": [
+        "common.borderWidth",
+        "common.borderColor"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). A border does NOT push the content inward: the view's children keep the positions they have without the border, and the border is drawn over them. A border on a wrapContent Label does not add to its height. Measured deviation: web insets children by the border width (2, 2) and adds 2 x borderWidth to a Label's height; iOS and Android draw over the content. See also `border` (when a border is drawn at all).",
+      "observable": {},
+      "inputFieldException": "TextField, TextView and SelectBox are the exception, declared so it is not a silent one: an input field's border is the control's chrome, and where its text sits inside that border is the platform's idiom. Web keeps a CSS border on input fields so the text never runs under the frame and because the outline is the focus ring (rjui border_draws_over_content?, triage commit 5898c2cf). Not covered by any fixture yet: the conformance corpus has no input field that declares a border (triage, scanning the web-scoped manifest), so this exception is not measured by the gate until one is added."
+    },
+    "stackOverflow": {
+      "attributes": [
+        "View.orientation",
+        "View.spacing",
+        "common.paddings"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). When a fixed-size row's (or column's) children, with its padding and spacing, exceed its size, the children are still placed in sequence at their declared sizes and the overflow runs past the far edge; no child is moved back inside. Measured deviation: Android holds the last child at 180 in a 200 row of six 40s; iOS and web place it at 200 (208 with paddingLeft 8, 240 with spacing 8).",
+      "observable": {}
+    },
+    "distributionRemainder": {
+      "attributes": [
+        "View.distribution"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). In a `fillEqually` stack where some children declare their size on the distribution axis, those children keep their declared size (distribution.explicitChildSizeWins) and the REMAINING space is shared equally by the others: 300 wide, one child declaring 60 and two undeclared -> 60 / 120 / 120. Measured before the ruling: Android 60 / 100 / 100 (40 left empty), web 100 / 100 / 100.",
+      "observable": {}
+    },
+    "emptyLabelHeight": {
+      "attributes": [
+        "Label.text",
+        "common.height"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). A Label whose text is empty and whose height is wrapContent still has the height of one line of its font; wrapContent does not collapse it to 0. Measured before the ruling: Android 24, web 0.",
+      "observable": {}
+    },
+    "labelHint": {
+      "attributes": [
+        "Label.hint",
+        "Label.hintAttributes"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). `Label.hint` is shown when the text is empty whether or not `hintAttributes` is declared; without hintAttributes it is drawn in the platform's default subdued hint colour at the Label's font. Measured before the ruling: rjui and Android required hintAttributes to show the hint.",
+      "observable": {}
+    },
+    "lineBreakModeLines": {
+      "attributes": [
+        "Label.lineBreakMode",
+        "Label.lines"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). `lineBreakMode` (head / middle / tail / clip) chooses HOW the last allowed line is truncated; it does not mean one line. The number of lines is `lines` alone (0 or absent: unlimited), so with no `lines` the text wraps and nothing is truncated. Measured before the ruling: web drew one line (24), Android wrapped (120).",
+      "observable": {}
+    },
+    "lineHeightMultipleBase": {
+      "attributes": [
+        "Label.lineHeightMultiple"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). `lineHeightMultiple` multiplies the font's own (natural) line height, not the font size. Measured before the ruling: lineHeightMultiple 1.8 drew 127.5 on Android and 143.98 on web.",
+      "observable": {}
+    },
+    "lineSpacingBetween": {
+      "attributes": [
+        "Label.lineSpacing"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). `lineSpacing` is added BETWEEN lines only: n lines get n - 1 spacings, and nothing is added after the last line. Measured before the ruling: lineSpacing 16 drew 150 on Android and 160 on web.",
+      "observable": {}
+    },
+    "iconLabelIconSize": {
+      "attributes": [
+        "IconLabel.iconSize",
+        "IconLabel.icon_on",
+        "IconLabel.icon_off"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). When `iconSize` is not declared: an IconLabel with no icon reserves no space for one, and one with an icon draws it at the image's own size. Measured before the ruling: web reserved a 96 icon box with no icon declared, Android none (height 24 vs 96).",
+      "observable": {}
+    },
+    "stackDirection": {
+      "attributes": [
+        "View.direction",
+        "SafeAreaView.direction"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). `direction: bottomToTop` stacks from the BOTTOM edge: the first child is the lowest, and each next child sits above it. (The same reading applies to the other directions: the first child sits at the edge the direction starts from.) Measured before the ruling: in a 200-high column of 40s, iOS and Android put box_b at 160, web at 120; SafeAreaView bottomToTop: Android stacked at the top (0 / 40 / 80), web at the bottom (728 / 688 / 648).",
+      "observable": {}
     }
   }
 }

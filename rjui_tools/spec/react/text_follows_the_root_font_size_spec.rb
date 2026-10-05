@@ -135,6 +135,14 @@ RSpec.describe 'rjui text lengths follow the root font size' do
     end
 
     it 'type-checks' do
+      # Skips where the spec toolchain is not installed, by the same reason the
+      # compile_as_typescript matcher uses (TypeScriptCompiler.unavailable_reason).
+      # It used to fail there instead: a worktree without
+      # rjui_tools/spec/support/node_modules showed it as the one red example
+      # among 281 pending ones. The CI job installs the toolchain, so it runs there.
+      if (reason = TypeScriptCompiler.unavailable_reason)
+        skip reason
+      end
       Dir.mktmpdir('rjui_autoshrink_tsc') do |dir|
         File.write(File.join(dir, 'autoShrink.ts'), helper(typescript: true))
         out, status = Open3.capture2e(TypeScriptCompiler.tsc_path, '--strict', '--noEmit', '--lib', 'es2020,dom',
