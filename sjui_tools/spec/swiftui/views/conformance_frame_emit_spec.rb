@@ -63,6 +63,18 @@ RSpec.describe 'conformance frame emit' do
     end
   end
 
+  # Inside the offset as well: `.offset` moves the drawing, not the layout
+  # bounds, so a modifier after it reported an offsetY 8 view at y = 0
+  # (ConformanceHost, 2026-10-05) where Android's testTag and web read 8.
+  it 'emits it inside the offset' do
+    with_config({ 'conformance_frames' => true })
+    code = emit(shapes['View'].merge('offsetY' => 8))
+    frame = line_of(code, '.jsonUIConformanceFrame("target")')
+    offset = line_of(code, '.offset(')
+    expect(offset).not_to be_nil, "no offset:\n#{code}"
+    expect(frame).to be < offset, "the measuring modifier is outside the offset:\n#{code}"
+  end
+
   # The stub is the library's signature (SwiftJsonUI
   # JsonUIConformanceFrame.swift), so an emit that passed it anything else
   # would not type-check here either.

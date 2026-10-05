@@ -33,8 +33,8 @@ module SjuiTools
           :foreground_color,    # foregroundColor
           :opacity,             # opacity/alpha
           :hidden,              # hidden
-          :offset,              # offset
           :conformance_frame,   # jsonUIConformanceFrame (the frames gate's layout box; conformance host only)
+          :offset,              # offset
           :margin,              # outer margin entries
           :tint_color,          # tint
           :on_click,            # contentShape + onTapGesture
