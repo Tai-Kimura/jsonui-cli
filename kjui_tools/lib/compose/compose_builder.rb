@@ -1354,11 +1354,27 @@ module KjuiTools
         # the bound face — `spacing` is `["number", "binding"]` and a raw
         # interpolation would put `@{v}.dp` in code position. A Box has no
         # arrangement to name, so orientation gates it exactly as it does there.
+        #
+        # The reversed children also stack from the edge the direction starts
+        # from (user ruling, 2026-10-05), as container_component does for a
+        # View: reversed alone they stacked from the top / left. KotlinJsonUI
+        # Dynamic: DynamicSafeAreaViewComponent.
+        from_end = Components::ContainerComponent.bottom_up?(json_data, container) ||
+                   Components::ContainerComponent.end_first?(json_data, container)
+        edge = container == 'Column' ? 'Bottom' : 'End'
+        arrangement = container == 'Column' ? 'verticalArrangement' : 'horizontalArrangement'
         if json_data['spacing'] && %w[Row Column].include?(container)
           @required_imports&.add(:arrangement)
           spacing_dp = Helpers::BoundValue.dp(json_data['spacing'])
-          arrangement = container == 'Column' ? 'verticalArrangement' : 'horizontalArrangement'
-          code += "\n" + indent("#{arrangement} = Arrangement.spacedBy(#{spacing_dp}),", depth + 1)
+          if from_end
+            @required_imports&.add(:alignment)
+            code += "\n" + indent("#{arrangement} = Arrangement.spacedBy(#{spacing_dp}, Alignment.#{edge}),", depth + 1)
+          else
+            code += "\n" + indent("#{arrangement} = Arrangement.spacedBy(#{spacing_dp}),", depth + 1)
+          end
+        elsif from_end
+          @required_imports&.add(:arrangement)
+          code += "\n" + indent("#{arrangement} = Arrangement.#{edge},", depth + 1)
         end
 
         # Build modifiers
