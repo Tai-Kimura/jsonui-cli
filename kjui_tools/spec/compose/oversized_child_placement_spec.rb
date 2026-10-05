@@ -161,6 +161,19 @@ RSpec.describe 'kjui codegen: an oversized child sits where its container places
       expect(code).not_to include('Arrangement.Bottom')
     end
 
+    it 'stacks a rightToLeft Row from the right edge' do
+      code = build({ 'type' => 'View', 'id' => 'row', 'orientation' => 'horizontal', 'direction' => 'rightToLeft',
+                     'width' => 200, 'height' => 200, 'child' => [{ 'type' => 'View', 'id' => 'a', 'width' => 40, 'height' => 40 }] })
+      expect(code).to include('horizontalArrangement = Arrangement.End')
+      expect(code).to include('.wrapContentWidth(align = BiasAlignment.Horizontal(1.0f), unbounded = true)')
+    end
+
+    it 'lets a horizontal gravity place a rightToLeft Row (control)' do
+      code = build({ 'type' => 'View', 'id' => 'row', 'orientation' => 'horizontal', 'direction' => 'rightToLeft', 'gravity' => 'left',
+                     'child' => [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A' }] })
+      expect(code).not_to include('Arrangement.End')
+    end
+
     it 'lets a vertical gravity place a bottomToTop Column (control)' do
       code = build({ 'type' => 'View', 'id' => 'col', 'orientation' => 'vertical', 'direction' => 'bottomToTop', 'gravity' => 'top',
                      'child' => [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A' }] })

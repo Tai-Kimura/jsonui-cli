@@ -158,7 +158,10 @@ module KjuiTools
               spaced = bottom_up?(json_data, layout) ? "Arrangement.spacedBy(#{spacing_dp}, Alignment.Bottom)" : "Arrangement.spacedBy(#{spacing_dp})"
               code += ",\n" + indent("verticalArrangement = #{spaced}", depth + 1)
             end
-            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Row'
+            if layout == 'Row'
+              spaced = end_first?(json_data, layout) ? "Arrangement.spacedBy(#{spacing_dp}, Alignment.End)" : "Arrangement.spacedBy(#{spacing_dp})"
+              code += ",\n" + indent("horizontalArrangement = #{spaced}", depth + 1)
+            end
           end
 
           # bottomToTop stacks from the bottom edge (user ruling 2026-10-05);
@@ -166,6 +169,11 @@ module KjuiTools
           if bottom_up?(json_data, layout) && !json_data['spacing']
             required_imports&.add(:arrangement)
             code += ",\n" + indent("verticalArrangement = Arrangement.Bottom", depth + 1)
+          end
+          # rightToLeft stacks a Row from its right edge (the same ruling).
+          if end_first?(json_data, layout) && !json_data['spacing']
+            required_imports&.add(:arrangement)
+            code += ",\n" + indent("horizontalArrangement = Arrangement.End", depth + 1)
           end
 
           # A child that declares its own size on the grow axis keeps it and
@@ -267,6 +275,7 @@ module KjuiTools
           parent_h = axis_bias_of(parts, %w[left], %w[right], %w[centerHorizontal center])
           parent_v = axis_bias_of(parts, %w[top], %w[bottom], %w[centerVertical center])
           parent_v = 1.0 if layout == 'Column' && bottom_up?(json_data, layout)
+          parent_h = 1.0 if layout == 'Row' && end_first?(json_data, layout)
           # A gravity-less rightToLeft Column anchors its children at the
           # trailing edge (add_gravity_settings).
           parent_h = 1.0 if layout == 'Column' && json_data['direction'] == 'rightToLeft' && parts.empty?
@@ -316,7 +325,8 @@ module KjuiTools
 
           parts = gravity_parts_of(json_data['gravity'] || alignment_as_gravity(json_data['alignment']))
           if layout == 'Row'
-            ".wrapContentWidth(align = BiasAlignment.Horizontal(#{axis_bias_of(parts, %w[left], %w[right], %w[centerHorizontal center])}f), unbounded = true)"
+            h = end_first?(json_data, layout) ? 1.0 : axis_bias_of(parts, %w[left], %w[right], %w[centerHorizontal center])
+            ".wrapContentWidth(align = BiasAlignment.Horizontal(#{h}f), unbounded = true)"
           else
             v = bottom_up?(json_data, layout) ? 1.0 : axis_bias_of(parts, %w[top], %w[bottom], %w[centerVertical center])
             ".wrapContentHeight(align = BiasAlignment.Vertical(#{v}f), unbounded = true)"
@@ -369,6 +379,19 @@ module KjuiTools
 
           parts = gravity_parts_of(json_data['gravity'] || alignment_as_gravity(json_data['alignment']))
           (parts & %w[top bottom centerVertical center]).empty?
+        end
+
+        # `direction: rightToLeft` stacks a Row from its right edge, the first
+        # child rightmost (user ruling, 2026-10-05, bottomToTop's rule turned
+        # sideways). Not when the gravity names a horizontal place or a
+        # distribution spreads them. KotlinJsonUI Dynamic:
+        # DynamicContainerComponent.stacksFromTheEnd.
+        def self.end_first?(json_data, layout)
+          return false unless layout == 'Row' && json_data['direction'] == 'rightToLeft'
+          return false if json_data['distribution']
+
+          parts = gravity_parts_of(json_data['gravity'] || alignment_as_gravity(json_data['alignment']))
+          (parts & %w[left right centerHorizontal center]).empty?
         end
 
         # A numeric size declared along `axis` ('width' / 'height').
