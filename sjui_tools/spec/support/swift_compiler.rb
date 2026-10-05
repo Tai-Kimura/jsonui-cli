@@ -128,6 +128,11 @@ module SwiftCompiler
             func getColor(for hex: String) -> Color? { Color.black }
         }
         class ViewModel: ObservableObject {}
+        // SwiftJsonUI JsonUIConformanceFrame.swift: every id-bearing view
+        // emits it (modifier_order.json conformance_frame).
+        extension View {
+            func jsonUIConformanceFrame(_ id: String?) -> some View { self }
+        }
       SWIFT
 
       <<~SWIFT

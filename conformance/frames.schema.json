@@ -33,6 +33,7 @@
       "description": "What the driver read the frames from, so a disagreement can be traced to the instrument as well as to the renderer.",
       "enum": [
         "xcuielement-frame",
+        "xcuielement-layout-probe",
         "a11y-node-bounds",
         "get-bounding-client-rect",
         "compose-layout-coordinates"

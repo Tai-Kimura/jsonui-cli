@@ -38,8 +38,8 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 FRAMES_SCHEMA_VERSION = 1
-SOURCES = frozenset({"xcuielement-frame", "a11y-node-bounds", "get-bounding-client-rect",
-                     "compose-layout-coordinates"})
+SOURCES = frozenset({"xcuielement-frame", "xcuielement-layout-probe", "a11y-node-bounds",
+                     "get-bounding-client-rect", "compose-layout-coordinates"})
 PLATFORMS = ("ios", "android", "web")
 LEDGER_NAME = "frame_parity.json"
 

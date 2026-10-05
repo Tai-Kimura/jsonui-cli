@@ -185,7 +185,7 @@ At each visual fixture's `screenshot` step, the driver writes
   "schemaVersion": 1,
   "fixture": "common/alignTopView__static",
   "platform": "ios",
-  "source": "xcuielement-frame",
+  "source": "xcuielement-layout-probe",
   "root": { "x": 0, "y": 62, "width": 402, "height": 778 },
   "frames": {
     "root":   { "x": 0,   "y": 0,   "width": 402, "height": 778 },
@@ -240,7 +240,19 @@ At each visual fixture's `screenshot` step, the driver writes
   element (Android a11y bounds stop at the screen edge) marks a frame that
   touches that edge `"clipped": true`. The gate does not judge a clipped frame
   and counts it.
-- **Sources:** iOS `XCUIElement.frame` (`xcuielement-frame`); Android the
+- **Sources:** iOS the `XCUIElement.frame` of each id's measuring element
+  (`xcuielement-layout-probe`). On SwiftUI the element that carries an id
+  reports what was drawn as accessibility elements, not the layout box
+  (measured on ConformanceHost, iOS 26.5, a 200 x 200 View holding one
+  40 x 40 child: with a background (0, −62, 200 x 262), the background
+  painting into the safe area; with none (0, 0, 40 x 40), the union of the
+  children). So while the host sets `jsonuiConformanceFrameProbe`,
+  SwiftJsonUI hands each id's layout box up (Dynamic and generated code
+  alike) and the host draws a clear element named `frame:<id>` there,
+  behind the fixture, and the driver reads that. An id
+  read from its own element instead goes in `fallbacks`. An app sets nothing
+  and gets no such element. `xcuielement-frame` (the id's own element) stays
+  in the enum for a host built before the measuring element. Android the
   conformance host's in-process Compose layout coordinates of each testTag,
   px divided by density (`compose-layout-coordinates`) — not the a11y bounds,
   which stop at the screen edge and would mark exactly the misplaced views

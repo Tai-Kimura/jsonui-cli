@@ -345,6 +345,9 @@ module SjuiTools
           end
 
           # Apply margins (external spacing)
+          # The frames gate's measuring element (apply_conformance_frame): this
+          # converter does not call apply_common_decorations, where the others get it.
+          apply_conformance_frame
           apply_margins
 
           # Apply opacity

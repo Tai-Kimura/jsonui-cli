@@ -506,6 +506,18 @@ module SjuiTools
         # (accessibility_merge_hazard?); every other id-bearing container
         # gets just .accessibilityElement(children: .contain) +
         # .accessibilityIdentifier (2 flat modifier lines).
+        # XCUIElement.frame reads what was drawn as accessibility elements,
+        # not the layout box: a background that touches the top paints into
+        # the safe area and reads 62 taller, and a container with no background
+        # reads as the union of its children (measured, ConformanceHost, iOS
+        # 26.5, 2026-10-05). The frames reader asks for `frame:<id>` first.
+        def apply_conformance_frame
+          return unless @component['id'].is_a?(String) && !@component['id'].empty?
+          return if @component['visibility'] == 'invisible' || @component['hidden'] == true
+
+          @modifier_bag.register(:conformance_frame, ".jsonUIConformanceFrame(#{swift_string_literal(@component['id'])})")
+        end
+
         def apply_accessibility_identifier
           # hidden: true is the boolean shorthand for visibility:"invisible"
           # (space-kept, not drawn, hidden from accessibility) — both static
@@ -651,6 +663,14 @@ module SjuiTools
         # the other paths draw them. A stage the converter registered itself
         # is kept (register_unless_exists).
         def apply_common_decorations
+          # Hands the layout box up to the conformance gate's measuring element,
+          # in the bag's `conformance_frame` slot: inside the margins, after the
+          # offset. Here because every converter calls this, including those
+          # that assemble their own chain. It makes nothing in an app:
+          # SwiftJsonUI's jsonUIConformanceFrame reads
+          # jsonuiConformanceFrameProbe, which only a conformance host sets.
+          # Dynamic: DynamicModifierHelper.applyConformanceFrame.
+          apply_conformance_frame
           # tintColor is the accent of the operable parts — a control's
           # accent, a link's colour, the cursor (4f's ruling, 1.9.0) — never
           # the text colour: SwiftUI's `.tint`. It was drawn only through
