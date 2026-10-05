@@ -1073,8 +1073,8 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         # m x L, each against its own size (attribute_semantics
         # lineHeightMultipleBase): L(24) x 1.5 highlighted, L(14) x 1.2 not.
         expect(result).to include(
-          'lineHeight = if (data.sel) LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current) ' \
-          'else LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current)'
+          'lineHeight = if (data.sel) LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current, LocalDensity.current) ' \
+          'else LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current, LocalDensity.current)'
         )
       end
 

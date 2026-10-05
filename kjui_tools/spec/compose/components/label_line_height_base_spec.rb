@@ -21,7 +21,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   it 'multiplies L, not the font size (no fontSize: the theme decides L)' do
     out = label('lineHeightMultiple' => 1.8)
-    expect(out).to include('lineHeight = LabelLineHeight.multiple(null, 1.8f, LocalTextStyle.current)')
+    expect(out).to include('lineHeight = LabelLineHeight.multiple(null, 1.8f, LocalTextStyle.current, LocalDensity.current)')
     expect(out).not_to include('25.2')
     expect(required_imports).to include(:label_line_height, :local_text_style)
     expect(out).to include('// Requires KotlinJsonUI >= 2.43.5 (LabelLineHeight, lineSpacingBetween)')
@@ -29,12 +29,12 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   it 'passes a declared fontSize so L is that size x 1.3' do
     expect(label('lineHeightMultiple' => 1.5, 'fontSize' => 14))
-      .to include('LabelLineHeight.multiple(14f, 1.5f, LocalTextStyle.current)')
+      .to include('LabelLineHeight.multiple(14f, 1.5f, LocalTextStyle.current, LocalDensity.current)')
   end
 
   it 'adds lineSpacing to L and takes it back after the last line' do
     out = label('lineSpacing' => 16)
-    expect(out).to include('lineHeight = LabelLineHeight.spaced(null, 16f, LocalTextStyle.current)')
+    expect(out).to include('lineHeight = LabelLineHeight.spaced(null, 16f, LocalTextStyle.current, LocalDensity.current)')
     expect(out).to include('.lineSpacingBetween(16f)')
     expect(required_imports).to include(:line_spacing_between)
   end
@@ -47,7 +47,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   it 'carries a bound lineSpacing into both the style and the modifier' do
     out = label('lineSpacing' => '@{gap}')
-    expect(out).to include('LabelLineHeight.spaced(null, (data.gap?.toFloat() ?: 0.0f), LocalTextStyle.current)')
+    expect(out).to include('LabelLineHeight.spaced(null, (data.gap?.toFloat() ?: 0.0f), LocalTextStyle.current, LocalDensity.current)')
     expect(out).to include('.lineSpacingBetween((data.gap?.toFloat() ?: 0.0f))')
   end
 
@@ -69,7 +69,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   # The emitted style and modifier type-check against the library's API. The
   # stubs transcribe KotlinJsonUI's LabelLineHeight.kt signatures (Float?,
-  # Float, TextStyle -> TextUnit; Modifier.lineSpacingBetween(Float)) — a
+  # Float, TextStyle, Density -> TextUnit; Modifier.lineSpacingBetween(Float)) — a
   # transcription, not a compile against the library itself, which the
   # conformance host's codegen build covers.
   it 'emits Kotlin that type-checks against LabelLineHeight' do
@@ -95,9 +95,11 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
           fun copy(lineHeight: TextUnit = this.lineHeight): TextStyle = TextStyle(lineHeight)
       }
       object LocalTextStyle { val current: TextStyle = TextStyle() }
+      class Density(val density: Float, val fontScale: Float = 1f)
+      object LocalDensity { val current: Density = Density(2f) }
       object LabelLineHeight {
-          fun multiple(fontSize: Float?, multiple: Float, style: TextStyle): TextUnit = TextUnit(0f)
-          fun spaced(fontSize: Float?, spacing: Float, style: TextStyle): TextUnit = TextUnit(0f)
+          fun multiple(fontSize: Float?, multiple: Float, style: TextStyle, density: Density): TextUnit = TextUnit(0f)
+          fun spaced(fontSize: Float?, spacing: Float, style: TextStyle, density: Density): TextUnit = TextUnit(0f)
       }
       interface Modifier { companion object : Modifier }
       fun Modifier.lineSpacingBetween(spacing: Float): Modifier = this

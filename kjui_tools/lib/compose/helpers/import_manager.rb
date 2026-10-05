@@ -224,7 +224,10 @@ module KjuiTools
                                 "import com.kotlinjsonui.components.styledTextLines"],
             # A Label's line height from L, one undeclared line
             # (attribute_semantics lineHeightMultipleBase / lineSpacingBetween).
-            label_line_height: "import com.kotlinjsonui.components.LabelLineHeight",
+            # LocalDensity: LabelLineHeight puts the line height on the
+            # device's pixel grid.
+            label_line_height: ["import com.kotlinjsonui.components.LabelLineHeight",
+                                "import androidx.compose.ui.platform.LocalDensity"],
             line_spacing_between: "import com.kotlinjsonui.components.lineSpacingBetween",
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",

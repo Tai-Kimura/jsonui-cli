@@ -718,7 +718,7 @@ module KjuiTools
           elsif json_data['lineSpacing']
             required_imports&.add(:label_line_height)
             required_imports&.add(:local_text_style)
-            "LabelLineHeight.spaced(#{label_size_arg(json_data['fontSize'])}, #{Helpers::BoundValue.float(json_data['lineSpacing'], fallback: 0)}, LocalTextStyle.current)"
+            "LabelLineHeight.spaced(#{label_size_arg(json_data['fontSize'])}, #{Helpers::BoundValue.float(json_data['lineSpacing'], fallback: 0)}, LocalTextStyle.current, LocalDensity.current)"
           elsif json_data['fontSize']
             scaled_sp(json_data['fontSize'], 1.3, round: true)
           end
@@ -728,7 +728,7 @@ module KjuiTools
         def self.multiple_line_height(size, multiple, required_imports)
           required_imports&.add(:label_line_height)
           required_imports&.add(:local_text_style)
-          "LabelLineHeight.multiple(#{label_size_arg(size)}, #{Helpers::BoundValue.float(multiple, fallback: 1)}, LocalTextStyle.current)"
+          "LabelLineHeight.multiple(#{label_size_arg(size)}, #{Helpers::BoundValue.float(multiple, fallback: 1)}, LocalTextStyle.current, LocalDensity.current)"
         end
 
         # The declared font size as a Float? argument: null when undeclared,
