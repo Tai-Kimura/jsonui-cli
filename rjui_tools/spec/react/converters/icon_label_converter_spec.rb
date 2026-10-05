@@ -142,4 +142,25 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
       end
     end
   end
+
+  # No icon declared: no icon drawn and no space kept (user ruling
+  # 2026-10-05, attribute_semantics iconLabelIconSize). An <img src=""> drew
+  # the browser's empty-image box, 96 high, where Android draws only the text.
+  describe 'with no icon declared' do
+    it 'emits no img at all' do
+      out = described_class.new({ 'type' => 'IconLabel', 'id' => 'il', 'width' => 200, 'text' => 'Sample' },
+                                { 'use_tailwind' => true }).convert_node(2)
+      expect(out).not_to include('<img')
+      expect(out).to include('Sample')
+    end
+
+    it 'still draws a declared icon at its own size when iconSize is absent' do
+      out = described_class.new({ 'type' => 'IconLabel', 'id' => 'il', 'width' => 200, 'text' => 'Sample', 'icon_off' => 'a.png' },
+                                { 'use_tailwind' => true }).convert_node(2)
+      img = out[/<img[^>]*>/]
+      expect(img).not_to be_nil
+      expect(img).not_to match(/\b[wh]-\[/)
+    end
+  end
 end
+

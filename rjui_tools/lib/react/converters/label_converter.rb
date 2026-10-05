@@ -67,10 +67,10 @@ module RjuiTools
 
         # The plain single-span label, with the hint swap when configured.
         #
-        # Canonical semantics (UIKit SJUILabel, mirrored by kjui): `hint` +
-        # `hintAttributes` are BOTH required, and the styled hint replaces the
-        # text when the text is empty. `placeholder` is the declared alias of
-        # `hint`; `hintAttributes.fontColor` wins over `hintColor`.
+        # The hint replaces the text when the text is empty, with or without
+        # `hintAttributes` (user ruling 2026-10-05; it used to require both,
+        # after UIKit SJUILabel — hint_config). `placeholder` is the declared
+        # alias of `hint`; `hintAttributes.fontColor` wins over `hintColor`.
         def render_plain_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           raw = attributes['text'] || ''
           hint = hint_config
@@ -121,11 +121,15 @@ module RjuiTools
         # colour names resolve through the generated `--color-*` variables
         # (theme.css); hex values pass through.
         def hint_config
-          attrs = attributes['hintAttributes']
+          # `hint` shows whether or not `hintAttributes` is declared (user
+          # ruling 2026-10-05, attribute_semantics labelHint); without them it
+          # is drawn in the default subdued hint colour at the Label's own
+          # font — gray-400, the hint default the rest of rjui uses (SelectBox).
+          attrs = attributes['hintAttributes'].is_a?(Hash) ? attributes['hintAttributes'] : {}
           hint = attributes['hint'] || attributes['placeholder']
-          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+          return nil unless hint.is_a?(String) && !hint.empty?
 
-          color = attrs['fontColor'] || attributes['hintColor']
+          color = attrs['fontColor'] || attributes['hintColor'] || '#9CA3AF'
           parts = []
           if has_binding?(color)
             # Was dropped outright. A runtime colour resolves the same way
@@ -385,6 +389,15 @@ module RjuiTools
             classes.concat(TailwindMapper.map_label_gravity(attributes['gravity'], attributes['textAlign']))
           end
 
+          # An empty Label keeps one line of height (user ruling 2026-10-05,
+          # attribute_semantics emptyLabelHeight): wrapContent collapsed it to
+          # 0 on web, where Android draws one line. An invisible, zero-wide
+          # character on the ::before of an element with no content holds
+          # the line — not in its text, so a text read still returns "". (No
+          # escape in the class: `\00a0` is an octal escape inside the JS
+          # string a className can be.)
+          classes << "empty:before:content-['x'] empty:before:invisible empty:before:w-0"
+
           # Line clamp for multiple lines
           #
           # A BOUND cap has no class — `line-clamp-N` needs N at build time —
@@ -524,6 +537,13 @@ module RjuiTools
           when 'Word'
             @dynamic_styles['overflowWrap'] = "'break-word'"
           when 'Head', 'Middle', 'Tail', 'Clip'
+            # These choose HOW the last allowed line is cut; they do not mean
+            # one line. `lines` alone sets the count, so with no cap the text
+            # wraps and nothing is cut (user ruling 2026-10-05,
+            # attribute_semantics lineBreakModeLines): web drew one line (24)
+            # where Android wrapped (120).
+            return style_attr_for(@dynamic_styles) unless line_cap?
+
             # CSS has no native middle truncation; ellipsis is the fallback.
             @dynamic_styles['textOverflow'] = "'ellipsis'"
             if attributes['lineBreakMode'] == 'Head'
@@ -566,6 +586,14 @@ module RjuiTools
         # its value is not known here, and treating it as single-line would
         # emit `white-space: nowrap` that defeats whatever the runtime asks
         # for.
+        # A cap on the line count: a bound `lines`, or a number above 0.
+        def line_cap?
+          lines = attributes['lines']
+          return true if has_binding?(lines)
+
+          lines.is_a?(Numeric) && lines > 0
+        end
+
         def multiline_cap?
           lines = attributes['lines']
           return true if has_binding?(lines)

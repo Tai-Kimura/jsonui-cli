@@ -347,12 +347,38 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       end
     end
 
+    # An empty Label keeps one line of height (user ruling 2026-10-05,
+    # attribute_semantics emptyLabelHeight); web collapsed it to 0. The line
+    # is held by an invisible zero-wide ::before, outside the text.
+    context 'when empty' do
+      it 'holds one line with an invisible ::before, without an escape in the class' do
+        converter = create_converter({ 'type' => 'Label', 'id' => 'l', 'width' => 200, 'text' => '' })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include("empty:before:content-['x']", 'empty:before:invisible', 'empty:before:w-0')
+        expect(classes).not_to include('\\')
+      end
+    end
+
     context 'with lineBreakMode' do
+      # It chooses how the last ALLOWED line is cut; with no `lines` cap the
+      # text wraps and nothing is cut (user ruling 2026-10-05,
+      # attribute_semantics lineBreakModeLines). Web drew one line where
+      # Android wrapped.
+      %w[Head Middle Tail Clip].each do |mode|
+        it "cuts nothing without a lines cap (#{mode})" do
+          converter = create_converter({ 'type' => 'Label', 'text' => 'Long text', 'lineBreakMode' => mode })
+          converter.send(:build_class_name)
+          result = converter.send(:build_style_attr)
+          expect(result).not_to include('textOverflow', 'whiteSpace', "overflow: 'hidden'")
+        end
+      end
+
       it 'handles Head truncation' do
         converter = create_converter({
           'type' => 'Label',
           'text' => 'Long text that will be truncated',
-          'lineBreakMode' => 'Head'
+          'lineBreakMode' => 'Head',
+          'lines' => 1
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
@@ -366,7 +392,8 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         converter = create_converter({
           'type' => 'Label',
           'text' => 'Long text',
-          'lineBreakMode' => 'Tail'
+          'lineBreakMode' => 'Tail',
+          'lines' => 1
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
@@ -379,7 +406,8 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         converter = create_converter({
           'type' => 'Label',
           'text' => 'Long text',
-          'lineBreakMode' => 'Middle'
+          'lineBreakMode' => 'Middle',
+          'lines' => 1
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
