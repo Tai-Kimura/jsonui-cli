@@ -25,9 +25,10 @@
       "fixture": "__control/Label__wrap-max",
       "id": "target",
       "fields": [
-        "width"
+        "width",
+        "height"
       ],
-      "reason": "Font metrics, not a cap (triage 2026-10-05): the Label is wrapContent in a matchParent root and its text fits on one line on every face, so its width is the text's natural single-line width in that face's font — android 800.0 (Roboto 16sp; Compose lays out on whole pixels, so a width at density 2 reads .0 or .5), web 761.55. Checked for a cap: no 800 in KotlinJsonUI's library or conformance host, and the android text's ink runs to 797.5 inside the 800 box (the box is the text, not a limit). The height (one line) agrees"
+      "reason": "Font metrics, not a cap (triage 2026-10-05): the Label is wrapContent in a matchParent root and its text fits on one line on every face, so its width is the text's natural single-line width in that face's font — android 800.0 (Roboto 16sp; Compose lays out on whole pixels, so a width at density 2 reads .0 or .5), web 761.55. Checked for a cap: no 800 in KotlinJsonUI's library or conformance host, and the android text's ink runs to 797.5 inside the 800 box (the box is the text, not a limit). The height (one line) agrees Height (support lane 2, 2026-10-05): the iOS screen is 402 wide, so the same natural width does not fit and the text wraps to three lines at 391.33 (64.33 high), where android (1280) and web (1024) draw one line, 24 — the root width, not a defect."
     },
     {
       "fixture": "TextField/*",
@@ -209,18 +210,48 @@
       "id": "target",
       "fields": [
         "y",
+        "width",
         "height"
       ],
-      "reason": "Switch control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (android centres the switch in a 48 touch row) — triage K, support lane 1"
+      "reason": "Switch control chrome: an unlabelled wrapContent Switch is the platform's own control — measured ios 61 x 28, android 52 x 48 (the switch centred in a 48 touch row), web 51 x 31; with a declared width the width is drawn on every face, and the expected sizes refuse anything else",
+      "expected": {
+        "ios": {
+          "width": 61,
+          "height": 28
+        },
+        "android": {
+          "width": 52,
+          "height": 48
+        },
+        "web": {
+          "width": 51,
+          "height": 31
+        }
+      }
     },
     {
       "fixture": "__control/Switch*",
       "id": "target",
       "fields": [
         "y",
+        "width",
         "height"
       ],
-      "reason": "Switch control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (android centres the switch in a 48 touch row) — triage K, support lane 1"
+      "reason": "Switch control chrome: an unlabelled wrapContent Switch is the platform's own control — measured ios 61 x 28, android 52 x 48 (the switch centred in a 48 touch row), web 51 x 31; with a declared width the width is drawn on every face, and the expected sizes refuse anything else",
+      "expected": {
+        "ios": {
+          "width": 61,
+          "height": 28
+        },
+        "android": {
+          "width": 52,
+          "height": 48
+        },
+        "web": {
+          "width": 51,
+          "height": 31
+        }
+      }
     },
     {
       "fixture": "Slider/*",
@@ -345,6 +376,410 @@
         "height"
       ],
       "reason": "both wrap by character; the line count differs by font metrics — triage L"
+    },
+    {
+      "fixture": "Label/fontFamily__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 19.67
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "a declared font family's own line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/underline__styled",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 22.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "a styled underline: iOS measured 22.33, 2 more than its plain line (the mechanism is not identified); ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/edgeInset__static",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 36.33
+        },
+        "android": {
+          "height": 40
+        },
+        "web": {
+          "height": 40
+        }
+      },
+      "reason": "one line plus the declared 8 + 8 inset: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/lines__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 42.33
+        },
+        "android": {
+          "height": 48
+        },
+        "web": {
+          "height": 48
+        }
+      },
+      "reason": "two lines (lines: 2): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/lineBreakMode__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 108.33
+        },
+        "android": {
+          "height": 120
+        },
+        "web": {
+          "height": 120
+        }
+      },
+      "reason": "five wrapped lines (lineBreakMode does not cap the count; lineBreakModeLines ruling): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/autoShrink__false",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 108.33
+        },
+        "android": {
+          "height": 120
+        },
+        "web": {
+          "height": 120
+        }
+      },
+      "reason": "five wrapped lines: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/Label__text-1d8efd05",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 108.33
+        },
+        "android": {
+          "height": 120
+        },
+        "web": {
+          "height": 120
+        }
+      },
+      "reason": "five wrapped lines: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "common/maxWidth__wrap",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 130.33
+        },
+        "android": {
+          "height": 144
+        },
+        "web": {
+          "height": 144
+        }
+      },
+      "reason": "six wrapped lines at maxWidth 150: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/lineSpacing__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 165.67
+        },
+        "android": {
+          "height": 184
+        },
+        "web": {
+          "height": 184
+        }
+      },
+      "reason": "five lines with lineSpacing 16 between them only (ruling B, lineSpacingBetween): 5 L + 4 x 16 = ios 165.67 / android and web 184; ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/highlightAttributes__static",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 28.67
+        },
+        "android": {
+          "height": 47
+        },
+        "web": {
+          "height": 48
+        }
+      },
+      "reason": "the highlight's lineHeightMultiple 1.5 on L at its own fontSize 24 (ruling B): android 31.2 x 1.5 on the pixel grid (47), web 32 x 1.5 (48); iOS keeps the first line at L (28.67), pinned narrowly by the iOS lineHeightMultiple ruling"
+    },
+    {
+      "fixture": "Label/linkable__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 42.33
+        },
+        "android": {
+          "height": 72
+        },
+        "web": {
+          "height": 72
+        }
+      },
+      "reason": "each OS's own line-break opportunities, not glyph width: 'See https://example.com/conformance for details' at 200 — iOS breaks the URL after '/', 2 lines; android moves the URL to the next line and splits the word (conf|ormance), 3 lines; web moves it and lets the unbreakable URL run past the box (overflow-wrap normal), 3 lines; ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/Label__text-5ed92def",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 42.33
+        },
+        "android": {
+          "height": 72
+        },
+        "web": {
+          "height": 72
+        }
+      },
+      "reason": "the linkable text without linkable: each OS's own line-break opportunities (see Label/linkable__*); ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 20.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/Label*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 20.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "common/border*_on_Label__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 20.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "one undeclared line inside a border drawn over the content (borderContentBox): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "View/distribution__fillequally",
+      "id": "box_*",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 20.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "the two Label children of a fillEqually row are one undeclared line high (their widths agree): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "common/distribution__fillequally",
+      "id": "box_*",
+      "fields": [
+        "height"
+      ],
+      "reason": "the two Label children are one undeclared line high, ios 20.33 / android 24 (their widths agree); web does not render common.distribution (platform swift / kotlin), so expected cannot name all three faces: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "IconLabel/iconPosition__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 88.33
+        },
+        "android": {
+          "height": 93
+        },
+        "web": {
+          "height": 93
+        }
+      },
+      "reason": "a 64 icon, the 5 margin and one line of text in a column: ios 64 + 5 + 19.33, android and web 64 + 5 + 24; ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "IconLabel/*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 19.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "an IconLabel's text line is its OS's Label line (user ruling 2026-10-05; iOS measured 19.33, its IconLabel default font): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/IconLabel*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 19.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "an IconLabel's text line is its OS's Label line (see IconLabel/*): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Indicator/animating__*",
+      "id": "target",
+      "fields": [
+        "width",
+        "height"
+      ],
+      "reason": "the platform's own spinner (indicatorStyle medium is 'the platform's own'): ios 20 (UIActivityIndicator medium), android 40 (Material3 CircularProgressIndicator); web does not render Indicator (platform swift / kotlin)"
+    },
+    {
+      "fixture": "Indicator/indicatorStyle__medium",
+      "id": "target",
+      "fields": [
+        "width",
+        "height"
+      ],
+      "reason": "the platform's own spinner, as Indicator/animating__*"
+    },
+    {
+      "fixture": "__control/Indicator",
+      "id": "target",
+      "fields": [
+        "width",
+        "height"
+      ],
+      "reason": "the platform's own spinner, as Indicator/animating__*"
+    },
+    {
+      "fixture": "Indicator/indicatorStyle__linear",
+      "id": "target",
+      "fields": [
+        "width"
+      ],
+      "reason": "a linear indicator's own width under wrapContent: ios ProgressView fills the proposed width (402), android Material3 LinearProgressIndicator is 240 wide; the 4 high bar agrees; web does not render Indicator"
     }
   ]
 }
