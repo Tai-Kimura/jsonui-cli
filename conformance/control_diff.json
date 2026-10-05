@@ -1357,18 +1357,6 @@
       ]
     },
     {
-      "fixture": "SafeAreaView/safeAreaInsetPositions__alias_edges",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
-      "fixture": "SafeAreaView/safeAreaInsetPositions__static",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "ScrollView/orientation__horizontal",
       "platforms": [
         "android",
@@ -2315,12 +2303,6 @@
         "android",
         "ios",
         "web"
-      ]
-    },
-    {
-      "fixture": "View/safeAreaInsetPositions__static",
-      "platforms": [
-        "ios"
       ]
     },
     {

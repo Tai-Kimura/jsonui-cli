@@ -310,26 +310,6 @@
       "note": ""
     },
     {
-      "fixture": "SafeAreaView/safeAreaInsetPositions__alias_edges",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: joins SafeAreaView/safeAreaInsetPositions__static. The inset reserved is whatever the host environment reports, and it is zero for a 200x200 box nested in the page on the web host (no notch in the desktop viewport, env(safe-area-inset-*) = 0) — measured 0 px on web at HEAD for all three safe-area fixtures — while the ios device has real insets to reserve. Not a dropped spelling: the codegen differential --paired reads it on all three. Family: container-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "SafeAreaView/safeAreaInsetPositions__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: ios draws inset/orientation chrome at this size; android/web render the default identically. Geometry probe closes it. Family: container-behavior.",
-      "note": ""
-    },
-    {
       "fixture": "ScrollView/defaultScrollAnchor__top",
       "verdict": "uniformly-inert",
       "declared": "top",
@@ -775,16 +755,6 @@
       "verdict": "uniformly-inert",
       "declared": "topToBottom",
       "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "View/safeAreaInsetPositions__static",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated container behavior: joins SafeAreaView/safeAreaInsetPositions__static. The inset reserved is whatever the host environment reports, and it is zero for a 200x200 box nested in the page on the web host (no notch in the desktop viewport, env(safe-area-inset-*) = 0) — measured 0 px on web at HEAD for all three safe-area fixtures — while the ios device has real insets to reserve. Not a dropped spelling: the codegen differential --paired reads it on all three. Family: container-behavior.",
       "note": ""
     },
     {

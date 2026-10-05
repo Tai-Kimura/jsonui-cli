@@ -114,12 +114,12 @@ RSpec.describe SjuiTools::SwiftUI::Views::ModifierHelper do
     end
 
     it 'reserves the safe area on the named edges' do
-      expect(lines_for('safeAreaInsetPositions' => %w[top bottom])).to eq(['.safeAreaPadding([.top, .bottom])'])
-      expect(lines_for('safeAreaInsetPositions' => %w[leading trailing])).to eq(['.safeAreaPadding([.leading, .trailing])'])
+      expect(lines_for('safeAreaInsetPositions' => %w[top bottom])).to eq(['.safeAreaPadding([.top, .bottom], 0)'])
+      expect(lines_for('safeAreaInsetPositions' => %w[leading trailing])).to eq(['.safeAreaPadding([.leading, .trailing], 0)'])
     end
 
     it 'reserves every edge for all' do
-      expect(lines_for('safeAreaInsetPositions' => 'all')).to eq(['.safeAreaPadding(.all)'])
+      expect(lines_for('safeAreaInsetPositions' => 'all')).to eq(['.safeAreaPadding(.all, 0)'])
     end
 
     # The items are declared top / bottom / leading / trailing / vertical /

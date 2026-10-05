@@ -126,17 +126,6 @@
       "reason": "Same as clip/middle: CSS has one truncation. See that row."
     },
     {
-      "component": "SafeAreaView",
-      "attribute": "safeAreaInsetPositions",
-      "platform": "ios",
-      "cases": [
-        "static",
-        "vertical"
-      ],
-      "owner": "B (sjui) — spelling equivalence, no code owner",
-      "reason": "Not a defect: the two declarations name the same edge set. The fixture's static value is [\"top\", \"bottom\"] and the vertical case is [\"vertical\"]; the SSoT's `vertical` item is the top and bottom edges together. Both iOS paths resolve it that way — SwiftJsonUI Dynamic inserts `.vertical` into the Edge.Set (DynamicModifierHelper) and sjui codegen emits `.safeAreaPadding(.vertical)` against `.safeAreaPadding([.top, .bottom])` — and `Edge.Set.vertical` IS `[.top, .bottom]`, so both reserve exactly the same insets and must draw one picture. The leading / trailing cases on the same host measure apart from static, which is the control that says the attribute is honoured and not merely inert."
-    },
-    {
       "component": "TextField",
       "attribute": "borderStyle",
       "platform": "android",
@@ -311,17 +300,6 @@
       ],
       "owner": "canon (adjudicated 51-orch) — fixture-side follow-up owned by D",
       "reason": "Adjudicated 51-orch (wave-end bake, run 31160838024): the canonical ios distribution ruling (2026-08-07) makes `fill` put `.frame(maxWidth: .infinity)` on every child, and the probe's children are IDENTICAL — equal division (fillEqually) and expand-every-child (fill) produce the same geometry for equal children, so the collapse is fixture-shape coincidence, not a dead face: fillProportionally and equalSpacing discriminate in the same run. Fixture-side follow-up owned by D: unequal-content children would separate the two."
-    },
-    {
-      "component": "View",
-      "attribute": "safeAreaInsetPositions",
-      "platform": "ios",
-      "cases": [
-        "static",
-        "vertical"
-      ],
-      "owner": "B (sjui) — spelling equivalence, no code owner",
-      "reason": "Not a defect: the two declarations name the same edge set. The fixture's static value is [\"top\", \"bottom\"] and the vertical case is [\"vertical\"]; the SSoT's `vertical` item is the top and bottom edges together. Both iOS paths resolve it that way — SwiftJsonUI Dynamic inserts `.vertical` into the Edge.Set (DynamicModifierHelper) and sjui codegen emits `.safeAreaPadding(.vertical)` against `.safeAreaPadding([.top, .bottom])` — and `Edge.Set.vertical` IS `[.top, .bottom]`, so both reserve exactly the same insets and must draw one picture. The leading / trailing cases on the same host measure apart from static, which is the control that says the attribute is honoured and not merely inert."
     },
     {
       "component": "common",

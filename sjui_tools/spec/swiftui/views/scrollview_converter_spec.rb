@@ -35,6 +35,35 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
       end
     end
 
+    # The content stack fills the ScrollView's width through a frame, and
+    # the frame places the stack where it is aligned. Without an alignment
+    # the frame centred it: a 150-wide child of a 200-wide vertical
+    # ScrollView drew at x 25 where Android and web drew 0 (frame-parity,
+    # 2026-10-05; declaration: gravityDefaults top|start).
+    context 'where the content stack sits' do
+      def frame_line(component)
+        described_class.new(component).convert.lines.find { |l| l.include?('.frame(maxWidth: .infinity, maxHeight: .infinity') }.to_s
+      end
+      let(:child) { { 'type' => 'View', 'width' => 150, 'height' => 600 } }
+
+      it 'at the top leading edge with several children' do
+        expect(frame_line({ 'type' => 'ScrollView', 'child' => [child, child] })).to include('alignment: .topLeading')
+      end
+
+      it 'at the top leading edge with one child' do
+        expect(frame_line({ 'type' => 'ScrollView', 'child' => [child] })).to include('alignment: .topLeading')
+      end
+
+      it "at the child's gravity with one child" do
+        expect(frame_line({ 'type' => 'ScrollView', 'child' => [child.merge('gravity' => 'right')] })).to include('alignment: .topTrailing')
+        expect(frame_line({ 'type' => 'ScrollView', 'child' => [child.merge('gravity' => 'center')] })).to include('alignment: .top)')
+      end
+
+      it 'at the top leading edge of a horizontal scroll' do
+        expect(frame_line({ 'type' => 'ScrollView', 'horizontalScroll' => true, 'child' => [child, child] })).to include('alignment: .topLeading')
+      end
+    end
+
     # keyboardDismissMode is opt-in: unset must emit nothing (keyboard stays
     # on scroll — user-confirmed default), a valid value passes through.
     context 'with keyboardDismissMode' do

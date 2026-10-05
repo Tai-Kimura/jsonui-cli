@@ -118,6 +118,7 @@ module SjuiTools
                 else
                   'alignment: .leading'
                 end
+                frame_alignment = { 'center' => '.top', 'right' => '.topTrailing' }.fetch(horizontal, '.topLeading')
                 
                 add_line "#{stack_type}(#{alignment}, spacing: 0) {"
                 indent do
@@ -132,6 +133,7 @@ module SjuiTools
               else
                 # HStack for horizontal scroll
                 alignment = 'alignment: .top'
+                frame_alignment = '.topLeading'
                 add_line "#{stack_type}(#{alignment}, spacing: 0) {"
                 indent do
                   # Through the visibility door (base_view_converter): a
@@ -143,8 +145,12 @@ module SjuiTools
               end
               add_line "}"
 
-              # Add frame modifier to fill available space in ScrollView
-              add_modifier_line ".frame(maxWidth: .infinity, maxHeight: .infinity)"
+              # Add frame modifier to fill available space in ScrollView.
+              # Placed where the stack is aligned: without an alignment the
+              # frame centres the stack, so a leading child of a wider
+              # ScrollView drew in its middle (x 25 for a 150 child in 200,
+              # frame-parity 2026-10-05) where Android and web drew it at 0.
+              add_modifier_line ".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: #{frame_alignment})"
             else
               # デフォルトのアライメントを左上にする
               alignment = axes == '.vertical' ? 'alignment: .leading' : 'alignment: .top'
@@ -158,8 +164,9 @@ module SjuiTools
               end
               add_line "}"
               
-              # Add frame modifier to fill available space in ScrollView
-              add_modifier_line ".frame(maxWidth: .infinity, maxHeight: .infinity)"
+              # Add frame modifier to fill available space in ScrollView, at
+              # the stack's top | start (see the single-child branch).
+              add_modifier_line ".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)"
             end
           end
           add_line "}"
