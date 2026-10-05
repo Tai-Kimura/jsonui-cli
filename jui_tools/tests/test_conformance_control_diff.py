@@ -9,6 +9,7 @@ with every gate green.
 
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -284,6 +285,53 @@ class IgnoreBottomTest(unittest.TestCase):
             a.save(pa)
             b.save(pb)
             self.assertEqual(diff_pixels(pa, pb, ignore_bottom=16), 1)
+
+
+class AndroidCiLastRowTest(unittest.TestCase):
+    """Android CI: the app's last row above the taskbar (y 1479 of 1600)
+    flips by one level between captures (PLATFORM_ENV_IGNORE_BOTTOM)."""
+
+    def setUp(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:  # pragma: no cover - environment dependent
+            raise unittest.SkipTest("Pillow not installed")
+
+    def _pair(self, tmp, row):
+        from PIL import Image
+        a = Image.new("RGB", (64, 1600), (254, 247, 255))
+        b = a.copy()
+        for x in range(64):
+            b.putpixel((x, row), (253, 246, 254))
+        pa, pb = Path(tmp) / "a.png", Path(tmp) / "b.png"
+        a.save(pa)
+        b.save(pb)
+        return pa, pb
+
+    def _changed(self, tmp, row, env):
+        from jui_cli.conformance.control_diff import diff_pixels, ignore_bands
+        top, bottom = ignore_bands("android", env)
+        return diff_pixels(*self._pair(tmp, row), ignore_top=top, ignore_bottom=bottom)
+
+    def test_the_last_row_is_outside_the_ci_band_at_120_and_inside_at_121(self):
+        from jui_cli.conformance.baseline import chrome_crop
+        from jui_cli.conformance.control_diff import diff_pixels
+        with tempfile.TemporaryDirectory() as tmp:
+            pa, pb = self._pair(tmp, 1479)
+            # chrome_crop's 120 alone still sees the row: the active the band fixes.
+            self.assertEqual(chrome_crop("android", "ci")[1], 120)
+            self.assertEqual(diff_pixels(pa, pb, ignore_top=48, ignore_bottom=120), 64)
+            self.assertEqual(self._changed(tmp, 1479, "ci"), 0)
+
+    def test_the_row_above_it_is_still_compared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._changed(tmp, 1478, "ci"), 64)
+
+    def test_local_android_keeps_its_bottom_rows(self):
+        from jui_cli.conformance.control_diff import ignore_bands
+        self.assertEqual(ignore_bands("android", "local")[1], 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._changed(tmp, 1479, "local"), 64)
 
 
 class OffFaceExclusionTest(unittest.TestCase):

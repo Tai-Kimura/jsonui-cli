@@ -82,6 +82,19 @@ LEDGER_NAME = "control_diff.json"
 #: indicator is there in every iOS environment.
 PLATFORM_IGNORE_BOTTOM = {"ios": 64}
 
+#: Bottom strip (px) excluded from the fixture-vs-control comparison for one
+#: (platform, env), on top of chrome_crop's band. Android CI: chrome_crop
+#: stops at the taskbar (120 of 1600), and the app's last row above it, y
+#: 1479, flips between (254, 247, 255) and (253, 246, 254) from one capture
+#: to the next. That one level on 2560 px made a fixture identical to its
+#: control count as active: 9 fixtures in run 37368630695 (2026-10-06; the
+#: four common/borderStyle, four clipToBounds overflow cases and
+#: Blur/blurRadius__static) and 2 in 37232779572, whose diff was exactly that
+#: row. Active, they entered value discrimination and read as six collapses.
+#: Kept here, not in chrome_crop: the hashes and parity read that band, and
+#: (android, local) has no band at all, its bottom rows being real content.
+PLATFORM_ENV_IGNORE_BOTTOM = {("android", "ci"): 121}
+
 
 def ignore_bands(platform: str, env: str | None) -> tuple[int, int]:
     """``(top, bottom)`` rows this comparison must not look at.
@@ -113,7 +126,8 @@ def ignore_bands(platform: str, env: str | None) -> tuple[int, int]:
     # either one alone drops whatever the other knew, and today that would
     # be iOS's 64px — the fade that produced 14 false actives on 2026-08-03.
     # Whichever band is taller covers both claims about the same rows.
-    return (top, max(bottom, PLATFORM_IGNORE_BOTTOM.get(platform, 0)))
+    return (top, max(bottom, PLATFORM_IGNORE_BOTTOM.get(platform, 0),
+                     PLATFORM_ENV_IGNORE_BOTTOM.get((platform, env), 0)))
 
 
 def ledger_path(conformance_dir) -> Path:
