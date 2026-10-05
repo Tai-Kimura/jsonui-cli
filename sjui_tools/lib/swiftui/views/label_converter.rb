@@ -257,8 +257,14 @@ module SjuiTools
             # measures from the font in force (ruling B; the first line stays
             # one line, an iOS limit). Converted here it was (m - 1) x
             # fontSize — the size, not the line. It wins over lineSpacing.
-            if @component['lineHeightMultiple']
-              multiple = @component['lineHeightMultiple']
+            #
+            # The hint's own lineHeightMultiple wins while the hint is
+            # showing, as its size and font do: `hintAttributes:
+            # {lineHeightMultiple: 1.5}` was read by nothing on this face
+            # (SwiftJsonUI Dynamic: LabelConverter, the same cascade).
+            hint_multiple = hint_static ? hint[:line_height_multiple] : nil
+            if hint_multiple || @component['lineHeightMultiple']
+              multiple = hint_multiple || @component['lineHeightMultiple']
               add_line "lineHeightMultiple: #{bound_number(multiple) || multiple.to_f},"
             elsif @component['lineSpacing']
               add_line "lineSpacing: #{bound_number(@component['lineSpacing']) || @component['lineSpacing'].to_f},"
@@ -512,7 +518,8 @@ module SjuiTools
             text: hint,
             color: color_value ? get_swiftui_color(color_value) : 'Color(SwiftJsonUIConfiguration.shared.colors.placeholder)',
             size: attrs['fontSize'],
-            font: attrs['font']
+            font: attrs['font'],
+            line_height_multiple: attrs['lineHeightMultiple']
           }
         end
 

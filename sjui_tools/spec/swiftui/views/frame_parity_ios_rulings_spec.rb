@@ -155,5 +155,24 @@ RSpec.describe 'iOS codegen: the frame-parity families of 2026-10-05' do
     it 'draws a hint without a font at the regular weight (control)' do
       expect(label('hintAttributes' => { 'fontSize' => 24 })).not_to include('fontWeight')
     end
+
+    # The hint's lineHeightMultiple was read by nothing on this face. It goes
+    # to the library as the Label's does (each line m x the line of the
+    # hint's own size; the iOS first line stays L, ruling B's iOS limit).
+    it 'takes the line height multiple from hintAttributes' do
+      expect(label('hintAttributes' => { 'fontSize' => 24, 'lineHeightMultiple' => 1.5 }))
+        .to include('lineHeightMultiple: 1.5,')
+    end
+
+    it "lets the hint's multiple win over the Label's while it shows" do
+      code = label('lineHeightMultiple' => 2.0, 'hintAttributes' => { 'lineHeightMultiple' => 1.5 })
+      expect(code).to include('lineHeightMultiple: 1.5,')
+      expect(code).not_to include('lineHeightMultiple: 2.0,')
+    end
+
+    it "keeps the Label's own multiple when the hint declares none (control)" do
+      expect(label('lineHeightMultiple' => 2.0, 'hintAttributes' => { 'fontSize' => 24 }))
+        .to include('lineHeightMultiple: 2.0,')
+    end
   end
 end
