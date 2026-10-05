@@ -269,13 +269,13 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       it 'multiplies the line the size brings' do
         converter = create_converter({ 'type' => 'Label', 'text' => 'T', 'fontSize' => 24, 'lineHeightMultiple' => 1.8 })
         converter.send(:build_class_name)
-        expect(converter.send(:build_style_attr)).to include("lineHeight: 'calc(var(--text-2xl--line-height) * 1.8)'")
+        expect(converter.send(:build_style_attr)).to include("lineHeight: 'calc(var(--text-2xl--line-height, 1.3333) * 1.8)'")
       end
 
       it 'adds lineSpacing to that line' do
         converter = create_converter({ 'type' => 'Label', 'text' => 'T', 'fontSize' => 24, 'lineSpacing' => 16 })
         converter.send(:build_class_name)
-        expect(converter.send(:build_style_attr)).to include("lineHeight: 'calc(var(--text-2xl--line-height) * 1em + 16px)'")
+        expect(converter.send(:build_style_attr)).to include("lineHeight: 'calc(var(--text-2xl--line-height, 1.3333) * 1em + 16px)'")
       end
 
       it 'multiplies the highlight font size\'s line for the highlight' do
@@ -283,7 +283,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
           'type' => 'Label', 'text' => 'Hi', 'selected' => true,
           'highlightAttributes' => { 'fontSize' => 24, 'lineHeightMultiple' => 1.5 }
         }).convert
-        expect(result).to include("lineHeight: 'calc(var(--text-2xl--line-height) * 1.5)'")
+        expect(result).to include("lineHeight: 'calc(var(--text-2xl--line-height, 1.3333) * 1.5)'")
         expect(result).not_to include('lineHeight: 2.25')
       end
 
@@ -291,6 +291,30 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         converter = create_converter({ 'type' => 'Label', 'text' => 'T', 'fontSize' => 17, 'lineHeightMultiple' => 1.8 })
         converter.send(:build_class_name)
         expect(converter.send(:build_style_attr)).to include('lineHeight: 2.7')
+      end
+    end
+
+    # hintAttributes: `font` is a weight name or a family, and the hint's own
+    # lineHeightMultiple is m x the line of its size (Label/hintAttributes__static
+    # drew a regular serif hint one line 36 high where android draws bold 24,
+    # two lines of 1.5 x L).
+    context 'with hintAttributes font and lineHeightMultiple' do
+      it 'draws a weight name as a weight and multiplies the hint size\'s line' do
+        out = create_converter({
+          'type' => 'Label', 'width' => 200, 'hint' => 'Conformance Hint',
+          'hintAttributes' => { 'font' => 'bold', 'fontSize' => 24, 'lineHeightMultiple' => 1.5 }
+        }).convert
+        expect(out).to include('fontWeight: 700')
+        expect(out).not_to include("fontFamily: 'bold'")
+        expect(out).to include("lineHeight: 'calc(var(--text-2xl--line-height, 1.3333) * 1.5)'")
+      end
+
+      it 'keeps a family name a family' do
+        out = create_converter({
+          'type' => 'Label', 'hint' => 'H', 'hintAttributes' => { 'font' => 'Georgia' }
+        }).convert
+        expect(out).to include("fontFamily: 'Georgia'")
+        expect(out).not_to include('fontWeight')
       end
     end
 
@@ -308,7 +332,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         # first line and below the last is taken back by the text's wrapper
         # (user ruling B, 2026-10-05: between lines only). A size on
         # Tailwind's scale brings its own line (text-base: its var).
-        expect(result).to include("lineHeight: 'calc(var(--text-base--line-height) * 1em + 8px)'")
+        expect(result).to include("lineHeight: 'calc(var(--text-base--line-height, 1.5) * 1em + 8px)'")
       end
 
       it 'uses default fontSize of 16 when not specified' do

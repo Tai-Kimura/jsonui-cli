@@ -141,7 +141,19 @@ module RjuiTools
             parts << "color: '#{css}'"
           end
           parts << "fontSize: '#{TailwindMapper.rem(attrs['fontSize'])}'" if attrs['fontSize']
-          parts << "fontFamily: #{JsonUIShared::StringLiterals.ts_single(attrs['font'])}" if attrs['font']
+          # `font` is a weight name or a family, as on the Label itself
+          # (TailwindMapper.map_font): `bold` went to fontFamily and the hint
+          # fell back to the browser's serif at the regular weight.
+          if attrs['font']
+            weight = HINT_FONT_WEIGHTS[attrs['font'].to_s.downcase]
+            parts << (weight ? "fontWeight: #{weight}" : "fontFamily: #{JsonUIShared::StringLiterals.ts_single(attrs['font'])}")
+          end
+          # The hint's own lineHeightMultiple: m x the line of its font size
+          # (ruling B, own_line) — it was not read at all.
+          if (multiple = attrs['lineHeightMultiple'])
+            line = multiplied_line(attrs['fontSize'] || attributes['fontSize'], multiple)
+            parts << "lineHeight: #{line}"
+          end
           { text: hint, parts: parts }
         end
 
@@ -315,8 +327,26 @@ module RjuiTools
         # 1.5 x 32 = 48. A bound size cannot name its class here and keeps 1.5.
         def own_line(size)
           token = TailwindMapper::FONT_SIZE_MAP[size]
-          token ? "var(--#{token}--line-height)" : DEFAULT_LINE_HEIGHT.to_s
+          return DEFAULT_LINE_HEIGHT.to_s unless token
+
+          # Tailwind emits a theme variable only where a utility uses it; the
+          # fallback is the default theme's own value, so a hint or highlight
+          # whose size class is not on the page still gets its line.
+          "var(--#{token}--line-height, #{TAILWIND_LINE_HEIGHTS.fetch(token)})"
         end
+
+        # Tailwind v4's default --text-*--line-height values (line / size).
+        TAILWIND_LINE_HEIGHTS = {
+          'text-xs' => 1.3333, 'text-sm' => 1.4286, 'text-base' => 1.5, 'text-lg' => 1.5556,
+          'text-xl' => 1.4, 'text-2xl' => 1.3333, 'text-3xl' => 1.2, 'text-4xl' => 1.1111,
+          'text-5xl' => 1, 'text-6xl' => 1
+        }.freeze
+
+        # CSS weights for a hint's `font` weight name (inline style, not a class).
+        HINT_FONT_WEIGHTS = {
+          'thin' => 100, 'extralight' => 200, 'light' => 300, 'normal' => 400, 'medium' => 500,
+          'semibold' => 600, 'bold' => 700, 'extrabold' => 800, 'heavy' => 800, 'black' => 900
+        }.freeze
 
         # own_line as a style value (a bare number or a quoted calc()).
         def own_line_value(size)
