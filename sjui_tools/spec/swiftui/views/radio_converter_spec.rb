@@ -315,4 +315,24 @@ RSpec.describe SjuiTools::SwiftUI::Views::RadioConverter do
       expect(bare[/Text\("a"\)\n(?:\s+\..*\n)*/]).not_to include('foregroundColor')
     end
   end
+
+  # A group (items) is one element that CONTAINS its options; a single radio
+  # stays one element read as its label (ticket sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+  describe 'the layout id on a group' do
+    it 'makes a titled group a containing element labelled by its title' do
+      code = described_class.new({ 'type' => 'Radio', 'id' => 'rg', 'text' => 'Pick', 'items' => %w[A B] }).convert
+      expect(code).to include('.accessibilityElement(children: .contain)')
+      expect(code).not_to include('.accessibilityElement(children: .ignore)')
+    end
+
+    it 'makes an untitled group a containing element too' do
+      code = described_class.new({ 'type' => 'Radio', 'id' => 'rg', 'items' => %w[A B] }).convert
+      expect(code).to include('.accessibilityElement(children: .contain)')
+    end
+
+    it 'keeps a single radio one element read as its label' do
+      code = described_class.new({ 'type' => 'Radio', 'id' => 'r', 'text' => 'One' }).convert
+      expect(code).to include('.accessibilityElement(children: .ignore)')
+    end
+  end
 end

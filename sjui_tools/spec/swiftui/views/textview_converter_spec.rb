@@ -407,14 +407,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
       expect(code.index('hint:')).to be < code.index('isFocused:')
     end
 
-    it 'emits isFocused as the last argument, after maxHeight, without a trailing comma' do
+    # isFocused, then the layout id — the library declares them in that order
+    # (the id goes on the TextEditor itself, not around the hint; ticket
+    # sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+    it 'emits isFocused after maxHeight and the id as the last argument, without a trailing comma' do
       converter = described_class.new({
         'type' => 'TextView', 'id' => 'note_input', 'text' => '@{note}',
         'hint' => 'placeholder', 'fontSize' => 15, 'minHeight' => 24, 'maxHeight' => 100
       })
       code = converter.convert
       expect(code.index('maxHeight: 100,')).to be < code.index('isFocused:')
-      expect(code).to match(/isFocused: \$data\.noteInputIsFocused\s*\)/)
+      expect(code).to match(/isFocused: \$data\.noteInputIsFocused,\s*accessibilityIdentifier: "note_input"\s*\)/)
+      expect(code).not_to include('.accessibilityIdentifier("note_input")')
     end
 
     # A read-only TextView was fully editable on iOS: both attributes are
@@ -474,5 +478,19 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
       end
     end
   end
-end
 
+  # The id goes on the TextEditor (an init argument), not around the hint
+  # (ticket sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+  describe 'the layout id on the editor itself' do
+    it 'passes it to TextViewWithPlaceholder and puts none on the composite' do
+      code = described_class.new({ 'type' => 'TextView', 'id' => 'tv', 'hint' => 'H' }).convert
+      expect(code).to include('accessibilityIdentifier: "tv"')
+      expect(code).not_to include('.accessibilityIdentifier(')
+    end
+
+    it 'passes none for a statically hidden TextView' do
+      code = described_class.new({ 'type' => 'TextView', 'id' => 'tv', 'hidden' => true }).convert
+      expect(code).not_to include('accessibilityIdentifier')
+    end
+  end
+end

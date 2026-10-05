@@ -267,6 +267,14 @@ module SjuiTools
             :component_specific,
             ".onLongPressGesture(minimumDuration: 0, pressing: { #{state_var} = $0 }, perform: {})"
           )
+          # One element: the base image and its pressed-state copy are one
+          # image to a reader, and the element the id names. As two, both took
+          # the id (SwiftUI hands an identifier on a non-element to every
+          # element inside, and `.accessibilityHidden` does not hold under an
+          # explicit accessibility container; ticket
+          # sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+          # SwiftJsonUI's HighlightableImage forms it the same way.
+          @modifier_bag.append(:component_specific, ".accessibilityElement(children: .combine)")
         end
       end
     end

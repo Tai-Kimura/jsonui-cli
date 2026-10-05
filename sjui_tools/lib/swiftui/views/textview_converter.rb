@@ -10,6 +10,10 @@ module SjuiTools
       class TextViewConverter < BaseViewConverter
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
         include SjuiTools::SwiftUI::Views::TextStyleHelper
+        def identifier_placed_inside?
+          true
+        end
+
         def convert
           id = @component['id'] || 'textEditor'
 
@@ -216,6 +220,13 @@ module SjuiTools
             if @component['id']
               focus_var = "#{to_camel_case(@component['id'])}IsFocused"
               add_line "isFocused: $data.#{focus_var},"
+            end
+
+            # The id on the TextEditor itself, not around the hint
+            # (BaseViewConverter#identifier_placed_inside?). Declared after
+            # isFocused in the library init.
+            if (id_expr = inner_accessibility_identifier_expr)
+              add_line "accessibilityIdentifier: #{id_expr},"
             end
 
             # 最後のカンマを削除

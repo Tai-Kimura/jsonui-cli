@@ -506,11 +506,37 @@ module SjuiTools
         # (accessibility_merge_hazard?); every other id-bearing container
         # gets just .accessibilityElement(children: .contain) +
         # .accessibilityIdentifier (2 flat modifier lines).
+        # A composite leaf whose converter puts the id on its INPUT itself
+        # (TextField, TextView) answers true, and no identifier goes on the
+        # composite: SwiftUI hands an identifier on a view that is not an
+        # accessibility element to every element inside it — the clear
+        # button, the styled placeholder, the hint — and hiding those parts
+        # does not hold under an explicit accessibility container (measured,
+        # XCUITest iOS 26.5; ticket
+        # sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+        def identifier_placed_inside?
+          false
+        end
+
+        # The identifier expression for a converter that places it inside
+        # (identifier_placed_inside?), with the same rules as below: none for
+        # a statically invisible view, an empty one while a bound `hidden`
+        # holds.
+        def inner_accessibility_identifier_expr
+          return nil if @component['id'].nil? || @component['visibility'] == 'invisible' || @component['hidden'] == true
+
+          hidden_binding = @component['hidden'] if is_binding?(@component['hidden'])
+          return "#{binding_data_expr(hidden_binding)} ? \"\" : #{swift_string_literal(@component['id'])}" if hidden_binding
+
+          swift_string_literal(@component['id'])
+        end
+
         def apply_accessibility_identifier
           # hidden: true is the boolean shorthand for visibility:"invisible"
           # (space-kept, not drawn, hidden from accessibility) — both static
           # spellings must suppress the identifier for the same reason.
           return if @component['visibility'] == 'invisible' || @component['hidden'] == true
+          return if identifier_placed_inside?
 
           # A tappable combined into one button carries its own element
           # (tap_accessibility_lines): the identifier lands on it, and the

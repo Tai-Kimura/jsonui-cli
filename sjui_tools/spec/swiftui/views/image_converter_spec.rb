@@ -413,4 +413,19 @@ RSpec.describe 'sjui image accessibility from alt' do
       expect(printed).not_to include('[info]')
     end
   end
+
+  # A highlightSrc image is ONE element: base and pressed copy both took the
+  # id (ticket sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+  describe 'highlightSrc and the layout id' do
+    it 'combines the base image and its pressed copy into one element' do
+      code = SjuiTools::SwiftUI::Views::ImageConverter.new({ 'type' => 'Image', 'id' => 'im', 'src' => 'a', 'highlightSrc' => 'b',
+                                   'width' => 40, 'height' => 40 }).convert
+      expect(code.index('.accessibilityElement(children: .combine)')).to be > code.index('.overlay(')
+    end
+
+    it 'leaves an image with no highlight as it was' do
+      code = SjuiTools::SwiftUI::Views::ImageConverter.new({ 'type' => 'Image', 'id' => 'im', 'src' => 'a', 'width' => 40, 'height' => 40 }).convert
+      expect(code).not_to include('.accessibilityElement(children: .combine)')
+    end
+  end
 end
