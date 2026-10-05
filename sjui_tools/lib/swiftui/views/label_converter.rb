@@ -245,8 +245,14 @@ module SjuiTools
             # bound lineSpacing froze to no spacing at all and a bound
             # lineHeightMultiple froze to (0 - 1) * fontSize — a NEGATIVE
             # constant that pulled the lines together.
+            # lineHeightMultiple goes to the library as it is: the spacing
+            # is (m - 1) x the font's own line, which PartialAttributedText
+            # measures from the font in force (ruling B; the first line stays
+            # one line, an iOS limit). Converted here it was (m - 1) x
+            # fontSize — the size, not the line. It wins over lineSpacing.
             if @component['lineHeightMultiple']
-              add_line "lineSpacing: #{line_spacing_from_multiple(@component['lineHeightMultiple'])},"
+              multiple = @component['lineHeightMultiple']
+              add_line "lineHeightMultiple: #{bound_number(multiple) || multiple.to_f},"
             elsif @component['lineSpacing']
               add_line "lineSpacing: #{bound_number(@component['lineSpacing']) || @component['lineSpacing'].to_f},"
             end
@@ -501,16 +507,6 @@ module SjuiTools
         # UIKit's formula, `(multiple - 1) * fontSize`, with either operand
         # possibly bound. Both static operands keep the exact arithmetic the
         # generator did before (a Ruby Float, printed the same way).
-        def line_spacing_from_multiple(multiple)
-          bound_multiple = bound_number(multiple)
-          bound_size = bound_number(@component['fontSize'])
-          return (multiple.to_f - 1) * (@component['fontSize'] || 17).to_i if bound_multiple.nil? && bound_size.nil?
-
-          multiple_expr = bound_multiple || multiple.to_f
-          size_expr = bound_size || (@component['fontSize'] || 17).to_i
-          "((#{multiple_expr} - 1) * #{size_expr})"
-        end
-
         # Get fontColor with binding support
         # Supports both direct color values and @{propertyName} binding expressions
         def get_font_color_with_binding(font_color)

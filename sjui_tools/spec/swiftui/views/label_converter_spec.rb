@@ -86,6 +86,29 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
       end
     end
 
+    # SwiftJsonUI 10.29.6 takes the multiple itself (`lineHeightMultiple:`,
+    # after `lineSpacing:`) and bases the spacing on the font's line.
+    context 'with lineHeightMultiple' do
+      let(:component) do
+        { 'type' => 'Label', 'text' => 'Three lines', 'lineHeightMultiple' => 1.8, 'lines' => 3 }
+      end
+
+      it 'generates compilable Swift code', :swift_compile do
+        code = described_class.new(component).convert
+        expect(code).to include('lineHeightMultiple: 1.8,')
+
+        full_code = <<~SWIFT
+          struct TestView: View {
+              var body: some View {
+                  #{code}
+              }
+          }
+        SWIFT
+
+        expect(full_code).to compile_as_swift
+      end
+    end
+
     context 'with textAlign' do
       let(:component) do
         {

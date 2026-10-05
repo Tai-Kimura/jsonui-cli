@@ -73,10 +73,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
   end
 
   describe 'line spacing' do
-    it 'derives lineSpacing from lineHeightMultiple and fontSize' do
+    # The spacing is (m - 1) x the font's own line (ruling B), which the
+    # library measures from the font; converted here it was (m - 1) x
+    # fontSize, against the size instead of the line.
+    it 'passes lineHeightMultiple to the library, and it wins over lineSpacing' do
       code = convert('type' => 'Label', 'text' => 't',
-                     'lineHeightMultiple' => 1.5, 'fontSize' => 20)
-      expect(code).to include('lineSpacing: 10.0,')
+                     'lineHeightMultiple' => 1.5, 'lineSpacing' => 4, 'fontSize' => 20)
+      expect(code).to include('lineHeightMultiple: 1.5,')
+      expect(code).not_to include('lineSpacing:')
     end
 
     it 'passes lineSpacing through as a float' do
