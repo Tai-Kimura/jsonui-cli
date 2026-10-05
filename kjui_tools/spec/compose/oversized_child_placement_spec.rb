@@ -100,6 +100,40 @@ RSpec.describe 'kjui codegen: an oversized child sits where its container places
     end
   end
 
+  # Ruling S (2026-10-05): a fixed-size row's children are placed in sequence
+  # and overflow past its edge. Compose measured them against the space left,
+  # so the child crossing the edge was coerced and every later one moved up
+  # (padding 8: box_f at 172, web and iOS 208). KotlinJsonUI Dynamic:
+  # mainAxisOverflowWrapper.
+  describe 'a fixed-size row of fixed-size children' do
+    def wrap(node) = KjuiTools::Compose::Components::ContainerComponent.send(:main_axis_overflow_wrapper, node, node['orientation'] == 'vertical' ? 'Column' : 'Row', node['child'])
+    let(:kid) { { 'type' => 'View', 'width' => 40, 'height' => 40 } }
+
+    it 'is measured unbounded along its axis, anchored by its gravity' do
+      expect(wrap({ 'orientation' => 'horizontal', 'width' => 200, 'child' => [kid, kid] }))
+        .to eq('.wrapContentWidth(align = BiasAlignment.Horizontal(-1.0f), unbounded = true)')
+      expect(wrap({ 'orientation' => 'horizontal', 'width' => 200, 'gravity' => 'centerHorizontal', 'child' => [kid] }))
+        .to eq('.wrapContentWidth(align = BiasAlignment.Horizontal(0.0f), unbounded = true)')
+      expect(wrap({ 'orientation' => 'vertical', 'height' => 200, 'gravity' => 'bottom', 'child' => [kid] }))
+        .to eq('.wrapContentHeight(align = BiasAlignment.Vertical(1.0f), unbounded = true)')
+    end
+
+    it 'keeps the bound for a distribution, a non-fixed row, or a child sized by weight or content' do
+      expect(wrap({ 'orientation' => 'horizontal', 'width' => 200, 'distribution' => 'equalSpacing', 'child' => [kid] })).to be_nil
+      expect(wrap({ 'orientation' => 'horizontal', 'width' => 'matchParent', 'child' => [kid] })).to be_nil
+      expect(wrap({ 'orientation' => 'horizontal', 'width' => 200, 'child' => [kid, { 'type' => 'Label', 'text' => 't' }] })).to be_nil
+      expect(wrap({ 'orientation' => 'horizontal', 'width' => 200, 'child' => [kid, kid.merge('weight' => 1)] })).to be_nil
+    end
+
+    it 'puts the wrapper innermost, after the padding' do
+      layout = { 'type' => 'View', 'id' => 'row', 'orientation' => 'horizontal', 'width' => 200, 'height' => 200, 'padding' => 8,
+                 'child' => [kid.merge('id' => 'a'), kid.merge('id' => 'b')] }
+      code = KjuiTools::Compose::ComposeBuilder.new.send(:generate_component, layout, 0, 'Box')
+      head = code.split('Row(').last.split(') {').first
+      expect(head.index('.padding(')).to be < head.index('.wrapContentWidth(align = BiasAlignment.Horizontal(-1.0f), unbounded = true)')
+    end
+  end
+
   it 'compiles: a centred Box holding an oversized child, through the builder' do
     layout = { 'type' => 'View', 'id' => 'box', 'width' => 200, 'height' => 200, 'gravity' => 'center',
                'child' => [{ 'type' => 'View', 'id' => 'kid', 'width' => 300, 'height' => 300 }] }

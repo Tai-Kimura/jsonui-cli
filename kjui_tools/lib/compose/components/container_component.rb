@@ -88,6 +88,16 @@ module KjuiTools
           # 7. Padding (inner spacing) - applied last
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
+          # 8. A fixed-size row whose children all declare their size along
+          # it lays them out in sequence past its edge (ruling S); innermost.
+          unless fill_distribution
+            overflow = main_axis_overflow_wrapper(json_data, layout, children)
+            if overflow
+              required_imports&.add(:bias_alignment)
+              modifiers << overflow
+            end
+          end
+
           # Reorder the alignment-anchor pattern so `.fillMax<Axis>()` sits
           # BEFORE `.wrapContent<Axis>(Alignment.X)` when an `.<axis>In(max =
           # N.dp)` is also present. Without this, a clamped + centered
@@ -265,6 +275,39 @@ module KjuiTools
             when 'Row' then v = own_bias[1] if own_bias
             end
             child[Helpers::ModifierBuilder::OVERFLOW_BIAS_KEY] = [h, v]
+          end
+        end
+
+        # A fixed-size Row / Column whose children all declare a numeric size
+        # along its axis measures them unbounded along it, innermost in its
+        # chain, anchored by its gravity. Compose measures a Row's children
+        # against the space left, so the child that crosses the edge was
+        # coerced to what was left and every child after it moved up — six
+        # 40-wide boxes in a 200 row with padding 8 put box_f at 172 where web
+        # and iOS put it at 208 (user ruling S, 2026-10-05: children of a
+        # fixed-size row are placed in sequence and overflow past the edge).
+        # Content that fits reads the same as before: the wrapper reports the
+        # declared size and places the content where the gravity would. Not
+        # with a distribution (it needs the free space) nor with any child
+        # sized by weight, fill or content, all of which need the bound.
+        # KotlinJsonUI Dynamic does the same
+        # (DynamicContainerComponent.mainAxisOverflowWrapper).
+        def self.main_axis_overflow_wrapper(json_data, layout, children)
+          return nil unless %w[Row Column].include?(layout)
+          return nil if json_data['distribution'] || children.empty?
+
+          axis = layout == 'Row' ? 'width' : 'height'
+          numeric = ->(v) { v.is_a?(Numeric) ? v >= 0 : (v.is_a?(String) && v.match?(/\A\d+(\.\d+)?\z/)) }
+          return nil unless numeric.call(json_data[axis])
+          return nil unless children.all? do |c|
+            c.is_a?(Hash) && numeric.call(c[axis]) && !(c['weight'] || c['widthWeight'] || c['heightWeight'])
+          end
+
+          parts = gravity_parts_of(json_data['gravity'] || alignment_as_gravity(json_data['alignment']))
+          if layout == 'Row'
+            ".wrapContentWidth(align = BiasAlignment.Horizontal(#{axis_bias_of(parts, %w[left], %w[right], %w[centerHorizontal center])}f), unbounded = true)"
+          else
+            ".wrapContentHeight(align = BiasAlignment.Vertical(#{axis_bias_of(parts, %w[top], %w[bottom], %w[centerVertical center])}f), unbounded = true)"
           end
         end
 
