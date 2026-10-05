@@ -797,7 +797,7 @@ def _cmd_frame_parity(args: argparse.Namespace) -> int:
         print(line)
     if args.update:
         try:
-            rules = fp.load_rules(fp.rules_path(conformance_dir))
+            rules = fp.load_rules(fp.rules_path(conformance_dir), manifest)
         except ValueError as exc:
             print(f"ERROR: {exc}")
             return 1

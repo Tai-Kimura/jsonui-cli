@@ -4453,7 +4453,7 @@
         "large",
         "linear"
       ],
-      "description": "Indicator style: `small` / `medium` / `large` are the spinner's size (`medium` the platform's own) and `linear` a bar instead of a spinner. A declared width / height wins over the style's size. The legacy spellings `style` (naming one of these values) and `size` (a length) are folded by the layout normalizer, with a warning: `style` into this attribute, `size` into width and height.",
+      "description": "Indicator style: `small` / `medium` / `large` are the spinner's size and `linear` a bar instead of a spinner. Each size is the platform's own value, `small` and `large` as well as `medium` (2026-10-05 user ruling): the faces need not draw the same small or large spinner. A declared width / height wins over the style's size. The legacy spellings `style` (naming one of these values) and `size` (a length) are folded by the layout normalizer, with a warning: `style` into this attribute, `size` into width and height.",
       "platform": [
         "swift",
         "kotlin"

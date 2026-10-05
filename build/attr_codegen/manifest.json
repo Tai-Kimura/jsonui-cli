@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "ee99ad41ea2b91edafd24cd7441c3ebe76684acfdec3082f56a1cde3c49cbed0"
+    "sha256": "a20f0ff0083bd2b3a2083434799e96830aedf68b145a36692ce453357e62f752"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -21,7 +21,7 @@
     "kotlin/GradientViewAttributes.kt": "15ce04fad66c14cbdb14a075e8382726dcb3518009788a918977a25cd11daa34",
     "kotlin/IconLabelAttributes.kt": "cd776b341ca561d7d8f6fbebb6e20016d22ef49b72e0bd0e9de6bffc02c79179",
     "kotlin/ImageAttributes.kt": "c1c71f09993e9f3b1d19eefd81ada0be784ab02819d52ebd6d0a7c1c1536a959",
-    "kotlin/IndicatorAttributes.kt": "e8436a0a162c5d1eeb3719fd096aa14b2a07db8856d21b6106425f70646b45e9",
+    "kotlin/IndicatorAttributes.kt": "ad1a69241921a550b09c9c1d037e640405ea640239ab810bf5258b2d82e38373",
     "kotlin/InputAttributes.kt": "903fd9e7b512b362162d08501c1c515589e54154efa0320feaee9f8d776b7ead",
     "kotlin/LabelAttributes.kt": "f9272637b217d7e0c6d87b0db34bc1b634b18fbd54fdd8b026aa11741ba6a3eb",
     "kotlin/NetworkImageAttributes.kt": "b1027f5df1db014aae61671d9854ee1d48bd97ad78dafba35ace2d692d3a9cb6",
@@ -53,7 +53,7 @@
     "ruby/gradient_view_attributes.rb": "7b2476482a65a38cb4a75b6afe6b3e029403ac12fdee4227793cc79be34414fa",
     "ruby/icon_label_attributes.rb": "133d5718c0221252d9de12a9bcad3661017d85e95850cb367744e2d001af03a1",
     "ruby/image_attributes.rb": "2c787c4db730744102b068ab9ce036f4c3136bc604dbb03df8bed38473f718c9",
-    "ruby/indicator_attributes.rb": "37f3e15e6ac649f05eeb87fce0ff39fa64ac7356fe6404116703c1fa1b254039",
+    "ruby/indicator_attributes.rb": "18d6e0d1e4f0978ebb8b18b8c7c7994f9835cbdc36320194cca3a10170e06d22",
     "ruby/input_attributes.rb": "a531d2c2e8b01eada67e933647c688c3670d5d444b6795000b04870662823e6b",
     "ruby/label_attributes.rb": "4aa39fab9f59b65f2db1a75f7bf359db065f048315bdbf3f423568822c5150d4",
     "ruby/network_image_attributes.rb": "e0c1b7b66125e720b2cdc79d0d5bb077e0330a81c2149eaa71cbfe7f3b543b4c",
@@ -87,7 +87,7 @@
     "swift/GradientViewAttributes.swift": "f76763ee888d3809ea29d4fb48a19d5fa2ed2c4ef0966fddbb144a6e7d9e19be",
     "swift/IconLabelAttributes.swift": "badcbb8b05fa2fcdc2708cd4fcc57254fcb8fb1c11dcbd78344ac262b66afcfc",
     "swift/ImageAttributes.swift": "a72a9083218e8816f8c3c80196c452cc252aabbe6fe0a7aebfa95c2fceb4c171",
-    "swift/IndicatorAttributes.swift": "f5511f9d2c2a184b391482cd911fd2031d6bdff926289ffde5fdabfbe0127205",
+    "swift/IndicatorAttributes.swift": "208de438c615a6376d3ea6edee3ecc70c2f8b51bdec0cdada6dd0435dc4e2ba9",
     "swift/InputAttributes.swift": "f7a04953e61a3d39b9fe3dc0d5f83cb504f607902a7adeb203b166eb8c8cb294",
     "swift/LabelAttributes.swift": "e9883933f9a001bdb0469fd38abd168b8aefdb578373242d7ada5d23eaa1cc6d",
     "swift/NetworkImageAttributes.swift": "77cc8d839aa9715e40afb1405707917845485e5e5d18322aa6069d20f43d32e3",

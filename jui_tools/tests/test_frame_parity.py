@@ -613,7 +613,8 @@ class LedgerFromRules(unittest.TestCase):
                 fp.load_rules(p)
 
     def test_the_committed_rules_load(self):
-        rules = fp.load_rules(SCHEMA.parent / fp.RULES_NAME)
+        manifest = json.loads((SCHEMA.parent / "manifest.json").read_text(encoding="utf-8"))
+        rules = fp.load_rules(SCHEMA.parent / fp.RULES_NAME, manifest)
         self.assertTrue(rules)
         self.assertTrue(all(r["reason"] for r in rules))
 
@@ -668,6 +669,39 @@ class LedgerFromRulesWithExpected(unittest.TestCase):
             with self.assertRaises(ValueError) as e:
                 fp.load_rules(p)
             self.assertIn("leaving ['web'] unchecked", str(e.exception))
+
+    # A rule's faces are its fixtures' platforms (the SSoT declaration, via
+    # the manifest). Indicator is declared for swift / kotlin only.
+    @staticmethod
+    def _two_faced(path, fixture, platforms, named):
+        path.write_text(json.dumps({"rules": [{"fixture": fixture, "fields": ["width"], "reason": "r",
+                                               "expected": {h: {"width": 1} for h in named}}]}))
+        return {"fixtures": [{"id": fixture, "class": "visual", "platforms": platforms}]}
+
+    def test_a_two_faced_part_may_name_both_its_faces(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / fp.RULES_NAME
+            manifest = self._two_faced(p, "Indicator/indicatorStyle__large", ["ios", "android"], ["ios", "android"])
+            self.assertEqual(len(fp.load_rules(p, manifest)), 1)
+            # The same rule without the manifest counts web, and is refused.
+            with self.assertRaises(ValueError):
+                fp.load_rules(p)
+
+    def test_a_three_faced_part_naming_two_faces_is_still_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / fp.RULES_NAME
+            manifest = self._two_faced(p, "Label/x", ["ios", "android", "web"], ["ios", "android"])
+            with self.assertRaises(ValueError) as e:
+                fp.load_rules(p, manifest)
+            self.assertIn("leaving ['web'] unchecked", str(e.exception))
+
+    def test_a_two_faced_part_naming_one_face_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / fp.RULES_NAME
+            manifest = self._two_faced(p, "Indicator/indicatorStyle__large", ["ios", "android"], ["ios"])
+            with self.assertRaises(ValueError) as e:
+                fp.load_rules(p, manifest)
+            self.assertIn("leaving ['android'] unchecked", str(e.exception))
 
     def test_an_expected_field_outside_the_rule_fields_does_not_load(self):
         with tempfile.TemporaryDirectory() as d:

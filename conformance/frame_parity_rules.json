@@ -606,6 +606,25 @@
       "reason": "the linkable text without linkable: each OS's own line-break opportunities (see Label/linkable__*); ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "Label/hintAttributes__static",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 71.67
+        },
+        "android": {
+          "height": 94
+        },
+        "web": {
+          "height": 96
+        }
+      },
+      "reason": "the showing hint is bold 24 at lineHeightMultiple 1.5 and wraps to two lines in 200. iOS draws no multiple on the first line (ruling B, as Label/lineHeightMultiple__*): measured 71.67, which is L + 1.5 x L for L 28.67; web draws 2 x 1.5 x 32 = 96; android measured 94 (conf_ci, 2026-10-05 17:24). Before SwiftJsonUI 10.29.6 the iOS hint read neither hintAttributes.font nor its lineHeightMultiple. All three are pinned"
+    },
+    {
       "fixture": "Label/*",
       "id": "target",
       "fields": [
@@ -661,6 +680,124 @@
         }
       },
       "reason": "one undeclared line inside a border drawn over the content (borderContentBox): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "View/distribution__fill",
+      "id": "box_b",
+      "fields": [
+        "x",
+        "width",
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "x": 60,
+          "width": 94.67,
+          "height": 20.33
+        },
+        "android": {
+          "x": 60,
+          "width": 97,
+          "height": 24
+        },
+        "web": {
+          "x": 60,
+          "width": 95.84,
+          "height": 24
+        }
+      },
+      "reason": "distribution fill grows each Label from its own text width by an equal share of what is left (SwiftJsonUI 10.29.6 DistributionFillLayout; before it iOS split the row equally, 80 / 80). The faces differ only by their text widths: the share is equal on each face, so box_c - box_b is the text-width difference CCCCCCCC - BBBB, ios 50.67 / android 46 / web 48.32. Heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces, so a return to an equal split (box_b = box_c) is refused"
+    },
+    {
+      "fixture": "View/distribution__fill",
+      "id": "box_c",
+      "fields": [
+        "x",
+        "width",
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "x": 154.67,
+          "width": 145.33,
+          "height": 20.33
+        },
+        "android": {
+          "x": 157,
+          "width": 143,
+          "height": 24
+        },
+        "web": {
+          "x": 155.84,
+          "width": 144.16,
+          "height": 24
+        }
+      },
+      "reason": "distribution fill grows each Label from its own text width by an equal share of what is left (SwiftJsonUI 10.29.6 DistributionFillLayout; before it iOS split the row equally, 80 / 80). The faces differ only by their text widths: the share is equal on each face, so box_c - box_b is the text-width difference CCCCCCCC - BBBB, ios 50.67 / android 46 / web 48.32. Heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces, so a return to an equal split (box_b = box_c) is refused"
+    },
+    {
+      "fixture": "common/distribution__fill",
+      "id": "box_*",
+      "fields": [
+        "x",
+        "width",
+        "height"
+      ],
+      "reason": "as View/distribution__fill (which pins the same row on all three faces): each Label grows from its own text width by an equal share, ios 94.67 / 145.33, android 97 / 143 (box_c - box_b: ios 50.67 / android 46, the text-width difference); heights one undeclared line, ios 20.33 / android 24. Web does not render common.distribution (platform swift / kotlin), so expected cannot name all three faces"
+    },
+    {
+      "fixture": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "id": "box_b",
+      "fields": [
+        "x",
+        "width",
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "x": 60,
+          "width": 43,
+          "height": 20.33
+        },
+        "android": {
+          "x": 60,
+          "width": 42,
+          "height": 24
+        },
+        "web": {
+          "x": 60,
+          "width": 40.81,
+          "height": 24
+        }
+      },
+      "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 40.81, CCCCCCCC ios 94 / android 88 / web 89.13 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces"
+    },
+    {
+      "fixture": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "id": "box_c",
+      "fields": [
+        "x",
+        "width",
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "x": 103,
+          "width": 94,
+          "height": 20.33
+        },
+        "android": {
+          "x": 102,
+          "width": 88,
+          "height": 24
+        },
+        "web": {
+          "x": 100.81,
+          "width": 89.13,
+          "height": 24
+        }
+      },
+      "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 40.81, CCCCCCCC ios 94 / android 88 / web 89.13 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces"
     },
     {
       "fixture": "View/distribution__fillequally",
@@ -754,6 +891,25 @@
         "height"
       ],
       "reason": "the platform's own spinner (indicatorStyle medium is 'the platform's own'): ios 20 (UIActivityIndicator medium), android 40 (Material3 CircularProgressIndicator); web does not render Indicator (platform swift / kotlin)"
+    },
+    {
+      "fixture": "Indicator/indicatorStyle__large",
+      "id": "target",
+      "fields": [
+        "width",
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "width": 30,
+          "height": 30
+        },
+        "android": {
+          "width": 48,
+          "height": 48
+        }
+      },
+      "reason": "2026-10-05 user ruling: small / large are each OS's own value (as medium is the platform's own). iOS draws medium's 20 at x 1.5 = 30 (sjui INDICATOR_SIZE_SCALES; laid out at that size from SwiftJsonUI 10.29.6 scaledWithFootprint), android 48 (kjui STYLE_SIZES). small agrees at 16 on both. Indicator is declared for swift / kotlin only, so both of its faces are pinned"
     },
     {
       "fixture": "Indicator/indicatorStyle__medium",

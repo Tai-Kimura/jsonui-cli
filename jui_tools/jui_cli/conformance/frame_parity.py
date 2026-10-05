@@ -674,7 +674,7 @@ def rules_path(conformance_dir) -> Path:
     return Path(conformance_dir) / RULES_NAME
 
 
-def load_rules(path) -> list[dict]:
+def load_rules(path, manifest: dict | None = None) -> list[dict]:
     """The hand-written half: which disagreements are a platform idiom, on
     which fields, and why. Each rule: ``fixture`` (fnmatch glob over the
     fixture id), ``id`` (glob, default ``*``), ``fields`` (the fields allowed
@@ -686,7 +686,13 @@ def load_rules(path) -> list[dict]:
     and the hosts it does not name must agree among themselves, or the id is
     refused. It is for a difference the rulings accept by a stated amount
     (iOS lineHeightMultiple: no multiple on the first line, so (m - 1) x L
-    short) — "height may differ" would also accept any other height."""
+    short) — "height may differ" would also accept any other height.
+
+    A rule's faces are those of the visual fixtures its ``fixture`` glob
+    matches in *manifest* (each fixture's ``platforms``, generated from the
+    SSoT platform declaration): an Indicator has no web face, so naming ios
+    and android leaves nothing unchecked. Without a manifest, or when the
+    glob matches no fixture, every EXPECTED_FRAME_HOSTS face counts."""
     path = Path(path)
     if not path.is_file():
         return []
@@ -703,8 +709,9 @@ def load_rules(path) -> list[dict]:
         # Naming all faces but one leaves that one compared with nothing: it
         # could draw any value and still be ledgered. Name one face, or all.
         named = set(rule.get("expected") or {})
-        if named and len(set(EXPECTED_FRAME_HOSTS) - named) == 1:
-            bad.append(f"expected names {sorted(named)}, leaving {sorted(set(EXPECTED_FRAME_HOSTS) - named)} unchecked")
+        faces = _rule_faces(rule, manifest)
+        if named and len(faces - named) == 1:
+            bad.append(f"expected names {sorted(named)}, leaving {sorted(faces - named)} unchecked")
         if missing or bad:
             raise ValueError(f"{RULES_NAME} rule {i}: missing {missing}, unknown fields {bad}")
     return rules
@@ -736,6 +743,18 @@ def differing_fields(d: "Disagreement", hosts: Iterable[str] | None = None) -> s
                           or _near(ra[size] - a[pos] - a[size], rb[size] - b[pos] - b[size])):
                     out.add(pos)
     return out
+
+
+def _rule_faces(rule: dict, manifest: dict | None) -> set[str]:
+    """The frame-writing faces of the visual fixtures *rule* matches; every
+    EXPECTED_FRAME_HOSTS face when there is no manifest or no match."""
+    from fnmatch import fnmatchcase
+
+    faces: set[str] = set()
+    for fixture in (manifest or {}).get("fixtures", []):
+        if fixture.get("class") == "visual" and fnmatchcase(fixture.get("id", ""), rule.get("fixture", "")):
+            faces |= set(fixture.get("platforms") or []) & EXPECTED_FRAME_HOSTS
+    return faces or set(EXPECTED_FRAME_HOSTS)
 
 
 def ledger_from_rules(result: FrameParityResult, rules: list[dict]) -> tuple[list[dict], list[str]]:
