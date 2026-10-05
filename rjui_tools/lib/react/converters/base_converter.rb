@@ -183,6 +183,9 @@ module RjuiTools
             classes << TailwindMapper.map_height(attributes['height'])
           end
 
+          classes << 'max-w-full' if wrap_capped?('width') && !attributes['maxWidth']
+          classes << 'max-h-full' if wrap_capped?('height') && !attributes['maxHeight']
+
           # Prevent flex shrinking when fixed dimensions are specified
           # This ensures elements maintain their specified size in flex containers
           if explicit_size?('width') || explicit_size?('height')
@@ -1746,12 +1749,45 @@ module RjuiTools
             # Skip data-only elements (they define props, not rendered content)
             next nil if data_only_element?(child)
 
-            annotated = child
+            annotated = with_parent_bounds(child)
             annotated = annotated.merge('_parent_orientation' => parent_orientation) if parent_orientation
             annotated = annotated.merge('_parent_distribution' => parent_distribution) if parent_distribution
             converter = create_converter_for_child(annotated)
             converter.convert_node(indent + 2)
           end.compact.join("\n")
+        end
+
+        # A wrapContent box stops at its parent's size when the parent has
+        # one (user ruling 2026-10-05: "Wrapcontent は Android が正しいね。
+        # 親の大きさが固定や matchparent ならその大きさまで"; attribute_semantics
+        # wrapContentCap). The parent has a size on an axis when it declares a
+        # number or matchParent there and does not scroll along it — a
+        # ScrollView's content is unbounded on its scroll axis, as Android
+        # measures it. The child reads `_parent_bounded_width/_height`.
+        def with_parent_bounds(child)
+          return child unless child.is_a?(Hash)
+
+          bounded = lambda do |axis|
+            value = attributes[axis]
+            next false unless value.is_a?(Numeric) || value == 'matchParent'
+
+            scroll_axis != axis
+          end
+          child.merge('_parent_bounded_width' => bounded.call('width'),
+                      '_parent_bounded_height' => bounded.call('height'))
+        end
+
+        # The axis this node scrolls its content along ('width' / 'height'),
+        # or nil. A ScrollView answers (ScrollViewConverter#scroll_axis).
+        def scroll_axis
+          nil
+        end
+
+        # Whether this node's own size on *axis* is its content's (wrapContent,
+        # or undeclared) and its parent has a size there to stop at.
+        def wrap_capped?(axis)
+          value = attributes[axis]
+          (value.nil? || value == 'wrapContent') && json["_parent_bounded_#{axis}"] == true
         end
 
         # Check if a child element is a data-only element (should not be rendered)

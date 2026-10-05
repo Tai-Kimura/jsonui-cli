@@ -37,6 +37,13 @@ module RjuiTools
         # scrollable element), and this attaches the ref they address. A
         # literal id is the contract between the two halves — MUST stay in sync
         # with ReactGenerator::SCROLL_CONTAINER_TYPES.
+        # The axis the content scrolls along: its parent-bounds stop there
+        # (BaseConverter#with_parent_bounds) — Android measures a scroll's
+        # content unbounded on that axis.
+        def scroll_axis
+          attributes['horizontalScroll'] || attributes['orientation'] == 'horizontal' ? 'width' : 'height'
+        end
+
         def build_scroll_ref_attr
           return '' unless attributes['defaultScrollAnchor']
 

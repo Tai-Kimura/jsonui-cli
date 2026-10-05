@@ -382,7 +382,7 @@ module RjuiTools
               elsif absolute
                 child = child.merge('_overlay' => true)
               end
-              converter = create_converter_for_child(child)
+              converter = create_converter_for_child(with_parent_bounds(child))
               converter.convert_node(indent + 2)
             end.compact.join("\n")
           else
