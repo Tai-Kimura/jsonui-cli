@@ -243,7 +243,7 @@
       "fields": [
         "height"
       ],
-      "reason": "autoShrink: android shrinks to fit (96), web wraps (120) — support lane 1's chrome row. NOTE triage L judged this (1) android (attribute_semantics autoShrink: web is canon); ledgered at the orchestrator's direction, to be confirmed"
+      "reason": "line height only: the (1) defect (Android forcing one line and shrinking) is fixed in KotlinJsonUI 2.43.5; the remaining 96 vs 120 is the height of the same four wrapped lines by each face's font metrics (family L)"
     },
     {
       "fixture": "Label/fontSize__*",
