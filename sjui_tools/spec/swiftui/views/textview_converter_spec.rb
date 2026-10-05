@@ -279,6 +279,25 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
         expect(code).not_to include('minHeight: 120')
       end
 
+      # flexible is about the height; the declared width still applies.
+      # Without it a 200-wide flexible TextView drew the whole width of its
+      # parent on iOS (402), where Android and web drew 200 (frame-parity,
+      # 2026-10-05, TextView/flexible__true).
+      it 'keeps the declared width' do
+        code = described_class.new(
+          { 'type' => 'TextView', 'text' => '@{x}', 'flexible' => true, 'width' => 200, 'height' => 100 }
+        ).convert
+        expect(code).to include('.frame(width: 200)')
+        expect(code).to include('.frame(minHeight: 100)')
+      end
+
+      it 'keeps a matchParent width as the parent\'s width' do
+        code = described_class.new(
+          { 'type' => 'TextView', 'text' => '@{x}', 'flexible' => true, 'width' => 'matchParent', 'height' => 100 }
+        ).convert
+        expect(code).to include('.frame(maxWidth: .infinity)')
+      end
+
       it 'ignores non-numeric heights' do
         code = described_class.new(
           { 'type' => 'TextView', 'text' => '@{x}', 'flexible' => true,

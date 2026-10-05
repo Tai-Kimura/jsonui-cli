@@ -233,8 +233,17 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.safeAreaPadding([.top, .bottom])')
+        expect(code).to include('.safeAreaPadding([.top, .bottom], 0)')
         expect(code).not_to include('.ignoresSafeArea')
+      end
+
+      # The safe area's own inset and nothing more: without a length SwiftUI
+      # adds its default padding (16), and a box touching no screen edge
+      # moved its content 16 where Android and web moved it 0 (frame-parity,
+      # 2026-10-05).
+      it 'adds no padding of its own to the safe area' do
+        code = described_class.new(component).convert
+        expect(code).not_to match(/\.safeAreaPadding\([^)]*\]\)|\.safeAreaPadding\(\.\w+\)/)
       end
     end
 
@@ -250,7 +259,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.safeAreaPadding(.all)')
+        expect(code).to include('.safeAreaPadding(.all, 0)')
         expect(code).not_to include('.ignoresSafeArea')
       end
     end
@@ -261,7 +270,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
     context 'with safeAreaInsetPositions spelled beyond the declaration' do
       it 'reserves only the declared edges' do
         code = described_class.new('type' => 'View', 'safeAreaInsetPositions' => %w[top left right horizontal]).convert
-        expect(code).to include('.safeAreaPadding([.top])')
+        expect(code).to include('.safeAreaPadding([.top], 0)')
         expect(described_class.new('type' => 'View', 'safeAreaInsetPositions' => %w[left]).convert).not_to include('safeAreaPadding')
       end
     end

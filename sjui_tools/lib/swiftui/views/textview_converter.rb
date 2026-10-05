@@ -294,6 +294,17 @@ module SjuiTools
 
           # Apply frame modifiers
           if @component['flexible'] == true
+            # flexible is about the height. The declared width still applies:
+            # without it a 200-wide flexible TextView took the whole width of
+            # its parent on iOS, where Android and web drew 200 (frame-parity,
+            # 2026-10-05, TextView/flexible__true). Dynamic:
+            # TextViewConverter.swift, same branch.
+            width = @component['width']
+            if width == 'matchParent'
+              @modifier_bag.append(:frame_size, '.frame(maxWidth: .infinity)')
+            elsif width.is_a?(Numeric) && width >= 0
+              @modifier_bag.append(:frame_size, ".frame(width: #{width})")
+            end
             # Flexible: min/max as frame bounds; the declared height is the
             # growth floor (see flexible_floor).
             floor = flexible_floor

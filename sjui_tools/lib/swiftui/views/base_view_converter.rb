@@ -2204,7 +2204,12 @@ module SjuiTools
           edges = safe_area_edge_set(positions)
           return if edges.nil?
 
-          @modifier_bag.append(:safe_area_insets, ".safeAreaPadding(#{edges})")
+          # Length 0: the safe area's own inset and nothing more. Without a
+          # length SwiftUI adds its default padding (16) on top, so a box that
+          # touches no screen edge moved its content 16 where Android and web
+          # moved it 0 (frame-parity, 2026-10-05; rjui pads by
+          # env(safe-area-inset-*)). Dynamic: DynamicModifierHelper.applySafeAreaInsets.
+          @modifier_bag.append(:safe_area_insets, ".safeAreaPadding(#{edges}, 0)")
         end
 
         #: Declared spelling -> `SwiftUI.Edge.Set` member, as written (the

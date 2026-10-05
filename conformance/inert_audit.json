@@ -7,7 +7,7 @@
     "web"
   ],
   "counts": {
-    "entries": 74,
+    "entries": 83,
     "unreviewed": 0
   },
   "entries": [
@@ -426,6 +426,81 @@
       "note": ""
     },
     {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__alias_edges",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "alias-of-queued-canonical",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__leading",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__static",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__trailing",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__vertical",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
       "fixture": "ScrollView/horizontalScroll__false",
       "component": "ScrollView",
       "attribute": "horizontalScroll",
@@ -835,6 +910,66 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__leading",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__static",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__trailing",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__vertical",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
     },
     {
       "fixture": "common/alignBottom__false",
