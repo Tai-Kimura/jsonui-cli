@@ -318,6 +318,24 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       end
     end
 
+    # A word longer than the box breaks inside it (user ruling 2026-10-05,
+    # attribute_semantics labelLongWordBreak): web let a long URL run past a
+    # 200-wide Label.
+    context 'with a word longer than the box' do
+      it 'breaks the word inside the box' do
+        out = create_converter({ 'type' => 'Label', 'width' => 200,
+                                 'text' => 'See https://example.com/conformance for details' }).convert
+        expect(out).to include('[overflow-wrap:anywhere]')
+      end
+
+      it 'keeps a declared Char or Word rule' do
+        %w[Char Word].each do |mode|
+          out = create_converter({ 'type' => 'Label', 'text' => 'x', 'lineBreakMode' => mode }).convert
+          expect(out).not_to include('[overflow-wrap:anywhere]'), mode
+        end
+      end
+    end
+
     context 'with lineSpacing' do
       it 'calculates lineHeight from lineSpacing and fontSize' do
         converter = create_converter({

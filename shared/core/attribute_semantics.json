@@ -496,6 +496,12 @@
         "IconLabel.fontSize"
       ],
       "ruling": "2026-10-05 user ruling (relayed by the orchestrator): the text line of an IconLabel is the same as one line of a Label on the same platform at the same font size (lineHeightMultipleBase's L). An IconLabel draws no taller or shorter text line than a Label would."
+    },
+    "labelLongWordBreak": {
+      "attributes": [
+        "Label.text"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, answered as a choice): a word longer than the Label's box breaks inside the box — only the word that does not fit is cut at the box's width and carried to the next line (CSS `overflow-wrap: anywhere`); where it breaks may differ per OS. Measured before the ruling: a 200-wide Label with \"See https://example.com/conformance for details\" (Label/linkable__* and __control/Label__text-5ed92def) wrapped the URL inside the box on iOS and Android and let it run past the box on web. A declared lineBreakMode Char / Word keeps its own rule."
     }
   }
 }
