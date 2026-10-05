@@ -215,11 +215,22 @@ module KjuiTools
           # IconLabel drew its text at 14sp on a 16.5 dp line where the
           # dynamic face and every unshadowed IconLabel keep 16 / 24. A
           # shadow does not change the size.
+          #
+          # The text's line is a Label's (user ruling 2026-10-05, ruling 5's
+          # ordinary line applied to IconLabel): a declared fontSize gives
+          # fontSize x 1.3, the emit Label's base_line_height_expression makes,
+          # where this kept the theme's 24 under a 20sp font (26 on a Label).
+          # Undeclared, the theme's line stands. KotlinJsonUI Dynamic:
+          # DynamicIconLabelComponent, the same rule.
+          style_parts = []
+          style_parts << "lineHeight = #{TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true)}" if json_data['fontSize']
           if json_data['textShadow']
             required_imports&.add(:shadow_style)
+            style_parts << TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)
+          end
+          if style_parts.any?
             required_imports&.add(:local_text_style)
-            shadow = TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)
-            code += "\n" + indent("style = LocalTextStyle.current.copy(#{shadow}),", depth + 1)
+            code += "\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')}),", depth + 1)
           end
           code = code.chomp(',')
           code += "\n" + indent(")", depth)

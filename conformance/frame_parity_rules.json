@@ -66,6 +66,24 @@
       "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
     },
     {
+      "fixture": "common/border*_on_TextField__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "TextField control chrome under a declared border: the platform's own control height (and the vertical position that centres it), the same idiom as TextField/*; the border fixtures (14adfcf4) live under common/, which that glob does not reach — triage K"
+    },
+    {
+      "fixture": "common/border*_on_SelectBox__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "SelectBox control chrome under a declared border: the platform's own control height (and the vertical position that centres it), the same idiom as SelectBox/*; the border fixtures (14adfcf4) live under common/, which that glob does not reach — triage K"
+    },
+    {
       "fixture": "Button/*",
       "id": "target",
       "fields": [
@@ -274,6 +292,15 @@
         "height"
       ],
       "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
+      "fixture": "IconLabel/fontSize__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "font line-height metrics, as Label/fontSize__*: an IconLabel's text line is the Label line of its OS (user ruling 2026-10-05, ruling 5 applied to IconLabel — Android 26 at fontSize 20, the same as a Label), and the OS-to-OS difference (26 / 28) is allowed by that ruling"
     },
     {
       "fixture": "Label/hint__static",

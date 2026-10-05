@@ -179,6 +179,43 @@ RSpec.describe 'kjui codegen: an oversized child sits where its container places
                      'child' => [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A' }] })
       expect(code).not_to include('Arrangement.Bottom')
     end
+
+    # A SafeAreaView is emitted by compose_builder's own helper, not by
+    # container_component: it reversed the children and stacked them from the
+    # top / left (three 40s at 80 / 40 / 0 in a full-height one).
+    describe 'on a SafeAreaView' do
+      def safe(extra) = { 'type' => 'SafeAreaView', 'id' => 'sa',
+                          'child' => [{ 'type' => 'View', 'id' => 'a', 'width' => 40, 'height' => 40 },
+                                      { 'type' => 'View', 'id' => 'b', 'width' => 40, 'height' => 40 }] }.merge(extra)
+
+      it 'stacks bottomToTop from the bottom edge, the first child last' do
+        code = build(safe('orientation' => 'vertical', 'direction' => 'bottomToTop'))
+        expect(code).to include('verticalArrangement = Arrangement.Bottom,')
+        expect(code.index('"b"')).to be < code.index('"a"')
+      end
+
+      it 'stacks rightToLeft from the right edge' do
+        code = build(safe('orientation' => 'horizontal', 'direction' => 'rightToLeft'))
+        expect(code).to include('horizontalArrangement = Arrangement.End,')
+      end
+
+      it 'keeps the spacing, aligned to the bottom' do
+        code = build(safe('orientation' => 'vertical', 'direction' => 'bottomToTop', 'spacing' => 8))
+        expect(code).to include('verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),')
+        expect(code).not_to include('Arrangement.Bottom,')
+      end
+
+      it 'stacks a topToBottom one from the top, as before (control)' do
+        code = build(safe('orientation' => 'vertical', 'direction' => 'topToBottom'))
+        expect(code).not_to include('Arrangement.Bottom')
+        expect(code.index('"a"')).to be < code.index('"b"')
+      end
+
+      it 'lets a vertical gravity place it (control)' do
+        code = build(safe('orientation' => 'vertical', 'direction' => 'bottomToTop', 'gravity' => 'top'))
+        expect(code).not_to include('Arrangement.Bottom')
+      end
+    end
   end
 
   it 'compiles: a centred Box holding an oversized child, through the builder' do
