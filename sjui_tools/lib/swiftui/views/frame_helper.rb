@@ -136,6 +136,7 @@ module SjuiTools
               @modifier_bag.register(:fixed_size, ".fixedSize(horizontal: #{h_fixed}, vertical: #{v_fixed})")
             end
           end
+          apply_wrap_cap
         end
 
         # A max that caps a wrapContent axis: a number or a binding, not
@@ -514,6 +515,22 @@ module SjuiTools
         # nodes the gravityDefaults canon means by "container". A childless
         # node's own-frame alignment is its content channel (fit bitmap,
         # custom-component internals), which is not this ruling's subject.
+        # A wrapContent container stops at its parent's size (SwiftJsonUI
+        # WrapCap, 10.29.6; user ruling 2026-10-05, attribute_semantics
+        # wrapContentCap). After any fixedSize, as Dynamic applies it. Not an
+        # axis a max bounds, nor one a weight gives the node.
+        def apply_wrap_cap
+          return unless container_content_node?
+
+          wrap = ->(v) { v.nil? || %w[wrapcontent wrap_content].include?(v.to_s.downcase) }
+          weighted = @component['weight']
+          cap_w = wrap.call(@component['width']) && !@component['maxWidth'] && !(weighted || @component['widthWeight'])
+          cap_h = wrap.call(@component['height']) && !@component['maxHeight'] && !(weighted || @component['heightWeight'])
+          return unless cap_w || cap_h
+
+          @modifier_bag.append(:fixed_size, ".wrapCap(width: #{cap_w}, height: #{cap_h})")
+        end
+
         def container_content_node?
           # A Collection lays out its cells, not `child`: it is a container
           # (4f ruling 2026-09-27). Its frame fell to SwiftUI's `.center`, so
