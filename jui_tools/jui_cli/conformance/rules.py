@@ -3028,8 +3028,17 @@ DEFAULT_COMMON_HOST = "View"
 #: a second implementation, not a second decoration.
 COMMON_EXTRA_HOSTS: dict[str, tuple[str, ...]] = {
     # The border family, on the component whose chain lost it.
-    "borderWidth": ("Label",),
-    "borderColor": ("Label",),
+    #
+    # And on the three input fields (2026-10-05, frame parity): the user ruled
+    # that a border does not push the content inward, EXCEPT on an input field,
+    # where the border is control chrome and the text's place inside it is the
+    # platform's idiom (attribute_semantics borderContentBox.inputFieldException).
+    # The corpus had no input field with a border, so the exception was a
+    # declaration no gate could see. Width and colour only: TextField has its
+    # own `borderStyle` (the UIKit field chrome), which the common spelling
+    # would collide with.
+    "borderWidth": ("Label", "TextField", "TextView", "SelectBox"),
+    "borderColor": ("Label", "TextField", "TextView", "SelectBox"),
     "borderStyle": ("Label",),
     # The pressed background on a node with a tap (jsonui-cli 1.9.0, ruling
     # (a)). The Button draws it in its own view; every other node with a tap
