@@ -383,6 +383,13 @@ module SjuiTools
           # filled the vertical axis with `top`, and a TextField's text sat at
           # the top of a 44pt frame (a Button's label is centred by
           # StateAwareButtonView itself, before and after).
+          # A reversed stack starts at the edge its direction starts from
+          # when its gravity does not name that axis (user ruling 2026-10-05,
+          # attribute_semantics stackDirection; SwiftJsonUI's DirectionStart).
+          case direction_start_edge
+          when 'bottom' then v ||= 'bottom'
+          when 'right' then h ||= 'trailing'
+          end
           cross = centred_cross_axis? ? 'center' : nil
           # A Label's text sits at the centre of a taller box unless its
           # gravity names the vertical axis (label_vertical); its horizontal
@@ -401,6 +408,22 @@ module SjuiTools
             %w[bottom trailing] => '.bottomTrailing'
           }
           map[[v, h]]
+        end
+
+        # "bottom" for a bottomToTop column, "right" for a rightToLeft row,
+        # when the container's gravity does not name that axis; else nil.
+        def direction_start_edge
+          return nil unless container_content_node?
+
+          direction = JsonUIShared::EnumSpelling.lowered(@component['direction'], 'View', 'direction')
+          orientation = JsonUIShared::EnumSpelling.lowered(@component['orientation'], 'View', 'orientation')
+          gravity = @component['gravity']
+          words = (gravity.is_a?(Array) ? gravity : gravity.to_s.split('|')).map { |g| g.to_s.strip.downcase }
+          if direction == 'bottomtotop' && orientation == 'vertical'
+            (words & %w[top bottom center centervertical center_vertical]).empty? ? 'bottom' : nil
+          elsif direction == 'righttoleft' && orientation == 'horizontal'
+            (words & %w[left right start end center centerhorizontal center_horizontal]).empty? ? 'right' : nil
+          end
         end
 
         def label_node?

@@ -125,15 +125,16 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(bound).to include('lineLimit: (Int(data.n ?? 0) == 0 ? nil : Int(data.n ?? 0)),')
     end
 
-    it 'Label lineHeightMultiple keeps the UIKit formula' do
+    it 'Label lineHeightMultiple goes to the library as the multiple, static or bound' do
       static = convert(:LabelConverter,
                        'type' => 'Label', 'text' => 'a', 'lineHeightMultiple' => 1.5, 'fontSize' => 20)
-      expect(static).to include('lineSpacing: 10.0,')
+      expect(static).to include('lineHeightMultiple: 1.5,')
+      expect(static).not_to include('lineSpacing:')
 
       bound = convert(:LabelConverter,
                       'type' => 'Label', 'text' => 'a', 'lineHeightMultiple' => '@{m}', 'fontSize' => 20)
       expect_no_leak(bound)
-      expect(bound).to include('lineSpacing: ((CGFloat(data.m ?? 0) - 1) * 20),')
+      expect(bound).to include('lineHeightMultiple: CGFloat(data.m ?? 0),')
     end
   end
 

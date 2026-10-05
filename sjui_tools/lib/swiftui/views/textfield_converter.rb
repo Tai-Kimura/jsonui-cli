@@ -12,6 +12,10 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::FontHelper
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
         include SjuiTools::SwiftUI::Views::TextStyleHelper
+        def identifier_placed_inside?
+          true
+        end
+
         def convert
           # Get text field handler for this component
           textfield_handler = @binding_handler.is_a?(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler) ?
@@ -110,6 +114,12 @@ module SjuiTools
             add_line "SecureField(#{hint}, text: #{text_binding})"
           else
             add_line "TextField(#{hint}, text: #{text_binding})"
+          end
+
+          # The id on the field itself, before the styled placeholder and the
+          # clear button go on (BaseViewConverter#identifier_placed_inside?).
+          if (id_expr = inner_accessibility_identifier_expr)
+            add_modifier_line ".accessibilityIdentifier(#{id_expr})"
           end
 
           # Apply font modifiers using helper

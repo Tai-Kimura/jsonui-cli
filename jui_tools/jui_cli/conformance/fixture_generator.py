@@ -985,6 +985,24 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     )
     summary.assertable_count += sum(1 for e in edge_entries if e["class"] == "assertable")
     summary.control_count += sum(1 for e in edge_entries if e.get("isControl"))
+
+    # A vertical ScrollView whose content is shorter than it (gravityDefaults
+    # top|start): every sweep ScrollView overflows, so where a short content
+    # starts was never drawn — see scroll_content_fixtures.
+    from .scroll_content_fixtures import build_scroll_content_fixtures
+
+    scroll_files, scroll_entries = build_scroll_content_fixtures(source_label)
+    for rel_path, payload in scroll_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(scroll_entries)
+    summary.fixture_count += len(scroll_entries)
+    summary.visual_count += sum(
+        1 for e in scroll_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.control_count += sum(1 for e in scroll_entries if e.get("isControl"))
     summary.fixture_count += len(bounds_entries)
     summary.visual_count += sum(
         1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")

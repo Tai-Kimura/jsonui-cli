@@ -41,10 +41,13 @@ module RjuiTools
           text_style = build_text_style
           text_element = "<span className=\"#{build_text_class_name}\"#{text_style}>#{text}</span>"
 
+          # No icon declared, no icon drawn and no space kept for one (user
+          # ruling 2026-10-05, attribute_semantics iconLabelIconSize). An
+          # `<img src="">` drew the browser's empty-image box, 96 high.
+          inner = icon_declared? ? [icon_element, text_element] : [text_element]
           jsx = <<~JSX.chomp
             #{indent_str(indent)}<div#{id_attr} className="#{class_name} flex #{flex_direction} items-center"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>
-            #{indent_str(indent + 2)}#{icon_element}
-            #{indent_str(indent + 2)}#{text_element}
+            #{inner.map { |el| "#{indent_str(indent + 2)}#{el}" }.join("\n")}
             #{indent_str(indent)}</div>
           JSX
 
@@ -116,6 +119,13 @@ module RjuiTools
           " style={{ #{style_parts.join(', ')} }}"
         end
 
+        def icon_declared?
+          %w[icon_on iconOn icon_off iconOff icon].any? do |key|
+            value = attributes[key]
+            value.is_a?(String) && !value.empty?
+          end
+        end
+
         def get_icon_src
           # Support selected state with icon_on/icon_off
           if attributes['selected'] && has_binding?(attributes['selected'])
@@ -123,6 +133,12 @@ module RjuiTools
             icon_on = attributes['icon_on'] || attributes['iconOn'] || ''
             icon_off = attributes['icon_off'] || attributes['iconOff'] || ''
             "{#{binding_expr} ? #{JsonUIShared::StringLiterals.ts_single(icon_on)} : #{JsonUIShared::StringLiterals.ts_single(icon_off)}}"
+          elsif attributes['selected'] == true || attributes['selected'] == 'true'
+            # A literal selected state (or its alias isOn) draws icon_on, as
+            # the text takes selectedFontColor: it fell to the branch below
+            # and drew icon_off, the icon alone left unselected (ticket
+            # rjui-iconlabel-static-selected-draws-icon-off).
+            attributes['icon_on'] || attributes['iconOn'] || attributes['icon_off'] || attributes['iconOff'] || attributes['icon'] || ''
           else
             attributes['icon_off'] || attributes['iconOff'] || attributes['icon_on'] || attributes['iconOn'] || attributes['icon'] || ''
           end

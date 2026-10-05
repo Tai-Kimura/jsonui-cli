@@ -142,4 +142,46 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
       end
     end
   end
+
+  # No icon declared: no icon drawn and no space kept (user ruling
+  # 2026-10-05, attribute_semantics iconLabelIconSize). An <img src=""> drew
+  # the browser's empty-image box, 96 high, where Android draws only the text.
+  describe 'with no icon declared' do
+    it 'emits no img at all' do
+      out = described_class.new({ 'type' => 'IconLabel', 'id' => 'il', 'width' => 200, 'text' => 'Sample' },
+                                { 'use_tailwind' => true }).convert_node(2)
+      expect(out).not_to include('<img')
+      expect(out).to include('Sample')
+    end
+
+    it 'still draws a declared icon at its own size when iconSize is absent' do
+      out = described_class.new({ 'type' => 'IconLabel', 'id' => 'il', 'width' => 200, 'text' => 'Sample', 'icon_off' => 'a.png' },
+                                { 'use_tailwind' => true }).convert_node(2)
+      img = out[/<img[^>]*>/]
+      expect(img).not_to be_nil
+      expect(img).not_to match(/\b[wh]-\[/)
+    end
+  end
+
+  # A literal selected state draws icon_on (ticket
+  # rjui-iconlabel-static-selected-draws-icon-off): it drew icon_off while the
+  # text took selectedFontColor.
+  describe 'a literal selected state' do
+    def img_src(attrs)
+      described_class.new({ 'type' => 'IconLabel', 'id' => 'il', 'text' => 'Sample',
+                            'icon_on' => 'on.png', 'icon_off' => 'off.png' }.merge(attrs),
+                          { 'use_tailwind' => true }).convert_node(2)[/<img[^>]*src="([^"]*)"/, 1]
+    end
+
+    it 'draws icon_on for selected: true and for its alias isOn: true' do
+      expect(img_src('selected' => true)).to eq('on.png')
+      expect(img_src('isOn' => true)).to eq('on.png')
+    end
+
+    it 'draws icon_off when not selected' do
+      expect(img_src('selected' => false)).to eq('off.png')
+      expect(img_src({})).to eq('off.png')
+    end
+  end
 end
+

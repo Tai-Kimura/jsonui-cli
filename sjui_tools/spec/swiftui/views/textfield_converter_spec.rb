@@ -746,4 +746,34 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
       end
     end
   end
+
+  # The id goes on the field itself, before the styled placeholder and the
+  # clear button go on. On the composite it reached every element inside —
+  # the test driver's tap pressed the clear button — and hiding those parts
+  # does not hold under an explicit accessibility container (measured,
+  # XCUITest iOS 26.5; ticket sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+  describe 'the layout id on the field itself' do
+    let(:code) do
+      described_class.new({ 'type' => 'TextField', 'id' => 'tf', 'text' => 'Clear me', 'clearButtonMode' => 'always',
+                            'hint' => 'H', 'hintColor' => '#FF0000' }).convert
+    end
+
+    it 'is applied right after the field, before the overlays, and nowhere else' do
+      id_at = code.index('.accessibilityIdentifier("tf")')
+      expect(id_at).not_to be_nil
+      expect(id_at).to be < code.index('.styledPlaceholder(')
+      expect(id_at).to be < code.index('.textFieldClearButton(')
+      expect(code.scan('.accessibilityIdentifier(').size).to eq(1)
+    end
+
+    it 'keeps the bound-hidden rule: an empty id while hidden' do
+      bound = described_class.new({ 'type' => 'TextField', 'id' => 'tf', 'hidden' => '@{h}' }).convert
+      expect(bound).to include('.accessibilityIdentifier(data.h ? "" : "tf")')
+    end
+
+    it 'emits no id for a statically invisible field' do
+      expect(described_class.new({ 'type' => 'TextField', 'id' => 'tf', 'visibility' => 'invisible' }).convert)
+        .not_to include('accessibilityIdentifier')
+    end
+  end
 end

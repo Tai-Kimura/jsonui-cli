@@ -67,10 +67,10 @@ module RjuiTools
 
         # The plain single-span label, with the hint swap when configured.
         #
-        # Canonical semantics (UIKit SJUILabel, mirrored by kjui): `hint` +
-        # `hintAttributes` are BOTH required, and the styled hint replaces the
-        # text when the text is empty. `placeholder` is the declared alias of
-        # `hint`; `hintAttributes.fontColor` wins over `hintColor`.
+        # The hint replaces the text when the text is empty, with or without
+        # `hintAttributes` (user ruling 2026-10-05; it used to require both,
+        # after UIKit SJUILabel — hint_config). `placeholder` is the declared
+        # alias of `hint`; `hintAttributes.fontColor` wins over `hintColor`.
         def render_plain_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
           raw = attributes['text'] || ''
           hint = hint_config
@@ -82,7 +82,7 @@ module RjuiTools
 
           if hint && raw.strip.empty?
             # Statically empty: the hint IS the content.
-            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{hint_common}>#{escape_jsx_text(hint[:text])}</span>"
+            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(escape_jsx_text(hint[:text]))}</span>"
           end
 
           if hint && pure_binding_text?(raw)
@@ -93,15 +93,15 @@ module RjuiTools
             text_node = convert_text_binding(raw)
             return <<~JSX.chomp
               #{indent_str(indent)}{(#{expr}) ? (
-              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{common}>#{text_node}</span>
+              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{common}>#{line_spacing_wrap(text_node)}</span>
               #{indent_str(indent)}) : (
-              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{hint_common}>#{escape_jsx_text(hint[:text])}</span>
+              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(escape_jsx_text(hint[:text]))}</span>
               #{indent_str(indent)})}
             JSX
           end
 
           text = convert_text_binding(raw)
-          "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{common}>#{text}</span>"
+          "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{common}>#{line_spacing_wrap(text)}</span>"
         end
 
         def merged_hint_style(style_attr, hint)
@@ -121,11 +121,15 @@ module RjuiTools
         # colour names resolve through the generated `--color-*` variables
         # (theme.css); hex values pass through.
         def hint_config
-          attrs = attributes['hintAttributes']
+          # `hint` shows whether or not `hintAttributes` is declared (user
+          # ruling 2026-10-05, attribute_semantics labelHint); without them it
+          # is drawn in the default subdued hint colour at the Label's own
+          # font — gray-400, the hint default the rest of rjui uses (SelectBox).
+          attrs = attributes['hintAttributes'].is_a?(Hash) ? attributes['hintAttributes'] : {}
           hint = attributes['hint'] || attributes['placeholder']
-          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+          return nil unless hint.is_a?(String) && !hint.empty?
 
-          color = attrs['fontColor'] || attributes['hintColor']
+          color = attrs['fontColor'] || attributes['hintColor'] || '#9CA3AF'
           parts = []
           if has_binding?(color)
             # Was dropped outright. A runtime colour resolves the same way
@@ -296,6 +300,56 @@ module RjuiTools
           classes.reject { |c| c.nil? || c.empty? }
         end
 
+        # The line of a Label that declares no line height, as a multiple of
+        # its font size: the stylesheet's `line-height: 1.5` (Tailwind's
+        # preflight), which every Label inherits.
+        DEFAULT_LINE_HEIGHT = 1.5
+
+        # L, the line of a Label of this font size that declares no line
+        # height, as a CSS number (a multiple of the font size). A size on
+        # Tailwind's scale brings its own line with its `text-*` class
+        # (text-2xl: 32 at 24px, its `--text-2xl--line-height`), and the var
+        # follows a theme that redefines it; any other size inherits the
+        # preflight 1.5. Ruling B multiplies this line: taken as 1.5 for every
+        # size, a highlight at 24 drew 1.5 x 36 = 54 where its own line gives
+        # 1.5 x 32 = 48. A bound size cannot name its class here and keeps 1.5.
+        def own_line(size)
+          token = TailwindMapper::FONT_SIZE_MAP[size]
+          token ? "var(--#{token}--line-height)" : DEFAULT_LINE_HEIGHT.to_s
+        end
+
+        # own_line as a style value (a bare number or a quoted calc()).
+        def own_line_value(size)
+          line = own_line(size)
+          line == DEFAULT_LINE_HEIGHT.to_s ? line : "'calc(#{line})'"
+        end
+
+        # m x own_line, as a style value: a bare number when the line is the
+        # preflight 1.5, else a calc() over the token's line.
+        def multiplied_line(size, multiple)
+          line = own_line(size)
+          return (DEFAULT_LINE_HEIGHT * multiple.to_f).round(4).to_s if line == DEFAULT_LINE_HEIGHT.to_s
+
+          "'calc(#{line} * #{multiple.to_f.round(4)})'"
+        end
+
+        # The text of a Label that declares lineSpacing, in a block whose
+        # negative block margins take back the half spacing above the first
+        # line and below the last: the line box adds s / 2 on each side of
+        # every line, and only the spacings BETWEEN lines are declared. The
+        # Label is a flex container, so the margins reach its height.
+        def line_spacing_wrap(content)
+          spacing = attributes['lineSpacing']
+          return content if spacing.nil?
+
+          margin = if (expr = bound_value_expr(spacing))
+                     "`-${Number(#{expr}) / 2}px`"
+                   else
+                     "'-#{TailwindMapper.css_px(spacing.to_f / 2)}'"
+                   end
+          "<span style={{ display: 'block', marginBlock: #{margin} }}>#{content}</span>"
+        end
+
         # The lineHeight swap. Kept out of the class list because line height is
         # a unitless multiplier in the style object, where React reads a bare
         # number as a multiplier rather than pixels.
@@ -309,13 +363,20 @@ module RjuiTools
           condition = selected_condition
           return if condition.nil?
 
+          # The same rule as the base: m x the Label's own line (ruling B,
+          # see build_style_attr) — at the highlight's font size when it
+          # declares one, the font the highlighted line is drawn in.
+          line = multiplied_line(attrs['fontSize'] || attributes['fontSize'], multiple)
           if condition == 'true'
-            @dynamic_styles['lineHeight'] = multiple.to_s
+            @dynamic_styles['lineHeight'] = line.to_s
             return
           end
 
-          base = @dynamic_styles['lineHeight'] || "'normal'"
-          @dynamic_styles['lineHeight'] = "(#{condition} ? #{multiple} : #{base})"
+          # Unselected with no line declared: the Label's own line, not CSS
+          # `normal` (which is the font's own, 18 at 16px — not the 24 every
+          # other Label draws).
+          base = @dynamic_styles['lineHeight'] || own_line_value(attributes['fontSize'])
+          @dynamic_styles['lineHeight'] = "(#{condition} ? #{line} : #{base})"
         end
 
         # The `selected` state that decides which set is in force. Absent means
@@ -385,6 +446,15 @@ module RjuiTools
             classes.concat(TailwindMapper.map_label_gravity(attributes['gravity'], attributes['textAlign']))
           end
 
+          # An empty Label keeps one line of height (user ruling 2026-10-05,
+          # attribute_semantics emptyLabelHeight): wrapContent collapsed it to
+          # 0 on web, where Android draws one line. An invisible, zero-wide
+          # character on the ::before of an element with no content holds
+          # the line — not in its text, so a text read still returns "". (No
+          # escape in the class: `\00a0` is an octal escape inside the JS
+          # string a className can be.)
+          classes << "empty:before:content-['x'] empty:before:invisible empty:before:w-0"
+
           # Line clamp for multiple lines
           #
           # A BOUND cap has no class — `line-clamp-N` needs N at build time —
@@ -445,23 +515,36 @@ module RjuiTools
           # multiplier. The arithmetic moves into the emitted expression.
           line_height_multiple = attributes['lineHeightMultiple']
           line_spacing = attributes['lineSpacing']
+          #
+          # User ruling B (2026-10-05, attribute_semantics
+          # lineHeightMultipleBase / lineSpacingBetween): the line they act on
+          # is L, the line of a Label that declares no line height — on web
+          # the line its font size's class brings, else the stylesheet's 1.5
+          # (own_line).
+          # lineHeightMultiple makes each line m x L (it multiplied the font
+          # size: 3 lines at 1.8 drew 86.4 where 129.6 is declared);
+          # lineSpacing adds s BETWEEN lines only, L x n + s x (n - 1) (it
+          # gave every line s / 2 above and below as well: 96 for 104). The
+          # last line's spacing is taken back by the text's wrapper
+          # (line_spacing_wrap).
+          size = attributes['fontSize']
+          line = own_line(size)
           if (multiple_expr = bound_value_expr(line_height_multiple))
-            @dynamic_styles['lineHeight'] = multiple_expr
+            @dynamic_styles['lineHeight'] = if line == DEFAULT_LINE_HEIGHT.to_s
+                                              "#{DEFAULT_LINE_HEIGHT} * Number(#{multiple_expr})"
+                                            else
+                                              "`calc(#{line} * ${Number(#{multiple_expr})})`"
+                                            end
           elsif line_height_multiple
-            @dynamic_styles['lineHeight'] = line_height_multiple.to_s
+            @dynamic_styles['lineHeight'] = multiplied_line(size, line_height_multiple)
           elsif line_spacing
-            # Convert lineSpacing (px) to lineHeight (em-ish)
-            font_size = attributes['fontSize'] || 16
             spacing_expr = bound_value_expr(line_spacing)
-            font_size_expr = bound_value_expr(font_size)
-            if spacing_expr || font_size_expr
-              size_js = font_size_expr || font_size
-              spacing_js = spacing_expr || line_spacing.to_f
-              @dynamic_styles['lineHeight'] = "((#{size_js}) + (#{spacing_js})) / (#{size_js})"
-            else
-              line_height = ((font_size + line_spacing.to_f) / font_size).round(2)
-              @dynamic_styles['lineHeight'] = line_height.to_s
-            end
+            line_em = line == DEFAULT_LINE_HEIGHT.to_s ? "#{line}em" : "#{line} * 1em"
+            @dynamic_styles['lineHeight'] = if spacing_expr
+                                              "`calc(#{line_em} + ${Number(#{spacing_expr})}px)`"
+                                            else
+                                              "'calc(#{line_em} + #{TailwindMapper.css_px(line_spacing)})'"
+                                            end
 
           elsif attributes['lineHeight']
             @dynamic_styles['lineHeight'] = "'#{TailwindMapper.rem(attributes['lineHeight'])}'"
@@ -524,6 +607,13 @@ module RjuiTools
           when 'Word'
             @dynamic_styles['overflowWrap'] = "'break-word'"
           when 'Head', 'Middle', 'Tail', 'Clip'
+            # These choose HOW the last allowed line is cut; they do not mean
+            # one line. `lines` alone sets the count, so with no cap the text
+            # wraps and nothing is cut (user ruling 2026-10-05,
+            # attribute_semantics lineBreakModeLines): web drew one line (24)
+            # where Android wrapped (120).
+            return style_attr_for(@dynamic_styles) unless line_cap?
+
             # CSS has no native middle truncation; ellipsis is the fallback.
             @dynamic_styles['textOverflow'] = "'ellipsis'"
             if attributes['lineBreakMode'] == 'Head'
@@ -566,6 +656,14 @@ module RjuiTools
         # its value is not known here, and treating it as single-line would
         # emit `white-space: nowrap` that defeats whatever the runtime asks
         # for.
+        # A cap on the line count: a bound `lines`, or a number above 0.
+        def line_cap?
+          lines = attributes['lines']
+          return true if has_binding?(lines)
+
+          lines.is_a?(Numeric) && lines > 0
+        end
+
         def multiline_cap?
           lines = attributes['lines']
           return true if has_binding?(lines)

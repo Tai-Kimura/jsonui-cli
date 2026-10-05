@@ -117,7 +117,7 @@ module SwiftCompiler
       mock_types = <<~SWIFT
         // Mock types for testing (simulating SwiftJsonUI types)
         struct PartialAttributedText: View {
-            init(_ text: String, partialAttributes: [PartialAttribute] = [], fontSize: CGFloat? = nil, fontWeight: String? = nil, fontColor: Color? = nil, highlightColor: Color? = nil, underline: Bool = false, strikethrough: Bool = false, lineSpacing: CGFloat? = nil, lineLimit: Int? = nil, textAlignment: TextAlignment = .leading, linkable: Bool = false, linksEnabled: Bool = true) {}
+            init(_ text: String, partialAttributes: [PartialAttribute] = [], fontSize: CGFloat? = nil, fontWeight: String? = nil, fontColor: Color? = nil, highlightColor: Color? = nil, underline: Bool = false, strikethrough: Bool = false, lineSpacing: CGFloat? = nil, lineHeightMultiple: CGFloat? = nil, lineLimit: Int? = nil, textAlignment: TextAlignment = .leading, linkable: Bool = false, linksEnabled: Bool = true) {}
             var body: some View { Text("") }
         }
         struct PartialAttribute {
@@ -126,7 +126,14 @@ module SwiftCompiler
         struct SwiftJsonUIConfiguration {
             static let shared = SwiftJsonUIConfiguration()
             func getColor(for hex: String) -> Color? { Color.black }
+            // SwiftJsonUIConfiguration.colors (a class, `placeholder: UIColor`);
+            // this compiler reads a macOS SDK, so the UIColor is stood in for
+            // by a type `Color(_:)` takes, as SwiftUI's takes a UIColor.
+            struct PlatformColor {}
+            final class Colors { var placeholder = PlatformColor() }
+            let colors = Colors()
         }
+        extension Color { init(_ color: SwiftJsonUIConfiguration.PlatformColor) { self = .gray } }
         class ViewModel: ObservableObject {}
       SWIFT
 

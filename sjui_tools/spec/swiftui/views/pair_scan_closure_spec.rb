@@ -42,8 +42,11 @@ RSpec.describe 'pair-scan closure (swiftui)' do
     expect(static_empty).to include('Empty')
     expect(static_empty).to include('fontSize: 11,')
 
+    # A hint shows without hintAttributes, in the configuration's placeholder
+    # colour (2026-10-05 user ruling 3) — it drew nothing.
     bare = convert(:LabelConverter, 'type' => 'Label', 'text' => '', 'hint' => 'X')
-    expect(bare).not_to include('"X"')
+    expect(bare).to include('"X"')
+    expect(bare).to include('fontColor: Color(SwiftJsonUIConfiguration.shared.colors.placeholder),')
   end
 
   it 'TextView: truncation, submit label, scroll opt-out' do

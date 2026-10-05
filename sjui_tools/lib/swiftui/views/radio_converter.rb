@@ -210,8 +210,22 @@ module SjuiTools
           # `.ignore` rather than `.combine`, matching the dynamic face: the
           # glyph carries nothing a reader needs, and combining would prepend
           # its name to every label.
+          #
+          # A GROUP (items) is one element that CONTAINS its options, with or
+          # without a title: the id goes on a Radio bare, and SwiftUI hands an
+          # identifier on a non-element to every element inside — the title
+          # and every option's glyph and label carried the group's id, and
+          # `.ignore` (which this used to emit for a titled group) left the
+          # options unreachable. `.contain` keeps each option its own,
+          # selectable element; the group reads as its title. The dynamic
+          # face forms the group the same way (RadioConverter.swift; ticket
+          # sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
           a11y_text = @component['label'] || @component['text']
-          if a11y_text.is_a?(String) && !a11y_text.empty?
+          titled = a11y_text.is_a?(String) && !a11y_text.empty?
+          if bound_items || items.any?
+            add_modifier_line ".accessibilityElement(children: .contain)"
+            add_modifier_line ".accessibilityLabel(#{label_expression(a11y_text)})" if titled
+          elsif titled
             add_modifier_line ".accessibilityElement(children: .ignore)"
             add_modifier_line ".accessibilityLabel(#{label_expression(a11y_text)})"
           end

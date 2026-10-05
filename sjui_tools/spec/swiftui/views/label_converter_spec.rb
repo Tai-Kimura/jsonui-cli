@@ -86,6 +86,54 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
       end
     end
 
+    # A hint shows without hintAttributes, in the configuration's placeholder
+    # colour (2026-10-05 user ruling 3): it needed hintAttributes beside it,
+    # and drew in the text colour when they declared none.
+    context 'with a hint and no hintAttributes' do
+      let(:component) { { 'type' => 'Label', 'text' => '', 'hint' => 'Conformance Hint' } }
+
+      it 'shows the hint in the placeholder colour, and compiles', :swift_compile do
+        code = described_class.new(component).convert
+        expect(code).to include('"Conformance Hint"')
+        expect(code).to include('fontColor: Color(SwiftJsonUIConfiguration.shared.colors.placeholder),')
+        expect("struct TestView: View {\n    var body: some View {\n#{code}\n    }\n}\n").to compile_as_swift
+      end
+
+      it 'keeps a declared colour' do
+        code = described_class.new(component.merge('hintAttributes' => { 'fontSize' => 12 }, 'hintColor' => '#FF0000')).convert
+        expect(code).not_to include('colors.placeholder')
+        expect(code).to include('fontSize: 12,')
+      end
+
+      it 'puts a hint with hintAttributes but no colour in the placeholder colour' do
+        code = described_class.new(component.merge('hintAttributes' => { 'fontSize' => 12 })).convert
+        expect(code).to include('fontColor: Color(SwiftJsonUIConfiguration.shared.colors.placeholder),')
+      end
+    end
+
+    # SwiftJsonUI 10.29.6 takes the multiple itself (`lineHeightMultiple:`,
+    # after `lineSpacing:`) and bases the spacing on the font's line.
+    context 'with lineHeightMultiple' do
+      let(:component) do
+        { 'type' => 'Label', 'text' => 'Three lines', 'lineHeightMultiple' => 1.8, 'lines' => 3 }
+      end
+
+      it 'generates compilable Swift code', :swift_compile do
+        code = described_class.new(component).convert
+        expect(code).to include('lineHeightMultiple: 1.8,')
+
+        full_code = <<~SWIFT
+          struct TestView: View {
+              var body: some View {
+                  #{code}
+              }
+          }
+        SWIFT
+
+        expect(full_code).to compile_as_swift
+      end
+    end
+
     context 'with textAlign' do
       let(:component) do
         {

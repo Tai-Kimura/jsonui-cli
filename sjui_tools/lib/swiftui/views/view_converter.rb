@@ -38,25 +38,29 @@ module SjuiTools
           # HStack with right/trailing gravity needs leading spacer
           # Extract horizontal component from gravity
           horizontal = extract_horizontal_from_gravity(gravity)
-          horizontal == 'right'
+          # A rightToLeft row with no horizontal gravity starts at the right
+          # edge (FrameHelper#direction_start_edge).
+          horizontal == 'right' || direction_start_edge == 'right'
         end
 
         def should_add_trailing_spacer_for_hstack(gravity)
           # HStack with left/leading gravity needs trailing spacer
           horizontal = extract_horizontal_from_gravity(gravity)
-          horizontal == 'left'
+          horizontal == 'left' && direction_start_edge.nil?
         end
 
         def should_add_leading_spacer_for_vstack(gravity)
           # VStack with bottom gravity needs leading spacer
           vertical = extract_vertical_from_gravity(gravity)
-          vertical == 'bottom'
+          # A bottomToTop column with no vertical gravity starts at the bottom
+          # edge (FrameHelper#direction_start_edge).
+          vertical == 'bottom' || direction_start_edge == 'bottom'
         end
 
         def should_add_trailing_spacer_for_vstack(gravity)
           # VStack with top gravity needs trailing spacer
           vertical = extract_vertical_from_gravity(gravity)
-          vertical == 'top'
+          vertical == 'top' && direction_start_edge.nil?
         end
 
         def extract_horizontal_from_gravity(gravity)

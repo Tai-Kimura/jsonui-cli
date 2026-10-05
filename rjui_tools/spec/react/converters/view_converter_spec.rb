@@ -953,7 +953,7 @@ RSpec.describe 'pair-scan closure (web)' do
     expect(net).to include('loading="eager"')
   end
 
-  it 'Label: styled hint swaps in for an empty text (canonical: both keys required)' do
+  it 'Label: a hint swaps in for an empty text, with or without hintAttributes (user ruling 2026-10-05)' do
     hinted = conv(RjuiTools::React::Converters::LabelConverter,
                   'type' => 'Label', 'text' => '',
                   'hint' => 'Nothing here', 'hintColor' => '#999999',
@@ -969,10 +969,13 @@ RSpec.describe 'pair-scan closure (web)' do
     expect(bound).to include('data.title) ? (')
     expect(bound).to include('No title')
 
-    # hint without hintAttributes shows nothing (UIKit SJUILabel contract)
+    # hint without hintAttributes shows too, in the default subdued colour
+    # (attribute_semantics labelHint; it used to show nothing, after UIKit
+    # SJUILabel)
     bare = conv(RjuiTools::React::Converters::LabelConverter,
                 'type' => 'Label', 'text' => '', 'hint' => 'X').convert
-    expect(bare).not_to include('X</span>')
+    expect(bare).to include('X</span>')
+    expect(bare).to include("color: '#9CA3AF'")
   end
 
   it 'TextView: input mode, enter key hint, truncation' do

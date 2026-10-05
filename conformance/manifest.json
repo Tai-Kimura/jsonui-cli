@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ee99ad41ea2b91edafd24cd7441c3ebe76684acfdec3082f56a1cde3c49cbed0",
   "counts": {
-    "fixtures": 1149,
+    "fixtures": 1151,
     "assertable": 49,
-    "visual": 861,
+    "visual": 862,
     "interactive": 37,
-    "control": 124,
+    "control": 125,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -28114,6 +28114,56 @@
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
+    },
+    {
+      "id": "__control/ScrollView__content-fills",
+      "component": "__control",
+      "attribute": null,
+      "case": "ScrollView__content-fills",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/ScrollView__content-fills.layout.json",
+      "test": "fixtures/__control/ScrollView__content-fills.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": []
+    },
+    {
+      "id": "ScrollView/content__short",
+      "component": "ScrollView",
+      "attribute": "child",
+      "case": "content__short",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "child",
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/content__short.layout.json",
+      "test": "fixtures/ScrollView/content__short.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/ScrollView__content-fills",
+      "companions": []
     }
   ],
   "skipped": [
