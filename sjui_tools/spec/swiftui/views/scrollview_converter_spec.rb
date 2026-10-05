@@ -54,9 +54,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
         expect(frame_line({ 'type' => 'ScrollView', 'child' => [child] })).to include('alignment: .topLeading')
       end
 
-      it "at the child's gravity with one child" do
-        expect(frame_line({ 'type' => 'ScrollView', 'child' => [child.merge('gravity' => 'right')] })).to include('alignment: .topTrailing')
-        expect(frame_line({ 'type' => 'ScrollView', 'child' => [child.merge('gravity' => 'center')] })).to include('alignment: .top)')
+      # common.gravity is the CONTENT gravity of the view that declares it:
+      # the ScrollView's own gravity places its content; a child's gravity is
+      # the child's content's and does not place the child (2026-10-05).
+      it "at the ScrollView's own gravity" do
+        expect(frame_line({ 'type' => 'ScrollView', 'gravity' => 'centerHorizontal', 'child' => [child] })).to include('alignment: .top)')
+        expect(frame_line({ 'type' => 'ScrollView', 'gravity' => 'right', 'child' => [child, child] })).to include('alignment: .topTrailing')
+      end
+
+      it "not at a child's gravity" do
+        %w[right center centerHorizontal].each do |g|
+          expect(frame_line({ 'type' => 'ScrollView', 'child' => [child.merge('gravity' => g)] })).to include('alignment: .topLeading'), g
+        end
       end
 
       it 'at the top leading edge of a horizontal scroll' do
@@ -401,34 +410,6 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
         expect(code).to include('AdvancedKeyboardAvoidingScrollView(.horizontal')
         expect(code).to include('KeyboardAvoidanceConfiguration(isEnabled: false)')
       end
-    end
-  end
-
-  describe '#extract_horizontal_from_gravity' do
-    let(:converter) { described_class.new({ 'type' => 'ScrollView' }) }
-
-    it 'extracts center from center gravity' do
-      expect(converter.extract_horizontal_from_gravity('center')).to eq('center')
-    end
-
-    it 'extracts left from left|top' do
-      expect(converter.extract_horizontal_from_gravity('left|top')).to eq('left')
-    end
-
-    it 'extracts right from right|bottom' do
-      expect(converter.extract_horizontal_from_gravity('right|bottom')).to eq('right')
-    end
-
-    it 'handles array gravity format' do
-      expect(converter.extract_horizontal_from_gravity(['right', 'top'])).to eq('right')
-    end
-
-    it 'returns left as default for nil' do
-      expect(converter.extract_horizontal_from_gravity(nil)).to eq('left')
-    end
-
-    it 'returns left for invalid gravity' do
-      expect(converter.extract_horizontal_from_gravity('invalid')).to eq('left')
     end
   end
 

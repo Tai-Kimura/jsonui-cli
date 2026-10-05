@@ -23,22 +23,6 @@ module SjuiTools
           v == v.to_i ? v.to_i.to_s : v.to_s
         end
 
-        def extract_horizontal_from_gravity(gravity)
-          gravity = gravity || 'left|top'
-          if gravity.is_a?(Array)
-            gravity.find { |g| ['left', 'center', 'right'].include?(g) } || 'left'
-          elsif gravity.is_a?(String)
-            if gravity.include?('|')
-              parts = gravity.split('|')
-              parts.find { |p| ['left', 'center', 'right'].include?(p) } || 'left'
-            else
-              ['left', 'center', 'right'].include?(gravity) ? gravity : 'left'
-            end
-          else
-            'left'
-          end
-        end
-
         def convert
           child_data = @component['child'] || []
           # childが単一要素の場合は配列に変換
@@ -104,70 +88,40 @@ module SjuiTools
           end
           
           indent do
-            if children.length == 1
-              # Single child - wrap in VStack/HStack with alignment-based Spacer
+            # The content stack, at the ScrollView's own content gravity
+            # (common.gravity is "Content gravity/alignment"; gravityDefaults
+            # top|start). A child's gravity is that child's content's and does
+            # not place the child: the single-child branch used to read it
+            # here, through a reader of its own that did not know
+            # centerHorizontal, and placed a narrow child centre / right where
+            # Dynamic, Android and web drew it at the start (2026-10-05). The
+            # gravity is read by ResponsiveHelper, as a View's is. Dynamic:
+            # DynamicScrollViewContainer, the same alignment.
+            stack_alignment, frame_alignment =
               if axes == '.vertical'
-                # VStack - check child's gravity for horizontal alignment
-                child_gravity = children.first['gravity'] if children.first.is_a?(Hash)
-                horizontal = extract_horizontal_from_gravity(child_gravity)
-                alignment = case horizontal
-                when 'center'
-                  'alignment: .center'
-                when 'right'
-                  'alignment: .trailing'
-                else
-                  'alignment: .leading'
-                end
-                frame_alignment = { 'center' => '.top', 'right' => '.topTrailing' }.fetch(horizontal, '.topLeading')
-                
-                add_line "#{stack_type}(#{alignment}, spacing: 0) {"
-                indent do
-                  # Through the visibility door (base_view_converter): a
-                  # `visibility` on the child was dropped here until 1.8.107.
-                  render_child_honoring_visibility(children.first)
-                  # Add Spacer for leading alignment (default)
-                  if horizontal != 'center' && horizontal != 'right'
-                    add_line "Spacer(minLength: 0)"
-                  end
+                case ResponsiveHelper.extract_horizontal(@component['gravity'])
+                when 'center', 'centerHorizontal' then ['.center', '.top']
+                when 'right' then ['.trailing', '.topTrailing']
+                else ['.leading', '.topLeading']
                 end
               else
-                # HStack for horizontal scroll
-                alignment = 'alignment: .top'
-                frame_alignment = '.topLeading'
-                add_line "#{stack_type}(#{alignment}, spacing: 0) {"
-                indent do
-                  # Through the visibility door (base_view_converter): a
-                  # `visibility` on the child was dropped here until 1.8.107.
-                  render_child_honoring_visibility(children.first)
-                  # Add Spacer to fill remaining space
-                  add_line "Spacer(minLength: 0)"
-                end
+                ['.top', '.topLeading']
               end
-              add_line "}"
-
-              # Add frame modifier to fill available space in ScrollView.
-              # Placed where the stack is aligned: without an alignment the
-              # frame centres the stack, so a leading child of a wider
-              # ScrollView drew in its middle (x 25 for a 150 child in 200,
-              # frame-parity 2026-10-05) where Android and web drew it at 0.
-              add_modifier_line ".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: #{frame_alignment})"
-            else
-              # デフォルトのアライメントを左上にする
-              alignment = axes == '.vertical' ? 'alignment: .leading' : 'alignment: .top'
-              add_line "#{stack_type}(#{alignment}, spacing: 0) {"
-              indent do
-                children.each do |child|
-                  render_child_honoring_visibility(child)
-                end
-                # Add Spacer to fill remaining space (same as Dynamic mode)
-                add_line "Spacer(minLength: 0)"
+            add_line "#{stack_type}(alignment: #{stack_alignment}, spacing: 0) {"
+            indent do
+              children.each do |child|
+                # Through the visibility door (base_view_converter): a
+                # `visibility` on a child was dropped here until 1.8.107.
+                render_child_honoring_visibility(child)
               end
-              add_line "}"
-              
-              # Add frame modifier to fill available space in ScrollView, at
-              # the stack's top | start (see the single-child branch).
-              add_modifier_line ".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)"
+              add_line "Spacer(minLength: 0)"
             end
+            add_line "}"
+            # Stretched to the ScrollView's size and placed where the stack is
+            # aligned: without an alignment the frame centred the stack, so a
+            # leading child of a wider ScrollView drew in its middle (x 25 for
+            # a 150 child in 200, frame-parity 2026-10-05).
+            add_modifier_line ".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: #{frame_alignment})"
           end
           add_line "}"
           

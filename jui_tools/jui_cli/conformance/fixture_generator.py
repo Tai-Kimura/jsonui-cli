@@ -1003,6 +1003,24 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         1 for e in scroll_entries if e["class"] == "visual" and not e.get("isControl")
     )
     summary.control_count += sum(1 for e in scroll_entries if e.get("isControl"))
+
+    # A vertical ScrollView holding a child narrower than itself: where the
+    # ScrollView's own gravity and the child's gravity put it — see
+    # scroll_gravity_fixtures.
+    from .scroll_gravity_fixtures import build_scroll_gravity_fixtures
+
+    gravity_files, gravity_entries = build_scroll_gravity_fixtures(source_label)
+    for rel_path, payload in gravity_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(gravity_entries)
+    summary.fixture_count += len(gravity_entries)
+    summary.visual_count += sum(
+        1 for e in gravity_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.control_count += sum(1 for e in gravity_entries if e.get("isControl"))
     summary.fixture_count += len(bounds_entries)
     summary.visual_count += sum(
         1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")

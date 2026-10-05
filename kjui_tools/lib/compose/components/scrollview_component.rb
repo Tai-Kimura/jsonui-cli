@@ -2,6 +2,7 @@
 
 require_relative '../helpers/content_inset_helper'
 require_relative '../helpers/modifier_builder'
+require_relative 'container_component'
 
 module KjuiTools
   module Compose
@@ -122,6 +123,19 @@ module KjuiTools
             code += "\n" + indent("state = #{state_var},", depth + 1)
           end
 
+          # The content, at the ScrollView's own content gravity across the
+          # scroll (common.gravity is "Content gravity/alignment";
+          # gravityDefaults top|start). It was not read, so a ScrollView
+          # declaring centerHorizontal drew a narrow child at the start, where
+          # web centred it (2026-10-05). Read as a Column's gravity is
+          # (ContainerComponent.gravity_parts_of). A child's gravity is the
+          # child's content's and does not place the child. KotlinJsonUI
+          # Dynamic: DynamicScrollViewComponent, the same alignment.
+          if !is_horizontal && (cross = cross_alignment(json_data['gravity']))
+            required_imports&.add(:alignment)
+            code += "\n" + indent("horizontalAlignment = #{cross},", depth + 1)
+          end
+
           # `contentInsetAdjustmentBehavior` — see ContentInsetHelper. UIKit
           # adjusts by default and the attribute stops it; Compose never
           # adjusts, so the values that need code are the opposite ones.
@@ -226,6 +240,15 @@ module KjuiTools
           result
         end
         
+        # `Alignment.*` for a vertical scroll's cross axis, or nil for start.
+        def self.cross_alignment(gravity)
+          parts = ContainerComponent.gravity_parts_of(gravity)
+          return 'Alignment.End' if parts.include?('right')
+          return 'Alignment.CenterHorizontally' if (parts & %w[centerHorizontal center]).any?
+
+          nil
+        end
+
         UNBOUNDED_ROW_OPEN = 'Row(modifier = Modifier.wrapContentHeight(align = Alignment.Top, unbounded = true)) {'.freeze
 
         private

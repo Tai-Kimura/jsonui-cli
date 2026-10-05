@@ -9,6 +9,34 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
   let(:required_imports) { Set.new }
 
   describe '.generate' do
+    # common.gravity is the CONTENT gravity of the view that declares it: a
+    # vertical ScrollView's own gravity places its content across the scroll
+    # (web centred a narrow child, Android drew it at the start, 2026-10-05);
+    # a child's gravity is the child's content's and does not.
+    context 'where a vertical scroll puts its content across' do
+      def code_for(json)
+        described_class.generate(json, 0, Set.new)[:code]
+      end
+      let(:child) { { 'type' => 'View', 'width' => 40, 'height' => 40 } }
+
+      it "at the ScrollView's own gravity" do
+        expect(code_for({ 'type' => 'ScrollView', 'gravity' => 'centerHorizontal', 'child' => [child] }))
+          .to include('horizontalAlignment = Alignment.CenterHorizontally')
+        expect(code_for({ 'type' => 'ScrollView', 'gravity' => 'right', 'child' => [child] }))
+          .to include('horizontalAlignment = Alignment.End')
+      end
+
+      it "at the start without one, whatever the child's gravity" do
+        code = code_for({ 'type' => 'ScrollView', 'child' => [child.merge('gravity' => 'right')] })
+        expect(code).not_to include('horizontalAlignment')
+      end
+
+      it 'not across a horizontal scroll' do
+        code = code_for({ 'type' => 'ScrollView', 'orientation' => 'horizontal', 'gravity' => 'centerHorizontal', 'child' => [child] })
+        expect(code).not_to include('horizontalAlignment')
+      end
+    end
+
     it 'generates vertical LazyColumn by default' do
       json_data = { 'type' => 'ScrollView' }
       result = described_class.generate(json_data, 0, required_imports)
