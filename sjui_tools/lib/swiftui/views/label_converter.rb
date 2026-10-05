@@ -504,9 +504,6 @@ module SjuiTools
 
         private
 
-        # UIKit's formula, `(multiple - 1) * fontSize`, with either operand
-        # possibly bound. Both static operands keep the exact arithmetic the
-        # generator did before (a Ruby Float, printed the same way).
         # Get fontColor with binding support
         # Supports both direct color values and @{propertyName} binding expressions
         def get_font_color_with_binding(font_color)
