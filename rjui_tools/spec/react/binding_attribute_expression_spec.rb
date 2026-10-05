@@ -241,7 +241,9 @@ RSpec.describe 'an attribute holding a binding is one expression' do
     emitted = spec::C::ViewConverter.new(
       { 'type' => 'View', 'borderWidth' => '@{w}', 'borderColor' => '#000000' }, spec::CONFIG.dup
     ).convert
-    expect(emitted).to include('borderWidth: `${data.w}px`')
+    # Drawn over the content by ::after, through a custom property (user
+    # ruling B, 2026-10-05).
+    expect(emitted).to include("'--jui-border-width': `${data.w}px`")
   end
 
   # Every element a build can ship, as a component returns it, under

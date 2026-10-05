@@ -34,7 +34,7 @@ RSpec.describe 'inline color attributes resolve colors.json keys' do
 
     it 'resolves a bound borderColor' do
       out = label('borderColor' => '@{lineColor}', 'borderWidth' => 1)
-      expect(out).to include('borderColor: ColorManager.resolveColor(data.lineColor)')
+      expect(out).to include("'--jui-border-color': ColorManager.resolveColor(data.lineColor)")
     end
 
     it 'unwraps the JSX braces so the call is a valid argument' do
@@ -48,18 +48,18 @@ RSpec.describe 'inline color attributes resolve colors.json keys' do
       # borderWidth is bound, so the whole border goes inline — the static
       # colour key rides along and used to be emitted raw.
       out = label('borderColor' => 'warn_border', 'borderWidth' => '@{w}')
-      expect(out).to include("borderColor: ColorManager.resolveColor('warn_border')")
+      expect(out).to include("'--jui-border-color': ColorManager.resolveColor('warn_border')")
     end
 
     it 'leaves CSS literals alone rather than paying for a runtime call' do
       out = label('borderColor' => '#ff0000', 'borderWidth' => '@{w}')
-      expect(out).to include("borderColor: '#ff0000'")
+      expect(out).to include("'--jui-border-color': '#ff0000'")
       expect(out).not_to include('resolveColor')
     end
 
     it 'leaves rgba() alone' do
       out = label('borderColor' => 'rgba(0, 0, 0, 0.5)', 'borderWidth' => '@{w}')
-      expect(out).to include("borderColor: 'rgba(0, 0, 0, 0.5)'")
+      expect(out).to include("'--jui-border-color': 'rgba(0, 0, 0, 0.5)'")
     end
 
     it 'keeps the class path untouched when nothing forces an inline style' do

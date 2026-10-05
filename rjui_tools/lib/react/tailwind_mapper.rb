@@ -328,6 +328,27 @@ module RjuiTools
           end
         end
 
+        # A border drawn OVER the content, inside the box: an outline pulled
+        # in by its own width, so it takes no layout space (user ruling B,
+        # 2026-10-05 — see BaseConverter's border block). Width 0 draws
+        # nothing, as `border-0` did.
+        # A border width as a CSS px length (2 -> "2px", 1.5 -> "1.5px").
+        def css_px(value)
+          number = value.is_a?(Float) && value == value.to_i ? value.to_i : value
+          "#{number}px"
+        end
+
+        def map_border_over_content(border_width, border_color, border_style = nil)
+          return '' if border_width.nil? || border_width.to_f <= 0
+
+          width = border_width.is_a?(Float) && border_width == border_width.to_i ? border_width.to_i : border_width
+          classes = ["outline-[length:#{width}px]", "outline-offset-[-#{width}px]"]
+          classes << map_color(border_color, 'outline') if border_color
+          style_class = map_border_style(border_style).sub('border-', 'outline-')
+          classes << (style_class.empty? ? 'outline-solid' : style_class)
+          classes.compact.reject(&:empty?).join(' ')
+        end
+
         def map_border_style(style)
           case JsonUIShared::EnumSpelling.lowered(style, 'common', 'borderStyle')
           when 'dashed'

@@ -243,8 +243,9 @@ RSpec.describe 'bound value emitters' do
   describe 'border — the pair requests it, neither half does' do
     it 'draws when width and colour are both declared' do
       out = view('borderWidth' => 2, 'borderColor' => '#FF0000')
-      expect(out).to include('border-2')
-      expect(out).to include('border-[#FF0000]')
+      # Drawn over the content, inside the box (user ruling B, 2026-10-05).
+      expect(out).to include('after:border-[length:2px]')
+      expect(out).to include('after:border-[#FF0000]')
     end
 
     it 'draws nothing for a width with no colour — there is no default border colour' do

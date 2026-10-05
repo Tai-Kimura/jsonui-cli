@@ -6,6 +6,12 @@ module RjuiTools
   module React
     module Converters
       class ProgressConverter < BaseConverter
+        # A replaced element (<progress>) has no ::after: a declared border falls
+        # back to an outline (BaseConverter#pseudo_border_supported?).
+        def pseudo_border_supported?
+          false
+        end
+
         def convert(indent = 2)
           class_name = build_class_name
           base_style_attr = build_base_style_attr

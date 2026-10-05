@@ -418,30 +418,32 @@ module RjuiTools
           # again). Rulings live once, in attribute_semantics.json, verified
           # by cross-effect (`d119189`); read that file before reasoning from
           # types, enums and defaults.
+          #
+          # WHERE the border is drawn: over the content, inside the box —
+          # it does not push the content inward (user ruling B, 2026-10-05:
+          # "a border does not push the content inward"; iOS and Android
+          # keep the children at (0, 0) and a Label's height unchanged). A CSS
+          # `border` on the element takes layout space, which put the children
+          # at (2, 2) for borderWidth 2 and made a Label 4 taller on web only.
+          # So the border is drawn by the element's ::after, laid over the
+          # whole box (absolute, inset-0, the element's own corner radius,
+          # transparent to taps): no layout space, above the children (an
+          # inset box-shadow would paint UNDER a child touching the edge,
+          # measured), the corner radius in every browser (an outline follows
+          # it only from Safari 16.4), and dashed / dotted as declared. The
+          # element becomes the ::after's containing block (`relative`),
+          # unless it is absolutely positioned already. An element with no
+          # ::after (an <img>) falls back to an outline pulled in by its own
+          # width (pseudo_border_supported?). A text input keeps a CSS border
+          # (border_draws_over_content?).
           if attributes['borderWidth'] && attributes['borderColor']
-            border_width_binding = attributes['borderWidth'] && has_binding?(attributes['borderWidth'])
-            border_color_binding = attributes['borderColor'] && has_binding?(attributes['borderColor'])
-            border_style_binding = attributes['borderStyle'] && has_binding?(attributes['borderStyle'])
-
-            if border_width_binding || border_color_binding || border_style_binding
-              # Dynamic border - use inline styles
-              if border_width_binding
-                prop = attribute_expression(attributes['borderWidth'])
-                @dynamic_styles['borderWidth'] = "`${#{prop}}px`"
-              elsif attributes['borderWidth']
-                @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
-              end
-              if border_color_binding
-                @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
-              elsif attributes['borderColor']
-                @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
-              end
-              if border_style_binding
-                @dynamic_styles['borderStyle'] = convert_binding(attributes['borderStyle'])
-              end
-              classes << 'border-solid' unless attributes['borderStyle']
+            if !border_draws_over_content?
+              classes << css_border_classes
+            elsif pseudo_border_supported?
+              classes << pseudo_border_classes
+              classes << 'relative' unless json['_overlay'] == true
             else
-              classes << TailwindMapper.map_border(attributes['borderWidth'], attributes['borderColor'], attributes['borderStyle'])
+              classes << outline_border_classes
             end
           end
 
@@ -536,8 +538,14 @@ module RjuiTools
 
           # The SIZE half of the parent's `distribution`. An explicit `weight`
           # below is the more specific declaration and wins the same axis, the
-          # way an explicit size wins over a bound one.
-          if (parent_distribution = json['_parent_distribution']) && !attributes['weight']
+          # way an explicit size wins over a bound one. So does an explicit
+          # size on the distribution axis (distribution.explicitChildSizeWins:
+          # "fill and fillEqually do not override a declared child size"):
+          # fillEqually's zero basis drew a width-60 child at an equal share,
+          # and fill's grow drew it past 60 (frame-parity inventory
+          # 2026-10-05; ticket rjui-fillequally-overrides-a-childs-declared-width).
+          if (parent_distribution = json['_parent_distribution']) && !attributes['weight'] &&
+             !explicit_size?(parent_row? ? 'width' : 'height')
             classes << DISTRIBUTION_CHILD_CLASS[parent_distribution]
           end
 
@@ -1227,6 +1235,104 @@ module RjuiTools
           'equalspacing' => 'justify-between',
           'equalcentering' => 'justify-around'
         }.freeze
+
+        # The border as a CSS border (a text input's), static or bound.
+        def css_border_classes
+          if border_bound?
+            if has_binding?(attributes['borderWidth'])
+              @dynamic_styles['borderWidth'] = "`${#{attribute_expression(attributes['borderWidth'])}}px`"
+            else
+              @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
+            end
+            @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
+            @dynamic_styles['borderStyle'] = convert_binding(attributes['borderStyle']) if has_binding?(attributes['borderStyle'])
+            attributes['borderStyle'] ? '' : 'border-solid'
+          else
+            TailwindMapper.map_border(attributes['borderWidth'], attributes['borderColor'], attributes['borderStyle'])
+          end
+        end
+
+        # The border drawn by the element's ::after, over the content. A
+        # bound value reaches the pseudo-element through a custom property on
+        # the element (`--jui-border-*`), since an inline style cannot.
+        def pseudo_border_classes
+          width = attributes['borderWidth']
+          color = attributes['borderColor']
+          style = attributes['borderStyle']
+          classes = %w[after:absolute after:inset-0 after:rounded-[inherit] after:pointer-events-none]
+          if has_binding?(width)
+            @dynamic_styles['--jui-border-width'] = "`${#{attribute_expression(width)}}px`"
+            classes << 'after:border-[length:var(--jui-border-width)]'
+          else
+            return '' if width.to_f <= 0
+
+            classes << "after:border-[length:#{TailwindMapper.css_px(width)}]"
+          end
+          # A colour rides a custom property whenever the border goes inline
+          # at all (a bound sibling), or when it is a CSS function (rgba(...)
+          # has spaces no class can hold) — the same values the inline branch
+          # always took, resolved the same way (color_style_expr).
+          if border_bound? || !color.to_s.match?(/\A(#\h+|[\w-]+)\z/)
+            @dynamic_styles['--jui-border-color'] = color_style_expr(color)
+            classes << 'after:border-[color:var(--jui-border-color)]'
+          else
+            classes << TailwindMapper.map_color(color, 'after:border')
+          end
+          if has_binding?(style)
+            @dynamic_styles['--jui-border-style'] = convert_binding(style)
+            classes << 'after:[border-style:var(--jui-border-style)]'
+          else
+            style_class = TailwindMapper.map_border_style(style)
+            classes << (style_class.empty? ? 'after:border-solid' : "after:#{style_class}")
+          end
+          classes.reject(&:empty?).join(' ')
+        end
+
+        # The fallback for an element with no ::after: an outline pulled in by
+        # its own width (it follows the corner radius from Safari 16.4 on).
+        def outline_border_classes
+          if border_bound?
+            if has_binding?(attributes['borderWidth'])
+              prop = attribute_expression(attributes['borderWidth'])
+              @dynamic_styles['outlineWidth'] = "`${#{prop}}px`"
+              @dynamic_styles['outlineOffset'] = "`-${#{prop}}px`"
+            else
+              @dynamic_styles['outlineWidth'] = "'#{attributes['borderWidth']}px'"
+              @dynamic_styles['outlineOffset'] = "'-#{attributes['borderWidth']}px'"
+            end
+            @dynamic_styles['outlineColor'] = color_style_expr(attributes['borderColor'])
+            @dynamic_styles['outlineStyle'] = convert_binding(attributes['borderStyle']) if has_binding?(attributes['borderStyle'])
+            attributes['borderStyle'] ? '' : 'outline-solid'
+          else
+            TailwindMapper.map_border_over_content(attributes['borderWidth'], attributes['borderColor'], attributes['borderStyle'])
+          end
+        end
+
+        def border_bound?
+          %w[borderWidth borderColor borderStyle].any? { |a| attributes[a] && has_binding?(attributes[a]) }
+        end
+
+        # Whether the element this converter renders can carry a ::after —
+        # not a replaced element such as <img>.
+        def pseudo_border_supported?
+          true
+        end
+
+        # Whether a declared border is drawn over the content (an outline
+        # inside the box) rather than as a CSS border that takes layout
+        # space. True for every view (user ruling B); a text input answers
+        # no — its text keeps clear of its own frame, and its focus ring is
+        # the outline.
+        def border_draws_over_content?
+          true
+        end
+
+        # Whether the parent lays its children out as a row (its orientation,
+        # passed down as `_parent_orientation`, in any declared spelling).
+        def parent_row?
+          orientation = json['_parent_orientation']
+          JsonUIShared::EnumSpelling.lowered(orientation, 'View', 'orientation') == 'horizontal'
+        end
 
         # The lowercased SIZE value this container declares, or nil.
         def distribution_size_value
