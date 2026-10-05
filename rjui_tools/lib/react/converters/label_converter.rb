@@ -82,7 +82,7 @@ module RjuiTools
 
           if hint && raw.strip.empty?
             # Statically empty: the hint IS the content.
-            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{hint_common}>#{escape_jsx_text(hint[:text])}</span>"
+            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(escape_jsx_text(hint[:text]))}</span>"
           end
 
           if hint && pure_binding_text?(raw)
@@ -93,15 +93,15 @@ module RjuiTools
             text_node = convert_text_binding(raw)
             return <<~JSX.chomp
               #{indent_str(indent)}{(#{expr}) ? (
-              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{common}>#{text_node}</span>
+              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{common}>#{line_spacing_wrap(text_node)}</span>
               #{indent_str(indent)}) : (
-              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{hint_common}>#{escape_jsx_text(hint[:text])}</span>
+              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(escape_jsx_text(hint[:text]))}</span>
               #{indent_str(indent)})}
             JSX
           end
 
           text = convert_text_binding(raw)
-          "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{common}>#{text}</span>"
+          "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{common}>#{line_spacing_wrap(text)}</span>"
         end
 
         def merged_hint_style(style_attr, hint)
@@ -300,6 +300,28 @@ module RjuiTools
           classes.reject { |c| c.nil? || c.empty? }
         end
 
+        # The line of a Label that declares no line height, as a multiple of
+        # its font size: the stylesheet's `line-height: 1.5` (Tailwind's
+        # preflight), which every Label inherits.
+        DEFAULT_LINE_HEIGHT = 1.5
+
+        # The text of a Label that declares lineSpacing, in a block whose
+        # negative block margins take back the half spacing above the first
+        # line and below the last: the line box adds s / 2 on each side of
+        # every line, and only the spacings BETWEEN lines are declared. The
+        # Label is a flex container, so the margins reach its height.
+        def line_spacing_wrap(content)
+          spacing = attributes['lineSpacing']
+          return content if spacing.nil?
+
+          margin = if (expr = bound_value_expr(spacing))
+                     "`-${Number(#{expr}) / 2}px`"
+                   else
+                     "'-#{TailwindMapper.css_px(spacing.to_f / 2)}'"
+                   end
+          "<span style={{ display: 'block', marginBlock: #{margin} }}>#{content}</span>"
+        end
+
         # The lineHeight swap. Kept out of the class list because line height is
         # a unitless multiplier in the style object, where React reads a bare
         # number as a multiplier rather than pixels.
@@ -313,13 +335,19 @@ module RjuiTools
           condition = selected_condition
           return if condition.nil?
 
+          # The same line as the base: m x the Label's default line (ruling
+          # B, see build_style_attr).
+          line = (DEFAULT_LINE_HEIGHT * multiple.to_f).round(4)
           if condition == 'true'
-            @dynamic_styles['lineHeight'] = multiple.to_s
+            @dynamic_styles['lineHeight'] = line.to_s
             return
           end
 
-          base = @dynamic_styles['lineHeight'] || "'normal'"
-          @dynamic_styles['lineHeight'] = "(#{condition} ? #{multiple} : #{base})"
+          # Unselected with no line declared: the default line itself, not
+          # CSS `normal` (which is the font's own, 18 at 16px — not the 24
+          # every other Label draws).
+          base = @dynamic_styles['lineHeight'] || DEFAULT_LINE_HEIGHT.to_s
+          @dynamic_styles['lineHeight'] = "(#{condition} ? #{line} : #{base})"
         end
 
         # The `selected` state that decides which set is in force. Absent means
@@ -458,23 +486,28 @@ module RjuiTools
           # multiplier. The arithmetic moves into the emitted expression.
           line_height_multiple = attributes['lineHeightMultiple']
           line_spacing = attributes['lineSpacing']
+          #
+          # User ruling B (2026-10-05, attribute_semantics
+          # lineHeightMultipleBase / lineSpacingBetween): the line they act on
+          # is L, the line of a Label that declares no line height — on web
+          # the 1.5 the stylesheet gives every Label (DEFAULT_LINE_HEIGHT).
+          # lineHeightMultiple makes each line m x L (it multiplied the font
+          # size: 3 lines at 1.8 drew 86.4 where 129.6 is declared);
+          # lineSpacing adds s BETWEEN lines only, L x n + s x (n - 1) (it
+          # gave every line s / 2 above and below as well: 96 for 104). The
+          # last line's spacing is taken back by the text's wrapper
+          # (line_spacing_wrap).
           if (multiple_expr = bound_value_expr(line_height_multiple))
-            @dynamic_styles['lineHeight'] = multiple_expr
+            @dynamic_styles['lineHeight'] = "#{DEFAULT_LINE_HEIGHT} * Number(#{multiple_expr})"
           elsif line_height_multiple
-            @dynamic_styles['lineHeight'] = line_height_multiple.to_s
+            @dynamic_styles['lineHeight'] = (DEFAULT_LINE_HEIGHT * line_height_multiple.to_f).round(4).to_s
           elsif line_spacing
-            # Convert lineSpacing (px) to lineHeight (em-ish)
-            font_size = attributes['fontSize'] || 16
             spacing_expr = bound_value_expr(line_spacing)
-            font_size_expr = bound_value_expr(font_size)
-            if spacing_expr || font_size_expr
-              size_js = font_size_expr || font_size
-              spacing_js = spacing_expr || line_spacing.to_f
-              @dynamic_styles['lineHeight'] = "((#{size_js}) + (#{spacing_js})) / (#{size_js})"
-            else
-              line_height = ((font_size + line_spacing.to_f) / font_size).round(2)
-              @dynamic_styles['lineHeight'] = line_height.to_s
-            end
+            @dynamic_styles['lineHeight'] = if spacing_expr
+                                              "`calc(#{DEFAULT_LINE_HEIGHT}em + ${Number(#{spacing_expr})}px)`"
+                                            else
+                                              "'calc(#{DEFAULT_LINE_HEIGHT}em + #{TailwindMapper.css_px(line_spacing)})'"
+                                            end
 
           elsif attributes['lineHeight']
             @dynamic_styles['lineHeight'] = "'#{TailwindMapper.rem(attributes['lineHeight'])}'"

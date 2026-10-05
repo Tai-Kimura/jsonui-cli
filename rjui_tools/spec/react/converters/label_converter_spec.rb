@@ -257,7 +257,8 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include('lineHeight: 1.5')
+        # m x the Label's default line, 1.5 (user ruling B, 2026-10-05)
+        expect(result).to include('lineHeight: 2.25')
       end
     end
 
@@ -271,8 +272,10 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        # lineHeight = (16 + 8) / 16 = 1.5
-        expect(result).to include('lineHeight: 1.5')
+        # The default line plus the spacing; the half spacing above the
+        # first line and below the last is taken back by the text's wrapper
+        # (user ruling B, 2026-10-05: between lines only).
+        expect(result).to include("lineHeight: 'calc(1.5em + 8px)'")
       end
 
       it 'uses default fontSize of 16 when not specified' do
@@ -283,7 +286,8 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        expect(result).to include('lineHeight: 1.5')
+        expect(result).to include("lineHeight: 'calc(1.5em + 8px)'")
+        expect(converter.convert).to include("<span style={{ display: 'block', marginBlock: '-4px' }}>Test</span>")
       end
     end
 
@@ -965,16 +969,16 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         'selected' => '@{sel}', 'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
       }).convert
 
-      expect(result).to include('lineHeight: (data.sel ? 1.5 : 1.2)')
+      expect(result).to include('lineHeight: (data.sel ? 2.25 : 1.8)')
     end
 
-    it 'falls back to CSS normal when the base sets no line height' do
+    it 'falls back to the default line when the base sets no line height' do
       result = create_converter({
         'type' => 'Label', 'text' => 'Hi', 'selected' => '@{sel}',
         'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
       }).convert
 
-      expect(result).to include("lineHeight: (data.sel ? 1.5 : 'normal')")
+      expect(result).to include('lineHeight: (data.sel ? 2.25 : 1.5)')
     end
 
     it 'leaves the class list untouched when there is no driver' do
@@ -1023,7 +1027,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter, 'web-only text attr
   # The cross-platform spellings are the multiplier and the extra spacing, so
   # they win over the web-only literal.
   it 'yields to lineHeightMultiple and lineSpacing' do
-    expect(label('lineHeight' => 28, 'lineHeightMultiple' => 1.5)).to include('lineHeight: 1.5')
+    expect(label('lineHeight' => 28, 'lineHeightMultiple' => 1.5)).to include('lineHeight: 2.25')
     expect(label('lineHeight' => 28, 'lineHeightMultiple' => 1.5)).not_to include('28px')
     expect(label('lineHeight' => 28, 'lineSpacing' => 4, 'fontSize' => 16)).not_to include('28px')
   end
