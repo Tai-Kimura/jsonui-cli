@@ -441,6 +441,25 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
 
+    fpar = sub.add_parser(
+        "frame-parity",
+        help=(
+            "Compare where each declared id was drawn across platforms, and "
+            "(--update) write frame_parity.json from frame_parity_rules.json"
+        ),
+    )
+    fpar.add_argument("--platform", action="append", choices=list(_PLATFORMS),
+                      help="Platform to include (repeatable; default: all three)")
+    fpar.add_argument("--dir", dest="conformance_dir", default=None,
+                      help=f"Conformance directory (default: {_DEFAULT_OUT})")
+    fpar.add_argument("--results", default=None, help="Results directory (default: <dir>/results)")
+    fpar.add_argument("--update", action="store_true",
+                      help=("Write frame_parity.json: every disagreement a rule in "
+                            "frame_parity_rules.json matches, with its measured outliers, as long as it "
+                            "differs only on the rule's fields. Matched ids that differ elsewhere are "
+                            "printed and left out. Without --update, prints the check `gate "
+                            "--frame-parity` runs."))
+
     cross = sub.add_parser(
         "cross-effect",
         help=(
@@ -748,6 +767,8 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         return _cmd_parity(args)
     if target == "cross-effect":
         return _cmd_cross_effect(args)
+    if target == "frame-parity":
+        return _cmd_frame_parity(args)
     if target == "inert-audit":
         return _cmd_inert_audit(args)
     if target == "codegen-effect":
@@ -757,6 +778,42 @@ def cmd_conformance(args: argparse.Namespace) -> int:
         "parity|cross-effect|inert-audit|codegen-effect> [options]"
     )
     return 1
+
+
+def _cmd_frame_parity(args: argparse.Namespace) -> int:
+    """Measure frame parity; with --update, write the ledger from the rules."""
+    from ..conformance import frame_parity as fp
+    from ..conformance.report import load_platform_results, manifest_identity
+
+    conformance_dir = Path(args.conformance_dir or _DEFAULT_OUT)
+    platforms = list(dict.fromkeys(args.platform or list(_PLATFORMS)))
+    manifest_path = conformance_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    digest, equivalent = manifest_identity(manifest_path, conformance_dir)
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, digest, equivalent)}
+    result = fp.measure(conformance_dir, manifest, {p: loaded[p].results for p in platforms if p in loaded}, platforms)
+    for line in fp.not_compared_lines(result):
+        print(line)
+    if args.update:
+        try:
+            rules = fp.load_rules(fp.rules_path(conformance_dir))
+        except ValueError as exc:
+            print(f"ERROR: {exc}")
+            return 1
+        entries, refused = fp.ledger_from_rules(result, rules)
+        fp.write_ledger(fp.ledger_path(conformance_dir), entries)
+        print(f"wrote {len(entries)} entr(y/ies) to {fp.LEDGER_NAME} from {len(rules)} rule(s)")
+        for line in refused:
+            print(f"  not ledgered — {line}")
+        verdict = fp.check(result, fp.load_ledger(fp.ledger_path(conformance_dir)))
+        print(fp.summarize(result, verdict))
+        return 0
+    verdict = fp.check(result, fp.load_ledger(fp.ledger_path(conformance_dir)))
+    print(fp.summarize(result, verdict))
+    for d in verdict.unrecorded[:20]:
+        print("  " + d.table())
+    return 0 if verdict.ok else 1
 
 
 def _require_env_for_update(args: argparse.Namespace) -> int | None:

@@ -660,3 +660,89 @@ def report_section(conformance_dir: Path, manifest: dict, platform_results: Iter
     lines.append("")
     lines += [f"- {line}" for line in not_compared_lines(result)]
     return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# Ledger from rules
+# --------------------------------------------------------------------------- #
+
+RULES_NAME = "frame_parity_rules.json"
+FIELDS = ("x", "y", "width", "height")
+
+
+def rules_path(conformance_dir) -> Path:
+    return Path(conformance_dir) / RULES_NAME
+
+
+def load_rules(path) -> list[dict]:
+    """The hand-written half: which disagreements are a platform idiom, on
+    which fields, and why. Each rule: ``fixture`` (fnmatch glob over the
+    fixture id), ``id`` (glob, default ``*``), ``fields`` (the fields allowed
+    to differ — any other field that differs keeps the id OUT of the ledger),
+    ``reason`` (required, one line)."""
+    path = Path(path)
+    if not path.is_file():
+        return []
+    rules = json.loads(path.read_text(encoding="utf-8")).get("rules", [])
+    for i, rule in enumerate(rules):
+        missing = [k for k in ("fixture", "reason") if not rule.get(k)] + (["fields"] if "fields" not in rule else [])
+        bad = [f for f in rule.get("fields", []) if f not in FIELDS]
+        if missing or bad:
+            raise ValueError(f"{RULES_NAME} rule {i}: missing {missing}, unknown fields {bad}")
+    return rules
+
+
+def differing_fields(d: "Disagreement") -> set[str]:
+    """Fields on which the faces' frames are more than TOLERANCE apart.
+    Position fields are compared by the readings (a far-edge view differs in
+    x between roots of different sizes and still agrees), sizes directly."""
+    out = set()
+    names = sorted(d.frames)
+    for i, p in enumerate(names):
+        for q in names[i + 1:]:
+            a, b, ra, rb = d.frames[p], d.frames[q], d.roots[p], d.roots[q]
+            x, y = frame_readings(a, ra, b, rb)
+            if not _near(a["width"], b["width"]):
+                out.add("width")
+            if not _near(a["height"], b["height"]):
+                out.add("height")
+            # A position differs when no reading places it, or — sizes
+            # differing — when neither its start nor its far-edge gap agrees.
+            for pos, size, readings in (("x", "width", x), ("y", "height", y)):
+                if readings:
+                    continue
+                if _near(a[size], b[size]):
+                    out.add(pos)
+                elif not (_near(a[pos], b[pos])
+                          or _near(ra[size] - a[pos] - a[size], rb[size] - b[pos] - b[size])):
+                    out.add(pos)
+    return out
+
+
+def ledger_from_rules(result: FrameParityResult, rules: list[dict]) -> tuple[list[dict], list[str]]:
+    """``(entries, refused)``. An entry per disagreement a rule matches whose
+    differing fields are all within the rule's ``fields``; ``refused`` names
+    the matched ones that also differ outside them (a defect must not be
+    ledgered along with an idiom on the same id)."""
+    from fnmatch import fnmatchcase
+
+    entries, refused = [], []
+    for d in sorted(result.disagreed, key=lambda d: d.key):
+        rule = next((r for r in rules
+                     if fnmatchcase(d.fixture, r["fixture"]) and fnmatchcase(d.id, r.get("id", "*"))), None)
+        if rule is None:
+            continue
+        outside = differing_fields(d) - set(rule["fields"])
+        if outside:
+            refused.append(f"{d.fixture} #{d.id}: differs in {sorted(outside)} outside the rule's {rule['fields']}")
+            continue
+        entries.append({"fixture": d.fixture, "id": d.id, "outliers": sorted(d.outliers),
+                        "fields": sorted(differing_fields(d)), "reason": rule["reason"]})
+    return entries, refused
+
+
+def write_ledger(path, entries: list[dict]) -> None:
+    path = Path(path)
+    data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"schemaVersion": 1}
+    data["entries"] = entries
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

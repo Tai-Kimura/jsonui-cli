@@ -1,0 +1,302 @@
+{
+  "schemaVersion": 1,
+  "_comment": "The hand-written half of frame_parity.json: which cross-platform frame disagreements are a platform idiom (category 3), on which fields, and why. `jui conformance frame-parity --update` measures, applies these rules (the first rule whose fixture / id globs match wins; fields: the fields allowed to differ), and writes frame_parity.json. A matched id that also differs OUTSIDE its rule's fields is not ledgered and is named, so a defect cannot ride in with an idiom on the same id. A rule with no fields keeps its ids out on purpose. HAND-MAINTAINED.",
+  "rules": [
+    {
+      "fixture": "__control/Label__wrap-max",
+      "id": "target",
+      "fields": [],
+      "reason": "NOT LEDGERED: triage — android is exactly 800; check for a cap before pinning"
+    },
+    {
+      "fixture": "TextField/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
+      "fixture": "__control/TextField*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
+      "fixture": "SelectBox/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+    },
+    {
+      "fixture": "__control/SelectBox*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+    },
+    {
+      "fixture": "Button/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "__control/Button*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/tapBackground__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/highlightBackground__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/disabledBackground__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "CheckBox/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
+    },
+    {
+      "fixture": "__control/CheckBox*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
+    },
+    {
+      "fixture": "Radio/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
+    },
+    {
+      "fixture": "__control/Radio*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
+    },
+    {
+      "fixture": "Switch/label__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "width",
+        "height"
+      ],
+      "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
+    },
+    {
+      "fixture": "Switch/fontColor__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "width",
+        "height"
+      ],
+      "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
+    },
+    {
+      "fixture": "Switch/fontSize__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "width",
+        "height"
+      ],
+      "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
+    },
+    {
+      "fixture": "__control/Switch__label*",
+      "id": "target",
+      "fields": [
+        "y",
+        "width",
+        "height"
+      ],
+      "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
+    },
+    {
+      "fixture": "Switch/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Switch control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (android centres the switch in a 48 touch row) — triage K, support lane 1"
+    },
+    {
+      "fixture": "__control/Switch*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "Switch control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (android centres the switch in a 48 touch row) — triage K, support lane 1"
+    },
+    {
+      "fixture": "Slider/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "__control/Slider*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "Progress/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "__control/Progress*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "Segment/*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "__control/Segment*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "Label/autoShrink__true",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "reason": "autoShrink: android shrinks to fit (96), web wraps (120) — support lane 1's chrome row. NOTE triage L judged this (1) android (attribute_semantics autoShrink: web is canon); ledgered at the orchestrator's direction, to be confirmed"
+    },
+    {
+      "fixture": "Label/fontSize__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
+      "fixture": "Label/hint__static",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
+      "fixture": "Label/hintColor__*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
+      "fixture": "Label/placeholder__static",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
+      "fixture": "__control/Label__hint*",
+      "id": "target",
+      "fields": [
+        "y",
+        "height"
+      ],
+      "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
+      "fixture": "Label/lineBreakMode__char",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "reason": "both wrap by character; the line count differs by font metrics — triage L"
+    }
+  ]
+}

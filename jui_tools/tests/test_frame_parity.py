@@ -567,6 +567,57 @@ class Ledger(unittest.TestCase):
         self.assertEqual(fp.load_ledger(path), {})
 
 
+class LedgerFromRules(unittest.TestCase):
+    """frame_parity_rules.json -> frame_parity.json: an idiom is ledgered only
+    when the id differs on nothing but the rule's fields."""
+
+    def _result(self, android_target):
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            t.fixture("TextField/hint__static", {"type": "View", "id": "root", "child": [{"type": "TextField", "id": "target"}]})
+            t.frames("web", "TextField/hint__static", {"target": f(0, 0, 200, 24)})
+            t.frames("android", "TextField/hint__static", {"target": android_target})
+            manifest = t.write()
+            return fp.measure(Path(d), manifest, t.results(), ["android", "web"])
+
+    RULES = [{"fixture": "TextField/*", "id": "target", "fields": ["y", "height"], "reason": "chrome height"}]
+
+    def test_a_height_only_difference_is_ledgered_with_its_outliers(self):
+        entries, refused = fp.ledger_from_rules(self._result(f(0, 0, 200, 56)), self.RULES)
+        self.assertEqual(refused, [])
+        self.assertEqual(entries, [{"fixture": "TextField/hint__static", "id": "target",
+                                    "outliers": ["android", "web"], "fields": ["height"], "reason": "chrome height"}])
+
+    def test_a_width_difference_on_the_same_id_keeps_it_out(self):
+        entries, refused = fp.ledger_from_rules(self._result(f(0, 0, 180, 56)), self.RULES)
+        self.assertEqual(entries, [])
+        self.assertIn("differs in ['width'] outside the rule's ['y', 'height']", refused[0])
+
+    def test_a_rule_with_no_fields_keeps_its_ids_out_on_purpose(self):
+        rules = [{"fixture": "TextField/hint__static", "fields": [], "reason": "not yet"}] + self.RULES
+        entries, refused = fp.ledger_from_rules(self._result(f(0, 0, 200, 56)), rules)
+        self.assertEqual(entries, [])
+        self.assertEqual(len(refused), 1)
+
+    def test_the_generated_ledger_accepts_what_it_records(self):
+        result = self._result(f(0, 0, 200, 56))
+        entries, _ = fp.ledger_from_rules(result, self.RULES)
+        ledger = {(e["fixture"], e["id"]): e for e in entries}
+        self.assertTrue(fp.check(result, ledger).ok)
+
+    def test_a_rule_without_a_reason_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / fp.RULES_NAME
+            p.write_text(json.dumps({"rules": [{"fixture": "a/*", "fields": ["height"]}]}))
+            with self.assertRaises(ValueError):
+                fp.load_rules(p)
+
+    def test_the_committed_rules_load(self):
+        rules = fp.load_rules(SCHEMA.parent / fp.RULES_NAME)
+        self.assertTrue(rules)
+        self.assertTrue(all(r["reason"] for r in rules))
+
+
 class Report(unittest.TestCase):
     def test_the_section_shows_the_frames_side_by_side(self):
         from jui_cli.conformance.report import load_platform_results, manifest_identity
