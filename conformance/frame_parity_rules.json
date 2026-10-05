@@ -524,10 +524,10 @@
           "height": 144
         },
         "web": {
-          "height": 144
+          "height": 168
         }
       },
-      "reason": "six wrapped lines at maxWidth 150: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+      "reason": "six wrapped lines at maxWidth 150 (web on CI: seven, 168 — CI's Linux chromium glyph widths wrap one more line; the local mac chromium draws six, 144): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
       "fixture": "Label/lineSpacing__*",
@@ -766,11 +766,11 @@
         },
         "web": {
           "x": 60,
-          "width": 40.81,
+          "width": 43.91,
           "height": 24
         }
       },
-      "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 40.81, CCCCCCCC ios 94 / android 88 / web 89.13 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces"
+      "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 43.91, CCCCCCCC ios 94 / android 88 / web 89.38 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces — the web values are CI's Linux chromium glyph widths; the local mac chromium measures BBBB 40.81 / CCCCCCCC 89.13 (box_c at x 100.81). The gate runs on CI."
     },
     {
       "fixture": "__control/View__child-b4827942_orientation-horizontal_width-300",
@@ -792,12 +792,12 @@
           "height": 24
         },
         "web": {
-          "x": 100.81,
-          "width": 89.13,
+          "x": 103.91,
+          "width": 89.38,
           "height": 24
         }
       },
-      "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 40.81, CCCCCCCC ios 94 / android 88 / web 89.13 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces"
+      "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 43.91, CCCCCCCC ios 94 / android 88 / web 89.38 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces — the web values are CI's Linux chromium glyph widths; the local mac chromium measures BBBB 40.81 / CCCCCCCC 89.13 (box_c at x 100.81). The gate runs on CI."
     },
     {
       "fixture": "View/distribution__fillequally",

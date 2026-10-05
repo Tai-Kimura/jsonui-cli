@@ -93,39 +93,6 @@
       "reason": "The CI runner's font stack has no distinct 600 weight and falls back to 700, so `font-[600]` and `font-bold` draw one picture there. NOT a codegen collapse: the DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured). Measured 2026-09-15 on one manifest and one rjui tree, same fixtures: local (macOS) 416 / 358 / 416 px apart, ci (ubuntu) 0 / 0 / 0 — and the same fixture differs 661 px BETWEEN the two environments, which is the font stack. Scoped to ci because on a developer machine these values do discriminate and a row here would be a false excuse."
     },
     {
-      "component": "Label",
-      "attribute": "lineBreakMode",
-      "platform": "web",
-      "cases": [
-        "clip",
-        "middle"
-      ],
-      "owner": "A (rjui)",
-      "reason": "CSS has one truncation, not four. Clip / Middle / Tail all resolve to `text-overflow: ellipsis` + `overflow: hidden` because CSS has no middle-truncation and no clip-without-ellipsis that a still capture can tell apart from ellipsis. rjui maps them deliberately (base_converter lineBreakMode, plan 49 2df3401) and the comment there says so. Char and Word are NOT in this ledger: they map to word-break / overflow-wrap and the gate sees them as distinct, which is the evidence that the mapping is real and only these three collapse."
-    },
-    {
-      "component": "Label",
-      "attribute": "lineBreakMode",
-      "platform": "web",
-      "cases": [
-        "clip",
-        "tail"
-      ],
-      "owner": "A (rjui)",
-      "reason": "Same as clip/middle: CSS has one truncation. See that row."
-    },
-    {
-      "component": "Label",
-      "attribute": "lineBreakMode",
-      "platform": "web",
-      "cases": [
-        "middle",
-        "tail"
-      ],
-      "owner": "A (rjui)",
-      "reason": "Same as clip/middle: CSS has one truncation. See that row."
-    },
-    {
       "component": "TextField",
       "attribute": "borderStyle",
       "platform": "android",
@@ -289,28 +256,6 @@
       ],
       "owner": "A (rjui)",
       "reason": "Same as both/horizontal: the grabber is identical across the three resizable values. See that row."
-    },
-    {
-      "component": "View",
-      "attribute": "distribution",
-      "platform": "ios",
-      "cases": [
-        "fill",
-        "fillequally"
-      ],
-      "owner": "canon (adjudicated 51-orch) — fixture-side follow-up owned by D",
-      "reason": "Adjudicated 51-orch (wave-end bake, run 31160838024): the canonical ios distribution ruling (2026-08-07) makes `fill` put `.frame(maxWidth: .infinity)` on every child, and the probe's children are IDENTICAL — equal division (fillEqually) and expand-every-child (fill) produce the same geometry for equal children, so the collapse is fixture-shape coincidence, not a dead face: fillProportionally and equalSpacing discriminate in the same run. Fixture-side follow-up owned by D: unequal-content children would separate the two."
-    },
-    {
-      "component": "common",
-      "attribute": "distribution",
-      "platform": "ios",
-      "cases": [
-        "fill",
-        "fillequally"
-      ],
-      "owner": "canon (adjudicated 51-orch) — fixture-side follow-up owned by D",
-      "reason": "Adjudicated 51-orch (wave-end bake, run 31160838024): the canonical ios distribution ruling (2026-08-07) makes `fill` put `.frame(maxWidth: .infinity)` on every child, and the probe's children are IDENTICAL — equal division (fillEqually) and expand-every-child (fill) produce the same geometry for equal children, so the collapse is fixture-shape coincidence, not a dead face: fillProportionally and equalSpacing discriminate in the same run. Fixture-side follow-up owned by D: unequal-content children would separate the two."
     },
     {
       "component": "common",
