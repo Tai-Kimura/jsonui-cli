@@ -349,10 +349,30 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to eq('')
     end
 
-    it 'generates text with minimumScaleFactor' do
+    # Auto size does not imply one line: the text wraps and shrinks only when
+    # it overflows a bounded box (attribute_semantics autoShrink
+    # .requiresBoundedAxis, 51-E; ticket kjui-label-autoshrink-shrinks-when-
+    # the-height-can-grow). Through 1.9.15 it added maxLines = 1 + Ellipsis.
+    it 'generates text with minimumScaleFactor, without forcing one line' do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'minimumScaleFactor' => 0.5 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('maxLines = 1')
+      expect(result).to include('autoSize = TextAutoSize.StepBased(')
+      expect(result).not_to include('maxLines =')
+      expect(result).not_to include('overflow =')
+    end
+
+    it 'generates text with autoShrink, without forcing one line' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'autoShrink' => true }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('autoSize = TextAutoSize.StepBased(')
+      expect(result).not_to include('maxLines =')
+      expect(result).not_to include('overflow =')
+    end
+
+    it 'keeps a declared lines beside autoShrink' do
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'autoShrink' => true, 'lines' => 2 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('maxLines = 2')
       expect(result).to include('overflow = TextOverflow.Ellipsis')
     end
 
@@ -436,7 +456,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         expect(result.scan('overflow =').size).to eq(1)
       end
 
-      it 'emits autoSize + single maxLines/overflow when autoShrink + lineBreakMode: clip combine (lineBreakMode wins)' do
+      it 'emits autoSize + a single overflow when autoShrink + lineBreakMode: clip combine (lineBreakMode wins)' do
         json_data = {
           'type' => 'Text', 'text' => 'Test', 'fontSize' => 14,
           'autoShrink' => true, 'lineBreakMode' => 'Clip'
@@ -444,8 +464,9 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         result = described_class.generate(json_data, 0, required_imports)
         expect(result.scan('overflow =').size).to eq(1)
         expect(result).to include('overflow = TextOverflow.Clip')
-        expect(result.scan('maxLines =').size).to eq(1)
-        expect(result).to include('maxLines = 1')
+        # autoShrink no longer implies one line (kjui-label-autoshrink-
+        # shrinks-when-the-height-can-grow).
+        expect(result.scan('maxLines =').size).to eq(0)
       end
 
       it 'lines: 0 still emits Int.MAX_VALUE with no overflow (preserved semantics)' do
@@ -1049,17 +1070,24 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         }
         result = described_class.generate(json_data, 0, required_imports)
 
-        # 24 * 1.5 highlighted, 14 * 1.2 not.
-        expect(result).to include('lineHeight = (if (data.sel) 36.0 else 16.8).sp')
+        # m x L, each against its own size (attribute_semantics
+        # lineHeightMultipleBase): L(24) x 1.5 highlighted, L(14) x 1.2 not.
+        expect(result).to include(
+          'lineHeight = if (data.sel) LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current, LocalDensity.current) ' \
+          'else LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current, LocalDensity.current)'
+        )
       end
 
-      it 'falls back to the font line height when the base sets none' do
+      # Not TextUnit.Unspecified: copy() would drop the theme's line height,
+      # which an undeclared label keeps.
+      it "keeps the theme's line height when the base sets none" do
         json_data = {
           'type' => 'Text', 'text' => 'Hi', 'selected' => '@{sel}',
           'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('else TextUnit.Unspecified')
+        expect(result).to include('else LocalTextStyle.current.lineHeight')
+        expect(result).not_to include('else TextUnit.Unspecified')
       end
 
       it 'swaps textAlign' do
@@ -1131,11 +1159,17 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent, 'hintAttributes' d
     expect(result).to include('fontSize = (if (labelText1.isEmpty()) resolved_text2 else resolved_text1).size')
   end
 
-  # UIKit's own condition — both keys or nothing.
-  it 'does nothing with a hint and no attributes' do
+  # A hint with no hintAttributes is shown in the default placeholder colour
+  # (user ruling, 2026-10-05). Through jsonui-cli 1.9.15 this example pinned
+  # UIKit's "both keys or nothing", and the hint drew nothing.
+  it 'shows a hint with no attributes, in the default placeholder colour' do
     result = label('hint' => 'No title')
-    expect(result).not_to include('labelText')
-    expect(result).to include('text = "${data.title ?: ""}",')
+    expect(result).to include('text = if (labelText1.isEmpty()) "No title" else labelText1,')
+    expect(result).to include('color = if (labelText1.isEmpty()) Configuration.TextField.defaultPlaceholderColor else')
+  end
+
+  it 'takes hintColor over the default when it is the only styling' do
+    expect(label('hint' => 'No title', 'hintColor' => '#999999')).not_to include('defaultPlaceholderColor')
   end
 
   it 'does nothing with attributes and no hint' do

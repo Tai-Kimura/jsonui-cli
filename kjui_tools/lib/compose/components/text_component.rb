@@ -34,6 +34,10 @@ module KjuiTools
           "resolved_text#{@counter}"
         end
 
+        # The KotlinJsonUI release that ships LabelLineHeight and
+        # Modifier.lineSpacingBetween, which a Label's line height emits.
+        LABEL_LINE_HEIGHT_MIN_LIBRARY_VERSION = '2.43.5'
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Check if component should be skipped entirely (static gone only;
           # hidden keeps its layout space and renders invisible)
@@ -174,6 +178,9 @@ module KjuiTools
                             end
           hint_color = if hint && hint[:font_color]
                          Helpers::ResourceResolver.process_color(hint[:font_color], required_imports)
+                       elsif hint && hint[:default_color]
+                         required_imports&.add(:configuration)
+                         'Configuration.TextField.defaultPlaceholderColor'
                        end
           if hint_color
             # The hint branch wraps whatever the text branch would have used.
@@ -242,72 +249,48 @@ module KjuiTools
             style_parts << text_shadow_expression(json_data['textShadow'], required_imports)
           end
 
+          # lineHeightMultiple and lineSpacing start from L, one line of a
+          # Label that declares no lineHeight (attribute_semantics
+          # lineHeightMultipleBase / lineSpacingBetween, 2026-10-05 rulings):
+          # KotlinJsonUI's LabelLineHeight resolves it at runtime — the
+          # declared fontSize x 1.3, or the theme's line height — and the
+          # dynamic face calls the same object. They used to start from the
+          # font size with 14 for none, while an undeclared Label draws 16sp
+          # on a 24sp line. lineSpacing's L + spacing is cut back to "between
+          # lines only" by the lineSpacingBetween modifier below.
+          #
           # A highlight lineHeightMultiple resolves against the highlight's own
           # font size, the same way the base one resolves against the base size.
-          highlight_line_height = if highlight && highlight_condition && highlight[:line_height_multiple]
-                                    hl_size = (highlight.dig(:font_attrs, 'fontSize') || json_data['fontSize'] || 14).to_f
-                                    (hl_size * highlight[:line_height_multiple].to_f)
-                                  end
-
-          if highlight_line_height && always_highlighted
+          base_line_height = base_line_height_expression(json_data, required_imports)
+          if highlight && highlight_condition && highlight[:line_height_multiple]
             required_imports&.add(:text_style)
-            style_parts << "lineHeight = #{Helpers::BoundValue.sp(highlight_line_height)}"
-          elsif highlight_line_height
-            required_imports&.add(:text_style)
-            base_line_height = if json_data['lineHeightMultiple']
-                                 (json_data['fontSize'] || 14).to_f * json_data['lineHeightMultiple'].to_f
-                               elsif json_data['lineSpacing']
-                                 (json_data['fontSize'] || 14).to_f + json_data['lineSpacing'].to_f
-                               elsif json_data['fontSize']
-                                 (json_data['fontSize'].to_f * 1.3).round(1)
-                               end
-            style_parts << if base_line_height
-                             "lineHeight = (if (#{highlight_condition}) #{highlight_line_height} else #{base_line_height}).sp"
+            hl_size = highlight.dig(:font_attrs, 'fontSize') || json_data['fontSize']
+            highlight_line_height = multiple_line_height(hl_size, highlight[:line_height_multiple], required_imports)
+            style_parts << if always_highlighted
+                             "lineHeight = #{highlight_line_height}"
                            else
-                             # TextUnit.Unspecified is how Compose says "use the
-                             # font's own line height".
-                             required_imports&.add(:text_unit)
-                             "lineHeight = if (#{highlight_condition}) #{Helpers::BoundValue.sp(highlight_line_height)} else TextUnit.Unspecified"
+                             # Not TextUnit.Unspecified: copy() would drop the
+                             # theme's line height, which an undeclared label keeps.
+                             "lineHeight = if (#{highlight_condition}) #{highlight_line_height} else #{base_line_height || 'LocalTextStyle.current.lineHeight'}"
                            end
-          elsif hint && hint_condition && hint[:line_height_multiple]
+          elsif hint && hint_condition && (hint[:line_height_multiple] || hint.dig(:font_attrs, 'fontSize'))
             # The hint bag's lineHeightMultiple resolves against the hint's
-            # own font size, the same cascade the dynamic face applies —
-            # hint_overrides collected it but nothing consumed it, so the
-            # codegen hint kept the default leading while dynamic drew 1.5
-            # (Label_hintAttributes__static android parity d=17, run
-            # 31258615705).
+            # own font size, the same cascade the dynamic face applies (it
+            # passes the hint's size as the label's). A hint fontSize alone
+            # is a declared size too: one line of it is size x 1.3, as the
+            # dynamic face draws (fontSize 12: 16 there, where this emit kept
+            # the theme's 24).
             required_imports&.add(:text_style)
-            hint_size = (hint.dig(:font_attrs, 'fontSize') || json_data['fontSize'] || 14).to_f
-            hint_line_height = (hint_size * hint[:line_height_multiple].to_f)
-            hint_base_line_height = if json_data['lineHeightMultiple']
-                                      (json_data['fontSize'] || 14).to_f * json_data['lineHeightMultiple'].to_f
-                                    elsif json_data['lineSpacing']
-                                      (json_data['fontSize'] || 14).to_f + json_data['lineSpacing'].to_f
-                                    elsif json_data['fontSize']
-                                      (json_data['fontSize'].to_f * 1.3).round(1)
-                                    end
-            style_parts << if hint_base_line_height
-                             "lineHeight = (if (#{hint_condition}) #{hint_line_height} else #{hint_base_line_height}).sp"
-                           else
-                             required_imports&.add(:text_unit)
-                             "lineHeight = if (#{hint_condition}) #{Helpers::BoundValue.sp(hint_line_height)} else TextUnit.Unspecified"
-                           end
-          elsif json_data['lineHeightMultiple']
+            hint_size = hint.dig(:font_attrs, 'fontSize') || json_data['fontSize']
+            hint_line_height = if hint[:line_height_multiple]
+                                 multiple_line_height(hint_size, hint[:line_height_multiple], required_imports)
+                               else
+                                 scaled_sp(hint_size, 1.3, round: true)
+                               end
+            style_parts << "lineHeight = if (#{hint_condition}) #{hint_line_height} else #{base_line_height || 'LocalTextStyle.current.lineHeight'}"
+          elsif base_line_height
             required_imports&.add(:text_style)
-            # Line height multiplier - apply to font size.
-            # Both factors are `["number", "binding"]`, and `"@{v}".to_f` is
-            # 0.0 — a bound multiple or a bound size used to freeze the line
-            # height to 0.sp or to the other factor alone (plan 49 lane C).
-            # When either side is bound the multiplication moves into the emit.
-            style_parts << "lineHeight = #{scaled_sp(json_data['fontSize'], json_data['lineHeightMultiple'])}"
-          elsif json_data['lineSpacing']
-            required_imports&.add(:text_style)
-            # Line spacing - add to base font size
-            style_parts << "lineHeight = #{summed_sp(json_data['fontSize'], json_data['lineSpacing'])}"
-          elsif json_data['fontSize']
-            # Default lineHeight to match iOS compact line spacing (fontSize * 1.3)
-            required_imports&.add(:text_style)
-            style_parts << "lineHeight = #{scaled_sp(json_data['fontSize'], 1.3, round: true)}"
+            style_parts << "lineHeight = #{base_line_height}"
           end
 
           if style_parts.any?
@@ -318,6 +301,9 @@ module KjuiTools
             # (Label lineHeightMultiple/lineSpacing parity d=49/58, run
             # 31258615705, after the dynamic half's 4fc122b).
             required_imports&.add(:local_text_style)
+            if style_parts.any? { |part| part.include?('LabelLineHeight') }
+              component_code += "\n" + indent("// Requires KotlinJsonUI >= #{LABEL_LINE_HEIGHT_MIN_LIBRARY_VERSION} (LabelLineHeight, lineSpacingBetween)", depth + 1)
+            end
             component_code += "\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')}),", depth + 1)
           end
 
@@ -377,6 +363,21 @@ module KjuiTools
           if valign
             required_imports&.add(:alignment)
             modifiers << valign
+          end
+
+          # lineSpacing goes between lines only (attribute_semantics
+          # lineSpacingBetween): innermost, but outside the drawn line faces,
+          # which read the Text's own layout coordinates. A lineHeightMultiple
+          # wins over it, as in the style; a highlight multiple wins while the
+          # highlight holds.
+          if json_data['lineSpacing'] && !json_data['lineHeightMultiple']
+            required_imports&.add(:line_spacing_between)
+            spacing = Helpers::BoundValue.float(json_data['lineSpacing'], fallback: 0)
+            if highlight && highlight_condition && highlight[:line_height_multiple] && !always_highlighted
+              modifiers << ".lineSpacingBetween(if (#{highlight_condition}) 0f else #{spacing})"
+            elsif !(highlight && highlight[:line_height_multiple] && always_highlighted)
+              modifiers << ".lineSpacingBetween(#{spacing})"
+            end
           end
 
           if line_state_var
@@ -467,11 +468,16 @@ module KjuiTools
           # is already passed". Same consolidation `maxLines`/`overflow` got
           # above, and for the same reason. An explicit `minimumScaleFactor`
           # wins: it names the floor, where `autoShrink` only implies 0.5.
+          #
+          # Auto size does not imply one line: the text wraps as any Label does
+          # and shrinks only when it overflows a bounded box, so under a
+          # wrapContent height nothing shrinks (attribute_semantics
+          # autoShrink.requiresBoundedAxis, ruling 51-E, web is canon; ticket
+          # kjui-label-autoshrink-shrinks-when-the-height-can-grow). `lines`
+          # still sets maxLines and its Ellipsis above.
           auto_size_factor = nil
           if json_data['autoShrink']
             auto_size_factor = 0.5
-            max_lines_value ||= '1'
-            overflow_value ||= 'TextOverflow.Ellipsis'
           end
 
           # Minimum scale factor (auto-shrink text) using TextAutoSize
@@ -479,8 +485,6 @@ module KjuiTools
             # Same `.to_f` freeze as lineHeightMultiple: a bound factor made
             # minFontSize 0.sp (plan 49 lane C: Label.minimumScaleFactor).
             auto_size_factor = json_data['minimumScaleFactor']
-            max_lines_value ||= '1'
-            overflow_value ||= 'TextOverflow.Ellipsis'
           end
 
           if auto_size_factor
@@ -705,6 +709,34 @@ module KjuiTools
           end
         end
 
+        # The label's own line height as a TextUnit expression, or nil when it
+        # declares none of lineHeightMultiple / lineSpacing / fontSize (the
+        # theme's line height then stands).
+        def self.base_line_height_expression(json_data, required_imports)
+          if json_data['lineHeightMultiple']
+            multiple_line_height(json_data['fontSize'], json_data['lineHeightMultiple'], required_imports)
+          elsif json_data['lineSpacing']
+            required_imports&.add(:label_line_height)
+            required_imports&.add(:local_text_style)
+            "LabelLineHeight.spaced(#{label_size_arg(json_data['fontSize'])}, #{Helpers::BoundValue.float(json_data['lineSpacing'], fallback: 0)}, LocalTextStyle.current, LocalDensity.current)"
+          elsif json_data['fontSize']
+            scaled_sp(json_data['fontSize'], 1.3, round: true)
+          end
+        end
+
+        # Every line m x L (LabelLineHeight.multiple).
+        def self.multiple_line_height(size, multiple, required_imports)
+          required_imports&.add(:label_line_height)
+          required_imports&.add(:local_text_style)
+          "LabelLineHeight.multiple(#{label_size_arg(size)}, #{Helpers::BoundValue.float(multiple, fallback: 1)}, LocalTextStyle.current, LocalDensity.current)"
+        end
+
+        # The declared font size as a Float? argument: null when undeclared,
+        # so LabelLineHeight falls back to the theme's line height.
+        def self.label_size_arg(size)
+          size.nil? ? 'null' : Helpers::BoundValue.float(size, fallback: 14)
+        end
+
         # The `selected` state that decides which set is in force. Absent means
         # never highlighted, so there is nothing to emit.
         # `hintAttributes` on a Label, with `hint` as the text it styles. Returns
@@ -714,11 +746,17 @@ module KjuiTools
           # `placeholder` is the declared alias of `hint` and only sjui/rjui
           # resolved both (plan 49 lane C, handed over from D).
           hint = json_data['hint'] || json_data['placeholder']
-          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+          # A hint with no hintAttributes is shown too, in the default
+          # placeholder colour (user ruling, 2026-10-05; through jsonui-cli
+          # 1.9.15 every face required both and drew nothing). KotlinJsonUI
+          # Dynamic: DynamicTextComponent, the same rule.
+          return nil unless hint.is_a?(String) && !hint.empty?
 
+          attrs = {} unless attrs.is_a?(Hash)
           {
             text: hint,
             font_color: attrs['fontColor'] || json_data['hintColor'],
+            default_color: !(attrs['fontColor'] || json_data['hintColor']),
             font_attrs: attrs.slice('font', 'fontSize'),
             line_height_multiple: attrs['lineHeightMultiple']
           }

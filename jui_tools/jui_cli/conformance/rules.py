@@ -2405,6 +2405,31 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
                  "height": 300, "background": "#FF0000"},
             ],
         },
+        # The same oversized child where the container centres it and where it
+        # puts it at the end. A container places an over-constrained child
+        # where its gravity says: flex overflows both sides when centred and
+        # the start side at the end. Compose coerced the required size and
+        # centred the content whatever the gravity, which the default-gravity
+        # "overflow" case cannot tell from a corner (ticket
+        # kjui-oversized-child-is-centred-and-cut-to-its-parent). These two
+        # give the frames gate a centred and an end-placed overflow on all
+        # three platforms.
+        "overflow_center": {
+            "orientation": None,
+            "gravity": "center",
+            "child": [
+                {"type": "View", "id": "overflow_box", "width": 300,
+                 "height": 300, "background": "#FF0000"},
+            ],
+        },
+        "overflow_end": {
+            "orientation": None,
+            "gravity": ["right", "bottom"],
+            "child": [
+                {"type": "View", "id": "overflow_box", "width": 300,
+                 "height": 300, "background": "#FF0000"},
+            ],
+        },
     },
 }
 
@@ -2493,10 +2518,18 @@ def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]
 #: `explicitChildSizeWins` (explicit > bounds > fill): `box_a` now declares
 #: its main-axis size, which `fill` must LEAVE ALONE (sjui
 #: apply_distribution_fill skips a declared axis; compose DistributionFillRow
-#: "explicit child size never grown") while `fillEqually` equalises every
-#: child regardless — 60/120/120 against equal thirds. The two flexible
-#: labels keep their unequal text, which is what separates the pair on
-#: android/web (content-proportional grow vs flex-1 equal shares).
+#: "explicit child size never grown"). The two flexible labels keep their
+#: unequal text, which is what separates the pair on android/web
+#: (content-proportional grow vs equal shares).
+#:
+#: `fillEqually` leaves the declared size alone too. The SSoT's CHILD SIZE
+#: PRECEDENCE names both values: "`fill` and `fillEqually` do not override a
+#: declared child size" (attribute_semantics distribution.ruling, 49-E). This
+#: comment said until 2026-10-05 that `fillEqually` "equalises every child
+#: regardless", which read the precedence for `fill` only. That is the reading
+#: the SSoT rules out, and web drew it (rjui-fillequally-overrides-a-childs-
+#: declared-width). What the undeclared children get beside the declared one is
+#: not declared yet (triage's ruling table, item (2)).
 _FILL_CHILDREN = [
     {"type": "View", "id": "box_a", "width": 60, "height": 40, "background": "#FF0000"},
     {"type": "Label", "id": "box_b", "text": "BBBB", "background": "#0000FF"},

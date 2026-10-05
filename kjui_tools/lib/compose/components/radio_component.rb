@@ -22,8 +22,12 @@ module KjuiTools
           
           # Handle individual Radio item (not a group). `label` is the
           # cross-platform spelling of the row text (web's ToggleConverter and
-          # sjui read it too).
-          if json_data['group'] || json_data['text'] || json_data['label']
+          # sjui read it too). A bare Radio — no text and no options — is one
+          # item too: the options branch had nothing to list and emitted an
+          # empty Column, 0 high, where web draws the indicator (ticket
+          # kjui-radio-without-a-label-draws-nothing). Same rule as KotlinJsonUI
+          # Dynamic's DynamicRadioComponent.rendersAsItem.
+          if json_data['group'] || json_data['text'] || json_data['label'] || !json_data['options']
             return generate_radio_item(json_data, depth, required_imports, parent_type)
           end
           # The group's selection: its `selectedValue` (SSoT common.bind

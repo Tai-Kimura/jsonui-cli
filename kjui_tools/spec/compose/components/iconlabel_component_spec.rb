@@ -162,6 +162,16 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
     it 'omits the weight for a font name that is not one' do
       expect(generate('font' => 'Helvetica')).not_to include('fontWeight')
     end
+
+    # A shadow does not change the size. A bare TextStyle(shadow = …) dropped
+    # the Material default (16sp on a 24sp line): the shadowed IconLabel drew
+    # at 14sp on a 16.5 dp line while the dynamic face kept 16 / 24.
+    it 'adds a textShadow to the current text style, not to a bare TextStyle' do
+      out = generate('textShadow' => { 'color' => '#000000', 'blur' => 2, 'offset' => [1, 1] })
+      expect(out).to include('style = LocalTextStyle.current.copy(shadow = ')
+      expect(out).not_to include('TextStyle(shadow')
+      expect(required_imports).to include(:local_text_style)
+    end
   end
 
   describe 'common attributes' do
@@ -197,8 +207,18 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
       expect(generate('icon_off' => 'home', 'iconSize' => [40, 20])).not_to include('[40, 20]')
     end
 
-    it 'falls back to the cross-platform default when undeclared' do
-      expect(generate('icon_off' => 'home')).to include('Modifier.size(24.dp)')
+    # attribute_semantics iconLabelIconSize (2026-10-05 ruling): undeclared,
+    # the icon is drawn at the image's own size — no size modifier at all.
+    it "draws the icon at the image's own size when undeclared" do
+      out = generate('icon_off' => 'home')
+      expect(out).to include('Image(')
+      expect(out).not_to include('Modifier.size(')
+    end
+
+    it 'keeps the Image arguments comma-separated without a size (a tint follows the description)' do
+      out = generate('icon_off' => 'home', 'tintColor' => '#FF0000')
+      expect(out).to match(/contentDescription = null,\n\s*colorFilter = /)
+      expect(out).not_to include(',,')
     end
   end
 end

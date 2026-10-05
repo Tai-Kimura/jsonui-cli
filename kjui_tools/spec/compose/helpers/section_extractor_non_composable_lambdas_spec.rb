@@ -58,6 +58,9 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     class Dp
     val Int.dp: Dp get() = Dp()
     fun Modifier.requiredHeight(height: Dp): Modifier = this
+    class BiasAlignment { class Horizontal(val bias: Float); class Vertical(val bias: Float) }
+    fun Modifier.wrapContentWidth(align: BiasAlignment.Horizontal, unbounded: Boolean): Modifier = this
+    fun Modifier.wrapContentHeight(align: BiasAlignment.Vertical, unbounded: Boolean): Modifier = this
     class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
     fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
     class Alignment { companion object { val Center = Alignment() } }
