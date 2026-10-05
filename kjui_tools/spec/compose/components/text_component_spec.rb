@@ -1070,17 +1070,24 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         }
         result = described_class.generate(json_data, 0, required_imports)
 
-        # 24 * 1.5 highlighted, 14 * 1.2 not.
-        expect(result).to include('lineHeight = (if (data.sel) 36.0 else 16.8).sp')
+        # m x L, each against its own size (attribute_semantics
+        # lineHeightMultipleBase): L(24) x 1.5 highlighted, L(14) x 1.2 not.
+        expect(result).to include(
+          'lineHeight = if (data.sel) LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current) ' \
+          'else LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current)'
+        )
       end
 
-      it 'falls back to the font line height when the base sets none' do
+      # Not TextUnit.Unspecified: copy() would drop the theme's line height,
+      # which an undeclared label keeps.
+      it "keeps the theme's line height when the base sets none" do
         json_data = {
           'type' => 'Text', 'text' => 'Hi', 'selected' => '@{sel}',
           'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('else TextUnit.Unspecified')
+        expect(result).to include('else LocalTextStyle.current.lineHeight')
+        expect(result).not_to include('else TextUnit.Unspecified')
       end
 
       it 'swaps textAlign' do

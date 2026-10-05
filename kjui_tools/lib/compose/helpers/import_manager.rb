@@ -222,6 +222,10 @@ module KjuiTools
             styled_text_lines: ["import com.kotlinjsonui.components.StyledLine",
                                 "import com.kotlinjsonui.components.StyledLineState",
                                 "import com.kotlinjsonui.components.styledTextLines"],
+            # A Label's line height from L, one undeclared line
+            # (attribute_semantics lineHeightMultipleBase / lineSpacingBetween).
+            label_line_height: "import com.kotlinjsonui.components.LabelLineHeight",
+            line_spacing_between: "import com.kotlinjsonui.components.lineSpacingBetween",
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",
