@@ -154,8 +154,18 @@ module KjuiTools
             # `spacing` is `["number", "binding"]` — the raw interpolation put
             # `@{v}.dp` in code position (plan 49 lane C: View.spacing).
             spacing_dp = Helpers::BoundValue.dp(json_data['spacing'])
-            code += ",\n" + indent("verticalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Column'
+            if layout == 'Column'
+              spaced = bottom_up?(json_data, layout) ? "Arrangement.spacedBy(#{spacing_dp}, Alignment.Bottom)" : "Arrangement.spacedBy(#{spacing_dp})"
+              code += ",\n" + indent("verticalArrangement = #{spaced}", depth + 1)
+            end
             code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{spacing_dp})", depth + 1) if layout == 'Row'
+          end
+
+          # bottomToTop stacks from the bottom edge (user ruling 2026-10-05);
+          # with spacing the spacedBy above carries the alignment.
+          if bottom_up?(json_data, layout) && !json_data['spacing']
+            required_imports&.add(:arrangement)
+            code += ",\n" + indent("verticalArrangement = Arrangement.Bottom", depth + 1)
           end
 
           # A child that declares its own size on the grow axis keeps it and
@@ -256,6 +266,7 @@ module KjuiTools
           parts = gravity_parts_of(gravity)
           parent_h = axis_bias_of(parts, %w[left], %w[right], %w[centerHorizontal center])
           parent_v = axis_bias_of(parts, %w[top], %w[bottom], %w[centerVertical center])
+          parent_v = 1.0 if layout == 'Column' && bottom_up?(json_data, layout)
           # A gravity-less rightToLeft Column anchors its children at the
           # trailing edge (add_gravity_settings).
           parent_h = 1.0 if layout == 'Column' && json_data['direction'] == 'rightToLeft' && parts.empty?
@@ -307,7 +318,8 @@ module KjuiTools
           if layout == 'Row'
             ".wrapContentWidth(align = BiasAlignment.Horizontal(#{axis_bias_of(parts, %w[left], %w[right], %w[centerHorizontal center])}f), unbounded = true)"
           else
-            ".wrapContentHeight(align = BiasAlignment.Vertical(#{axis_bias_of(parts, %w[top], %w[bottom], %w[centerVertical center])}f), unbounded = true)"
+            v = bottom_up?(json_data, layout) ? 1.0 : axis_bias_of(parts, %w[top], %w[bottom], %w[centerVertical center])
+            ".wrapContentHeight(align = BiasAlignment.Vertical(#{v}f), unbounded = true)"
           end
         end
 
@@ -346,6 +358,25 @@ module KjuiTools
           gravity.is_a?(Array) ? gravity.map { |g| g.to_s.strip } : gravity.to_s.split('|').map(&:strip)
         end
 
+        # `direction: bottomToTop` stacks a Column from its bottom edge, the
+        # first child at the bottom (user ruling, 2026-10-05); reversing the
+        # children alone stacked them from the top. Not when the gravity names
+        # a vertical place or a distribution spreads them. KotlinJsonUI
+        # Dynamic: DynamicContainerComponent.stacksFromTheBottom.
+        def self.bottom_up?(json_data, layout)
+          return false unless layout == 'Column' && json_data['direction'] == 'bottomToTop'
+          return false if json_data['distribution']
+
+          parts = gravity_parts_of(json_data['gravity'] || alignment_as_gravity(json_data['alignment']))
+          (parts & %w[top bottom centerVertical center]).empty?
+        end
+
+        # A numeric size declared along `axis` ('width' / 'height').
+        def self.declares_size_along?(child, axis)
+          v = child[axis]
+          v.is_a?(Numeric) ? v >= 0 : (v.is_a?(String) && v.match?(/\A\d+(\.\d+)?\z/))
+        end
+
         # A numeric width or height (or a frame): the only nodes the size stage
         # wraps. Same predicate as KotlinJsonUI Dynamic's declaresNumericSize.
         def self.declares_numeric_size?(child)
@@ -374,6 +405,12 @@ module KjuiTools
             # A child that declares its own weight keeps it and is not being
             # distributed to.
             next if child['weight'] || child['heightWeight'] || child['widthWeight']
+            # A child that declares its own size along the axis keeps it and
+            # takes no share; the others split what is left equally (user
+            # ruling, 2026-10-05: 60 / 120 / 120, not 60 drawn in an equal 100
+            # slot with 40 empty). KotlinJsonUI Dynamic:
+            # DynamicContainerComponent.declaresSizeAlong.
+            next if declares_size_along?(child, axis_size)
 
             child[axis_weight] = 1
             # Distribution-injected, not author-declared: an AUTHOR weight

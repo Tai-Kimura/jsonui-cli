@@ -134,6 +134,40 @@ RSpec.describe 'kjui codegen: an oversized child sits where its container places
     end
   end
 
+  # User rulings 2026-10-05: fillEqually splits what a declared child leaves
+  # (60 / 120 / 120); bottomToTop stacks from the bottom edge.
+  describe 'distribution and direction rulings' do
+    def build(layout) = KjuiTools::Compose::ComposeBuilder.new.send(:generate_component, layout, 0, 'Box')
+
+    it 'gives a fillEqually child that declares its width no share' do
+      kids = [{ 'type' => 'View', 'id' => 'a', 'width' => 60, 'height' => 40 },
+              { 'type' => 'Label', 'id' => 'b', 'text' => 'B' }, { 'type' => 'Label', 'id' => 'c', 'text' => 'C' }]
+      KjuiTools::Compose::Components::ContainerComponent.send(:distribute_main_axis!, kids, 'fillEqually', 'Row')
+      expect(kids.map { |k| k['weight'] }).to eq([nil, 1, 1])
+      expect(kids.first).not_to have_key('__distributionWeight')
+    end
+
+    it 'stacks a bottomToTop Column from the bottom edge' do
+      code = build({ 'type' => 'View', 'id' => 'col', 'orientation' => 'vertical', 'direction' => 'bottomToTop',
+                     'width' => 200, 'height' => 200, 'child' => [{ 'type' => 'View', 'id' => 'a', 'width' => 40, 'height' => 40 }] })
+      expect(code).to include('verticalArrangement = Arrangement.Bottom')
+      expect(code).to include('.wrapContentHeight(align = BiasAlignment.Vertical(1.0f), unbounded = true)')
+    end
+
+    it 'keeps the spacing on a bottomToTop Column, aligned to the bottom' do
+      code = build({ 'type' => 'View', 'id' => 'col', 'orientation' => 'vertical', 'direction' => 'bottomToTop', 'spacing' => 8,
+                     'child' => [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A' }] })
+      expect(code).to include('verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)')
+      expect(code).not_to include('Arrangement.Bottom')
+    end
+
+    it 'lets a vertical gravity place a bottomToTop Column (control)' do
+      code = build({ 'type' => 'View', 'id' => 'col', 'orientation' => 'vertical', 'direction' => 'bottomToTop', 'gravity' => 'top',
+                     'child' => [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A' }] })
+      expect(code).not_to include('Arrangement.Bottom')
+    end
+  end
+
   it 'compiles: a centred Box holding an oversized child, through the builder' do
     layout = { 'type' => 'View', 'id' => 'box', 'width' => 200, 'height' => 200, 'gravity' => 'center',
                'child' => [{ 'type' => 'View', 'id' => 'kid', 'width' => 300, 'height' => 300 }] }

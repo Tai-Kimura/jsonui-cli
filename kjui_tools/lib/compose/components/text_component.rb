@@ -174,6 +174,9 @@ module KjuiTools
                             end
           hint_color = if hint && hint[:font_color]
                          Helpers::ResourceResolver.process_color(hint[:font_color], required_imports)
+                       elsif hint && hint[:default_color]
+                         required_imports&.add(:configuration)
+                         'Configuration.TextField.defaultPlaceholderColor'
                        end
           if hint_color
             # The hint branch wraps whatever the text branch would have used.
@@ -717,11 +720,17 @@ module KjuiTools
           # `placeholder` is the declared alias of `hint` and only sjui/rjui
           # resolved both (plan 49 lane C, handed over from D).
           hint = json_data['hint'] || json_data['placeholder']
-          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+          # A hint with no hintAttributes is shown too, in the default
+          # placeholder colour (user ruling, 2026-10-05; through jsonui-cli
+          # 1.9.15 every face required both and drew nothing). KotlinJsonUI
+          # Dynamic: DynamicTextComponent, the same rule.
+          return nil unless hint.is_a?(String) && !hint.empty?
 
+          attrs = {} unless attrs.is_a?(Hash)
           {
             text: hint,
             font_color: attrs['fontColor'] || json_data['hintColor'],
+            default_color: !(attrs['fontColor'] || json_data['hintColor']),
             font_attrs: attrs.slice('font', 'fontSize'),
             line_height_multiple: attrs['lineHeightMultiple']
           }

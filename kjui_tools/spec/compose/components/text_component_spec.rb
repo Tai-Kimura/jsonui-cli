@@ -1152,11 +1152,17 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent, 'hintAttributes' d
     expect(result).to include('fontSize = (if (labelText1.isEmpty()) resolved_text2 else resolved_text1).size')
   end
 
-  # UIKit's own condition — both keys or nothing.
-  it 'does nothing with a hint and no attributes' do
+  # A hint with no hintAttributes is shown in the default placeholder colour
+  # (user ruling, 2026-10-05). Through jsonui-cli 1.9.15 this example pinned
+  # UIKit's "both keys or nothing", and the hint drew nothing.
+  it 'shows a hint with no attributes, in the default placeholder colour' do
     result = label('hint' => 'No title')
-    expect(result).not_to include('labelText')
-    expect(result).to include('text = "${data.title ?: ""}",')
+    expect(result).to include('text = if (labelText1.isEmpty()) "No title" else labelText1,')
+    expect(result).to include('color = if (labelText1.isEmpty()) Configuration.TextField.defaultPlaceholderColor else')
+  end
+
+  it 'takes hintColor over the default when it is the only styling' do
+    expect(label('hint' => 'No title', 'hintColor' => '#999999')).not_to include('defaultPlaceholderColor')
   end
 
   it 'does nothing with attributes and no hint' do
