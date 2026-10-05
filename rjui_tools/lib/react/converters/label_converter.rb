@@ -485,6 +485,17 @@ module RjuiTools
           # string a className can be.)
           classes << "empty:before:content-['x'] empty:before:invisible empty:before:w-0"
 
+          # A word longer than the box breaks inside the box (user ruling
+          # 2026-10-05, attribute_semantics labelLongWordBreak): only the word
+          # that does not fit is cut at the box's width and carried to the next
+          # line — `overflow-wrap: anywhere`; where it breaks may differ per
+          # OS. Web let a long URL run past a 200-wide Label (Label/linkable__*
+          # and __control/Label__text-5ed92def) where iOS and Android wrap it.
+          # A declared lineBreakMode `Char` / `Word` keeps its own rule. The
+          # arbitrary property, not `wrap-anywhere`: that utility arrived in
+          # Tailwind 4.1, and a 4.0 project would drop it without a word.
+          classes << '[overflow-wrap:anywhere]' unless %w[Char Word].include?(attributes['lineBreakMode'])
+
           # Line clamp for multiple lines
           #
           # A BOUND cap has no class — `line-clamp-N` needs N at build time —
