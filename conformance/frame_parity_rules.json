@@ -24,8 +24,10 @@
     {
       "fixture": "__control/Label__wrap-max",
       "id": "target",
-      "fields": [],
-      "reason": "NOT LEDGERED: triage — android is exactly 800; check for a cap before pinning"
+      "fields": [
+        "width"
+      ],
+      "reason": "Font metrics, not a cap (triage 2026-10-05): the Label is wrapContent in a matchParent root and its text fits on one line on every face, so its width is the text's natural single-line width in that face's font — android 800.0 (Roboto 16sp; Compose lays out on whole pixels, so a width at density 2 reads .0 or .5), web 761.55. Checked for a cap: no 800 in KotlinJsonUI's library or conformance host, and the android text's ink runs to 797.5 inside the 800 box (the box is the text, not a limit). The height (one line) agrees"
     },
     {
       "fixture": "TextField/*",
