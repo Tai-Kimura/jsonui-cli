@@ -699,8 +699,8 @@ module SjuiTools
         # is kept (register_unless_exists).
         def apply_common_decorations
           # Hands the layout box up to the conformance gate's measuring element,
-          # in the bag's `conformance_frame` slot: inside the margins, after the
-          # offset. Here because every converter calls this, including those
+          # in the bag's `conformance_frame` slot: inside the offset and the
+          # margins. Here because every converter calls this, including those
           # that assemble their own chain. Only for the conformance host's
           # codegen (apply_conformance_frame). Dynamic:
           # DynamicModifierHelper.applyConformanceFrame.
