@@ -489,15 +489,21 @@ module SjuiTools
           gates.uniq.map { |gate| tap_gate_expr(gate) }.join(' && ')
         end
 
+        # A `hint` shows on its own (2026-10-05 user ruling 3): it needed
+        # `hintAttributes` beside it, so a Label with only a hint drew
+        # nothing. Without a declared colour it is drawn in the configuration's
+        # placeholder colour, the ruling's light default — it drew in the text
+        # colour. SwiftJsonUI's Dynamic LabelConverter.labelHint reads the same.
         def label_hint_config
           attrs = @component['hintAttributes']
+          attrs = {} unless attrs.is_a?(Hash)
           hint = @component['hint'] || @component['placeholder']
-          return nil unless attrs.is_a?(Hash) && hint.is_a?(String) && !hint.empty?
+          return nil unless hint.is_a?(String) && !hint.empty?
 
           color_value = attrs['fontColor'] || @component['hintColor']
           {
             text: hint,
-            color: color_value ? get_swiftui_color(color_value) : nil,
+            color: color_value ? get_swiftui_color(color_value) : 'Color(SwiftJsonUIConfiguration.shared.colors.placeholder)',
             size: attrs['fontSize']
           }
         end

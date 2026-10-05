@@ -126,7 +126,14 @@ module SwiftCompiler
         struct SwiftJsonUIConfiguration {
             static let shared = SwiftJsonUIConfiguration()
             func getColor(for hex: String) -> Color? { Color.black }
+            // SwiftJsonUIConfiguration.colors (a class, `placeholder: UIColor`);
+            // this compiler reads a macOS SDK, so the UIColor is stood in for
+            // by a type `Color(_:)` takes, as SwiftUI's takes a UIColor.
+            struct PlatformColor {}
+            final class Colors { var placeholder = PlatformColor() }
+            let colors = Colors()
         }
+        extension Color { init(_ color: SwiftJsonUIConfiguration.PlatformColor) { self = .gray } }
         class ViewModel: ObservableObject {}
       SWIFT
 
