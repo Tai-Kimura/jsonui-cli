@@ -181,7 +181,7 @@
       },
       "perValueMapping": {
         "fill": {
-          "swiftui": ".frame(maxWidth/maxHeight: .infinity) on each child",
+          "swiftui": "grow from content: DistributionFillLayout in SwiftJsonUI (10.29.6), content size plus an equal share of the leftover, the same policy as Compose's DistributionFillRow/Column; each undeclared child still takes .frame(maxWidth/maxHeight: .infinity), which is how the layout knows it may grow. An HStack/VStack of those children split the axis equally, which is fillEqually (frame-parity common/distribution__fill, 2026-10-05: 60 / 120 / 120 against Android 60 / 97 / 143)",
           "compose": "grow from content — NOT expressible with Modifier.weight (weight(1f) IS fillEqually, the run-4 0px collapse; weight(1f, fill=false) packs by content and is inert). Dedicated measurement pass DistributionFillRow/Column in the base KotlinJsonUI library (c7d2dfb): content size plus an equal split of the leftover, one policy shared by the kjui codegen emit and the dynamic renderer. Device-verified: all 6 value pairs pairwise distinct, explicit child size never grown, spacing gaps pinned",
           "web": "grow on each child"
         },
