@@ -12,6 +12,15 @@
       "note": ""
     },
     {
+      "screenshot": "TabView_selectedIndex__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
       "screenshot": "TabView_selectedIndex__static.png",
       "platform": "android",
       "env": "local",
@@ -21,6 +30,15 @@
       "note": ""
     },
     {
+      "screenshot": "TabView_showLabels__false.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
       "screenshot": "TabView_showLabels__true.png",
       "platform": "android",
       "env": "local",
@@ -28,6 +46,15 @@
       "distance": 11,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
+    },
+    {
+      "screenshot": "TabView_tabBarBackground__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
     },
     {
       "screenshot": "TabView_tabBarBackground__static.png",
@@ -48,6 +75,15 @@
       "note": ""
     },
     {
+      "screenshot": "TabView_tintColor__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
       "screenshot": "TabView_tintColor__static.png",
       "platform": "android",
       "env": "local",
@@ -55,6 +91,15 @@
       "distance": 11,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
+    },
+    {
+      "screenshot": "TabView_unselectedColor__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
     },
     {
       "screenshot": "TabView_unselectedColor__static.png",
