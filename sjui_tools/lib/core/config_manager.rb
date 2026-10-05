@@ -200,6 +200,15 @@ module SjuiTools
       def self.get_use_network
         load_config.fetch('use_network', true)
       end
+
+      # Whether generated views hand their layout boxes up to the conformance
+      # host's measuring elements (`.jsonUIConformanceFrame(id)`). Only the
+      # conformance host's codegen sets it; absent everywhere else, so an
+      # app's generated code does not change. Not in DEFAULT_CONFIG for the
+      # same reason.
+      def self.conformance_frames?
+        load_config['conformance_frames'] == true
+      end
     end
   end
 end

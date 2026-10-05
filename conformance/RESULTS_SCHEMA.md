@@ -247,8 +247,9 @@ At each visual fixture's `screenshot` step, the driver writes
   40 x 40 child: with a background (0, −62, 200 x 262), the background
   painting into the safe area; with none (0, 0, 40 x 40), the union of the
   children). So while the host sets `jsonuiConformanceFrameProbe`,
-  SwiftJsonUI hands each id's layout box up (Dynamic and generated code
-  alike) and the host draws a clear element named `frame:<id>` there,
+  SwiftJsonUI hands each id's layout box up (Dynamic, and generated code
+  when the host's sjui config says `"conformance_frames": true`, which no
+  app's does) and the host draws a clear element named `frame:<id>` there,
   behind the fixture, and the driver reads that. An id
   read from its own element instead goes in `fallbacks`. An app sets nothing
   and gets no such element. `xcuielement-frame` (the id's own element) stays

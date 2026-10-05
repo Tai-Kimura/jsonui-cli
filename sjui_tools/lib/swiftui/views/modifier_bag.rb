@@ -34,7 +34,7 @@ module SjuiTools
           :opacity,             # opacity/alpha
           :hidden,              # hidden
           :offset,              # offset
-          :conformance_frame,   # jsonUIConformanceFrame (the frames gate's layout box; inert in an app)
+          :conformance_frame,   # jsonUIConformanceFrame (the frames gate's layout box; conformance host only)
           :margin,              # outer margin entries
           :tint_color,          # tint
           :on_click,            # contentShape + onTapGesture
