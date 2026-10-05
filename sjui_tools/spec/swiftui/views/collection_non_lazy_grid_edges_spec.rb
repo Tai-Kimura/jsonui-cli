@@ -26,7 +26,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   def top_level(code)
     lines = code.lines
     views = lines.each_index.select { |i| lines[i] =~ /\A[A-Za-z]/ }
-    first_modifier = lines.index { |l| l.start_with?('    .background(') }
+    # The first of the Collection's own modifiers (the wrapContent cap, SwiftJsonUI
+    # WrapCap, comes before the background).
+    first_modifier = lines.index { |l| l.start_with?('    .wrapCap(', '    .background(') }
     [views.map { |i| lines[i][/\A\w+/] }, views, first_modifier, lines]
   end
 
