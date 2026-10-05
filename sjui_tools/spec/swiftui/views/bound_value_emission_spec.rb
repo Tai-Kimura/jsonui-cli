@@ -320,8 +320,11 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       # converter that ignores the attribute.
       expect(convert(:ProgressConverter, 'type' => 'Progress', 'indicatorStyle' => 'medium'))
         .not_to include('.scaleEffect(')
+      # Indicator scales by the same table and, from SwiftJsonUI 10.29.6, also
+      # lays out at the scaled size (ScaledFootprint); Progress keeps the bare
+      # scaleEffect.
       expect(convert(:IndicatorConverter, 'type' => 'Indicator', 'indicatorStyle' => 'large'))
-        .to include('.scaleEffect(1.5)')
+        .to include('.scaledWithFootprint(1.5)')
     end
 
     it 'bound animating with hidesWhenStopped wraps the if in Group' do

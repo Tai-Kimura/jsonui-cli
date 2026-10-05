@@ -6,6 +6,8 @@ module SjuiTools
   module SwiftUI
     module Views
       class IndicatorConverter < BaseViewConverter
+        SCALED_FOOTPRINT_MIN_LIBRARY_VERSION = '10.29.6'
+
         def convert
           # Check for animating property binding
           animating = @component['animating']
@@ -64,19 +66,25 @@ module SjuiTools
         private
 
         def generate_progress_view
+          indicator_style = @component['indicatorStyle'] || @component['style']
+          scale = indicator_style ? get_scale_for_style(indicator_style) : 1.0
+          # A scaled spinner lays out at its scaled size: `.scaleEffect` alone
+          # kept the unscaled 20 footprint for large and small alike
+          # (SwiftJsonUI ScaledFootprint; frame-parity
+          # Indicator/indicatorStyle__large, 2026-10-05).
+          add_line "// Requires SwiftJsonUI >= #{SCALED_FOOTPRINT_MIN_LIBRARY_VERSION} (scaledWithFootprint)" if scale != 1.0
+
           # ProgressView（インジケーター）
           add_line "ProgressView()"
 
           # style with scale effect for size
-          indicator_style = @component['indicatorStyle'] || @component['style']
           if indicator_style
             style = indicator_style_to_swiftui(indicator_style)
             add_modifier_line ".progressViewStyle(#{style})"
 
             # Apply scale based on style
-            scale = get_scale_for_style(indicator_style)
             if scale != 1.0
-              add_modifier_line ".scaleEffect(#{scale})"
+              add_modifier_line ".scaledWithFootprint(#{scale})"
             end
           end
 

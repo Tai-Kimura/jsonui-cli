@@ -35,12 +35,16 @@ RSpec.describe SjuiTools::SwiftUI::Views::IndicatorConverter do
         }
       end
 
-      it 'adds circular progressViewStyle and scale effect' do
+      it 'adds circular progressViewStyle and a scale that takes its own space' do
         converter = described_class.new(component)
         code = converter.convert
 
         expect(code).to include('.progressViewStyle(CircularProgressViewStyle())')
-        expect(code).to include('.scaleEffect(1.5)')
+        # `.scaleEffect` alone scaled the drawing and kept the 20 layout of medium (frame-parity
+        # Indicator/indicatorStyle__large, 2026-10-05).
+        expect(code).to include('.scaledWithFootprint(1.5)')
+        expect(code).not_to include('.scaleEffect(')
+        expect(code).to include('// Requires SwiftJsonUI >= 10.29.6 (scaledWithFootprint)')
       end
     end
 
@@ -61,6 +65,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::IndicatorConverter do
 
         expect(code).to include('.progressViewStyle(CircularProgressViewStyle())')
         expect(code).not_to include('.scaleEffect(')
+        expect(code).not_to include('.scaledWithFootprint(')
       end
     end
 

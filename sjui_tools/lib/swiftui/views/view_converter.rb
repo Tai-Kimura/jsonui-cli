@@ -27,7 +27,48 @@ module SjuiTools
         # Stores child code/weight for each WeightedStack child (used for body splitting)
         attr_reader :weighted_children_info
 
+        # `alignment` is the declared string alternative to gravity
+        # (attribute_definitions common.alignment). A View with no gravity
+        # reads it as the gravity it names, so every gravity reader here
+        # (stack alignment, spacers, the frame alignment) places the children:
+        # only the ZStack's own `alignment:` read it, inside a frame that
+        # still pinned the content to the top left, so a 200 box with
+        # `alignment: bottom` drew its children at 0, 0 where Android places
+        # them bottom centre (frame-parity common/alignment, 2026-10-05). The
+        # table is the kjui codegen's (container_component.rb
+        # ALIGNMENT_GRAVITY); SwiftJsonUI Dynamic reads the same
+        # (DynamicDecodingHelper.alignmentAsGravity).
+        ALIGNMENT_GRAVITY = {
+          'topleading' => %w[top left],
+          'top' => %w[top centerHorizontal],
+          'toptrailing' => %w[top right],
+          'leading' => %w[centerVertical left],
+          'center' => %w[center],
+          'trailing' => %w[centerVertical right],
+          'bottomleading' => %w[bottom left],
+          'bottom' => %w[bottom centerHorizontal],
+          'bottomtrailing' => %w[bottom right]
+        }.freeze
+
+        DISTRIBUTION_FILL_MIN_LIBRARY_VERSION = '10.29.6'
+
+        # Where DistributionFillLayout puts a child across the axis, from the
+        # stack alignment the gravity gives (0 top / leading, 1 bottom / trailing).
+        def cross_bias(alignment)
+          { '.center' => '0.5', '.bottom' => '1', '.trailing' => '1' }.fetch(alignment, '0')
+        end
+
+        def self.alignment_as_gravity(component)
+          return nil unless component.is_a?(Hash) && component['type'] == 'View' && component['gravity'].nil?
+          return nil unless component['alignment'].is_a?(String)
+
+          ALIGNMENT_GRAVITY[JsonUIShared::EnumSpelling.lowered(component['alignment'], 'common', 'alignment')]
+        end
+
         def initialize(component, indent_level = 0, action_manager = nil, converter_factory = nil, view_registry = nil, binding_registry = nil)
+          if (gravity = self.class.alignment_as_gravity(component))
+            component = component.merge('gravity' => gravity)
+          end
           super(component, indent_level, action_manager, binding_registry)
           @converter_factory = converter_factory
           @view_registry = view_registry || SjuiTools::SwiftUI::ViewRegistry.new
@@ -208,6 +249,17 @@ module SjuiTools
             # @{gap})` and the build died on the first stack that used it.
             spacing_value = bound_number(@component['spacing']) || @component['spacing'] || 0
 
+            # `distribution: fill` grows each child from its content
+            # (SwiftJsonUI DistributionFillLayout): an HStack / VStack of
+            # `.frame(maxWidth: .infinity)` children split the axis equally,
+            # which is fillEqually — a 300 row of a 60 box and the labels
+            # "BBBB" / "CCCCCCCC" drew 60 / 120 / 120 where Android draws
+            # 60 / 97 / 143 (frame-parity common/distribution__fill,
+            # 2026-10-05). The layout reads which child may grow from the
+            # child itself, so no gravity spacer goes inside it.
+            fill_layout = !has_weights && %w[horizontal vertical].include?(orientation) &&
+                          JsonUIShared::EnumSpelling.lowered(@component['distribution'], 'View', 'distribution') == 'fill'
+
             if has_weights && (orientation == 'horizontal' || orientation == 'vertical')
               # weightがある場合はWeightedStack用の子要素を構築
               @weighted_children_info = []  # Track child codes for body splitting
@@ -250,7 +302,12 @@ module SjuiTools
             elsif orientation == 'horizontal'
               # HStackでgravityを反映
               alignment = get_hstack_alignment
-              add_line "HStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
+              if fill_layout
+                add_line "// Requires SwiftJsonUI >= #{DISTRIBUTION_FILL_MIN_LIBRARY_VERSION} (DistributionFillLayout)"
+                add_line "DistributionFillLayout(axis: .horizontal, spacing: #{spacing_value}, crossBias: #{cross_bias(alignment)}) {"
+              else
+                add_line "HStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
+              end
 
               # Leading spacer: gravity, or equalCentering's END unit.
               # semantics.distribution iosGapConstruction: equalCentering is
@@ -262,7 +319,7 @@ module SjuiTools
               # distinguish them (collapsedPairs, run 5).
               distribution = @component['distribution']
               gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
-              if (!gap_distribution && should_add_leading_spacer_for_hstack(@component['gravity'])) || distribution == 'equalCentering'
+              if !fill_layout && ((!gap_distribution && should_add_leading_spacer_for_hstack(@component['gravity'])) || distribution == 'equalCentering')
                 indent do
                   add_line "Spacer(minLength: 0)"
                 end
@@ -270,13 +327,18 @@ module SjuiTools
             elsif orientation == 'vertical'
               # VStackでgravityを反映
               alignment = get_vstack_alignment
-              add_line "VStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
+              if fill_layout
+                add_line "// Requires SwiftJsonUI >= #{DISTRIBUTION_FILL_MIN_LIBRARY_VERSION} (DistributionFillLayout)"
+                add_line "DistributionFillLayout(axis: .vertical, spacing: #{spacing_value}, crossBias: #{cross_bias(alignment)}) {"
+              else
+                add_line "VStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
+              end
 
               # Leading spacer: gravity, or equalCentering's END unit
               # (same construction note as the HStack branch above).
               distribution = @component['distribution']
               gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
-              if (!gap_distribution && should_add_leading_spacer_for_vstack(@component['gravity'])) || distribution == 'equalCentering'
+              if !fill_layout && ((!gap_distribution && should_add_leading_spacer_for_vstack(@component['gravity'])) || distribution == 'equalCentering')
                 indent do
                   add_line "Spacer(minLength: 0)"
                 end
@@ -455,7 +517,7 @@ module SjuiTools
                   # Add trailing Spacer based on gravity or distribution
                   # ただし、親からcenterHorizontal/centerVerticalでラップされている場合はSpacerを追加しない
                   # また、wrapContent/具体的なサイズの場合はSpacerを追加しない（matchParentや-1の場合のみ追加）
-                  unless @component['_skip_trailing_spacer']
+                  unless @component['_skip_trailing_spacer'] || fill_layout
                     width = @component['width']
                     height = @component['height']
                     # Spacerはコンテナが拡大する場合のみ意味がある

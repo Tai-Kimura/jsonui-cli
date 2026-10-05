@@ -171,7 +171,14 @@ module SjuiTools
             # line: whether it resolves to one cannot be known at generation
             # time. Two such nodes exist on one face and this does NOT reach
             # them.
-            weight_name = if @component['fontWeight']
+            #
+            # The hint's own `font` wins while the hint is showing, as its size
+            # does above: `hintAttributes: {font: bold}` drew a regular-weight
+            # hint (frame-parity Label/hintAttributes__static, 2026-10-05).
+            # SwiftJsonUI Dynamic: LabelConverter.labelHintFont.
+            weight_name = if hint_static && weight_vocabulary.include?(hint[:font].to_s.downcase)
+                            hint[:font]
+                          elsif @component['fontWeight']
                             @component['fontWeight']
                           elsif weight_vocabulary.include?(@component['font'].to_s.downcase)
                             @component['font']
@@ -504,7 +511,8 @@ module SjuiTools
           {
             text: hint,
             color: color_value ? get_swiftui_color(color_value) : 'Color(SwiftJsonUIConfiguration.shared.colors.placeholder)',
-            size: attrs['fontSize']
+            size: attrs['fontSize'],
+            font: attrs['font']
           }
         end
 
