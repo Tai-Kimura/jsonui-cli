@@ -197,8 +197,18 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
       expect(generate('icon_off' => 'home', 'iconSize' => [40, 20])).not_to include('[40, 20]')
     end
 
-    it 'falls back to the cross-platform default when undeclared' do
-      expect(generate('icon_off' => 'home')).to include('Modifier.size(24.dp)')
+    # attribute_semantics iconLabelIconSize (2026-10-05 ruling): undeclared,
+    # the icon is drawn at the image's own size — no size modifier at all.
+    it "draws the icon at the image's own size when undeclared" do
+      out = generate('icon_off' => 'home')
+      expect(out).to include('Image(')
+      expect(out).not_to include('Modifier.size(')
+    end
+
+    it 'keeps the Image arguments comma-separated without a size (a tint follows the description)' do
+      out = generate('icon_off' => 'home', 'tintColor' => '#FF0000')
+      expect(out).to match(/contentDescription = null,\n\s*colorFilter = /)
+      expect(out).not_to include(',,')
     end
   end
 end

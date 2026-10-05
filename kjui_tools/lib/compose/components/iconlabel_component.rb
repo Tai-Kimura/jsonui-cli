@@ -35,7 +35,6 @@ module KjuiTools
         # dynamic converter both default to 5) — the KJUI dynamic 8f fallback
         # was the deviant side (32 parity re-measure).
         DEFAULT_ICON_MARGIN = 5
-        DEFAULT_ICON_SIZE = 24
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           position = JsonUIShared::EnumSpelling.lowered(json_data['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
@@ -89,6 +88,11 @@ module KjuiTools
         # is not Kotlin, which made the only two-axis spelling uncompilable.
         # NOT the same shape as CheckBox.iconSize, which is number-only for a
         # square glyph and must stay that way.
+        #
+        # nil when no size is declared: the icon is then drawn at the image's
+        # own size (attribute_semantics iconLabelIconSize, 2026-10-05 ruling),
+        # so the Image gets no size modifier. A fixed 24 dp drew a 64 dp
+        # asset at 24 where iOS and the declaration draw it at 64.
         def self.icon_size_call(value)
           if value.is_a?(Array) && value.length >= 2
             return "size(width = #{Helpers::BoundValue.dp(value[0])}, height = #{Helpers::BoundValue.dp(value[1])})"
@@ -96,7 +100,7 @@ module KjuiTools
 
           # A one-element array still means "both edges", the same as a number.
           scalar = value.is_a?(Array) ? value.first : value
-          "size(#{scalar || DEFAULT_ICON_SIZE}.dp)"
+          scalar.nil? ? nil : "size(#{scalar}.dp)"
         end
 
         # `iconMargin` is the declared row; `spacing` is the legacy spelling the
@@ -141,20 +145,19 @@ module KjuiTools
               drawable(resting)
             end
 
-          code = indent("Image(", depth) + "\n"
-          code += indent("painter = #{painter},", depth + 1) + "\n"
           # The label beside the icon names this control, so the icon itself
           # is decorative (null — an empty string is still an unnamed image
           # to TalkBack) unless the layout says otherwise.
           icon_desc = json_data['contentDescription'] ? quote(json_data['contentDescription']) : 'null'
-          code += indent("contentDescription = #{icon_desc},", depth + 1) + "\n"
-          code += indent("modifier = Modifier.#{icon_size_call(json_data['iconSize'])}", depth + 1)
+          args = ["painter = #{painter}", "contentDescription = #{icon_desc}"]
+          if (size = icon_size_call(json_data['iconSize']))
+            args << "modifier = Modifier.#{size}"
+          end
           if (filter = icon_color_filter(json_data, condition, required_imports))
             required_imports&.add(:color_filter)
-            code += ",\n" + indent("colorFilter = #{filter}", depth + 1)
+            args << "colorFilter = #{filter}"
           end
-          code += "\n" + indent(")", depth)
-          code
+          indent("Image(", depth) + "\n" + args.map { |a| indent(a, depth + 1) }.join(",\n") + "\n" + indent(")", depth)
         end
 
         # Tint only when a colour was asked for. iOS tints the icon with the font

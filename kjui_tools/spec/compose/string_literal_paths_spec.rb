@@ -98,7 +98,7 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
   path('CircleImageComponent.quote — CircleImage.url', around: 'model = %s,') do |t|
     components::CircleImageComponent.generate({ 'type' => 'CircleImage', 'url' => t }, 0, Set.new)
   end
-  path('IconLabelComponent.quote — IconLabel.contentDescription', around: 'contentDescription = %s,') do |t|
+  path('IconLabelComponent.quote — IconLabel.contentDescription', around: 'contentDescription = %s') do |t|
     components::IconLabelComponent.generate({ 'type' => 'IconLabel', 'text' => 'a', 'icon' => 'x', 'contentDescription' => t }, 0, Set.new)
   end
   path('NetworkImageComponent.quote — NetworkImage.url', around: 'model = %s,') do |t|
