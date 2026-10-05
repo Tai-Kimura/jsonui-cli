@@ -618,6 +618,55 @@ class LedgerFromRules(unittest.TestCase):
         self.assertTrue(all(r["reason"] for r in rules))
 
 
+class LedgerFromRulesWithExpected(unittest.TestCase):
+    """A rule's ``expected`` pins the named face to a stated amount: iOS
+    lineHeightMultiple 1.8 draws five lines L + 4 x m x L = 166.71 (no
+    multiple on the first line), where Android and web draw 5 x m x L."""
+
+    RULES = [{"fixture": "Label/lineHeightMultiple__*", "id": "target", "fields": ["height"],
+              "expected": {"ios": {"height": 166.71}}, "reason": "iOS: no multiple on the first line"}]
+
+    def _result(self, ios_h, android_h=217.5, web_h=216):
+        with tempfile.TemporaryDirectory() as d:
+            t = Tree(Path(d))
+            t.fixture("Label/lineHeightMultiple__static", {"type": "View", "id": "root", "child": [{"type": "Label", "id": "target"}]})
+            t.frames("ios", "Label/lineHeightMultiple__static", {"target": f(0, 0, 200, ios_h)})
+            t.frames("android", "Label/lineHeightMultiple__static", {"target": f(0, 0, 200, android_h)})
+            t.frames("web", "Label/lineHeightMultiple__static", {"target": f(0, 0, 200, web_h)})
+            manifest = t.write()
+            return fp.measure(Path(d), manifest, t.results(), ["android", "ios", "web"])
+
+    def test_the_expected_amount_is_ledgered(self):
+        entries, refused = fp.ledger_from_rules(self._result(166.7), self.RULES)
+        self.assertEqual(refused, [])
+        self.assertEqual([e["outliers"] for e in entries], [["ios"]])
+
+    def test_any_other_ios_height_is_refused(self):
+        # 156: today's iOS, which adds (m - 1) x fontSize between lines.
+        entries, refused = fp.ledger_from_rules(self._result(156), self.RULES)
+        self.assertEqual(entries, [])
+        self.assertIn("ios height 156 is not the rule's expected 166.71", refused[0])
+
+    def test_the_tolerance_is_the_gates(self):
+        self.assertEqual(fp.ledger_from_rules(self._result(166.71 + fp.TOLERANCE), self.RULES)[1], [])
+        self.assertTrue(fp.ledger_from_rules(self._result(166.71 + fp.TOLERANCE + 0.1), self.RULES)[1])
+
+    def test_the_faces_it_does_not_name_must_agree(self):
+        # Android at 127.5 (the old font-size base): height may differ for
+        # iOS by the stated amount, not between Android and web.
+        entries, refused = fp.ledger_from_rules(self._result(166.7, android_h=127.5), self.RULES)
+        self.assertEqual(entries, [])
+        self.assertIn("the faces the rule's expected does not name differ in ['height']", refused[0])
+
+    def test_an_expected_field_outside_the_rule_fields_does_not_load(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / fp.RULES_NAME
+            p.write_text(json.dumps({"rules": [{"fixture": "a/*", "fields": ["height"], "reason": "r",
+                                                "expected": {"ios": {"width": 10}}}]}))
+            with self.assertRaises(ValueError):
+                fp.load_rules(p)
+
+
 class Report(unittest.TestCase):
     def test_the_section_shows_the_frames_side_by_side(self):
         from jui_cli.conformance.report import load_platform_results, manifest_identity
