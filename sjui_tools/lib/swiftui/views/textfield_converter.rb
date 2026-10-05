@@ -354,6 +354,9 @@ module SjuiTools
             @modifier_bag.register(:border, border_code)
           end
 
+          # The frames gate's measuring element (apply_conformance_frame): this
+          # converter does not call apply_common_decorations, where the others get it.
+          apply_conformance_frame
           # Apply margins (external spacing)
           apply_margins
 
