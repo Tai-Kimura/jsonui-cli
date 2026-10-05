@@ -20,6 +20,19 @@ Two fixtures and one control, each a 200x200 vertical ScrollView holding one
   child by its gravity draws it at x 160.
 * the control — no gravity anywhere: the box at x 0.
 
+A second pair holds the child's own gravity in place: the ScrollView holds
+one matchParent-wide View declaring gravity center, which holds the 40x40
+box —
+
+* ``childContentGravity__center`` — the box at x 80, centred by its parent's
+  content gravity. A platform that overwrote the child's alignment with the
+  ScrollView's (start) would draw it at 0.
+* its control — the same tree without the gravity: the box at x 0.
+
+The 2026-10-05 sjui change that made the ScrollView's own gravity place its
+content left this shape as it was (measured: a 72 box at x 159 of 390 before
+and after, in the layout that raised the question); the pair fixes that.
+
 All ``class: visual``; the frame-parity gate reads the box on every
 platform.
 """
@@ -36,6 +49,8 @@ _PLATFORMS = ["ios", "android", "web"]
 SCROLL_GRAVITY_CASE = "gravity__centerHorizontal"
 CHILD_GRAVITY_CASE = "childGravity__right"
 CONTROL_STEM = "ScrollView__narrow-child"
+CHILD_CONTENT_CASE = "childContentGravity__center"
+CHILD_CONTENT_CONTROL_STEM = "ScrollView__matchparent-child"
 
 _BOX = 200
 _CHILD = 40
@@ -66,6 +81,23 @@ def _layout(source_label: str, scroll_gravity=None, child_gravity=None) -> dict:
         "width": "matchParent",
         "height": "matchParent",
         "child": [scroll],
+    }
+
+
+def _wrapped_layout(source_label: str, content_gravity=None) -> dict:
+    content = {"type": "View", "id": "content", "orientation": "vertical", "width": "matchParent",
+               "height": "wrapContent",
+               "child": [{"type": "View", "id": "box", "width": _CHILD, "height": _CHILD, "background": "#FF0000"}]}
+    if content_gravity:
+        content["gravity"] = content_gravity
+    return {
+        "_generated": _marker(source_label),
+        "type": "View",
+        "id": "root",
+        "width": "matchParent",
+        "height": "matchParent",
+        "child": [{"type": "ScrollView", "id": "target", "width": _BOX, "height": _BOX,
+                   "background": "#DDDDDD", "child": [content]}],
     }
 
 
@@ -168,4 +200,28 @@ def build_scroll_gravity_fixtures(
             "control": control_id,
             "companions": list(companions),
         })
+    # The child's own content gravity, inside the ScrollView.
+    cc_control_id = f"__control/{CHILD_CONTENT_CONTROL_STEM}"
+    cc_control_layout = f"fixtures/__control/{CHILD_CONTENT_CONTROL_STEM}.layout.json"
+    cc_control_test = f"fixtures/__control/{CHILD_CONTENT_CONTROL_STEM}.test.json"
+    files.append((cc_control_layout, _wrapped_layout(source_label)))
+    files.append((cc_control_test, _test(
+        CHILD_CONTENT_CONTROL_STEM,
+        "Control for the child-content-gravity ScrollView: a 200x200 vertical ScrollView holding one "
+        "matchParent-wide View with no gravity, which holds a 40x40 box — the box at x 0.",
+        cc_control_layout)))
+    entries.append({**entries[0], "id": cc_control_id, "case": CHILD_CONTENT_CONTROL_STEM,
+                    "layout": cc_control_layout, "test": cc_control_test})
+    layout_rel = f"fixtures/ScrollView/{CHILD_CONTENT_CASE}.layout.json"
+    test_rel = f"fixtures/ScrollView/{CHILD_CONTENT_CASE}.test.json"
+    files.append((layout_rel, _wrapped_layout(source_label, content_gravity="center")))
+    files.append((test_rel, _test(
+        CHILD_CONTENT_CASE,
+        "A 200x200 vertical ScrollView holding one matchParent-wide View declaring gravity center, "
+        "which holds a 40x40 box: the View's content gravity centres the box at x 80, whatever the "
+        "ScrollView's own gravity. A platform that overwrote the child's alignment would draw it at 0.",
+        layout_rel)))
+    entries.append({**entries[1], "id": f"ScrollView/{CHILD_CONTENT_CASE}", "attribute": "child",
+                    "case": CHILD_CONTENT_CASE, "writtenKey": "child", "value": None,
+                    "layout": layout_rel, "test": test_rel, "control": cc_control_id})
     return files, entries

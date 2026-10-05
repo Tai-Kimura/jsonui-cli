@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/ScrollView__matchparent-child.layout.json"
+  },
+  "metadata": {
+    "name": "conformance ScrollView__matchparent-child",
+    "description": "Control for the child-content-gravity ScrollView: a 200x200 vertical ScrollView holding one matchParent-wide View with no gravity, which holds a 40x40 box — the box at x 0.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "ScrollView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "ScrollView__matchparent-child",
+      "description": "Control for the child-content-gravity ScrollView: a 200x200 vertical ScrollView holding one matchParent-wide View with no gravity, which holds a 40x40 box — the box at x 0.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "ScrollView_ScrollView__matchparent-child"
+        }
+      ]
+    }
+  ]
+}

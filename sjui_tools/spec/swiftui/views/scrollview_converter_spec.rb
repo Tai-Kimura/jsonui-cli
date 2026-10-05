@@ -68,6 +68,22 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
         end
       end
 
+      # Holds the value b56ea7a4 left unchanged — the same before and after it
+      # (measured on the layout that raised the question: a 72 box at x 159 of
+      # 390 both ways). Not red before that change: it fixes the value. The
+      # ScrollView's gravity places the ScrollView's content stack; the
+      # child's own stack keeps the child's gravity.
+      it "keeps a child's own content gravity" do
+        out = SjuiTools::SwiftUI::ConverterFactory.new.create_converter({ 'type' => 'ScrollView', 'gravity' => 'right', 'child' => [
+          { 'type' => 'View', 'id' => 'content', 'orientation' => 'vertical', 'width' => 'matchParent',
+            'height' => 'wrapContent', 'gravity' => 'center', 'child' => [child] }
+        ] }).convert
+        code = out.is_a?(Array) ? out.join("\n") : out.to_s
+        stacks = code.lines.grep(/VStack\(alignment:/).map(&:strip)
+        expect(stacks.first).to include('alignment: .trailing'), code
+        expect(stacks[1]).to include('alignment: .center'), code
+      end
+
       it 'at the top leading edge of a horizontal scroll' do
         expect(frame_line({ 'type' => 'ScrollView', 'horizontalScroll' => true, 'child' => [child, child] })).to include('alignment: .topLeading')
       end

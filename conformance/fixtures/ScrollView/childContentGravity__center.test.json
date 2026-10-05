@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/ScrollView/childContentGravity__center.layout.json"
+  },
+  "metadata": {
+    "name": "conformance childContentGravity__center",
+    "description": "A 200x200 vertical ScrollView holding one matchParent-wide View declaring gravity center, which holds a 40x40 box: the View's content gravity centres the box at x 80, whatever the ScrollView's own gravity. A platform that overwrote the child's alignment would draw it at 0.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "ScrollView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "childContentGravity__center",
+      "description": "A 200x200 vertical ScrollView holding one matchParent-wide View declaring gravity center, which holds a 40x40 box: the View's content gravity centres the box at x 80, whatever the ScrollView's own gravity. A platform that overwrote the child's alignment would draw it at 0.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "ScrollView_childContentGravity__center"
+        }
+      ]
+    }
+  ]
+}

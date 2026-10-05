@@ -15,6 +15,10 @@ import unittest
 from jui_cli.conformance import scroll_gravity_fixtures as sg
 
 
+NARROW = {f"ScrollView/{sg.SCROLL_GRAVITY_CASE}", f"ScrollView/{sg.CHILD_GRAVITY_CASE}", f"__control/{sg.CONTROL_STEM}"}
+CHILD_CONTENT = {f"ScrollView/{sg.CHILD_CONTENT_CASE}", f"__control/{sg.CHILD_CONTENT_CONTROL_STEM}"}
+
+
 def _built():
     files, entries = sg.build_scroll_gravity_fixtures("src")
     return dict(files), {e["id"]: e for e in entries}
@@ -27,9 +31,7 @@ def _scroll(files, entry):
 class Shape(unittest.TestCase):
     def test_two_fixtures_one_control(self):
         _, by_id = _built()
-        ids = sorted(by_id)
-        self.assertEqual(ids, sorted([f"ScrollView/{sg.SCROLL_GRAVITY_CASE}", f"ScrollView/{sg.CHILD_GRAVITY_CASE}",
-                                      f"__control/{sg.CONTROL_STEM}"]))
+        self.assertEqual(set(by_id), NARROW | CHILD_CONTENT)
         control = by_id[f"__control/{sg.CONTROL_STEM}"]
         self.assertTrue(control["isControl"])
         for case in (sg.SCROLL_GRAVITY_CASE, sg.CHILD_GRAVITY_CASE):
@@ -40,7 +42,7 @@ class Shape(unittest.TestCase):
 
     def test_vertical_and_the_child_narrower_by_a_band(self):
         files, by_id = _built()
-        for entry in by_id.values():
+        for entry in (by_id[i] for i in NARROW):
             scroll = _scroll(files, entry)
             self.assertNotIn("orientation", scroll)
             self.assertNotIn("horizontalScroll", scroll)
@@ -66,6 +68,33 @@ class Shape(unittest.TestCase):
             stripped.pop("gravity", None)
             stripped["child"][0].pop("gravity", None)
             self.assertEqual(stripped, control)
+
+
+class ChildContentGravity(unittest.TestCase):
+    """The pair that holds a child's own content gravity inside a ScrollView."""
+
+    def test_one_fixture_one_control(self):
+        _, by_id = _built()
+        fixture = by_id[f"ScrollView/{sg.CHILD_CONTENT_CASE}"]
+        control = by_id[fixture["control"]]
+        self.assertEqual(control["id"], f"__control/{sg.CHILD_CONTENT_CONTROL_STEM}")
+        self.assertTrue(control["isControl"])
+        self.assertEqual(fixture["class"], "visual")
+
+    def test_the_gravity_is_on_the_matchparent_child_only(self):
+        files, by_id = _built()
+        fixture = _scroll(files, by_id[f"ScrollView/{sg.CHILD_CONTENT_CASE}"])
+        control = _scroll(files, by_id[f"__control/{sg.CHILD_CONTENT_CONTROL_STEM}"])
+        self.assertNotIn("gravity", fixture)
+        content = fixture["child"][0]
+        self.assertEqual(content["width"], "matchParent")
+        self.assertEqual(content.get("gravity"), "center")
+        box = content["child"][0]
+        # Centred, the box starts at (200 - 40) / 2 = 80: a band from the start.
+        self.assertGreaterEqual((fixture["width"] - box["width"]) / 2, 40)
+        stripped = copy.deepcopy(fixture)
+        stripped["child"][0].pop("gravity")
+        self.assertEqual(stripped, control)
 
 
 if __name__ == "__main__":
