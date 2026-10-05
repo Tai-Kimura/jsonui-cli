@@ -135,8 +135,6 @@ module SwiftCompiler
         }
         extension Color { init(_ color: SwiftJsonUIConfiguration.PlatformColor) { self = .gray } }
         class ViewModel: ObservableObject {}
-        // SwiftJsonUI's WrapCap (10.29.6): the wrapContent cap a container emits.
-        extension View { func wrapCap(width: Bool, height: Bool) -> some View { self } }
       SWIFT
 
       <<~SWIFT

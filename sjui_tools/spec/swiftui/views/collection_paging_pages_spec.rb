@@ -144,7 +144,6 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           }
           guard (0...lastPage).contains(oldValue) else { return }
       }
-          .wrapCap(width: true, height: true)
           .accessibilityIdentifier("carousel")
     SWIFT
   end
@@ -232,8 +231,6 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         import SwiftUI
         #{EmittedSwift::COLLECTION_DATA_SOURCE_STUB}
         #{cell_view_stub('ACellView', 'BCellView', 'CCellView')}
-        // SwiftJsonUI's WrapCap (10.29.6).
-        extension View { func wrapCap(width: Bool, height: Bool) -> some View { self } }
           struct ACellData { var title = ""; func toDictionary() -> [String: Any] { ["title": title] } }
         struct TestData { var rows: CollectionDataSource? = nil; var list: [ACellData] = []; var page: Int = 0 }
         struct EmittedHost: View {
