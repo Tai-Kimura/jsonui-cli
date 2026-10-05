@@ -9,11 +9,17 @@
         "height"
       ],
       "expected": {
+        "android": {
+          "height": 215.0
+        },
         "ios": {
           "height": 166.71
+        },
+        "web": {
+          "height": 216.0
         }
       },
-      "reason": "iOS draws no multiple on the first line (SwiftUI has no per-line height; 2026-10-05 user instruction, attribute_semantics lineHeightMultipleBase): five lines of L 20.33 at m 1.8 are L + 4 x m x L = 166.71, (m - 1) x L = 16.27 short of 5 x m x L. Pinned to that amount: any other iOS height, or Android and web apart, is refused"
+      "reason": "iOS draws no multiple on the first line (SwiftUI has no per-line height; 2026-10-05 user instruction, attribute_semantics lineHeightMultipleBase): five lines of L 20.33 at m 1.8 are L + 4 x m x L = 166.71, (m - 1) x L = 16.27 short of 5 x m x L. Android draws each line on the pixel grid (KotlinJsonUI LabelLineHeight: 43.2 dp is 86.4 px, drawn 86 at density 2 on conf_ci and the CI pixel_tablet), 0.2 short a line: 215.0 for five. Web draws the declared 5 x m x L = 216.0. All three are pinned (naming two would leave the third compared with nothing): any other height on any face is refused"
     },
     {
       "fixture": "__control/Label__wrap-max",

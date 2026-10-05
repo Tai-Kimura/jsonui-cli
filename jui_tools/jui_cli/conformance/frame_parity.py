@@ -700,6 +700,11 @@ def load_rules(path) -> list[dict]:
                 continue
             bad += [f"expected.{host}.{f}" for f, v in values.items()
                     if f not in rule.get("fields", []) or not isinstance(v, (int, float))]
+        # Naming all faces but one leaves that one compared with nothing: it
+        # could draw any value and still be ledgered. Name one face, or all.
+        named = set(rule.get("expected") or {})
+        if named and len(set(EXPECTED_FRAME_HOSTS) - named) == 1:
+            bad.append(f"expected names {sorted(named)}, leaving {sorted(set(EXPECTED_FRAME_HOSTS) - named)} unchecked")
         if missing or bad:
             raise ValueError(f"{RULES_NAME} rule {i}: missing {missing}, unknown fields {bad}")
     return rules

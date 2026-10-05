@@ -658,6 +658,17 @@ class LedgerFromRulesWithExpected(unittest.TestCase):
         self.assertEqual(entries, [])
         self.assertIn("the faces the rule's expected does not name differ in ['height']", refused[0])
 
+    def test_naming_all_faces_but_one_does_not_load(self):
+        # Android and iOS named, web left with no face to agree with: any web
+        # height would be ledgered.
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / fp.RULES_NAME
+            p.write_text(json.dumps({"rules": [{"fixture": "a/*", "fields": ["height"], "reason": "r",
+                                                "expected": {"ios": {"height": 1}, "android": {"height": 2}}}]}))
+            with self.assertRaises(ValueError) as e:
+                fp.load_rules(p)
+            self.assertIn("leaving ['web'] unchecked", str(e.exception))
+
     def test_an_expected_field_outside_the_rule_fields_does_not_load(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / fp.RULES_NAME
