@@ -162,6 +162,16 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
     it 'omits the weight for a font name that is not one' do
       expect(generate('font' => 'Helvetica')).not_to include('fontWeight')
     end
+
+    # A shadow does not change the size. A bare TextStyle(shadow = …) dropped
+    # the Material default (16sp on a 24sp line): the shadowed IconLabel drew
+    # at 14sp on a 16.5 dp line while the dynamic face kept 16 / 24.
+    it 'adds a textShadow to the current text style, not to a bare TextStyle' do
+      out = generate('textShadow' => { 'color' => '#000000', 'blur' => 2, 'offset' => [1, 1] })
+      expect(out).to include('style = LocalTextStyle.current.copy(shadow = ')
+      expect(out).not_to include('TextStyle(shadow')
+      expect(required_imports).to include(:local_text_style)
+    end
   end
 
   describe 'common attributes' do

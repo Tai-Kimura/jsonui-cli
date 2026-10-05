@@ -209,11 +209,17 @@ module KjuiTools
           # Label (the UIKit runtime passes the identical JSON to both), and
           # this component never reached ANY shadow path (plan 49 lane C:
           # IconLabel.textShadow). The emitter is Label's, so the two cannot
-          # drift.
+          # drift. The style is LocalTextStyle.current.copy, never a bare
+          # TextStyle() (Label's rule, text_component.rb): the bare one dropped
+          # the Material default — 16sp on a 24sp line — so a shadowed
+          # IconLabel drew its text at 14sp on a 16.5 dp line where the
+          # dynamic face and every unshadowed IconLabel keep 16 / 24. A
+          # shadow does not change the size.
           if json_data['textShadow']
             required_imports&.add(:shadow_style)
+            required_imports&.add(:local_text_style)
             shadow = TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)
-            code += "\n" + indent("style = TextStyle(#{shadow}),", depth + 1)
+            code += "\n" + indent("style = LocalTextStyle.current.copy(#{shadow}),", depth + 1)
           end
           code = code.chomp(',')
           code += "\n" + indent(")", depth)
