@@ -6,6 +6,12 @@ module RjuiTools
   module React
     module Converters
       class WebConverter < BaseConverter
+        # A replaced element (<iframe>) has no ::after: a declared border falls
+        # back to an outline (BaseConverter#pseudo_border_supported?).
+        def pseudo_border_supported?
+          false
+        end
+
         def convert(indent = 2)
           class_name = build_class_name
           style_attr = build_style_attr

@@ -40,6 +40,13 @@ module RjuiTools
           @attributes['cornerRadius'] ||= text_field_defaults['cornerRadius']
         end
 
+        # A text input keeps a CSS border: its text stays clear of its own
+        # frame, and its focus ring is the outline (BaseConverter#
+        # border_draws_over_content?).
+        def border_draws_over_content?
+          false
+        end
+
         def build_class_name
           classes = [super]
 

@@ -522,6 +522,75 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     end
   end
 
+  # A border is drawn over the content and does not push it inward (user
+  # ruling B, 2026-10-05). A CSS border takes layout space: the children sat
+  # at (2, 2) for borderWidth 2 and a Label drew 4 taller, on web only
+  # (frame-parity inventory, 16 fixtures). The border is the element's
+  # ::after, laid over the whole box — above the children (an inset
+  # box-shadow paints under a child touching the edge, measured), along the
+  # corner radius in every browser, dashed / dotted as declared. A replaced
+  # element (<img>) falls back to an outline; a text input keeps a CSS border.
+  describe 'a border over the content' do
+    def first_classes(converter)
+      converter.convert_node(2).lines.first[/className="([^"]*)"/, 1].split
+    end
+
+    let(:border) { { 'borderWidth' => 2, 'borderColor' => '#FF0000' } }
+
+    it "draws a View's and a Label's border on ::after over the box, with no border or outline on the element" do
+      require 'react/converters/label_converter'
+      [create_converter({ 'type' => 'View', 'id' => 'v', 'width' => 200, 'height' => 200 }.merge(border)),
+       RjuiTools::React::Converters::LabelConverter.new({ 'type' => 'Label', 'id' => 'l', 'text' => 'x' }.merge(border),
+                                                        default_config)].each do |conv|
+        classes = first_classes(conv)
+        expect(classes).to include('after:absolute', 'after:inset-0', 'after:rounded-[inherit]', 'after:pointer-events-none',
+                                   'after:border-[length:2px]', 'after:border-[#FF0000]', 'after:border-solid', 'relative')
+        expect(classes.grep(/\A(border|outline)/)).to be_empty
+      end
+    end
+
+    it 'keeps the declared style' do
+      classes = first_classes(create_converter({ 'type' => 'View', 'id' => 'v', 'borderStyle' => 'dotted' }.merge(border)))
+      expect(classes).to include('after:border-dotted')
+      expect(classes).not_to include('after:border-solid')
+    end
+
+    it 'hands a bound width to the ::after through a custom property' do
+      out = create_converter({ 'type' => 'View', 'id' => 'v', 'borderWidth' => '@{w}', 'borderColor' => '#FF0000' }).convert
+      expect(out).to include("'--jui-border-width': `${data.w}px`", 'after:border-[length:var(--jui-border-width)]')
+      expect(out).not_to include('borderWidth')
+    end
+
+    it 'does not add relative to an element that is absolutely positioned already' do
+      result = create_converter({
+        'type' => 'View', 'id' => 'overlay', 'width' => 200, 'height' => 200,
+        'child' => [{ 'type' => 'View', 'id' => 'a', 'width' => 40, 'height' => 40 }.merge(border),
+                    { 'type' => 'View', 'id' => 'b', 'width' => 40, 'height' => 40 }]
+      }).convert
+      a = result.lines.find { |l| l.include?('id="a"') }[/className="([^"]*)"/, 1].split
+      expect(a).to include('absolute', 'after:border-[length:2px]')
+      expect(a).not_to include('relative')
+    end
+
+    it 'falls back to an outline on an <img>, which has no ::after' do
+      require 'react/converters/image_converter'
+      classes = first_classes(RjuiTools::React::Converters::ImageConverter.new(
+        { 'type' => 'Image', 'id' => 'i', 'srcName' => 'a', 'width' => 40, 'height' => 40 }.merge(border), default_config
+      ))
+      expect(classes).to include('outline-[length:2px]', 'outline-offset-[-2px]')
+      expect(classes.grep(/\Aafter:/)).to be_empty
+    end
+
+    it 'leaves a text input its CSS border, whose outline is the focus ring' do
+      require 'react/converters/text_field_converter'
+      classes = first_classes(RjuiTools::React::Converters::TextFieldConverter.new(
+        { 'type' => 'TextField', 'id' => 't', 'width' => 200, 'height' => 40 }.merge(border), default_config
+      ))
+      expect(classes).to include('border-2', 'outline-none')
+      expect(classes.grep(/\A(after:|outline-\[)/)).to be_empty
+    end
+  end
+
   # safeAreaInsetPositions — which edges reserve the safe area. On web that is
   # `env(safe-area-inset-*)` padding: the notch, the home indicator, a rounded
   # display's corners.
