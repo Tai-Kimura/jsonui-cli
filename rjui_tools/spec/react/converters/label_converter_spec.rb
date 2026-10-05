@@ -262,6 +262,38 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       end
     end
 
+    # L is the line of a Label of the same font size with no line height:
+    # text-2xl brings 32 at 24px, so 1.5 x L is 48, not 1.5 x 36 = 54
+    # (Label/highlightAttributes__static drew 54).
+    context 'with a font size on Tailwind\'s scale' do
+      it 'multiplies the line the size brings' do
+        converter = create_converter({ 'type' => 'Label', 'text' => 'T', 'fontSize' => 24, 'lineHeightMultiple' => 1.8 })
+        converter.send(:build_class_name)
+        expect(converter.send(:build_style_attr)).to include("lineHeight: 'calc(var(--text-2xl--line-height) * 1.8)'")
+      end
+
+      it 'adds lineSpacing to that line' do
+        converter = create_converter({ 'type' => 'Label', 'text' => 'T', 'fontSize' => 24, 'lineSpacing' => 16 })
+        converter.send(:build_class_name)
+        expect(converter.send(:build_style_attr)).to include("lineHeight: 'calc(var(--text-2xl--line-height) * 1em + 16px)'")
+      end
+
+      it 'multiplies the highlight font size\'s line for the highlight' do
+        result = create_converter({
+          'type' => 'Label', 'text' => 'Hi', 'selected' => true,
+          'highlightAttributes' => { 'fontSize' => 24, 'lineHeightMultiple' => 1.5 }
+        }).convert
+        expect(result).to include("lineHeight: 'calc(var(--text-2xl--line-height) * 1.5)'")
+        expect(result).not_to include('lineHeight: 2.25')
+      end
+
+      it 'keeps the preflight line for a size off the scale' do
+        converter = create_converter({ 'type' => 'Label', 'text' => 'T', 'fontSize' => 17, 'lineHeightMultiple' => 1.8 })
+        converter.send(:build_class_name)
+        expect(converter.send(:build_style_attr)).to include('lineHeight: 2.7')
+      end
+    end
+
     context 'with lineSpacing' do
       it 'calculates lineHeight from lineSpacing and fontSize' do
         converter = create_converter({
@@ -272,10 +304,11 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         })
         converter.send(:build_class_name)
         result = converter.send(:build_style_attr)
-        # The default line plus the spacing; the half spacing above the
+        # The Label's own line plus the spacing; the half spacing above the
         # first line and below the last is taken back by the text's wrapper
-        # (user ruling B, 2026-10-05: between lines only).
-        expect(result).to include("lineHeight: 'calc(1.5em + 8px)'")
+        # (user ruling B, 2026-10-05: between lines only). A size on
+        # Tailwind's scale brings its own line (text-base: its var).
+        expect(result).to include("lineHeight: 'calc(var(--text-base--line-height) * 1em + 8px)'")
       end
 
       it 'uses default fontSize of 16 when not specified' do

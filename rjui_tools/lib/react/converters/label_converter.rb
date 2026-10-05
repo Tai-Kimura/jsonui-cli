@@ -305,6 +305,34 @@ module RjuiTools
         # preflight), which every Label inherits.
         DEFAULT_LINE_HEIGHT = 1.5
 
+        # L, the line of a Label of this font size that declares no line
+        # height, as a CSS number (a multiple of the font size). A size on
+        # Tailwind's scale brings its own line with its `text-*` class
+        # (text-2xl: 32 at 24px, its `--text-2xl--line-height`), and the var
+        # follows a theme that redefines it; any other size inherits the
+        # preflight 1.5. Ruling B multiplies this line: taken as 1.5 for every
+        # size, a highlight at 24 drew 1.5 x 36 = 54 where its own line gives
+        # 1.5 x 32 = 48. A bound size cannot name its class here and keeps 1.5.
+        def own_line(size)
+          token = TailwindMapper::FONT_SIZE_MAP[size]
+          token ? "var(--#{token}--line-height)" : DEFAULT_LINE_HEIGHT.to_s
+        end
+
+        # own_line as a style value (a bare number or a quoted calc()).
+        def own_line_value(size)
+          line = own_line(size)
+          line == DEFAULT_LINE_HEIGHT.to_s ? line : "'calc(#{line})'"
+        end
+
+        # m x own_line, as a style value: a bare number when the line is the
+        # preflight 1.5, else a calc() over the token's line.
+        def multiplied_line(size, multiple)
+          line = own_line(size)
+          return (DEFAULT_LINE_HEIGHT * multiple.to_f).round(4).to_s if line == DEFAULT_LINE_HEIGHT.to_s
+
+          "'calc(#{line} * #{multiple.to_f.round(4)})'"
+        end
+
         # The text of a Label that declares lineSpacing, in a block whose
         # negative block margins take back the half spacing above the first
         # line and below the last: the line box adds s / 2 on each side of
@@ -335,18 +363,19 @@ module RjuiTools
           condition = selected_condition
           return if condition.nil?
 
-          # The same line as the base: m x the Label's default line (ruling
-          # B, see build_style_attr).
-          line = (DEFAULT_LINE_HEIGHT * multiple.to_f).round(4)
+          # The same rule as the base: m x the Label's own line (ruling B,
+          # see build_style_attr) — at the highlight's font size when it
+          # declares one, the font the highlighted line is drawn in.
+          line = multiplied_line(attrs['fontSize'] || attributes['fontSize'], multiple)
           if condition == 'true'
             @dynamic_styles['lineHeight'] = line.to_s
             return
           end
 
-          # Unselected with no line declared: the default line itself, not
-          # CSS `normal` (which is the font's own, 18 at 16px — not the 24
-          # every other Label draws).
-          base = @dynamic_styles['lineHeight'] || DEFAULT_LINE_HEIGHT.to_s
+          # Unselected with no line declared: the Label's own line, not CSS
+          # `normal` (which is the font's own, 18 at 16px — not the 24 every
+          # other Label draws).
+          base = @dynamic_styles['lineHeight'] || own_line_value(attributes['fontSize'])
           @dynamic_styles['lineHeight'] = "(#{condition} ? #{line} : #{base})"
         end
 
@@ -490,23 +519,31 @@ module RjuiTools
           # User ruling B (2026-10-05, attribute_semantics
           # lineHeightMultipleBase / lineSpacingBetween): the line they act on
           # is L, the line of a Label that declares no line height — on web
-          # the 1.5 the stylesheet gives every Label (DEFAULT_LINE_HEIGHT).
+          # the line its font size's class brings, else the stylesheet's 1.5
+          # (own_line).
           # lineHeightMultiple makes each line m x L (it multiplied the font
           # size: 3 lines at 1.8 drew 86.4 where 129.6 is declared);
           # lineSpacing adds s BETWEEN lines only, L x n + s x (n - 1) (it
           # gave every line s / 2 above and below as well: 96 for 104). The
           # last line's spacing is taken back by the text's wrapper
           # (line_spacing_wrap).
+          size = attributes['fontSize']
+          line = own_line(size)
           if (multiple_expr = bound_value_expr(line_height_multiple))
-            @dynamic_styles['lineHeight'] = "#{DEFAULT_LINE_HEIGHT} * Number(#{multiple_expr})"
+            @dynamic_styles['lineHeight'] = if line == DEFAULT_LINE_HEIGHT.to_s
+                                              "#{DEFAULT_LINE_HEIGHT} * Number(#{multiple_expr})"
+                                            else
+                                              "`calc(#{line} * ${Number(#{multiple_expr})})`"
+                                            end
           elsif line_height_multiple
-            @dynamic_styles['lineHeight'] = (DEFAULT_LINE_HEIGHT * line_height_multiple.to_f).round(4).to_s
+            @dynamic_styles['lineHeight'] = multiplied_line(size, line_height_multiple)
           elsif line_spacing
             spacing_expr = bound_value_expr(line_spacing)
+            line_em = line == DEFAULT_LINE_HEIGHT.to_s ? "#{line}em" : "#{line} * 1em"
             @dynamic_styles['lineHeight'] = if spacing_expr
-                                              "`calc(#{DEFAULT_LINE_HEIGHT}em + ${Number(#{spacing_expr})}px)`"
+                                              "`calc(#{line_em} + ${Number(#{spacing_expr})}px)`"
                                             else
-                                              "'calc(#{DEFAULT_LINE_HEIGHT}em + #{TailwindMapper.css_px(line_spacing)})'"
+                                              "'calc(#{line_em} + #{TailwindMapper.css_px(line_spacing)})'"
                                             end
 
           elsif attributes['lineHeight']

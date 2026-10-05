@@ -90,7 +90,8 @@ RSpec.describe 'bound value emitters' do
 
     it 'does not freeze a bound lineSpacing to a 1.0 multiplier via to_f' do
       out = label('lineSpacing' => '@{s}', 'fontSize' => 16)
-      expect(out).to include('lineHeight: `calc(1.5em + ${Number(data.s)}px)`')
+      # 16 is text-base, whose own line the spacing is added to.
+      expect(out).to include('lineHeight: `calc(var(--text-base--line-height) * 1em + ${Number(data.s)}px)`')
     end
 
     it 'lets a bound Collection lazy still reach the none shape' do
