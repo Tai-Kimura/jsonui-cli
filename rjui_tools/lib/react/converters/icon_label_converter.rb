@@ -133,6 +133,12 @@ module RjuiTools
             icon_on = attributes['icon_on'] || attributes['iconOn'] || ''
             icon_off = attributes['icon_off'] || attributes['iconOff'] || ''
             "{#{binding_expr} ? #{JsonUIShared::StringLiterals.ts_single(icon_on)} : #{JsonUIShared::StringLiterals.ts_single(icon_off)}}"
+          elsif attributes['selected'] == true || attributes['selected'] == 'true'
+            # A literal selected state (or its alias isOn) draws icon_on, as
+            # the text takes selectedFontColor: it fell to the branch below
+            # and drew icon_off, the icon alone left unselected (ticket
+            # rjui-iconlabel-static-selected-draws-icon-off).
+            attributes['icon_on'] || attributes['iconOn'] || attributes['icon_off'] || attributes['iconOff'] || attributes['icon'] || ''
           else
             attributes['icon_off'] || attributes['iconOff'] || attributes['icon_on'] || attributes['iconOn'] || attributes['icon'] || ''
           end

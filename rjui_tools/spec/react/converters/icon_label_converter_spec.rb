@@ -162,5 +162,26 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
       expect(img).not_to match(/\b[wh]-\[/)
     end
   end
+
+  # A literal selected state draws icon_on (ticket
+  # rjui-iconlabel-static-selected-draws-icon-off): it drew icon_off while the
+  # text took selectedFontColor.
+  describe 'a literal selected state' do
+    def img_src(attrs)
+      described_class.new({ 'type' => 'IconLabel', 'id' => 'il', 'text' => 'Sample',
+                            'icon_on' => 'on.png', 'icon_off' => 'off.png' }.merge(attrs),
+                          { 'use_tailwind' => true }).convert_node(2)[/<img[^>]*src="([^"]*)"/, 1]
+    end
+
+    it 'draws icon_on for selected: true and for its alias isOn: true' do
+      expect(img_src('selected' => true)).to eq('on.png')
+      expect(img_src('isOn' => true)).to eq('on.png')
+    end
+
+    it 'draws icon_off when not selected' do
+      expect(img_src('selected' => false)).to eq('off.png')
+      expect(img_src({})).to eq('off.png')
+    end
+  end
 end
 
