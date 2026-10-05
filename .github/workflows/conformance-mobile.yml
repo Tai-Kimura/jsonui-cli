@@ -57,11 +57,11 @@ on:
         description: 'Run ONLY the iOS tap-miss reproduction (loops two interactive fixtures; every other job is off)'
         required: false
         default: false
+        type: boolean
       frame_parity:
         description: "Also judge cross-platform frame parity (gate --frame-parity: the same declared id drawn in the same place on every face; frame_parity.json). Default false until the ledger and the rulings close the current disagreements"
         type: boolean
         default: false
-        type: boolean
       tap_repro_repeats:
         description: 'tap_repro only: copies of EACH of the two fixtures, alternating (150 -> 300 taps)'
         required: false
