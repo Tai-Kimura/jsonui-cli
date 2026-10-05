@@ -482,6 +482,20 @@
       ],
       "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the frame-parity inventory: docs/bugs/material/frame-parity-inventory-3face-2026-10-05/rulings.md). `direction: bottomToTop` stacks from the BOTTOM edge: the first child is the lowest, and each next child sits above it. (The same reading applies to the other directions: the first child sits at the edge the direction starts from.) Measured before the ruling: in a 200-high column of 40s, iOS and Android put box_b at 160, web at 120; SafeAreaView bottomToTop: Android stacked at the top (0 / 40 / 80), web at the bottom (728 / 688 / 648). 2026-10-05 user ruling (bottomToTop) applied to the horizontal axis by the orchestrator: `direction: rightToLeft` stacks from the RIGHT edge: the first child is the rightmost, and each next child sits to its left (the usual meaning of right-to-left). Measured before (frame-parity inventory, View/direction__righttoleft, six 40-wide boxes in a 200-wide row): web put box_a at x 160 and box_f at -40 (from the right edge, as declared); iOS (box_a 200 ... box_f 0) and Android (box_a 180, then 160 ... 0) reverse the children and stack them from the left.",
       "observable": {}
+    },
+    "wrapContentCap": {
+      "attributes": [
+        "common.width",
+        "common.height"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator, from the three-face conformance run): \"Wrapcontent は Android が正しいね。親の大きさが固定や matchparent ならその大きさまで\". A wrapContent box (or one with no size declared on that axis) takes its content's size, but no more than its parent's size on that axis when the parent has one there: a number, or matchParent. A parent that scrolls along that axis (a ScrollView's content axis) has none, and neither does a wrapContent parent. Measured before the ruling: a flow Collection, lazy none, wrapContent in a 150x100 parent (Collection/flowOverflow__noneWrapInBox and its control) was 168 high on web, 100 on Android. Distinct from ruling S: a child with a FIXED size larger than its parent keeps that size and overflows; the cap applies to the wrapContent box itself only."
+    },
+    "iconLabelTextLine": {
+      "attributes": [
+        "IconLabel.text",
+        "IconLabel.fontSize"
+      ],
+      "ruling": "2026-10-05 user ruling (relayed by the orchestrator): the text line of an IconLabel is the same as one line of a Label on the same platform at the same font size (lineHeightMultipleBase's L). An IconLabel draws no taller or shorter text line than a Label would."
     }
   }
 }
