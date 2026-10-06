@@ -199,7 +199,11 @@ module KotlinCompiler
   # emitted code that calls them for real (the Dynamic wrappers read Gson).
   LIBRARIES = { gson: %w[com.google.code.gson gson] }.freeze
 
-  def compile(source, libraries: [])
+  # `files`: further sources compiled with it, by file name — for a stub that
+  # must live in its own package, so that an emit naming it without its
+  # import does not resolve (a single file has one package, so a stub beside
+  # the emit would be found whether or not the emit imports it).
+  def compile(source, libraries: [], files: {})
     stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
     reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
     annots   = jar('org.jetbrains', 'annotations')
@@ -215,10 +219,15 @@ module KotlinCompiler
     Dir.mktmpdir('kjui_kotlin') do |dir|
       file = File.join(dir, 'Emitted.kt')
       File.write(file, source)
+      others = files.map do |name, text|
+        path = File.join(dir, name)
+        File.write(path, text)
+        path
+      end
       out, err, = Open3.capture3(
         java_bin, '-cp', compiler_cp,
         'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
-        '-no-stdlib', '-cp', target_cp, '-d', File.join(dir, 'out'), file
+        '-no-stdlib', '-cp', target_cp, '-d', File.join(dir, 'out'), file, *others
       )
       text = "#{out}\n#{err}"
       errors = text.lines.select { |l| l.include?('error:') }.map(&:strip)
@@ -285,9 +294,12 @@ RSpec::Matchers.define :compile_as_kotlin do |*libraries|
       raise RSpec::Core::Pending::SkipDeclaredInExample, message
     end
 
-    @result = KotlinCompiler.compile(source, libraries: libraries)
+    @result = KotlinCompiler.compile(source, libraries: libraries, files: @files || {})
     @result.success?
   end
+
+  # `expect(src).to compile_as_kotlin.alongside('Stubs.kt' => text)`
+  chain(:alongside) { |files| @files = files }
 
   failure_message do |source|
     "expected the emitted Kotlin to compile, but got:\n" \

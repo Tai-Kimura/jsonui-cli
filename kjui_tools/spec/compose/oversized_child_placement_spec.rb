@@ -221,7 +221,12 @@ RSpec.describe 'kjui codegen: an oversized child sits where its container places
   it 'compiles: a centred Box holding an oversized child, through the builder' do
     layout = { 'type' => 'View', 'id' => 'box', 'width' => 200, 'height' => 200, 'gravity' => 'center',
                'child' => [{ 'type' => 'View', 'id' => 'kid', 'width' => 300, 'height' => 300 }] }
-    code = KjuiTools::Compose::ComposeBuilder.new.send(:generate_component, layout, 1, 'Box')
+    # The import set a generation run gives the builder (the short names are
+    # written for it; with none they are written whole — see
+    # size_stage_without_an_import_set_spec.rb).
+    builder = KjuiTools::Compose::ComposeBuilder.new
+    builder.instance_variable_set(:@required_imports, Set.new)
+    code = builder.send(:generate_component, layout, 1, 'Box')
     expect(code).to include('.wrapContentWidth(align = BiasAlignment.Horizontal(0.0f), unbounded = true)')
     expect(<<~KT).to compile_as_kotlin
       interface Modifier { companion object : Modifier }

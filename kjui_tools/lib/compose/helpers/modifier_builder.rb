@@ -397,15 +397,28 @@ module KjuiTools
           return nil unless bias.is_a?(Array) && bias.size == 2
 
           required_imports&.add(:bias_alignment)
+          name = imported_name('androidx.compose.ui.BiasAlignment', required_imports)
           if axis == :width
-            ".wrapContentWidth(align = BiasAlignment.Horizontal(#{bias[0].to_f}f), unbounded = true)"
+            ".wrapContentWidth(align = #{name}.Horizontal(#{bias[0].to_f}f), unbounded = true)"
           else
-            ".wrapContentHeight(align = BiasAlignment.Vertical(#{bias[1].to_f}f), unbounded = true)"
+            ".wrapContentHeight(align = #{name}.Vertical(#{bias[1].to_f}f), unbounded = true)"
           end
+        end
+
+        # A name the size stage emits, as the caller's file can read it. With
+        # an import set the import is registered and the short name used;
+        # without one — `build_size(json_data)`, the call an app converter
+        # made from the template before 2026-08-05, and a complete call by
+        # the signature — nothing would import it, so the name is written
+        # whole (ticket kjui-build-size-without-required-imports-emits-an-
+        # unimported-biasalignment: the build failed on `BiasAlignment`).
+        def self.imported_name(qualified, required_imports)
+          required_imports ? qualified.split('.').last : qualified
         end
 
         def self.build_size(json_data, parent_type = nil, required_imports = nil)
           modifiers = []
+          dp_infinity = "#{imported_name('androidx.compose.ui.unit.Dp', required_imports)}.Infinity"
           weight_axis = weighted_axis(json_data, parent_type)
 
           # Handle 'frame' attribute - object with width/height
@@ -464,11 +477,11 @@ module KjuiTools
           # widthIn first would clamp the declared width instead.
           width_constraint =
             if json_data['minWidth'] && json_data['maxWidth']
-              ".widthIn(min = #{BoundValue.dp(json_data['minWidth'])}, max = #{BoundValue.dp(json_data['maxWidth'], null_expr: 'Dp.Infinity')})"
+              ".widthIn(min = #{BoundValue.dp(json_data['minWidth'])}, max = #{BoundValue.dp(json_data['maxWidth'], null_expr: dp_infinity)})"
             elsif json_data['minWidth']
               ".widthIn(min = #{BoundValue.dp(json_data['minWidth'])})"
             elsif json_data['maxWidth']
-              ".widthIn(max = #{BoundValue.dp(json_data['maxWidth'], null_expr: 'Dp.Infinity')})"
+              ".widthIn(max = #{BoundValue.dp(json_data['maxWidth'], null_expr: dp_infinity)})"
             end
           # A DISTRIBUTION-injected weight does not own the axis the way an
           # author weight does: the declared size stays, start-aligned inside
@@ -529,11 +542,11 @@ module KjuiTools
           # `.height(N).heightIn(...)` chain, where the bound is inert).
           height_constraint =
             if json_data['minHeight'] && json_data['maxHeight']
-              ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])}, max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
+              ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])}, max = #{BoundValue.dp(json_data['maxHeight'], null_expr: dp_infinity)})"
             elsif json_data['minHeight']
               ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])})"
             elsif json_data['maxHeight']
-              ".heightIn(max = #{BoundValue.dp(json_data['maxHeight'], null_expr: 'Dp.Infinity')})"
+              ".heightIn(max = #{BoundValue.dp(json_data['maxHeight'], null_expr: dp_infinity)})"
             end
           numeric_height = json_data['height'] &&
                            json_data['height'] != 'matchParent' &&

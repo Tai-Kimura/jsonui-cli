@@ -1280,8 +1280,12 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     # behaviour. Plan 49 lane C, from B's lane ("does the fallback collide
     # with the attribute's own unset value?").
     it 'emits Dp expressions for bound min/max, with an unbounded max fallback' do
-      result = described_class.build_size('minWidth' => '@{lo}', 'maxWidth' => '@{hi}')
+      result = described_class.build_size({ 'minWidth' => '@{lo}', 'maxWidth' => '@{hi}' }, nil, Set.new)
       expect(result).to eq(['.widthIn(min = (data.lo?.dp ?: 0.dp), max = (data.hi?.dp ?: Dp.Infinity))'])
+      # With no import set nothing imports `Dp`, so it is written whole
+      # (compiled in size_stage_without_an_import_set_spec.rb).
+      expect(described_class.build_size('maxWidth' => '@{hi}'))
+        .to eq(['.widthIn(max = (data.hi?.dp ?: androidx.compose.ui.unit.Dp.Infinity))'])
     end
 
     it 'registers the Dp import only when an unbounded max is actually emitted' do
