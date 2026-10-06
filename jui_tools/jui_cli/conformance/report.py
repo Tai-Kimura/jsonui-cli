@@ -102,6 +102,11 @@ class ReportSummary:
     #: gate refuses to call a face fully covered while it is above zero.
     ink_checked: dict[str, int] = field(default_factory=dict)
     ink_uncovered: dict[str, int] = field(default_factory=dict)
+    #: platform -> compared entries the vertical hash judged, and those it
+    #: could not because their baseline has no `vhashes` entry. The second is
+    #: the migration state, not "nothing moved vertically".
+    vertical_checked: dict[str, int] = field(default_factory=dict)
+    vertical_uncovered: dict[str, int] = field(default_factory=dict)
     #: platform -> entries left UNJUDGED because this lane cannot be asked the
     #: blanking question at all (no committed hash on it is all zeros, so
     #: nothing proves a blank page reaches zero here). NEVER folded into a
@@ -420,6 +425,8 @@ def render_report(
             summary.ink_regressions[p.platform] = list(comparison.ink_regressions)
             summary.ink_checked[p.platform] = comparison.ink_checked
             summary.ink_uncovered[p.platform] = len(comparison.ink_uncovered)
+            summary.vertical_checked[p.platform] = comparison.vertical_checked
+            summary.vertical_uncovered[p.platform] = len(comparison.vertical_uncovered)
             summary.blank_check_unavailable[p.platform] = comparison.blank_check_unavailable
             if comparison.error:
                 summary.baseline_errors[p.platform] = comparison.error
@@ -466,7 +473,16 @@ def render_report(
                 lines.append("| Screenshot | Distance | Threshold |")
                 lines.append("|---|---|---|")
                 for name, distance in comparison.regressions:
-                    lines.append(f"| `{name}` | {distance} | {comparison.threshold} |")
+                    axis = " (vertical)" if comparison.regression_axis.get(name) == "vertical" else ""
+                    lines.append(f"| `{name}` | {distance}{axis} | {comparison.threshold} |")
+            if comparison.compared:
+                lines.append("")
+                lines.append(
+                    f"> {p.platform}: vertical hash judged {comparison.vertical_checked} of the "
+                    f"{comparison.compared} compared screenshots; "
+                    f"{len(comparison.vertical_uncovered)} have no committed `vhashes` entry, so a "
+                    f"move inside their column was NOT checked (not a pass)."
+                )
             if comparison.no_baseline:
                 lines.append("")
                 shown = ", ".join(f"`{n}`" for n in comparison.no_baseline[:10])

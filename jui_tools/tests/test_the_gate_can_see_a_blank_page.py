@@ -70,6 +70,19 @@ def _faint(path: Path, ink_pixels: int) -> None:
     img.save(path)
 
 
+def _speck(path: Path) -> None:
+    """A 3x3 mark in the corner: blind to BOTH hashes (popcount 3 / 3), with
+    ink 9. `_faint` is blind only to the horizontal one — its full-width lower
+    edge rings under the resize and the vertical hash reads 128 bits of it —
+    so since `vhashes` the comparison sees `_faint` go blank, and the arm that
+    needs a picture no hash can see takes this one instead."""
+    img = Image.new("RGB", (64, 64), BLANK)
+    for x in range(3):
+        for y in range(3):
+            img.putpixel((x, y), (0, 0, 0))
+    img.save(path)
+
+
 def _loud(path: Path) -> None:
     """High-contrast stripes: a hash with a large popcount, i.e. NOT blind."""
     img = Image.new("RGB", (64, 64), BLANK)
@@ -127,9 +140,10 @@ class TheComparisonCatchesBlankingTests(unittest.TestCase):
         self.art.mkdir(parents=True)
         (self.conf / "baselines" / "local").mkdir(parents=True)
         _faint(self.art / "faint.png", 400)
+        _speck(self.art / "speck.png")
         _blank(self.art / "empty.png")
         _loud(self.art / "loud.png")
-        self.names = ["faint.png", "empty.png", "loud.png"]
+        self.names = ["faint.png", "speck.png", "empty.png", "loud.png"]
         update_baseline(self.conf, "web", artifacts_dir=self.art, env="local")
         self.baseline = self.conf / "baselines" / "local" / "web.hashes.json"
 
@@ -157,15 +171,24 @@ class TheComparisonCatchesBlankingTests(unittest.TestCase):
         """THE TICKET. Both halves asserted together — a pass on the second
         assertion alone would be indistinguishable from the gate simply
         working, which is what the shipped README concluded."""
-        _blank(self.art / "faint.png")
+        _blank(self.art / "speck.png")
         c = self._compare()
         self.assertEqual(
             [r[0] for r in c.regressions],
             [],
-            "if Hamming catches this, the fixture is not in the blind population "
-            "and this arm is not measuring the defect",
+            "if either hash catches this, the fixture is not blind and this arm "
+            "is not measuring the defect",
         )
-        self.assertEqual([(r[0], r[3]) for r in c.ink_regressions], [("faint.png", "collapsed")])
+        self.assertGreater(c.vertical_checked, 0, "the vertical hash must have been asked")
+        self.assertEqual([(r[0], r[3]) for r in c.ink_regressions], [("speck.png", "collapsed")])
+
+    def test_a_picture_blind_only_to_the_horizontal_hash_going_blank_is_seen_by_the_vertical_one(self) -> None:
+        """`_faint` was the arm above until `vhashes`: its horizontal hash is
+        within the threshold of blank, its vertical one is not."""
+        _blank(self.art / "faint.png")
+        c = self._compare()
+        self.assertEqual([r[0] for r in c.regressions], ["faint.png"])
+        self.assertEqual(c.regression_axis, {"faint.png": "vertical"})
 
     def test_a_loud_picture_going_blank_is_left_to_hamming(self) -> None:
         """The boundary: the new predicate must not expand past its population."""

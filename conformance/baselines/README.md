@@ -299,6 +299,50 @@ stored in each baseline manifest, so recalibration is per-platform when the
 iOS/Android hosts land (expect more anti-aliasing variance on device
 renderers; measure before changing).
 
+### The vertical hash (`vhashes`, 2026-10-06)
+
+Every bit above compares a pixel with its RIGHT neighbour, so an element
+that moves inside its own column changes few bits. Measured on CI renders
+(run 37189084185 against 37368630695, the gate's own hash and crop): every
+picture with >= 10k px changed that the gate called unchanged — web 1, ios 2,
+android 1 — was a vertical move; `common_alignTopOfView__static` (a 50 pt
+box moved 132 pt down, 26400 px) measured 6 against the threshold 8 (ticket
+conformance-moved-dhash-misses-a-small-pale-box-moving).
+
+`vhashes` is the same hash of the TRANSPOSED picture (each pixel against the
+one below it), baked beside `hashes` in the same key sets, and compared at
+the same threshold; a picture is moved when either distance is over it.
+
+| CI pair | horizontal | vertical |
+|---|---:|---:|
+| ios `View_direction__bottomtotop` (vertical move, 89520 px) | 6 | 92 |
+| ios `common_alignTopOfView__static` (vertical move, 26400 px) | 6 | 27 |
+| ios `common_alignLeftOfView__static` (sideways move, 26400 px) | 29 | 16 |
+| web `common_alignBottomView__static` (vertical move, 11600 px) | 7 | 40 |
+
+Threshold: **8, the shared one.** What was measured:
+- two full local web runs of one tree and one bundle (880 screenshots):
+  all 880 PNGs byte-identical, so both distances 0 everywhere — this
+  says the renderer was deterministic that day, NOT what the vertical
+  hash's noise ceiling is;
+- the CI pairs above whose change was small (1–999 px): vertical max web 7 /
+  ios 2 / android 7, none over 8 (horizontal max 11, two over 8);
+- the declared-unstable Indicator pictures on CI: vertical <= horizontal on
+  every one, max 5.
+Nothing measured makes the vertical hash noisier than the horizontal one.
+Recalibrate it the way the horizontal one was if a lane shows otherwise.
+
+Neither hash sees a change of colour or content without geometry (image
+content, a border's colour, a thin tint strip): measured on the same CI
+pairs, those pass both.
+
+A baseline baked before `vhashes` existed still compares on the horizontal
+hash; its entries are reported as vertically **uncovered** (the report's
+"vertical hash judged N of M" line and a gate notice with the count), never
+as unmoved. The next bake writes them; an `--only-new` bake
+gives an entry that keeps its committed hash no vertical hash rather than one
+from a different render (the rule `ink` follows).
+
 ### Fixtures whose picture is not stable (2026-09-05)
 
 Two shapes do not draw the same thing twice, so `baseline update
@@ -542,7 +586,8 @@ the reader knows it was already moving on 2026-09-04.
   "environment": "local",
   "algorithm": "dhash-64",
   "threshold": 8,
-  "hashes": { "<Screenshot name>.png": "<1024 hex chars>" }
+  "hashes": { "<Screenshot name>.png": "<1024 hex chars>" },
+  "vhashes": { "<Screenshot name>.png": "<1024 hex chars, transposed>" }
 }
 ```
 

@@ -1170,6 +1170,12 @@ def judge(
                     f"shows a blank picture reaches zero and distance-from-zero is the wrong "
                     f"question. This is NOT 'no blind entries'"
                 )
+            v_uncovered = summary.vertical_uncovered.get(p, 0)
+            if v_uncovered:
+                env_flag = f" --env {env}" if env != DEFAULT_ENV else ""
+                notices.append(
+                    f"{p}: {v_uncovered} compared screenshot(s) have no committed vertical hash, so a move inside their column was NOT checked (vertical hash judged {summary.vertical_checked.get(p, 0)}) — re-bake with `jui conformance baseline update --platform {p}{env_flag} --fail-on-moved` to cover them"
+                )
             uncovered = summary.ink_uncovered.get(p, 0)
             if uncovered:
                 env_flag = f" --env {env}" if env != DEFAULT_ENV else ""

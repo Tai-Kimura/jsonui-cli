@@ -166,8 +166,8 @@ class MovedJudgment(unittest.TestCase):
         self._artifact(name)
         self._commit_baseline(name, self._at_distance(self.MEASURED, distance))
         # 🔻 EVERY READER OF THE ARTIFACT BYTES HAS TO BE PATCHED, and there
-        # is now more than one: `update_baseline` measures a dHash AND an ink
-        # count for each picture. A reader added later would open
+        # is now more than one: `update_baseline` measures a dHash, a vertical
+        # dHash AND an ink count for each picture. A reader added later would open
         # `b"not a real png"` and raise, which is loud — but it would raise
         # from inside a passing-looking arm about tolerance, so `_load_pillow`
         # is stubbed to say what actually went wrong. It must never be reached
@@ -180,7 +180,11 @@ class MovedJudgment(unittest.TestCase):
                 "CI rather than failing there. Patch it here too."
             )
 
+        # The vertical hash (`vdhash_file`) is the third reader. The committed
+        # baseline here has no `vhashes`, so its value takes no part in the
+        # classification these arms judge.
         with mock.patch.object(baseline, "dhash_file", return_value=self.MEASURED), \
+                mock.patch.object(baseline, "vdhash_file", return_value=self.MEASURED), \
                 mock.patch.object(baseline, "ink_file", return_value=self.MEASURED_INK), \
                 mock.patch.object(baseline, "_load_pillow", _no_pillow):
             summary = baseline.update_baseline(self.dir, "ios", env="local")

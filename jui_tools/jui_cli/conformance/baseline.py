@@ -32,6 +32,17 @@ Algorithm: **dHash (difference hash), 64x64 grid = 4096 bits**.
 - distance = Hamming distance between the 4096-bit hashes. The comparison
   threshold is calibrated against measured repeat-run variance of the web
   host (see ``conformance/baselines/README.md``) — not guessed.
+- every bit compares a pixel with its RIGHT neighbour, so an element that
+  moves inside its own column changes few bits: a 50 pt box moved 132 pt
+  down measured 6 against a threshold of 8 while 26400 px had changed
+  (ticket conformance-moved-dhash-misses-a-small-pale-box-moving). The same
+  hash of the TRANSPOSED picture (``vdhash_file``, stored as ``vhashes``)
+  compares each pixel with the one BELOW it and measured 27 on that move; a
+  sideways move of the same box measured 29 / 16. A picture is moved when
+  either distance is over the threshold. ``vhashes`` is a field beside
+  ``hashes`` rather than a new ``ALGORITHM``, so a baseline baked before it
+  still compares on the horizontal hash and reports its entries as
+  vertically UNCOVERED, never as unmoved.
 
 Dependency: Pillow (image decode + resample), an *optional* extra — see
 ``jui_tools/setup.py`` ``extras_require["conformance"]``. Everything doing
@@ -194,13 +205,25 @@ def chrome_crop(platform: str | None, env: str | None) -> tuple[int, int]:
 
 
 def dhash_file(path: Path, crop: tuple[int, int] = (0, 0)) -> str:
-    """256-bit dHash of one image file, as a 64-char lowercase hex string.
+    """4096-bit dHash of one image file (a 64x64 grid of "brighter than the
+    RIGHT neighbour" bits), as a 1024-char lowercase hex string.
 
     ``crop`` excludes ``(top, bottom)`` rows before hashing — see
     :data:`PLATFORM_ENV_CHROME_CROP`. A hash taken with a crop is only ever
     comparable to another taken with the same crop, which the ``(platform,
     env)`` keying guarantees.
     """
+    return _dhash_of(path, crop, transpose=False)
+
+
+def vdhash_file(path: Path, crop: tuple[int, int] = (0, 0)) -> str:
+    """The same hash of the TRANSPOSED picture: each bit compares a pixel with
+    the one BELOW it, so it sees the vertical moves :func:`dhash_file` is
+    blind to. Same crop, same size, same string form."""
+    return _dhash_of(path, crop, transpose=True)
+
+
+def _dhash_of(path: Path, crop: tuple[int, int], transpose: bool) -> str:
     Image = _load_pillow()
     with Image.open(path) as img:
         top, bottom = crop
@@ -208,6 +231,8 @@ def dhash_file(path: Path, crop: tuple[int, int] = (0, 0)) -> str:
             width, height = img.size
             if height > top + bottom:
                 img = img.crop((0, top, width, height - bottom))
+        if transpose:
+            img = img.transpose(Image.Transpose.TRANSPOSE)
         gray = img.convert("L").resize(
             (HASH_SIZE + 1, HASH_SIZE), Image.Resampling.LANCZOS
         )
@@ -454,6 +479,7 @@ def update_baseline(
     # today's blind set would leave the next threshold change with no data
     # and no way to tell "never measured" from "measured as zero".
     measured_ink = {png.name: ink_file(png, crop) for png in pngs}
+    measured_v = {png.name: vdhash_file(png, crop) for png in pngs}
 
     # Classify against what is already committed, whichever mode we are in.
     previous = load_baseline(conformance_dir, platform, env) or {}
@@ -465,8 +491,25 @@ def update_baseline(
     prior: dict[str, str] = dict(previous.get("hashes") or {})
     if os_key:
         prior.update(previous_by_os.get(os_key) or {})
+    # The committed vertical hashes, keyed like `prior`. A baseline baked
+    # before they existed has none, and its entries are then classified on the
+    # horizontal hash alone, as they always were.
+    prior_v: dict[str, str] = dict(previous.get("vhashes") or {})
+    if os_key:
+        prior_v.update((previous.get("vhashes_by_os") or {}).get(os_key) or {})
+
+    def _distance(n: str) -> int:
+        """The larger of the two distances from the committed entry."""
+        d = hamming(prior[n], measured[n])
+        if n in prior_v:
+            d = max(d, hamming(prior_v[n], measured_v[n]))
+        return d
+
+    def _changed(n: str) -> bool:
+        return prior[n] != measured[n] or (n in prior_v and prior_v[n] != measured_v[n])
+
     new_names = sorted(n for n in measured if n not in prior)
-    same_names = sorted(n for n in measured if n in prior and prior[n] == measured[n])
+    same_names = sorted(n for n in measured if n in prior and not _changed(n))
     # A fixture whose picture is not a function of the code — a spinning
     # Indicator, an image still arriving — differs run to run on a correct
     # machine (measured: four runs, four pictures, one host). Holding those
@@ -480,19 +523,19 @@ def update_baseline(
     unstable = unstable_screenshots(conformance_dir)
     limit = DEFAULT_THRESHOLD if threshold is None else int(threshold)
     moved_pairs = tuple(
-        (n, hamming(prior[n], measured[n]))
+        (n, _distance(n))
         for n in sorted(measured)
         if n in prior
-        and prior[n] != measured[n]
-        and (n not in unstable or hamming(prior[n], measured[n]) >= limit)
+        and _changed(n)
+        and (n not in unstable or _distance(n) >= limit)
     )
     tolerated_pairs = tuple(
-        (n, hamming(prior[n], measured[n]), unstable[n])
+        (n, _distance(n), unstable[n])
         for n in sorted(measured)
         if n in prior
-        and prior[n] != measured[n]
+        and _changed(n)
         and n in unstable
-        and hamming(prior[n], measured[n]) < limit
+        and _distance(n) < limit
     )
     dropped_names = sorted(n for n in prior if n not in measured)
 
@@ -565,6 +608,25 @@ def update_baseline(
 
     ink_by_os = {k: _ink_for(v) for k, v in by_os.items()}
 
+    # Vertical hashes follow the same key sets by the same rule as ink, for
+    # the same reason: in only-new mode an entry that kept its committed
+    # horizontal hash may only keep its COMMITTED vertical one, and where
+    # there is none it stays ABSENT (reported as uncovered) rather than
+    # pairing today's vertical hash with an older render's horizontal one.
+    baseline_records_v = previous.get("vhashes") is not None
+
+    def _v_for(names) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for n in sorted(names):
+            if only_new and n not in new_names:
+                if baseline_records_v and n in prior_v:
+                    out[n] = prior_v[n]
+            elif n in measured_v:
+                out[n] = measured_v[n]
+        return out
+
+    vhashes_by_os = {k: _v_for(v) for k, v in by_os.items()}
+
     out_path = baseline_path(conformance_dir, platform, env)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -609,6 +671,10 @@ def update_baseline(
         # across fixtures. See `ink_file` and `INK_COLLAPSE_RATIO`.
         "ink": _ink_for(hashes),
         "ink_by_os": {k: ink_by_os[k] for k in sorted(ink_by_os)},
+        # The transposed hash (`vdhash_file`), in the same key sets as
+        # `hashes`. Compared beside it at the same threshold.
+        "vhashes": _v_for(hashes),
+        "vhashes_by_os": {k: vhashes_by_os[k] for k in sorted(vhashes_by_os)},
     }
     # 🔻 THE REFUSAL HAS TO HAPPEN BEFORE THE WRITE, AND IT DID NOT.
     # `--fail-on-moved` used to be checked by the CLI on the summary this
@@ -697,6 +763,15 @@ class VisualComparison:
     #: the smallest popcount measured (the evidence).
     blank_check_unavailable: int = 0
     blank_check_min_popcount: int | None = None
+    #: How many compared entries the vertical hash judged, and which ones it
+    #: could not because their baseline carries no vertical hash (baked before
+    #: `vhashes` existed). The second is NOT "did not move vertically": a
+    #: vertical move inside the horizontal threshold passes those unseen.
+    vertical_checked: int = 0
+    vertical_uncovered: list[str] = field(default_factory=list)
+    #: name -> "vertical" for a regression only the vertical hash found, so
+    #: the report can say which distance put it over.
+    regression_axis: dict[str, str] = field(default_factory=dict)
     #: Entries whose committed hash is already the blank hash. Reported apart
     #: from `blind` because no distance measurement can say anything about
     #: them — only the ink record can.
@@ -812,6 +887,9 @@ def compare_platform(
     if os_key:
         hashes.update(baseline.get("hashes_by_os", {}).get(os_key) or {})
     crop = chrome_crop(platform, env)
+    vhashes: dict = dict(baseline.get("vhashes") or {})
+    if os_key:
+        vhashes.update((baseline.get("vhashes_by_os") or {}).get(os_key) or {})
 
     # 🔻 THE SECOND PREDICATE, AND WHY IT IS NOT A SECOND THRESHOLD.
     # Lowering the Hamming threshold would not close this: the entries below
@@ -857,6 +935,23 @@ def compare_platform(
         comparison.compared += 1
         if distance > comparison.threshold:
             comparison.regressions.append((name, distance))
+            continue
+        # Within the horizontal threshold: ask the vertical hash, which sees
+        # a move inside a column. No committed vertical hash is UNCOVERED, a
+        # named state, never a pass.
+        expected_v = vhashes.get(name)
+        if expected_v is None:
+            comparison.vertical_uncovered.append(name)
+            continue
+        try:
+            vdistance = hamming(vdhash_file(png, crop), expected_v)
+        except BaselineError as exc:
+            comparison.error = str(exc)
+            return comparison
+        comparison.vertical_checked += 1
+        if vdistance > comparison.threshold:
+            comparison.regressions.append((name, vdistance))
+            comparison.regression_axis[name] = "vertical"
 
     # Baseline entries whose fixture no longer produced a screenshot.
     for name in hashes:
