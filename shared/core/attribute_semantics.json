@@ -368,6 +368,19 @@
       "observable": {},
       "overflowHitTesting": "hit testing follows CLIPPING, not the parent frame: an unclipped overflow is drawn and therefore tappable; a clipped one is neither"
     },
+    "idBox": {
+      "attributes": [
+        "common.id"
+      ],
+      "box": "an id names its element's box: inside the margin, including the padding, moved by the offset",
+      "ruling": "2026-10-06, user: 「マージンはそのビューの要素じゃない」 (the margin is not the element), 「パディングはその要素だからね」 (the padding is the element), and the id box moves with the offset (Android's measured result, accepted as the target). This is the box a UI test driver taps and reads (XCUIElement.frame on iOS, accessibility bounds on Android). iOS measured it against the layout box in SwiftJsonUI ConformanceHost IdBoxProbeUITests and CellIdBoxProbeUITests; containers met it from SwiftJsonUI 10.29.7 / jsonui-cli 1.9.18, when the 0.5pt single-child merge anchor moved inside the offset and the margins.",
+      "platformConventions": {
+        "androidButtonTouchTarget": "Android: a Button's id box is at least 48dp high (Material's minimum touch target), centred on the declared box — (25,6,100,48) for a 100 x 40 Button. A platform convention, not a defect (2026-10-06). iOS keeps the declared 40.",
+        "iosTextFieldInputArea": "iOS: a TextField's id box is the input field itself, inside the padding — (33,19,84,22) for a 100 x 40 field with padding 8. SwiftUI's TextField cannot be made larger than its line, and every placement that gives the padded box either takes the id off the input (an Other container with no value, which a text assertion cannot read) or cannot be typed into (measured 2026-10-06, six placements). With a symmetric padding the box's centre, where a tap aims, is the same. User ruling 2026-10-06: recorded as an iOS convention, not fixed. The id stays on the input field."
+      },
+      "collectionCellRoot": "A cell's root is addressed as `{collectionId}_item_{N}`. An id declared on the root is not used under the item address: the item address and the root's id would name the same element, which carries one identifier, so the root's own id is not found (iOS Dynamic and codegen, Android, measured 2026-10-06). The item's box is the root's box by the rule above. User ruling 2026-10-06.",
+      "observable": {}
+    },
     "sliderRange": {
       "attributes": [
         "Slider.minimum",
