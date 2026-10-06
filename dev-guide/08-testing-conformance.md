@@ -100,7 +100,7 @@
 
 ### conformance-mobile.yml（週次: 日曜 18:00 UTC = 月曜 03:00 JST + dispatch）
 
-- ios: macos-15 + **Xcode 26.3 固定**、SwiftJsonUI + test-runner checkout、iPhone 16 Pro sim、90m
+- ios: macos-15 + **Xcode 26.3 固定**、SwiftJsonUI + test-runner checkout、iPhone 16 Pro sim、150m（2026-10-07 に 90m から上げた。ios-codegen も同じ 150m。実測 ios 61 / 76 / 73 / 79 分・ios-codegen 71 / 81 / 89 分、1.9.18 で ios-codegen が 90m の予算で cancelled — 票 ci-ios-conformance-jobs-outgrow-their-90-minute-budget）
   （Xcode ビルド ~30m 込み）
 - android: ubuntu + KVM、API 34 / pixel_tablet 固定、270m。**予算は「悪いランナー」基準**
   （良ランナー ~7 分、悪いと 6 倍）: boot ~2 分 + gradle ~5 分 + 20 分×最大 5 attempt の resumable 実行
