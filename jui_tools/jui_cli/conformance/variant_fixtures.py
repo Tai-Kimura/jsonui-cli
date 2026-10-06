@@ -63,7 +63,7 @@ def _screen(source_label: str, which_text: str) -> dict:
         "height": "wrapContent",
         "orientation": "vertical",
         "child": [
-            {"type": "Label", "id": WHICH_ID, "text": which_text},
+            {"type": "Label", "id": WHICH_ID, "width": "wrapContent", "height": "wrapContent", "text": which_text},
         ],
     }
 
@@ -80,8 +80,8 @@ def _echo_screen(source_label: str, which_text: str) -> dict:
         "height": "wrapContent",
         "orientation": "vertical",
         "child": [
-            {"type": "Label", "id": WHICH_ID, "text": which_text},
-            {"type": "Label", "id": ECHO_ID, "text": "@{fieldValue}"},
+            {"type": "Label", "id": WHICH_ID, "width": "wrapContent", "height": "wrapContent", "text": which_text},
+            {"type": "Label", "id": ECHO_ID, "width": "wrapContent", "height": "wrapContent", "text": "@{fieldValue}"},
         ],
     }
     if which_text == "base":
@@ -120,7 +120,7 @@ def _host_layout(
     if data:
         layout["data"] = data
     layout["child"] = [
-        {"type": "Label", "id": HOST_MARKER_ID, "text": HOST_MARKER_TEXT},
+        {"type": "Label", "id": HOST_MARKER_ID, "width": "wrapContent", "height": "wrapContent", "text": HOST_MARKER_TEXT},
         *(extra_children or []),
         embed,
     ]
@@ -366,7 +366,7 @@ def build_variant_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], l
             params={"fieldValue": "@{conformanceText}"},
             data=[{"name": "conformanceText", "class": "String", "defaultValue": ""}],
             extra_children=[
-                {"type": "TextField", "id": STATE_INPUT_ID, "text": "@{conformanceText}"},
+                {"type": "TextField", "id": STATE_INPUT_ID, "width": "wrapContent", "height": "wrapContent", "text": "@{conformanceText}"},
             ],
         ),
         cases=[

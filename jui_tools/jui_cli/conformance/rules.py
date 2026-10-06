@@ -1515,7 +1515,11 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "TextView": {"hint": "Sample", "width": 200, "height": 100},
     "EditText": {"hint": "Sample", "width": 200},
     "Input": {"hint": "Sample", "width": 200},
-    "Radio": {"text": "Sample", "width": 200},
+    # `group` is required (attribute_definitions Radio.group); a Radio
+    # without one is input the validator warns on. Every Radio fixture belongs
+    # to the one group, so `checked` is asked of a grouped radio, the case its
+    # `with_group` variant existed to reach (removed 2026-10-07).
+    "Radio": {"text": "Sample", "width": 200, "group": "conformance_group"},
     "CheckBox": {"text": "Sample", "width": 200},
     "Check": {"text": "Sample", "width": 200},
     "Segment": {"items": ["One", "Two"], "width": 200},
@@ -2331,21 +2335,11 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
     ("common", "borderStyle"): {
         "with_border": {"borderWidth": 2, "borderColor": "#FF0000"},
     },
-    # A LONE radio behaves the same however `checked` is prioritised against
-    # the group's selection state, so the existing fixture sees nothing; the
-    # behaviours only diverge once the radio belongs to a group. The failure is
-    # loud — `checked: true` with a group produced a radio that never switched
-    # again.
-    #
-    # What this fixture guards is the RENDER stage, not the codegen priority:
-    # C pinned all five orderings in `radio_component_spec.rb` (133ff58), so a
-    # reverted priority fails a unit spec immediately. What a unit pin cannot
-    # see is whether the LIBRARY honours the expression the codegen emitted —
-    # the dynamic side of the same question G fixed with `value ?? id`. That is
-    # the parity this pair measures.
-    ("Radio", "checked"): {
-        "with_group": {"group": "conformance_group"},
-    },
+    # (`Radio.checked`'s `with_group` variant is gone: `group` is required, so
+    # the Radio base declares it and every `checked` fixture is a grouped
+    # radio — ticket conformance-generators-emit-layouts-missing-required-
+    # attributes. A LONE radio, which the variant was written against, is
+    # input the validator warns on.)
     # B isolated the real crash and it is narrower than either of us wrote
     # down: a numeric `fontWeight` alone generates fine, `partialAttributes`
     # alone generates fine, and only the PAIR raised NoMethodError — the
@@ -2543,8 +2537,8 @@ def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]
 #: not declared yet (triage's ruling table, item (2)).
 _FILL_CHILDREN = [
     {"type": "View", "id": "box_a", "width": 60, "height": 40, "background": "#FF0000"},
-    {"type": "Label", "id": "box_b", "text": "BBBB", "background": "#0000FF"},
-    {"type": "Label", "id": "box_c", "text": "CCCCCCCC", "background": "#00AA00"},
+    {"type": "Label", "id": "box_b", "width": "wrapContent", "height": "wrapContent", "text": "BBBB", "background": "#0000FF"},
+    {"type": "Label", "id": "box_c", "width": "wrapContent", "height": "wrapContent", "text": "CCCCCCCC", "background": "#00AA00"},
 ]
 
 CASE_BASE_ATTRS: dict[tuple[str, str, str], dict[str, Any]] = {
@@ -2960,6 +2954,8 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             {
                 "type": "Label",
                 "id": "cell_child_a",
+                "width": "wrapContent",
+                "height": "wrapContent",
                 "text": "@{title}",
                 "fontSize": 11,
                 "fontColor": "#FFFFFF",
@@ -2968,6 +2964,8 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             {
                 "type": "Label",
                 "id": "cell_child_b",
+                "width": "wrapContent",
+                "height": "wrapContent",
                 "text": "b",
                 "fontSize": 11,
                 "fontColor": "#FFFFFF",
@@ -2991,6 +2989,8 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             {
                 "type": "Label",
                 "id": "cell_only_child",
+                "width": "wrapContent",
+                "height": "wrapContent",
                 "text": "@{title}",
                 "fontSize": 11,
                 "fontColor": "#FFFFFF",
@@ -3020,6 +3020,8 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             {
                 "type": "Label",
                 "id": "cell_inset_child",
+                "width": "wrapContent",
+                "height": "wrapContent",
                 "text": "@{title}",
                 "fontSize": 11,
             }
@@ -3042,6 +3044,8 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             {
                 "type": "Label",
                 "id": "cell_inset_id_child",
+                "width": "wrapContent",
+                "height": "wrapContent",
                 "text": "@{title}",
                 "fontSize": 11,
             }
@@ -3060,6 +3064,8 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             {
                 "type": "Label",
                 "id": "cell_title",
+                "width": "wrapContent",
+                "height": "wrapContent",
                 "text": "@{title}",
                 "fontSize": 11,
                 "fontColor": "#FFFFFF",

@@ -17,7 +17,8 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "Conformance Text"
+      "text": "Conformance Text",
+      "group": "conformance_group"
     }
   ]
 }

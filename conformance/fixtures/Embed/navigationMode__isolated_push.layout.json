@@ -16,11 +16,15 @@
     {
       "type": "Label",
       "id": "host-marker",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "host"
     },
     {
       "type": "Button",
       "id": "push-button",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "push",
       "onclick": "confPush"
     },

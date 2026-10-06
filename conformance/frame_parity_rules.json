@@ -746,7 +746,7 @@
       "reason": "as View/distribution__fill (which pins the same row on all three faces): each Label grows from its own text width by an equal share, ios 94.67 / 145.33, android 97 / 143 (box_c - box_b: ios 50.67 / android 46, the text-width difference); heights one undeclared line, ios 20.33 / android 24. Web does not render common.distribution (platform swift / kotlin), so expected cannot name all three faces"
     },
     {
-      "fixture": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "fixture": "__control/View__child-d271b446_orientation-horizontal_width-300",
       "id": "box_b",
       "fields": [
         "x",
@@ -773,7 +773,7 @@
       "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 43.91, CCCCCCCC ios 94 / android 88 / web 89.38 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces — the web values are CI's Linux chromium glyph widths; the local mac chromium measures BBBB 40.81 / CCCCCCCC 89.13 (box_c at x 100.81). The gate runs on CI."
     },
     {
-      "fixture": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "fixture": "__control/View__child-d271b446_orientation-horizontal_width-300",
       "id": "box_c",
       "fields": [
         "x",
@@ -936,44 +936,6 @@
         "width"
       ],
       "reason": "a linear indicator's own width under wrapContent: ios ProgressView fills the proposed width (402), android Material3 LinearProgressIndicator is 240 wide; the 4 high bar agrees; web does not render Indicator"
-    },
-    {
-      "fixture": "Collection/flowOverflow__noneWrapInBox",
-      "id": "target",
-      "fields": [
-        "height"
-      ],
-      "expected": {
-        "android": {
-          "height": 100.0
-        },
-        "ios": {
-          "height": 168.0
-        },
-        "web": {
-          "height": 100.0
-        }
-      },
-      "reason": "wrapContentCap's iOS limitation (2026-10-06 user ruling, attribute_semantics wrapContentCap.iosLimitation): a wrapContent flow Collection, lazy none, in a 150x100 parent stops at the parent on android (100, conf_ci 22:54 / 23:08, both routes) and web (100, rjui's max-h-full from f12a5640, 17:23); SwiftUI does not enforce the cap and reports its content, 6 rows of 28 = 168 (both routes, 3bd25fd before WrapCap; WrapCap was dropped). All three faces are pinned, so a web or android return to 168 is refused."
-    },
-    {
-      "fixture": "__control/Collection__flow-overflow-none-wrapInBox",
-      "id": "target",
-      "fields": [
-        "height"
-      ],
-      "expected": {
-        "android": {
-          "height": 100.0
-        },
-        "ios": {
-          "height": 168.0
-        },
-        "web": {
-          "height": 100.0
-        }
-      },
-      "reason": "wrapContentCap's iOS limitation (2026-10-06 user ruling, attribute_semantics wrapContentCap.iosLimitation): a wrapContent flow Collection, lazy none, in a 150x100 parent stops at the parent on android (100, conf_ci 22:54 / 23:08, both routes) and web (100, rjui's max-h-full from f12a5640, 17:23); SwiftUI does not enforce the cap and reports its content, 6 rows of 28 = 168 (both routes, 3bd25fd before WrapCap; WrapCap was dropped). All three faces are pinned, so a web or android return to 168 is refused. The control declares no height: the ruling reads a box with no size on that axis as wrapContent."
     },
     {
       "fixture": "common/offset*_on_Label__*",

@@ -16,11 +16,15 @@
     {
       "type": "Label",
       "id": "variant-which",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "regular"
     },
     {
       "type": "Label",
       "id": "variant-echo",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "@{fieldValue}"
     }
   ]

@@ -30,12 +30,16 @@
         {
           "type": "Label",
           "id": "box_b",
+          "width": "wrapContent",
+          "height": "wrapContent",
           "text": "BBBB",
           "background": "#0000FF"
         },
         {
           "type": "Label",
           "id": "box_c",
+          "width": "wrapContent",
+          "height": "wrapContent",
           "text": "CCCCCCCC",
           "background": "#00AA00"
         }

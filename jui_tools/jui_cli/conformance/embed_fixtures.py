@@ -73,7 +73,7 @@ def _companion_root(source_label: str) -> dict:
         "height": "wrapContent",
         "orientation": "vertical",
         "child": [
-            {"type": "Label", "id": ROOT_LABEL_ID, "text": ROOT_LABEL_TEXT},
+            {"type": "Label", "id": ROOT_LABEL_ID, "width": "wrapContent", "height": "wrapContent", "text": ROOT_LABEL_TEXT},
         ],
     }
 
@@ -87,7 +87,7 @@ def _companion_second(source_label: str) -> dict:
         "height": "wrapContent",
         "orientation": "vertical",
         "child": [
-            {"type": "Label", "id": SECOND_LABEL_ID, "text": SECOND_LABEL_TEXT},
+            {"type": "Label", "id": SECOND_LABEL_ID, "width": "wrapContent", "height": "wrapContent", "text": SECOND_LABEL_TEXT},
         ],
     }
 
@@ -111,8 +111,8 @@ def _companion_params(source_label: str) -> dict:
             }
         ],
         "child": [
-            {"type": "Label", "id": PARAMS_NAME_ID, "text": "@{profile.name}"},
-            {"type": "Label", "id": PARAMS_AGE_ID, "text": "@{profile.meta.age}"},
+            {"type": "Label", "id": PARAMS_NAME_ID, "width": "wrapContent", "height": "wrapContent", "text": "@{profile.name}"},
+            {"type": "Label", "id": PARAMS_AGE_ID, "width": "wrapContent", "height": "wrapContent", "text": "@{profile.meta.age}"},
         ],
     }
 
@@ -147,7 +147,7 @@ def _host_layout(
     if data:
         layout["data"] = data
     layout["child"] = [
-        {"type": "Label", "id": HOST_MARKER_ID, "text": HOST_MARKER_TEXT},
+        {"type": "Label", "id": HOST_MARKER_ID, "width": "wrapContent", "height": "wrapContent", "text": HOST_MARKER_TEXT},
         *(buttons or []),
         embed,
     ]
@@ -305,7 +305,7 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
             screen="embed_root",
             navigation_mode="isolated",
             buttons=[
-                {"type": "Button", "id": PUSH_BUTTON_ID, "text": "push", "onclick": "confPush"},
+                {"type": "Button", "id": PUSH_BUTTON_ID, "width": "wrapContent", "height": "wrapContent", "text": "push", "onclick": "confPush"},
             ],
         ),
         steps=[
@@ -327,8 +327,8 @@ def build_embed_fixtures(source_label: str) -> tuple[list[tuple[str, dict]], lis
             screen="embed_root",
             navigation_mode="isolated",
             buttons=[
-                {"type": "Button", "id": PUSH_BUTTON_ID, "text": "push", "onclick": "confPush"},
-                {"type": "Button", "id": POP_BUTTON_ID, "text": "pop", "onclick": "confPop"},
+                {"type": "Button", "id": PUSH_BUTTON_ID, "width": "wrapContent", "height": "wrapContent", "text": "push", "onclick": "confPush"},
+                {"type": "Button", "id": POP_BUTTON_ID, "width": "wrapContent", "height": "wrapContent", "text": "pop", "onclick": "confPop"},
             ],
         ),
         steps=[

@@ -28,11 +28,15 @@
     {
       "type": "Label",
       "id": "embed-params-name",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "@{profile.name}"
     },
     {
       "type": "Label",
       "id": "embed-params-age",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "@{profile.meta.age}"
     }
   ]

@@ -16,6 +16,8 @@
     {
       "type": "Label",
       "id": "embed-root-label",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "embed-root"
     }
   ]

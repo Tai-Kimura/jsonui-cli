@@ -35,6 +35,8 @@
     {
       "type": "Label",
       "id": "mirror",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "@{conformanceResult}"
     }
   ]

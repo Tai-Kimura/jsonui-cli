@@ -17,7 +17,8 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
-      "text": "@{boundText}"
+      "text": "@{boundText}",
+      "group": "conformance_group"
     }
   ],
   "data": [

@@ -348,6 +348,10 @@ def build_interactive_layout(
             {
                 "type": "Label",
                 "id": interactive_rules.MIRROR_ID,
+                # width / height are required (attribute_definitions common):
+                # a layout without them is input the validator warns on.
+                "width": "wrapContent",
+                "height": "wrapContent",
                 "text": f"@{{{spec.mirror_var}}}",
             }
         )

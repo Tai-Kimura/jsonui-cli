@@ -16,6 +16,8 @@
     {
       "type": "Label",
       "id": "variant-host-marker",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "host"
     },
     {

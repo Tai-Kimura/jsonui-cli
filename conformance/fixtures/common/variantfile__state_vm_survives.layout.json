@@ -23,11 +23,15 @@
     {
       "type": "Label",
       "id": "variant-host-marker",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "host"
     },
     {
       "type": "TextField",
       "id": "variant_state_input",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "@{conformanceText}"
     },
     {

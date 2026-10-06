@@ -42,7 +42,7 @@ _CASES = (
     ("emptyView__zero", {"width": 0, "height": 0}, 0),
 )
 
-_AFTER = {"type": "Label", "id": "after", "text": "After", "fontColor": "#000000", "background": "#FFDD00"}
+_AFTER = {"type": "Label", "id": "after", "width": "wrapContent", "height": "wrapContent", "text": "After", "fontColor": "#000000", "background": "#FFDD00"}
 
 
 def _marker(source_label: str) -> dict:

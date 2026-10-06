@@ -16,7 +16,8 @@
       "type": "Radio",
       "id": "target",
       "width": 200,
-      "height": "wrapContent"
+      "height": "wrapContent",
+      "group": "conformance_group"
     }
   ]
 }

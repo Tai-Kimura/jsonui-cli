@@ -27,6 +27,8 @@
     {
       "type": "Label",
       "id": "cell_inset_id_child",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "@{title}",
       "fontSize": 11
     }

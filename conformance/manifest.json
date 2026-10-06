@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "a20f0ff0083bd2b3a2083434799e96830aedf68b145a36692ce453357e62f752",
   "counts": {
-    "fixtures": 1183,
+    "fixtures": 1176,
     "assertable": 51,
-    "visual": 887,
+    "visual": 883,
     "interactive": 37,
-    "control": 130,
+    "control": 127,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -5941,8 +5941,8 @@
       "test": "fixtures/common/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/distribution@View__child-b4827942_orientation-horizontal_width-300",
-      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
+      "peerGroup": "common/distribution@View__child-d271b446_orientation-horizontal_width-300",
+      "control": "__control/View__child-d271b446_orientation-horizontal_width-300"
     },
     {
       "id": "common/distribution__fill",
@@ -5964,8 +5964,8 @@
       "test": "fixtures/common/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/distribution@View__child-b4827942_orientation-horizontal_width-300",
-      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
+      "peerGroup": "common/distribution@View__child-d271b446_orientation-horizontal_width-300",
+      "control": "__control/View__child-d271b446_orientation-horizontal_width-300"
     },
     {
       "id": "common/distribution__equalspacing",
@@ -18872,8 +18872,8 @@
       "test": "fixtures/View/distribution__fillequally.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "View/distribution@View__child-b4827942_orientation-horizontal_width-300",
-      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
+      "peerGroup": "View/distribution@View__child-d271b446_orientation-horizontal_width-300",
+      "control": "__control/View__child-d271b446_orientation-horizontal_width-300"
     },
     {
       "id": "View/distribution__fill",
@@ -18900,8 +18900,8 @@
       "test": "fixtures/View/distribution__fill.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "View/distribution@View__child-b4827942_orientation-horizontal_width-300",
-      "control": "__control/View__child-b4827942_orientation-horizontal_width-300"
+      "peerGroup": "View/distribution@View__child-d271b446_orientation-horizontal_width-300",
+      "control": "__control/View__child-d271b446_orientation-horizontal_width-300"
     },
     {
       "id": "View/distribution__equalspacing",
@@ -21422,30 +21422,6 @@
       "control": "__control/Radio"
     },
     {
-      "id": "Radio/checked__true_with_group",
-      "component": "Radio",
-      "attribute": "checked",
-      "case": "true_with_group",
-      "class": "visual",
-      "host": "Radio",
-      "writtenKey": "checked",
-      "aliasOf": null,
-      "value": true,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Radio/checked__true_with_group.layout.json",
-      "test": "fixtures/Radio/checked__true_with_group.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "Radio/checked@Radio__group-conformance-group",
-      "control": "__control/Radio__group-conformance-group"
-    },
-    {
       "id": "Radio/checked__alias_isOn",
       "component": "Radio",
       "attribute": "checked",
@@ -21492,30 +21468,6 @@
       "promotedFrom": null,
       "peerGroup": "Radio/checked@Radio",
       "control": "__control/Radio"
-    },
-    {
-      "id": "Radio/checked__false_with_group",
-      "component": "Radio",
-      "attribute": "checked",
-      "case": "false_with_group",
-      "class": "visual",
-      "host": "Radio",
-      "writtenKey": "checked",
-      "aliasOf": null,
-      "value": false,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Radio/checked__false_with_group.layout.json",
-      "test": "fixtures/Radio/checked__false_with_group.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "Radio/checked@Radio__group-conformance-group",
-      "control": "__control/Radio__group-conformance-group"
     },
     {
       "id": "Radio/checked__binding",
@@ -25744,30 +25696,6 @@
       "isControl": true
     },
     {
-      "id": "__control/Radio__group-conformance-group",
-      "component": "__control",
-      "attribute": null,
-      "case": "Radio",
-      "class": "visual",
-      "host": "Radio",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/Radio__group-conformance-group.layout.json",
-      "test": "fixtures/__control/Radio__group-conformance-group.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true
-    },
-    {
       "id": "__control/Radio__items--Alpha-Beta-Gamma",
       "component": "__control",
       "attribute": null,
@@ -26883,7 +26811,7 @@
       "isControl": true
     },
     {
-      "id": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "id": "__control/View__child-d271b446_orientation-horizontal_width-300",
       "component": "__control",
       "attribute": null,
       "case": "View",
@@ -26899,8 +26827,8 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/__control/View__child-b4827942_orientation-horizontal_width-300.layout.json",
-      "test": "fixtures/__control/View__child-b4827942_orientation-horizontal_width-300.test.json",
+      "layout": "fixtures/__control/View__child-d271b446_orientation-horizontal_width-300.layout.json",
+      "test": "fixtures/__control/View__child-d271b446_orientation-horizontal_width-300.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -28445,122 +28373,6 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": null,
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
-      ]
-    },
-    {
-      "id": "__control/Collection__flow-overflow-none-wrapInBox",
-      "component": "__control",
-      "attribute": null,
-      "case": "Collection__flow-overflow-none-wrapInBox",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/Collection__flow-overflow-none-wrapInBox.layout.json",
-      "test": "fixtures/__control/Collection__flow-overflow-none-wrapInBox.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true,
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
-      ]
-    },
-    {
-      "id": "Collection/flowOverflow__noneWrapInBox",
-      "component": "Collection",
-      "attribute": "height",
-      "case": "flowOverflow__noneWrapInBox",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "height",
-      "aliasOf": null,
-      "value": "wrapContent",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Collection/flowOverflow__noneWrapInBox.layout.json",
-      "test": "fixtures/Collection/flowOverflow__noneWrapInBox.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": null,
-      "control": "__control/Collection__flow-overflow-none-wrapInBox",
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
-      ]
-    },
-    {
-      "id": "__control/Collection__flow-overflow-none-wrapInScroll",
-      "component": "__control",
-      "attribute": null,
-      "case": "Collection__flow-overflow-none-wrapInScroll",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/Collection__flow-overflow-none-wrapInScroll.layout.json",
-      "test": "fixtures/__control/Collection__flow-overflow-none-wrapInScroll.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true,
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
-      ]
-    },
-    {
-      "id": "Collection/flowOverflow__noneWrapInScroll",
-      "component": "Collection",
-      "attribute": "height",
-      "case": "flowOverflow__noneWrapInScroll",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "height",
-      "aliasOf": null,
-      "value": "wrapContent",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Collection/flowOverflow__noneWrapInScroll.layout.json",
-      "test": "fixtures/Collection/flowOverflow__noneWrapInScroll.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": null,
-      "control": "__control/Collection__flow-overflow-none-wrapInScroll",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",

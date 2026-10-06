@@ -1186,13 +1186,6 @@
       ]
     },
     {
-      "fixture": "Radio/checked__true_with_group",
-      "platforms": [
-        "ios",
-        "web"
-      ]
-    },
-    {
       "fixture": "Radio/fontColor__static",
       "platforms": [
         "android",

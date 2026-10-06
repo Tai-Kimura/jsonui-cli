@@ -17,6 +17,7 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
+      "group": "conformance_group",
       "label": "sample"
     }
   ]

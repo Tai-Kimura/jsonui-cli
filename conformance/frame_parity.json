@@ -1586,33 +1586,7 @@
       "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
     },
     {
-      "fixture": "Radio/checked__false_with_group",
-      "id": "target",
-      "outliers": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "fields": [
-        "height"
-      ],
-      "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
-    },
-    {
       "fixture": "Radio/checked__true",
-      "id": "target",
-      "outliers": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "fields": [
-        "height"
-      ],
-      "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
-    },
-    {
-      "fixture": "Radio/checked__true_with_group",
       "id": "target",
       "outliers": [
         "android",
@@ -4527,19 +4501,6 @@
       "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
     },
     {
-      "fixture": "__control/Radio__group-conformance-group",
-      "id": "target",
-      "outliers": [
-        "android",
-        "ios",
-        "web"
-      ],
-      "fields": [
-        "height"
-      ],
-      "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
-    },
-    {
       "fixture": "__control/Radio__items--Alpha-Beta-Gamma",
       "id": "target",
       "outliers": [
@@ -4803,7 +4764,7 @@
       "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
     },
     {
-      "fixture": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "fixture": "__control/View__child-d271b446_orientation-horizontal_width-300",
       "id": "box_b",
       "outliers": [
         "ios"
@@ -4814,7 +4775,7 @@
       "reason": "the two wrapContent Labels of a plain horizontal row (the control of View/distribution__fill) are their text widths: BBBB ios 43 / android 42 / web 43.91, CCCCCCCC ios 94 / android 88 / web 89.38 — each face's own font metrics; heights are one undeclared line, ruling 5 (user, 2026-10-05): each face's ordinary line is its own — one undeclared line is ios 20.33 / android 24 / web 24. Pinned on all three faces — the web values are CI's Linux chromium glyph widths; the local mac chromium measures BBBB 40.81 / CCCCCCCC 89.13 (box_c at x 100.81). The gate runs on CI."
     },
     {
-      "fixture": "__control/View__child-b4827942_orientation-horizontal_width-300",
+      "fixture": "__control/View__child-d271b446_orientation-horizontal_width-300",
       "id": "box_c",
       "outliers": [
         "ios"

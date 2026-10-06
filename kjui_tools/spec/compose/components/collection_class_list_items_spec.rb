@@ -22,6 +22,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     'lazy vertical' => {}, 'lazy grid' => { 'columns' => 2 }, 'lazy horizontal' => { 'layout' => 'horizontal' },
     'flow' => { 'layout' => 'flow' }, 'lazy:none' => { 'lazy' => 'none' }, 'lazy:none grid' => { 'lazy' => 'none', 'columns' => 2 },
     'lazy:none horizontal' => { 'lazy' => 'none', 'layout' => 'horizontal' }, 'wrapContent' => { 'height' => 'wrapContent' },
+    'flow lazy:none wrapContent' => { 'layout' => 'flow', 'lazy' => 'none', 'height' => 'wrapContent' },
     'paging' => { 'layout' => 'horizontal', 'paging' => true }
   }.freeze
 
@@ -74,6 +75,25 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     code = emit({}, { 'name' => 'rows', 'class' => '[Booking]', 'defaultValue' => '[]' })
     expect(said.join).to include("items 'rows' is a list of Booking; a cell reads its own RowCellData or a map")
     expect(code).to include('data.rows.mapNotNull { it as? Map<String, Any> }')
+  end
+
+  # A lazy "none" flow that declares `height: "wrapContent"` gets two
+  # wrapContentHeight modifiers: build_size's own `.wrapContentHeight()` and the
+  # flow overflow rule's unbounded one. The conformance pair
+  # flowOverflow__noneWrapInBox / InScroll measured that stack as inert
+  # (byte-identical to the one-modifier control on the dynamic and codegen
+  # hosts). It was removed in jsonui-cli 1.9.18 because its control omitted the
+  # required `height` (ticket conformance-generators-emit-layouts-missing-
+  # required-attributes), so this holds the shape that was measured. The order
+  # is the finding: a Compose modifier written first is outer, so the declared
+  # wrap is outside and the unbounded one inside measures the flow at its
+  # content height. Swapped, the outer bounded wrap would size the flow to the
+  # constraints again and clip the overflow.
+  it 'a lazy none flow with an explicit wrapContent height: the declared wrap outside the unbounded one' do
+    allow(KjuiTools::Core::Logger).to receive(:warn)
+    definition = CLASS_LIST_ITEMS_DECLARATIONS.values.first.first
+    lines = emit(CLASS_LIST_ITEMS_ROUTES['flow lazy:none wrapContent'], definition).lines.map(&:strip).grep(/wrapContentHeight/)
+    expect(lines).to eq(['.wrapContentHeight()', '.wrapContentHeight(Alignment.Top, unbounded = true),'])
   end
 
   CLASS_LIST_ITEMS_STUBS = <<~KOTLIN

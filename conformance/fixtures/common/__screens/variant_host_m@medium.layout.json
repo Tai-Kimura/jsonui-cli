@@ -16,6 +16,8 @@
     {
       "type": "Label",
       "id": "variant-which",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "medium"
     }
   ]

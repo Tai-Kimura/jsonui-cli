@@ -24,6 +24,8 @@
     {
       "type": "Label",
       "id": "after",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "After",
       "fontColor": "#000000",
       "background": "#FFDD00"

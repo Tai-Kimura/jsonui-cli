@@ -23,6 +23,8 @@
     {
       "type": "Label",
       "id": "cell_title",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "@{title}",
       "fontSize": 11,
       "fontColor": "#FFFFFF",

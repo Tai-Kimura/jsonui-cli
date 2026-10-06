@@ -23,6 +23,8 @@
     {
       "type": "Label",
       "id": "host-marker",
+      "width": "wrapContent",
+      "height": "wrapContent",
       "text": "host"
     },
     {
