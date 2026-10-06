@@ -258,6 +258,39 @@
       "reason": "Same as both/horizontal: the grabber is identical across the three resizable values. See that row."
     },
     {
+      "component": "View",
+      "attribute": "width",
+      "platform": "android",
+      "cases": [
+        "emptyView__wrapContent",
+        "emptyView__zero"
+      ],
+      "owner": "none — declared equivalence",
+      "reason": "The SSoT makes an empty View's wrapContent box 0 (nothing to be the size of), so `wrapContent` and a declared 0 are the same box by declaration and draw the same column: the empty box, its 12pt top margin, then `after`. They cannot differ. The pair exists to catch a face that fills instead (sjui codegen's Color.clear until jsonui-cli 1.9.18), which shows as a difference against the 8 x 8 control, not between these two. Accepted 2026-10-07 by the library orchestrator."
+    },
+    {
+      "component": "View",
+      "attribute": "width",
+      "platform": "ios",
+      "cases": [
+        "emptyView__wrapContent",
+        "emptyView__zero"
+      ],
+      "owner": "none — declared equivalence",
+      "reason": "The SSoT makes an empty View's wrapContent box 0 (nothing to be the size of), so `wrapContent` and a declared 0 are the same box by declaration and draw the same column: the empty box, its 12pt top margin, then `after`. They cannot differ. The pair exists to catch a face that fills instead (sjui codegen's Color.clear until jsonui-cli 1.9.18), which shows as a difference against the 8 x 8 control, not between these two. Accepted 2026-10-07 by the library orchestrator."
+    },
+    {
+      "component": "View",
+      "attribute": "width",
+      "platform": "web",
+      "cases": [
+        "emptyView__wrapContent",
+        "emptyView__zero"
+      ],
+      "owner": "none — declared equivalence",
+      "reason": "The SSoT makes an empty View's wrapContent box 0 (nothing to be the size of), so `wrapContent` and a declared 0 are the same box by declaration and draw the same column: the empty box, its 12pt top margin, then `after`. They cannot differ. The pair exists to catch a face that fills instead (sjui codegen's Color.clear until jsonui-cli 1.9.18), which shows as a difference against the 8 x 8 control, not between these two. Accepted 2026-10-07 by the library orchestrator."
+    },
+    {
       "component": "common",
       "attribute": "effectStyle",
       "platform": "web",

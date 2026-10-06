@@ -5156,6 +5156,154 @@
       "reason": "six wrapped lines at maxWidth 150 (web on CI: seven, 168 — CI's Linux chromium glyph widths wrap one more line; the local mac chromium draws six, 144): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "common/offsetX_on_Button__binding",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as Button/* (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/offsetX_on_Button__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as Button/* (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/offsetX_on_Label__binding",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line under an offset: the offset moves the box the same on every face (x / y agree); its height is the line — ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "common/offsetX_on_Label__static",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line under an offset: the offset moves the box the same on every face (x / y agree); its height is the line — ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "common/offsetX_on_SelectBox__binding",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as SelectBox/* — triage K"
+    },
+    {
+      "fixture": "common/offsetX_on_SelectBox__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as SelectBox/* — triage K"
+    },
+    {
+      "fixture": "common/offsetY_on_Button__binding",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as Button/* (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/offsetY_on_Button__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as Button/* (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/offsetY_on_Label__binding",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line under an offset: the offset moves the box the same on every face (x / y agree); its height is the line — ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "common/offsetY_on_Label__static",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line under an offset: the offset moves the box the same on every face (x / y agree); its height is the line — ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "common/offsetY_on_SelectBox__binding",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as SelectBox/* — triage K"
+    },
+    {
+      "fixture": "common/offsetY_on_SelectBox__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as SelectBox/* — triage K"
+    },
+    {
       "fixture": "common/tapBackground__binding",
       "id": "target",
       "outliers": [
