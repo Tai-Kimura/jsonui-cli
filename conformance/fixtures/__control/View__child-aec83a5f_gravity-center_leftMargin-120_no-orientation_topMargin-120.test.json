@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/View__child-aec83a5f_gravity--right-bottom_no-orientation.layout.json"
+    "layout": "fixtures/__control/View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120.layout.json"
   },
   "metadata": {
     "name": "conformance control View",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "View__child-aec83a5f_gravity--right-bottom_no-orientation",
+      "name": "View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120",
       "description": "Control for View: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_View__child-aec83a5f_gravity--right-bottom_no-orientation"
+          "name": "control_View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120"
         }
       ]
     }

@@ -2414,9 +2414,18 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
         # kjui-oversized-child-is-centred-and-cut-to-its-parent). These two
         # give the frames gate a centred and an end-placed overflow on all
         # three platforms.
+        #
+        # Both sit 120 in from the root's top and left. At the root's origin
+        # the start-side overhang (−50 centred, −100 at the end) was off the
+        # screen, so clip-on and clip-off drew the same picture on web and
+        # android, and on ios differed only by the strip under the status bar
+        # (ticket conformance-cliptobounds-overflow-end-pair-draws-the-same-on-
+        # web-and-android). 120 > 100 puts the whole overhang on screen.
         "overflow_center": {
             "orientation": None,
             "gravity": "center",
+            "topMargin": 120,
+            "leftMargin": 120,
             "child": [
                 {"type": "View", "id": "overflow_box", "width": 300,
                  "height": 300, "background": "#FF0000"},
@@ -2425,6 +2434,8 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
         "overflow_end": {
             "orientation": None,
             "gravity": ["right", "bottom"],
+            "topMargin": 120,
+            "leftMargin": 120,
             "child": [
                 {"type": "View", "id": "overflow_box", "width": 300,
                  "height": 300, "background": "#FF0000"},

@@ -4553,8 +4553,8 @@
       "test": "fixtures/common/clipToBounds__true_overflow_center.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity-center_no-orientation",
-      "control": "__control/View__child-aec83a5f_gravity-center_no-orientation"
+      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120",
+      "control": "__control/View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120"
     },
     {
       "id": "common/clipToBounds__true_overflow_end",
@@ -4577,8 +4577,8 @@
       "test": "fixtures/common/clipToBounds__true_overflow_end.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity--right-bottom_no-orientation",
-      "control": "__control/View__child-aec83a5f_gravity--right-bottom_no-orientation"
+      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity--right-bottom_leftMargin-120_no-orientation_topMargin-120",
+      "control": "__control/View__child-aec83a5f_gravity--right-bottom_leftMargin-120_no-orientation_topMargin-120"
     },
     {
       "id": "common/clipToBounds__false",
@@ -4649,8 +4649,8 @@
       "test": "fixtures/common/clipToBounds__false_overflow_center.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity-center_no-orientation",
-      "control": "__control/View__child-aec83a5f_gravity-center_no-orientation"
+      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120",
+      "control": "__control/View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120"
     },
     {
       "id": "common/clipToBounds__false_overflow_end",
@@ -4673,8 +4673,8 @@
       "test": "fixtures/common/clipToBounds__false_overflow_end.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity--right-bottom_no-orientation",
-      "control": "__control/View__child-aec83a5f_gravity--right-bottom_no-orientation"
+      "peerGroup": "common/clipToBounds@View__child-aec83a5f_gravity--right-bottom_leftMargin-120_no-orientation_topMargin-120",
+      "control": "__control/View__child-aec83a5f_gravity--right-bottom_leftMargin-120_no-orientation_topMargin-120"
     },
     {
       "id": "common/clipToBounds__binding",
@@ -26427,7 +26427,7 @@
       "isControl": true
     },
     {
-      "id": "__control/View__child-aec83a5f_gravity--right-bottom_no-orientation",
+      "id": "__control/View__child-aec83a5f_gravity--right-bottom_leftMargin-120_no-orientation_topMargin-120",
       "component": "__control",
       "attribute": null,
       "case": "View",
@@ -26443,15 +26443,15 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/__control/View__child-aec83a5f_gravity--right-bottom_no-orientation.layout.json",
-      "test": "fixtures/__control/View__child-aec83a5f_gravity--right-bottom_no-orientation.test.json",
+      "layout": "fixtures/__control/View__child-aec83a5f_gravity--right-bottom_leftMargin-120_no-orientation_topMargin-120.layout.json",
+      "test": "fixtures/__control/View__child-aec83a5f_gravity--right-bottom_leftMargin-120_no-orientation_topMargin-120.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
       "isControl": true
     },
     {
-      "id": "__control/View__child-aec83a5f_gravity-center_no-orientation",
+      "id": "__control/View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120",
       "component": "__control",
       "attribute": null,
       "case": "View",
@@ -26467,8 +26467,8 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/__control/View__child-aec83a5f_gravity-center_no-orientation.layout.json",
-      "test": "fixtures/__control/View__child-aec83a5f_gravity-center_no-orientation.test.json",
+      "layout": "fixtures/__control/View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120.layout.json",
+      "test": "fixtures/__control/View__child-aec83a5f_gravity-center_leftMargin-120_no-orientation_topMargin-120.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

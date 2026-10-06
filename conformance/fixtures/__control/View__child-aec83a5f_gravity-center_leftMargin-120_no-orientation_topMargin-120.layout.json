@@ -18,10 +18,9 @@
       "width": 200,
       "height": 200,
       "background": "#DDDDDD",
-      "gravity": [
-        "right",
-        "bottom"
-      ],
+      "gravity": "center",
+      "topMargin": 120,
+      "leftMargin": 120,
       "child": [
         {
           "type": "View",

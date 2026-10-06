@@ -22,6 +22,8 @@
         "right",
         "bottom"
       ],
+      "topMargin": 120,
+      "leftMargin": 120,
       "child": [
         {
           "type": "View",
