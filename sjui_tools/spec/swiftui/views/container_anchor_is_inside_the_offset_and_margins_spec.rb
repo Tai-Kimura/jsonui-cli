@@ -54,6 +54,16 @@ RSpec.describe 'sjui codegen: the accessibility anchor is inside the offset and 
     expect(at(code, ANCHOR_SPEC_ANCHOR)).to be < at(code, '.accessibilityElement(children: .combine)')
   end
 
+  # An id-less cell root: `{collectionId}_item_{N}` names its box, so its
+  # anchor goes in the same place (apply_collection_cell_root_container).
+  it 'an id-less cell root: before the offset and the margins, once, then .contain' do
+    code = emit(ANCHOR_SPEC_BOX.merge(SjuiTools::SwiftUI::Views::BaseViewConverter::COLLECTION_CELL_ROOT_KEY => true))
+    expect(code.scan(ANCHOR_SPEC_ANCHOR).size).to eq(1)
+    expect(at(code, ANCHOR_SPEC_ANCHOR)).to be < at(code, '.offset(x: 5')
+    expect(at(code, ANCHOR_SPEC_ANCHOR)).to be < at(code, '.padding(.leading, 20)')
+    expect(at(code, '.accessibilityElement(children: .contain)')).to be > at(code, '.padding(.leading, 20)')
+  end
+
   # The other side of the hazard: two guaranteed children, no anchor.
   it 'a container with two children takes none (control)' do
     code = emit(ANCHOR_SPEC_BOX.merge('id' => 's_view', 'child' => ANCHOR_SPEC_CHILD + ANCHOR_SPEC_CHILD))

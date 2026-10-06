@@ -446,7 +446,10 @@ module SjuiTools
           # the defect this method exists to remove, surviving in cells with
           # one child. Found by reading the id path's own hazard check rather
           # than by a failing test; the arms below pin both sides.
-          if accessibility_merge_hazard?
+          # Normally on already, inside the offset and the margins
+          # (apply_accessibility_anchor); here only for a chain that never
+          # reached apply_common_decorations.
+          if accessibility_merge_hazard? && !@accessibility_anchor_registered
             add_modifier_line ".overlay(alignment: .topLeading) {"
             indent do
               add_modifier_line "Color.clear"
@@ -509,6 +512,10 @@ module SjuiTools
         def takes_accessibility_anchor?
           return false unless accessibility_merge_hazard?
           return true if combined_tap?
+          # An id-less cell root (apply_collection_cell_root_container): its
+          # box is what `{collectionId}_item_{N}` names, so its anchor sits
+          # inside its offset and margins like any other id's.
+          return true if collection_cell_root_without_id?
           return false unless @component['id']
           return false if @component['visibility'] == 'invisible' || @component['hidden'] == true
           return false if identifier_placed_inside?
