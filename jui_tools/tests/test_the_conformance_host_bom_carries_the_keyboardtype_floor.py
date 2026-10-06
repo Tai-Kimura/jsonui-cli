@@ -55,6 +55,29 @@ BOM_FILE = Path("conformance-host") / "build.gradle.kts"
 BOM_RE = re.compile(r'androidx\.compose:compose-bom:([0-9]{4}\.[0-9]{2}\.[0-9]{2})')
 
 
+def bom_floor_violation(text: str) -> str | None:
+    """Why *text* fails the floor, or ``None``.
+
+    EVERY compose-bom coordinate the file declares must be at or above the
+    floor, and there must be at least one. Until 1.9.17 this asserted EXACTLY
+    one, and KotlinJsonUI 2.43.5 (9a85fd6) gave the host a second line — the
+    same 2026.09.00 BOM for androidTestImplementation — which turned the
+    release check red on a file that met the floor twice. Counting was the
+    wrong question: a second line below the floor is the defect (the test APK
+    compiles the generated Kotlin too), a second line at the floor is not.
+    """
+    found = BOM_RE.findall(text)
+    if not found:
+        return "declares no androidx.compose:compose-bom coordinate"
+    low = [v for v in found if v < BOM_FLOOR]
+    if low:
+        return (
+            f"declares compose-bom {', '.join(low)} (of {found}), below the "
+            f"{BOM_FLOOR} floor"
+        )
+    return None
+
+
 def _kotlin_repo() -> tuple[Path | None, str]:
     """``(path, why_not)`` — the checkout, or why this arm cannot run.
 
@@ -107,16 +130,10 @@ class ConformanceHostBomFloorTests(unittest.TestCase):
         path = self.repo / BOM_FILE
         if not path.is_file():
             self.skipTest("covered by test_the_bom_line_is_readable")
-        found = BOM_RE.findall(path.read_text(encoding="utf-8"))
-        self.assertEqual(
-            1, len(found),
-            f"expected exactly one compose-bom coordinate in {path}, found {found}",
-        )
-        declared = found[0]
-        self.assertGreaterEqual(
-            declared, BOM_FLOOR,
-            f"conformance-host declares compose-bom {declared}, below the "
-            f"{BOM_FLOOR} floor. ui-text under that floor has 10 KeyboardType "
+        violation = bom_floor_violation(path.read_text(encoding="utf-8"))
+        self.assertIsNone(
+            violation,
+            f"conformance-host {violation}. ui-text under that floor has 10 KeyboardType "
             "members and none of Date / Time / DateTime / DecimalSigned, which "
             "the kjui emitter NAMES — so the codegen host stops compiling. "
             "Either raise the BOM back, or declare compose_version in the "
@@ -135,6 +152,36 @@ class ConformanceHostBomFloorTests(unittest.TestCase):
         self.assertLess("2026.06.01", BOM_FLOOR)
         self.assertGreater("2026.09.00", BOM_FLOOR)
         self.assertGreater("2027.01.00", BOM_FLOOR)
+
+
+class TheFloorIsJudgedOnEveryCoordinateTests(unittest.TestCase):
+    """The predicate's boundary, on text — no checkout needed."""
+
+    @staticmethod
+    def _host(*versions: str) -> str:
+        confs = ["implementation", "androidTestImplementation", "debugImplementation"]
+        return "\n".join(
+            f'    {confs[i]}(platform("androidx.compose:compose-bom:{v}"))'
+            for i, v in enumerate(versions)
+        )
+
+    def test_one_line_at_the_floor_passes(self):
+        self.assertIsNone(bom_floor_violation(self._host(BOM_FLOOR)))
+
+    def test_two_lines_at_or_above_the_floor_pass(self):
+        """KotlinJsonUI 2.43.5's shape: the same BOM twice."""
+        self.assertIsNone(bom_floor_violation(self._host("2026.09.00", "2026.09.00")))
+        self.assertIsNone(bom_floor_violation(self._host(BOM_FLOOR, "2026.09.00")))
+
+    def test_a_second_line_below_the_floor_fails(self):
+        for pair in (("2026.09.00", "2026.06.01"), ("2026.06.01", "2026.09.00")):
+            violation = bom_floor_violation(self._host(*pair))
+            self.assertIsNotNone(violation, pair)
+            self.assertIn("2026.06.01", violation)
+
+    def test_no_line_fails_rather_than_passing_vacuously(self):
+        self.assertIsNotNone(bom_floor_violation(""))
+        self.assertIsNotNone(bom_floor_violation('implementation("androidx.compose.ui:ui:1.12.1")'))
 
 
 if __name__ == "__main__":
