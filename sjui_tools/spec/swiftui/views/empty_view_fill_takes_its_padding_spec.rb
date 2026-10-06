@@ -23,36 +23,36 @@ RSpec.describe 'sjui codegen: an empty View painted by its fill takes no padding
     factory.create_converter(node, 0, nil, factory).convert.to_s
   end
 
-  BOX = { 'type' => 'View', 'width' => 100, 'height' => 40, 'padding' => 8 }.freeze
+  FILL_SPEC_BOX = { 'type' => 'View', 'width' => 100, 'height' => 40, 'padding' => 8 }.freeze
 
   it 'a background fill: no padding' do
-    out = emit(BOX.merge('background' => '#FFDD00'))
+    out = emit(FILL_SPEC_BOX.merge('background' => '#FFDD00'))
     expect(out.lines.first.strip).to eq('Rectangle()')
     expect(out).not_to include('.padding(')
   end
 
   it 'a pressed background fill: no padding' do
-    out = emit(BOX.merge('background' => '#FFDD00', 'tapBackground' => '#000000', 'onClick' => '@{tap}'))
+    out = emit(FILL_SPEC_BOX.merge('background' => '#FFDD00', 'tapBackground' => '#000000', 'onClick' => '@{tap}'))
     expect(out.lines.first.strip).to start_with('PressedFill(')
     expect(out).not_to include('.padding(')
   end
 
   # The same padding on the other side of the boundary keeps it.
   it 'a spacer keeps its padding (control)' do
-    out = emit(BOX)
+    out = emit(FILL_SPEC_BOX)
     expect(out.lines.first.strip).to eq('Color.clear')
     expect(out).to include('.padding(')
   end
 
   it 'a View with children keeps its padding (control)' do
-    out = emit(BOX.merge('background' => '#FFDD00', 'child' => [{ 'type' => 'Label', 'text' => 'a' }]))
+    out = emit(FILL_SPEC_BOX.merge('background' => '#FFDD00', 'child' => [{ 'type' => 'Label', 'text' => 'a' }]))
     expect(out).to include('.padding(')
   end
 
   it 'every case compiles' do
-    codes = [BOX.merge('background' => '#FFDD00'),
-             BOX.merge('background' => '#FFDD00', 'tapBackground' => '#000000', 'onClick' => '@{tap}'),
-             BOX].map { |n| emit(n) }
+    codes = [FILL_SPEC_BOX.merge('background' => '#FFDD00'),
+             FILL_SPEC_BOX.merge('background' => '#FFDD00', 'tapBackground' => '#000000', 'onClick' => '@{tap}'),
+             FILL_SPEC_BOX].map { |n| emit(n) }
     # PressedFill / tracksPress transcribed from PressedBackground.swift, as
     # tap_background_is_the_pressed_background_spec does.
     stubs = <<~SWIFT
