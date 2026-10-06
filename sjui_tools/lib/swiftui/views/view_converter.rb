@@ -206,6 +206,7 @@ module SjuiTools
               # (base_view_converter#pressed_background_color).
               add_line "PressedFill(pressed: #{pressed_background_color}, base: #{get_swiftui_color(@component['background'])})"
               @modifier_bag.register(:background, "")
+              @fill_is_the_content = true
             elsif @component['background']
               add_line "Rectangle()"
               # A declared gradient fills the shape itself. Filling with the
@@ -223,6 +224,7 @@ module SjuiTools
               end
               # Rectangleの場合はbackgroundを適用しない - register background to prevent apply_modifiers from adding it
               @modifier_bag.register(:background, "")
+              @fill_is_the_content = true
             elsif empty_view_takes_space?
               # A spacer: an axis with a size, a weight or a gradient to paint.
               add_line "Color.clear"
@@ -577,7 +579,13 @@ module SjuiTools
 
           # 共通のモディファイアを適用
           # 相対配置の場合、paddingはRelativePositionContainer内部で処理されるのでスキップ
-          apply_modifiers(skip_padding: @needs_relative_positioning)
+          # An empty View whose fill IS its content takes no padding either:
+          # there is nothing to inset, and the padding applied outside the
+          # shape left it painting only the inner box (100 x 40 with padding 8
+          # painted 84 x 24; the padding is the element, user ruling
+          # 2026-10-06; ticket ios-an-empty-view-with-a-background-paints-only-
+          # inside-its-padding). SwiftJsonUI Dynamic skips it in the same case.
+          apply_modifiers(skip_padding: @needs_relative_positioning || @fill_is_the_content)
 
           # グラデーション
           if @component['gradient']
