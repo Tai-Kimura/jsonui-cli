@@ -52,6 +52,17 @@ _CELLS = (
     ("bare_1", "conformance_cell_bare_single", ("cell_only_child",)),
 )
 
+#: The id-box pair (rules.SUPPORT_LAYOUTS): one child, margins, padding,
+#: offsetX, a fixed size — without and with a root id. These fixtures hold
+#: the address and the identifiers; the box itself is read by SwiftJsonUI's
+#: ConformanceHost CellIdBoxProbe, which renders the same cells. Their
+#: companions ride on these entries only, so no other Collection entry moves.
+#: (case suffix, cell layout basename, ids that must answer)
+_ID_BOX_CELLS = (
+    ("bare_1", "conformance_cell_inset_bare_single", ("cell_inset_child",)),
+    ("id_1", "conformance_cell_inset_single", ("cell_inset_root", "cell_inset_id_child")),
+)
+
 
 def _marker(source_label: str) -> dict:
     return json_marker(source=source_label, generator=GENERATOR_NAME)
@@ -162,4 +173,42 @@ def build_collection_cell_child_fixtures(
                 "control": None,
                 "companions": list(rules.BASE_COMPANIONS["Collection"]),
             })
+
+    for suffix, cell_name, ids in _ID_BOX_CELLS:
+        case = f"cellIdBox__{suffix}"
+        layout_rel = f"fixtures/Collection/{case}.layout.json"
+        test_rel = f"fixtures/Collection/{case}.test.json"
+        steps = [
+            {"action": "waitFor", "id": "root"},
+            {"action": "waitFor", "id": "target_item_0"},
+        ] + [{"action": "waitFor", "id": i} for i in ids]
+        description = (
+            "A cell with margins, padding and an offset keeps its item address "
+            f"and {'its root and child identifiers' if len(ids) > 1 else 'its child identifier'}."
+        )
+        files.append((layout_rel, _layout(source_label, cell_name)))
+        files.append((test_rel, _test(case, description, layout_rel, steps)))
+        entries.append({
+            "id": f"Collection/{case}",
+            "component": "Collection",
+            "attribute": "layout",
+            "case": case,
+            "class": rules.CLASS_ASSERTABLE,
+            "host": "Collection",
+            "writtenKey": "layout",
+            "aliasOf": None,
+            "value": "flow",
+            "platforms": list(_PLATFORMS),
+            "mode": None,
+            "deprecated": None,
+            "layout": layout_rel,
+            "test": test_rel,
+            "state": None,
+            "promotedFrom": None,
+            "peerGroup": None,
+            "control": None,
+            "companions": list(rules.BASE_COMPANIONS["Collection"]) + [
+                f"fixtures/Collection/__cells/{cell_name}.layout.json"
+            ],
+        })
     return files, entries

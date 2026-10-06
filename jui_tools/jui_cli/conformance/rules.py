@@ -2998,6 +2998,55 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             }
         ],
     },
+    #: The cell id-box pair: one child, margins, padding 8, offsetX 5, a fixed
+    #: size and a background — without and with a root id. A cell's item box
+    #: (`{collectionId}_item_{N}`) and the root's own id box are read
+    #: against the drawn box (SwiftJsonUI ConformanceHost CellIdBoxProbe):
+    #: the anchor against the single-child merge used to sit outside the
+    #: root's offset and margins.
+    "fixtures/Collection/__cells/conformance_cell_inset_bare_single.layout.json": {
+        "type": "View",
+        "width": 100,
+        "height": 40,
+        "leftMargin": 20,
+        "topMargin": 10,
+        "padding": 8,
+        "offsetX": 5,
+        "background": "#FFDD00",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_inset_child",
+                "text": "@{title}",
+                "fontSize": 11,
+            }
+        ],
+    },
+    "fixtures/Collection/__cells/conformance_cell_inset_single.layout.json": {
+        "type": "View",
+        "id": "cell_inset_root",
+        "width": 100,
+        "height": 40,
+        "leftMargin": 20,
+        "topMargin": 10,
+        "padding": 8,
+        "offsetX": 5,
+        "background": "#FFDD00",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_inset_id_child",
+                "text": "@{title}",
+                "fontSize": 11,
+            }
+        ],
+    },
     "fixtures/Collection/__cells/conformance_cell.layout.json": {
         "type": "View",
         "id": "cell_root",

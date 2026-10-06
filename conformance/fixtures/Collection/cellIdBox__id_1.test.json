@@ -1,0 +1,40 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/cellIdBox__id_1.layout.json"
+  },
+  "metadata": {
+    "name": "conformance cellIdBox__id_1",
+    "description": "A cell with margins, padding and an offset keeps its item address and its root and child identifiers.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cellIdBox__id_1",
+      "description": "A cell with margins, padding and an offset keeps its item address and its root and child identifiers.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_0"
+        },
+        {
+          "action": "waitFor",
+          "id": "cell_inset_root"
+        },
+        {
+          "action": "waitFor",
+          "id": "cell_inset_id_child"
+        }
+      ]
+    }
+  ]
+}
