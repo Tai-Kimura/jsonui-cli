@@ -145,6 +145,20 @@ SECONDARY_COLOR_ALT = "#00FF00"
 #: not fail for punctuation reasons and read as a defect.
 STRING_SUFFIX = "Two"
 
+#: The enum case to take as the second value, where the next case in the plan
+#: cannot tell the primary from the control on the generic probe children.
+#: `distribution`'s primary is `fillEqually` and its next case is `fill`: both
+#: are instructions to the CHILD's axis, and the probe's children declare their
+#: width, which both must leave alone (attribute_semantics
+#: distribution.explicitChildSizeWins). Since jsonui-cli 1.9.16 rjui obeys that
+#: (bdbe81a4), so on web both emit what the control emits and C0 read the
+#: spelling as unread — the converter was right and the pair was blind.
+#: `equalSpacing` spaces the children apart, which declared widths do not stop.
+SECONDARY_CASE: dict[tuple[str, str], Any] = {
+    ("View", "distribution"): "equalSpacing",
+    ("common", "distribution"): "equalSpacing",
+}
+
 
 def _second_number(primary: Any, defn: dict) -> Any:
     """A number that differs from *primary* and still satisfies min/max.
@@ -474,8 +488,9 @@ def build_jobs(definitions: dict, platforms=PLATFORMS, companion_specs: dict | N
             secondary_source = ""
             has_secondary = False
             secondary: Any = None
+            preferred = SECONDARY_CASE.get((section, attribute))
             for case in cases[1:]:
-                if case.value != primary:
+                if case.value != primary and (preferred is None or case.value == preferred):
                     secondary, has_secondary, secondary_source = case.value, True, "enum-case"
                     break
             if not has_secondary:

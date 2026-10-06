@@ -119,6 +119,23 @@ class JobTableTest(unittest.TestCase):
         self.assertEqual(entry.scope_reason, "unfixturable")
         self.assertEqual(entry.detail, rules.REASON_CALLBACK)
 
+    def test_distributions_second_value_is_one_the_sized_probe_children_obey(self):
+        # fill and fillEqually both leave a declared child width alone, and the
+        # probe's children declare theirs: a fill / fillEqually pair is blind on
+        # a converter that obeys explicitChildSizeWins (web since 1.9.16).
+        defn = _defn(
+            type="string",
+            enum=["fill", "fillEqually", "equalSpacing", "equalCentering"],
+            mode=["swiftui", "compose", "react"],
+        )
+        for section in ("View", "common"):
+            table = ce.build_jobs({section: {"distribution": defn}}, platforms=("web",))
+            probe = table.probes[0]
+            self.assertEqual(probe.primary, "fillEqually")
+            self.assertEqual(
+                (probe.secondary, probe.secondary_source), ("equalSpacing", "enum-case")
+            )
+
     def test_one_probe_per_declared_platform(self):
         definitions = {"View": {"tintColor": _defn(type="color")}}
         table = ce.build_jobs(definitions)
