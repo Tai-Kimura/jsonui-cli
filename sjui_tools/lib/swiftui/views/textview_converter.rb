@@ -168,8 +168,14 @@ module SjuiTools
             # `edgeInset` is the UIKit spelling of the same content inset — the
             # Label converter already reads it, and routing it here is what took
             # TextView.edgeInset off the coverage gap ledger.
+            # `padding` too (a number): Dynamic reads it into the same inset
+            # through getPadding, and it is the element's own spacing. Read by
+            # neither the inset nor an outer `.padding` here, a TextView's
+            # `padding` was dropped (ticket ios-a-textviews-id-box-shrinks-by-
+            # its-container-inset). A bound `padding` is not folded in.
+            uniform_padding = @component['padding'] if @component['padding'].is_a?(Numeric)
             inset = @component['containerInset'] || @component['edgeInset'] ||
-                    @component['paddings']
+                    @component['paddings'] || uniform_padding
             # A four-value `paddings` is [top, right, bottom, left] (the SSoT's
             # common.paddings; SwiftJsonUI Dynamic reads a TextView's paddings
             # so through getPadding). containerInset keeps [top, left, bottom,
