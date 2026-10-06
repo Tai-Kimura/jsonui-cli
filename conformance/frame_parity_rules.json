@@ -974,6 +974,30 @@
         }
       },
       "reason": "wrapContentCap's iOS limitation (2026-10-06 user ruling, attribute_semantics wrapContentCap.iosLimitation): a wrapContent flow Collection, lazy none, in a 150x100 parent stops at the parent on android (100, conf_ci 22:54 / 23:08, both routes) and web (100, rjui's max-h-full from f12a5640, 17:23); SwiftUI does not enforce the cap and reports its content, 6 rows of 28 = 168 (both routes, 3bd25fd before WrapCap; WrapCap was dropped). All three faces are pinned, so a web or android return to 168 is refused. The control declares no height: the ruling reads a box with no size on that axis as wrapContent."
+    },
+    {
+      "fixture": "common/offset*_on_Label__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line under an offset: the offset moves the box the same on every face (x / y agree); its height is the line — ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "common/offset*_on_Button__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as Button/* (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "common/offset*_on_SelectBox__*",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as SelectBox/* — triage K"
     }
   ]
 }
