@@ -33,6 +33,7 @@ module SjuiTools
           :foreground_color,    # foregroundColor
           :opacity,             # opacity/alpha
           :hidden,              # hidden
+          :accessibility_anchor, # the 0.5pt single-child merge anchor, inside the offset and the margins
           :conformance_frame,   # jsonUIConformanceFrame (the frames gate's layout box; conformance host only)
           :offset,              # offset
           :margin,              # outer margin entries

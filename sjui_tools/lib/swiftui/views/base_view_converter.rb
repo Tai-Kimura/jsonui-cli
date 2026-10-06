@@ -484,6 +484,38 @@ module SjuiTools
         # codegen writes. An app's generated code is what it was without it,
         # byte for byte, and builds against a SwiftJsonUI that has no
         # jsonUIConformanceFrame.
+        # The 0.5pt anchor against the single-child merge, in the bag's
+        # `accessibility_anchor` slot: inside the offset and the margins, the
+        # same box as the conformance frame. A container's id box is the union
+        # of its anchor and its content, so the anchor marks the layout box's
+        # corner. Written with the identifier, outside them, it sat at the
+        # margin's corner and before the offset: a 100-wide View with offsetX
+        # 5 and leftMargin 20 in a vertical stack read an id box 105 wide from
+        # the margin (ticket ios-container-id-box-starts-at-the-anchor-before-
+        # the-offset). For the nodes the id path and the combined tap anchor
+        # (apply_accessibility_identifier, tap_accessibility_lines). Dynamic:
+        # DynamicModifierHelper.applyAccessibilityAnchor.
+        def apply_accessibility_anchor
+          return unless takes_accessibility_anchor?
+
+          indent_str = "    " * (@indent_level + 1)
+          @modifier_bag.register(:accessibility_anchor,
+                                 ".overlay(alignment: .topLeading) {\n#{indent_str}Color.clear\n" \
+                                 "#{indent_str}    .frame(width: 0.5, height: 0.5)\n" \
+                                 "#{indent_str}    .accessibilityElement(children: .ignore)\n#{indent_str[0...-4]}}")
+          @accessibility_anchor_registered = true
+        end
+
+        def takes_accessibility_anchor?
+          return false unless accessibility_merge_hazard?
+          return true if combined_tap?
+          return false unless @component['id']
+          return false if @component['visibility'] == 'invisible' || @component['hidden'] == true
+          return false if identifier_placed_inside?
+
+          accessibility_container?
+        end
+
         def apply_conformance_frame
           return unless Core::ConfigManager.conformance_frames?
           return unless @component['id'].is_a?(String) && !@component['id'].empty?
@@ -563,7 +595,10 @@ module SjuiTools
           # (tap_accessibility_lines): the identifier lands on it, and the
           # container — and its anchor — would split it back into children.
           if accessibility_container? && !combined_tap?
-            if accessibility_merge_hazard?
+            # Normally on already, inside the offset and the margins
+            # (apply_accessibility_anchor). Here only for a converter whose
+            # chain never reached apply_common_decorations.
+            if accessibility_merge_hazard? && !@accessibility_anchor_registered
               add_modifier_line ".overlay(alignment: .topLeading) {"
               indent do
                 add_modifier_line "Color.clear"
@@ -705,6 +740,7 @@ module SjuiTools
           # codegen (apply_conformance_frame). Dynamic:
           # DynamicModifierHelper.applyConformanceFrame.
           apply_conformance_frame
+          apply_accessibility_anchor
           # tintColor is the accent of the operable parts — a control's
           # accent, a link's colour, the cursor (4f's ruling, 1.9.0) — never
           # the text colour: SwiftUI's `.tint`. It was drawn only through
@@ -1306,9 +1342,11 @@ module SjuiTools
             # with one accessible child, `.combine` took the child's own
             # identifier away (measured: the child's id found 0 times; with
             # the anchor, or two children, it is found). BEFORE `.combine`,
-            # so the anchor is one of the children it combines.
+            # so the anchor is one of the children it combines: normally on
+            # already, in the bag's accessibility_anchor slot
+            # (apply_accessibility_anchor).
             anchor = []
-            if accessibility_merge_hazard?
+            if accessibility_merge_hazard? && !@accessibility_anchor_registered
               indent_str = "    " * (@indent_level + 1)
               anchor << ".overlay(alignment: .topLeading) {\n#{indent_str}Color.clear\n" \
                         "#{indent_str}    .frame(width: 0.5, height: 0.5)\n" \
