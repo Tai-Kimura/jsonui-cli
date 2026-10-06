@@ -3093,6 +3093,16 @@ COMMON_EXTRA_HOSTS: dict[str, tuple[str, ...]] = {
     # reached a real Swift or Kotlin compiler. A still capture cannot show a
     # press: the fixture is there to be compiled and drawn at rest.
     "tapBackground": ("View",),
+    # The offset, on the components whose SwiftJsonUI Dynamic chain is built
+    # by hand (2026-10-06): Label, Button, TextView and SelectBox ran their own
+    # modifier chain without the offset stage, so offsetX / offsetY moved
+    # nothing in Dynamic while codegen and Android moved them (measured: drawn
+    # at the margin, x = 20, where the others drew 25; ticket sjui-dynamic-
+    # offsetx-is-not-applied-to-label-button-and-textview). Every offset
+    # fixture was hosted on a View, whose chain is the standard one — the
+    # corpus asked the offset question only where the answer was yes.
+    "offsetX": ("Label", "Button", "TextView", "SelectBox"),
+    "offsetY": ("Label", "Button", "TextView", "SelectBox"),
 }
 
 
