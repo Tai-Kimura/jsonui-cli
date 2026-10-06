@@ -692,6 +692,23 @@ jobs:
         run: |
           echo "KotlinJsonUI ref=${{ inputs.kotlinjsonui_ref || 'main' }} HEAD=$(git -C KotlinJsonUI rev-parse HEAD)"
           ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
+      - name: Size the Kotlin compile daemon's heap
+        # The codegen host compiles every generated fixture view in one
+        # module, so the Kotlin daemon's heap grows with the fixture count.
+        # Unset, the daemon inherits KotlinJsonUI's org.gradle.jvmargs
+        # (-Xmx2048m). At 1183 fixtures (jsonui-cli 1.9.18) this job ran out
+        # of heap in :conformance-host:compileDebugKotlin (run 37471959505)
+        # after passing at 1162 (run 37422435382). Measured locally (arm64,
+        # openjdk 17): 1162 compiles at 1792m, 1183 fails at 1792m and passes
+        # at 2048m with 1652M live after GC. No single method grew, and the
+        # registry is already chunked (ticket ci-android-codegen-conformance-
+        # host-compile-runs-out-of-heap). 4g leaves room for the fixtures
+        # still to come. The user-home gradle.properties takes precedence
+        # over the project's, for this job only.
+        run: |
+          mkdir -p ~/.gradle
+          echo 'kotlin.daemon.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
+          cat ~/.gradle/gradle.properties
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
