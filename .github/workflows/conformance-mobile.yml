@@ -59,9 +59,9 @@ on:
         default: false
         type: boolean
       frame_parity:
-        description: "Also judge cross-platform frame parity (gate --frame-parity: the same declared id drawn in the same place on every face; frame_parity.json). Default false until the ledger and the rulings close the current disagreements"
+        description: "Judge cross-platform frame parity (gate --frame-parity: the same declared id drawn in the same place on every face; frame_parity.json). Default true, and the schedule runs it too; pass false to skip"
         type: boolean
-        default: false
+        default: true
       tap_repro_repeats:
         description: 'tap_repro only: copies of EACH of the two fixtures, alternating (150 -> 300 taps)'
         required: false
@@ -962,11 +962,14 @@ jobs:
           args=(conformance gate --env ci --parity --cross-effect --inert-complete --value-discrimination)
           for p in ${{ steps.faces.outputs.judged }}; do args+=(--platform "$p"); done
           # Frame parity (frame_parity.py): every face writes frames, and the
-          # three are declared in EXPECTED_FRAME_HOSTS. Off by default until
-          # frame_parity.json and the pending rulings account for today's
-          # disagreements; switching it on is flipping the input's default.
-          # A schedule run has no inputs, so it stays off until then too.
-          [ "${{ inputs.frame_parity }}" = true ] && args+=(--frame-parity)
+          # three are declared in EXPECTED_FRAME_HOSTS. On by default since
+          # jsonui-cli 1.9.17: frame_parity.json accounts for every
+          # disagreement run 37368630695 measured (417 of 417 accepted, none
+          # unrecorded, none stale). The test is `!= false`, not `= true`: a
+          # schedule run has NO inputs, so `inputs.frame_parity` is empty there
+          # and `= true` would leave the schedule off whatever the default says.
+          # A run without the flag prints "frame parity: NOT judged".
+          [ "${{ inputs.frame_parity }}" != false ] && args+=(--frame-parity)
           [ "${{ needs.ios.result }}" = success ] && args+=(--rendered-by "swiftjsonui.src=${{ needs.ios.outputs.library_sha }}" --rendered-by "ios.toolchain=${{ needs.ios.outputs.toolchain }}")
           [ "${{ needs.android.result }}" = success ] && args+=(--rendered-by "kotlinjsonui.src=${{ needs.android.outputs.library_sha }}" --rendered-by "android.toolchain=${{ needs.android.outputs.toolchain }}")
           [ "${{ needs.web.result }}" = success ] && args+=(--rendered-by "rjui.src=${{ needs.web.outputs.library_sha }}" --rendered-by "chromium=${{ needs.web.outputs.chromium }}")

@@ -147,6 +147,12 @@ def ratchet_for_env(ratchet: dict, env: str) -> dict[str, dict[str, int]]:
     return resolved
 
 
+#: The notice a gate run without ``--frame-parity`` prints. CI passes the flag
+#: by default (conformance-mobile.yml input ``frame_parity``, default true);
+#: this line is how a run that did not shows it.
+FRAME_PARITY_NOT_JUDGED = "frame parity: NOT judged (--frame-parity not given)"
+
+
 def evaluate(
     conformance_dir: Path,
     platforms: Sequence[str],
@@ -211,6 +217,10 @@ def evaluate(
         )
         outcome.problems.extend(problems)
         outcome.notices.extend(notices)
+    else:
+        # Said, not left silent: a run without the flag printed no frame-parity
+        # line at all, so "judged and agreed" and "never asked" read the same.
+        outcome.notices.append(FRAME_PARITY_NOT_JUDGED)
 
     if inert_complete:
         if not visual:

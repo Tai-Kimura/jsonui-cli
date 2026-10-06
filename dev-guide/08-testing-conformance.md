@@ -161,9 +161,12 @@
   （`conformance/frames.schema.json`、RESULTS_SCHEMA.md の `frames` 節）。許容差は
   `frame_parity.TOLERANCE` の 1 か所だけ。比べられなかったものは理由ごとに 1 行ずつ件数を印字し、
   1 件も比べられなかった run は赤になる。3 面（web / android / ios）とも frames を書き、
-  `EXPECTED_FRAME_HOSTS` に宣言済み。CI（conformance-mobile.yml）には dispatch の input
-  `frame_parity`（既定 false）として入れてあり、**既定では走らない**（schedule も input を持たないので off）。
-  有効にするのは、`frame_parity.json` と裁定が今の食い違いを閉じた後に、input の既定を true にする 1 行で。
+  `EXPECTED_FRAME_HOSTS` に宣言済み。CI（conformance-mobile.yml）では jsonui-cli 1.9.17 から
+  **既定で走る**（input `frame_parity` の既定 true。式は `!= false` なので、input を持たない
+  schedule でも走る。`= true` だと schedule は空文字で off のままになる）。外すのは dispatch で
+  `-f frame_parity=false`。旗なしの gate は `note: frame parity: NOT judged (--frame-parity not given)`
+  を印字する（旗なしが無言だと「比べて一致」と「比べていない」が同じ出力になるため）。
+  on の run は `note: frame parity (…): N fixture(s) compared, …` を印字する。
 
 **CI 予算の鉄則**（過去の実測から）: cancelled はまず timeout 到達を疑う。fixture を増やしたら
 再採寸する（ローカル実測 × 5-7 倍が CI 目安）。attempt < step < job の算数を workflow コメントに書く。
