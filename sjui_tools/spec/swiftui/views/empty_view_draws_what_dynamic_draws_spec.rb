@@ -11,6 +11,7 @@ require_relative '../../support/emitted_swift'
 #
 #   background (no gradient)                     -> Rectangle / PressedFill
 #   an axis sized and not 0, a weight, a gradient -> Color.clear
+#   a margin                                      -> Color.clear, 0 x 0
 #   otherwise                                     -> EmptyView (0 x 0)
 #
 # and an empty SafeAreaView is EmptyView whatever it declares
@@ -44,7 +45,7 @@ RSpec.describe 'sjui codegen: an empty View draws what Dynamic draws' do
     # EmptyView: nothing gives it a size, so it is 0 x 0.
     'nothing declared' => [{}, 'EmptyView()'],
     'width wrapContent' => [{ 'width' => 'wrapContent' }, 'EmptyView()'],
-    'both wrapContent, with margins' => [{ 'width' => 'wrapContent', 'height' => 'wrapContent', 'topMargin' => 12, 'leftMargin' => 16 }, 'EmptyView()'],
+    'both wrapContent, margins 0' => [{ 'width' => 'wrapContent', 'height' => 'wrapContent', 'topMargin' => 0, 'leftMargin' => 0 }, 'EmptyView()'],
     'width 0' => [{ 'width' => 0 }, 'EmptyView()'],
     'height "0"' => [{ 'height' => '0' }, 'EmptyView()'],
     'weight 0' => [{ 'weight' => 0 }, 'EmptyView()'],
@@ -55,6 +56,15 @@ RSpec.describe 'sjui codegen: an empty View draws what Dynamic draws' do
     'weight 1, nothing sized' => [{ 'weight' => 1 }, 'Color.clear'],
     'widthWeight 1' => [{ 'widthWeight' => 1 }, 'Color.clear'],
     'a gradient only' => [{ 'gradient' => ['#FF0000', '#0000FF'] }, 'Color.clear'],
+    # A margin: a box of 0 that the margin pads. EmptyView took its margin
+    # with it on iOS, and the next child sat 12pt too high (ticket ios-an-
+    # empty-views-margin-vanishes-with-it; user ruling 2026-10-07: the margin
+    # stays, as on Android and web).
+    'both wrapContent, with margins' => [{ 'width' => 'wrapContent', 'height' => 'wrapContent', 'topMargin' => 12, 'leftMargin' => 16 }, 'Color.clear'],
+    'width 0, topMargin 12' => [{ 'width' => 0, 'height' => 0, 'topMargin' => 12 }, 'Color.clear'],
+    'a bound margin' => [{ 'topMargin' => '@{m}' }, 'Color.clear'],
+    'margins [0]' => [{ 'margins' => [0] }, 'EmptyView()'],
+    'margins [4]' => [{ 'margins' => [4] }, 'Color.clear'],
     # Unchanged: the background row.
     'a background, wrapContent' => [{ 'background' => '#FF0000', 'width' => 'wrapContent' }, 'Rectangle()']
   }.freeze
@@ -63,6 +73,12 @@ RSpec.describe 'sjui codegen: an empty View draws what Dynamic draws' do
     it "#{label} -> #{expected}" do
       expect(base({ 'type' => 'View' }.merge(attrs))).to eq(expected)
     end
+  end
+
+  it 'an empty View with a margin is sized 0, and the margin pads it' do
+    out = emit({ 'type' => 'View', 'width' => 'wrapContent', 'height' => 'wrapContent', 'topMargin' => 12 })
+    expect(out.lines[1].strip).to eq('.frame(width: 0, height: 0)')
+    expect(out).to include('.padding(.top, 12)')
   end
 
   it 'an empty SafeAreaView is EmptyView whatever it declares' do
@@ -80,6 +96,6 @@ RSpec.describe 'sjui codegen: an empty View draws what Dynamic draws' do
     nodes = CASES.values.map { |(attrs, _)| { 'type' => 'View' }.merge(attrs) } +
             [{ 'type' => 'SafeAreaView', 'width' => 100 }, { 'type' => 'SafeAreaView', 'background' => '#FF0000' }]
     codes = nodes.map { |n| emit(n) }
-    expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: ['var w: CGFloat = 10'])).to compile_as_swift
+    expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: ['var w: CGFloat = 10', 'var m: CGFloat = 4'])).to compile_as_swift
   end
 end

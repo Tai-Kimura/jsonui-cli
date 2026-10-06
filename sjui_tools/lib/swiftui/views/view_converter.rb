@@ -228,6 +228,16 @@ module SjuiTools
             elsif empty_view_takes_space?
               # A spacer: an axis with a size, a weight or a gradient to paint.
               add_line "Color.clear"
+            elsif empty_view_declares_a_margin?
+              # A box of 0 that its margin can pad. EmptyView lays out nothing
+              # in a stack, so the margin's `.padding` went with it and the
+              # next child sat where the margin should have pushed it (ticket
+              # ios-an-empty-views-margin-vanishes-with-it; the margin is outer
+              # space and stays, user ruling 2026-10-07). Sized here: an
+              # unsized Color.clear takes all the space offered. SwiftJsonUI
+              # Dynamic draws the same (DynamicViewContainer.emptyContent).
+              add_line "Color.clear"
+              add_modifier_line ".frame(width: 0, height: 0)"
             else
               add_line "EmptyView()"
             end
@@ -619,6 +629,22 @@ module SjuiTools
         # Dynamic and Android drew nothing (ticket sjui-codegen-an-empty-view-
         # fills-the-offered-space-and-its-id-box-includes-the-margin), and a
         # gradient-only empty View drew nothing here while Dynamic painted it.
+        # Whether an empty View declares a margin: a number other than 0, a
+        # binding (resolved only at run time), or a `margins` value.
+        EMPTY_VIEW_MARGIN_KEYS = %w[leftMargin rightMargin topMargin bottomMargin startMargin endMargin margins].freeze
+
+        def empty_view_declares_a_margin?
+          EMPTY_VIEW_MARGIN_KEYS.any? do |key|
+            value = @component[key]
+            case value
+            when nil then false
+            when Numeric then value != 0
+            when Array then value.any? { |v| !(v.is_a?(Numeric) && v.zero?) }
+            else true
+            end
+          end
+        end
+
         def empty_view_takes_space?
           %w[width height].any? { |key| sized_axis?(@component[key]) } ||
             %w[weight widthWeight heightWeight].any? { |key| weighted?(@component[key]) } ||
