@@ -199,7 +199,9 @@ module SjuiTools
           if children.empty?
             # 子要素がない場合
             # backgroundが設定されている場合はRectangleを使用（dividerなど）
-            if @component['background'] && !gradient_wins_over_background? && pressed_background_color
+            if empty_content_is_always_empty_view?
+              add_line "EmptyView()"
+            elsif @component['background'] && !gradient_wins_over_background? && pressed_background_color
               # The fill takes the pressed colour while the view is pressed
               # (base_view_converter#pressed_background_color).
               add_line "PressedFill(pressed: #{pressed_background_color}, base: #{get_swiftui_color(@component['background'])})"
@@ -221,8 +223,8 @@ module SjuiTools
               end
               # Rectangleの場合はbackgroundを適用しない - register background to prevent apply_modifiers from adding it
               @modifier_bag.register(:background, "")
-            elsif @component['width'] || @component['height']
-              # width/heightが指定されている場合はColor.clearを使用（スペーサーとして機能）
+            elsif empty_view_takes_space?
+              # A spacer: an axis with a size, a weight or a gradient to paint.
               add_line "Color.clear"
             else
               add_line "EmptyView()"
@@ -597,6 +599,52 @@ module SjuiTools
         end
 
         private
+
+        # An empty View is Color.clear — which takes all the space it is
+        # offered — only when the SwiftJsonUI Dynamic runtime makes it one
+        # (DynamicViewContainer.emptyContent): an axis declares a size that is
+        # not 0 (a number, matchParent or a binding), or the node has a
+        # weight, or a gradient to paint. Otherwise it is EmptyView, 0 x 0, as
+        # the SSoT declares a wrapContent box with nothing in it. Until
+        # jsonui-cli 1.9.18 the KEY was enough: `"width": "wrapContent"` or
+        # `"width": 0` drew a box filling the screen on iOS codegen while
+        # Dynamic and Android drew nothing (ticket sjui-codegen-an-empty-view-
+        # fills-the-offered-space-and-its-id-box-includes-the-margin), and a
+        # gradient-only empty View drew nothing here while Dynamic painted it.
+        def empty_view_takes_space?
+          %w[width height].any? { |key| sized_axis?(@component[key]) } ||
+            %w[weight widthWeight heightWeight].any? { |key| weighted?(@component[key]) } ||
+            gradient_wins_over_background?
+        end
+
+        # Dynamic's emptyContent is reached by View only; an empty
+        # SafeAreaView is always EmptyView there (DynamicSafeAreaViewContainer).
+        # ConverterFactory hands both types to this class.
+        def empty_content_is_always_empty_view?
+          @component['type'] == 'SafeAreaView'
+        end
+
+        def sized_axis?(value)
+          case value
+          when nil then false
+          when Numeric then value != 0
+          when String
+            return false if value == 'wrapContent' || value.strip.empty?
+            return value.to_f != 0 if value.match?(/\A-?\d+(\.\d+)?\z/)
+
+            true # matchParent, or a binding resolved at run time
+          else true
+          end
+        end
+
+        def weighted?(value)
+          case value
+          when nil then false
+          when Numeric then value > 0
+          when String then !value.match?(/\A-?\d+(\.\d+)?\z/) || value.to_f > 0
+          else true
+          end
+        end
 
         # `distribution: fill` — the SIZE half of distribution is carried to
         # the CHILDREN, not spelled as a container arrangement. The canon cell

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/View__empty-view-sized-8.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View__empty-view-sized-8",
+    "description": "Control for the empty-View family: the same column with the empty View sized 8 x 8, a spacer that takes its size, so `after` sits 8pt lower than in the fixtures.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "View__empty-view-sized-8",
+      "description": "Control for the empty-View family: the same column with the empty View sized 8 x 8, a spacer that takes its size, so `after` sits 8pt lower than in the fixtures.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_View__empty-view-sized-8"
+        }
+      ]
+    }
+  ]
+}

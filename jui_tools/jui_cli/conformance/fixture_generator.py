@@ -967,6 +967,23 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary.assertable_count += sum(1 for e in overflow_entries if e["class"] == "assertable")
     summary.control_count += sum(1 for e in overflow_entries if e.get("isControl"))
 
+    # An empty View sized wrapContent / 0 paints nothing either way; what it
+    # changes is where the next child lands — see empty_view_fixtures.
+    from .empty_view_fixtures import build_empty_view_fixtures
+
+    empty_files, empty_entries = build_empty_view_fixtures(source_label)
+    for rel_path, payload in empty_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(empty_entries)
+    summary.fixture_count += len(empty_entries)
+    summary.visual_count += sum(
+        1 for e in empty_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.control_count += sum(1 for e in empty_entries if e.get("isControl"))
+
     # A flow Collection whose sections declare a header and a footer (round 7
     # ruling: full-width rows around each section's wrap) — the corpus held
     # no section header on any layout; see flow_section_edge_fixtures.
