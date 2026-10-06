@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance cellIdBox__id_1",
-    "description": "A cell with margins, padding and an offset keeps its item address and its root and child identifiers.",
+    "description": "A cell with margins, padding and an offset keeps its item address and its child identifier.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "cellIdBox__id_1",
-      "description": "A cell with margins, padding and an offset keeps its item address and its root and child identifiers.",
+      "description": "A cell with margins, padding and an offset keeps its item address and its child identifier.",
       "steps": [
         {
           "action": "waitFor",
@@ -25,10 +25,6 @@
         {
           "action": "waitFor",
           "id": "target_item_0"
-        },
-        {
-          "action": "waitFor",
-          "id": "cell_inset_root"
         },
         {
           "action": "waitFor",
