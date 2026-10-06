@@ -186,7 +186,12 @@ jobs:
     # 90. iOS-eligible fixtures go to 958 with the Wave 3 expansion (+13%
     # on the manifest), putting it near 47 — still ~1.9x headroom, and the
     # simulator has no degraded-runner attempt loop to absorb like Android's.
-    timeout-minutes: 90
+    # 2026-10-07: measured 61 / 76 / 73 / 79 min in runs 37189084185 /
+    # 37368630695 / 37422435382 / 37480369210 (1.9.13 / 1.9.16 / 1.9.17 /
+    # 1.9.18) — 11 min under 90 and rising with the fixtures (1183 at
+    # 1.9.18). 150 is ~1.9x the measured maximum (ticket ci-ios-conformance-
+    # jobs-outgrow-their-90-minute-budget).
+    timeout-minutes: 150
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
       JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
@@ -349,7 +354,11 @@ jobs:
   ios-codegen:
     if: ${{ !inputs.tap_repro }} # off when only the tap repro runs
     runs-on: macos-15
-    timeout-minutes: 90
+    # 2026-10-07: measured 71 / 81 / 89 min (runs 37189084185 / 37368630695 /
+    # 37422435382) and cancelled at 90 in 37480369210 (1.9.18, 1183
+    # fixtures). 150 is ~1.65x the last completed run (ticket ci-ios-
+    # conformance-jobs-outgrow-their-90-minute-budget).
+    timeout-minutes: 150
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
       JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
