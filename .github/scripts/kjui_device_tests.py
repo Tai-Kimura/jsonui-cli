@@ -256,6 +256,8 @@ SNAPSHOT = (
     ("window.txt", ["shell", "dumpsys", "window"]),
     ("activities.txt", ["shell", "dumpsys", "activity", "activities"]),
     ("logcat.txt", ["logcat", "-d", "-v", "threadtime"]),
+    # am_anr is written here, not to main.
+    ("logcat-events.txt", ["logcat", "-d", "-b", "events", "-v", "threadtime"]),
     ("devices.txt", ["devices", "-l"]),
 )
 

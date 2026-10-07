@@ -43,8 +43,15 @@ test_packages=(com.kotlinjsonui.test com.kotlinjsonui.dynamic.test
 
 # Best effort: a bigger ring buffer so a ~15-minute run's early lines survive
 # to the dump, and a clean start so the dump is this run's.
-adb logcat -G 16M >/dev/null 2>&1 || echo "warning: could not resize the logcat buffer"
-adb logcat -c >/dev/null 2>&1 || true
+# `-b all`: without it -G leaves the events buffer at 256 KiB (measured on an
+# API 35 AVD), and run 37630837392's events at the end reached back only to
+# 14:12 of a run that started 13:45 — the am_anr count was of the last 8
+# minutes. What the boot left in it (an ANR right after boot, before the
+# setting below) is saved before the clear.
+mkdir -p "$evidence"
+adb logcat -d -b events -v threadtime >"$evidence/logcat-events-before-run.txt" 2>&1 || true
+adb logcat -b all -G 16M >/dev/null 2>&1 || echo "warning: could not resize the logcat buffers"
+adb logcat -b all -c >/dev/null 2>&1 || true
 
 # No "isn't responding" / "keeps stopping" dialog: the system closes the app
 # instead (measured on an API 35 tablet AVD, 2026-10-07: with the setting an
@@ -67,7 +74,11 @@ collect_evidence() {
   # ANR shows no dialog and the run can stay green, so the count is how a run
   # says one happened.
   adb logcat -d -b events -v threadtime >"$evidence/logcat-events.txt" 2>&1 || true
-  echo "ANRs on the device (am_anr): $(grep -c ' am_anr ' "$evidence/logcat-events.txt" 2>/dev/null || true)"
+  # Each count names the window it read: a buffer that rolled over reads
+  # as fewer ANRs, not as none.
+  local window
+  window=$(grep -oE '^[0-9]{2}-[0-9]{2} [0-9:.]+' "$evidence/logcat-events.txt" 2>/dev/null | sed -n '1p;$p' | tr '\n' ' ')
+  echo "ANRs on the device (am_anr): before the run $(grep -c ' am_anr ' "$evidence/logcat-events-before-run.txt" 2>/dev/null || true), during the run $(grep -c ' am_anr ' "$evidence/logcat-events.txt" 2>/dev/null || true) (events read from ${window:-nothing})"
   local pkg
   for pkg in "${test_packages[@]}"; do
     adb shell dumpsys activity exit-info "$pkg" >"$evidence/exit-info-$pkg.txt" 2>&1 \

@@ -79,7 +79,7 @@ class WatchTest(unittest.TestCase):
         self.assertEqual(rc, 124, out)
         self.assertLess(took, 30, "the stand-in's 60 s sleep ran out: the command was not stopped")
         self.assertIn("progress has not moved for 1 s (last count: 1)", out)
-        for name in ("screen.png", "input_method.txt", "window.txt", "logcat.txt"):
+        for name in ("screen.png", "input_method.txt", "window.txt", "logcat.txt", "logcat-events.txt"):
             self.assertTrue((self.evidence / "stopped" / name).is_file(), name)
         self.assertIn("shell dumpsys input_method", self.calls.read_text())
 
