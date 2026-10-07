@@ -40,7 +40,7 @@ class ImeProbeTest(unittest.TestCase):
         self.requests = self.dir / "requests.txt"
         self.evidence = self.dir / "device-evidence"
 
-    def adb(self, shows_on: int | None, opens: bool = True) -> str:
+    def adb(self, shows_on: int | None, opens: bool | str = True) -> str:
         """A stand-in adb: the IME is shown once the surface was opened
         `shows_on` times (never when None); `opens` False: no surface opens."""
         adb = self.dir / "adb"
@@ -54,7 +54,9 @@ class ImeProbeTest(unittest.TestCase):
             counter = Path({str(self.requests)!r})
             if args[:3] == ["shell", "am", "start"]:
                 counter.write_text(str(int(counter.read_text() or 0) + 1) if counter.exists() else "1")
-                print("Status: ok" if {opens!r} else "Error: Activity not started, unable to resolve Intent")
+                opens = {opens!r}
+                ok = opens is True or (isinstance(opens, str) and opens in args)
+                print("Status: ok" if ok else "Error: Activity not started, unable to resolve Intent")
             elif args[:3] == ["shell", "dumpsys", "input_method"]:
                 n = int(counter.read_text()) if counter.exists() else 0
                 shows_on = {shows_on!r}
@@ -65,7 +67,7 @@ class ImeProbeTest(unittest.TestCase):
         adb.chmod(adb.stat().st_mode | stat.S_IEXEC)
         return str(adb)
 
-    def probe(self, shows_on: int | None, budget: float = 2.0, opens: bool = True):
+    def probe(self, shows_on: int | None, budget: float = 2.0, opens: bool | str = True):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             rc = K.ime_ready(self.evidence, budget_seconds=budget, adb=self.adb(shows_on, opens),
@@ -76,6 +78,8 @@ class ImeProbeTest(unittest.TestCase):
         rc, out = self.probe(shows_on=3)
         self.assertEqual(rc, 0, out)
         self.assertIn("ime: shown on request 3,", out)
+        # Which surface came up is part of the line: the image decides it.
+        self.assertIn("(surface: android.settings.APP_SEARCH_SETTINGS)", out)
         self.assertFalse((self.evidence / "ime-never-shown").exists())
 
     def test_an_ime_that_shows_on_the_first_request_passes(self):
@@ -87,6 +91,7 @@ class ImeProbeTest(unittest.TestCase):
         rc, out = self.probe(shows_on=None, budget=1.0)
         self.assertEqual(rc, 3, out)
         self.assertIn("the IME never showed before the tests", out)
+        self.assertIn("surface: android.settings.APP_SEARCH_SETTINGS", out)
         for name in ("screen.png", "input_method.txt", "window.txt", "logcat.txt", "logcat-events.txt"):
             self.assertTrue((self.evidence / "ime-never-shown" / name).is_file(), name)
         # It kept asking within the budget, not once.
@@ -100,6 +105,11 @@ class ImeProbeTest(unittest.TestCase):
         self.assertEqual(len(opens), 2)
         self.assertEqual(len(homes), 3, "home before the first request, after the failed one and after the shown one")
         self.assertEqual(calls.index("shell input keyevent KEYCODE_HOME"), 0, "the first thing is home: no IME left up")
+
+    def test_without_settings_search_the_global_search_is_used_and_named(self):
+        rc, out = self.probe(shows_on=2, opens="android.search.action.GLOBAL_SEARCH")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("(surface: android.search.action.GLOBAL_SEARCH)", out)
 
     def test_an_image_without_a_surface_is_not_checked_and_says_so_loudly(self):
         rc, out = self.probe(shows_on=None, budget=1.0, opens=False)

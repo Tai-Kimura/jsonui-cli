@@ -450,13 +450,14 @@ def ime_ready(evidence: Path, budget_seconds: float = DEFAULT_IME_BUDGET_SECONDS
         while time.monotonic() < until:
             if ime_shown(adb):
                 took = time.monotonic() - started
-                print(f"ime: shown on request {n}, {took:.1f} s after the first", flush=True)
+                print(f"ime: shown on request {n}, {took:.1f} s after the first (surface: {surface[-1]})", flush=True)
                 _adb_quiet(adb, "shell", "input", "keyevent", "KEYCODE_HOME")
                 return 0
             time.sleep(poll)
         _adb_quiet(adb, "shell", "input", "keyevent", "KEYCODE_HOME")
     snapshot(evidence, "ime-never-shown", adb)
-    print(f"ime: the IME never showed before the tests ({n} requests over {int(budget_seconds)} s) — "
+    print(f"ime: the IME never showed before the tests ({n} requests over {int(budget_seconds)} s, "
+          f"surface: {surface[-1]}) — "
           "the device cannot run the keyboard cases; not a test result", flush=True)
     return 3
 
