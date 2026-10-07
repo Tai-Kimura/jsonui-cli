@@ -1169,7 +1169,7 @@
         "equalSpacing",
         "equalCentering"
       ],
-      "description": "Child distribution for orientation-bearing containers. SwiftUI: Spacer/weight synthesis; Compose: Arrangement.",
+      "description": "Child distribution for orientation-bearing containers. SwiftUI: Spacer/weight synthesis; Compose: Arrangement. `fill` and `fillEqually` distribute SIZE: a child whose width (in a vertical stack, its height) is `wrapContent` grows, and the growing children share the axis \u2014 `fill` grows each from its content, `fillEqually` makes them equal shares of what is left. Only a child that declares a numeric size keeps it. `equalSpacing` and `equalCentering` leave the children's sizes alone and distribute the free space between them (equal gaps / equal centre-to-centre tracks).",
       "platform": [
         "swift",
         "kotlin"
@@ -3544,7 +3544,7 @@
         "equalSpacing",
         "equalCentering"
       ],
-      "description": "Child distribution mode for stacks",
+      "description": "Child distribution mode for stacks. `fill` and `fillEqually` distribute SIZE: a child whose width (in a vertical stack, its height) is `wrapContent` grows, and the growing children share the axis \u2014 `fill` grows each from its content, `fillEqually` makes them equal shares of what is left. Only a child that declares a numeric size keeps it. `equalSpacing` and `equalCentering` leave the children's sizes alone and distribute the free space between them (equal gaps / equal centre-to-centre tracks).",
       "mode": [
         "swiftui",
         "compose",
