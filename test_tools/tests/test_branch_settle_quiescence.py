@@ -601,6 +601,15 @@ DELIVERY_MS = 300
 #: The event loop held up this long by synchronous work: the quiet window has
 #: passed by the first poll after it.
 HELD_MS = 2 * bt.QUIET_MS
+#: Below this a settle "returned within QUIET_MS" (timed()). Half the quiet
+#: window, not the window itself: a settle that waits the window out — the
+#: "until" control's mutant — takes QUIET_MS, and a real timer that fires a
+#: fraction early, rounded, read 399 and passed as fast (release-check run
+#: 37650040409, ticket test-branch-settle-control-real-clock-threshold-sits-
+#: on-the-mutants-wait). The fast paths drain turns: settle(40), the longest,
+#: took 52 ms here (2026-10-08); forty turns at a browser's clamped 4 ms each
+#: would be 160.
+FAST_MS = bt.QUIET_MS // 2
 
 
 def test_the_fake_clock_specimens_are_bound_to_the_declarations():
@@ -611,6 +620,9 @@ def test_the_fake_clock_specimens_are_bound_to_the_declarations():
     assert "const STALLED_TURNS = 200;" in bt.RUNTIME_TS
     assert STILL_BEFORE_IMPORT_MS >= 10 * 200 * 5
     assert HELD_MS > bt.QUIET_MS
+    # Away from the mutant's wait on one side and from forty clamped turns on the other.
+    assert FAST_MS <= bt.QUIET_MS // 2
+    assert FAST_MS > 40 * 4
     assert "const DEFAULT_SETTLE_TURNS = 10;" in bt.RUNTIME_TS
 
 
@@ -635,14 +647,19 @@ export function outcome(p: Promise<unknown>, ms = STILL_MS): Promise<string> {
     .finally(() => unwall(timer));
 }
 
-/** The outcome, and whether it returned before QUIET_MS of real time — the
- * least a settle with the quiet window takes. */
-export async function timed(p: Promise<unknown>): Promise<string> {
-  const started = wallNow();
+/** Below this it returned "within QUIET_MS": half of it, so a settle that
+ * waits the window out reads as slow even when the timer fires early. */
+export const FAST_MS = FAST_MS_VALUE;
+
+/** The outcome, and whether it returned well before QUIET_MS of real time —
+ * the least a settle with the quiet window takes. `now` is the clock it is
+ * timed on: real time, or a stand-in in the threshold's own cases. */
+export async function timed(p: Promise<unknown>, now: () => number = wallNow): Promise<string> {
+  const started = now();
   const got = await outcome(p);
-  const took = Math.round(wallNow() - started);
+  const took = Math.round(now() - started);
   if (got !== "returned") return got;
-  return took < QUIET_MS ? "returned within QUIET_MS" : `returned in ${took} ms, not within QUIET_MS (QUIET_MS ms)`;
+  return took < FAST_MS ? "returned within QUIET_MS" : `returned in ${took} ms, not under QUIET_MS / 2 (FAST_MS_VALUE ms)`;
 }
 
 /** Fail with the whole outcome in the message — an assertion library cuts a
@@ -650,8 +667,7 @@ export async function timed(p: Promise<unknown>): Promise<string> {
 export function must(got: string, want: string | RegExp): void {
   if (typeof want === "string" ? got !== want : !want.test(got)) throw new Error(`OUTCOME ${got}`);
 }
-'''.replace("STILL_MS", str(STILL_MS)).replace("< QUIET_MS", f"< {bt.QUIET_MS}").replace(
-    "(QUIET_MS ms)", f"({bt.QUIET_MS} ms)")
+'''.replace("STILL_MS", str(STILL_MS)).replace("FAST_MS_VALUE", str(FAST_MS))
 
 
 #: Faked inside each case, after the runtime was imported — the usual place.
@@ -889,8 +905,40 @@ _DATE_BEFORE = "settleQuiet() returns — Date frozen before the runtime was imp
 _BOTH_BEFORE = "settleQuiet() names the clock — Date and performance frozen before the runtime was imported"
 _TURNS_BOTH_BEFORE = ("settle(20) names the clock after a delayed response — Date and performance "
                       "frozen before the runtime was imported")
+#: timed()'s threshold on a stand-in clock: they pass whatever the runtime
+#: is, so each control below leaves them green.
+_THRESHOLD = ["timed() reads a quiet window that ends 1 ms early as slow",
+              "timed() reads ten turns' time as fast",
+              "timed() reads FAST_MS - 1 as fast and FAST_MS as slow"]
 _CLOCK_CASES = [*_FROZEN, *_EARLY, *_NO_ARG_FAST, *_TURNS_FAST, _DELIVERY_REAL, _DELIVERY_DATE, _DELAYED, *_NAMED,
-                _TURNS_BUDGET, _DATE_BEFORE, _BOTH_BEFORE, _TURNS_BOTH_BEFORE]
+                _TURNS_BUDGET, _DATE_BEFORE, _BOTH_BEFORE, _TURNS_BOTH_BEFORE, *_THRESHOLD]
+
+#: The threshold's cases: timed() on a clock that reads `started`, then
+#: `started + took` — no timer, so no jitter, and the boundary is exact.
+_CLOCK_THRESHOLD_TS = '''import { it } from "vitest";
+import { FAST_MS, must, timed } from "./race";
+
+function clockThatTakes(took: number): () => number {
+  const reads = [1000, 1000 + took];
+  return () => reads.shift() ?? 1000 + took;
+}
+
+it("timed() reads a quiet window that ends 1 ms early as slow", async () => {
+  // The "until" mutant waits QUIET_MS; its timer fired a fraction early and
+  // read 399 (release-check run 37650040409).
+  must(await timed(Promise.resolve(), clockThatTakes(QUIET_MS_VALUE - 1)),
+       /^returned in QUIET_MS_VALUE_MINUS_ONE ms, not under QUIET_MS \\/ 2/);
+});
+
+it("timed() reads ten turns' time as fast", async () => {
+  must(await timed(Promise.resolve(), clockThatTakes(13)), "returned within QUIET_MS");
+});
+
+it("timed() reads FAST_MS - 1 as fast and FAST_MS as slow", async () => {
+  must(await timed(Promise.resolve(), clockThatTakes(FAST_MS - 1)), "returned within QUIET_MS");
+  must(await timed(Promise.resolve(), clockThatTakes(FAST_MS)), /^returned in \\d+ ms, not under/);
+});
+'''.replace("QUIET_MS_VALUE_MINUS_ONE", str(bt.QUIET_MS - 1)).replace("QUIET_MS_VALUE", str(bt.QUIET_MS))
 
 #: How settle sends a call without an object — to settleTurns, ten turns when
 #: it is not given a number.
@@ -962,6 +1010,7 @@ def _clock_project(root: Path, runtime: str) -> Path:
     n._write(unit / "generated" / "jsonui-branch-runtime.ts", runtime)
     n._write(unit / "generated" / "short-budget-runtime.ts", short)
     n._write(unit / "race.ts", _CLOCK_RACE_TS)
+    n._write(unit / "timed-threshold.test.ts", _CLOCK_THRESHOLD_TS)
     n._write(unit / "fake-after-import.test.ts", _CLOCK_AFTER_IMPORT_TS)
     n._write(unit / "date-before-import.test.ts", _CLOCK_DATE_BEFORE_IMPORT_TS)
     n._write(unit / "clock-before-import.test.ts", _CLOCK_BOTH_BEFORE_IMPORT_TS)
