@@ -144,6 +144,9 @@
   **SwiftJsonUI / KotlinJsonUI のタグの前に release 枝で撃つ**。schedule は入力無し＝既定ブランチ、probe なし。
   `android_library_only=true` は android-library-tests だけを走らせる（ほかの job と report は止まる）。
   KotlinJsonUI の device test だけを繰り返すとき用（conformance の job は 1 本も走らない）
+  ⚠️ 同じ枝へ続けて撃つと消える: workflow の concurrency は枝（ref）ごとで、GitHub は同じ group に実行中 1 本＋待機 1 本しか
+  持たず、3 本目が来ると待機中の run を cancel する（`cancel-in-progress: false` が守るのは実行中だけ）。2026-10-07 に
+  同じ枝へ 3 本ずつ撃ち、2 本目が job 0 本のまま cancelled（37618377022 / 37618381831）。まとめて撃つなら 1 本ずつ別の枝から
 - report: 5 job 後、ゲート = 欠落 0 / mismatch 0 / stale 0 / fail 0 / error 0 /
   visual regression 0 / ratchet 天井内 / **parity（codegen ⇔ dynamic ci ベースライン、
   codegen_parity.json 台帳照合）**。1 コマンド:
