@@ -960,6 +960,44 @@
         "height"
       ],
       "reason": "SelectBox control chrome under an offset: the offset moves the box the same on every face (x / y agree); its height is the platform's own control height, not a layout value, as SelectBox/* — triage K"
+    },
+    {
+      "fixture": "View/emptyView__*",
+      "id": "after",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 20.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "the Label `after` below the empty View is one undeclared line (it declares width / height wrapContent): one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/View__empty-view-sized-8",
+      "id": "after",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 20.33
+        },
+        "android": {
+          "height": 24
+        },
+        "web": {
+          "height": 24
+        }
+      },
+      "reason": "the Label `after` below the empty View is one undeclared line (it declares width / height wrapContent): one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     }
   ]
 }
