@@ -35,9 +35,14 @@ module SjuiTools
           :hidden,              # hidden
           :accessibility_anchor, # the 0.5pt single-child merge anchor, inside the offset and the margins
           :conformance_frame,   # jsonUIConformanceFrame (the frames gate's layout box; conformance host only)
-          :offset,              # offset
-          :margin,              # outer margin entries
-          :tint_color,          # tint
+          # The gestures go on inside the offset and the margins, where the
+          # anchor and the conformance frame are: the tap's receiver is the id
+          # box (margin out, padding in, moved by the offset — user ruling
+          # 2026-10-06), as Compose's clickable sits inside the margins. After
+          # the margin, `.contentShape(Rectangle())` took the margin in: a tap
+          # in it ran the handler, and a combined tap's id read it (56 high
+          # with topMargin 24 read 80; ticket sjui-a-combined-taps-id-box-
+          # takes-its-margin-in).
           :on_click,            # contentShape + onTapGesture
           :on_long_press,       # onLongPressGesture
           :on_pan,              # contentShape + simultaneousGesture(DragGesture)
@@ -51,6 +56,9 @@ module SjuiTools
           # (measured on iOS 18.6 and 26.4, SwiftJsonUI ConformanceHost
           # -interactionGateProbe).
           :allows_hit_testing,  # allowsHitTesting
+          :offset,              # offset
+          :margin,              # outer margin entries
+          :tint_color,          # tint
           :on_value_change,     # onChange handlers
           :on_text_change,      # text change handlers
           :on_appear,           # onAppear
