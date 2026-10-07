@@ -176,14 +176,18 @@ module KjuiTools
             code += ",\n" + indent("horizontalArrangement = Arrangement.End", depth + 1)
           end
 
-          # A child that declares its own size on the grow axis keeps it and
-          # is excluded from growth (explicit > fill) — same presence test as
-          # the dynamic caller (`grows = children.map { !it.has("width") }`).
+          # A child that declares a NUMERIC size on the grow axis keeps it and
+          # is excluded from growth (explicit > fill). `wrapContent` is a child
+          # fill grows: width is required, so reading it as explicit left fill
+          # no child to grow in a correct layout (user ruling 2026-10-07,
+          # attribute_semantics distribution.explicitChildSizeWins). This read
+          # the key's presence, as the dynamic caller did; both read only a
+          # numeric size now (KotlinJsonUI DynamicContainerComponent.fillGrows).
           # All-grow is the layout's default, so the argument is only emitted
           # when some child opts out.
           if fill_distribution
             axis_key = layout == 'Column' ? 'height' : 'width'
-            grows = children.map { |c| !(c.is_a?(Hash) && c[axis_key]) }
+            grows = children.map { |c| !(c.is_a?(Hash) && declares_size_along?(c, axis_key)) }
             unless grows.all?
               code += ",\n" + indent("grows = listOf(#{grows.join(', ')})", depth + 1)
             end
@@ -243,6 +247,7 @@ module KjuiTools
           # composable above; its children render plain, so they must NOT be
           # distributed to here.
           distribute_main_axis!(children, json_data['distribution'], layout) unless fill_distribution
+          grow_fill_children!(children, layout) if fill_distribution
           inject_overflow_bias!(children, layout, gravity, json_data) unless fill_distribution
 
           # Return structure for parent to process children. `layout_type` is
@@ -449,7 +454,27 @@ module KjuiTools
             # the child's intrinsic size sitting in an empty slot. The dynamic
             # component does exactly this (`injectFillSize`), and only when the
             # child does not size that axis itself.
-            child[axis_size] ||= 'matchParent'
+            # A declared wrapContent too: it is not an explicit size here
+            # (numeric sizes returned above), and kept it drew the content
+            # inside an equal share (user ruling 2026-10-07; KotlinJsonUI
+            # DynamicContainerComponent.overridesTheChildsSize).
+            child[axis_size] = 'matchParent'
+          end
+        end
+
+        # A growing child of a `distribution: fill` row (column) draws across
+        # the slot DistributionFillRow gives it: its own `wrapContent` would be
+        # a wrapContentWidth inside that exact width, drawing the content at
+        # its own size at the start of a wider slot. The slot is sized from the
+        # child's max intrinsic, which a fill modifier leaves alone, so the
+        # split is unchanged. KotlinJsonUI Dynamic: DynamicContainerComponent.fillChild.
+        def self.grow_fill_children!(children, layout)
+          axis_size = layout == 'Column' ? 'height' : 'width'
+          children.each do |child|
+            next unless child.is_a?(Hash)
+            next if declares_size_along?(child, axis_size)
+
+            child[axis_size] = 'matchParent'
           end
         end
 

@@ -116,6 +116,28 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
       expect(result[:code]).to include('grows = listOf(true, false)')
     end
 
+    # User ruling 2026-10-07 (attribute_semantics
+    # distribution.explicitChildSizeWins): only a NUMERIC size is explicit. A
+    # declared wrapContent grows, and draws across its slot instead of
+    # wrapping inside it. KotlinJsonUI Dynamic: fillGrows / fillChild.
+    it 'grows a declared wrapContent child, drawn across its slot' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'fill',
+                    'child' => [{ 'type' => 'Label', 'width' => 'wrapContent' }, { 'type' => 'Label', 'width' => 40 }] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:code]).to include('grows = listOf(true, false)')
+      expect(result[:children].map { |c| c['width'] }).to eq(['matchParent', 40])
+    end
+
+    it 'fills a declared wrapContent child of fillEqually to its share' do
+      json_data = { 'type' => 'View', 'orientation' => 'horizontal',
+                    'distribution' => 'fillEqually',
+                    'child' => [{ 'type' => 'Label', 'width' => 'wrapContent' }, { 'type' => 'Label', 'width' => 40 }] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result[:children].map { |c| c['width'] }).to eq(['matchParent', 40])
+      expect(result[:children].map { |c| c['weight'] }).to eq([1, nil])
+    end
+
     it 'passes spacing to fill as the gap parameter, not an Arrangement' do
       json_data = { 'type' => 'View', 'orientation' => 'vertical',
                     'distribution' => 'fill', 'spacing' => 8, 'child' => child_pair }
