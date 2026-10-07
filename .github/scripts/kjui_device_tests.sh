@@ -46,6 +46,18 @@ test_packages=(com.kotlinjsonui.test com.kotlinjsonui.dynamic.test
 adb logcat -G 16M >/dev/null 2>&1 || echo "warning: could not resize the logcat buffer"
 adb logcat -c >/dev/null 2>&1 || true
 
+# No "isn't responding" / "keeps stopping" dialog: the system closes the app
+# instead (measured on an API 35 tablet AVD, 2026-10-07: with the setting an
+# app whose main thread is blocked ANRs and no dialog takes the focus; without
+# it the dialog holds it). Run 37618369032: Pixel Launcher's ANR dialog held
+# the focus for 14 minutes, the IME never showed, library's keyboard cases
+# timed out and library-dynamic did not start a case (ticket ci-android-
+# library-tests-emulator-dies-in-the-keyboard-tests-and-the-run-hangs). The
+# watch below closes such a dialog if one shows anyway.
+adb shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 \
+  || echo "warning: could not set hide_error_dialogs"
+echo "hide_error_dialogs: $(adb shell settings get global hide_error_dialogs 2>/dev/null | tr -d '\r')"
+
 collect_evidence() {
   mkdir -p "$evidence" || return 0
   adb logcat -d -v threadtime >"$evidence/logcat.txt" 2>&1 \
@@ -82,7 +94,7 @@ echo "left out here (run by another job): $not_class"
 
 rc=0
 (cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
-  --idle "${KJUI_IDLE_SECONDS:-600}" --evidence "$evidence" -- \
+  --idle "${KJUI_IDLE_SECONDS:-600}" --focus "${KJUI_FOCUS_SECONDS:-15}" --evidence "$evidence" -- \
   ./gradlew --no-daemon --continue \
   :library:connectedDebugAndroidTest :library-dynamic:connectedDebugAndroidTest \
   :conformance-host:connectedDebugAndroidTest \

@@ -156,6 +156,68 @@ class WatchTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn(FINISHED, out)
 
+    # --- an ANR dialog holding the focus (run 37618369032) -----------------
+
+    def focus_adb(self, focus_line: str) -> None:
+        """A stand-in adb whose `dumpsys window` reports focus_line."""
+        adb = self.dir / "adb-focus"
+        adb.write_text(textwrap.dedent(f"""\
+            #!{sys.executable}
+            import sys
+            with open({str(self.calls)!r}, "a") as f:
+                f.write(" ".join(sys.argv[1:]) + "\\n")
+            if sys.argv[1:4] == ["shell", "dumpsys", "window"]:
+                print("  mFocusedApp=ActivityRecord{{725902a u0 com.kotlinjsonui.test/.KeyboardActivity t39}}")
+                print("  " + {focus_line!r})
+            """))
+        adb.chmod(adb.stat().st_mode | stat.S_IEXEC)
+        self.adb = str(adb)
+
+    LAUNCHER_ANR = "mCurrentFocus=Window{39e6b5b u0 Application Not Responding: com.google.android.apps.nexuslauncher}"
+
+    def run_focus(self, seconds: float = 1.2):
+        out = io.StringIO()
+        script = f"""
+            print({STARTING!r}); print({COUNT.format(n=1, f=0)!r})
+            time.sleep({seconds}); print({COUNT.format(n=3, f=0)!r}); print({FINISHED!r})
+        """
+        with contextlib.redirect_stdout(out):
+            rc = K.watch(self.gradle(script), self.evidence, idle_seconds=30, adb=self.adb,
+                         poll=0.05, focus_seconds=0.1)
+        return rc, out.getvalue()
+
+    def test_an_anr_dialog_holding_the_focus_is_saved_and_its_app_closed(self):
+        self.focus_adb(self.LAUNCHER_ANR)
+        rc, out = self.run_focus()
+        self.assertEqual(rc, 0, out)
+        calls = self.calls.read_text()
+        self.assertIn("shell am force-stop com.google.android.apps.nexuslauncher", calls)
+        self.assertTrue((self.evidence / "anr-1" / "window.txt").is_file())
+        record = (self.evidence / "anr-dialogs.txt").read_text()
+        self.assertIn("ANR dialog #1", record)
+        self.assertIn("closed (am force-stop com.google.android.apps.nexuslauncher)", record)
+
+    def test_the_same_dialog_is_counted_once(self):
+        self.focus_adb(self.LAUNCHER_ANR)
+        rc, out = self.run_focus(seconds=1.5)
+        self.assertEqual(out.count("ANR dialog #"), 1, out)
+        self.assertEqual(self.calls.read_text().count("am force-stop"), 1)
+
+    def test_an_anr_of_a_package_under_test_is_recorded_and_left_open(self):
+        self.focus_adb("mCurrentFocus=Window{1a2b3c u0 Application Not Responding: com.kotlinjsonui.dynamic.test}")
+        rc, out = self.run_focus()
+        self.assertNotIn("am force-stop", self.calls.read_text())
+        self.assertIn("left open", (self.evidence / "anr-dialogs.txt").read_text())
+
+    def test_an_ordinary_focus_is_not_touched(self):
+        self.focus_adb("mCurrentFocus=Window{317c0d7 u0 com.kotlinjsonui.test/com.kotlinjsonui.components.KeyboardActivity}")
+        rc, out = self.run_focus()
+        self.assertEqual(rc, 0, out)
+        calls = self.calls.read_text()
+        self.assertIn("shell dumpsys window", calls, "the focus was never read: the check did not run")
+        self.assertNotIn("am force-stop", calls)
+        self.assertFalse((self.evidence / "anr-dialogs.txt").exists())
+
     def test_the_command_line(self):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):

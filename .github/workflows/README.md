@@ -93,6 +93,13 @@ failed case (`device-evidence/first-failure`), and a module whose progress
 count has not moved for 600 s (`KJUI_IDLE_SECONDS`; 120 s was the longest
 wait on five green runs) is stopped with its state saved
 (`device-evidence/stopped`) instead of hanging to the step's budget.
+Before the tests the job sets `hide_error_dialogs` to 1 (an ANR or crash
+closes the app instead of showing a dialog), and every 15 s
+(`KJUI_FOCUS_SECONDS`) the watch reads the window focus: a system "isn't
+responding" dialog there is saved (`device-evidence/anr-N`), its app
+force-stopped unless it is under test, and recorded with its time in
+`device-evidence/anr-dialogs.txt`. Run 37618369032: Pixel Launcher's ANR
+dialog held the focus for 14 minutes and the IME never showed.
 
 Or: Actions tab → `conformance-mobile` → "Run workflow".
 

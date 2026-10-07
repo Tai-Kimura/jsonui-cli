@@ -30,7 +30,7 @@ Two commands:
                            src/androidTest that this job does not run and that
                            UNREACHED_MODULES does not name with a reason.
 
-  watch [--idle S] [--evidence DIR] [--adb ADB] -- <command…>
+  watch [--idle S] [--focus S] [--evidence DIR] [--adb ADB] -- <command…>
                          Runs the Gradle command, its output passed through,
                          and watches it (ticket ci-android-library-tests-
                          emulator-dies-in-the-keyboard-tests-and-the-run-hangs):
@@ -49,6 +49,13 @@ Two commands:
                            evidence the job saves after Gradle never ran.
                          The emulator console's failure line is not the sign:
                          it is printed before every module on green runs too.
+                         Every --focus seconds (default 15) it reads which
+                         window has the focus: a system "isn't responding"
+                         dialog there is saved (DIR/anr-N), its app is
+                         force-stopped unless it is under test, and the time
+                         and count go to DIR/anr-dialogs.txt (run
+                         37618369032: Pixel Launcher's ANR dialog held the
+                         focus for 14 minutes and the IME never showed).
 
 conformance-host is run here for its probes (2026-10-04, ticket
 kjui-conformance-host-androidtest-probes-never-run-in-ci): 13 probe classes
@@ -228,6 +235,19 @@ FINISHED = re.compile(r"Finished (\d+) tests on ")
 FAILED_CASE = re.compile(r" > \S+\[[^\]]+\].*FAILED")
 DEFAULT_IDLE_SECONDS = 600
 
+# A system "isn't responding" dialog holding the window focus. Measured on
+# run 37618369032: Pixel Launcher's ANR dialog held mCurrentFocus for 14
+# minutes, the test activity was the focused app without the focus, the IME
+# never showed (mInputShown=false), library's keyboard cases timed out and
+# library-dynamic did not start a case.
+ANR_FOCUS = re.compile(r"mCurrentFocus=Window\{(\S+) \S+ Application Not Responding: ([A-Za-z0-9_.]+)\}")
+DEFAULT_FOCUS_SECONDS = 15
+# The packages under test: an ANR of one of them is the run's own, and
+# closing it would end its instrumentation, so it is recorded and left to the
+# idle stop.
+TEST_PACKAGES = ("com.kotlinjsonui.test", "com.kotlinjsonui.dynamic.test",
+                 "com.kotlinjsonui.conformance", "com.kotlinjsonui.conformance.test")
+
 # (file, adb arguments): the device's state, each read on its own so one
 # that hangs or fails does not take the others with it.
 SNAPSHOT = (
@@ -255,9 +275,43 @@ def snapshot(evidence: Path, tag: str, adb: str, timeout: float = 60) -> Path:
     return out
 
 
+def anr_focus(adb: str, timeout: float = 30) -> tuple[str, str] | None:
+    """(window, package) when an ANR dialog holds the focus, else None."""
+    try:
+        out = subprocess.run([adb, "shell", "dumpsys", "window"], capture_output=True,
+                             text=True, timeout=timeout).stdout
+    except Exception:
+        return None
+    m = ANR_FOCUS.search(out)
+    return (m.group(1), m.group(2)) if m else None
+
+
+def close_anr(evidence: Path, adb: str, n: int, package: str) -> str:
+    """Saves the state, then closes the dialog's app unless it is under test."""
+    snapshot(evidence, f"anr-{n}", adb)
+    if package in TEST_PACKAGES:
+        action = "left open (a package under test: closing it would end the run's instrumentation)"
+    else:
+        try:
+            subprocess.run([adb, "shell", "am", "force-stop", package], capture_output=True, timeout=30)
+            action = f"closed (am force-stop {package})"
+        except Exception as error:
+            action = f"not closed ({type(error).__name__}: {error})"
+    line = (f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} ANR dialog #{n}: the focus was on "
+            f"'Application Not Responding: {package}' — {action}")
+    print(f"watch: {line}", flush=True)
+    evidence.mkdir(parents=True, exist_ok=True)
+    with open(evidence / "anr-dialogs.txt", "a") as f:
+        f.write(line + "\n")
+    return line
+
+
 def watch(command: list[str], evidence: Path, idle_seconds: float = DEFAULT_IDLE_SECONDS,
-          adb: str = "adb", poll: float = 5.0) -> int:
-    """Runs command and watches its output (see the module docstring)."""
+          adb: str = "adb", poll: float = 5.0, focus_seconds: float = DEFAULT_FOCUS_SECONDS) -> int:
+    """Runs command and watches its output (see the module docstring).
+
+    Every focus_seconds (0: never) it also asks which window has the focus;
+    an ANR dialog there is saved and closed (close_anr), once per dialog."""
     proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1, start_new_session=True)
     state = {"running": False, "count": None, "moved": time.monotonic(), "failed": False}
@@ -280,8 +334,16 @@ def watch(command: list[str], evidence: Path, idle_seconds: float = DEFAULT_IDLE
     reader = threading.Thread(target=read, daemon=True)
     reader.start()
     snapped = False
+    anrs, seen, focus_checked = 0, set(), time.monotonic()
     while proc.poll() is None:
         time.sleep(poll)
+        if focus_seconds and time.monotonic() - focus_checked >= focus_seconds:
+            focus_checked = time.monotonic()
+            hit = anr_focus(adb)
+            if hit and hit[0] not in seen:
+                seen.add(hit[0])
+                anrs += 1
+                close_anr(evidence, adb, anrs, hit[1])
         with lock:
             failed, running, moved, count = state["failed"], state["running"], state["moved"], state["count"]
         if failed and not snapped:
@@ -313,7 +375,7 @@ def watch(command: list[str], evidence: Path, idle_seconds: float = DEFAULT_IDLE
 
 
 def _watch_main(argv: list[str]) -> int:
-    idle, evidence, adb = DEFAULT_IDLE_SECONDS, Path("device-evidence"), "adb"
+    idle, evidence, adb, focus = DEFAULT_IDLE_SECONDS, Path("device-evidence"), "adb", DEFAULT_FOCUS_SECONDS
     i = 0
     while i < len(argv) and argv[i] != "--":
         if argv[i] == "--idle":
@@ -322,15 +384,17 @@ def _watch_main(argv: list[str]) -> int:
             evidence = Path(argv[i + 1]); i += 2
         elif argv[i] == "--adb":
             adb = argv[i + 1]; i += 2
+        elif argv[i] == "--focus":
+            focus = float(argv[i + 1]); i += 2
         else:
             print(f"watch: unknown option {argv[i]}", file=sys.stderr)
             return 2
     command = argv[i + 1:]
     if not command:
-        print("usage: kjui_device_tests.py watch [--idle S] [--evidence DIR] [--adb ADB] -- <command…>",
+        print("usage: kjui_device_tests.py watch [--idle S] [--focus S] [--evidence DIR] [--adb ADB] -- <command…>",
               file=sys.stderr)
         return 2
-    return watch(command, evidence, idle, adb)
+    return watch(command, evidence, idle, adb, focus_seconds=focus)
 
 
 def main(argv: list[str]) -> int:

@@ -137,7 +137,12 @@
   モジュールの進捗の数が 600 秒（`KJUI_IDLE_SECONDS`。緑の 5 run で最長 120 秒）動かなければ状態を
   `device-evidence/stopped` に残して Gradle を止める（exit 124）。2 run が `Tests 0/203` のまま 99 分、step の予算まで
   止まり、Gradle の後の証拠集めが一度も走らなかった（ticket ci-android-library-tests-emulator-dies-in-the-keyboard-
-  tests-and-the-run-hangs）。emulator console の失敗行は合図ではない（緑の run でもモジュールごとに出る）
+  tests-and-the-run-hangs）。emulator console の失敗行は合図ではない（緑の run でもモジュールごとに出る）。
+  テストの前に `hide_error_dialogs=1`（ANR / crash でダイアログを出さず app を閉じる。API 35 の tablet AVD で、
+  設定なしはダイアログが focus を取り、設定ありは出ないことを両側で測った）。watch は 15 秒ごと（`KJUI_FOCUS_SECONDS`）に
+  window の focus を読み、system の「isn't responding」ダイアログなら状態を `device-evidence/anr-N` に残して、その app を
+  force-stop（テスト対象の package は閉じずに記録だけ）、時刻と回数を `device-evidence/anr-dialogs.txt` に書く。
+  run 37618369032: Pixel Launcher の ANR ダイアログが focus を 14 分持ち、IME が一度も出なかった
 - dispatch の入力: `swiftjsonui_ref`（iOS 2 job）/ `image_probes` / `kotlinjsonui_ref`（Android 3 job）/
   `android_probes`（テストが `getArguments().getString("x") == "1"` と比べる旗をすべて立てる。旗の一覧は
   テストから導出）。2 つの probe は **jsonui-cli 1.9.8 から既定で true**（下ろすときだけ `=false`）。
