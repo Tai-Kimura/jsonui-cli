@@ -85,6 +85,15 @@ needs no workflow edit. The schedule has
 no inputs and keeps `master`. ConformanceHost's TapIdentifierOnceUITests is
 not opt-in: it runs in both iOS jobs whatever the inputs.
 
+One leg alone, for repeating KotlinJsonUI's device tests without the other
+six jobs: `-f android_library_only=true -f kotlinjsonui_ref=<ref>` runs only
+`android-library-tests` (the report too is off). In that job Gradle runs
+under `kjui_device_tests.py watch`: the device's state is saved at the first
+failed case (`device-evidence/first-failure`), and a module whose progress
+count has not moved for 600 s (`KJUI_IDLE_SECONDS`; 120 s was the longest
+wait on five green runs) is stopped with its state saved
+(`device-evidence/stopped`) instead of hanging to the step's budget.
+
 Or: Actions tab → `conformance-mobile` → "Run workflow".
 
 Flaky-run policy: the one `continue-on-error` is the Android emulator's

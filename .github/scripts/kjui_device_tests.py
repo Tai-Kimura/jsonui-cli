@@ -30,6 +30,26 @@ Two commands:
                            src/androidTest that this job does not run and that
                            UNREACHED_MODULES does not name with a reason.
 
+  watch [--idle S] [--evidence DIR] [--adb ADB] -- <command…>
+                         Runs the Gradle command, its output passed through,
+                         and watches it (ticket ci-android-library-tests-
+                         emulator-dies-in-the-keyboard-tests-and-the-run-hangs):
+                         - at the first failed case it saves the device's
+                           state once (DIR/first-failure: a screenshot,
+                           `dumpsys input_method`, `dumpsys window`, the top
+                           activities, the logcat);
+                         - while a module's cases run (between "Starting N
+                           tests" and "Finished"), when the progress count has
+                           not moved for S seconds (default 600) it saves the
+                           state again (DIR/stopped), stops the command and exits
+                           124. Measured on five green runs (2026-10-05 to
+                           10-07): the longest wait between two counts was 120
+                           s. Two red runs printed "Tests 0/203" and nothing
+                           more for 99 minutes, to the step's budget, and the
+                           evidence the job saves after Gradle never ran.
+                         The emulator console's failure line is not the sign:
+                         it is printed before every module on green runs too.
+
 conformance-host is run here for its probes (2026-10-04, ticket
 kjui-conformance-host-androidtest-probes-never-run-in-ci): 13 probe classes
 sat in its androidTest, and the `android` job instruments ConformanceSuiteTest
@@ -38,8 +58,13 @@ only. One of them, TapRoleProbeTest, had been red since KotlinJsonUI 14c075b
 """
 from __future__ import annotations
 
+import os
 import re
+import signal
+import subprocess
 import sys
+import threading
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -195,7 +220,122 @@ def judge(kjui: Path) -> int:
     return 0
 
 
+# ----------------------------------------------------------------- watch
+# What AGP prints per device while a module's cases run, and a failed case.
+PROGRESS = re.compile(r"Tests (\d+)/(\d+) completed")
+STARTING = re.compile(r"Starting (\d+) tests on ")
+FINISHED = re.compile(r"Finished (\d+) tests on ")
+FAILED_CASE = re.compile(r" > \S+\[[^\]]+\].*FAILED")
+DEFAULT_IDLE_SECONDS = 600
+
+# (file, adb arguments): the device's state, each read on its own so one
+# that hangs or fails does not take the others with it.
+SNAPSHOT = (
+    ("screen.png", ["exec-out", "screencap", "-p"]),
+    ("input_method.txt", ["shell", "dumpsys", "input_method"]),
+    ("window.txt", ["shell", "dumpsys", "window"]),
+    ("activities.txt", ["shell", "dumpsys", "activity", "activities"]),
+    ("logcat.txt", ["logcat", "-d", "-v", "threadtime"]),
+    ("devices.txt", ["devices", "-l"]),
+)
+
+
+def snapshot(evidence: Path, tag: str, adb: str, timeout: float = 60) -> Path:
+    """Saves the device's state under evidence/tag. Never raises."""
+    out = evidence / tag
+    out.mkdir(parents=True, exist_ok=True)
+    for name, args in SNAPSHOT:
+        try:
+            done = subprocess.run([adb, *args], capture_output=True, timeout=timeout)
+            data = done.stdout if name.endswith(".png") else done.stdout + done.stderr
+            (out / name).write_bytes(data)
+        except Exception as error:  # a dead device must not stop the verdict
+            (out / f"{name}.error").write_text(f"{type(error).__name__}: {error}\n")
+    print(f"device evidence ({tag}) saved: {out}", flush=True)
+    return out
+
+
+def watch(command: list[str], evidence: Path, idle_seconds: float = DEFAULT_IDLE_SECONDS,
+          adb: str = "adb", poll: float = 5.0) -> int:
+    """Runs command and watches its output (see the module docstring)."""
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1, start_new_session=True)
+    state = {"running": False, "count": None, "moved": time.monotonic(), "failed": False}
+    lock = threading.Lock()
+
+    def read() -> None:
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            with lock:
+                if STARTING.search(line):
+                    state.update(running=True, count=None, moved=time.monotonic())
+                elif FINISHED.search(line):
+                    state.update(running=False)
+                elif (m := PROGRESS.search(line)) and m.group(1) != state["count"]:
+                    state.update(count=m.group(1), moved=time.monotonic())
+                if FAILED_CASE.search(line):
+                    state["failed"] = True
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    snapped = False
+    while proc.poll() is None:
+        time.sleep(poll)
+        with lock:
+            failed, running, moved, count = state["failed"], state["running"], state["moved"], state["count"]
+        if failed and not snapped:
+            snapshot(evidence, "first-failure", adb)
+            snapped = True
+        if running and time.monotonic() - moved > idle_seconds:
+            print(f"watch: the cases' progress has not moved for {int(idle_seconds)} s "
+                  f"(last count: {count if count is not None else 'none since Starting'}) — "
+                  "saving the device's state and stopping the command", flush=True)
+            snapshot(evidence, "stopped", adb)
+            for sig, wait in ((signal.SIGTERM, 30), (signal.SIGKILL, 10)):
+                try:
+                    os.killpg(proc.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    proc.wait(timeout=wait)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            reader.join(timeout=5)
+            return 124
+    reader.join(timeout=5)
+    with lock:
+        failed = state["failed"]
+    if failed and not snapped:
+        snapshot(evidence, "first-failure", adb)
+    return proc.returncode
+
+
+def _watch_main(argv: list[str]) -> int:
+    idle, evidence, adb = DEFAULT_IDLE_SECONDS, Path("device-evidence"), "adb"
+    i = 0
+    while i < len(argv) and argv[i] != "--":
+        if argv[i] == "--idle":
+            idle = float(argv[i + 1]); i += 2
+        elif argv[i] == "--evidence":
+            evidence = Path(argv[i + 1]); i += 2
+        elif argv[i] == "--adb":
+            adb = argv[i + 1]; i += 2
+        else:
+            print(f"watch: unknown option {argv[i]}", file=sys.stderr)
+            return 2
+    command = argv[i + 1:]
+    if not command:
+        print("usage: kjui_device_tests.py watch [--idle S] [--evidence DIR] [--adb ADB] -- <command…>",
+              file=sys.stderr)
+        return 2
+    return watch(command, evidence, idle, adb)
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["watch"]:
+        return _watch_main(argv[1:])
     if len(argv) != 2 or argv[0] not in ("flags", "judge", "not-class"):
         print("usage: kjui_device_tests.py flags|judge|not-class <KotlinJsonUI checkout>", file=sys.stderr)
         return 2

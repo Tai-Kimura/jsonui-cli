@@ -72,6 +72,16 @@ on:
         required: false
         default: false
         type: boolean
+      # One leg, for repeating it: the train's conformance run is once per
+      # train (the CI rule), and a question about KotlinJsonUI's device tests
+      # alone (ticket ci-android-library-tests-emulator-dies-in-the-keyboard-
+      # tests-and-the-run-hangs: 2.43.5 against 2.43.6 on the same jsonui-cli)
+      # should not cost the other six jobs each time.
+      android_library_only:
+        description: 'Run ONLY android-library-tests (KotlinJsonUI device tests at kotlinjsonui_ref; every other job, the report included, is off)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: conformance-mobile-${{ github.ref }}
@@ -84,7 +94,7 @@ jobs:
   # web-conformance job minus the per-platform gate (the report job gates).
   # ------------------------------------------------------------------ #
   web:
-    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -178,7 +188,7 @@ jobs:
   # simulator. Xcode is pinned so the simulator runtime is deterministic.
   # ------------------------------------------------------------------ #
   ios:
-    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
     runs-on: macos-15
     # 2026-08-07 (plan 51-H) re-measure — held, with the reading recorded so
     # the next resize starts from a number instead of re-deriving one.
@@ -352,7 +362,7 @@ jobs:
   # judged invariant instead of maintainer working memory (plan 25 A).
   # ------------------------------------------------------------------ #
   ios-codegen:
-    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
     runs-on: macos-15
     # 2026-10-07: measured 71 / 81 / 89 min (runs 37189084185 / 37368630695 /
     # 37422435382) and cancelled at 90 in 37480369210 (1.9.18, 1183
@@ -462,7 +472,7 @@ jobs:
   # committed baseline runs (small phones can push fixtures offscreen).
   # ------------------------------------------------------------------ #
   android:
-    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
     runs-on: ubuntu-latest
     # Suite duration (full 672-fixture set incl. interactive + screenshots;
     # 2026-07-24: +4 assertable Embed fixtures + 2 companion layouts — local
@@ -672,7 +682,7 @@ jobs:
   # arithmetic as the dynamic job.
   # ------------------------------------------------------------------ #
   android-codegen:
-    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
     runs-on: ubuntu-latest
     timeout-minutes: 270
     env:
@@ -780,7 +790,7 @@ jobs:
   # red already makes the run red.
   # ------------------------------------------------------------------ #
   android-library-tests:
-    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs
+    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs; on with android_library_only
     runs-on: ubuntu-latest
     # Budget. First run (36196156936, 2026-09-26, API 34): step 17.5 min,
     # gradle 15m47s for 262 cases on a good runner. The android job's
@@ -893,7 +903,7 @@ jobs:
     # wrong was turning "cannot produce a complete report" into "produce
     # nothing". The verdict step below keeps the run RED whenever a face is
     # missing — an incomplete report is "not judged", never "passed".
-    if: ${{ always() && !inputs.tap_repro }}
+    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -1052,7 +1062,7 @@ jobs:
   # one is off otherwise — the normal conformance path is unchanged.
   tap-repro:
     # Only when dispatched with tap_repro=true; every other job is then off.
-    if: ${{ inputs.tap_repro }}
+    if: ${{ inputs.tap_repro && !inputs.android_library_only }}
     runs-on: macos-15
     # Budget by arithmetic, from v1.9.13's conformance (37189084185) and the
     # local loops: setup ~1 min + host build ~6 min + the probe XCTests

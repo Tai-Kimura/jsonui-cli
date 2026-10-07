@@ -131,11 +131,19 @@
   焦点を要する腕が emulator を測ってしまう。matrix run 36197930038 で 34 は赤、35 は緑、画面キーボードの設定は無関係）。判定は結果 XML から（`.github/scripts/kjui_device_tests.py`）:
   失敗 / error / 結果の無いモジュール / **@Test を持つのに結果に 1 件も無いクラス** / **device test を持つのに、この job が走らせず
   `UNREACHED_MODULES` に理由つきで名前も無いモジュール**が赤。skip は名前で印字。sample-app は理由つきで名指しされている
-  2026-09-26 まで、この 2 モジュールの androidTest はどの CI でも走っていなかった
+  2026-09-26 まで、この 2 モジュールの androidTest はどの CI でも走っていなかった。
+  Gradle は `kjui_device_tests.py watch` の下で走る: 最初に失敗した case の時点で端末の状態（screenshot /
+  `dumpsys input_method` / `dumpsys window` / 上の activity / logcat）を `device-evidence/first-failure` に、
+  モジュールの進捗の数が 600 秒（`KJUI_IDLE_SECONDS`。緑の 5 run で最長 120 秒）動かなければ状態を
+  `device-evidence/stopped` に残して Gradle を止める（exit 124）。2 run が `Tests 0/203` のまま 99 分、step の予算まで
+  止まり、Gradle の後の証拠集めが一度も走らなかった（ticket ci-android-library-tests-emulator-dies-in-the-keyboard-
+  tests-and-the-run-hangs）。emulator console の失敗行は合図ではない（緑の run でもモジュールごとに出る）
 - dispatch の入力: `swiftjsonui_ref`（iOS 2 job）/ `image_probes` / `kotlinjsonui_ref`（Android 3 job）/
   `android_probes`（テストが `getArguments().getString("x") == "1"` と比べる旗をすべて立てる。旗の一覧は
   テストから導出）。2 つの probe は **jsonui-cli 1.9.8 から既定で true**（下ろすときだけ `=false`）。
-  **SwiftJsonUI / KotlinJsonUI のタグの前に release 枝で撃つ**。schedule は入力無し＝既定ブランチ、probe なし
+  **SwiftJsonUI / KotlinJsonUI のタグの前に release 枝で撃つ**。schedule は入力無し＝既定ブランチ、probe なし。
+  `android_library_only=true` は android-library-tests だけを走らせる（ほかの job と report は止まる）。
+  KotlinJsonUI の device test だけを繰り返すとき用（conformance の job は 1 本も走らない）
 - report: 5 job 後、ゲート = 欠落 0 / mismatch 0 / stale 0 / fail 0 / error 0 /
   visual regression 0 / ratchet 天井内 / **parity（codegen ⇔ dynamic ci ベースライン、
   codegen_parity.json 台帳照合）**。1 コマンド:

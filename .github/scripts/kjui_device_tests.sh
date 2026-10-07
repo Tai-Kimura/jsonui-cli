@@ -24,10 +24,20 @@
 # is both the instrumentation and the app under test. The test APKs are kept
 # installed after the run, because the system drops a package's exit-info
 # when it is uninstalled. Evidence collection never changes the exit status.
+#
+# Gradle runs under kjui_device_tests.py watch: at the first failed case it
+# saves the device's state (device-evidence/first-failure), and when a
+# module's progress count has not moved for KJUI_IDLE_SECONDS (default 600;
+# the longest wait on five green runs was 120 s) it saves it again
+# (device-evidence/stopped) and stops Gradle with exit 124, instead of hanging
+# to the step's budget, which kills this script before the evidence below is
+# taken (ticket ci-android-library-tests-emulator-dies-in-the-keyboard-tests-
+# and-the-run-hangs: two runs sat at "Tests 0/203" for 99 minutes).
 set -uo pipefail
 kjui=${1:?usage: kjui_device_tests.sh <KotlinJsonUI checkout>}
 here=$(cd "$(dirname "$0")" && pwd)
-evidence="$kjui/device-evidence"
+# Absolute: Gradle and the watch run from inside the checkout.
+evidence="$(cd "$kjui" && pwd)/device-evidence"
 test_packages=(com.kotlinjsonui.test com.kotlinjsonui.dynamic.test
                com.kotlinjsonui.conformance com.kotlinjsonui.conformance.test)
 
@@ -47,6 +57,9 @@ collect_evidence() {
       || echo "warning: exit-info for $pkg failed"
   done
   adb shell dumpsys activity exit-info >"$evidence/exit-info-all.txt" 2>&1 || true
+  adb shell dumpsys input_method >"$evidence/input_method.txt" 2>&1 || true
+  adb shell dumpsys window >"$evidence/window.txt" 2>&1 || true
+  adb exec-out screencap -p >"$evidence/screen.png" 2>/dev/null || true
   adb shell cat /proc/meminfo >"$evidence/meminfo-device.txt" 2>&1 || true
   free -m >"$evidence/meminfo-host.txt" 2>&1 || true
   echo "device evidence saved: $evidence"
@@ -68,13 +81,15 @@ not_class=$(python3 "$here/kjui_device_tests.py" not-class "$kjui") || exit 2
 echo "left out here (run by another job): $not_class"
 
 rc=0
-(cd "$kjui" && ./gradlew --no-daemon --continue \
+(cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
+  --idle "${KJUI_IDLE_SECONDS:-600}" --evidence "$evidence" -- \
+  ./gradlew --no-daemon --continue \
   :library:connectedDebugAndroidTest :library-dynamic:connectedDebugAndroidTest \
   :conformance-host:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.notClass="$not_class" \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
   ${args[@]+"${args[@]}"}) || rc=$?
-echo "gradle exit: $rc"
+echo "gradle exit: $rc$([ "$rc" = 124 ] && echo ' (stopped by the watch: the cases stopped moving)')"
 
 collect_evidence || echo "warning: evidence collection failed; the verdict is unchanged"
 
