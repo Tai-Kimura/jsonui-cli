@@ -100,6 +100,15 @@ responding" dialog there is saved (`device-evidence/anr-N`), its app
 force-stopped unless it is under test, and recorded with its time in
 `device-evidence/anr-dialogs.txt`. Run 37618369032: Pixel Launcher's ANR
 dialog held the focus for 14 minutes and the IME never showed.
+Before the tests the job also asks whether the IME can show at all
+(`kjui_device_tests.py ime`): it opens a surface whose field asks for the
+IME (Settings search, else the global search) and waits for
+`mInputShown=true`, retrying for `KJUI_IME_BUDGET_SECONDS` (120; green runs
+saw their first show at most 35 s after their first request). Never shown:
+the state is saved (`device-evidence/ime-never-shown`) and the leg fails as
+"the IME never showed before the tests" without running them — red for the
+environment, not as library's keyboard cases. No surface on the image: a
+WARNING that the IME was not checked, and the tests run.
 
 Or: Actions tab → `conformance-mobile` → "Run workflow".
 

@@ -108,6 +108,16 @@ fi
 not_class=$(python3 "$here/kjui_device_tests.py" not-class "$kjui") || exit 2
 echo "left out here (run by another job): $not_class"
 
+# Can the IME show at all? Asked on a known field before the tests, so a
+# device whose IME never shows is red for the environment, by name, and not
+# as library's ten keyboard cases (run 37650134866: every show request
+# failed, focus on the test activity, no onShown in the whole run).
+if ! python3 "$here/kjui_device_tests.py" ime --budget "${KJUI_IME_BUDGET_SECONDS:-120}" --evidence "$evidence"; then
+  collect_evidence || true
+  echo "::error::the IME never showed before the tests (device-evidence/ime-never-shown) — the device tests were not run"
+  exit 1
+fi
+
 rc=0
 (cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
   --idle "${KJUI_IDLE_SECONDS:-600}" --focus "${KJUI_FOCUS_SECONDS:-15}" --evidence "$evidence" -- \

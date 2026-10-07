@@ -142,7 +142,12 @@
   設定なしはダイアログが focus を取り、設定ありは出ないことを両側で測った）。watch は 15 秒ごと（`KJUI_FOCUS_SECONDS`）に
   window の focus を読み、system の「isn't responding」ダイアログなら状態を `device-evidence/anr-N` に残して、その app を
   force-stop（テスト対象の package は閉じずに記録だけ）、時刻と回数を `device-evidence/anr-dialogs.txt` に書く。
-  run 37618369032: Pixel Launcher の ANR ダイアログが focus を 14 分持ち、IME が一度も出なかった
+  run 37618369032: Pixel Launcher の ANR ダイアログが focus を 14 分持ち、IME が一度も出なかった。
+  テストの前に IME が出せるかも確かめる（`kjui_device_tests.py ime`）: 自分から IME を求める画面（Settings の検索、
+  無ければ global search）を開いて `mInputShown=true` を待ち、`KJUI_IME_BUDGET_SECONDS`（120。緑の run は最初の要求から
+  最長 35 秒で出た）の間やり直す。一度も出なければ状態を `device-evidence/ime-never-shown` に残し、テストを走らせずに
+  「the IME never showed before the tests」で落とす（環境の赤。run 37650134866 はこれを library のキーボードの 10 件として出していた）。
+  画面がその image に無ければ WARNING（IME は確かめていない）を出してテストへ進む
 - dispatch の入力: `swiftjsonui_ref`（iOS 2 job）/ `image_probes` / `kotlinjsonui_ref`（Android 3 job）/
   `android_probes`（テストが `getArguments().getString("x") == "1"` と比べる旗をすべて立てる。旗の一覧は
   テストから導出）。2 つの probe は **jsonui-cli 1.9.8 から既定で true**（下ろすときだけ `=false`）。

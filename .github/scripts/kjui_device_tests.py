@@ -376,6 +376,107 @@ def watch(command: list[str], evidence: Path, idle_seconds: float = DEFAULT_IDLE
     return proc.returncode
 
 
+# ------------------------------------------------------------------- ime
+# Whether the device's IME can show at all, asked before the tests: run
+# 37650134866 failed library's 10 keyboard cases with the focus on the test
+# activity, every show request `onFailed at PHASE_CLIENT_REQUEST_IME_SHOW`
+# and no `onShown` in the whole run — the environment, read as ten product
+# failures. Green runs saw their first `onShown` at most 35 s after their
+# first request (37650123422; 1 s on 37650130355), so the budget is 120 s.
+DEFAULT_IME_BUDGET_SECONDS = 120
+#: One request: the surface is opened, then the IME is waited for this long.
+IME_ATTEMPT_SECONDS = 5.0
+#: Surfaces whose field takes the focus and asks for the IME on its own, in
+#: the order tried; the first that opens is used. Measured on an API 35
+#: tablet AVD (2026-10-08): each opened and showed the IME within 1 s.
+IME_SURFACES = (
+    ["shell", "am", "start", "-W", "-a", "android.settings.APP_SEARCH_SETTINGS"],
+    ["shell", "am", "start", "-W", "-a", "android.search.action.GLOBAL_SEARCH"],
+)
+IME_SHOWN = re.compile(r"\bmInputShown=true\b")
+
+
+def ime_shown(adb: str, timeout: float = 30) -> bool:
+    try:
+        out = subprocess.run([adb, "shell", "dumpsys", "input_method"], capture_output=True,
+                             text=True, timeout=timeout).stdout
+    except Exception:
+        return False
+    return bool(IME_SHOWN.search(out))
+
+
+def _adb_quiet(adb: str, *args: str) -> None:
+    try:
+        subprocess.run([adb, *args], capture_output=True, timeout=60)
+    except Exception:
+        pass
+
+
+def _opened(adb: str, surface: list[str]) -> bool:
+    """`am start -W` says `Status: ok` when the activity came up."""
+    try:
+        out = subprocess.run([adb, *surface], capture_output=True, text=True, timeout=60)
+    except Exception:
+        return False
+    return "Status: ok" in out.stdout
+
+
+def ime_ready(evidence: Path, budget_seconds: float = DEFAULT_IME_BUDGET_SECONDS, adb: str = "adb",
+              attempt_seconds: float = IME_ATTEMPT_SECONDS, poll: float = 0.5) -> int:
+    """0 once the IME showed (printing on which request and when), else the
+    evidence under evidence/ime-never-shown and 3."""
+    # Start from no IME on screen: an IME still up from before would read as
+    # this request's (measured on the AVD: a second probe read "shown" in
+    # 0.1 s with the IME disabled).
+    _adb_quiet(adb, "shell", "input", "keyevent", "KEYCODE_HOME")
+    settle_until = time.monotonic() + 5
+    while ime_shown(adb) and time.monotonic() < settle_until:
+        time.sleep(poll)
+    # A surface the image lacks says nothing about the IME: it is not checked,
+    # loudly, rather than failed as "never showed".
+    surface = next((s for s in IME_SURFACES if _opened(adb, s)), None)
+    if surface is None:
+        print("ime: WARNING — no probe surface opened on this image "
+              f"({', '.join(s[-1] for s in IME_SURFACES)}); the IME was NOT checked before the tests",
+              flush=True)
+        return 0
+    started = time.monotonic()
+    n = 0
+    while time.monotonic() - started < budget_seconds:
+        n += 1
+        if n > 1:
+            _adb_quiet(adb, *surface)
+        until = time.monotonic() + attempt_seconds
+        while time.monotonic() < until:
+            if ime_shown(adb):
+                took = time.monotonic() - started
+                print(f"ime: shown on request {n}, {took:.1f} s after the first", flush=True)
+                _adb_quiet(adb, "shell", "input", "keyevent", "KEYCODE_HOME")
+                return 0
+            time.sleep(poll)
+        _adb_quiet(adb, "shell", "input", "keyevent", "KEYCODE_HOME")
+    snapshot(evidence, "ime-never-shown", adb)
+    print(f"ime: the IME never showed before the tests ({n} requests over {int(budget_seconds)} s) — "
+          "the device cannot run the keyboard cases; not a test result", flush=True)
+    return 3
+
+
+def _ime_main(argv: list[str]) -> int:
+    budget, evidence, adb = DEFAULT_IME_BUDGET_SECONDS, Path("device-evidence"), "adb"
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--budget":
+            budget = float(argv[i + 1]); i += 2
+        elif argv[i] == "--evidence":
+            evidence = Path(argv[i + 1]); i += 2
+        elif argv[i] == "--adb":
+            adb = argv[i + 1]; i += 2
+        else:
+            print(f"ime: unknown option {argv[i]}", file=sys.stderr)
+            return 2
+    return ime_ready(evidence, budget, adb)
+
+
 def _watch_main(argv: list[str]) -> int:
     idle, evidence, adb, focus = DEFAULT_IDLE_SECONDS, Path("device-evidence"), "adb", DEFAULT_FOCUS_SECONDS
     i = 0
@@ -402,6 +503,8 @@ def _watch_main(argv: list[str]) -> int:
 def main(argv: list[str]) -> int:
     if argv[:1] == ["watch"]:
         return _watch_main(argv[1:])
+    if argv[:1] == ["ime"]:
+        return _ime_main(argv[1:])
     if len(argv) != 2 or argv[0] not in ("flags", "judge", "not-class"):
         print("usage: kjui_device_tests.py flags|judge|not-class <KotlinJsonUI checkout>", file=sys.stderr)
         return 2
