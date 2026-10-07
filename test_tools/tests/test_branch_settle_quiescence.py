@@ -1018,18 +1018,41 @@ def _clock_project(root: Path, runtime: str) -> Path:
     return root
 
 
+def _same_cases(what: str, got: set[str], want: set[str],
+                cases: dict[str, tuple[str, str]] | None = None) -> None:
+    """Fail with every name that differs and, when known, its outcome and
+    message, written out in full. pytest's own diff of two lists stops at
+    the first difference and ends "Use -v to get more diff": a local run on
+    2026-10-08 failed one of these controls and the case's name was lost
+    with it (ticket test-branch-settle-control-real-clock-threshold-sits-on-
+    the-mutants-wait). The message is ours, so it does not depend on -v."""
+    if got == want:
+        return
+    lines = [f"{what}: {len(got)} cases, {len(want)} expected"]
+    for label, names in (("expected, not got", sorted(want - got)), ("got, not expected", sorted(got - want))):
+        lines.append(f"  {label}: {len(names)}")
+        for name in names:
+            state, message = (cases or {}).get(name, ("-", ""))
+            lines.append(f"    {name!r}: {state} {message!r}")
+    raise AssertionError("\n".join(lines))
+
+
 def _clock_cases(tmp_path: Path, runtime: str) -> dict[str, tuple[str, str]]:
     """Each case's (outcome, failure message) — every case, or the arm fails:
     a case that did not run is not one that passed."""
     run, tests = _vitest(_clock_project(tmp_path / "p", runtime))
     got = {name: (state, message) for name, state, message in tests}
-    assert sorted(got) == sorted(_CLOCK_CASES), (run.stdout + run.stderr)[-4000:]
+    try:
+        _same_cases("cases that ran", set(got), set(_CLOCK_CASES), got)
+    except AssertionError as error:
+        raise AssertionError(f"{error}\n{(run.stdout + run.stderr)[-4000:]}") from None
     return got
 
 
 def test_web_settle_runs_its_windows_under_a_fake_clock_and_takes_a_number_again(tmp_path):
     got = _clock_cases(tmp_path, bt.RUNTIME_TS)
-    assert {name: state for name, (state, _) in got.items()} == dict.fromkeys(_CLOCK_CASES, "passed"), got
+    _same_cases("cases that passed", {name for name, (state, _) in got.items() if state == "passed"},
+                set(_CLOCK_CASES), got)
 
 
 _STOOD = "OUTCOME threw: settle: the clock it measures with (Date.now, taken when this runtime loaded) read the same time across "
@@ -1091,8 +1114,11 @@ _SLOW = "OUTCOME returned in "
         "no-deliveries", "date-clock", "guard", "early"])
 def test_web_control_each_part_taken_out_turns_its_own_cases_red(tmp_path, parts, red):
     got = _clock_cases(tmp_path, _without(*parts))
-    assert sorted(name for name, (state, _) in got.items() if state != "passed") == sorted(red), got
-    assert {name: got[name][1][:len(says)] for name, says in red.items()} == red, got
+    _same_cases("cases that went red", {name for name, (state, _) in got.items() if state != "passed"},
+                set(red), got)
+    wrong = {name: (says, got[name][1]) for name, says in red.items() if got[name][1][:len(says)] != says}
+    assert not wrong, "red for another reason:\n" + "\n".join(
+        f"  {name!r}: expected {says!r}…, got {message!r}" for name, (says, message) in sorted(wrong.items()))
 
 
 _TS_TURNS = '''import { installFetchMock, settle, settleQuiet } from "./runtime.ts";
