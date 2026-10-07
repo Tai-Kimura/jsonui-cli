@@ -63,6 +63,11 @@ collect_evidence() {
   adb logcat -d -v threadtime >"$evidence/logcat.txt" 2>&1 \
     || echo "warning: adb logcat -d failed (see $evidence/logcat.txt)"
   adb logcat -d -b crash -v threadtime >"$evidence/logcat-crash.txt" 2>&1 || true
+  # am_anr lands in the events buffer, not main: with hide_error_dialogs an
+  # ANR shows no dialog and the run can stay green, so the count is how a run
+  # says one happened.
+  adb logcat -d -b events -v threadtime >"$evidence/logcat-events.txt" 2>&1 || true
+  echo "ANRs on the device (am_anr): $(grep -c ' am_anr ' "$evidence/logcat-events.txt" 2>/dev/null || true)"
   local pkg
   for pkg in "${test_packages[@]}"; do
     adb shell dumpsys activity exit-info "$pkg" >"$evidence/exit-info-$pkg.txt" 2>&1 \
