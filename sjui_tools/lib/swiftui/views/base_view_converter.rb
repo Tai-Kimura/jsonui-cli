@@ -2,6 +2,7 @@
 
 require_relative 'template_helper'
 require_relative '../../core/type_synonyms'
+require_relative '../../core/image_accessibility'
 require_relative '../binding/binding_expression'
 require_relative 'alignment_helper'
 require_relative 'frame_helper'
@@ -331,7 +332,8 @@ module SjuiTools
 
         # Component types that are guaranteed to surface at least one
         # accessibility element of their own when visible (text, controls,
-        # images). Used to decide whether a container can ever collapse to a
+        # images — an image only with a written alt, image_surely_an_element?).
+        # Used to decide whether a container can ever collapse to a
         # single accessibility child (the "merge hazard" — see
         # apply_accessibility_identifier). Types NOT listed here (Collection,
         # Table, Web, TabView, Include, Embed, DynamicComponent, bare
@@ -681,7 +683,8 @@ module SjuiTools
         #   - statically always visible (no visibility attribute, or the
         #     literal "visible"; bindings / invisible / gone may vanish)
         #   - a guaranteed element type (CERTAIN_ACCESSIBILITY_ELEMENT_TYPES)
-        #     contributes 1; an id-bearing container contributes 1 (it becomes
+        #     contributes 1, an image only with a written alt
+        #     (image_surely_an_element?); an id-bearing container contributes 1 (it becomes
         #     an explicit accessibility container itself under this same
         #     rule); an id-less plain container contributes its own
         #     guaranteed children (they are promoted to the grandparent's
@@ -727,7 +730,29 @@ module SjuiTools
             return [guaranteed_accessible_child_count(child), 2].min
           end
 
+          # An image is an element only while its alt keeps it one
+          # (image_surely_an_element?).
+          return image_surely_an_element?(child) ? 1 : 0 if JsonUIShared::ImageAccessibility.image?(child)
+
           CERTAIN_ACCESSIBILITY_ELEMENT_TYPES.include?(type) ? 1 : 0
+        end
+
+        # An image with no alt is decorative and `.accessibilityHidden(true)`
+        # unless it operates a control, which depends on the tappables around
+        # it; one with alt "", or a bound alt that resolves to "", is hidden
+        # too (shared/core/image_accessibility.rb). Counted as a sure element,
+        # it made a container of a hidden image and one tappable View read as
+        # two children, so the container took no anchor and SwiftUI merged it
+        # into the View: the View's id read the container's box, and from
+        # jsonui-cli 1.9.18 a tap by that id landed on the box's centre, on
+        # the container's own onClick (ticket sjui-a-tappable-elements-
+        # anchor-inside-its-tap-target-moves-the-tap-point-off-it). So only
+        # an alt written as a non-empty string counts; anything else errs
+        # toward the anchor. Dynamic: DynamicModifierHelper
+        # .imageSurelyAnElement, the same rule.
+        def image_surely_an_element?(child)
+          alt = JsonUIShared::ImageAccessibility.alt(child)
+          alt.is_a?(String) && !alt.empty? && !alt.include?('@{')
         end
 
         # 共通のモディファイア適用メソッド

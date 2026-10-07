@@ -221,6 +221,54 @@ RSpec.describe 'container accessibilityIdentifier emission' do
 
       expect(code).to include(ANCHOR_OVERLAY)
     end
+
+    # An image is an element only while its alt keeps it one: with no alt it
+    # is decorative and hidden (unless the tappables around it make it a
+    # control), with alt "" hidden, with a bound alt hidden when that is "".
+    # Counted as sure, a hidden image and one tappable View read as two
+    # children: the container took no anchor and SwiftUI merged it into the
+    # View, whose id then read the container's box (ticket sjui-a-tappable-
+    # elements-anchor-inside-its-tap-target-moves-the-tap-point-off-it).
+    def image_and_label_root(image)
+      { 'type' => 'View', 'id' => 'root',
+        'child' => [image, { 'type' => 'Label', 'text' => 'One' }] }
+    end
+
+    { 'no alt' => {},
+      'alt ""' => { 'alt' => '' },
+      'a bound alt' => { 'alt' => '@{photoAlt}' },
+      'a bound accessibilityLabel' => { 'accessibilityLabel' => '@{photoAlt}' } }.each do |name, extra|
+      %w[Image NetworkImage CircleImage].each do |type|
+        it "does not count #{type} with #{name}" do
+          code = convert(image_and_label_root({ 'type' => type, 'src' => 'photo' }.merge(extra)))
+
+          expect(code).to include(ANCHOR_OVERLAY)
+        end
+      end
+    end
+
+    %w[alt accessibilityLabel contentDescription].each do |key|
+      it "counts an image whose #{key} is a non-empty string" do
+        code = convert(image_and_label_root({ 'type' => 'NetworkImage', 'src' => 'photo', key => 'Photo' }))
+
+        expect(code).not_to include(ANCHOR_OVERLAY)
+      end
+    end
+
+    it "anchors a card of a decorative image and one tappable View (the ticket's shape)" do
+      code = convert({ 'type' => 'View', 'id' => 'card', 'width' => 'matchParent', 'height' => 200,
+                       'onClick' => '@{onCard}',
+                       'child' => [
+                         { 'type' => 'NetworkImage', 'id' => 'photo', 'width' => 'matchParent',
+                           'height' => 'matchParent', 'src' => '@{url}', 'contentMode' => 'AspectFill' },
+                         { 'type' => 'View', 'id' => 'remove', 'width' => 30, 'height' => 30,
+                           'alignTop' => true, 'alignRight' => true, 'onClick' => '@{onRemove}',
+                           'child' => [{ 'type' => 'Label', 'text' => 'x' }] }
+                       ] })
+
+      card = code[code.rindex('.accessibilityIdentifier("card")') - 400, 400]
+      expect(card).to include(ANCHOR_OVERLAY)
+    end
   end
 
   describe 'depth budget regression (device stack overflow)' do
