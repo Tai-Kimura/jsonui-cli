@@ -1711,6 +1711,89 @@ class SpecValidator:
                             level="warning",
                         ))
 
+        self._validate_view_model_member_clashes(vars_list, methods, result)
+
+    @staticmethod
+    def _kotlin_accessor_names(var_name: str) -> tuple[str, str]:
+        """(getter, setter) the JVM gets for a Kotlin property named *var_name*:
+        ``isOpen`` / ``is1`` keep the name as the getter and drop ``is`` for
+        the setter, whatever the type; every other name takes ``get`` /
+        ``set`` plus the name with its first character upper-cased
+        (``url`` → ``getUrl``, ``island`` → ``getIsland``). Measured with
+        kotlinc 2.4.20."""
+        if len(var_name) > 2 and var_name.startswith("is") and not var_name[2].islower():
+            return var_name, "set" + var_name[2:]
+        cap = var_name[:1].upper() + var_name[1:]
+        return "get" + cap, "set" + cap
+
+    def _validate_view_model_member_clashes(self, vars_list, methods, result: SpecValidationResult):
+        """A viewModel method the generated protocol cannot hold next to a var.
+
+        Android: a method named like the var's JVM getter with no parameters,
+        or its setter with one (only a plain ``var`` — observable false, not
+        readOnly — has a setter), is a "Platform declaration clash". iOS: a
+        method with the var's own name and no parameters is an "invalid
+        redeclaration". Names and parameter counts only, not types; async
+        methods collide with neither; both members must reach the platform.
+        jui build refuses the same set (jui_cli.core.spec_validator
+        .viewmodel_member_clashes); the cases are
+        shared/core/viewmodel_member_clash_vectors.json. Ticket
+        jui-protocol-var-and-setter-method-clash-on-jvm.
+        """
+        all_platforms = {"ios", "android", "web"}
+        parsed_methods = []
+        for i, method in enumerate(methods):
+            if isinstance(method, str):
+                parsed_methods.append((i, method, [], False, all_platforms))
+            elif isinstance(method, dict) and method.get("name"):
+                params = method.get("params")
+                pf = method.get("platforms")
+                parsed_methods.append((
+                    i, method["name"],
+                    params if isinstance(params, list) else [],
+                    bool(method.get("isAsync", False)),
+                    set(pf) if isinstance(pf, list) and pf else all_platforms,
+                ))
+        for var in vars_list:
+            if not isinstance(var, dict) or not isinstance(var.get("name"), str):
+                continue
+            name = var["name"]
+            pf = var.get("platforms")
+            var_targets = set(pf) if isinstance(pf, list) else all_platforms
+            getter, setter = self._kotlin_accessor_names(name)
+            has_setter = (not var.get("readOnly", False)
+                          and not var.get("observable", True))
+            for i, m_name, params, is_async, m_targets in parsed_methods:
+                if is_async:
+                    continue
+                targets = var_targets & m_targets
+                arity = len(params)
+                path = f"dataFlow.viewModel.methods[{i}]"
+                if "android" in targets and (
+                    (m_name == getter and arity == 0)
+                    or (has_setter and m_name == setter and arity == 1)
+                ):
+                    result.errors.append(SpecValidationMessage(
+                        path=path,
+                        message=(
+                            f"Method '{m_name}' has the JVM accessor name of var "
+                            f"'{name}' — on Android the property declares "
+                            f"{m_name}() itself, so the generated Kotlin protocol "
+                            "does not compile (Platform declaration clash). Rename "
+                            "the method (or scope one of them with platforms)."
+                        ),
+                    ))
+                if "ios" in targets and m_name == name and arity == 0:
+                    result.errors.append(SpecValidationMessage(
+                        path=path,
+                        message=(
+                            f"Method '{m_name}' takes no arguments and has the name "
+                            f"of var '{name}' — the generated Swift protocol does "
+                            f"not compile (invalid redeclaration of '{m_name}()'). "
+                            "Rename one of them (or scope one with platforms)."
+                        ),
+                    ))
+
     def _validate_mermaid_diagram(self, diagram: str, result: SpecValidationResult):
         """Validate Mermaid diagram syntax."""
         # Check for unquoted paths with slashes in brackets
