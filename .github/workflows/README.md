@@ -68,13 +68,24 @@ gh run watch                                     # follow it
 
 # Before a SwiftJsonUI / KotlinJsonUI tag: every mobile job against the
 # release branches, with the opt-in probes raised.
-gh workflow run conformance-mobile.yml -f swiftjsonui_ref=<sjui-release-branch> -f image_probes=true \
+gh workflow run conformance-mobile.yml -f swiftjsonui_ref=<sjui-release-branch> -f ios_probes=true \
     -f kotlinjsonui_ref=<kjui-release-branch> -f android_probes=true
 ```
 
-`image_probes` and `android_probes` default to `true` (from jsonui-cli 1.9.8):
-a dispatch that forgets them still raises the probes; lower one with
+`ios_probes`, `image_probes` and `android_probes` default to `true`
+(`ios_probes` from jsonui-cli 1.9.23, the other two from 1.9.8): a dispatch
+that forgets them still raises the probes; lower one with
 `-f android_probes=false`. The schedule has no inputs and runs without them.
+
+`ios_probes` raises every switch a ConformanceHost UI test compares to `"1"`
+(`environment["X"] == "1"`, outside comments; `CONFORMANCE_*` excluded) as
+`TEST_RUNNER_X=1` in both iOS jobs — derived from the tests by
+`.github/scripts/ios_probe_gates.py`, as `android_probes` is, so a new probe
+needs no workflow edit. The image probes' two switches are among them. With it
+raised, the step "Every probe whose switch was raised ran" turns the job red
+for a gated class with a `skipped` test or none in the record (before 1.9.23
+23 classes / 40 tests with assertions never ran in a dispatch; ticket
+conformance-mobile-ios-probe-guards-never-run-in-dispatch).
 
 `swiftjsonui_ref` (default `master`) is the SwiftJsonUI ref both iOS jobs
 check out, and `kotlinjsonui_ref` (default `main`) the KotlinJsonUI ref the

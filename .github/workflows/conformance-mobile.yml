@@ -39,7 +39,18 @@ on:
       # weekly run is unchanged (as `inputs.swiftjsonui_ref || 'master'`
       # already relies on).
       image_probes:
-        description: "Also run the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) in both iOS jobs (default true; the schedule runs without them)"
+        description: "Also run the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) in both iOS jobs (default true; the schedule runs without them). ios_probes raises them too"
+        required: false
+        default: true
+        type: boolean
+      # Every ConformanceHost probe switch (`["X"] == "1"` in its UITests),
+      # read from the sources by .github/scripts/ios_probe_gates.py, as
+      # android_probes reads KotlinJsonUI's. Until 1.9.23 nothing raised them
+      # but the two image ones, and 23 classes / 40 tests with assertions
+      # never ran in a dispatch (ticket
+      # conformance-mobile-ios-probe-guards-never-run-in-dispatch).
+      ios_probes:
+        description: "Also run every opt-in probe in both iOS jobs (each environment switch a ConformanceHost UI test compares to \"1\"; default true; the schedule runs without them)"
         required: false
         default: true
         type: boolean
@@ -306,7 +317,18 @@ jobs:
           # A fixed staging of the caller's (kept after a green run, for the
           # per-test record below); /tmp, as run_conformance.sh's own.
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios.ci
-        run: SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
+          IOS_PROBES: ${{ inputs.ios_probes && 'true' || 'false' }}
+        run: |
+          # The probe switches are environment variables of the xcodebuild
+          # process (run_conformance.sh's), derived from the UITests, not listed.
+          if [ "$IOS_PROBES" = true ]; then
+            switches=$(python3 .github/scripts/ios_probe_gates.py exports SwiftJsonUI/ConformanceHost/UITests)
+            for s in $switches; do export "$s"; done
+            echo "opt-in probes raised: $(echo "$switches" | grep -c .) — $(echo $switches)"
+          else
+            echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
+          fi
+          SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
@@ -325,6 +347,13 @@ jobs:
       - name: Record every XCTest result
         if: always()
         run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt
+      # 🔻 A RAISED SWITCH THAT DID NOT RUN IS RED. Raising the switches is
+      # half of it: a probe that skips anyway (a renamed switch, a new gate
+      # of another form) would leave the run green with the probe unjudged,
+      # the shape ios_probes was added to close.
+      - name: Every probe whose switch was raised ran
+        if: ${{ !cancelled() && inputs.ios_probes }}
+        run: python3 .github/scripts/ios_probe_gates.py check /tmp/jsonui-conformance-ios.ci/xctests.txt SwiftJsonUI/ConformanceHost/UITests
       - name: Upload the per-test record
         if: always()
         uses: actions/upload-artifact@v4
@@ -415,8 +444,17 @@ jobs:
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios-codegen.ci
           TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ inputs.image_probes && '1' || '0' }}
           TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ inputs.image_probes && '1' || '0' }}
+          IOS_PROBES: ${{ inputs.ios_probes && 'true' || 'false' }}
         run: |
           echo "SwiftJsonUI ref=${{ inputs.swiftjsonui_ref || 'master' }} HEAD=$(git -C SwiftJsonUI rev-parse HEAD)"
+          # As the ios job: every probe switch the UITests read, derived.
+          if [ "$IOS_PROBES" = true ]; then
+            switches=$(python3 .github/scripts/ios_probe_gates.py exports SwiftJsonUI/ConformanceHost/UITests)
+            for s in $switches; do export "$s"; done
+            echo "opt-in probes raised: $(echo "$switches" | grep -c .) — $(echo $switches)"
+          else
+            echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
+          fi
           SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Upload results
         if: always()
@@ -436,6 +474,13 @@ jobs:
       - name: Record every XCTest result
         if: always()
         run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
+      # 🔻 A RAISED SWITCH THAT DID NOT RUN IS RED. Raising the switches is
+      # half of it: a probe that skips anyway (a renamed switch, a new gate
+      # of another form) would leave the run green with the probe unjudged,
+      # the shape ios_probes was added to close.
+      - name: Every probe whose switch was raised ran
+        if: ${{ !cancelled() && inputs.ios_probes }}
+        run: python3 .github/scripts/ios_probe_gates.py check /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt SwiftJsonUI/ConformanceHost/UITests
       - name: Upload the per-test record
         if: always()
         uses: actions/upload-artifact@v4

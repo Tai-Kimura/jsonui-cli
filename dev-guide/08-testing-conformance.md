@@ -148,9 +148,13 @@
   最長 35 秒で出た）の間やり直す。一度も出なければ状態を `device-evidence/ime-never-shown` に残し、テストを走らせずに
   「the IME never showed before the tests」で落とす（環境の赤。run 37650134866 はこれを library のキーボードの 10 件として出していた）。
   画面がその image に無ければ WARNING（IME は確かめていない）を出してテストへ進む
-- dispatch の入力: `swiftjsonui_ref`（iOS 2 job）/ `image_probes` / `kotlinjsonui_ref`（Android 3 job）/
+- dispatch の入力: `swiftjsonui_ref`（iOS 2 job）/ `ios_probes` / `image_probes` / `kotlinjsonui_ref`（Android 3 job）/
   `android_probes`（テストが `getArguments().getString("x") == "1"` と比べる旗をすべて立てる。旗の一覧は
-  テストから導出）。2 つの probe は **jsonui-cli 1.9.8 から既定で true**（下ろすときだけ `=false`）。
+  テストから導出）。`ios_probes`（jsonui-cli 1.9.23 から）は ConformanceHost の UI テストが `["X"] == "1"` と比べる
+  env の旗をすべて `TEST_RUNNER_X=1` で立てる（コメントの中と `CONFORMANCE_*` は除く。一覧は
+  `.github/scripts/ios_probe_gates.py` がテストから導出。画像の 2 つも含む）。立てたのに skipped のクラス、記録に無いクラスは
+  step「Every probe whose switch was raised ran」で赤（1.9.22 まで 23 クラス・40 本が dispatch で一度も走っていなかった。
+  票 conformance-mobile-ios-probe-guards-never-run-in-dispatch）。3 つの probe は **既定で true**（下ろすときだけ `=false`）。
   **SwiftJsonUI / KotlinJsonUI のタグの前に release 枝で撃つ**。schedule は入力無し＝既定ブランチ、probe なし。
   `android_library_only=true` は android-library-tests だけを走らせる（ほかの job と report は止まる）。
   KotlinJsonUI の device test だけを繰り返すとき用（conformance の job は 1 本も走らない）
