@@ -241,6 +241,21 @@ module SjuiTools
         # A written-out `selectedValue` as a Swift string literal, or nil when
         # it is absent or bound (a binding is the selection itself, not a
         # seed for one).
+        # A Radio with items is ONE element that contains its options
+        # (`.accessibilityElement(children: .contain)`, above), so the stopped
+        # control's treatment put on it lands on the group and not on the
+        # options: inside a stop each option still responded to VoiceOver
+        # (measured, SwiftJsonUI ConformanceHost -a11yActivationProbe, iOS
+        # 26.5, since the group became one element). With `items: true` the
+        # group is read as the same control disabled, options included
+        # (JsonUIStoppedControl `items`, as a Segment). The items test is the
+        # one that forms the group. Ticket
+        # sjui-dynamic-radio-item-operable-inside-a-stop.
+        def stopped_items?
+          raw_items = @component['items']
+          (raw_items.is_a?(String) && is_binding?(raw_items)) || (raw_items.is_a?(Array) && raw_items.any?)
+        end
+
         def static_selection
           value = @component['selectedValue']
           return nil if value.nil? || is_binding?(value)

@@ -61,8 +61,12 @@ RSpec.describe 'sjui a control a stop holds' do
   # A Segment's segments are UIKit's elements, which the modifier's
   # treatment of the control does not reach: it is told so (`items: true`,
   # SwiftJsonUI reads the control as disabled instead — measured,
-  # ConformanceHost -a11yActivationProbe -wrappers). No other control.
-  items = ->(type) { type == 'Segment' ? ', items: true' : '' }
+  # ConformanceHost -a11yActivationProbe -wrappers). A Radio with items too:
+  # the group is ONE element that contains its options, and the treatment put
+  # on the group did not reach the options (each still responded inside a
+  # stop, measured; ticket sjui-dynamic-radio-item-operable-inside-a-stop).
+  # No other control.
+  items = ->(type) { %w[Segment Radio].include?(type) ? ', items: true' : '' }
 
   controls.each_key do |type|
     it "#{type}: inside false, with false of its own, inside a binding, reached by a stop handed down — and nothing beside no stop" do
@@ -99,6 +103,22 @@ RSpec.describe 'sjui a control a stop holds' do
     expect(JsonUIShared::TapAccessibility.control?({ 'type' => 'Table' })).to be(false)
   ensure
     JsonUIShared::TypeSynonyms.app_types = []
+  end
+
+  # The Radio's items flag follows the group: items written or bound form the
+  # group (`.accessibilityElement(children: .contain)`) and take `items: true`;
+  # a Radio with no items is one option, no group, and does not.
+  it 'a Radio takes items: true exactly when it is a group' do
+    bound = { 'type' => 'Radio', 'id' => 'r', 'items' => '@{options}', 'selectedValue' => '@{sel}' }
+    expect(convert.call(stopping.call(false, bound))).to include('.jsonuiStoppedControl(true, items: true)')
+    single = { 'type' => 'Radio', 'id' => 'r', 'text' => 'One', 'group' => 'g' }
+    single_code = convert.call(stopping.call(false, single))
+    expect(single_code).to include('.jsonuiStoppedControl(true)')
+    expect(single_code).not_to include('items: true')
+    # The group itself, outside any stop (whose View carries `.contain` too).
+    expect(convert.call(single)).not_to include('children: .contain')
+    expect(convert.call(node.call('Radio'))).to include('children: .contain')
+    expect(convert.call(bound)).to include('children: .contain')
   end
 
   it 'not on what is not a control: a Label, a View, a container' do
