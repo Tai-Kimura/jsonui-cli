@@ -875,7 +875,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
       expect(lines[at + 4]).to eq("if (scrollShift != 0) { #{state}.scrollBy(scrollShift.toFloat()) }")
       expect(code).not_to include('average()')
       expect(code.scan(/scrollToItem\(/).size).to eq(1)
-      expect(imports).to include(:scroll_by)
+      expect(imports).to include(:anchored_scroll_by)
     end
   end
 end

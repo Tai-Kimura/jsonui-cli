@@ -622,7 +622,7 @@ module KjuiTools
             return indent(scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollToItem' : 'scrollToItem'}(index)" }), depth) + "\n"
           end
 
-          required_imports&.add(:scroll_by)
+          required_imports&.add(:anchored_scroll_by)
           offset = axis ? "item.offset.#{axis}" : 'item.offset'
           size = { x: 'item.size.width', y: 'item.size.height' }.fetch(axis, 'item.size')
           left = "(scrollViewport - #{size})#{anchor == 'center' ? ' / 2' : ''}"

@@ -234,8 +234,12 @@ module KjuiTools
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",
             # A Collection's anchored scrollTo (collection_component
             # anchored_scroll_code): the difference to the anchor, scrolled.
-            scroll_by: ["import androidx.compose.foundation.gestures.scrollBy",
-                        "import androidx.compose.foundation.gestures.animateScrollBy"],
+            # Its own key: it was a second :scroll_by (jsonui-cli 1.9.23),
+            # which overwrote the ScrollView anchor's and gave every
+            # ScrollView with defaultScrollAnchor an unused animateScrollBy
+            # import (kjui-import-manager-duplicate-scroll-by-key).
+            anchored_scroll_by: ["import androidx.compose.foundation.gestures.scrollBy",
+                                 "import androidx.compose.foundation.gestures.animateScrollBy"],
             disposable_effect: "import androidx.compose.runtime.DisposableEffect",
             alignment: "import androidx.compose.ui.Alignment",
             bias_alignment: "import androidx.compose.ui.BiasAlignment",
