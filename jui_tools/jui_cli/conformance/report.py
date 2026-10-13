@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import image_memo
 from . import baseline as baseline_mod
 from . import control_diff as control_diff_mod
 from . import cross_effect as cross_effect_mod
@@ -822,8 +823,7 @@ def generate_report(
 
     # Same-platform screenshot baseline comparison (plan 12 §3). The names
     # come from the `screenshot` fields the platform runner recorded.
-    visual: dict[str, baseline_mod.VisualComparison] = {}
-    for p in platforms:
+    def compare_visual(p):
         screenshot_names = [
             Path(entry["screenshot"]).name
             for entry in p.results.values()
@@ -831,13 +831,18 @@ def generate_report(
         ]
         # The OS comes from the run's own `runner` block, so the comparison
         # and the bake agree without either restating the other.
-        visual[p.platform] = baseline_mod.compare_platform(
+        return baseline_mod.compare_platform(
             conformance_dir,
             p.platform,
             screenshot_names,
             env=env,
             os_key=os_key_from_runner(p.runner),
         )
+
+    # The faces in parallel, kept in the platforms' order (image_memo.per_face).
+    visual: dict[str, baseline_mod.VisualComparison] = dict(
+        zip([p.platform for p in platforms], image_memo.per_face(compare_visual, platforms))
+    )
 
     # Fixture-vs-control comparison: does the attribute change anything on
     # this platform at all? Independent of baselines — both images come from
@@ -853,11 +858,13 @@ def generate_report(
     # `effect_verdicts` below, so dropping the key here re-introduced the
     # clock into every contract judgement — 13 of the 18 violations reported
     # on round 4.
-    diffs: dict[str, control_diff_mod.DiffResult] = {}
-    for p in platforms:
-        diffs[p.platform] = control_diff_mod.compare(
-            conformance_dir, p.platform, manifest, p.results, env=env
-        )
+    diffs: dict[str, control_diff_mod.DiffResult] = dict(zip(
+        [p.platform for p in platforms],
+        image_memo.per_face(
+            lambda p: control_diff_mod.compare(conformance_dir, p.platform, manifest, p.results, env=env),
+            platforms,
+        ),
+    ))
 
     if definitions_path is None:
         definitions_path = (

@@ -311,11 +311,18 @@ def evaluate(
         # lane that asks for parity must actually have run the codegen host.
         from . import parity as parity_mod
 
+        from . import image_memo
+
         ledger = parity_mod.load_ledger(parity_mod.ledger_path(conformance_dir))
+        # web's host already renders through codegen. The faces are measured
+        # in parallel and judged in this order (image_memo.per_face).
+        parity_faces = [p for p in dict.fromkeys(platforms) if p in parity_mod.PARITY_PLATFORMS]
+        measured = dict(zip(parity_faces, image_memo.per_face(
+            lambda p: parity_mod.measure(conformance_dir, p, env=env), parity_faces)))
         for p in list(dict.fromkeys(platforms)):
             if p not in parity_mod.PARITY_PLATFORMS:
                 continue  # web's host already renders through codegen
-            result = parity_mod.measure(conformance_dir, p, env=env)
+            result = measured[p]
             verdict = parity_mod.check(result, ledger)
             if verdict.error:
                 outcome.problems.append(f"{p}: parity not measured — {verdict.error}")

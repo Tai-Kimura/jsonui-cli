@@ -224,21 +224,47 @@ def vdhash_file(path: Path, crop: tuple[int, int] = (0, 0)) -> str:
 
 
 def _dhash_of(path: Path, crop: tuple[int, int], transpose: bool) -> str:
-    Image = _load_pillow()
-    with Image.open(path) as img:
-        top, bottom = crop
-        if top or bottom:
-            width, height = img.size
-            if height > top + bottom:
-                img = img.crop((0, top, width, height - bottom))
-        if transpose:
-            img = img.transpose(Image.Transpose.TRANSPOSE)
-        gray = img.convert("L").resize(
-            (HASH_SIZE + 1, HASH_SIZE), Image.Resampling.LANCZOS
-        )
-        # tobytes() on mode-L images is the raw 8-bit pixel row-major buffer
-        # (stable across Pillow versions, unlike the deprecated getdata()).
-        pixels = gray.tobytes()
+    return _measures(path, crop)["vdhash" if transpose else "dhash"]
+
+
+def _measures(path: Path, crop: tuple[int, int]) -> dict:
+    """dHash, vdHash and ink of one file under one crop, from ONE decode, kept
+    for the file's content (image_memo): parity asks dHash and ink of each
+    screenshot, the baseline dHash and vdHash, and each used to decode it
+    again."""
+    from . import image_memo  # noqa: PLC0415
+
+    digest, data = image_memo.content_key(path)
+
+    def compute() -> dict:
+        Image = _load_pillow()
+        with image_memo.open_bytes(Image, data) as opened:
+            img = opened
+            top, bottom = crop
+            if top or bottom:
+                width, height = img.size
+                if height > top + bottom:
+                    img = img.crop((0, top, width, height - bottom))
+            gray = img.convert("L")
+            out = {
+                "dhash": _dhash_bits(img, Image, transpose=False),
+                "vdhash": _dhash_bits(img, Image, transpose=True),
+                "ink": _ink_of(gray),
+            }
+        return out
+
+    return image_memo.memo("measures", (digest, tuple(crop)), compute)
+
+
+def _dhash_bits(img, Image, transpose: bool) -> str:
+    if transpose:
+        img = img.transpose(Image.Transpose.TRANSPOSE)
+    gray = img.convert("L").resize(
+        (HASH_SIZE + 1, HASH_SIZE), Image.Resampling.LANCZOS
+    )
+    # tobytes() on mode-L images is the raw 8-bit pixel row-major buffer
+    # (stable across Pillow versions, unlike the deprecated getdata()).
+    pixels = gray.tobytes()
 
     bits = 0
     for row in range(HASH_SIZE):
@@ -246,6 +272,11 @@ def _dhash_of(path: Path, crop: tuple[int, int], transpose: bool) -> str:
         for col in range(HASH_SIZE):
             bits = (bits << 1) | (1 if pixels[offset + col] > pixels[offset + col + 1] else 0)
     return f"{bits:0{HASH_SIZE * HASH_SIZE // 4}x}"
+
+
+def _ink_of(gray) -> int:
+    histogram = gray.histogram()
+    return sum(histogram) - max(histogram)
 
 
 def hamming(hex_a: str, hex_b: str) -> int:
@@ -365,15 +396,7 @@ def ink_file(path: Path, crop: tuple[int, int] = (0, 0)) -> int:
     changes colour without changing brightness has no ink change — that case
     belongs to dHash and the control diff, not here.
     """
-    Image = _load_pillow()
-    with Image.open(path) as img:
-        top, bottom = crop
-        if top or bottom:
-            width, height = img.size
-            if height > top + bottom:
-                img = img.crop((0, top, width, height - bottom))
-        histogram = img.convert("L").histogram()
-    return sum(histogram) - max(histogram)
+    return _measures(path, crop)["ink"]
 
 
 # --------------------------------------------------------------------------- #

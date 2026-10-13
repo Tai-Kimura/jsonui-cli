@@ -332,10 +332,25 @@ def diff_pixels(
     ``ignore_bottom`` crops that many pixels off BOTH images before comparing
     — see ``PLATFORM_IGNORE_BOTTOM`` for why (ios home-indicator fade).
     """
+    from . import image_memo  # noqa: PLC0415
+
+    # Kept for the two files' CONTENT and the crop (image_memo): the report,
+    # inert-complete and value discrimination each ask the same pairs.
+    digest_a, data_a = image_memo.content_key(path_a)
+    digest_b, data_b = image_memo.content_key(path_b)
+    return image_memo.memo(
+        "diff_pixels", (digest_a, digest_b, ignore_bottom, ignore_top),
+        lambda: _diff_pixels_of(data_a, data_b, ignore_bottom, ignore_top),
+    )
+
+
+def _diff_pixels_of(data_a: bytes, data_b: bytes, ignore_bottom: int, ignore_top: int) -> int:
+    from . import image_memo  # noqa: PLC0415
+
     Image = _load_pillow()
     from PIL import ImageChops  # noqa: PLC0415 - paired with _load_pillow
 
-    with Image.open(path_a) as ia, Image.open(path_b) as ib:
+    with image_memo.open_bytes(Image, data_a) as ia, image_memo.open_bytes(Image, data_b) as ib:
         a, b = ia.convert("RGB"), ib.convert("RGB")
         if a.size != b.size:
             return a.size[0] * a.size[1]
