@@ -43,6 +43,10 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
 
   PAGING_PAGES_STUBS = <<~KOTLIN
     import kotlinx.coroutines.flow.drop
+    import kotlinx.coroutines.launch
+    // The scope a scrollTo landing is launched in; it runs at once here, as
+    // the effects do.
+    fun rememberCoroutineScope(): kotlinx.coroutines.CoroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
     annotation class Composable
     interface Modifier { companion object : Modifier }
     class Tagged(val tag: String) : Modifier

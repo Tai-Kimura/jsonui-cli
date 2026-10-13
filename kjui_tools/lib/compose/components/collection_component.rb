@@ -475,7 +475,10 @@ module KjuiTools
 
           required_imports&.add(:remember_state)
           required_imports&.add(:launched_effect)
+          required_imports&.add(:scroll_to_landing)
           code = indent('val scrollToArmed = remember { mutableStateOf(false) }', depth) + "\n"
+          code += indent('val scrollToScope = rememberCoroutineScope()', depth) + "\n"
+          code += indent('val scrollToLanding = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }', depth) + "\n"
           if target != :flow && !only_non_lazy
             code += indent('val scrollToDebug = (androidx.compose.ui.platform.LocalContext.current.applicationInfo.flags and ' \
                            'android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0', depth) + "\n"
@@ -488,23 +491,53 @@ module KjuiTools
           code += resolution
           non_lazy_call = "collectionScrollToCell(cell, #{non_lazy_anchor_mode(json_data)}, #{non_lazy_animate_expr(json_data)})"
           if only_non_lazy
-            return code + indent(non_lazy_call, depth + 1) + "\n" + indent('}', depth) + "\n"
+            return code + landing_launch(indent(non_lazy_call, depth + 1) + "\n", depth + 1) + indent('}', depth) + "\n"
           end
           if non_lazy
             code += indent("if (#{non_lazy}) {", depth + 1) + "\n"
-            code += indent("if (cell >= 0) #{non_lazy_call}", depth + 2) + "\n"
+            code += indent('if (cell >= 0) {', depth + 2) + "\n"
+            code += landing_launch(indent(non_lazy_call, depth + 3) + "\n", depth + 3)
+            code += indent('}', depth + 2) + "\n"
             code += indent('return@LaunchedEffect', depth + 2) + "\n"
             code += indent('}', depth + 1) + "\n"
           end
-          code += case target
-                  when :pager then pager_scroll_code(json_data, depth + 1, pager_legs)
-                  when :flow then flow_scroll_code(json_data, depth + 1)
-                  else
-                    indent('if (index < 0) return@LaunchedEffect', depth + 1) + "\n" +
-                      anchored_scroll_code(json_data, state, depth + 1, required_imports,
-                                           axis: target == :grid ? (is_horizontal ? :x : :y) : nil)
-                  end
+          landing = case target
+                    when :pager then pager_scroll_code(json_data, depth + 1, pager_legs)
+                    when :flow then flow_scroll_code(json_data, depth + 1)
+                    else
+                      indent('if (index < 0) return@LaunchedEffect', depth + 1) + "\n" +
+                        anchored_scroll_code(json_data, state, depth + 1, required_imports,
+                                             axis: target == :grid ? (is_horizontal ? :x : :y) : nil)
+                    end
+          # The lines that find no target (a page out of range, a flow cell
+          # not laid out, no lazy item) stay in the effect and return from it:
+          # a value that names nothing leaves a landing in flight alone.
+          lines = landing.lines
+          guards = lines.take_while { |l| l.include?('return@LaunchedEffect') }
+          code += guards.join + landing_launch(lines.drop(guards.size).join, depth + 1)
           code + indent('}', depth) + "\n"
+        end
+
+        # The landing, launched in the composition's scope (scrollToScope)
+        # rather than run in the effect the bound value keys
+        # (kjui-collection-scrollto-landing-cancelled-by-next-value). The
+        # effect restarts on every change of the value, and cancels what it
+        # runs: a consumer that names a cell and puts the value back to ""
+        # 200 ms later (to name the same cell again — a value that does not
+        # change scrolls nowhere) cut every landing longer than that, measured
+        # at 173–269 ms on an Android 15 emulator, and a reversed chat stopped
+        # with the sent message at the bottom edge. Now a value that names no
+        # cell — "", null, a key no cell has, an index out of range — returns
+        # before this and leaves the landing in flight; a value that names a
+        # cell cancels it and lands on its own. iOS does the same:
+        # `.onChange(of:)` returns for a value that names no cell, and a new
+        # scrollTo(id) takes over the scroll.
+        def self.landing_launch(body, depth)
+          inner = body.gsub('return@LaunchedEffect', 'return@launch').lines.map { |l| l.strip.empty? ? l : "    #{l}" }.join
+          indent('scrollToLanding[0]?.cancel()', depth) + "\n" +
+            indent('scrollToLanding[0] = scrollToScope.launch {', depth) + "\n" +
+            inner +
+            indent('}', depth) + "\n"
         end
 
         # scrollAnchor on a non-lazy container, as collectionScrollToCell

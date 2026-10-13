@@ -232,6 +232,11 @@ module KjuiTools
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",
+            # A Collection's scrollTo landing runs in the composition's scope,
+            # outside the effect the value keys (collection_component
+            # scroll_to_effect).
+            scroll_to_landing: ["import androidx.compose.runtime.rememberCoroutineScope",
+                                "import kotlinx.coroutines.launch"],
             # A Collection's anchored scrollTo (collection_component
             # anchored_scroll_code): the difference to the anchor, scrolled.
             # Its own key: it was a second :scroll_by (jsonui-cli 1.9.23),

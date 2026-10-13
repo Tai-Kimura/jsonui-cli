@@ -47,6 +47,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
 
   KJ_SCROLL_STUBS = <<~KOTLIN
     package stubs
+    import kotlinx.coroutines.launch
 
     annotation class Composable
     interface Modifier { companion object : Modifier }
@@ -143,8 +144,23 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = remember(listOf(key1, key2), calculation)
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
         val slot = Composition.slot { Keyed(Any(), null) }
-        if (slot.key != key1) { slot.key = key1; Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } } }
+        if (slot.key == key1) return
+        slot.key = key1
+        val live = Live.scope
+        if (live == null) { Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } }; return }
+        // Live: as Compose runs an effect — a coroutine of its own, cancelled
+        // when the key changes (and the one for the new key started).
+        (slot.value as? kotlinx.coroutines.Job)?.cancel()
+        slot.value = live.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { block() }
     }
+    // Live runs (the landing arm): effects and landings are coroutines on
+    // one event loop, and an animated scroll takes Live.animationMs of it;
+    // the composition's scope is the loop's. Otherwise a scope that runs a
+    // landing at once, inside the effect that launches it.
+    object Live { var scope: kotlinx.coroutines.CoroutineScope? = null; var animationMs = 0L
+        suspend fun animate() { if (animationMs > 0) kotlinx.coroutines.delay(animationMs) } }
+    fun rememberCoroutineScope(): kotlinx.coroutines.CoroutineScope =
+        remember { Live.scope ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined) }
     // The lazy states (jsonui-cli 1.9.23: an anchored scroll lays the item
     // out, then scrolls the difference to its anchor). The items lie end to
     // end; none is laid out until a scrollToItem, which puts its item at
@@ -166,9 +182,9 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     class LazyListState {
         val layoutInfo get() = ListLayoutInfo(0, 100, Scrolled.visible().map { (i, at) -> ListItemInfo(i, at, Drawn.sizeOf(Drawn.items[i])) })
         suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
-        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Live.animate(); Scrolled.to(index, scrollOffset) }
         suspend fun scrollBy(value: Float): Float = Scrolled.by(value)
-        suspend fun animateScrollBy(value: Float): Float = Scrolled.by(value)
+        suspend fun animateScrollBy(value: Float): Float { Live.animate(); return Scrolled.by(value) }
     }
     class IntSize(val width: Int, val height: Int)
     class IntOffset(val x: Int, val y: Int)
@@ -177,9 +193,9 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     class LazyGridState {
         val layoutInfo get() = GridLayoutInfo(0, 100, Scrolled.visible().map { (i, at) -> GridItemInfo(i, IntOffset(at, at), IntSize(60, Drawn.sizeOf(Drawn.items[i]))) })
         suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
-        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Live.animate(); Scrolled.to(index, scrollOffset) }
         suspend fun scrollBy(value: Float): Float = Scrolled.by(value)
-        suspend fun animateScrollBy(value: Float): Float = Scrolled.by(value)
+        suspend fun animateScrollBy(value: Float): Float { Live.animate(); return Scrolled.by(value) }
     }
     fun rememberLazyGridState() = remember { LazyGridState() }
     class LazyGridScope {
@@ -490,7 +506,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value#{mode}), Any()) }"
       end
     end
-    ["import stubs.*\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
+    ["import stubs.*\nimport kotlinx.coroutines.launch\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
      functions.join("\n\n"),
      <<~KOTLIN
        // One composition, then its effects — as a frame does.
@@ -569,7 +585,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
                    .gsub('androidx.compose.ui.unit.Constraints', 'Constraints')
                    .gsub('androidx.compose.ui.platform.LocalLayoutDirection', 'LocalLayoutDirection')
                    .gsub('androidx.compose.ui.unit.LayoutDirection', 'LayoutDirection') +
-      "\n" + KJ_SCROLL_STUBS.sub("package stubs\n", '').gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
+      "\n" + KJ_SCROLL_STUBS.sub("package stubs\nimport kotlinx.coroutines.launch\n", '').gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
                             .gsub('androidx.compose.ui.geometry.Offset', 'Offset').gsub('androidx.compose.ui.unit.Constraints', 'Constraints')
                             .gsub('androidx.compose.ui.unit.LayoutDirection', 'LayoutDirection') +
       "fun rememberLazyListState() = remember { LazyListState() }\n" +
@@ -848,5 +864,125 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(landed(lines, 'stackDupKeys k1')).to eq('A1'), lines.inspect
     expect(landed(lines, 'stackDupKeys k3')).to eq('A3'), lines.inspect
     expect(landed(lines, 'gridDupKeys k1')).to eq('A1'), lines.inspect
+  end
+  # kjui-collection-scrollto-landing-cancelled-by-next-value: a landing in
+  # flight is not cut by a change to a value that names no cell — "", null, a
+  # key no cell has, an index out of range — and a value that names another
+  # cell replaces it. A consumer names a cell and puts the value back to ""
+  # 200 ms later, so that the same cell can be named again; a landing took
+  # 173–269 ms on an Android 15 emulator, and every one longer than that was
+  # cut where its first step left it.
+  #
+  # LIVE runs: the effects and the landings are coroutines on one event loop,
+  # an effect is cancelled when its key changes (Compose's LaunchedEffect),
+  # and an animated scroll step takes 100 ms. A step list is (ms after the
+  # previous step, value); each run's answer is where it came to rest, read
+  # against the same route landing on the value it ends on with nothing in
+  # between.
+  LIVE_STEPS = {
+    'clear' => [[0, 'TARGET'], [30, '']],
+    'clearLate' => [[0, 'TARGET'], [150, '']],
+    'null' => [[0, 'TARGET'], [30, nil]],
+    'unknown' => [[0, 'TARGET'], [30, 'UNKNOWN']],
+    'other' => [[0, 'TARGET'], [30, 'OTHER']],
+    'alone' => [[0, 'TARGET']],
+    'otherAlone' => [[0, 'OTHER']]
+  }.freeze unless defined?(LIVE_STEPS)
+
+  def live_routes
+    {
+      # The reported shape: keys, reverseLayout, scrollAnchor top (the
+      # landing lays the item out, then scrolls to its anchor).
+      'liveChat' => [emit(node('cellIdProperty' => 'key', 'reverseLayout' => true, 'scrollAnchor' => 'top')), {},
+                     { 'TARGET' => 'x2', 'OTHER' => 'k1', 'UNKNOWN' => 'nothing' }],
+      'liveCenter' => [emit(node('scrollAnchor' => 'center')), {}, { 'TARGET' => 6, 'OTHER' => 1, 'UNKNOWN' => 99 }],
+      'liveGrid' => [emit(grid_node('cellIdProperty' => 'key', 'scrollAnchor' => 'center')), { grid: true },
+                     { 'TARGET' => 'x2', 'OTHER' => 'k1', 'UNKNOWN' => 'nothing' }]
+    }
+  end
+
+  def kotlin_value(value)
+    return 'null' if value.nil?
+
+    value.is_a?(Integer) ? value.to_s : "\"#{value}\""
+  end
+
+  def live_program
+    routes = live_routes
+    functions = routes.map { |name, (body, _, _)| "@Composable fun #{name}(data: Data, viewModel: Any) {\n#{body}\n}" }
+    calls = routes.flat_map do |name, (_, options, values)|
+      sections = data_sections(**options)
+      LIVE_STEPS.map do |step_name, steps|
+        list = steps.map { |delay, v| "#{delay}L to #{kotlin_value(values.fetch(v, v))}" }.join(', ')
+        "    live(\"#{name} #{step_name}\", listOf<Pair<Long, Any?>>(#{list})) { value -> #{name}(Data(CollectionDataSource(#{sections}), value), Any()) }"
+      end
+    end
+    ["import stubs.*\nimport kotlinx.coroutines.launch\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
+     functions.join("\n\n"),
+     <<~KOTLIN
+       fun recompose(value: Any?, compose: (Any?) -> Unit) {
+           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0; Positions.reversed = false; Positions.k = 0; Drawn.chain.clear()
+           compose(value)
+       }
+       fun live(label: String, steps: List<Pair<Long, Any?>>, compose: (Any?) -> Unit) {
+           Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Scrolled.laidOut = false; Scrolled.position = 0
+           kotlinx.coroutines.runBlocking {
+               Live.scope = this; Live.animationMs = 100
+               recompose("", compose)
+               for ((wait, value) in steps) { kotlinx.coroutines.delay(wait); recompose(value, compose) }
+               kotlinx.coroutines.delay(1000)
+               Live.scope = null
+           }
+           Live.animationMs = 0
+           val at = Drawn.items.getOrNull(Drawn.scrolledTo) ?: "none"
+           println(label + " => " + at + " @" + Drawn.scrolledTo + " offset " + Drawn.offset + " position " + Scrolled.position)
+       }
+       fun main() {
+       #{calls.join("\n")}
+       }
+     KOTLIN
+    ].join("\n")
+  end
+
+  def run_live
+    skip "compile: #{KotlinCompiler.unavailable_reason}" if KotlinCompiler.unavailable_reason
+
+    KJ_SCROLL_RUNS[live_program] ||= compile_and_run_source(live_program)
+  end
+
+  def compile_and_run_source(source)
+    stdlib = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    coroutines = KotlinCompiler.jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    reflect = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annotations = KotlinCompiler.jar('org.jetbrains', 'annotations')
+    Dir.mktmpdir('kjui_scroll_live') do |dir|
+      files = { 'Emitted.kt' => source, 'Stubs.kt' => KJ_SCROLL_STUBS }.merge(KJ_SCROLL_QUALIFIED)
+      files.each { |name, text| File.write(File.join(dir, name), text) }
+      out, status = KotlinCompiler.java_capture2e('-cp', KotlinCompiler.compiler_classpath, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+                                                  '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
+                                                  '-d', File.join(dir, 'out'), *files.keys.map { |name| File.join(dir, name) })
+      errors = out.lines.grep(/error:/)
+      raise "the emitted code did not compile:\n#{errors.join}" unless status.success? && errors.empty?
+
+      run, status = KotlinCompiler.java_capture2e('-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
+      raise "the emitted code did not run:\n#{run}" unless status.success?
+
+      run.lines.to_h { |l| k, v = l.chomp.split(' => ', 2); [k, v] }
+    end
+  end
+
+  it 'a landing in flight is not cut by a value that names no cell, and a value that names another cell replaces it' do
+    lines = run_live
+    misses = live_routes.keys.flat_map do |route|
+      alone = lines.fetch("#{route} alone")
+      other = lines.fetch("#{route} otherAlone")
+      expect(alone).not_to start_with('none'), "#{route}: the uninterrupted landing went nowhere: #{alone}"
+      expect(other).not_to eq(alone), "#{route}: the two targets land alike, so the arm cannot tell them apart"
+      { 'clear' => alone, 'clearLate' => alone, 'null' => alone, 'unknown' => alone, 'other' => other }.filter_map do |steps, want|
+        got = lines.fetch("#{route} #{steps}")
+        "#{route} #{steps}: #{got}, expected #{want}" if got != want
+      end
+    end
+    expect(misses).to be_empty, "#{misses.size} misses:\n#{misses.join("\n")}"
   end
 end

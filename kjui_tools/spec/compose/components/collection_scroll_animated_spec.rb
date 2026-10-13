@@ -66,7 +66,11 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
   end
 
   SCROLL_ANIMATED_STUBS = <<~KOTLIN
+    import kotlinx.coroutines.launch
     annotation class Composable
+    // The scope a scrollTo landing is launched in (the effect only names
+    // the target, kjui-collection-scrollto-landing-cancelled-by-next-value).
+    fun rememberCoroutineScope(): kotlinx.coroutines.CoroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
     class ItemInfo(val index: Int, val offset: Int, val size: Int)
     class GridItemInfo(val index: Int, val offset: IntOffset, val size: IntSize)
     class IntSize(val width: Int, val height: Int)
