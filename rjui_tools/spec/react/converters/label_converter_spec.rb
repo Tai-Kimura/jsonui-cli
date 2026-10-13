@@ -371,6 +371,47 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       it 'leaves a literal linkable to LinkifyText, which adds the class itself' do
         expect(class_attr_of({ 'text' => '@{body}', 'linkable' => true })).not_to include('whitespace-pre-line')
       end
+
+      it 'keeps the line break for a bound fontColor (the colour rides style, the class list stays one string)' do
+        expect(class_attr_of({ 'text' => '@{body}', 'fontColor' => '@{tint}' }).split(/[\s"]+/))
+          .to include('whitespace-pre-line')
+      end
+
+      # A `selected` binding makes className a ternary: the highlight arm and
+      # the base arm are two class lists, and the line break has to be in
+      # BOTH or it disappears while the label is selected
+      # (rjui-label-pre-line-missing-on-selected-classname). An `include` on
+      # the whole attribute passes when only one arm has it, so each arm is
+      # taken out and read on its own.
+      def class_arms_of(extra)
+        out = create_converter({ 'type' => 'Label', 'text' => '@{body}', 'fontColor' => '#000000' }.merge(extra)).convert
+        m = out.match(/className=\{[^?]+ \? (?<q1>["`])(?<on>.*?)\k<q1> : (?<q2>["`])(?<off>.*?)\k<q2>\}/)
+        raise "no ternary className in: #{out}" unless m
+
+        { selected: m[:on].split, unselected: m[:off].split }
+      end
+
+      {
+        'a static highlightColor' => { 'selected' => '@{isOn}', 'highlightColor' => '#FF0000' },
+        'a bound highlightColor' => { 'selected' => '@{isOn}', 'highlightColor' => '@{tint}' },
+        'highlightAttributes' => { 'selected' => '@{isOn}', 'highlightAttributes' => { 'fontColor' => '#FF0000' } },
+        'a bound userInteractionEnabled (template-literal arms)' =>
+          { 'selected' => '@{isOn}', 'highlightColor' => '#FF0000', 'userInteractionEnabled' => '@{canTap}' }
+      }.each do |name, extra|
+        it "keeps the line break in both arms of a selected label with #{name}" do
+          arms = class_arms_of(extra)
+          expect(arms[:selected]).to include('whitespace-pre-line')
+          expect(arms[:unselected]).to include('whitespace-pre-line')
+        end
+      end
+
+      it 'keeps the nowrap of lines: 1 in both arms of a selected label' do
+        arms = class_arms_of({ 'selected' => '@{isOn}', 'highlightColor' => '#FF0000', 'lines' => 1 })
+        expect(arms[:selected]).not_to include('whitespace-pre-line')
+        expect(arms[:unselected]).not_to include('whitespace-pre-line')
+        expect(arms[:selected]).to include('truncate')
+        expect(arms[:unselected]).to include('truncate')
+      end
     end
 
     context 'with lineSpacing' do
