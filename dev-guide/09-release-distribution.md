@@ -153,11 +153,18 @@ push せず、rsync/sync_tool による同期のみ。
   `android-library-tests` 以外のどの CI でも走らない（KotlinJsonUI の ci.yml は JVM の unit だけ）。
 
 ### タグ・公開の前の dispatch（SwiftJsonUI / KotlinJsonUI 共通）
+🔻 **この dispatch は列車の最後に 1 回だけ撃つ。版ごと・ライブラリごとに撃たない**（2026-10-05 ユーザー指示、
+10-13 に「今後は無駄なランさせないように」と再指摘）。10-12〜13 の夜に、同じ件の KotlinJsonUI 2.43.8 と
+SwiftJsonUI 10.29.10 を別々に撃ち、1 回で足りたところを 2 回にした。この節を「版ごとの必須手順」と読んだのが原因。
+同じ夜に出す両ライブラリの release 枝を揃えてから、両方の ref を 1 回の dispatch に渡す。
+個々の修正の受入は手元の該当箇所で取る（KJUI は conf_ci の emulator、web は web host）。
 1. 両ライブラリの release 枝を push する（main でもタグでもないので、消費側には届かない）。
 2. `gh workflow run conformance-mobile.yml -R Tai-Kimura/jsonui-cli --ref <jsonui-cli の検証する枝>
-   -f swiftjsonui_ref=<SJUI の枝> -f image_probes=true -f kotlinjsonui_ref=<KJUI の枝> -f android_probes=true`
-   （jsonui-cli 1.9.8 から 2 つの probe は**既定で true**。下ろすときだけ `=false` を書く。1.9.7 のタグは、
-   旗を書き忘れた dispatch（probe 9 本が skip）の緑で判定された。schedule は入力を持たないので probe なしのまま）
+   -f swiftjsonui_ref=<SJUI の枝> -f kotlinjsonui_ref=<KJUI の枝>`
+   （probe の 3 つの旗 `ios_probes` / `image_probes` / `android_probes` は**既定で true**。下ろすときだけ `=false` を書く。
+   1.9.7 のタグは、旗を書き忘れた dispatch（probe 9 本が skip）の緑で判定された。iOS の probe の門は 1.9.23 から
+   ConformanceHost/UITests のソースから導出して立てる（それまでは 23 クラス・40 本が一度も走っていなかった）。
+   schedule は入力を持たないので probe なしのまま）
 3. **全 job の緑**を見てから、SPM のタグと Maven の publish に進む。読むのは緑だけではない:
    各 job が印字する ref と HEAD が撃った枝か、`android-library-tests` の skip の名前、probe の印字。
    Maven の publish は取り消せない。
