@@ -496,6 +496,15 @@ module RjuiTools
           # Tailwind 4.1, and a 4.0 project would drop it without a word.
           classes << '[overflow-wrap:anywhere]' unless %w[Char Word].include?(attributes['lineBreakMode'])
 
+          # A "\n" in the text is a line break, as iOS and Android draw it
+          # (rjui-label-collapses-newlines-in-bound-text): `white-space:
+          # normal` folded a bound one into a space. A static literal already
+          # breaks through `<br />`; the linkable one gets this class from
+          # LinkifyText itself. `lines: 1` keeps its nowrap (`truncate`, and
+          # the nowrap a truncating lineBreakMode writes inline).
+          static_linkable = attributes['linkable'] && !bound_value_expr(attributes['linkable'])
+          classes << 'whitespace-pre-line' unless attributes['lines'] == 1 || static_linkable
+
           # Line clamp for multiple lines
           #
           # A BOUND cap has no class — `line-clamp-N` needs N at build time —

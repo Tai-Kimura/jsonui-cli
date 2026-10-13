@@ -336,6 +336,43 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       end
     end
 
+    # rjui-label-collapses-newlines-in-bound-text: a "\n" in a bound text was
+    # folded into a space (`white-space: normal`); iOS and Android break there.
+    context 'with a newline in the text' do
+      def class_attr_of(extra)
+        out = create_converter({ 'type' => 'Label' }.merge(extra)).convert
+        out[/className=(?:"[^"]*"|\{[^}]*\})/]
+      end
+
+      {
+        'a static text' => { 'text' => 'line1' },
+        'a bound text' => { 'text' => '@{body}' },
+        'a bound text with a bound cap' => { 'text' => '@{body}', 'lines' => '@{n}' },
+        'a three-line cap' => { 'text' => '@{body}', 'lines' => 3 },
+        'a truncating lineBreakMode over three lines' => { 'text' => '@{body}', 'lines' => 3, 'lineBreakMode' => 'Tail' },
+        'partialAttributes' => { 'text' => '@{body}',
+                                 'partialAttributes' => [{ 'range' => [0, 2], 'fontColor' => '#FF0000' }] },
+        'a bound linkable (its plain arm)' => { 'text' => '@{body}', 'linkable' => '@{isLinkable}' }
+      }.each do |name, extra|
+        it "keeps the line break for #{name}" do
+          expect(class_attr_of(extra)).to include('whitespace-pre-line')
+        end
+      end
+
+      {
+        'lines: 1' => { 'text' => '@{body}', 'lines' => 1 },
+        'a truncating lineBreakMode on one line' => { 'text' => '@{body}', 'lines' => 1, 'lineBreakMode' => 'Tail' }
+      }.each do |name, extra|
+        it "keeps the nowrap of #{name}" do
+          expect(class_attr_of(extra)).not_to include('whitespace-pre-line')
+        end
+      end
+
+      it 'leaves a literal linkable to LinkifyText, which adds the class itself' do
+        expect(class_attr_of({ 'text' => '@{body}', 'linkable' => true })).not_to include('whitespace-pre-line')
+      end
+    end
+
     context 'with lineSpacing' do
       it 'calculates lineHeight from lineSpacing and fontSize' do
         converter = create_converter({
