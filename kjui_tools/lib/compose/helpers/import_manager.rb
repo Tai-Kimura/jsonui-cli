@@ -232,6 +232,10 @@ module KjuiTools
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",
+            # A Collection's anchored scrollTo (collection_component
+            # anchored_scroll_code): the difference to the anchor, scrolled.
+            scroll_by: ["import androidx.compose.foundation.gestures.scrollBy",
+                        "import androidx.compose.foundation.gestures.animateScrollBy"],
             disposable_effect: "import androidx.compose.runtime.DisposableEffect",
             alignment: "import androidx.compose.ui.Alignment",
             bias_alignment: "import androidx.compose.ui.BiasAlignment",

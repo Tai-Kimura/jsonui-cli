@@ -17,7 +17,11 @@ require_relative '../../support/kotlin_compiler'
 # LazyListState stubs whose two calls are transcribed from javap of
 # foundation-android 1.12.1 (`scrollToItem(int, int, Continuation)` and
 # `animateScrollToItem(int, int, Continuation)` on both, with `$default`
-# forms): a transcription, not a compile against Compose.
+# forms; ScrollExtensionsKt's `scrollBy(ScrollableState, float,
+# Continuation)` and `animateScrollBy(ScrollableState, float, AnimationSpec,
+# Continuation)` with `$default`; the items' `int getOffset()` / `int
+# getSize()`, the grid's IntOffset / IntSize): a transcription, not a compile
+# against Compose.
 RSpec.describe 'kjui codegen: scrollAnimated' do
   SCROLL_ANIMATED_PATHS = {
     'grid' => { 'cellClasses' => ['RowCell'], 'columns' => 2 },
@@ -36,9 +40,9 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
     code[/^( *)val (?:gridState|collectionStackState) = .*?\n\1LaunchedEffect\(.*?\n\1\}\n/m] or raise "no scroll block in\n#{code}"
   end
 
-  # The scroll the value asks for — the first call; since jsonui-cli 1.9.0 a
-  # centre / bottom anchor may follow it with a `scrollToItem` that corrects
-  # the offset once the item's own size is known (anchored_scroll_code).
+  # The scroll the value asks for — the first call; since jsonui-cli 1.9.23
+  # a centre / bottom anchor makes it only when the item is not laid out, and
+  # follows it with a `scrollBy` to the anchor (anchored_scroll_code).
   def calls(code)
     block = scroll_block(code)
     main = block.lines.find { |l| l =~ /\b(animateScrollToItem|scrollToItem)\(index/ } or raise "no scroll call in\n#{block}"
@@ -63,20 +67,24 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
 
   SCROLL_ANIMATED_STUBS = <<~KOTLIN
     annotation class Composable
-    class ItemInfo(val index: Int, val size: Int)
-    class GridItemInfo(val index: Int, val size: IntSize)
+    class ItemInfo(val index: Int, val offset: Int, val size: Int)
+    class GridItemInfo(val index: Int, val offset: IntOffset, val size: IntSize)
     class IntSize(val width: Int, val height: Int)
+    class IntOffset(val x: Int, val y: Int)
+    interface ScrollableState
+    suspend fun ScrollableState.scrollBy(value: Float): Float = value
+    suspend fun ScrollableState.animateScrollBy(value: Float, animationSpec: Any? = null): Float = value
     class LayoutInfo { val viewportStartOffset: Int = 0; val viewportEndOffset: Int = 0; val visibleItemsInfo = listOf<ItemInfo>() }
     class GridLayoutInfo { val viewportStartOffset: Int = 0; val viewportEndOffset: Int = 0; val visibleItemsInfo = listOf<GridItemInfo>() }
     class MutableState<T>(var value: T)
     fun <T> mutableStateOf(value: T) = MutableState(value)
     fun <T> remember(calculation: () -> T): T = calculation()
-    class LazyGridState {
+    class LazyGridState : ScrollableState {
         val layoutInfo = GridLayoutInfo()
         suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) {}
         suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) {}
     }
-    class LazyListState {
+    class LazyListState : ScrollableState {
         val layoutInfo = LayoutInfo()
         suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) {}
         suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) {}

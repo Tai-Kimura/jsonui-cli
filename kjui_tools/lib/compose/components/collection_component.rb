@@ -501,8 +501,8 @@ module KjuiTools
                   when :flow then flow_scroll_code(json_data, depth + 1)
                   else
                     indent('if (index < 0) return@LaunchedEffect', depth + 1) + "\n" +
-                      anchored_scroll_code(json_data, state, depth + 1,
-                                           size: target == :grid ? (is_horizontal ? 'size.width' : 'size.height') : 'size')
+                      anchored_scroll_code(json_data, state, depth + 1, required_imports,
+                                           axis: target == :grid ? (is_horizontal ? :x : :y) : nil)
                   end
           code + indent('}', depth) + "\n"
         end
@@ -601,13 +601,20 @@ module KjuiTools
         # middle at the middle; bottom: its end at the viewport's end — which
         # is what SwiftUI's ScrollViewReader anchors and the web's
         # scrollCollectionToCell compute. Under reverseLayout the list starts
-        # at its bottom, so top and bottom trade places. The offset needs the
-        # item's size: the item's own when it is laid out, else the laid-out
-        # items' average for the scroll, corrected once it is laid out.
+        # at its bottom, so top and bottom trade places. center / bottom need
+        # the item's size: an item not laid out is scrolled to first
+        # (scrollToItem remeasures before it returns), then the difference
+        # between where it is and where it belongs is scrolled, which stops
+        # at the list's ends. `axis`: the grid's item offset / size component
+        # (:x / :y); nil for a LazyColumn / LazyRow's Int.
         # Until jsonui-cli 1.9.0 the offset was the viewport or half of it,
         # so `bottom` put the target's top at the viewport's bottom edge
-        # (measured, 4f round 11).
-        def self.anchored_scroll_code(json_data, state, depth, size:)
+        # (measured, 4f round 11). Until 1.9.23 an item not laid out was
+        # sized as the laid-out items' average; a cell taller than the
+        # viewport on screen pushed the target out of it, and the correction
+        # for a laid-out target never ran
+        # (kjui-collection-anchored-scroll-overshoots-when-target-offscreen).
+        def self.anchored_scroll_code(json_data, state, depth, required_imports, axis: nil)
           anchor = JsonUIShared::EnumSpelling.lowered(json_data['scrollAnchor'] || DEFAULT_SCROLL_ANCHOR, 'Collection', 'scrollAnchor').to_s
           anchor = DEFAULT_SCROLL_ANCHOR unless %w[top center bottom].include?(anchor)
           anchor = { 'top' => 'bottom', 'bottom' => 'top' }.fetch(anchor, anchor) if json_data['reverseLayout'] == true
@@ -615,13 +622,19 @@ module KjuiTools
             return indent(scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollToItem' : 'scrollToItem'}(index)" }), depth) + "\n"
           end
 
-          offset = anchor == 'center' ? '-(scrollViewport - it) / 2' : '-(scrollViewport - it)'
-          code = indent("val scrollViewport = #{state}.layoutInfo.viewportEndOffset - #{state}.layoutInfo.viewportStartOffset", depth) + "\n"
-          code += indent("val scrollOffset: (Int) -> Int = { #{offset} }", depth) + "\n"
-          code += indent("val scrollSize = #{state}.layoutInfo.visibleItemsInfo.let { items -> items.firstOrNull { it.index == index }?.let { it.#{size} } " \
-                         "?: items.map { it.#{size} }.average().let { if (it.isNaN()) 0 else it.toInt() } }", depth) + "\n"
-          code += indent(scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollToItem' : 'scrollToItem'}(index, scrollOffset(scrollSize))" }), depth) + "\n"
-          code + indent("#{state}.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { it.#{size} }?.let { if (it != scrollSize) #{state}.scrollToItem(index, scrollOffset(it)) }", depth) + "\n"
+          required_imports&.add(:scroll_by)
+          offset = axis ? "item.offset.#{axis}" : 'item.offset'
+          size = { x: 'item.size.width', y: 'item.size.height' }.fetch(axis, 'item.size')
+          left = "(scrollViewport - #{size})#{anchor == 'center' ? ' / 2' : ''}"
+          visible = "#{state}.layoutInfo.visibleItemsInfo"
+          code = indent("if (#{visible}.none { it.index == index }) { " \
+                        "#{scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollToItem' : 'scrollToItem'}(index)" })} }", depth) + "\n"
+          code += indent("#{visible}.firstOrNull { it.index == index }?.let { item ->", depth) + "\n"
+          code += indent("val scrollViewport = #{state}.layoutInfo.viewportEndOffset - #{state}.layoutInfo.viewportStartOffset", depth + 1) + "\n"
+          code += indent("val scrollShift = #{offset} - #{left}", depth + 1) + "\n"
+          code += indent("if (scrollShift != 0) { " \
+                         "#{scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollBy' : 'scrollBy'}(scrollShift.toFloat())" })} }", depth + 1) + "\n"
+          code + indent('}', depth) + "\n"
         end
 
         # The pager: the page is the cell (pageCount from the pager's own

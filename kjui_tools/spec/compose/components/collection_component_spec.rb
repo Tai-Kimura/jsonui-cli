@@ -831,14 +831,13 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
   # viewport or half of it, which put the item's top at the bottom edge.
   def anchor_lines(json)
     described_class.generate(json, 0, Set.new, nil)
-                   .lines.select { |l| l =~ /animateScrollToItem|scrollOffset|scrollViewport/ }
+                   .lines.select { |l| l =~ /animateScrollToItem|scrollShift|scrollViewport|scrollBy/ }
                    .map(&:strip).join(' ')
   end
 
   it 'anchors an undeclared scroll at the bottom, matching ios and web' do
-    expect(anchor_lines(scrolling)).to include('animateScrollToItem(index, scrollOffset(scrollSize))')
     expect(anchor_lines(scrolling)).to include('viewportEndOffset')
-    expect(anchor_lines(scrolling)).to include('{ -(scrollViewport - it) }')
+    expect(anchor_lines(scrolling)).to include('val scrollShift = item.offset.y - (scrollViewport - item.size.height)')
   end
 
   it 'lets an explicit top opt out of the offset entirely' do
@@ -847,6 +846,36 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
   end
 
   it 'halves what the viewport has left beside the item for center' do
-    expect(anchor_lines(scrolling.merge('scrollAnchor' => 'center'))).to include('{ -(scrollViewport - it) / 2 }')
+    expect(anchor_lines(scrolling.merge('scrollAnchor' => 'center'))).to include('item.offset.y - (scrollViewport - item.size.height) / 2')
+  end
+
+  # An item not laid out is scrolled to first, then lands by its own size
+  # and place: the difference to the anchor, scrolled. Until 1.9.23 its size
+  # was the laid-out items' average — a cell taller than the viewport on
+  # screen pushed the target out of it, and the correction for a laid-out
+  # target never ran
+  # (kjui-collection-anchored-scroll-overshoots-when-target-offscreen).
+  # Both lazy routes: the grid (its IntOffset / IntSize component along the
+  # axis) and the CollectionStack (LazyColumn / LazyRow, an Int).
+  {
+    'grid' => [{ 'cellClasses' => ['RowCell'] }, 'gridState', 'item.offset.y', 'item.size.height'],
+    'horizontal grid' => [{ 'cellClasses' => ['RowCell'], 'layout' => 'horizontal', 'columns' => 2 }, 'gridState', 'item.offset.x', 'item.size.width'],
+    'stack' => [{ 'sections' => [{ 'cell' => 'RowCell' }] }, 'collectionStackState', 'item.offset', 'item.size'],
+    'reversed stack, top' => [{ 'sections' => [{ 'cell' => 'RowCell' }], 'reverseLayout' => true, 'scrollAnchor' => 'top' },
+                              'collectionStackState', 'item.offset', 'item.size']
+  }.each do |name, (extra, state, offset, size)|
+    it "#{name}: lays the item out, then scrolls the difference to its anchor" do
+      imports = Set.new
+      code = described_class.generate(scrolling.reject { |k, _| k == 'cellClasses' }.merge(extra).merge('scrollAnimated' => false), 0, imports, nil)
+      lines = code.lines.map(&:strip)
+      at = lines.index("if (#{state}.layoutInfo.visibleItemsInfo.none { it.index == index }) { #{state}.scrollToItem(index) }")
+      expect(at).not_to be_nil, code
+      expect(lines[at + 1]).to eq("#{state}.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { item ->")
+      expect(lines[at + 3]).to eq("val scrollShift = #{offset} - (scrollViewport - #{size})")
+      expect(lines[at + 4]).to eq("if (scrollShift != 0) { #{state}.scrollBy(scrollShift.toFloat()) }")
+      expect(code).not_to include('average()')
+      expect(code.scan(/scrollToItem\(/).size).to eq(1)
+      expect(imports).to include(:scroll_by)
+    end
   end
 end

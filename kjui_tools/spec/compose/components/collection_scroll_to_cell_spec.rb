@@ -145,20 +145,41 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         val slot = Composition.slot { Keyed(Any(), null) }
         if (slot.key != key1) { slot.key = key1; Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } } }
     }
-    class ListItemInfo(val index: Int, val size: Int)
+    // The lazy states (jsonui-cli 1.9.23: an anchored scroll lays the item
+    // out, then scrolls the difference to its anchor). The items lie end to
+    // end; none is laid out until a scrollToItem, which puts its item at
+    // -scrollOffset of a 100 viewport — so the answer stays the item the
+    // scroll asked for — and scrollBy moves that offset by what it scrolls.
+    // scrollBy / animateScrollBy are ScrollableState extensions in Compose
+    // (ScrollExtensionsKt, foundation-android 1.12.1); members here.
+    object Scrolled {
+        var laidOut = false
+        var position = 0
+        fun start(index: Int) = Drawn.items.take(index).sumOf { Drawn.sizeOf(it) }
+        fun visible(): List<Pair<Int, Int>> = if (!laidOut) emptyList() else
+            Drawn.items.indices.map { it to start(it) - position }.filter { (i, at) -> at < 100 && at + Drawn.sizeOf(Drawn.items[i]) > 0 }
+        fun to(index: Int, scrollOffset: Int) { laidOut = true; position = start(index) + scrollOffset; Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+        fun by(value: Float): Float { position += value.toInt(); Drawn.offset += value.toInt(); return value }
+    }
+    class ListItemInfo(val index: Int, val offset: Int, val size: Int)
     class ListLayoutInfo(val viewportStartOffset: Int, val viewportEndOffset: Int, val visibleItemsInfo: List<ListItemInfo>)
     class LazyListState {
-        val layoutInfo get() = ListLayoutInfo(0, 100, Drawn.items.mapIndexed { i, item -> ListItemInfo(i, Drawn.sizeOf(item)) })
-        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
-        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+        val layoutInfo get() = ListLayoutInfo(0, 100, Scrolled.visible().map { (i, at) -> ListItemInfo(i, at, Drawn.sizeOf(Drawn.items[i])) })
+        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun scrollBy(value: Float): Float = Scrolled.by(value)
+        suspend fun animateScrollBy(value: Float): Float = Scrolled.by(value)
     }
     class IntSize(val width: Int, val height: Int)
-    class GridItemInfo(val index: Int, val size: IntSize)
+    class IntOffset(val x: Int, val y: Int)
+    class GridItemInfo(val index: Int, val offset: IntOffset, val size: IntSize)
     class GridLayoutInfo(val viewportStartOffset: Int, val viewportEndOffset: Int, val visibleItemsInfo: List<GridItemInfo>)
     class LazyGridState {
-        val layoutInfo get() = GridLayoutInfo(0, 100, Drawn.items.mapIndexed { i, item -> GridItemInfo(i, IntSize(60, Drawn.sizeOf(item))) })
-        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
-        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+        val layoutInfo get() = GridLayoutInfo(0, 100, Scrolled.visible().map { (i, at) -> GridItemInfo(i, IntOffset(at, at), IntSize(60, Drawn.sizeOf(Drawn.items[i]))) })
+        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun scrollBy(value: Float): Float = Scrolled.by(value)
+        suspend fun animateScrollBy(value: Float): Float = Scrolled.by(value)
     }
     fun rememberLazyGridState() = remember { LazyGridState() }
     class LazyGridScope {
@@ -480,7 +501,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
            kotlinx.coroutines.runBlocking { effects.forEach { it() } }
        }
        fun run(label: String, first: String?, target: Any?, compose: (Any?) -> Unit) {
-           Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Drawn.logs.clear(); Drawn.duplicate = null
+           Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Scrolled.laidOut = false; Scrolled.position = 0; Drawn.logs.clear(); Drawn.duplicate = null
            Drawn.userScroll = null; Drawn.packed = null
            if (first != null) frame(first, compose)
            frame(target, compose)
