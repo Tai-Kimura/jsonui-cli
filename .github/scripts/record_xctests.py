@@ -37,7 +37,10 @@ from pathlib import Path
 
 CASE = re.compile(r"^Test Case '-\[(?P<module>[\w.]+?)\.(?P<cls>\w+) (?P<test>\w+)\]' "
                   r"(?P<verdict>passed|failed|skipped)\b")
-ALL_TESTS = re.compile(r"^Test Suite 'All tests' (passed|failed)")
+# 'Selected tests' is the same summary for an -only-testing run, which every
+# shard of conformance-mobile's iOS jobs is (CONFORMANCE_ONLY_TESTING): read
+# only 'All tests', each shard reported "the run stopped before it finished".
+ALL_TESTS = re.compile(r"^Test Suite '(?:All|Selected) tests' (passed|failed)")
 EXECUTED = re.compile(r"^\s*Executed (\d+) tests?, ")
 VERDICTS = ("passed", "failed", "skipped")
 # One line per tap, printed by SwiftJsonUI's ConformanceHost (c016de9+):

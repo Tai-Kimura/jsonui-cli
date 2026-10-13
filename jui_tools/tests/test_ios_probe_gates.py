@@ -138,9 +138,11 @@ class Workflow(unittest.TestCase):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("ios_probes:", text)
         self.assertEqual(text.count("ios_probe_gates.py exports SwiftJsonUI/ConformanceHost/UITests"), 2)
+        # The iOS jobs run as shards; a shard's record lacks the other shards'
+        # probes, so the check reads the merged record in ios-merge and
+        # ios-codegen-merge (test_ios_shards.py holds where it runs).
         self.assertEqual(text.count("ios_probe_gates.py check "), 2)
-        self.assertIn("ios_probe_gates.py check /tmp/jsonui-conformance-ios.ci/xctests.txt", text)
-        self.assertIn("ios_probe_gates.py check /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt", text)
+        self.assertEqual(text.count("ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests"), 2)
 
 
 if __name__ == "__main__":

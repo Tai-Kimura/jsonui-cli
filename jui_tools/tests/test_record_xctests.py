@@ -75,6 +75,14 @@ class RecordXCTestsTest(unittest.TestCase):
         _, printed, _ = self.run_on(cut)
         self.assertIn("the log has no 'All tests' summary", printed)
 
+    def test_an_only_testing_run_has_its_summary_under_selected_tests(self):
+        selected = GREEN_RUN.replace("Test Suite 'All tests'", "Test Suite 'Selected tests'")
+        self.assertNotEqual(selected, GREEN_RUN)
+        _, printed, _ = self.run_on(selected)
+        self.assertNotIn("the log has no 'All tests' summary", printed)
+        _, short, _ = self.run_on(selected.replace("Executed 3 tests", "Executed 4 tests"))
+        self.assertIn("but the run says it executed 4", short)
+
     def test_a_missing_log_is_not_read_as_nothing_ran(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(R.main(["/tmp/jsonui-conformance-ios.ci/xcodebuild.log.absent",

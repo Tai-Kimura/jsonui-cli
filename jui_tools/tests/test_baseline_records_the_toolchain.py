@@ -68,13 +68,23 @@ class TheWorkflowPassesToolsNotOnlyTheSubject(unittest.TestCase):
         Each toolchain value must come from a job output, and that output
         must come from a step that runs something.
         """
-        for job, step_id in (("ios", "toolchain"), ("android", "android_toolchain")):
+        for job, step_id in (("android", "android_toolchain"),):
             self.assertIn(
                 f"toolchain: ${{{{ steps.{step_id}.outputs.spec }}}}",
                 self.text,
                 f"{job}: toolchain output is not wired to a step",
             )
             self.assertIn(f"id: {step_id}", self.text, f"{job}: no step with id {step_id}")
+        # iOS runs as shards (IOS_SHARDS), which have no single job output:
+        # each shard writes the measured spec into its meta.json, and ios-merge
+        # (which refuses shards that disagree) outputs it for the report.
+        self.assertIn("id: toolchain", self.text, "ios: no step with id toolchain")
+        self.assertIn('"${{ steps.toolchain.outputs.spec }}" > "$out/meta.json"', self.text,
+                      "ios: a shard does not record the measured toolchain")
+        self.assertIn("toolchain: ${{ steps.merge.outputs.toolchain }}", self.text,
+                      "ios-merge does not output the shards' toolchain")
+        self.assertIn("ios.toolchain=${{ needs.ios-merge.outputs.toolchain }}", self.text,
+                      "the report does not take the toolchain from ios-merge")
 
     def _step(self, step_id: str) -> str:
         """The step's own text, bounded by the NEXT step — not by a character count.

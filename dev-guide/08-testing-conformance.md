@@ -110,9 +110,20 @@
   attempt-1 のみ retry 許容
 - **ios-codegen / android-codegen**: 同じ fixture を生成コードで描画する 2 レーン
   （sjui/kjui 実 codegen → registry → HOST_MODE=codegen。予算は dynamic レーンと同算数）
+- **ios / ios-codegen は shard（workflow の `IOS_SHARDS`、今は 2）の matrix**、**ios-merge / ios-codegen-merge**
+  （ubuntu）がそれを 1 本に戻す。1 本のときは ios 108 分・ios-codegen 114 分（run 38393632937）で、suite と
+  probe 124 本を 1 台の simulator で順に流していた。各 shard は suite の runnable fixture の連続した 1/N
+  （SwiftJsonUI の `CONFORMANCE_SHARD=k/N`。`CONFORMANCE_FILTER` は部分一致で、runnable の 241 本が別の id の
+  部分文字列なので使えない）と、probe クラスを重さ（`.github/scripts/ios_shard_weights.json`）で詰めた 1 束
+  （`CONFORMANCE_ONLY_TESTING`）を流し、artifact `ios-shard-k` / `ios-codegen-shard-k` に上げる。merge
+  （`.github/scripts/ios_shards.py merge`）が、fixture はちょうど 1 つの shard で実行・probe のテストは源が宣言する
+  全部がちょうど 1 回・shard の刻印あり（無い＝CONFORMANCE_SHARD を知らない SwiftJsonUI が全件を流した）・
+  スクリーンショットの衝突なし、を証明してから `results-ios[-codegen]` / `xctests-ios[-codegen]` を今と同じ名前・
+  形で上げる。report は shard と merge の両方が緑のときだけその面を judged に数える。N=2 は macOS 4 本で、
+  アカウントの macOS の同時実行の上限 5 本に収まる（3 だと 6 本で 1 本が待ち、2 より遅い）
 - ios / ios-codegen が赤のとき: `Name the failed tests` step が run の xcodebuild.log から失敗した
   `Test Case` と `file:line: error:` を印字し（`.github/scripts/name_failed_xctests.py`、注釈にも出る）、
-  xcodebuild.log と xcresult を artifact `failure-log-ios` / `failure-log-ios-codegen` に上げる（14 日）。
+  xcodebuild.log と xcresult を artifact `failure-log-ios-k` / `failure-log-ios-codegen-k`（shard k）に上げる（14 日）。
   run_conformance.sh は `tail -40` しか印字しないので、jsonui-cli 1.9.9 より前は失敗名がログに残らなかった
 - **tap-repro**（dispatch で `tap_repro=true` のときだけ。ほかの 7 job はすべて止まる）: iOS Dynamic で 2 つの interactive
   fixture（Switch/onValueChange__callback_fire と common/clipToBounds__hit_overflow_true）を別 id の複製で交互に
@@ -120,7 +131,8 @@
   post-tap 行: 2 回目の tap で通れば touch 未達、通らなければ handler 不応答）。予算 90 分（固定 ~18.5 分 + 300 本 ~32.5 分）
 - ios / ios-codegen は緑でも赤でも `Record every XCTest result` が全テストの結果行（passed / failed / skipped）を
   クラスごとに 1 行で数えて印字し（`.github/scripts/record_xctests.py`、`Executed N tests` と突き合わせる）、
-  行そのものを artifact `xctests-ios` / `xctests-ios-codegen` に上げる（7 日）。staging は suite step の env で
+  行そのものを shard の artifact に入れ、merge が全 shard の和を artifact `xctests-ios` / `xctests-ios-codegen` に
+  上げる（7 日。suite の 1 本は shard ごとに走るので、和では秒数を足した 1 行）。staging は suite step の env で
   `/tmp/jsonui-conformance-ios[-codegen].ci` に固定（run_conformance.sh 自前の staging は緑の run で消えるため）
 - android-library-tests（125m。初回の実測は step 17.5 分 / 262 case。2026-10-04 時点の直近 5 本は 17.8〜26.3 分 /
   394 case で、host の probe を足して (26.3 + 8) × 3 ≈ 103 → step 110）: KotlinJsonUI の

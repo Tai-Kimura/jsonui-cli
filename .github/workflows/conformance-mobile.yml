@@ -94,6 +94,19 @@ on:
         default: false
         type: boolean
 
+env:
+  # 🔻 THE iOS JOBS RUN AS SHARDS. One iOS job took 108-114 min (run
+  # 38393632937): the fixture suite and 124 probe tests, one after another on
+  # one simulator. Each of IOS_SHARDS shards runs a slice of the suite
+  # (SwiftJsonUI's CONFORMANCE_SHARD) and a share of the probe classes
+  # (.github/scripts/ios_shards.py plan, CONFORMANCE_ONLY_TESTING); ios-merge /
+  # ios-codegen-merge put them back together and refuse a run whose shards do
+  # not add up to it. 2 per mode is 4 macOS jobs: GitHub runs at most 5 macOS
+  # jobs at once on this account's plan, so 3 per mode (6) would queue one
+  # behind the others and finish later than 2. The matrices below list
+  # 1..IOS_SHARDS (jui_tools/tests/test_ios_shards.py holds them together).
+  IOS_SHARDS: 2
+
 concurrency:
   group: conformance-mobile-${{ github.ref }}
   cancel-in-progress: false
@@ -213,12 +226,13 @@ jobs:
     # 1.9.18). 150 is ~1.9x the measured maximum (ticket ci-ios-conformance-
     # jobs-outgrow-their-90-minute-budget).
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2] # 1..IOS_SHARDS
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
       JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
-    outputs:
-      library_sha: ${{ steps.library_sha.outputs.sha }}
-      toolchain: ${{ steps.toolchain.outputs.spec }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -317,7 +331,9 @@ jobs:
           # A fixed staging of the caller's (kept after a green run, for the
           # per-test record below); /tmp, as run_conformance.sh's own.
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios.ci
+          CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
           IOS_PROBES: ${{ inputs.ios_probes && 'true' || 'false' }}
+          SHARD_MODE: ios
         run: |
           # The probe switches are environment variables of the xcodebuild
           # process (run_conformance.sh's), derived from the UITests, not listed.
@@ -328,48 +344,32 @@ jobs:
           else
             echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
           fi
+          export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          echo "shard $CONFORMANCE_SHARD: $(echo $CONFORMANCE_ONLY_TESTING | wc -w | tr -d ' ') test classes — $CONFORMANCE_ONLY_TESTING"
           SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: results-ios
-          if-no-files-found: error
-          path: |
-            conformance/results/ios.results.json
-            conformance/artifacts/ios/
-      # 🔻 RECORD EVERY TEST, GREEN OR RED. A green run used to keep no
-      # per-test result: run 37154953027 passed 99 tests and its logs held no
-      # line of the pager probe's class, so "the probe passed" could only be
-      # inferred (ticket conformance-ios-passing-tests-leave-no-per-test-record).
-      # The staging is named above so it survives a green run (a staging of
-      # run_conformance.sh's own is removed when the run succeeds).
       - name: Record every XCTest result
         if: always()
         run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt
-      # 🔻 A RAISED SWITCH THAT DID NOT RUN IS RED. Raising the switches is
-      # half of it: a probe that skips anyway (a renamed switch, a new gate
-      # of another form) would leave the run green with the probe unjudged,
-      # the shape ios_probes was added to close.
-      - name: Every probe whose switch was raised ran
-        if: ${{ !cancelled() && inputs.ios_probes }}
-        run: python3 .github/scripts/ios_probe_gates.py check /tmp/jsonui-conformance-ios.ci/xctests.txt SwiftJsonUI/ConformanceHost/UITests
-      - name: Upload the per-test record
+      # One shard's part of the run, under a name the report's results-* does
+      # not match: ios-merge proves the shards add up and uploads
+      # results-ios / xctests-ios as the unsharded job did.
+      - name: Gather this shard's results
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/shard"
+          mkdir -p "$out/$(dirname results/ios.results.json)" "$out/artifacts/ios"
+          cp conformance/results/ios.results.json "$out/results/ios.results.json" || true
+          [ -d conformance/artifacts/ios ] && cp -R conformance/artifacts/ios/. "$out/artifacts/ios/" || true
+          cp /tmp/jsonui-conformance-ios.ci/xctests.txt /tmp/jsonui-conformance-ios.ci/tap_timing.txt "$out/" 2>/dev/null || true
+          printf '{"library_sha": "%s", "toolchain": "%s"}\n' "${{ steps.library_sha.outputs.sha }}" "${{ steps.toolchain.outputs.spec }}" > "$out/meta.json"
+      - name: Upload this shard's results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xctests-ios
-          if-no-files-found: warn
+          name: ios-shard-${{ matrix.shard }}
+          if-no-files-found: error
           retention-days: 7
-          path: |
-            /tmp/jsonui-conformance-ios.ci/xctests.txt
-            /tmp/jsonui-conformance-ios.ci/tap_timing.txt
-      # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
-      # xcodebuild, and on a failure it exits before saying where the full
-      # log is; run 37112820775 failed "1 failure" with no test name in the
-      # job log (ticket conformance-ios-failure-name-is-not-in-the-ci-log).
-      # The log is in the run's own staging dir — this job's runner holds
-      # one, /tmp/jsonui-conformance-ios.ci (named in the suite step's env).
+          path: ${{ runner.temp }}/shard/
       - name: Name the failed tests
         if: failure()
         run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios.*/xcodebuild.log
@@ -377,7 +377,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: failure-log-ios
+          name: failure-log-ios-${{ matrix.shard }}
           if-no-files-found: warn
           retention-days: 14
           path: |
@@ -398,6 +398,10 @@ jobs:
     # fixtures). 150 is ~1.65x the last completed run (ticket ci-ios-
     # conformance-jobs-outgrow-their-90-minute-budget).
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2] # 1..IOS_SHARDS
     env:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
       JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
@@ -442,6 +446,8 @@ jobs:
           # A fixed staging of the caller's (kept after a green run, for the
           # per-test record below); /tmp, as run_conformance.sh's own.
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios-codegen.ci
+          CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
+          SHARD_MODE: ios-codegen
           TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ inputs.image_probes && '1' || '0' }}
           TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ inputs.image_probes && '1' || '0' }}
           IOS_PROBES: ${{ inputs.ios_probes && 'true' || 'false' }}
@@ -455,48 +461,31 @@ jobs:
           else
             echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
           fi
+          export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          echo "shard $CONFORMANCE_SHARD: $(echo $CONFORMANCE_ONLY_TESTING | wc -w | tr -d ' ') test classes — $CONFORMANCE_ONLY_TESTING"
           SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: results-ios-codegen
-          if-no-files-found: error
-          path: |
-            conformance/codegen/ios.results.json
-            conformance/artifacts/ios-codegen/
-      # 🔻 RECORD EVERY TEST, GREEN OR RED. A green run used to keep no
-      # per-test result: run 37154953027 passed 99 tests and its logs held no
-      # line of the pager probe's class, so "the probe passed" could only be
-      # inferred (ticket conformance-ios-passing-tests-leave-no-per-test-record).
-      # The staging is named above so it survives a green run (a staging of
-      # run_conformance.sh's own is removed when the run succeeds).
       - name: Record every XCTest result
         if: always()
         run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
-      # 🔻 A RAISED SWITCH THAT DID NOT RUN IS RED. Raising the switches is
-      # half of it: a probe that skips anyway (a renamed switch, a new gate
-      # of another form) would leave the run green with the probe unjudged,
-      # the shape ios_probes was added to close.
-      - name: Every probe whose switch was raised ran
-        if: ${{ !cancelled() && inputs.ios_probes }}
-        run: python3 .github/scripts/ios_probe_gates.py check /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt SwiftJsonUI/ConformanceHost/UITests
-      - name: Upload the per-test record
+      # One shard's part of the run, under a name the report's results-* does
+      # not match: ios-codegen-merge proves the shards add up and uploads
+      # results-ios-codegen / xctests-ios-codegen as the unsharded job did.
+      - name: Gather this shard's results
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/shard"
+          mkdir -p "$out/$(dirname codegen/ios.results.json)" "$out/artifacts/ios-codegen"
+          cp conformance/codegen/ios.results.json "$out/codegen/ios.results.json" || true
+          [ -d conformance/artifacts/ios-codegen ] && cp -R conformance/artifacts/ios-codegen/. "$out/artifacts/ios-codegen/" || true
+          cp /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt /tmp/jsonui-conformance-ios-codegen.ci/tap_timing.txt "$out/" 2>/dev/null || true
+      - name: Upload this shard's results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xctests-ios-codegen
-          if-no-files-found: warn
+          name: ios-codegen-shard-${{ matrix.shard }}
+          if-no-files-found: error
           retention-days: 7
-          path: |
-            /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
-            /tmp/jsonui-conformance-ios-codegen.ci/tap_timing.txt
-      # 🔻 NAME THE FAILED TESTS. run_conformance.sh prints only `tail -40` of
-      # xcodebuild, and on a failure it exits before saying where the full
-      # log is; run 37112820775 failed "1 failure" with no test name in the
-      # job log (ticket conformance-ios-failure-name-is-not-in-the-ci-log).
-      # The log is in the run's own staging dir — this job's runner holds
-      # one, /tmp/jsonui-conformance-ios-codegen.ci (named in the suite step's env).
+          path: ${{ runner.temp }}/shard/
       - name: Name the failed tests
         if: failure()
         run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios-codegen.*/xcodebuild.log
@@ -504,7 +493,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: failure-log-ios-codegen
+          name: failure-log-ios-codegen-${{ matrix.shard }}
           if-no-files-found: warn
           retention-days: 14
           path: |
@@ -516,6 +505,115 @@ jobs:
   # (KVM-accelerated on ubuntu-latest). Tablet profile matches the
   # committed baseline runs (small phones can push fixtures offscreen).
   # ------------------------------------------------------------------ #
+  # Puts the ios shards back together as the one result the report reads
+  # (results-ios / xctests-ios, the names and shape of the unsharded
+  # job's), and refuses a run whose shards do not add up: a fixture or a
+  # probe test in no shard or in two, a shard missing, a results file
+  # without the shard record (a SwiftJsonUI that ignores CONFORMANCE_SHARD
+  # ran everything in every shard). .github/scripts/ios_shards.py merge.
+  ios-merge:
+    needs: ios
+    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      library_sha: ${{ steps.merge.outputs.library_sha }}
+      toolchain: ${{ steps.merge.outputs.toolchain }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: ${{ inputs.swiftjsonui_ref || 'master' }}
+          path: SwiftJsonUI
+          sparse-checkout: ConformanceHost/UITests
+      - name: Download the shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ios-shard-*
+          path: shards
+      - name: Merge the shards (and prove they are the whole run)
+        id: merge
+        run: |
+          set -euo pipefail
+          ls -d shards/ios-shard-* || true
+          python3 .github/scripts/ios_shards.py merge --mode ios --shards "$IOS_SHARDS" \
+            --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
+            --out merged shards/ios-shard-*
+          python3 .github/scripts/ios_shards.py meta shards/ios-shard-* | tee -a "$GITHUB_OUTPUT"
+      - name: Every probe whose switch was raised ran
+        if: ${{ !cancelled() && inputs.ios_probes }}
+        run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-ios
+          if-no-files-found: error
+          path: |
+            merged/results/ios.results.json
+            merged/artifacts/ios/
+      - name: Upload the per-test record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctests-ios
+          if-no-files-found: warn
+          retention-days: 7
+          path: merged/xctests.txt
+
+  # Puts the ios-codegen shards back together as the one result the report reads
+  # (results-ios-codegen / xctests-ios-codegen, the names and shape of the unsharded
+  # job's), and refuses a run whose shards do not add up: a fixture or a
+  # probe test in no shard or in two, a shard missing, a results file
+  # without the shard record (a SwiftJsonUI that ignores CONFORMANCE_SHARD
+  # ran everything in every shard). .github/scripts/ios_shards.py merge.
+  ios-codegen-merge:
+    needs: ios-codegen
+    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: ${{ inputs.swiftjsonui_ref || 'master' }}
+          path: SwiftJsonUI
+          sparse-checkout: ConformanceHost/UITests
+      - name: Download the shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ios-codegen-shard-*
+          path: shards
+      - name: Merge the shards (and prove they are the whole run)
+        id: merge
+        run: |
+          set -euo pipefail
+          ls -d shards/ios-codegen-shard-* || true
+          python3 .github/scripts/ios_shards.py merge --mode ios-codegen --shards "$IOS_SHARDS" \
+            --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
+            --out merged shards/ios-codegen-shard-*
+          python3 .github/scripts/ios_shards.py meta shards/ios-codegen-shard-* | tee -a "$GITHUB_OUTPUT"
+      - name: Every probe whose switch was raised ran
+        if: ${{ !cancelled() && inputs.ios_probes }}
+        run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-ios-codegen
+          if-no-files-found: error
+          path: |
+            merged/codegen/ios.results.json
+            merged/artifacts/ios-codegen/
+      - name: Upload the per-test record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctests-ios-codegen
+          if-no-files-found: warn
+          retention-days: 7
+          path: merged/xctests.txt
+
   android:
     if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
     runs-on: ubuntu-latest
@@ -934,7 +1032,7 @@ jobs:
     # 20 restores roughly the 2x headroom the other jobs carry. Cheap: this
     # is a weekly public-repo run, so wall-clock only gates the report.
     timeout-minutes: 20
-    needs: [web, ios, android, ios-codegen, android-codegen]
+    needs: [web, ios, ios-merge, android, ios-codegen, ios-codegen-merge, android-codegen]
     # 🔴 ALWAYS, BECAUSE ONE RED LEG USED TO DELETE THE WHOLE JUDGMENT.
     # Measured on run 34987243780: web/ios/ios-codegen/android all succeeded,
     # android-codegen failed on a real defect — and this job was SKIPPED, so
@@ -974,10 +1072,14 @@ jobs:
           judged=""; missing=""
           add() { [ "$2" = success ] && judged="$judged $1" || missing="$missing $1($2)"; }
           add web    "${{ needs.web.result }}"
-          add ios    "${{ needs.ios.result }}"
+          # A sharded face is judged when every shard and the merge that
+          # proved they are the whole run succeeded.
+          both() { [ "$1" = success ] && echo "$2" || echo "$1"; }
+          add ios    "$(both "${{ needs.ios.result }}" "${{ needs.ios-merge.result }}")"
           add android "${{ needs.android.result }}"
           cg_missing=""
-          [ "${{ needs.ios-codegen.result }}" = success ] || cg_missing="$cg_missing ios-codegen(${{ needs.ios-codegen.result }})"
+          cg_ios="$(both "${{ needs.ios-codegen.result }}" "${{ needs.ios-codegen-merge.result }}")"
+          [ "$cg_ios" = success ] || cg_missing="$cg_missing ios-codegen($cg_ios)"
           [ "${{ needs.android-codegen.result }}" = success ] || cg_missing="$cg_missing android-codegen(${{ needs.android-codegen.result }})"
           all_missing="${missing}${cg_missing}"
           echo "judged=${judged# }" >> "$GITHUB_OUTPUT"
@@ -1051,7 +1153,7 @@ jobs:
           # and `= true` would leave the schedule off whatever the default says.
           # A run without the flag prints "frame parity: NOT judged".
           [ "${{ inputs.frame_parity }}" != false ] && args+=(--frame-parity)
-          [ "${{ needs.ios.result }}" = success ] && args+=(--rendered-by "swiftjsonui.src=${{ needs.ios.outputs.library_sha }}" --rendered-by "ios.toolchain=${{ needs.ios.outputs.toolchain }}")
+          [ "${{ needs.ios.result }}" = success ] && [ "${{ needs.ios-merge.result }}" = success ] && args+=(--rendered-by "swiftjsonui.src=${{ needs.ios-merge.outputs.library_sha }}" --rendered-by "ios.toolchain=${{ needs.ios-merge.outputs.toolchain }}")
           [ "${{ needs.android.result }}" = success ] && args+=(--rendered-by "kotlinjsonui.src=${{ needs.android.outputs.library_sha }}" --rendered-by "android.toolchain=${{ needs.android.outputs.toolchain }}")
           [ "${{ needs.web.result }}" = success ] && args+=(--rendered-by "rjui.src=${{ needs.web.outputs.library_sha }}" --rendered-by "chromium=${{ needs.web.outputs.chromium }}")
           printf 'gate args:'; printf ' %s' "${args[@]}"; printf '\n'
