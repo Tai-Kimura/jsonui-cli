@@ -18,9 +18,19 @@ Two commands:
                          "1" (`getArguments().getString("x") == "1"`). The
                          list is derived from the tests, so a new probe needs no
                          edit here.
-  judge <KotlinJsonUI>   Reads each module's connected-test XML. Fails on any
+  judge <KotlinJsonUI> [--probes-raised]
+                         Reads each module's connected-test XML. Fails on any
                          of these:
                          - a failed case, or a case with an error;
+                         - with --probes-raised (the run raised every switch
+                           `flags` lists — kjui_device_tests.sh passes it when
+                           ANDROID_PROBES=true): a skipped case that
+                           RAISED_SKIPS does not declare. A raised probe that
+                           skips anyway did not run, and was green until
+                           jsonui-cli 1.9.27 (ticket conformance-mobile-
+                           android-raised-probe-skip-stays-green; iOS has had
+                           the same gate since 1.9.23, ios_probe_gates.py
+                           check);
                          - a module with no results;
                          - a class that has @Test in source but no case in the
                            results. Such a class did not run: a filter, a crash
@@ -94,6 +104,19 @@ UNREACHED_MODULES = {
                   "repository does not carry",
 }
 
+# A case that may skip on a run that raised every switch, and why. Declared,
+# never derived: an absent entry must mean "this skip is a probe that did not
+# run", not "nobody listed it". Each entry names the test, why it skips and
+# when (the condition), so a reader can tell whether the condition still holds.
+# Counted 2026-10-14 before this gate: 0 skipped cases in the three modules on
+# every run that raised the switches (38 runs, 19 switches); the 45 skips of
+# the scheduled runs (switches down) were all the 19 switch-gated classes.
+RAISED_SKIPS: dict[tuple[str, str], dict[str, str]] = {
+    # ("library-dynamic", "SomeProbeTest.someCase"): {
+    #     "why": "...", "when": "...",
+    # },
+}
+
 FLAG = re.compile(r'getArguments\(\)\s*\.getString\("([A-Za-z0-9_]+)"\)\s*==\s*"1"')
 # Top-level classes only: a declaration at column 0. A nested helper declared
 # above the tests (`private class Reading(...)` inside the test class) would
@@ -163,14 +186,18 @@ def _results(kjui: Path, module: str) -> list[Path]:
     return sorted(root.rglob("TEST-*.xml")) if root.is_dir() else []
 
 
-def judge(kjui: Path) -> int:
+def judge(kjui: Path, probes_raised: bool = False) -> int:
     problems: list[str] = []
+    for key, entry in RAISED_SKIPS.items():
+        if not (entry.get("why") or "").strip() or not (entry.get("when") or "").strip():
+            problems.append(f"RAISED_SKIPS {key}: declares no why or no when")
     for module in MODULES:
         files = _results(kjui, module)
         declared = test_classes(kjui, module)
         passed = failed = skipped = 0
         failures: list[str] = []
         skips: list[str] = []
+        skipped_names: list[str] = []
         seen: set[str] = set()
         cases = 0
         for path in files:
@@ -189,6 +216,7 @@ def judge(kjui: Path) -> int:
                     failures.append(f"{name}: {first[0][:160] if first else '(no message)'}")
                 elif skip is not None:
                     skipped += 1
+                    skipped_names.append(name)
                     reason = (skip.get("message") or skip.text or "").strip().splitlines()
                     skips.append(f"{name}: {reason[0][:160] if reason else '(no reason)'}")
                 else:
@@ -212,6 +240,12 @@ def judge(kjui: Path) -> int:
             problems.append(f"{module}: {failed} failed")
         if not_run:
             problems.append(f"{module}: {len(not_run)} class(es) with @Test did not run")
+        if probes_raised:
+            undeclared = sorted(n for n in skipped_names if (module, n) not in RAISED_SKIPS)
+            for name in undeclared:
+                print(f"   RAISED BUT SKIPPED  {name} (the switches were raised; RAISED_SKIPS does not declare it)")
+            if undeclared:
+                problems.append(f"{module}: {len(undeclared)} case(s) skipped although the probes were raised")
     for module in modules_with_device_tests(kjui):
         if module in UNREACHED_MODULES:
             print(f"== {module}: not run by this job — {UNREACHED_MODULES[module]}")
@@ -506,8 +540,12 @@ def main(argv: list[str]) -> int:
         return _watch_main(argv[1:])
     if argv[:1] == ["ime"]:
         return _ime_main(argv[1:])
+    raised = argv[0:1] == ["judge"] and argv[2:] == ["--probes-raised"]
+    if raised:
+        argv = argv[:2]
     if len(argv) != 2 or argv[0] not in ("flags", "judge", "not-class"):
-        print("usage: kjui_device_tests.py flags|judge|not-class <KotlinJsonUI checkout>", file=sys.stderr)
+        print("usage: kjui_device_tests.py flags|judge|not-class <KotlinJsonUI checkout> "
+              "(judge also takes --probes-raised)", file=sys.stderr)
         return 2
     kjui = Path(argv[1])
     if not (kjui / "library").is_dir():
@@ -521,7 +559,8 @@ def main(argv: list[str]) -> int:
         # One comma-separated value for -Pandroid.testInstrumentationRunnerArguments.notClass.
         print(",".join(sorted(fq for (_, fq) in RUN_ELSEWHERE)))
         return 0
-    return judge(kjui)
+    print(f"probes raised: {'yes — an undeclared skip is red' if raised else 'no'}")
+    return judge(kjui, probes_raised=raised)
 
 
 if __name__ == "__main__":

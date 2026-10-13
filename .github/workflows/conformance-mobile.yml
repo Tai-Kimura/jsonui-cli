@@ -1008,8 +1008,10 @@ jobs:
           path: |
             KotlinJsonUI/library/build/outputs/androidTest-results/
             KotlinJsonUI/library-dynamic/build/outputs/androidTest-results/
+            KotlinJsonUI/conformance-host/build/outputs/androidTest-results/
             KotlinJsonUI/library/build/reports/androidTests/
             KotlinJsonUI/library-dynamic/build/reports/androidTests/
+            KotlinJsonUI/conformance-host/build/reports/androidTests/
             KotlinJsonUI/device-evidence/
 
   # ------------------------------------------------------------------ #

@@ -94,7 +94,10 @@ collect_evidence() {
 }
 
 args=()
+judge_args=()
 if [ "${ANDROID_PROBES:-false}" = true ]; then
+  # The judge turns a raised probe that skipped anyway red (RAISED_SKIPS).
+  judge_args=(--probes-raised)
   while IFS= read -r name; do
     [ -n "$name" ] && args+=("-Pandroid.testInstrumentationRunnerArguments.${name}=1")
   done < <(python3 "$here/kjui_device_tests.py" flags "$kjui")
@@ -131,5 +134,5 @@ echo "gradle exit: $rc$([ "$rc" = 124 ] && echo ' (stopped by the watch: the cas
 
 collect_evidence || echo "warning: evidence collection failed; the verdict is unchanged"
 
-python3 "$here/kjui_device_tests.py" judge "$kjui" || rc=1
+python3 "$here/kjui_device_tests.py" judge "$kjui" ${judge_args[@]+"${judge_args[@]}"} || rc=1
 exit "$rc"

@@ -241,5 +241,107 @@ class KjuiDeviceTestsJudge(unittest.TestCase):
         self.assertEqual(["fooProbe"], K.flags(self.tree.root))
 
 
+
+class RaisedProbes(unittest.TestCase):
+    """On a run that raised every switch (--probes-raised, ANDROID_PROBES=true),
+    a skipped case is a probe that did not run and is red, unless RAISED_SKIPS
+    declares it (ticket conformance-mobile-android-raised-probe-skip-stays-green).
+    A run with the switches down is judged as before."""
+
+    SKIP = '<skipped />'
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tree = _Tree(Path(self._tmp.name))
+        for module, cls in (("library", "ATest"), ("library-dynamic", "BProbeTest"), ("conformance-host", "HProbeTest")):
+            self.tree.source(module, cls, TEST_CLASS.format(name=cls))
+            self.tree.results(module, "\n".join([_case(cls, "one"), _case(cls, "two")]))
+        self._declared = dict(K.RAISED_SKIPS)
+
+    def tearDown(self):
+        K.RAISED_SKIPS.clear()
+        K.RAISED_SKIPS.update(self._declared)
+        self._tmp.cleanup()
+
+    def _judge(self, raised: bool) -> tuple[int, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = K.judge(self.tree.root, probes_raised=raised)
+        return rc, out.getvalue() + err.getvalue()
+
+    def _skip_one(self, module="library-dynamic", cls="BProbeTest", name="two"):
+        self.tree.results(module, "\n".join([_case(cls, "one"), _case(cls, name, self.SKIP)]))
+
+    def test_nothing_skipped_is_green_raised_or_not(self):
+        self.assertEqual(0, self._judge(True)[0])
+        self.assertEqual(0, self._judge(False)[0])
+
+    def test_a_raised_probe_that_skipped_is_red_and_named(self):
+        self._skip_one()
+        rc, text = self._judge(True)
+        self.assertEqual(1, rc, text)
+        self.assertIn("RAISED BUT SKIPPED  BProbeTest.two", text)
+        self.assertIn("library-dynamic: 1 case(s) skipped although the probes were raised", text)
+
+    def test_with_the_switches_down_a_skip_is_judged_as_before(self):
+        self._skip_one()
+        rc, text = self._judge(False)
+        self.assertEqual(0, rc, text)
+        self.assertNotIn("RAISED BUT SKIPPED", text)
+
+    def test_a_declared_skip_is_green(self):
+        self._skip_one()
+        K.RAISED_SKIPS[("library-dynamic", "BProbeTest.two")] = {"why": "the platform lacks X", "when": "API < 36"}
+        rc, text = self._judge(True)
+        self.assertEqual(0, rc, text)
+
+    def test_a_new_skip_beside_a_declared_one_is_red(self):
+        self._skip_one()
+        self.tree.results("conformance-host", "\n".join([_case("HProbeTest", "one", self.SKIP), _case("HProbeTest", "two")]))
+        K.RAISED_SKIPS[("library-dynamic", "BProbeTest.two")] = {"why": "the platform lacks X", "when": "API < 36"}
+        rc, text = self._judge(True)
+        self.assertEqual(1, rc, text)
+        self.assertIn("RAISED BUT SKIPPED  HProbeTest.one", text)
+        self.assertNotIn("RAISED BUT SKIPPED  BProbeTest.two", text)
+
+    def test_a_declaration_is_keyed_by_its_module(self):
+        self._skip_one()
+        K.RAISED_SKIPS[("library", "BProbeTest.two")] = {"why": "x", "when": "y"}
+        self.assertEqual(1, self._judge(True)[0])
+
+    def test_a_declaration_without_why_or_when_is_red(self):
+        K.RAISED_SKIPS[("library", "ATest.one")] = {"why": "flaky", "when": ""}
+        rc, text = self._judge(False)
+        self.assertEqual(1, rc, text)
+        self.assertIn("declares no why or no when", text)
+
+    def test_the_committed_declarations_each_say_why_and_when(self):
+        for key, entry in self._declared.items():
+            self.assertTrue(entry.get("why", "").strip() and entry.get("when", "").strip(), key)
+
+    def test_the_command_line_takes_the_flag_and_nothing_else(self):
+        (self.tree.root / "library").mkdir(exist_ok=True)
+        self._skip_one()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(1, K.main(["judge", str(self.tree.root), "--probes-raised"]))
+            self.assertEqual(0, K.main(["judge", str(self.tree.root)]))
+            self.assertEqual(2, K.main(["judge", str(self.tree.root), "--probes-rised"]))
+
+    def test_the_runner_passes_the_flag_only_when_it_raised_the_switches(self):
+        import subprocess
+        script = (REPO_ROOT / ".github" / "scripts" / "kjui_device_tests.sh").read_text()
+        start = script.index("args=()\njudge_args=()")
+        block = script[start:script.index("\nfi\n", start) + 4]
+        self.assertIn("judge_args=(--probes-raised)", block)
+        self.assertIn('judge "$kjui" ${judge_args[@]+"${judge_args[@]}"}', script)
+        probe = ('here=/nonexistent; kjui=/nonexistent\n'
+                 'python3() { :; }\n' + block +
+                 'echo "n=${#judge_args[@]} ${judge_args[*]-}"\n')
+        for value, expect in (("true", "n=1 --probes-raised"), ("false", "n=0"), ("", "n=0")):
+            env = {"PATH": "/usr/bin:/bin", "ANDROID_PROBES": value}
+            got = subprocess.run(["/bin/bash", "-euc", probe], env=env, capture_output=True, text=True)
+            self.assertEqual(expect, got.stdout.strip().splitlines()[-1], (value, got.stdout, got.stderr))
+
+
 if __name__ == "__main__":
     unittest.main()

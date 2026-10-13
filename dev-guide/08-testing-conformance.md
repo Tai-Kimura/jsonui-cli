@@ -142,7 +142,10 @@
   （conformance の 34 ではない。API 34 の CI emulator では IME が出ず、前面 window の読み上げも空になることがあり、
   焦点を要する腕が emulator を測ってしまう。matrix run 36197930038 で 34 は赤、35 は緑、画面キーボードの設定は無関係）。判定は結果 XML から（`.github/scripts/kjui_device_tests.py`）:
   失敗 / error / 結果の無いモジュール / **@Test を持つのに結果に 1 件も無いクラス** / **device test を持つのに、この job が走らせず
-  `UNREACHED_MODULES` に理由つきで名前も無いモジュール**が赤。skip は名前で印字。sample-app は理由つきで名指しされている
+  `UNREACHED_MODULES` に理由つきで名前も無いモジュール**が赤。skip は名前で印字。**旗を立てた run（`ANDROID_PROBES=true`、
+  judge の `--probes-raised`）では、`RAISED_SKIPS` に理由と条件つきで宣言されていない skip も赤**（jsonui-cli 1.9.27 から。
+  それまでは立てた probe が skip しても緑だった。宣言は導出しない。2026-10-14 時点の宣言は 0 件: 旗を立てた 38 run で skip 0）。
+  sample-app は理由つきで名指しされている
   2026-09-26 まで、この 2 モジュールの androidTest はどの CI でも走っていなかった。
   Gradle は `kjui_device_tests.py watch` の下で走る: 最初に失敗した case の時点で端末の状態（screenshot /
   `dumpsys input_method` / `dumpsys window` / 上の activity / logcat）を `device-evidence/first-failure` に、
