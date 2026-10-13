@@ -186,7 +186,7 @@ RSpec.describe 'Responsive integration with converters' do
         output = converter.convert(2)
 
         expect(output).to include('flex-col')
-        expect(output).to include('md:flex-row')
+        expect(output).to include('md:max-lg:flex-row')
         expect(output).to include('lg:flex-row')
       end
     end
@@ -288,7 +288,7 @@ RSpec.describe 'Responsive integration with converters' do
         'type' => 'Button', 'image' => 'menu',
         'responsive' => { 'medium' => { 'visibility' => 'gone' } }
       })
-      expect(cls).to include('md:hidden')
+      expect(cls).to include('md:max-lg:hidden')
       expect(cls).to include('inline-flex')
     end
 

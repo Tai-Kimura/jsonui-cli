@@ -132,7 +132,9 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
     end
 
     context 'with medium (md:) breakpoint' do
-      it 'generates md: prefixed classes' do
+      # medium is the 768..1023 band, `md:max-lg:` (it was `md:`, which also
+      # held on a regular window: rjui-responsive-medium-classes-hold-on-regular-windows).
+      it 'generates md:max-lg: prefixed classes' do
         component = {
           'type' => 'View',
           'orientation' => 'vertical',
@@ -142,7 +144,7 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('md:flex-row')
+        expect(result[:classes]).to include('md:max-lg:flex-row')
         expect(result[:classes]).not_to include('flex-col')
       end
     end
@@ -217,7 +219,7 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('md:flex-1 md:min-w-0 md:min-h-0')
+        expect(result[:classes]).to include('md:max-lg:flex-1 md:max-lg:min-w-0 md:max-lg:min-h-0')
       end
 
       # Regression: rjui-responsive-gravity-override-not-emitted — gravity was
@@ -315,8 +317,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         result = described_class.build_responsive(component)
 
         # Medium breakpoint
-        expect(result[:classes]).to include('md:flex-row')
-        expect(result[:classes]).to include('md:gap-[0.75rem]')
+        expect(result[:classes]).to include('md:max-lg:flex-row')
+        expect(result[:classes]).to include('md:max-lg:gap-[0.75rem]')
 
         # Regular breakpoint
         expect(result[:classes]).to include('lg:flex-row')
@@ -494,7 +496,9 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
     screen = RjuiTools::React::ReactGenerator.new({ 'typescript' => true, 'use_tailwind' => true })
                                              .generate('Home', layout, screen_id: 'home')
     expect(screen).to include(described_class.landscape_hook_declaration)
-    expect(screen).to include('${isLandscape ? ')
+    # Each key of a block with a landscape key is a run-time fragment, held
+    # where that key wins (exclusive_condition).
+    expect(screen).to include('${isLandscape && !isMinLg ? ', '${isLandscape && isMinLg ? ', '${!isLandscape && !isMinMd ? ')
     template = File.read(File.expand_path('../../lib/react/templates/use_media_query.ts', __dir__))
     signature = template[/^export function useMediaQuery\(([^)]*)\): (\w+)/]
     expect(signature).to eq('export function useMediaQuery(query: string): boolean')
