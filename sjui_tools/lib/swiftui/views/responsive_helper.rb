@@ -55,6 +55,22 @@ module SjuiTools
           end
         end
 
+        # Whether any node in the tree draws width conditions (minWidth:N /
+        # maxWidth:N) — the view then owns an SJUIWindowWidth.
+        def self.has_width_condition_descendant?(component)
+          return false unless component.is_a?(Hash)
+          return true if JsonUIShared::ResponsiveResolver.width_conditions?(component)
+
+          children = component['child'] || component['children']
+          if children.is_a?(Array)
+            children.any? { |child| has_width_condition_descendant?(child) }
+          elsif children.is_a?(Hash)
+            has_width_condition_descendant?(children)
+          else
+            false
+          end
+        end
+
         # Build the Swift condition expression for a size class key.
         # @param size_class [String] e.g. "regular", "landscape", "regular-landscape"
         # @return [String] Swift condition expression
@@ -101,6 +117,13 @@ module SjuiTools
 
         def self.size_class_condition(size_class)
           parsed = JsonUIShared::ResponsiveResolver.parse_size_class(size_class)
+          # minWidth:N / maxWidth:N: the window's width, read from the
+          # library's SJUIWindowWidth (the scene's width, kept current by
+          # observing the scene's geometry, right from the first body).
+          if (width_condition = parsed[:condition])
+            return "#{WINDOW_WIDTH_VARIABLE}.value #{width_condition[:kind] == :min ? '>=' : '<'} #{width_condition[:value]}"
+          end
+
           conditions = []
 
           case parsed[:width]
@@ -655,6 +678,12 @@ module SjuiTools
             %w[top center bottom centerVertical].include?(gravity) ? gravity : 'top'
           end
         end
+
+        # The window width a view with width conditions reads. The view owns
+        # it, and view_updater ties it to the window the view is in
+        # (.sjuiTracksWindowWidth on the outer Group).
+        WINDOW_WIDTH_VARIABLE = 'sjuiWindowWidth'
+        WINDOW_WIDTH_DECLARATION = "@StateObject private var #{WINDOW_WIDTH_VARIABLE} = SJUIWindowWidth()"
 
         # State variable declarations needed when responsive is used
         # @return [Array<String>] Swift state variable lines

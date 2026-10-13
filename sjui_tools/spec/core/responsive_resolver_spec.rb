@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require 'core/responsive_resolver'
 
 RSpec.describe JsonUIShared::ResponsiveResolver do
@@ -172,6 +173,66 @@ RSpec.describe JsonUIShared::ResponsiveResolver do
     it 'parses nil' do
       result = described_class.parse_size_class(nil)
       expect(result).to eq({ width: nil, landscape: false })
+    end
+  end
+  # Which key wins, across every face: shared/core/responsive_resolution_vectors.json.
+  # build_branches gives the order; the first branch whose condition holds is
+  # drawn (the codegens' if / else if chains). A size class holds by its width
+  # bucket and orientation; a width condition by env.width (the codegens'
+  # conditions are held to the same reading in their own emit specs).
+  describe 'the resolution vectors' do
+    vectors = JSON.parse(File.read(File.expand_path('../../../shared/core/responsive_resolution_vectors.json', __dir__)))
+
+    holds = lambda do |key, env|
+      parsed = described_class.parse_size_class(key)
+      if (condition = parsed[:condition])
+        next condition[:kind] == :min ? env['width'] >= condition[:value] : env['width'] < condition[:value]
+      end
+      next false if parsed[:landscape] && env['landscape'] != true
+      next false if !parsed[:landscape] && parsed[:width].nil?
+      parsed[:width].nil? || parsed[:width] == env['sizeClass']
+    end
+
+    it 'has cases' do
+      expect(vectors['cases'].size).to be >= 20
+    end
+
+    vectors['cases'].each do |c|
+      it "draws #{c['winner'].inspect}: #{c['name']}" do
+        component = { 'type' => 'View', 'responsive' => c['keys'].to_h { |k| [k, { 'tag' => k }] } }
+        drawn = described_class.build_branches(component).find { |b| b[:size_class].nil? || holds.call(b[:size_class], c['env']) }
+        expect(drawn[:size_class]).to eq(c['winner'])
+        expect(drawn[:attrs]['tag']).to eq(c['winner'])
+      end
+    end
+  end
+
+  describe '.width_condition' do
+    it 'reads minWidth:N and maxWidth:N' do
+      expect(described_class.width_condition('minWidth:700')).to eq(kind: :min, value: 700)
+      expect(described_class.width_condition('maxWidth:0')).to eq(kind: :max, value: 0)
+    end
+
+    it 'reads every key of the shared key_cases as they say' do
+      vectors = JSON.parse(File.read(File.expand_path('../../../shared/core/responsive_resolution_vectors.json', __dir__)))
+      expect(vectors['key_cases'].size).to be >= 15
+      vectors['key_cases'].each do |c|
+        expected = c['condition'] && { kind: c['condition']['kind'].to_sym, value: c['condition']['value'] }
+        expect(described_class.width_condition(c['key'])).to eq(expected), c['key'].inspect
+      end
+    end
+  end
+
+  describe '.build_branches with width conditions' do
+    it 'orders the most narrowing first: maxWidth ascending, then minWidth descending' do
+      component = { 'responsive' => { 'minWidth:600' => {}, 'maxWidth:400' => {}, 'minWidth:900' => {}, 'maxWidth:300' => {} } }
+      expect(described_class.build_branches(component).map { |b| b[:size_class] })
+        .to eq(['maxWidth:300', 'maxWidth:400', 'minWidth:900', 'minWidth:600', nil])
+    end
+
+    it 'leaves a block that also names a size class to the size classes (jui build refuses it)' do
+      component = { 'responsive' => { 'minWidth:600' => {}, 'regular' => {} } }
+      expect(described_class.build_branches(component).map { |b| b[:size_class] }).to eq(['regular', nil])
     end
   end
 end

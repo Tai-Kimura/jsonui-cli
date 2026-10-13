@@ -4,6 +4,7 @@ require_relative '../core/generated_marker'
 require_relative 'binding/binding_expression'
 require_relative '../core/string_literals'
 require_relative 'section_bounder'
+require_relative 'views/responsive_helper'
 
 module SjuiTools
   module SwiftUI
@@ -15,6 +16,9 @@ module SjuiTools
       # point — a silent "static has a marker, dynamic doesn't" split is far
       # harder to diagnose than a build error.
       SCREEN_MARKER_MIN_LIBRARY_VERSION = '10.8.1'
+      # SJUIWindowWidth / .sjuiTracksWindowWidth (responsive minWidth:N /
+      # maxWidth:N, jui-responsive-width-threshold-conditions).
+      WINDOW_WIDTH_MIN_LIBRARY_VERSION = '10.29.12'
 
       # A generated view the build could not update keeps the previous
       # build's body — the layout's change is not in the app. Until 1.9.0
@@ -159,6 +163,16 @@ module SjuiTools
           ""
         end
 
+        # A view with width conditions owns an SJUIWindowWidth; tie it to the
+        # window this view is in, on the OUTER Group like the screen marker,
+        # so the Dynamic branch and the generated one share it.
+        window_width_line = if state_variables.any? { |sv| sv == Views::ResponsiveHelper::WINDOW_WIDTH_DECLARATION }
+          "\n            // Requires SwiftJsonUI >= #{WINDOW_WIDTH_MIN_LIBRARY_VERSION} (responsive minWidth / maxWidth)" \
+          "\n            .sjuiTracksWindowWidth(#{Views::ResponsiveHelper::WINDOW_WIDTH_VARIABLE})"
+        else
+          ""
+        end
+
         marker_header = SjuiTools::Core::GeneratedMarker.comment_header(
           source: "#{json_name}.json",
           generator: "sjui build",
@@ -189,7 +203,7 @@ module SjuiTools
         #endif
                 }
                 // Requires SwiftJsonUI >= 10.6.0 (embed init-params child-side wiring)
-                .receiveEmbedInitParams(to: viewModel)#{screen_marker_line}
+                .receiveEmbedInitParams(to: viewModel)#{window_width_line}#{screen_marker_line}
             }
 
             @ViewBuilder

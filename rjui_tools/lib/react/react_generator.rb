@@ -553,7 +553,12 @@ module RjuiTools
         auto_shrink_declarations = "\n#{auto_shrink_declarations}\n" unless auto_shrink_declarations.empty?
 
         # Generate landscape hook declaration
-        landscape_declaration = needs_landscape ? "\n  #{ResponsiveHelper.landscape_hook_declaration}\n" : ''
+        landscape_declaration = if needs_landscape
+                                  bands = ResponsiveHelper.needs_landscape_width_bands?(json)
+                                  "\n  #{ResponsiveHelper.landscape_hook_declaration(width_bands: bands)}\n"
+                                else
+                                  ''
+                                end
 
         # Generate StringManager hook declaration. The helper emits
         # `StringManager.currentLanguage.xxx` while walking the spec; we

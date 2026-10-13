@@ -161,6 +161,7 @@ module RjuiTools
 
           size_classes = JsonUIShared::ResponsiveResolver.size_classes(component)
           has_landscape = size_classes.any? { |sc| sc.include?('landscape') }
+          width_prefixes = width_condition_prefixes(component)
 
           # For each size class, generate prefixed Tailwind classes
           size_classes.each do |sc|
@@ -189,8 +190,9 @@ module RjuiTools
                 result[:landscape_styles][landscape_key] << cls
               end
             else
-              # Pure width breakpoint -> Tailwind responsive prefix
-              prefix = BREAKPOINT_PREFIX[parsed[:width]] || ''
+              # Pure width breakpoint -> Tailwind responsive prefix; a width
+              # condition -> the band in which it is the one that wins.
+              prefix = width_prefixes[sc] || BREAKPOINT_PREFIX[parsed[:width]] || ''
 
               overrides.each do |attr, value|
                 next if %w[type child data responsive].include?(attr)
@@ -217,10 +219,61 @@ module RjuiTools
           result
         end
 
+        # minWidth:N / maxWidth:N (jui-responsive-width-threshold-conditions):
+        # each key's classes are scoped to the band of viewport widths in
+        # which it is the one that wins (the smallest maxWidth that holds,
+        # else the largest minWidth), so no other key's classes stack on top
+        # of it the way md: does under lg:. Tailwind v4: min-[Npx] is
+        # `width >= N`, max-[Npx] is `width < N` — the layout's own meaning.
+        #
+        # maxWidth M(1) < M(2) < …: M(i) wins in [M(i-1), M(i)).
+        # minWidth N(1) > N(2) > …: N(i) wins in [N(i), N(i-1)).
+        #
+        # { key => prefix } for a block of width conditions, else {}.
+        def width_condition_prefixes(component)
+          return {} unless JsonUIShared::ResponsiveResolver.width_conditions?(component)
+
+          conditions = JsonUIShared::ResponsiveResolver.width_condition_keys(component)
+                                                     .map { |k| [k, JsonUIShared::ResponsiveResolver.width_condition(k)] }
+          maxes = conditions.select { |_, c| c[:kind] == :max }.sort_by { |_, c| c[:value] }
+          mins = conditions.select { |_, c| c[:kind] == :min }.sort_by { |_, c| -c[:value] }
+          prefixes = {}
+          maxes.each_with_index do |(key, c), i|
+            lower = i.zero? ? nil : maxes[i - 1][1][:value]
+            prefixes[key] = "#{lower ? "min-[#{lower}px]:" : ''}max-[#{c[:value]}px]:"
+          end
+          mins.each_with_index do |(key, c), i|
+            upper = i.zero? ? nil : mins[i - 1][1][:value]
+            prefixes[key] = "min-[#{c[:value]}px]:#{upper ? "max-[#{upper}px]:" : ''}"
+          end
+          prefixes
+        end
+
         # Generate the useMediaQuery hook call string for landscape detection.
         # Returns the TypeScript/JSX code string.
-        def landscape_hook_declaration
-          "const isLandscape = useMediaQuery('(orientation: landscape)');"
+        # A tree with a size-class + landscape combination also reads the
+        # widths its bands need (landscape_condition).
+        def landscape_hook_declaration(width_bands: false)
+          declaration = "const isLandscape = useMediaQuery('(orientation: landscape)');"
+          return declaration unless width_bands
+
+          "#{declaration}\n  const isMinMd = useMediaQuery('(min-width: 768px)');" \
+            "\n  const isMinLg = useMediaQuery('(min-width: 1024px)');"
+        end
+
+        # Whether any node in the tree has a size-class + landscape
+        # combination (compact-landscape, medium-landscape, regular-landscape).
+        def needs_landscape_width_bands?(component)
+          return false unless component.is_a?(Hash)
+
+          if JsonUIShared::ResponsiveResolver.responsive?(component)
+            sizes = JsonUIShared::ResponsiveResolver.size_classes(component)
+            return true if sizes.any? { |sc| LANDSCAPE_WIDTH_CONDITIONS.key?(JsonUIShared::ResponsiveResolver.parse_size_class(sc)[:width]) && sc.include?('landscape') }
+          end
+
+          children = component['child']
+          children = [children] if children.is_a?(Hash)
+          Array(children).any? { |child| needs_landscape_width_bands?(child) }
         end
 
         # Build a conditional className expression for landscape overrides.
@@ -341,19 +394,22 @@ module RjuiTools
           end
         end
 
+        # A combination's width is its size class's band — compact below
+        # 768px, medium 768..1023, regular from 1024, as the variant-file
+        # dispatch reads them — AND landscape. Until jsonui-cli 1.9.25 every
+        # combination returned `isLandscape` alone, so regular-landscape held
+        # on a narrow landscape window too
+        # (rjui-responsive-width-plus-landscape-drops-width-condition).
+        LANDSCAPE_WIDTH_CONDITIONS = {
+          'compact' => '!isMinMd',
+          'medium' => 'isMinMd && !isMinLg',
+          'regular' => 'isMinLg'
+        }.freeze
+
         def landscape_condition(key)
-          case key
-          when 'landscape'
-            'isLandscape'
-          when 'compact-landscape'
-            'isLandscape'
-          when 'medium-landscape'
-            'isLandscape'
-          when 'regular-landscape'
-            'isLandscape'
-          else
-            'isLandscape'
-          end
+          width = JsonUIShared::ResponsiveResolver.parse_size_class(key)[:width]
+          band = LANDSCAPE_WIDTH_CONDITIONS[width]
+          band ? "isLandscape && #{band}" : 'isLandscape'
         end
 
         def map_responsive_padding(value, prefix)

@@ -287,6 +287,9 @@ module SjuiTools
             @state_variables << decl
           end
         end
+        if Views::ResponsiveHelper.has_width_condition_descendant?(json_data)
+          @state_variables << Views::ResponsiveHelper::WINDOW_WIDTH_DECLARATION
+        end
         @state_variables << Views::BaseViewConverter::INTERACTION_ENVIRONMENT_DECLARATION if @reads_interaction_environment
 
         # Get root children info for potential body splitting

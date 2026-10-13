@@ -861,6 +861,13 @@ module KjuiTools
         return nil if size_class.nil?
 
         parsed = JsonUIShared::ResponsiveResolver.parse_size_class(size_class)
+        # minWidth:N / maxWidth:N against the same window width as the size
+        # classes. The expression truncates to Int, and for an integer N
+        # `floor(w) >= N` is `w >= N` and `floor(w) < N` is `w < N`.
+        if (width_condition = parsed[:condition])
+          return "#{INLINE_WIDTH_DP_EXPR} #{width_condition[:kind] == :min ? '>=' : '<'} #{width_condition[:value]}"
+        end
+
         conditions = []
         conditions << INLINE_WIDTH_CONDITIONS[parsed[:width]] if INLINE_WIDTH_CONDITIONS.key?(parsed[:width])
         conditions << INLINE_LANDSCAPE_CONDITION if parsed[:landscape]

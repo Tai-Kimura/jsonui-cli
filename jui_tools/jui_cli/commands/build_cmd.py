@@ -311,6 +311,14 @@ def cmd_build(args: argparse.Namespace) -> int:
     if variants_ok is False:
         return 1
 
+    # Hard gate: an inline responsive block's width conditions are spelled as
+    # such, not mixed with size classes, and never overlap
+    # (jui-responsive-width-threshold-conditions, user ruling 2026-10-13).
+    with clock.stage("responsive width check"):
+        widths_ok = _check_responsive_width_conditions(config_mgr)
+    if widths_ok is False:
+        return 1
+
     # Hard gate: no two nodes under one id once includes expand (design U8).
     with clock.stage("layout id uniqueness"):
         ids_ok = _check_layout_id_uniqueness(config_mgr, platforms)
@@ -2049,6 +2057,22 @@ def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
         except json.JSONDecodeError:
             continue
     return stems
+
+
+def _check_responsive_width_conditions(config_mgr: ConfigManager) -> bool:
+    """Hard gate for ``minWidth:N`` / ``maxWidth:N`` in inline ``responsive``
+    blocks (core/responsive_width_gate.py): layouts and styles, before a file
+    is written."""
+    from ..core.responsive_width_gate import directory_errors
+
+    errors = directory_errors([config_mgr.layouts_directory, config_mgr.styles_directory])
+    if not errors:
+        return True
+    print("\nERROR [responsive]: a responsive block whose width conditions do not "
+          "give one answer at every width:")
+    for line in errors:
+        print(f"  - {line}")
+    return False
 
 
 def _check_layout_id_uniqueness(config_mgr: ConfigManager, platforms) -> bool:
