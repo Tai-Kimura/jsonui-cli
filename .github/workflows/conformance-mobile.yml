@@ -35,11 +35,16 @@ on:
       # forgot the flag went green with the probes skipped — 1.9.7's tag was
       # judged on such a run (9 library-dynamic probes skipped). Lower one with
       # `-f android_probes=false`. The schedule has no inputs, so `inputs.*`
-      # is empty there and the `&& '1' || '0'` below stays '0' / 'false': the
-      # weekly run is unchanged (as `inputs.swiftjsonui_ref || 'master'`
-      # already relies on).
+      # is empty there — and until jsonui-cli 1.9.27 that left every opt-in
+      # probe off on the weekly run: the one run nobody dispatches never ran
+      # them at all. Each switch below therefore reads
+      # `(inputs.X || github.event_name == 'schedule')`: a dispatch is exactly
+      # what it was (true unless lowered), the schedule raises all three, and
+      # the "every raised probe ran" check runs on the schedule too
+      # (jui_tools/tests/test_the_schedule_raises_the_probes.py evaluates each
+      # of them for both events).
       image_probes:
-        description: "Also run the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) in both iOS jobs (default true; the schedule runs without them). ios_probes raises them too"
+        description: "Also run the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) in both iOS jobs (default true; the schedule raises them). ios_probes raises them too"
         required: false
         default: true
         type: boolean
@@ -50,7 +55,7 @@ on:
       # never ran in a dispatch (ticket
       # conformance-mobile-ios-probe-guards-never-run-in-dispatch).
       ios_probes:
-        description: "Also run every opt-in probe in both iOS jobs (each environment switch a ConformanceHost UI test compares to \"1\"; default true; the schedule runs without them)"
+        description: "Also run every opt-in probe in both iOS jobs (each environment switch a ConformanceHost UI test compares to \"1\"; default true; the schedule raises them)"
         required: false
         default: true
         type: boolean
@@ -60,7 +65,7 @@ on:
         default: main
         type: string
       android_probes:
-        description: "Also run the opt-in probes in KotlinJsonUI's device tests (every instrumentation argument a test compares to \"1\"; default true; the schedule runs without them)"
+        description: "Also run the opt-in probes in KotlinJsonUI's device tests (every instrumentation argument a test compares to \"1\"; default true; the schedule raises them)"
         required: false
         default: true
         type: boolean
@@ -326,13 +331,13 @@ jobs:
           SIMULATOR_OS: "26"
           # The opt-in probes read these through the test runner (TEST_RUNNER_
           # prefix stripped); "0" when not dispatched with image_probes.
-          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ inputs.image_probes && '1' || '0' }}
-          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ inputs.image_probes && '1' || '0' }}
+          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
+          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
           # A fixed staging of the caller's (kept after a green run, for the
           # per-test record below); /tmp, as run_conformance.sh's own.
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios.ci
           CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
-          IOS_PROBES: ${{ inputs.ios_probes && 'true' || 'false' }}
+          IOS_PROBES: ${{ (inputs.ios_probes || github.event_name == 'schedule') && 'true' || 'false' }}
           SHARD_MODE: ios
         run: |
           # The probe switches are environment variables of the xcodebuild
@@ -448,9 +453,9 @@ jobs:
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios-codegen.ci
           CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
           SHARD_MODE: ios-codegen
-          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ inputs.image_probes && '1' || '0' }}
-          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ inputs.image_probes && '1' || '0' }}
-          IOS_PROBES: ${{ inputs.ios_probes && 'true' || 'false' }}
+          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
+          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
+          IOS_PROBES: ${{ (inputs.ios_probes || github.event_name == 'schedule') && 'true' || 'false' }}
         run: |
           echo "SwiftJsonUI ref=${{ inputs.swiftjsonui_ref || 'master' }} HEAD=$(git -C SwiftJsonUI rev-parse HEAD)"
           # As the ios job: every probe switch the UITests read, derived.
@@ -542,7 +547,7 @@ jobs:
             --out merged shards/ios-shard-*
           python3 .github/scripts/ios_shards.py meta shards/ios-shard-* | tee -a "$GITHUB_OUTPUT"
       - name: Every probe whose switch was raised ran
-        if: ${{ !cancelled() && inputs.ios_probes }}
+        if: ${{ !cancelled() && (inputs.ios_probes || github.event_name == 'schedule') }}
         run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
       - name: Upload results
         uses: actions/upload-artifact@v4
@@ -595,7 +600,7 @@ jobs:
             --out merged shards/ios-codegen-shard-*
           python3 .github/scripts/ios_shards.py meta shards/ios-codegen-shard-* | tee -a "$GITHUB_OUTPUT"
       - name: Every probe whose switch was raised ran
-        if: ${{ !cancelled() && inputs.ios_probes }}
+        if: ${{ !cancelled() && (inputs.ios_probes || github.event_name == 'schedule') }}
         run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
       - name: Upload results
         uses: actions/upload-artifact@v4
@@ -967,7 +972,7 @@ jobs:
         timeout-minutes: 110
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          ANDROID_PROBES: ${{ inputs.android_probes && 'true' || 'false' }}
+          ANDROID_PROBES: ${{ (inputs.android_probes || github.event_name == 'schedule') && 'true' || 'false' }}
         # API 35, not the conformance jobs' 34 (those keep 34 for their
         # baselines; this job has none). Measured 2026-09-26, same
         # KotlinJsonUI 329f5d6 and the same runner image. Only the classes

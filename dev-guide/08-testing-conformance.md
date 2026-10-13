@@ -167,7 +167,10 @@
   `.github/scripts/ios_probe_gates.py` がテストから導出。画像の 2 つも含む）。立てたのに skipped のクラス、記録に無いクラスは
   step「Every probe whose switch was raised ran」で赤（1.9.22 まで 23 クラス・40 本が dispatch で一度も走っていなかった。
   票 conformance-mobile-ios-probe-guards-never-run-in-dispatch）。3 つの probe は **既定で true**（下ろすときだけ `=false`）。
-  **SwiftJsonUI / KotlinJsonUI のタグの前に release 枝で撃つ**。schedule は入力無し＝既定ブランチ、probe なし。
+  **SwiftJsonUI / KotlinJsonUI のタグの前に release 枝で撃つ**。schedule は入力無し＝既定ブランチ。probe は
+  jsonui-cli 1.9.27 から **schedule でも 3 つとも上がる**（各 switch が `(inputs.X || github.event_name == 'schedule')`。
+  それまでは入力が空で全部 off になり、週次の run では opt-in の probe が一度も走らず、「上げた probe はすべて走った」の
+  検査も一緒に飛んでいた。jui_tools/tests/test_the_schedule_raises_the_probes.py が各式を両方の event で評価する）。
   `android_library_only=true` は android-library-tests だけを走らせる（ほかの job と report は止まる）。
   KotlinJsonUI の device test だけを繰り返すとき用（conformance の job は 1 本も走らない）
   ⚠️ 同じ枝へ続けて撃つと消える: workflow の concurrency は枝（ref）ごとで、GitHub は同じ group に実行中 1 本＋待機 1 本しか
