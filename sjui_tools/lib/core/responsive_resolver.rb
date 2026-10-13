@@ -26,7 +26,7 @@ module JsonUIShared
     ].freeze
 
     # Window-width conditions (jui-responsive-width-threshold-conditions,
-    # jsonui-cli 1.9.25): `minWidth:N` holds when the window is at least N
+    # jsonui-cli 1.9.26): `minWidth:N` holds when the window is at least N
     # wide, `maxWidth:N` when it is narrower than N — N itself is not
     # included, so `maxWidth:700` and `minWidth:700` split the widths with no
     # gap and no overlap, fractional widths included. N is a non-negative
