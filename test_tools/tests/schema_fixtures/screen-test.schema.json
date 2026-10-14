@@ -169,16 +169,27 @@
       ],
       "description": "How this file decides the page is ready, overriding the runner's project-wide screenReadyStrategy. Needed by tests whose expected outcome is that the screen does NOT render — a permission refusal shown in its place, an expired session redirecting to login — for which waiting on the screen's own marker can only time out. 'none' skips the gate (the test's first step does the waiting); { marker } waits for where it lands instead, keeping a positive readiness condition; 'auto' / 'marker' / 'networkidle' are the project-wide gates applied to this file alone."
     },
+    "caseIsolation": {
+      "x-requires-driver": {
+        "android": "1.16.0",
+        "ios": "1.14.0",
+        "web": "1.14.0"
+      },
+      "type": "string",
+      "enum": ["shared", "reopen"],
+      "default": "shared",
+      "description": "Whether the cases of this file share one screen state. 'shared' (the default, and what an absent key means): the screen is opened once, setup runs once, every case runs in the state the previous case left — its scroll position, the screen it navigated to — and teardown runs once, so the order of the cases matters. 'reopen': before EACH case the screen is opened afresh — web goes back to the URL the page was on when the file started (file mocks re-applied, screenReady gate awaited), iOS relaunches the app with the file's launch / mocks, Android relaunches the app with the file's launch / mocks — then setup runs; teardown runs after each case. A case gated out by skip / platform / responsive opens nothing; each retry attempt re-opens. Read for screen test files run directly; a flow that references a case runs it inside the flow and ignores this. An older driver ignores the key and runs the file as 'shared'."
+    },
     "setup": {
       "type": "array",
-      "description": "Steps to execute before each test case",
+      "description": "Steps run before the cases. With caseIsolation 'shared' (the default) they run ONCE per file, before the first case — not before each case. With caseIsolation 'reopen' they run before each case, after the screen is re-opened. A setup failure fails the cases it was run for (every case under 'shared', that one case under 'reopen'); teardown still runs.",
       "items": {
         "$ref": "actions.schema.json#/definitions/step"
       }
     },
     "teardown": {
       "type": "array",
-      "description": "Steps to execute after each test case",
+      "description": "Steps run after the cases. With caseIsolation 'shared' (the default) they run ONCE per file, after the last case — not after each case. With caseIsolation 'reopen' they run after each case. Teardown runs even when setup or the case failed; a teardown failure is recorded as an extra 'teardown' result.",
       "items": {
         "$ref": "actions.schema.json#/definitions/step"
       }

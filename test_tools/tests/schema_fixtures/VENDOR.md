@@ -24,7 +24,9 @@ turning drift into a CI failure.
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
 - Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
-- Vendored at commit: `aae3b0a`
+- Vendored at commit: `aae3b0a`; `screen-test.schema.json` alone re-vendored from
+  `8a1b823` (branch `feat/case-isolation`, `caseIsolation`) — re-point this
+  line when that commit lands under its final SHA.
 
   ⚠️ Nothing reads that line. The byte guard is
   `dev-guide/ci/check-canonical-sync.py`, which compares the FILES; the

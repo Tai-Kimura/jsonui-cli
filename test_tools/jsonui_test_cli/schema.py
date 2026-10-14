@@ -317,8 +317,8 @@ VALID_PERMISSION_VALUES = ["allow", "deny", "unset"]
 # pins both lists to the vendored schemas.
 VALID_SCREEN_TOP_LEVEL_KEYS = [
     "$schema", "type", "source", "metadata", "platform", "orientation",
-    "embeddedIn", "initialState", "launch", "mocks", "screenReady", "setup",
-    "teardown", "cases"
+    "embeddedIn", "initialState", "launch", "mocks", "screenReady",
+    "caseIsolation", "setup", "teardown", "cases"
 ]
 
 # Minimum driver version per top-level key, mirroring `x-requires-driver` in
@@ -349,6 +349,11 @@ KEY_DRIVER_REQUIREMENTS = {
     # than silence, and the day either becomes resolvable the declaration is
     # already here rather than being remembered then.
     "orientation": {"android": "1.12.0", "ios": "1.12.0", "web": "1.12.0"},
+    # The first release of each driver that reads it — the next minor of
+    # each at the time the key was added (web / ios 1.13.0 -> 1.14.0,
+    # android 1.15.12 -> 1.16.0). An older driver runs a 'reopen' file as
+    # 'shared', which is the failure the declaration exists to name.
+    "caseIsolation": {"android": "1.16.0", "ios": "1.14.0", "web": "1.14.0"},
 }
 
 # `screenReady` string forms. The object form is {"marker": "<screen id>"}.
@@ -357,6 +362,13 @@ KEY_DRIVER_REQUIREMENTS = {
 # because the readiness gate would otherwise wait for a marker that is
 # correctly never going to appear.
 VALID_SCREEN_READY_VALUES = ["auto", "marker", "networkidle", "none"]
+
+# `caseIsolation` values. 'shared' (the default) runs setup once, every case
+# in the state the previous case left, teardown once; 'reopen' opens the
+# screen afresh before each case and runs setup / teardown around each case.
+# Checked because an unrecognised value would run as 'shared' — exactly the
+# shared state the file declared it did not want.
+VALID_CASE_ISOLATION_VALUES = ["shared", "reopen"]
 VALID_FLOW_TOP_LEVEL_KEYS = [
     "$schema", "type", "metadata", "platform", "orientation",
     "initialState", "launch", "mocks", "setup", "teardown", "sources",
