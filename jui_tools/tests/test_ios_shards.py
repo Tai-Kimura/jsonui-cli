@@ -95,8 +95,68 @@ class Plan(unittest.TestCase):
             self.assertEqual(sorted(c for g in got for c in g[1:]), sorted(probes))
             with self.assertRaises(shards.Refused):
                 shards.shard_classes(d, w, "ios", 3, 4)
-            with self.assertRaises(shards.Refused):
-                shards.shard_classes(d, w, "ios-codegen", 3, 1)
+            # A mode the table does not weigh still gets a plan that covers
+            # every class (the merge proves coverage; a table can only cost
+            # balance), with a note on stderr.
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                no_weights = [shards.shard_classes(d, w, "ios-codegen", 3, k) for k in (1, 2, 3)]
+            self.assertEqual(sorted(c for g in no_weights for c in g[1:]), sorted(probes))
+            self.assertIn("no weights for ios-codegen", err.getvalue())
+
+    def test_the_suite_slices_are_each_shares_starting_load(self):
+        classes = [f"P{i}" for i in range(12)]
+        weights = {c: float(10 + i) for i, c in enumerate(classes)}
+        # A head start the probes can make up (they weigh 186 in all).
+        start = [100.0, 0.0]
+        seeded = shards.plan(classes, weights, 2, start)
+        loads = [start[k] + sum(weights[c] for c in seeded[k]) for k in (0, 1)]
+        self.assertLessEqual(abs(loads[0] - loads[1]), max(weights.values()), loads)
+        plain = shards.plan(classes, weights, 2)
+        plain_loads = [start[k] + sum(weights[c] for c in plain[k]) for k in (0, 1)]
+        self.assertGreater(abs(plain_loads[0] - plain_loads[1]), abs(loads[0] - loads[1]),
+                           "the seeded plan must balance what the unseeded one does not")
+
+    def test_slices_for_another_shard_count_change_nothing(self):
+        classes = [f"P{i}" for i in range(9)]
+        weights = {c: float(i + 1) for i, c in enumerate(classes)}
+        self.assertEqual(shards.plan(classes, weights, 3, [100.0, 0.0]), shards.plan(classes, weights, 3))
+
+    def test_a_missing_or_broken_table_never_stops_the_plan(self):
+        with tempfile.TemporaryDirectory() as t:
+            probes = {f"P{i}UITests": [f"test{i}"] for i in range(7)}
+            d = _uitests(Path(t), {"ConformanceUITests": ["testConformanceSuite"], **probes})
+            tables = {
+                "missing": None,
+                "not json": "{ nope",
+                "a list": "[1, 2]",
+                "no mode": json.dumps({"ios-codegen": {}}),
+                "bad weights": json.dumps({"ios": {"P0UITests": "heavy", "P1UITests": -3, "P2UITests": 5}}),
+                "slices not numbers": json.dumps({"ios": {}, "suite_slices": {"ios": ["a", "b"]}}),
+                "slices for 3": json.dumps({"ios": {}, "suite_slices": {"ios": [1, 2, 3]}}),
+                "slices not a map": json.dumps({"ios": {}, "suite_slices": [1, 2]}),
+            }
+            for name, body in tables.items():
+                w = Path(t) / f"{name}.json"
+                if body is not None:
+                    w.write_text(body)
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    got = [shards.shard_classes(d, w, "ios", 2, k) for k in (1, 2)]
+                self.assertEqual(sorted(c for g in got for c in g[1:]), sorted(probes), name)
+                self.assertTrue(all(g[0] == "ConformanceUITests" for g in got), name)
+                self.assertIn("note:", err.getvalue(), f"{name}: the fallback says why")
+
+    def test_the_committed_table_has_one_slice_per_shard_of_the_workflow(self):
+        n = int(yaml.safe_load(WORKFLOW.read_text())["env"]["IOS_SHARDS"])
+        table = json.loads(WEIGHTS.read_text())
+        for mode in ("ios", "ios-codegen"):
+            slices = table["suite_slices"][mode]
+            self.assertEqual(len(slices), n, mode)
+            self.assertTrue(all(isinstance(x, (int, float)) and x > 0 for x in slices), mode)
+            weights, start, notes = shards.load_table(WEIGHTS, mode, n)
+            self.assertEqual(notes, [], mode)
+            self.assertEqual(start, [float(x) for x in slices])
 
     def test_the_committed_weights_plan_the_real_modes(self):
         table = json.loads(WEIGHTS.read_text())

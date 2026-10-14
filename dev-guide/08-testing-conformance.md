@@ -114,7 +114,9 @@
   （ubuntu）がそれを 1 本に戻す。1 本のときは ios 108 分・ios-codegen 114 分（run 38393632937）で、suite と
   probe 124 本を 1 台の simulator で順に流していた。各 shard は suite の runnable fixture の連続した 1/N
   （SwiftJsonUI の `CONFORMANCE_SHARD=k/N`。`CONFORMANCE_FILTER` は部分一致で、runnable の 241 本が別の id の
-  部分文字列なので使えない）と、probe クラスを重さ（`.github/scripts/ios_shard_weights.json`）で詰めた 1 束
+  部分文字列なので使えない）と、probe クラスを重さ（`.github/scripts/ios_shard_weights.json`。各 shard の suite の範囲の秒数
+  `suite_slices` を「初めの負荷」に持ち、N が一致するときだけ使う。表が無い・壊れていても plan は止まらず、重さ無しで全クラスを覆う。
+  作り直しは直近の run の `ios-shard-k` / `ios-codegen-shard-k` の xctests から）で詰めた 1 束
   （`CONFORMANCE_ONLY_TESTING`）を流し、artifact `ios-shard-k` / `ios-codegen-shard-k` に上げる。merge
   （`.github/scripts/ios_shards.py merge`）が、fixture はちょうど 1 つの shard で実行・probe のテストは源が宣言する
   全部がちょうど 1 回・shard の刻印あり（無い＝CONFORMANCE_SHARD を知らない SwiftJsonUI が全件を流した）・

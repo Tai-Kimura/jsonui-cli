@@ -8,6 +8,7 @@ test cases against its "Executed 93 tests").
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import io
 import tempfile
@@ -153,6 +154,68 @@ class RecordXCTestsTest(unittest.TestCase):
         R.tap_timing(R.read_log(GREEN_RUN + lines), out=printed)
         self.assertIn("1 tap(s) after the fixture marker: min 7.000s", printed.getvalue())
         self.assertIn("no n= / prev= on these lines", printed.getvalue())
+
+
+class PhaseTimes(unittest.TestCase):
+    """Where a shard's wall clock went: printed only, never a verdict. The two
+    session lines below are the shapes xcodebuild wrote in CI (run
+    38339290220's ios-codegen log)."""
+
+    LOG = (
+        "Test Suite 'Selected tests' started at 2026-10-13 03:08:42.880.\n"
+        "Test Case '-[ConformanceHostUITests.ConformanceUITests testConformanceSuite]' passed (6000.000 seconds).\n"
+        "Test Suite 'Selected tests' passed at 2026-10-13 04:57:28.274.\n"
+        "\t Executed 1 test, with 0 failures (0 unexpected) in 6525.394 (6525.394) seconds\n"
+        "2026-10-13 04:57:53.690 xcodebuild[8205:29639] [MT] IDETestOperationsObserverDebug: "
+        "6602.447 elapsed -- Testing started completed.\n"
+    )
+
+    def test_the_phases_add_up_to_the_session(self):
+        from datetime import datetime
+        started = datetime(2026, 10, 13, 2, 57, 3).timestamp()
+        got = R.phases(self.LOG, started)
+        self.assertAlmostEqual(got["testing session"], 6602.447)
+        self.assertAlmostEqual(got["testing session -> first test (runner up)"], 51.6, places=0)
+        self.assertAlmostEqual(got["tests"], 6525.394, places=0)
+        self.assertAlmostEqual(got["last test -> session end"], 25.4, places=0)
+        self.assertAlmostEqual(got["step start -> testing session (simulator, build, install)"], 648.2, places=0)
+        inside = (got["testing session -> first test (runner up)"] + got["tests"] + got["last test -> session end"])
+        self.assertAlmostEqual(inside, got["testing session"], places=2)
+
+    def test_without_the_step_start_that_phase_is_left_out(self):
+        self.assertNotIn("step start -> testing session (simulator, build, install)", R.phases(self.LOG))
+
+    def test_a_log_without_session_times_says_so_and_judges_nothing(self):
+        out = io.StringIO()
+        R.print_phases(R.phases("Test Case '-[M.C t]' passed (1.0 seconds).\n"), out)
+        self.assertIn("no session times", out.getvalue())
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "xcodebuild.log"
+            log.write_text("Test Case '-[M.C t]' passed (1.0 seconds).\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(R.main([str(log), str(Path(tmp) / "x.txt"), "--started-at", ""]), 0)
+                self.assertEqual(R.main([str(log), str(Path(tmp) / "x.txt"), "--started-at", "1760000000"]), 0)
+
+    def test_the_printout_says_it_is_not_a_verdict(self):
+        out = io.StringIO()
+        R.print_phases(R.phases(self.LOG), out)
+        self.assertIn("printed only", out.getvalue())
+
+    def test_both_shard_jobs_record_their_start_and_pass_it(self):
+        import yaml
+        wf = yaml.safe_load((Path(__file__).resolve().parents[2] / ".github" / "workflows"
+                             / "conformance-mobile.yml").read_text())
+        for job in ("ios", "ios-codegen"):
+            steps = wf["jobs"][job]["steps"]
+            suite = [st["run"] for st in steps if "CONFORMANCE_SHARD" in (st.get("env") or {})]
+            self.assertEqual(len(suite), 1, job)
+            self.assertIn('date +%s > "$RUNNER_TEMP/suite-started"', suite[0])
+            self.assertLess(suite[0].index("suite-started"), suite[0].index("run_conformance.sh"), job)
+            record = [st["run"] for st in steps if st.get("name") == "Record every XCTest result"]
+            self.assertEqual(len(record), 1, job)
+            self.assertIn('--started-at "$(cat "$RUNNER_TEMP/suite-started" 2>/dev/null)"', record[0])
+        tap = [st.get("run", "") for st in wf["jobs"]["tap-repro"]["steps"] if "record_xctests.py" in st.get("run", "")]
+        self.assertTrue(tap and all("--started-at" not in r for r in tap), "tap-repro is unchanged")
 
 
 if __name__ == "__main__":

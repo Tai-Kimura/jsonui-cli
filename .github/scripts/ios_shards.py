@@ -94,15 +94,22 @@ def declared_tests(uitests: Path) -> dict[str, list[str]]:
     return out
 
 
-def plan(classes: list[str], weights: dict[str, float], n: int) -> list[list[str]]:
+def plan(classes: list[str], weights: dict[str, float], n: int,
+         start: list[float] | None = None) -> list[list[str]]:
     """The probe classes in n shares of about equal weight: longest first, each
     to the lightest share so far (ties to the lower share). A class with no
-    weight counts as the median — a new probe lands somewhere, never nowhere."""
+    weight counts as the median — a new probe lands somewhere, never nowhere.
+
+    `start`: each share's load before any probe — the seconds its slice of the
+    suite takes (the table's suite_slices). The suite is cut by fixture count,
+    and slices of one count can differ by minutes (run 38486621880, codegen:
+    16.3 vs 12.1 min), which the probes then have to make up. Used only when
+    it has n entries; otherwise every share starts at 0, as before."""
     if n < 1:
         raise Refused(f"n must be at least 1, got {n}")
     known = sorted(weights[c] for c in classes if c in weights)
     median = known[len(known) // 2] if known else 1.0
-    load = [0.0] * n
+    load = [float(x) for x in start] if start is not None and len(start) == n else [0.0] * n
     shares: list[list[str]] = [[] for _ in range(n)]
     for cls in sorted(classes, key=lambda c: (-weights.get(c, median), c)):
         k = min(range(n), key=lambda i: (load[i], i))
@@ -111,14 +118,50 @@ def plan(classes: list[str], weights: dict[str, float], n: int) -> list[list[str
     return [sorted(s) for s in shares]
 
 
+def load_table(weights_file: Path, mode: str, n: int) -> tuple[dict[str, float], list[float] | None, list[str]]:
+    """The mode's class weights and suite slices, and what was wrong with the
+    table. Never raises: a missing, unreadable or partial table gives what it
+    can (no weights — every class the median, so an even split by count — and
+    no starting loads), and the plan still covers every class. The merge
+    proves coverage either way; a bad table can only cost balance."""
+    notes: list[str] = []
+    try:
+        table = json.loads(weights_file.read_text(encoding="utf-8"))
+        if not isinstance(table, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as e:
+        return {}, None, [f"{weights_file}: {e} — planning without weights"]
+    raw = table.get(mode)
+    weights: dict[str, float] = {}
+    if not isinstance(raw, dict):
+        notes.append(f"{weights_file} has no weights for {mode} — planning without them")
+    else:
+        weights = {c: float(v) for c, v in raw.items()
+                   if isinstance(c, str) and isinstance(v, (int, float)) and v >= 0}
+        if len(weights) != len(raw):
+            notes.append(f"{weights_file}: {len(raw) - len(weights)} unusable weight(s) for {mode} ignored")
+    slices = (table.get("suite_slices") or {}).get(mode) if isinstance(table.get("suite_slices"), dict) else None
+    start: list[float] | None = None
+    if slices is None:
+        notes.append(f"{weights_file} has no suite_slices for {mode} — every shard starts at 0")
+    elif not (isinstance(slices, list) and all(isinstance(x, (int, float)) and x >= 0 for x in slices)):
+        notes.append(f"{weights_file}: suite_slices for {mode} is not a list of seconds — every shard starts at 0")
+    elif len(slices) != n:
+        notes.append(f"{weights_file}: suite_slices for {mode} has {len(slices)} entries, the run has {n} shards "
+                     "— every shard starts at 0")
+    else:
+        start = [float(x) for x in slices]
+    return weights, start, notes
+
+
 def shard_classes(uitests: Path, weights_file: Path, mode: str, n: int, k: int) -> list[str]:
     if not 1 <= k <= n:
         raise Refused(f"shard {k} of {n}")
-    weights = json.loads(weights_file.read_text(encoding="utf-8")).get(mode)
-    if weights is None:
-        raise Refused(f"{weights_file} has no weights for {mode}")
+    weights, start, notes = load_table(weights_file, mode, n)
+    for note in notes:
+        print(f"note: {note}", file=sys.stderr)
     probes = [c for c in declared_tests(uitests) if c != SUITE_CLASS]
-    return [SUITE_CLASS] + plan(probes, weights, n)[k - 1]
+    return [SUITE_CLASS] + plan(probes, weights, n, start)[k - 1]
 
 
 def read_record(path: Path) -> list[tuple[str, str, str, float]]:

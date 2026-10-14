@@ -340,6 +340,8 @@ jobs:
           IOS_PROBES: ${{ (inputs.ios_probes || github.event_name == 'schedule') && 'true' || 'false' }}
           SHARD_MODE: ios
         run: |
+          # When this step began, for record_xctests.py's phase times (printed only).
+          date +%s > "$RUNNER_TEMP/suite-started"
           # The probe switches are environment variables of the xcodebuild
           # process (run_conformance.sh's), derived from the UITests, not listed.
           if [ "$IOS_PROBES" = true ]; then
@@ -354,7 +356,7 @@ jobs:
           SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Record every XCTest result
         if: always()
-        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt
+        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt --started-at "$(cat "$RUNNER_TEMP/suite-started" 2>/dev/null)"
       # One shard's part of the run, under a name the report's results-* does
       # not match: ios-merge proves the shards add up and uploads
       # results-ios / xctests-ios as the unsharded job did.
@@ -457,6 +459,8 @@ jobs:
           TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
           IOS_PROBES: ${{ (inputs.ios_probes || github.event_name == 'schedule') && 'true' || 'false' }}
         run: |
+          # When this step began, for record_xctests.py's phase times (printed only).
+          date +%s > "$RUNNER_TEMP/suite-started"
           echo "SwiftJsonUI ref=${{ inputs.swiftjsonui_ref || 'master' }} HEAD=$(git -C SwiftJsonUI rev-parse HEAD)"
           # As the ios job: every probe switch the UITests read, derived.
           if [ "$IOS_PROBES" = true ]; then
@@ -471,7 +475,7 @@ jobs:
           SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Record every XCTest result
         if: always()
-        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt
+        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt --started-at "$(cat "$RUNNER_TEMP/suite-started" 2>/dev/null)"
       # One shard's part of the run, under a name the report's results-* does
       # not match: ios-codegen-merge proves the shards add up and uploads
       # results-ios-codegen / xctests-ios-codegen as the unsharded job did.

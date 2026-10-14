@@ -161,9 +161,70 @@ def tap_timing(found: dict, out=sys.stdout) -> None:
                   f"+{t['at']:.3f}s from the marker", file=out)
 
 
+# Where a shard's wall clock went (printed only — no step judges these numbers).
+# Run 38486621880: ios-codegen (1) spent 17.2 min of its xcodebuild outside the
+# tests and (2) 4.7 min, and the job log keeps only run_conformance.sh's last 40
+# lines, so whether the build, the install or the runner took the difference
+# could not be read. xcodebuild prints no time for its own start; the suite
+# step records one (`--started-at`, epoch seconds) and the rest is in the log:
+SESSION_DONE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+) xcodebuild\[.*?\] .*IDETestOperationsObserverDebug: "
+                          r"([\d.]+) elapsed -- Testing started completed\.")
+SUITE_STARTED = re.compile(r"^Test Suite '(?:All|Selected) tests' started at (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)")
+SUITE_ENDED = re.compile(r"^Test Suite '(?:All|Selected) tests' (?:passed|failed) at (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)")
+
+
+def phases(text: str, started_at: float | None = None) -> dict[str, float]:
+    """Seconds per phase: step start -> testing session start (simulator boot,
+    build, install), session start -> first test (the runner coming up), the
+    tests, last test -> session end. A phase whose ends are not both known is
+    left out. The log's times and `started_at` are the same machine's clock."""
+    from datetime import datetime
+    parse = lambda t: datetime.strptime(t, "%Y-%m-%d %H:%M:%S.%f")
+    first = last = done = None
+    elapsed = None
+    for line in text.splitlines():
+        line = line.rstrip()
+        if first is None and (m := SUITE_STARTED.match(line)):
+            first = parse(m.group(1))
+        elif m := SUITE_ENDED.match(line):
+            last = parse(m.group(1))
+        elif m := SESSION_DONE.match(line):
+            done, elapsed = parse(m.group(1)), float(m.group(2))
+    out: dict[str, float] = {}
+    session_start = None
+    if done is not None and elapsed is not None:
+        from datetime import timedelta
+        session_start = done - timedelta(seconds=elapsed)
+        out["testing session"] = elapsed
+    if started_at and session_start is not None:
+        out["step start -> testing session (simulator, build, install)"] = (
+            session_start - datetime.fromtimestamp(started_at)).total_seconds()
+    if session_start is not None and first is not None:
+        out["testing session -> first test (runner up)"] = (first - session_start).total_seconds()
+    if first is not None and last is not None:
+        out["tests"] = (last - first).total_seconds()
+    if last is not None and done is not None:
+        out["last test -> session end"] = (done - last).total_seconds()
+    return out
+
+
+def print_phases(found_phases: dict[str, float], out=sys.stdout) -> None:
+    if not found_phases:
+        print("[xctest timing] no session times in the log", file=out)
+        return
+    print("[xctest timing] (printed only — no step judges these numbers)", file=out)
+    for name, seconds in found_phases.items():
+        print(f"  {name}: {seconds:.0f} s ({seconds / 60:.1f} min)", file=out)
+
+
 def main(argv: list[str]) -> int:
+    started_at: float | None = None
+    if len(argv) == 4 and argv[2] == "--started-at":
+        # Empty when the step did not record it; then that phase is left out.
+        started_at = float(argv[3]) if argv[3].strip() else None
+        argv = argv[:2]
     if len(argv) != 2:
-        print("usage: record_xctests.py <xcodebuild.log> <out.txt>", file=sys.stderr)
+        print("usage: record_xctests.py <xcodebuild.log> <out.txt> [--started-at EPOCH]", file=sys.stderr)
         return 1
     log, out_path = Path(argv[0]), Path(argv[1])
     if not log.is_file():
@@ -181,6 +242,7 @@ def main(argv: list[str]) -> int:
     (out_path.parent / "tap_timing.txt").write_text("".join(line + "\n" for line in raw))
     summarize(found)
     tap_timing(found)
+    print_phases(phases(log.read_text(errors="replace"), started_at))
     return 0
 
 
