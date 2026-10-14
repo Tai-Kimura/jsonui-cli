@@ -31,6 +31,7 @@ committed ink because one side of its comparison is only a hash.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -68,6 +69,7 @@ def _loud(path: Path) -> None:
 class ParitySeesOneSideGoBlankTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.conf = self.tmp / "conformance"
         self.codegen = self.conf / "artifacts" / "ios-codegen"
         self.dynamic = self.conf / "artifacts" / "ios"

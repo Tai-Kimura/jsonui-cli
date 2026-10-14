@@ -24,6 +24,7 @@ import io
 import json
 import os
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -167,6 +168,41 @@ class ExceptionPathRecordsTests(unittest.TestCase):
         entries = (json.loads(manifest.read_text())["files"]
                    if manifest.exists() else {})
         return raised, entries, out.getvalue()
+
+    def _in_private_tempdir(self, build):
+        """Run *build* with tempfile pointed at an empty dir; return what it left there."""
+        scratch = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, scratch, True)
+        saved = tempfile.tempdir
+        tempfile.tempdir = str(scratch)
+        try:
+            build()
+        finally:
+            tempfile.tempdir = saved
+        return sorted(p.name for p in scratch.iterdir())
+
+    def test_a_build_leaves_nothing_in_the_temp_dir_on_either_exit(self):
+        # The stage-failure ledger's directory was made per build and never
+        # removed: one empty directory per `jui build` in the user's temp dir.
+        def halting():
+            original = build_cmd._sync_api_models
+            build_cmd._sync_api_models = lambda *_a, **_k: False
+            os.chdir(self.root)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    build_cmd.cmd_build(argparse.Namespace(
+                        clean=False, ios_only=False, android_only=False,
+                        web_only=False, platform=None, lint_strings=False,
+                        normalize_layouts=None))
+            finally:
+                build_cmd._sync_api_models = original
+
+        for name, build in (("raised", lambda: self._build_raising(ValueError)), ("halted", halting)):
+            with self.subTest(exit=name):
+                before = os.environ.get("JUI_STAGE_FAILURES")
+                self.assertEqual(self._in_private_tempdir(build), [])
+                self.assertEqual(os.environ.get("JUI_STAGE_FAILURES"), before,
+                                 "the build must put the variable back")
 
     def test_a_stage_that_raises_still_records_what_it_wrote(self):
         raised, entries, out = self._build_raising(ValueError)

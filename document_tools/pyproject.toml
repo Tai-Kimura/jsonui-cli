@@ -74,6 +74,9 @@ postgres = [
 ]
 
 [tool.pytest.ini_options]
+# Keep tmp_path only for failed tests: the default kept every test's for
+# the last 3 runs (9 MB per run of this suite, measured 2026-10-15).
+tmp_path_retention_policy = "failed"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]

@@ -18,6 +18,7 @@ output carrying `note: frame parity (...): N fixture(s) compared`.
 from __future__ import annotations
 
 import re
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,7 +50,9 @@ class AGateWithoutTheFlagSaysSoTests(unittest.TestCase):
     """Pure enough to run anywhere: visual off, the committed tree, a scratch report."""
 
     def _notices(self, frame_parity: bool) -> list[str]:
-        out = Path(tempfile.mkdtemp()) / "REPORT.md"
+        _scratch = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, _scratch, True)
+        out = _scratch / "REPORT.md"
         outcome = evaluate(
             REPO / "conformance", ["web"], out_path=out, visual=False, frame_parity=frame_parity
         )

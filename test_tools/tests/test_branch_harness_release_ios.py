@@ -105,6 +105,12 @@ def sims():
     devices.release()
 
 
+def _scratch_beside(work: Path) -> Path:
+    scratch = work.parent / "tool-tmp"
+    scratch.mkdir(exist_ok=True)
+    return scratch
+
+
 def _run(work: Path, runtime_source: str, udid: str, probe: Path = PROBE) -> tuple[int, str]:
     """`xcodebuild test` of *probe* with *runtime_source* as the emitted
     runtime; its exit code and log."""
@@ -116,7 +122,10 @@ def _run(work: Path, runtime_source: str, udid: str, probe: Path = PROBE) -> tup
          # A crash is the control's expected outcome; without this xcodebuild
          # sits in `simctl diagnose` for up to 600 s afterwards.
          "-collect-test-diagnostics", "never"],
-        cwd=work, capture_output=True, text=True, timeout=900)
+        cwd=work, capture_output=True, text=True, timeout=900,
+        # xcodebuild and SwiftPM leave TemporaryDirectory.* and lock files in
+        # $TMPDIR; keep them beside the package so they go with tmp_path.
+        env={**os.environ, "TMPDIR": f"{_scratch_beside(work)}/"})
     return run.returncode, run.stdout + run.stderr
 
 

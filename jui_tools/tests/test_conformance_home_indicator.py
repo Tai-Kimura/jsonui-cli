@@ -15,6 +15,7 @@ place in a 1206 x 2622 capture.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,6 +38,7 @@ class PillShareTests(unittest.TestCase):
     def setUp(self):
         self.pill = home_indicator.load_pill(home_indicator.TEMPLATE)
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def _share(self, image: Image.Image) -> float | None:
         path = self.tmp / "shot.png"
@@ -60,6 +62,7 @@ class PillShareTests(unittest.TestCase):
 class GateTests(unittest.TestCase):
     def _conformance_dir(self, shots: dict[str, str]) -> Path:
         root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
         for rel, band in shots.items():
             path = root / "artifacts" / rel
             path.parent.mkdir(parents=True, exist_ok=True)

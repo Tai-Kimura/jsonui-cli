@@ -32,6 +32,7 @@ manifests equivalent while every result keys on an id that no longer exists.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,8 +41,19 @@ from jui_cli.conformance import manifest_lineage as lineage
 from jui_cli.conformance.report import load_platform_results, manifest_identity
 
 
+#: Scratch trees made by _tree, removed when the module ends.
+_MADE: list[Path] = []
+
+
+def tearDownModule() -> None:
+    for path in _MADE:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def _tree(fixtures: dict[str, str], ids: list[str], provenance: str) -> Path:
-    conf = Path(tempfile.mkdtemp()) / "conformance"
+    _scratch = Path(tempfile.mkdtemp())
+    _MADE.append(_scratch)
+    conf = _scratch / "conformance"
     (conf / "fixtures").mkdir(parents=True)
     for name, body in fixtures.items():
         (conf / "fixtures" / name).write_text(body, encoding="utf-8")

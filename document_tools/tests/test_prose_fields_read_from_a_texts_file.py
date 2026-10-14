@@ -19,6 +19,7 @@ What is pinned here:
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -47,6 +48,7 @@ def _app_spec(description, intent="checks"):
 class _Dir(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def write(self, name, content):
         path = self.dir / name
@@ -394,7 +396,9 @@ class FileReferenceRules(_Dir):
         self.assertNotIn("does not exist", e)
 
     def test_an_absolute_path_is_refused(self):
-        other = Path(tempfile.mkdtemp()) / "abs.texts.yaml"
+        _scratch = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, _scratch, True)
+        other = _scratch / "abs.texts.yaml"
         other.write_text("key: x\n", encoding="utf-8")
         (e,) = self.errors(f"{other}#key")
         self.assertIn("absolute", e)

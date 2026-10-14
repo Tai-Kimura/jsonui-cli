@@ -30,6 +30,7 @@ discriminating position fails by name instead of passing vacuously.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +75,7 @@ class AMoveInsideAColumnIsCaughtTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.conf = conformance_with_shared_core(self.tmp)
         self.art = self.conf / "artifacts" / "web"
         self.art.mkdir(parents=True)

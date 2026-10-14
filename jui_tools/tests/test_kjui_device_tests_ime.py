@@ -14,6 +14,7 @@ import importlib.util
 import io
 import stat
 import sys
+import shutil
 import tempfile
 import textwrap
 import unittest
@@ -36,6 +37,7 @@ K = _load()
 class ImeProbeTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, True)
         self.calls = self.dir / "adb-calls.txt"
         self.requests = self.dir / "requests.txt"
         self.evidence = self.dir / "device-evidence"

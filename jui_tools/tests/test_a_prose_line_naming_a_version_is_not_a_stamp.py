@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,6 +56,7 @@ class AVersionMentionedInProseIsNotAStampTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.repo = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.repo, True)
         _git(self.repo, "init", "-q", "-b", "main")
         _git(self.repo, "config", "user.email", "t@example.invalid")
         _git(self.repo, "config", "user.name", "t")

@@ -34,6 +34,7 @@ false positives on the unmutated corpus.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -120,6 +121,7 @@ class TheBlindPopulationIsDerivedTests(unittest.TestCase):
 class InkSeparatesBlankFromDrawnTests(unittest.TestCase):
     def test_a_blank_page_of_any_colour_has_zero_ink(self) -> None:
         tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
         for shade in ((255, 255, 255), (0, 0, 0), (17, 99, 200)):
             path = tmp / f"{shade[0]}.png"
             Image.new("RGB", (64, 64), shade).save(path)
@@ -129,6 +131,7 @@ class InkSeparatesBlankFromDrawnTests(unittest.TestCase):
 
     def test_a_drawn_page_has_ink(self) -> None:
         tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
         _faint(tmp / "f.png", 40)
         self.assertEqual(ink_file(tmp / "f.png"), 40)
 
@@ -137,6 +140,7 @@ class InkSeparatesBlankFromDrawnTests(unittest.TestCase):
 class TheComparisonCatchesBlankingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.conf = conformance_with_shared_core(self.tmp)
         self.art = self.conf / "artifacts" / "web"
         self.art.mkdir(parents=True)
@@ -222,6 +226,7 @@ class AbsenceIsReportedNotReadAsZeroTests(unittest.TestCase):
 
     def test_a_pre_ink_baseline_reports_uncovered_and_judges_nothing(self) -> None:
         tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
         conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
@@ -263,6 +268,7 @@ class EveryBlindEntryLandsInExactlyOneBucketTests(unittest.TestCase):
 
     def test_checked_plus_uncovered_plus_exempt_accounts_for_the_population(self) -> None:
         tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
         conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
@@ -327,6 +333,7 @@ class TheDerivationsOwnPremiseIsMeasuredPerLaneTests(unittest.TestCase):
 
     def _lane(self, painter, extra_blank: bool = False):
         tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
         conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
@@ -387,6 +394,7 @@ class OnlyNewNeverPairsAFreshInkWithACommittedHashTests(unittest.TestCase):
 
     def _bake_ground(self):
         tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
         conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
@@ -450,6 +458,7 @@ class AnUncoveredEntryIsStillMeasuredTests(unittest.TestCase):
 
     def _pre_ink_lane(self):
         tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
         conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
