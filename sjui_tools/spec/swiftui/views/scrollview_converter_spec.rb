@@ -352,11 +352,38 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
         }
       end
 
-      it 'inherits orientation from child' do
-        converter = described_class.new(component)
-        code = converter.convert
+      # The axis is never taken from the children (attribute_definitions.json
+      # ScrollView, user ruling 2026-10-14,
+      # jui-scrollview-axis-from-child-web-disagrees): a horizontal child is
+      # laid out inside a vertical scroll, as rjui and kjui draw it.
+      it 'keeps the scroll vertical: a horizontal child does not turn it' do
+        code = described_class.new(component).convert
 
-        expect(code).to include('.horizontal')
+        expect(code).to include('AdvancedKeyboardAvoidingScrollView(.vertical,')
+        expect(code).not_to include('AdvancedKeyboardAvoidingScrollView(.horizontal,')
+      end
+
+      it 'keeps the scroll vertical for a child drawn as a horizontal View (HStack)' do
+        code = described_class.new({ 'type' => 'ScrollView', 'child' => [{ 'type' => 'HStack' }] }).convert
+
+        expect(code).to include('AdvancedKeyboardAvoidingScrollView(.vertical,')
+      end
+    end
+
+    context 'the axis keys' do
+      def axis(component)
+        described_class.new(component).convert[/AdvancedKeyboardAvoidingScrollView\((\.\w+),/, 1]
+      end
+
+      it 'scrolls sideways for orientation horizontal or horizontalScroll true' do
+        expect(axis({ 'type' => 'ScrollView', 'orientation' => 'horizontal' })).to eq('.horizontal')
+        expect(axis({ 'type' => 'ScrollView', 'horizontalScroll' => true })).to eq('.horizontal')
+      end
+
+      it 'scrolls vertically otherwise' do
+        expect(axis({ 'type' => 'ScrollView' })).to eq('.vertical')
+        expect(axis({ 'type' => 'ScrollView', 'orientation' => 'vertical' })).to eq('.vertical')
+        expect(axis({ 'type' => 'ScrollView', 'horizontalScroll' => false })).to eq('.vertical')
       end
     end
 

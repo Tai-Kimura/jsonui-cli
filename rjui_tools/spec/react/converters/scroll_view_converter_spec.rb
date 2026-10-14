@@ -30,6 +30,20 @@ RSpec.describe RjuiTools::React::Converters::ScrollViewConverter do
       end
     end
 
+    # The axis is never taken from the children (attribute_definitions.json
+    # ScrollView, user ruling 2026-10-14,
+    # jui-scrollview-axis-from-child-web-disagrees) — the rule sjui and kjui
+    # now share with this converter.
+    context 'with a horizontal child and no axis key' do
+      it 'stays a vertical scroll' do
+        [{ 'type' => 'View', 'orientation' => 'horizontal' }, { 'type' => 'HStack' }].each do |child|
+          classes = create_converter({ 'type' => 'ScrollView', 'child' => [child] }).send(:build_class_name)
+          expect(classes).to include('overflow-y-auto')
+          expect(classes).not_to include('overflow-x-auto')
+        end
+      end
+    end
+
     context 'with horizontal scroll' do
       it 'includes overflow-x-auto for horizontalScroll' do
         converter = create_converter({

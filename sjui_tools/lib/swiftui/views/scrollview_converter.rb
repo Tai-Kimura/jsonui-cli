@@ -28,20 +28,15 @@ module SjuiTools
           # childが単一要素の場合は配列に変換
           children = child_data.is_a?(Array) ? child_data : [child_data]
           
-          # スクロール方向の判定
-          # horizontalScroll属性、orientation属性、またはchild要素の配置から判定
+          # スクロール方向の判定 — horizontalScroll true or orientation
+          # horizontal scrolls sideways, anything else vertically. Never from
+          # the children: a horizontal child is laid out in a vertical scroll
+          # (attribute_definitions.json ScrollView, user ruling 2026-10-14,
+          # jui-scrollview-axis-from-child-web-disagrees). A pair that
+          # disagrees is refused by jui build (ERROR [scrollview]).
           orientation = @component['orientation']
           horizontal_scroll = @component['horizontalScroll']
-          
-          # 子要素が1つでViewの場合、その orientation を確認 — the child as it
-          # is drawn (type_synonyms.rb): an HStack / Row is a View with
-          # orientation horizontal, and scrolls this ScrollView sideways as
-          # that View does
-          if children.length == 1 && children.first.is_a?(Hash)
-            drawn_child = JsonUIShared::TypeSynonyms.drawn(children.first)
-            orientation ||= drawn_child['orientation'] if drawn_child['type'] == 'View'
-          end
-          
+
           # スクロール軸の設定
           if horizontal_scroll || orientation == 'horizontal'
             axes = '.horizontal'

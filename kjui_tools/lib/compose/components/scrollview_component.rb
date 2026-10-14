@@ -20,29 +20,17 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
-          # スクロール方向の判定
-          # horizontalScroll属性、orientation属性、またはchild要素の配置から判定
-          is_horizontal = false
-          
-          # 1. horizontalScroll属性を最優先
-          if json_data.key?('horizontalScroll')
-            is_horizontal = json_data['horizontalScroll']
-          # 2. orientation属性を次に確認
-          elsif json_data.key?('orientation')
-            is_horizontal = json_data['orientation'] == 'horizontal'
-          # 3. child要素の配置から判定
-          elsif json_data['child']
-            children = json_data['child']
-            # childを配列として扱う
-            children = [children] unless children.is_a?(Array)
-            
-            # 配列の中から最初のViewコンポーネントを探す
-            first_view = children.find { |child| child.is_a?(Hash) && child['type'] == 'View' }
-            if first_view
-              is_horizontal = first_view['orientation'] == 'horizontal'
-            end
-          end
-          
+          # スクロール方向の判定 — horizontalScroll true or orientation
+          # horizontal scrolls sideways, anything else vertically, as sjui
+          # and rjui read it. Neither key outranks the other (a pair that
+          # disagrees is refused by jui build, ERROR [scrollview]), and the
+          # children never decide: a horizontal child is laid out in a
+          # vertical scroll (attribute_definitions.json ScrollView, user
+          # ruling 2026-10-14, jui-scrollview-horizontalscroll-false-disagrees,
+          # jui-scrollview-axis-from-child-web-disagrees).
+          is_horizontal = (json_data['horizontalScroll'] ? true : false) ||
+                          json_data['orientation'] == 'horizontal'
+
           # keyboardAvoidance属性の確認（デフォルトはtrue）
           keyboard_avoidance = json_data['keyboardAvoidance'] != false
 

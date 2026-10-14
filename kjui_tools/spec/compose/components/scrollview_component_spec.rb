@@ -97,13 +97,30 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
       expect(result[:children]).to be_an(Array)
     end
 
-    it 'detects horizontal from child View orientation' do
+    # The axis is never taken from the children (attribute_definitions.json
+    # ScrollView, user ruling 2026-10-14,
+    # jui-scrollview-axis-from-child-web-disagrees): a horizontal child is
+    # laid out inside a vertical scroll, as sjui and rjui draw it.
+    it 'keeps the scroll vertical: a horizontal child View does not turn it' do
       json_data = {
         'type' => 'ScrollView',
-        'child' => [{ 'type' => 'View', 'orientation' => 'horizontal' }]
+        'child' => [{ 'type' => 'View', 'orientation' => 'horizontal' }, { 'type' => 'Label' }]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result[:code]).to include('LazyRow(')
+      expect(result[:code]).to include('LazyColumn(')
+      expect(result[:code]).not_to include('LazyRow(')
+    end
+
+    # Neither key outranks the other (jui-scrollview-horizontalscroll-false-
+    # disagrees): horizontal when horizontalScroll is true or orientation is
+    # horizontal, as sjui and rjui read it. The disagreeing pair itself is
+    # refused by jui build (ERROR [scrollview]); this holds the formula so a
+    # renderer reached without the gate still answers as the other two do.
+    it 'reads horizontalScroll false as no outranking of orientation horizontal' do
+      json_data = { 'type' => 'ScrollView', 'horizontalScroll' => false, 'orientation' => 'horizontal' }
+      expect(described_class.generate(json_data, 0, required_imports)[:code]).to include('LazyRow(')
+      json_data = { 'type' => 'ScrollView', 'horizontalScroll' => false }
+      expect(described_class.generate(json_data, 0, required_imports)[:code]).to include('LazyColumn(')
     end
 
     context 'keyboardAvoidance' do

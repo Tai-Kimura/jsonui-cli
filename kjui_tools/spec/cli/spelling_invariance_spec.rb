@@ -108,15 +108,13 @@ RSpec.describe 'kjui build: a synonym or alias spelling builds what its canonica
     @spelled = build.call(layout_for.call(true))
   end
 
-  # A spelling as a ScrollView's only child: the ScrollView reads its child's
-  # type as written to pick its axis (scrollview_component.rb, the `View`
-  # child check), so an HStack / Row child scrolls vertically where the View
-  # with orientation horizontal it is drawn as scrolls sideways (LazyRow).
-  # That component is moved onto TypeSynonyms.drawn by its owner's change;
-  # when it lands this example passes and RSpec reports the pending as fixed
-  # — then this becomes a plain example.
+  # A spelling as a ScrollView's only child. The ScrollView used to read its
+  # child's type as written to pick its axis, so an HStack / Row child
+  # scrolled vertically where the View with orientation horizontal it is
+  # drawn as scrolled sideways (LazyRow). Since jsonui-cli 1.9.28 no child
+  # picks the axis (jui-scrollview-axis-from-child-web-disagrees, user
+  # ruling 2026-10-14): both scroll vertically, and the spellings build alike.
   it "builds a spelling as a ScrollView's only child as its canonical spelling" do
-    pending 'scrollview_component.rb reads its only child as written (moved onto TypeSynonyms.drawn separately)'
     only_child = lambda do |spelled|
       children = rows.each_with_index.map do |(spelling, target, implied), i|
         node = { 'type' => spelled ? spelling : target, 'id' => "w#{i}" }.merge(needs.call(target, i))

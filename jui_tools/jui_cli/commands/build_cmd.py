@@ -319,6 +319,14 @@ def cmd_build(args: argparse.Namespace) -> int:
     if widths_ok is False:
         return 1
 
+    # Hard gate: a ScrollView's orientation and horizontalScroll do not
+    # disagree, as written, with its style, or under a responsive key
+    # (jui-scrollview-horizontalscroll-false-disagrees, user ruling 2026-10-14).
+    with clock.stage("scrollview axis check"):
+        axes_ok = _check_scrollview_axes(config_mgr)
+    if axes_ok is False:
+        return 1
+
     # Hard gate: no two nodes under one id once includes expand (design U8).
     with clock.stage("layout id uniqueness"):
         ids_ok = _check_layout_id_uniqueness(config_mgr, platforms)
@@ -2070,6 +2078,22 @@ def _check_responsive_width_conditions(config_mgr: ConfigManager) -> bool:
         return True
     print("\nERROR [responsive]: a responsive block whose width conditions do not "
           "give one answer at every width:")
+    for line in errors:
+        print(f"  - {line}")
+    return False
+
+
+def _check_scrollview_axes(config_mgr: ConfigManager) -> bool:
+    """Hard gate for a ScrollView whose ``orientation`` and ``horizontalScroll``
+    say opposite axes (core/scrollview_axis_gate.py): layouts and styles,
+    before a file is written."""
+    from ..core.scrollview_axis_gate import RULE, directory_errors
+
+    errors = directory_errors(config_mgr.layouts_directory, config_mgr.styles_directory)
+    if not errors:
+        return True
+    print(f"\nERROR [scrollview]: a ScrollView whose orientation and horizontalScroll "
+          f"disagree ({RULE}):")
     for line in errors:
         print(f"  - {line}")
     return False
