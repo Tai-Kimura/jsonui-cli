@@ -254,7 +254,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy", val t: Int? = 20)
+    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy", val t: Int? = 20, val anchor: String? = "bottom")
 
     // The pager composes each page in turn; the page it was asked for is the scroll.
     class PagerState(val pageCount: () -> Int) {
@@ -490,7 +490,21 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'addInsetsSafeOnly' => [emit(grid_node('insets' => [8, 4, 0, 2], 'contentInsetAdjustmentBehavior' => 'always')), { grid: true }, [0]],
       'bindInsets' => [emit(node('insets' => ['@{t}', 0, 0, 0], 'insetVertical' => 8)), {}, [0]],
       'rowInsetH' => [emit(node('layout' => 'horizontal', 'insetHorizontal' => 14, 'insetVertical' => 4)), {}, [0]],
-      'rowInsetHSafe' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'insetHorizontal' => 14, 'contentInsetAdjustmentBehavior' => 'scrollableAxes')), {}, [0]]
+      'rowInsetHSafe' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'insetHorizontal' => 14, 'contentInsetAdjustmentBehavior' => 'scrollableAxes')), {}, [0]],
+      # jsonui-cli 1.9.29: a bound scrollAnchor, chosen per request — the
+      # stack, the grid, the flow, the EAGER container, reversed, and a bound
+      # value that is no anchor.
+      'stackBoundTop' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'stackBoundCenter' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'center' }, [6]],
+      'stackBoundBottom' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'bottom' }, [6]],
+      'stackBoundOdd' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'sideways' }, [6]],
+      'stackReversedTop' => [emit(node('reverseLayout' => true, 'scrollAnchor' => 'top')), {}, [6]],
+      'stackReversedBoundTop' => [emit(node('reverseLayout' => true, 'scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'stackReversedBoundBottom' => [emit(node('reverseLayout' => true, 'scrollAnchor' => '@{anchor}')), { anchor: 'bottom' }, [6]],
+      'gridBoundCenter' => [emit(grid_node('scrollAnchor' => '@{anchor}')), { grid: true, anchor: 'center' }, [6]],
+      'flowBoundTop' => [emit(node('layout' => 'flow', 'height' => 100, 'scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'eagerBoundTop' => [emit(node('lazy' => 'eager', 'scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'eagerBoundCenter' => [emit(node('lazy' => 'eager', 'scrollAnchor' => '@{anchor}')), { anchor: 'center' }, [6]]
     }
   end
 
@@ -499,8 +513,9 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     calls = routes.flat_map do |name, (_, options, targets, *first)|
       first = first.empty? ? '' : first.first
       targets.map do |target|
-        sections = data_sections(**options.except(:mode))
+        sections = data_sections(**options.except(:mode, :anchor))
         mode = options[:mode] ? ", mode = \"#{options[:mode]}\"" : ''
+        mode += ", anchor = \"#{options[:anchor]}\"" if options[:anchor]
         first_arg = first.nil? ? 'null' : "\"#{first}\""
         target_arg = target.is_a?(Integer) ? target.to_s : "\"#{target}\""
         "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value#{mode}), Any()) }"
@@ -665,6 +680,35 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(read(lines, 'stackCenter 6')[:offset]).to eq(-36), lines.inspect
     expect(read(lines, 'stackTop 6')[:offset]).to eq(0), lines.inspect
     expect(read(lines, 'stackReversed 6')[:offset]).to eq(0), lines.inspect  # bottom, reversed: the list's start
+  end
+
+  # A bound scrollAnchor (jsonui-cli 1.9.29,
+  # jui-collection-scrollto-per-request-anchor) lands where the written one
+  # does, chosen per request; reversed, top and bottom trade at run time as
+  # the written ones trade; a value that is no anchor lands as bottom and a
+  # debuggable app hears it.
+  it 'a bound scrollAnchor lands as the written one, per request, on every route' do
+    lines = run_emitted(routes)
+    expect(%w[Top Center Bottom].map { |a| read(lines, "stackBound#{a} 6")[:offset] }).to eq([0, -36, -72]), lines.inspect
+    expect(read(lines, 'stackBoundOdd 6').values_at(:offset, :logs)).to eq([-72, 1]), lines.inspect
+    expect(read(lines, 'stackBoundTop 6')[:logs]).to eq(0), lines.inspect
+    expect(read(lines, 'stackReversedBoundTop 6')[:offset]).to eq(read(lines, 'stackReversedTop 6')[:offset]), lines.inspect
+    expect(read(lines, 'stackReversedBoundTop 6')[:offset]).to eq(-72), lines.inspect      # top, reversed: the viewport's far end
+    expect(read(lines, 'stackReversedBoundBottom 6')[:offset]).to eq(read(lines, 'stackReversed 6')[:offset]), lines.inspect
+    expect(read(lines, 'gridBoundCenter 6')[:offset]).to eq(-36), lines.inspect
+    expect(read(lines, 'flowBoundTop 6')[:index]).to eq(196), lines.inspect                # 28 (6 + 1), top-anchored
+    expect(read(lines, 'eagerBoundTop 6')[:index]).to eq(read(lines, 'eagerTop 6')[:index]), lines.inspect
+    expect(read(lines, 'eagerBoundCenter 6')[:index]).to eq(read(lines, 'eagerCenter 6')[:index]), lines.inspect
+  end
+
+  it 'a bound scrollAnchor is read in the effect the scrollTo value keys, and keys nothing itself' do
+    code = emit(node('scrollAnchor' => '@{anchor}'))
+    expect(code).to include('LaunchedEffect(data.target) {')
+    expect(code).not_to match(/LaunchedEffect\([^)]*data\.anchor/)
+    effect = code[/LaunchedEffect\(data\.target\) \{.*/m]
+    expect(effect).to include('val scrollAnchorNow = (data.anchor')
+    expect(code.scan('data.anchor').size).to eq(1)
+    expect(emit(node('scrollAnchor' => 'top'))).not_to include('scrollAnchorNow')
   end
 
   it 'defaultScrollAnchor counts cells across the sections, as scrollTo does' do

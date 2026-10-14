@@ -1633,6 +1633,27 @@ module SjuiTools
           { 'top' => 'leading', 'center' => 'center', 'bottom' => 'trailing' }.fetch(anchor, anchor)
         end
 
+        # A bound scrollAnchor (`"scrollAnchor": "@{prop}"`, jsonui-cli 1.9.29,
+        # jui-collection-scrollto-per-request-anchor): the property it reads,
+        # else nil (a written anchor, scroll_anchor_point).
+        def scroll_anchor_binding
+          extract_property_name(@component['scrollAnchor'])
+        end
+
+        # The `anchor:` a scrollTo lands by: the written one as a UnitPoint
+        # member, or — bound — the library's reading of the bound value when
+        # the scrollTo value changes (CollectionScrollAnchor.point: top /
+        # center / bottom along the scroll axis, anything else bottom with a
+        # DEBUG warning). The value is read inside `.onChange(of:)`, so a
+        # change of the anchor alone scrolls nothing.
+        def scroll_anchor_arg
+          prop = scroll_anchor_binding
+          return ".#{scroll_anchor_point}" unless prop
+
+          "CollectionScrollAnchor.point(data.#{prop}, horizontal: #{horizontal_scroll?}, " \
+            "collection: #{(@component['id'] || '').to_s.inspect})"
+        end
+
         # ScrollViewReader helpers for programmatic scrolling
         def has_scroll_to?
           @component['scrollTo'] != nil
@@ -1703,7 +1724,7 @@ module SjuiTools
           return unless has_scroll_to?
           scroll_prop = extract_property_name(@component['scrollTo'])
           return unless scroll_prop
-          anchor = scroll_anchor_point
+          anchor = scroll_anchor_arg
           scroll_animated = @component['scrollAnimated']
           recv_var = key_scroll? ? 'cellId' : 'index'
           # `scrollTo` is declared as a PLAIN VALUE, its class what it names
@@ -1738,7 +1759,7 @@ module SjuiTools
             elsif @component['cellIdProperty'] && !key_scroll? && emit_keyed_place_lookup(recv_var)
               target = 'found'
             end
-            scroll_call = "scrollProxy.scrollTo(#{target}, anchor: .#{anchor})"
+            scroll_call = "scrollProxy.scrollTo(#{target}, anchor: #{anchor})"
             if scroll_animated.is_a?(String) && scroll_animated.start_with?('@{') && scroll_animated.end_with?('}')
               # Binding: runtime check (canonical expression parsing)
               animated_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(scroll_animated[2..-2])

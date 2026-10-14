@@ -96,7 +96,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
   # generator's ref and effect lines under a minimal useRef / useEffect (a
   # ref kept across renders, an effect run when a dependency changed, the
   # first render included) — and the view at the top is read after each.
-  def top_after(node, targets, renders: false, data: SCROLL_TO_CELL_DATA)
+  def top_after(node, targets, renders: false, data: SCROLL_TO_CELL_DATA, anchors: nil)
     esbuild = File.expand_path('../support/node_modules/.bin/esbuild', __dir__)
     skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
     HeadlessChromium.ensure!(self)
@@ -146,7 +146,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
           };
           let root = null;
           #{targets.to_json}.forEach((target, n) => {
-            const data = Object.assign(#{data.strip}, { target });
+            const data = Object.assign(#{data.strip}, { target }, #{anchors ? "{ anchor: #{anchors.to_json}[n] }" : '{}'});
             slot = 0; pending = [];
             #{renders ? effect_lines(node).gsub("
 ", "
@@ -175,7 +175,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
         }
         document.body.textContent = 'AT' + JSON.stringify(out);
       JSX
-      log, status = Open3.capture2e(esbuild, File.join(dir, 'app.jsx'), '--bundle', '--jsx-factory=h',
+      log, status = Open3.capture2e(esbuild, File.join(dir, 'app.jsx'), '--bundle', '--jsx-factory=h', '--define:process.env.NODE_ENV="development"',
                                     '--outfile=' + File.join(dir, 'app.js'))
       raise "esbuild: #{log}" unless status.success?
 
@@ -261,6 +261,34 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
     expect(at).to eq('0:6' => 'H0', '1:6' => 'H0', '2:3' => 'A3', '3:3' => 'A3', '4:6' => 'B1')
   end
 
+  # A bound scrollAnchor (jsonui-cli 1.9.29,
+  # jui-collection-scrollto-per-request-anchor): read in the effect the
+  # scrollTo value keys — the anchor of the render that changed it — so a
+  # change of the anchor alone scrolls nothing; a value that is no anchor lands
+  # as bottom. Until 1.9.29 a binding here was read as 'bottom'.
+  BOUND_ANCHOR_NODE = SCROLL_TO_CELL_NODE.merge('scrollAnchor' => '@{anchor}')
+
+  it 'renders: a bound scrollAnchor lands each request by the value of its render; the anchor alone scrolls nothing' do
+    # H0 0–10, A0…A4 10–110, F0 110–120, H1 120–130, B0 130–150, B1 150–170,
+    # in a 100-high list. 6 (B1) top-anchored: B1 at the top. The anchor
+    # alone changing to bottom: no scroll, B1 stays. 3 (A3) bottom-anchored:
+    # its end at 90 needs no scroll, H0 at the top (top would put A3 there).
+    # 6 with a value that is no anchor lands as bottom: B1's end at the
+    # viewport's, scrolled 70, A3 at the top (top would put B1 there).
+    at = top_after(BOUND_ANCHOR_NODE, [0, 6, 6, 3, 6], renders: true, anchors: %w[top top bottom bottom sideways])
+    expect(at).to eq('0:0' => 'H0', '1:6' => 'B1', '2:6' => 'B1', '3:3' => 'H0', '4:6' => 'A3')
+  end
+
+  it 'a bound scrollAnchor is read in the scrollTo effect only, and keys nothing itself; a written one is as before' do
+    effect = generated(BOUND_ANCHOR_NODE)[/useEffect\(\(\) => \{ .*scrollCollectionToCell.*\n/]
+    expect(effect).to include("'bottom'))(data.anchor)").and end_with("}, [data.target]);\n")
+    expect(generated(BOUND_ANCHOR_NODE).scan('data.anchor').size).to eq(1)
+    expect(generated(BOUND_ANCHOR_NODE)).not_to include('declare const process')
+    expect(generated(BOUND_ANCHOR_NODE, typescript: true)).to include('declare const process: { env: { NODE_ENV?: string } };')
+    expect(scroll_call(SCROLL_TO_CELL_NODE)).to include("'top'")
+    expect(generated(SCROLL_TO_CELL_NODE, typescript: true)).not_to include('declare const process')
+  end
+
   it 'under autoChangeTrackingId the keys are the enriched cellIds' do
     call = scroll_call(SCROLL_TO_CELL_NODE.merge('cellIdProperty' => 'key', 'autoChangeTrackingId' => true))
     expect(call).to include('enrichCellIds((data.rows?.sections?.[0]?.cells?.data ?? []), "key")')
@@ -297,6 +325,8 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
         declare module '@/generated/collectionScroll' { #{declarations} }
       TS
       expect(tsx).to compile_as_typescript.with_ambient(ambient)
+      bound = generated(BOUND_ANCHOR_NODE.merge('cellIdProperty' => 'key'), typescript: true)
+      expect(bound).to compile_as_typescript.with_ambient(ambient.sub('target?: string };', 'target?: string; anchor?: string };'))
     end
   end
 end

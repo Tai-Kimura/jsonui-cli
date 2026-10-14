@@ -979,7 +979,16 @@ module RjuiTools
         names << 'observeCollectionItems' if collections.any? { |c| c[:on_item_appear] }
         return '' if names.empty?
 
-        "\nimport { #{names.sort.join(', ')} } from '@/generated/collectionScroll';"
+        line = "\nimport { #{names.sort.join(', ')} } from '@/generated/collectionScroll';"
+        # A bound scrollAnchor warns outside a production build
+        # (scroll_anchor_now): the literal `process.env.NODE_ENV` a bundler
+        # folds, typed by a module-scoped declaration as the generated
+        # helpers type it (build_command.rb, the screen marker) — a Vite
+        # project without @types/node does not know `process`.
+        if @config['typescript'] && collections.any? { |c| scroll_to_binding?(c) && binding_expression?(c[:scroll_anchor]) }
+          line += "\n\ndeclare const process: { env: { NODE_ENV?: string } };"
+        end
+        line
       end
 
       def collection_scroll_effects(collection)
@@ -1011,7 +1020,11 @@ module RjuiTools
         if scroll_to_binding?(collection)
           prop = binding_data_path(collection[:scroll_to])
           seen = "#{camel}ScrollToSeen"
-          anchor_expr = scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
+          anchor_expr = if binding_expression?(collection[:scroll_anchor])
+                          scroll_anchor_now(collection[:scroll_anchor], collection[:id])
+                        else
+                          scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
+                        end
           animated = scroll_animated_arg(collection[:scroll_animated])
           lists = collection_cell_key_lists(collection)
           keys = lists ? "collectionCellKeys(#{lists}, #{cell_key_property(collection).to_json})" : 'null'
@@ -1098,6 +1111,22 @@ module RjuiTools
 
       def scroll_anchor_expr(anchor)
         %w[top center bottom].include?(anchor.to_s) ? "'#{anchor}'" : "'bottom'"
+      end
+
+      # A bound scrollAnchor (`"scrollAnchor": "@{prop}"`, jsonui-cli 1.9.29,
+      # jui-collection-scrollto-per-request-anchor) as the request reads it:
+      # inside the effect the scrollTo value keys — the value of the render
+      # that changed the scrollTo value, so a change of the anchor alone
+      # scrolls nothing — top / center / bottom, anything else bottom with a
+      # warning outside a production build (the rule SwiftJsonUI's
+      # CollectionScrollAnchor and kjui follow). Until 1.9.29 a binding here
+      # was read as 'bottom' (scroll_anchor_expr).
+      def scroll_anchor_now(anchor, collection_id)
+        value = binding_data_path(anchor)
+        param = @config['typescript'] ? "(a: unknown): 'top' | 'center' | 'bottom'" : '(a)'
+        "(#{param} => (a === 'top' || a === 'center' || a === 'bottom') ? a : " \
+          "((process.env.NODE_ENV !== 'production' && console.warn(`Collection #{collection_id}: scrollAnchor \"${String(a)}\" " \
+          "is not top, center or bottom — lands as bottom`)), 'bottom'))(#{value})"
       end
 
       # `scrollAnimated` as scrollCollectionToItem's `animated`: a literal

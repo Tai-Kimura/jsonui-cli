@@ -483,11 +483,17 @@ module KjuiTools
             code += indent('val scrollToDebug = (androidx.compose.ui.platform.LocalContext.current.applicationInfo.flags and ' \
                            'android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0', depth) + "\n"
           end
+          bound_anchor = scroll_anchor_binding(json_data) && target != :pager
+          if bound_anchor
+            code += indent('val scrollAnchorDebug = (androidx.compose.ui.platform.LocalContext.current.applicationInfo.flags and ' \
+                           'android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0', depth) + "\n"
+          end
           code += indent("LaunchedEffect(data.#{prop}) {", depth) + "\n"
           code += indent('// A change scrolls; the value the Collection first composes with does not (jsonui-cli 1.9.0).', depth + 1) + "\n"
           code += indent('if (!scrollToArmed.value) { scrollToArmed.value = true; return@LaunchedEffect }', depth + 1) + "\n"
           code += indent("val raw = data.#{prop}#{Helpers::BoundValue.string_typed?(prop) ? '.orEmpty()' : '?.toString().orEmpty()'}", depth + 1) + "\n"
           code += indent('if (raw.isEmpty()) return@LaunchedEffect', depth + 1) + "\n"
+          code += scroll_anchor_now_line(json_data, depth + 1) if bound_anchor
           code += resolution
           non_lazy_call = "collectionScrollToCell(cell, #{non_lazy_anchor_mode(json_data)}, #{non_lazy_animate_expr(json_data)})"
           if only_non_lazy
@@ -542,10 +548,36 @@ module KjuiTools
 
         # scrollAnchor on a non-lazy container, as collectionScrollToCell
         # takes it: 0 top, 1 center, 2 bottom (the default). These containers
-        # draw no reverseLayout, so the anchor is the declared one.
+        # draw no reverseLayout, so the anchor is the declared one. Bound, the
+        # value scroll_to_effect read when the scrollTo value changed
+        # (`scrollAnchorNow`, scroll_anchor_now_line).
         def self.non_lazy_anchor_mode(json_data)
+          return 'when (scrollAnchorNow) { "top" -> 0; "center" -> 1; else -> 2 }' if scroll_anchor_binding(json_data)
+
           anchor = JsonUIShared::EnumSpelling.lowered(json_data['scrollAnchor'] || DEFAULT_SCROLL_ANCHOR, 'Collection', 'scrollAnchor').to_s
           { 'top' => 0, 'center' => 1 }.fetch(anchor, 2)
+        end
+
+        # A bound scrollAnchor (`"scrollAnchor": "@{prop}"`, jsonui-cli 1.9.29,
+        # jui-collection-scrollto-per-request-anchor): the property, else nil.
+        def self.scroll_anchor_binding(json_data)
+          raw = json_data['scrollAnchor']
+          raw.is_a?(String) ? raw[/\A@\{([^}]+)\}\z/, 1]&.strip : nil
+        end
+
+        # The bound anchor as the request reads it, inside the effect the
+        # scrollTo value keys — so the value of the update that changed the
+        # scrollTo value, and a change of the anchor alone scrolls nothing:
+        # top / center / bottom, anything else bottom with a warning a
+        # debuggable app hears (the rule SwiftJsonUI's
+        # CollectionScrollAnchor and rjui's collectionScrollAnchor follow).
+        def self.scroll_anchor_now_line(json_data, depth)
+          prop = scroll_anchor_binding(json_data)
+          name = (json_data['id'] || '(unnamed)').to_s
+          read = Helpers::BoundValue.string_typed?(prop) ? "data.#{prop}" : "data.#{prop}?.toString()"
+          indent("val scrollAnchorNow = (#{read}).let { a -> if (a == \"top\" || a == \"center\" || a == \"bottom\") a else { " \
+                 "if (scrollAnchorDebug) android.util.Log.w(\"JsonUI\", \"Collection #{name}: scrollAnchor \\\"$a\\\" is not top, center or bottom — lands as bottom\"); \"bottom\" } }",
+                 depth) + "\n"
         end
 
         # scrollAnimated as a Kotlin Boolean (scroll_animated_mode).
@@ -648,6 +680,8 @@ module KjuiTools
         # for a laid-out target never ran
         # (kjui-collection-anchored-scroll-overshoots-when-target-offscreen).
         def self.anchored_scroll_code(json_data, state, depth, required_imports, axis: nil)
+          return bound_anchored_scroll_code(json_data, state, depth, required_imports, axis: axis) if scroll_anchor_binding(json_data)
+
           anchor = JsonUIShared::EnumSpelling.lowered(json_data['scrollAnchor'] || DEFAULT_SCROLL_ANCHOR, 'Collection', 'scrollAnchor').to_s
           anchor = DEFAULT_SCROLL_ANCHOR unless %w[top center bottom].include?(anchor)
           anchor = { 'top' => 'bottom', 'bottom' => 'top' }.fetch(anchor, anchor) if json_data['reverseLayout'] == true
@@ -665,6 +699,28 @@ module KjuiTools
           code += indent("#{visible}.firstOrNull { it.index == index }?.let { item ->", depth) + "\n"
           code += indent("val scrollViewport = #{state}.layoutInfo.viewportEndOffset - #{state}.layoutInfo.viewportStartOffset", depth + 1) + "\n"
           code += indent("val scrollShift = #{offset} - #{left}", depth + 1) + "\n"
+          code += indent("if (scrollShift != 0) { " \
+                         "#{scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollBy' : 'scrollBy'}(scrollShift.toFloat())" })} }", depth + 1) + "\n"
+          code + indent('}', depth) + "\n"
+        end
+
+        # anchored_scroll_code for a bound scrollAnchor: the same landing, the
+        # anchor `scrollAnchorNow` (scroll_anchor_now_line) chosen at run time
+        # — top's place 0, center's half the room, bottom's all of it — and,
+        # under reverseLayout, top and bottom traded at run time as the
+        # written anchor trades them here.
+        def self.bound_anchored_scroll_code(json_data, state, depth, required_imports, axis: nil)
+          required_imports&.add(:anchored_scroll_by)
+          offset = axis ? "item.offset.#{axis}" : 'item.offset'
+          size = { x: 'item.size.width', y: 'item.size.height' }.fetch(axis, 'item.size')
+          visible = "#{state}.layoutInfo.visibleItemsInfo"
+          lead_anchor = json_data['reverseLayout'] == true ? 'when (scrollAnchorNow) { "top" -> "bottom"; "bottom" -> "top"; else -> scrollAnchorNow }' : 'scrollAnchorNow'
+          code = indent("if (#{visible}.none { it.index == index }) { " \
+                        "#{scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollToItem' : 'scrollToItem'}(index)" })} }", depth) + "\n"
+          code += indent("#{visible}.firstOrNull { it.index == index }?.let { item ->", depth) + "\n"
+          code += indent("val scrollViewport = #{state}.layoutInfo.viewportEndOffset - #{state}.layoutInfo.viewportStartOffset", depth + 1) + "\n"
+          code += indent("val scrollRoom = scrollViewport - #{size}", depth + 1) + "\n"
+          code += indent("val scrollShift = #{offset} - when (#{lead_anchor}) { \"top\" -> 0; \"center\" -> scrollRoom / 2; else -> scrollRoom }", depth + 1) + "\n"
           code += indent("if (scrollShift != 0) { " \
                          "#{scroll_call(json_data, ->(animate) { "#{state}.#{animate ? 'animateScrollBy' : 'scrollBy'}(scrollShift.toFloat())" })} }", depth + 1) + "\n"
           code + indent('}', depth) + "\n"
@@ -750,6 +806,12 @@ module KjuiTools
                   when 'bottom' then 'top - (flowScrollState.viewportSize - size)'
                   else 'top'
                   end
+          if scroll_anchor_binding(json_data)
+            # Bound (scroll_anchor_now_line): the same three places, chosen
+            # at run time.
+            place = 'top - when (scrollAnchorNow) { "top" -> 0; "center" -> (flowScrollState.viewportSize - size) / 2; ' \
+                    'else -> flowScrollState.viewportSize - size }'
+          end
           code = indent('val content = flowContent[0]?.takeIf { it.isAttached } ?: return@LaunchedEffect', depth) + "\n"
           code += indent('val placed = flowCellTargets[cell]?.takeIf { it.isAttached } ?: return@LaunchedEffect', depth) + "\n"
           code += indent('val top = content.localPositionOf(placed, androidx.compose.ui.geometry.Offset.Zero).y.toInt()', depth) + "\n"

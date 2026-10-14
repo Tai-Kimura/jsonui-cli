@@ -267,6 +267,51 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # A bound scrollAnchor (jsonui-cli 1.9.29,
+  # jui-collection-scrollto-per-request-anchor): the anchor is read inside the
+  # `.onChange(of:)` the scrollTo value keys — so a change of the anchor alone
+  # scrolls nothing — through SwiftJsonUI's CollectionScrollAnchor.point (top /
+  # center / bottom along the scroll axis, anything else bottom with a DEBUG
+  # warning). Until 1.9.29 a binding here emitted `.@{…}`, which did not
+  # compile. A written anchor emits what it emitted.
+  describe 'a bound scrollAnchor' do
+    BOUND_ANCHOR_DATA = [{ 'name' => 'anchor', 'class' => 'String', 'defaultValue' => 'top' }].freeze
+
+    it 'reads the bound value when the scrollTo value changes, along the scroll axis' do
+      code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'scrollAnchor' => '@{anchor}' }, INT + BOUND_ANCHOR_DATA)
+      onchange = code[/\.onChange\(of: data\.target\) \{.*?\n\s*\}\n/m]
+      expect(onchange).to include('scrollProxy.scrollTo(index, anchor: CollectionScrollAnchor.point(data.anchor, horizontal: false, collection: "list"))')
+      expect(code.scan('data.anchor').size).to eq(1), 'read in the scrollTo change only'
+      code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'layout' => 'horizontal', 'scrollAnchor' => '@{anchor}' }, INT + BOUND_ANCHOR_DATA)
+      expect(code).to include('anchor: CollectionScrollAnchor.point(data.anchor, horizontal: true, collection: "list"))')
+    end
+
+    it 'control: a written anchor emits the UnitPoint member, as before' do
+      code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'scrollAnchor' => 'top' }, INT)
+      expect(code).to include('scrollProxy.scrollTo(index, anchor: .top)')
+      expect(code).not_to include('CollectionScrollAnchor')
+    end
+
+    it 'type-checks, vertical and horizontal, a String and an Int scrollTo', :swift_compile do
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB + cell_view_stub('ACellView') +
+              "enum CollectionScrollAnchor { static func point(_ value: String?, horizontal: Bool, collection: String = \"\") -> UnitPoint { .bottom } }\n"
+      views = [[{}, INT, 'Int', '0'], [{ 'layout' => 'horizontal' }, STR, 'String', '""']].each_with_index.map do |(extra, props, cls, initial), i|
+        code, state = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'scrollAnchor' => '@{anchor}', 'id' => "bound#{i}" }.merge(extra), props + BOUND_ANCHOR_DATA)
+        <<~SWIFT
+          struct Bound#{i}Data { var rows: CollectionDataSource? = nil; var target: #{cls} = #{initial}; var anchor: String = "top" }
+          struct Bound#{i}: View {
+              @State var data = Bound#{i}Data()
+          #{state.map { |l| "    #{l}" }.join("\n")}
+              var body: some View {
+          #{code.lines.map { |l| "        #{l}" }.join}
+              }
+          }
+        SWIFT
+      end
+      expect("#{EmittedSwift::LIBRARY_STUBS}\n#{stubs}\n#{views.join("\n")}").to compile_as_swift
+    end
+  end
+
   # defaultScrollAnchor likewise — where a horizontal Collection starts (4f
   # ruling 2026-09-27). Until jsonui-cli 1.9.0 a horizontal Collection's was
   # not passed to its CollectionStackView at all: it started at its leading

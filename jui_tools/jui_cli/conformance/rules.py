@@ -928,6 +928,10 @@ BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
     ('Button', 'highlightColor'): 'String',
     ('CheckBox', 'font'): 'String',
     ('Collection', 'lazy'): 'String',
+    # jsonui-cli 1.9.29 (jui-collection-scrollto-per-request-anchor): the
+    # anchor of a scrollTo, chosen per request — the bound case lands by the
+    # bound value as the written one does (its scrollTo companion below).
+    ('Collection', 'scrollAnchor'): 'String',
     ('Image', 'contentMode'): 'String',
     ('Label', 'font'): 'String',
     ('Label', 'fontFamily'): 'String',

@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "cb5cbce0c0fe69e9f1aace44f30085232964e7ca6bf42edddc661deb286efadb",
+  "generatedFrom": "a0860bf5e004d12e053011c2fb6c98695bacb5373cb5c72c991401e308cc5877",
   "counts": {
-    "fixtures": 1176,
+    "fixtures": 1177,
     "assertable": 51,
-    "visual": 883,
+    "visual": 884,
     "interactive": 37,
     "control": 127,
     "declarationOnly": 77,
@@ -20747,6 +20747,35 @@
       "deprecated": null,
       "layout": "fixtures/Collection/scrollAnchor__bottom.layout.json",
       "test": "fixtures/Collection/scrollAnchor__bottom.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
+      "control": "__control/Collection__scrollTo--scrollTarget",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/scrollAnchor__binding",
+      "component": "Collection",
+      "attribute": "scrollAnchor",
+      "case": "binding",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "scrollAnchor",
+      "aliasOf": null,
+      "value": "@{boundScrollAnchor}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/scrollAnchor__binding.layout.json",
+      "test": "fixtures/Collection/scrollAnchor__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
