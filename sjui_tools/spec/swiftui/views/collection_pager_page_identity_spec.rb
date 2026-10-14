@@ -73,6 +73,7 @@ RSpec.describe 'sjui: a pager page is known by its place' do
     expect(styled.join).not_to include('.page(')
     <<~SWIFT
       #{EmittedSwift::COLLECTION_DATA_SOURCE_STUB}
+      #{EmittedSwift::SCROLL_MEMORY_STUB}
       #{cell_view_stub('ACellView', 'BCellView')}
       extension Array where Element == [String: Any] {
           func reconfigured(cellIdProperty: String?, autoChangeTrackingId: Bool) -> [[String: Any]] { self }

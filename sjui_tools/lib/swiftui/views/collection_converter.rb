@@ -1365,8 +1365,7 @@ module SjuiTools
 
           recv_var = key_scroll? ? 'cellId' : 'index'
           lists = drawn_cell_lists(enriched: key_scroll?).map(&:last)
-          add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
-          indent do
+          request_body = lambda do
             add_line 'var page = 0'
             add_line 'var found: Int? = nil'
             add_line "search: for cells in [#{lists.join(', ')}] {"
@@ -1395,7 +1394,10 @@ module SjuiTools
               add_line "withAnimation { #{turn} }"
             end
           end
+          add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
+          indent(&request_body)
           add_line '}'
+          emit_scroll_entry(scroll_prop, recv_var, &request_body)
         end
 
         # One page: the cell, its identity, frame, spacing and address, and
@@ -1720,6 +1722,31 @@ module SjuiTools
           add_modifier_line ".defaultScrollAnchor(#{anchor == 'nil' ? '.top' : anchor})"
         end
 
+        # The value the Collection appears with scrolls nowhere — unless the
+        # screen saw this Collection (by its id) with another value before
+        # visibility gone removed it: then the same request runs
+        # (SwiftJsonUI CollectionScrollMemory; kjui-collection-scrollto-
+        # ignored-after-visibility-gone, 2026-10-14). The view that holds the
+        # Collection provides the screen's memory (providesCollectionScroll-
+        # Memory on the generated view). A Collection with no id keeps the
+        # first-draw rule.
+        def emit_scroll_entry(scroll_prop, recv_var, &request_body)
+          memory_id = scroll_memory_id
+          return unless memory_id
+
+          @uses_collection_scroll_memory = true
+          add_line ".collectionScrollEntry(#{memory_id.inspect}, value: data.#{scroll_prop}) { #{recv_var} in"
+          indent(&request_body)
+          add_line '}'
+        end
+
+        # The id the screen's scrollTo memory knows this Collection by; nil
+        # when it has none.
+        def scroll_memory_id
+          id = @component['id']
+          id.is_a?(String) && !id.empty? ? id : nil
+        end
+
         def generate_scroll_reader_close
           return unless has_scroll_to?
           scroll_prop = extract_property_name(@component['scrollTo'])
@@ -1750,8 +1777,7 @@ module SjuiTools
           # "sending the SAME value again re-scrolls" — that is publisher
           # behaviour a plain value cannot express, and the declaration is now
           # a plain value.
-          add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
-          indent do
+          request_body = lambda do
             target = recv_var
             if @scroll_every_data_section
               emit_every_data_section_lookup(recv_var)
@@ -1786,7 +1812,10 @@ module SjuiTools
               add_line "}"
             end
           end
+          add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
+          indent(&request_body)
           add_line "}"
+          emit_scroll_entry(scroll_prop, recv_var, &request_body)
           @indent_level -= 1
           add_line "}"
         end

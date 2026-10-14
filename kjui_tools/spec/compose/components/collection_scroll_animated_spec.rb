@@ -83,6 +83,14 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
     class MutableState<T>(var value: T)
     fun <T> mutableStateOf(value: T) = MutableState(value)
     fun <T> remember(calculation: () -> T): T = calculation()
+    // KotlinJsonUI CollectionScrollMemory, transcribed (kjui-collection-
+    // scrollto-ignored-after-visibility-gone): no provider here, so the
+    // first-draw rule.
+    class CollectionScrollMemory {
+        fun isRequestOnEntry(id: String?, value: Any?): Boolean = false
+        fun record(id: String?, value: Any?) {}
+    }
+    object LocalCollectionScrollMemory { val current: CollectionScrollMemory? = null }
     class LazyGridState : ScrollableState {
         val layoutInfo = GridLayoutInfo()
         suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) {}

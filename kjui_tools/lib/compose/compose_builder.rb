@@ -1816,6 +1816,14 @@ module KjuiTools
           # selection in this view's own map (RadioComponent); every section
           # the extractor lifted runs inside the provider, so an item reads the
           # same map wherever it landed.
+          # A Collection with an id and a scrollTo reads the screen's
+          # scrollTo memory; the view that holds one provides it (or shares
+          # the one an enclosing view provides) — KotlinJsonUI
+          # ProvideCollectionScrollMemory.
+          if @required_imports.include?(:collection_scroll_memory)
+            static_content = provide_collection_scroll_memory(static_content)
+            @required_imports.add(:provide_collection_scroll_memory)
+          end
           if @required_imports.include?(:radio_group_selections)
             static_content = provide_radio_groups(static_content)
             @responsive_functions << RADIO_GROUP_SELECTIONS_DECLARATION
@@ -2245,6 +2253,12 @@ module KjuiTools
         // (absent until the user chooses — the checked item shows until then).
         private val LocalRadioGroupSelections = compositionLocalOf<MutableMap<String, String>> { mutableStateMapOf() }
       KOTLIN
+
+      def provide_collection_scroll_memory(static_content)
+        trailing = static_content.end_with?("\n") ? "\n" : ''
+        body = static_content.chomp.lines.map { |line| line.strip.empty? ? line : "    #{line}" }.join
+        "    ProvideCollectionScrollMemory {\n#{body}\n    }#{trailing}"
+      end
 
       def provide_radio_groups(static_content)
         trailing = static_content.end_with?("\n") ? "\n" : ''

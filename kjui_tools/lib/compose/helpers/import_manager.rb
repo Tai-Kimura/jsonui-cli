@@ -245,6 +245,11 @@ module KjuiTools
             # import (kjui-import-manager-duplicate-scroll-by-key).
             anchored_scroll_by: ["import androidx.compose.foundation.gestures.scrollBy",
                                  "import androidx.compose.foundation.gestures.animateScrollBy"],
+            # The screen's Collection scrollTo memory (KotlinJsonUI
+            # CollectionScrollMemory): read by a Collection with an id,
+            # provided at the root of the view that holds one.
+            collection_scroll_memory: "import com.kotlinjsonui.components.LocalCollectionScrollMemory",
+            provide_collection_scroll_memory: "import com.kotlinjsonui.components.ProvideCollectionScrollMemory",
             disposable_effect: "import androidx.compose.runtime.DisposableEffect",
             alignment: "import androidx.compose.ui.Alignment",
             bias_alignment: "import androidx.compose.ui.BiasAlignment",

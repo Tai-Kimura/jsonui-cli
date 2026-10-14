@@ -77,6 +77,14 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
     // The screen's ViewModel: the pager writes the page it shows back here.
     class ScreenModel { val written = mutableListOf<Map<String, Any>>(); fun updateData(updates: Map<String, Any>) { written += updates } }
     inline fun <T> remember(calculation: () -> T): T = calculation()
+    // KotlinJsonUI CollectionScrollMemory, transcribed (kjui-collection-
+    // scrollto-ignored-after-visibility-gone): no provider here, so the
+    // first-draw rule.
+    class CollectionScrollMemory {
+        fun isRequestOnEntry(id: String?, value: Any?): Boolean = false
+        fun record(id: String?, value: Any?) {}
+    }
+    object LocalCollectionScrollMemory { val current: CollectionScrollMemory? = null }
     inline fun <T> remember(key1: Any?, calculation: () -> T): T = calculation()
     // A bound pager's programmatic-scroll flag (`var … by remember { mutableStateOf(false) }`).
     class MutableState<T>(var value: T)

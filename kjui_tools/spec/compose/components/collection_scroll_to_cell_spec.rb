@@ -132,6 +132,15 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         }
     }
     class Keyed(var key: Any?, var value: Any?)
+    // The screen's scrollTo memory (KotlinJsonUI CollectionScrollMemory), a
+    // transcription: provided once per run (a screen), outside the
+    // composition's slots, so it survives a Collection leaving and coming back.
+    class CollectionScrollMemory {
+        private val seen = HashMap<String, Any?>()
+        fun isRequestOnEntry(id: String?, value: Any?): Boolean = id != null && seen.containsKey(id) && seen[id] != value
+        fun record(id: String?, value: Any?) { if (id != null) seen[id] = value }
+    }
+    object LocalCollectionScrollMemory { var current: CollectionScrollMemory? = null }
     class MutableState<T>(var value: T)
     fun <T> mutableStateOf(value: T) = MutableState(value)
     fun <T> remember(calculation: () -> T): T = Composition.slot(calculation)
@@ -381,6 +390,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'stack' => [emit(node), {}, ints],
       'stackReversed' => [emit(node('reverseLayout' => true)), {}, ints],
       'stackKeys' => [emit(node('cellIdProperty' => 'key')), {}, keys],
+      # kjui-collection-scrollto-ignored-after-visibility-gone: the value a
+      # Collection comes back from gone with, against the one it left with.
+      'goneReturn' => [emit(node('cellIdProperty' => 'key')), { reenter: true }, %w[k3], ''],
+      'goneReturnSame' => [emit(node('cellIdProperty' => 'key')), { reenter: true }, %w[k3], 'k3'],
+      'goneReturnNoId' => [emit(node('cellIdProperty' => 'key').except('id')), { reenter: true }, %w[k3], ''],
+      'goneStays' => [emit(node('cellIdProperty' => 'key')), {}, %w[k3], ''],
       'stackEnriched' => [emit(node('cellIdProperty' => 'key', 'autoChangeTrackingId' => true)), {}, %w[k3_e x2_e k3]],
       'stackCenter' => [emit(node('scrollAnchor' => 'center')), {}, [6]],
       'stackTop' => [emit(node('scrollAnchor' => 'top')), {}, [6]],
@@ -513,12 +528,13 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     calls = routes.flat_map do |name, (_, options, targets, *first)|
       first = first.empty? ? '' : first.first
       targets.map do |target|
-        sections = data_sections(**options.except(:mode, :anchor))
+        sections = data_sections(**options.except(:mode, :anchor, :reenter))
         mode = options[:mode] ? ", mode = \"#{options[:mode]}\"" : ''
         mode += ", anchor = \"#{options[:anchor]}\"" if options[:anchor]
         first_arg = first.nil? ? 'null' : "\"#{first}\""
         target_arg = target.is_a?(Integer) ? target.to_s : "\"#{target}\""
-        "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value#{mode}), Any()) }"
+        reenter = options[:reenter] ? ', reenter = true' : ''
+        "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}#{reenter}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value#{mode}), Any()) }"
       end
     end
     ["import stubs.*\nimport kotlinx.coroutines.launch\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
@@ -531,10 +547,15 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
            val effects = Drawn.effects.toList(); Drawn.effects.clear()
            kotlinx.coroutines.runBlocking { effects.forEach { it() } }
        }
-       fun run(label: String, first: String?, target: Any?, compose: (Any?) -> Unit) {
+       // reenter: the Collection leaves the composition between the first value
+       // and the target (visibility gone) — its slots are gone, the screen's
+       // scrollTo memory is not.
+       fun run(label: String, first: String?, target: Any?, reenter: Boolean = false, compose: (Any?) -> Unit) {
+           LocalCollectionScrollMemory.current = CollectionScrollMemory()
            Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Scrolled.laidOut = false; Scrolled.position = 0; Drawn.logs.clear(); Drawn.duplicate = null
            Drawn.userScroll = null; Drawn.packed = null
            if (first != null) frame(first, compose)
+           if (reenter) { Composition.slots.clear(); Drawn.effects.clear() }
            frame(target, compose)
            val at = Drawn.items.getOrNull(Drawn.scrolledTo) ?: "none"
            println(label + " => " + at + " @" + Drawn.scrolledTo + " offset " + Drawn.offset + " logs " + Drawn.logs.size +
@@ -709,6 +730,19 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(effect).to include('val scrollAnchorNow = (data.anchor')
     expect(code.scan('data.anchor').size).to eq(1)
     expect(emit(node('scrollAnchor' => 'top'))).not_to include('scrollAnchorNow')
+  end
+
+  # kjui-collection-scrollto-ignored-after-visibility-gone (2026-10-14):
+  # visibility gone takes a Collection out of the composition; the value it
+  # comes back with, written in the same update, was read as the value it is
+  # drawn with. The screen remembers the value each Collection (by its id) was
+  # last seen with: a different value on the way back is a request.
+  it 'a value a Collection comes back from gone with is a request when the screen saw it with another' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'goneStays k3')[:at]).to eq('A3'), lines.inspect        # control: no gone in between
+    expect(read(lines, 'goneReturn k3')[:at]).to eq('A3'), lines.inspect       # "" when it left, k3 when it came back
+    expect(read(lines, 'goneReturnSame k3')[:index]).to eq(-1), lines.inspect  # the value it left with: nothing to do
+    expect(read(lines, 'goneReturnNoId k3')[:index]).to eq(-1), lines.inspect  # no id, nothing remembered: the first-draw rule
   end
 
   it 'defaultScrollAnchor counts cells across the sections, as scrollTo does' do

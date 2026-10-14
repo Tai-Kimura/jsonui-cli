@@ -505,7 +505,20 @@ module KjuiTools
           required_imports&.add(:remember_state)
           required_imports&.add(:launched_effect)
           required_imports&.add(:scroll_to_landing)
-          code = indent('val scrollToArmed = remember { mutableStateOf(false) }', depth) + "\n"
+          # The value the Collection first composes with scrolls nowhere —
+          # unless the screen saw this Collection (by its id) with another
+          # value before it left the composition (visibility gone): then the
+          # value it comes back with is a request (KotlinJsonUI
+          # CollectionScrollMemory; kjui-collection-scrollto-ignored-after-
+          # visibility-gone). A Collection with no id keeps the first rule.
+          memory_id = json_data['id'].is_a?(String) && !json_data['id'].empty? ? json_data['id'] : nil
+          if memory_id
+            required_imports&.add(:collection_scroll_memory)
+            code = indent('val scrollToMemory = LocalCollectionScrollMemory.current', depth) + "\n"
+            code += indent("val scrollToArmed = remember { mutableStateOf(scrollToMemory?.isRequestOnEntry(#{memory_id.inspect}, data.#{prop}) == true) }", depth) + "\n"
+          else
+            code = indent('val scrollToArmed = remember { mutableStateOf(false) }', depth) + "\n"
+          end
           code += indent('val scrollToScope = rememberCoroutineScope()', depth) + "\n"
           code += indent('val scrollToLanding = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }', depth) + "\n"
           if target != :flow && !only_non_lazy
@@ -518,6 +531,7 @@ module KjuiTools
                            'android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0', depth) + "\n"
           end
           code += indent("LaunchedEffect(data.#{prop}) {", depth) + "\n"
+          code += indent("scrollToMemory?.record(#{memory_id.inspect}, data.#{prop})", depth + 1) + "\n" if memory_id
           code += indent('// A change scrolls; the value the Collection first composes with does not (jsonui-cli 1.9.0).', depth + 1) + "\n"
           code += indent('if (!scrollToArmed.value) { scrollToArmed.value = true; return@LaunchedEffect }', depth + 1) + "\n"
           code += indent("val raw = data.#{prop}#{Helpers::BoundValue.string_typed?(prop) ? '.orEmpty()' : '?.toString().orEmpty()'}", depth + 1) + "\n"

@@ -127,6 +127,17 @@ module EmittedSwift
   # 10.29.0; `across` fits a horizontal row's wrapContent height), and the
   # `contentFit(_:)` modifier a wrapContent axis with a max emits, and nothing
   # more.
+  # SwiftJsonUI 10.29.16 CollectionScrollMemory.swift, transcribed: the
+  # signatures, not the behaviour — a type-check, not the library. Every
+  # Collection with an id and a scrollTo emits `.collectionScrollEntry`
+  # (kjui-collection-scrollto-ignored-after-visibility-gone).
+  SCROLL_MEMORY_STUB = <<~SWIFT
+    extension View {
+        func collectionScrollEntry<Value: Hashable>(_ id: String?, value: Value, perform: @escaping (Value) -> Void) -> some View { self }
+        func providesCollectionScrollMemory() -> some View { self }
+    }
+  SWIFT
+
   LIBRARY_STUBS = <<~SWIFT
     extension String {
         func localized(tableName: String? = nil, bundle: Bundle? = nil,
@@ -141,6 +152,7 @@ module EmittedSwift
     extension View {
         func contentFit(_ axis: Axis) -> some View { CollectionContentFit(axis: axis) { self } }
     }
+    #{SCROLL_MEMORY_STUB}
   SWIFT
 
   # Emitted Swift that belongs in a `var body: some View`.

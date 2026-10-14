@@ -19,6 +19,9 @@ module SjuiTools
       # SJUIWindowWidth / .sjuiTracksWindowWidth (responsive minWidth:N /
       # maxWidth:N, jui-responsive-width-threshold-conditions).
       WINDOW_WIDTH_MIN_LIBRARY_VERSION = '10.29.12'
+      # CollectionScrollMemory / collectionScrollEntry / providesCollectionScrollMemory
+      # (kjui-collection-scrollto-ignored-after-visibility-gone).
+      SCROLL_MEMORY_MIN_LIBRARY_VERSION = '10.29.16'
 
       # A generated view the build could not update keeps the previous
       # build's body — the layout's change is not in the app. Until 1.9.0
@@ -173,6 +176,18 @@ module SjuiTools
           ""
         end
 
+        # A Collection with an id and a scrollTo reads the screen's scrollTo
+        # memory (.collectionScrollEntry — kjui-collection-scrollto-ignored-
+        # after-visibility-gone); the view that holds one provides it on the
+        # OUTER Group, so both branches share it, and an enclosing screen's
+        # memory, when there is one, is kept (ProvideCollectionScrollMemory).
+        scroll_memory_line = if "#{body_code}\n#{combined_functions}".include?('.collectionScrollEntry(')
+          "\n            // Requires SwiftJsonUI >= #{SCROLL_MEMORY_MIN_LIBRARY_VERSION} (scrollTo with the return from gone)" \
+          "\n            .providesCollectionScrollMemory()"
+        else
+          ""
+        end
+
         marker_header = SjuiTools::Core::GeneratedMarker.comment_header(
           source: "#{json_name}.json",
           generator: "sjui build",
@@ -203,7 +218,7 @@ module SjuiTools
         #endif
                 }
                 // Requires SwiftJsonUI >= 10.6.0 (embed init-params child-side wiring)
-                .receiveEmbedInitParams(to: viewModel)#{window_width_line}#{screen_marker_line}
+                .receiveEmbedInitParams(to: viewModel)#{window_width_line}#{scroll_memory_line}#{screen_marker_line}
             }
 
             @ViewBuilder

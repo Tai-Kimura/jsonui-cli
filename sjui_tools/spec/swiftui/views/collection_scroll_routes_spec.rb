@@ -267,6 +267,34 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # kjui-collection-scrollto-ignored-after-visibility-gone (2026-10-14):
+  # visibility gone removes a Collection, and the value it comes back with was
+  # its first value — `.onChange(of:)` does not fire for that, so a request
+  # written with the return never ran. A Collection with an id hands its value
+  # to the screen's memory on entry (SwiftJsonUI collectionScrollEntry): a
+  # value the screen saw it with differently runs the SAME request body. With
+  # no id nothing is remembered, and the first-draw rule stands.
+  describe 'the entry from gone' do
+    it 'runs the onChange body on entry, by the Collection id' do
+      code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'scrollAnchor' => 'top' }, INT)
+      onchange = code[/\.onChange\(of: data\.target\) \{ _, index in\n(.*?)\n\s*\}\n/m, 1]
+      entry = code[/\.collectionScrollEntry\("list", value: data\.target\) \{ index in\n(.*?)\n\s*\}\n/m, 1]
+      expect(entry).not_to be_nil, code
+      expect(entry.strip).to eq(onchange.strip)
+    end
+
+    it 'emits no entry for a Collection with no id' do
+      code, = emit({ 'id' => nil, 'sections' => [{ 'cell' => 'ACell' }] }, INT)
+      expect(code).to include('.onChange(of: data.target)')
+      expect(code).not_to include('collectionScrollEntry')
+    end
+
+    it 'the pager turns its page on entry too' do
+      code, = emit(PAGER, INT)
+      expect(code.scan('.collectionScrollEntry("list", value: data.target)').size).to eq(1), code
+    end
+  end
+
   # A bound scrollAnchor (jsonui-cli 1.9.29,
   # jui-collection-scrollto-per-request-anchor): the anchor is read inside the
   # `.onChange(of:)` the scrollTo value keys — so a change of the anchor alone
@@ -281,7 +309,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'scrollAnchor' => '@{anchor}' }, INT + BOUND_ANCHOR_DATA)
       onchange = code[/\.onChange\(of: data\.target\) \{.*?\n\s*\}\n/m]
       expect(onchange).to include('scrollProxy.scrollTo(index, anchor: CollectionScrollAnchor.point(data.anchor, horizontal: false, collection: "list"))')
-      expect(code.scan('data.anchor').size).to eq(1), 'read in the scrollTo change only'
+      # Read in the request body only: the scrollTo change's, and the same body
+      # on the entry from gone (.collectionScrollEntry, kjui-collection-
+      # scrollto-ignored-after-visibility-gone).
+      expect(code.scan('data.anchor').size).to eq(2), 'read in the request bodies only'
       code, = emit({ 'sections' => [{ 'cell' => 'ACell' }], 'layout' => 'horizontal', 'scrollAnchor' => '@{anchor}' }, INT + BOUND_ANCHOR_DATA)
       expect(code).to include('anchor: CollectionScrollAnchor.point(data.anchor, horizontal: true, collection: "list"))')
     end
