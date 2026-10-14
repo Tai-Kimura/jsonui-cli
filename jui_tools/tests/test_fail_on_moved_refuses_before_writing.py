@@ -28,6 +28,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests._shared_core import conformance_with_shared_core
+
 from jui_cli.conformance.baseline import BaselineMoved, update_baseline
 
 try:
@@ -50,7 +52,7 @@ def _png(path: Path, shade: int) -> None:
 class TheFlagRefusesInsteadOfReporting(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
-        self.conf = self.tmp / "conformance"
+        self.conf = conformance_with_shared_core(self.tmp)
         (self.conf / "artifacts" / "ios").mkdir(parents=True)
         (self.conf / "baselines" / "local").mkdir(parents=True)
         self.art = self.conf / "artifacts" / "ios"

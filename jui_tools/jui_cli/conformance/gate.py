@@ -59,6 +59,7 @@ from typing import Sequence
 from .baseline import DEFAULT_ENV
 from .visual_stability import screenshot_name
 from . import cross_effect as cross_effect_mod
+from . import shared_core
 from . import frame_parity as frame_parity_mod
 from . import home_indicator as home_indicator_mod
 from .report import ReportSummary, generate_report
@@ -210,6 +211,14 @@ def evaluate(
                 "--cross-effect needs the visual checks: activeness verdicts come "
                 "from the fixture-vs-control comparison, which --no-visual skips"
             )
+        elif missing := shared_core.missing_for(
+            conformance_dir,
+            [shared_core.SEMANTICS, shared_core.DEFINITIONS],
+            asked="--cross-effect",
+        ):
+            # Both are read beside conformance/ (contract here, enum values in
+            # generate_report); either one absent changes the counts silently.
+            outcome.problems.extend(missing)
         else:
             ledger = cross_effect_mod.load_ledger(
                 cross_effect_mod.ledger_path(conformance_dir)

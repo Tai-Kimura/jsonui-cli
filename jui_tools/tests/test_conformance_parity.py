@@ -15,6 +15,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests._shared_core import conformance_with_shared_core
+
 try:
     from PIL import Image, ImageDraw
 
@@ -41,7 +43,7 @@ def _write_png(path: Path, *, box=None, gradient_horizontal=True) -> None:
 class ParityMeasureTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         # dynamic artifacts -> baked local baseline (three screenshots)
         dyn = self.conf / "artifacts" / "ios"
         _write_png(dyn / "A.png")
@@ -131,7 +133,7 @@ class ParityMeasureTest(unittest.TestCase):
 class ParityLedgerTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         dyn = self.conf / "artifacts" / "ios"
         _write_png(dyn / "A.png")
         _write_png(dyn / "B.png", box=(10, 10, 60, 60))
@@ -220,7 +222,7 @@ class GateParityTest(unittest.TestCase):
         from jui_cli.conformance.fixture_generator import generate_conformance
 
         defs_path = _write_defs(tmp, SYNTHETIC_DEFS)
-        self.conf = tmp / "conformance"
+        self.conf = conformance_with_shared_core(tmp)
         generate_conformance(defs_path, self.conf)
         manifest = json.loads((self.conf / "manifest.json").read_text(encoding="utf-8"))
         ids = [f["id"] for f in manifest["fixtures"]]

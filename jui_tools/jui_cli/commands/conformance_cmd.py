@@ -1403,6 +1403,9 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     only_new = bool(getattr(args, "only_new", False))
     fail_on_moved = bool(getattr(args, "fail_on_moved", False))
 
+    from ..conformance.shared_core import input_digest
+
+    print(input_digest(conformance_dir, platforms=[args.platform], artifacts_dir=artifacts_dir))
     try:
         summary = update_baseline(
             conformance_dir,
@@ -2001,6 +2004,10 @@ def _cmd_gate(args: argparse.Namespace) -> int:
     selected = list(dict.fromkeys(args.platform))
     env = getattr(args, "env", None) or DEFAULT_ENV
 
+    from ..conformance.shared_core import input_digest
+
+    # What this run was handed, once, so a rerun can show it read the same.
+    print(input_digest(conformance_dir, results_dir=results_dir))
     try:
         outcome = evaluate(
             conformance_dir,

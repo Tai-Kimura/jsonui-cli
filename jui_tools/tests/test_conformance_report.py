@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests._shared_core import conformance_with_shared_core
+
 from jui_cli.conformance.fixture_generator import generate_conformance
 from jui_cli.conformance.report import ReportError, generate_report
 
@@ -82,7 +84,7 @@ class ConformanceReportTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         tmp = Path(self._tmp.name)
         defs_path = _write_defs(tmp, SYNTHETIC_DEFS)
-        self.out_dir = tmp / "conformance"
+        self.out_dir = conformance_with_shared_core(tmp)
         generate_conformance(defs_path, self.out_dir)
         self.manifest = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
         self.all_ids = [f["id"] for f in self.manifest["fixtures"]]
@@ -202,7 +204,7 @@ class InteractiveSectionTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         tmp = Path(self._tmp.name)
         defs_path = _write_defs(tmp, SYNTHETIC_DEFS)
-        self.out_dir = tmp / "conformance"
+        self.out_dir = conformance_with_shared_core(tmp)
         generate_conformance(defs_path, self.out_dir)
         self.manifest = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
         self.all_ids = [f["id"] for f in self.manifest["fixtures"]]
@@ -250,7 +252,7 @@ class VisualRegressionSectionTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         tmp = Path(self._tmp.name)
         defs_path = _write_defs(tmp, SYNTHETIC_DEFS)
-        self.out_dir = tmp / "conformance"
+        self.out_dir = conformance_with_shared_core(tmp)
         generate_conformance(defs_path, self.out_dir)
         self.manifest = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
         self.all_ids = [f["id"] for f in self.manifest["fixtures"]]

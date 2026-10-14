@@ -33,6 +33,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+
+from tests._shared_core import conformance_with_shared_core
 from unittest import mock
 
 from jui_cli.conformance import baseline
@@ -72,7 +74,7 @@ class AMoveInsideAColumnIsCaughtTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
-        self.conf = self.tmp / "conformance"
+        self.conf = conformance_with_shared_core(self.tmp)
         self.art = self.conf / "artifacts" / "web"
         self.art.mkdir(parents=True)
         (self.conf / "baselines" / "local").mkdir(parents=True)

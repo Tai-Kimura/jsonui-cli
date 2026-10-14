@@ -38,6 +38,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests._shared_core import conformance_with_shared_core
+
 from jui_cli.conformance.baseline import (
     INK_COLLAPSE_RATIO,
     blind_to_blanking,
@@ -135,7 +137,7 @@ class InkSeparatesBlankFromDrawnTests(unittest.TestCase):
 class TheComparisonCatchesBlankingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
-        self.conf = self.tmp / "conformance"
+        self.conf = conformance_with_shared_core(self.tmp)
         self.art = self.conf / "artifacts" / "web"
         self.art.mkdir(parents=True)
         (self.conf / "baselines" / "local").mkdir(parents=True)
@@ -220,7 +222,7 @@ class AbsenceIsReportedNotReadAsZeroTests(unittest.TestCase):
 
     def test_a_pre_ink_baseline_reports_uncovered_and_judges_nothing(self) -> None:
         tmp = Path(tempfile.mkdtemp())
-        conf = tmp / "conformance"
+        conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
         (conf / "baselines" / "local").mkdir(parents=True)
@@ -261,7 +263,7 @@ class EveryBlindEntryLandsInExactlyOneBucketTests(unittest.TestCase):
 
     def test_checked_plus_uncovered_plus_exempt_accounts_for_the_population(self) -> None:
         tmp = Path(tempfile.mkdtemp())
-        conf = tmp / "conformance"
+        conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
         (conf / "baselines" / "local").mkdir(parents=True)
@@ -325,7 +327,7 @@ class TheDerivationsOwnPremiseIsMeasuredPerLaneTests(unittest.TestCase):
 
     def _lane(self, painter, extra_blank: bool = False):
         tmp = Path(tempfile.mkdtemp())
-        conf = tmp / "conformance"
+        conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
         (conf / "baselines" / "local").mkdir(parents=True)
@@ -385,7 +387,7 @@ class OnlyNewNeverPairsAFreshInkWithACommittedHashTests(unittest.TestCase):
 
     def _bake_ground(self):
         tmp = Path(tempfile.mkdtemp())
-        conf = tmp / "conformance"
+        conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
         (conf / "baselines" / "local").mkdir(parents=True)
@@ -448,7 +450,7 @@ class AnUncoveredEntryIsStillMeasuredTests(unittest.TestCase):
 
     def _pre_ink_lane(self):
         tmp = Path(tempfile.mkdtemp())
-        conf = tmp / "conformance"
+        conf = conformance_with_shared_core(tmp)
         art = conf / "artifacts" / "web"
         art.mkdir(parents=True)
         (conf / "baselines" / "local").mkdir(parents=True)

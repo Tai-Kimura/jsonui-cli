@@ -191,6 +191,20 @@
       --rendered-by swiftjsonui.src=… --rendered-by ios.toolchain=… （計 6 本）
   ```
 
+  📥 **手元で report を再現するなら、repo root で既定の dir のまま撃つ。** gate と bake は
+  `shared/core/attribute_semantics.json` と `attribute_definitions.json` を **conformance dir の兄弟**として読む。
+  `--dir` で repo の外の写しを撃つと、どちらも無い。1.9.30 までは、黙って空として読んでいた。
+  その結果、run 38620808116 と同じ artifact でも、cross-effect が CI の 21 / 25 に対して 16 / 55 になった。
+  bake では、os 依存の絵（glass）が `hashes_by_os` に切り分けられなくなっていた。
+  今は `--cross-effect` の gate と、すべての bake が、そのパスを名指して**赤**で止まる（conformance/shared_core.py）。
+  gate と bake は、最初に 1 行だけ `conformance inputs: dir=… manifest=… results=[…] codegen=[…]
+  artifacts=N files <digest> semantics=<path> <md5|MISSING> definitions=<path> <md5|MISSING>` を出す。
+  report job の行と手元の行が一致すれば、同じ入力を判定している。違えば、動いた欄が 1 つ名指される。
+  手元の組み立て方は、report job と同じにする: 新しい worktree の `conformance/` に、run の `results-*` を
+  **すべて** merge する。`gh run download <run> -p 'results-*' -D <tmp>` は artifact ごとに `<tmp>/<name>/` に
+  分けて置くので、そのあと各 `<tmp>/results-*/` を `rsync -a` で `conformance/` に重ねる。
+  これは CI の `merge-multiple: true` と同じ形。
+
   🔴 **`--env ci` は `--inert-complete` / `--cross-effect` / attribute-effect を「注記」に
   格下げする。** activeness と inert verdict は **local-env で主張される量**だから
   （gate.py の env スコープ）。つまり **CI がいくら緑でも、この 3 つは一度も撃たれていない**。
