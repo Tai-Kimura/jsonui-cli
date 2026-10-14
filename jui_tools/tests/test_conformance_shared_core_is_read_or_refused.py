@@ -39,6 +39,13 @@ except ImportError:  # pragma: no cover
 REPO = Path(__file__).resolve().parents[2]
 
 
+def _scratch(case: unittest.TestCase) -> Path:
+    """A temporary directory removed when *case* ends (a copy of conformance/ is ~13 MB)."""
+    path = Path(tempfile.mkdtemp())
+    case.addCleanup(shutil.rmtree, path, True)
+    return path
+
+
 def _copy_committed_conformance(root: Path) -> Path:
     conf = root / "conformance"
     shutil.copytree(
@@ -60,7 +67,7 @@ class TheGateRefusesCrossEffectWithoutSharedCoreTests(unittest.TestCase):
         ).problems
 
     def test_without_either_file_both_are_named(self) -> None:
-        conf = _copy_committed_conformance(Path(tempfile.mkdtemp()))
+        conf = _copy_committed_conformance(Path(_scratch(self)))
         missing = _missing_problems(self._gate(conf))
         self.assertEqual(len(missing), 2, missing)
         self.assertIn(str(conf.parent / "shared" / "core" / shared_core.SEMANTICS), missing[0])
@@ -73,7 +80,7 @@ class TheGateRefusesCrossEffectWithoutSharedCoreTests(unittest.TestCase):
             (shared_core.DEFINITIONS, shared_core.SEMANTICS),
         ):
             with self.subTest(present=present):
-                root = Path(tempfile.mkdtemp())
+                root = Path(_scratch(self))
                 conf = _copy_committed_conformance(root)
                 (root / "shared" / "core").mkdir(parents=True)
                 shutil.copy(REPO / "shared" / "core" / present, root / "shared" / "core" / present)
@@ -83,7 +90,7 @@ class TheGateRefusesCrossEffectWithoutSharedCoreTests(unittest.TestCase):
 
     def test_with_both_files_beside_it_nothing_is_refused(self) -> None:
         """The boundary: the same copy, with the files, is judged."""
-        root = Path(tempfile.mkdtemp())
+        root = Path(_scratch(self))
         conf = _copy_committed_conformance(root)
         (root / "shared" / "core").mkdir(parents=True)
         for name in (shared_core.SEMANTICS, shared_core.DEFINITIONS):
@@ -91,7 +98,7 @@ class TheGateRefusesCrossEffectWithoutSharedCoreTests(unittest.TestCase):
         self.assertEqual(_missing_problems(self._gate(conf)), [])
 
     def test_a_gate_not_asked_for_cross_effect_does_not_ask_for_the_files(self) -> None:
-        conf = _copy_committed_conformance(Path(tempfile.mkdtemp()))
+        conf = _copy_committed_conformance(Path(_scratch(self)))
         self.assertEqual(_missing_problems(self._gate(conf, cross_effect=False)), [])
 
     def test_the_repo_itself_has_both(self) -> None:
@@ -126,7 +133,7 @@ class TheBakeRefusesWithoutDefinitionsTests(unittest.TestCase):
         return conf
 
     def test_without_definitions_nothing_is_written(self) -> None:
-        conf = self._corpus(Path(tempfile.mkdtemp()))
+        conf = self._corpus(Path(_scratch(self)))
         with self.assertRaises(BaselineError) as caught:
             update_baseline(conf, "ios", env="local", os_key="ios-26.2")
         self.assertIn("a bake reads ", str(caught.exception))
@@ -136,7 +143,7 @@ class TheBakeRefusesWithoutDefinitionsTests(unittest.TestCase):
     def test_with_definitions_the_glass_picture_is_carved(self) -> None:
         """The boundary, and the reason the refusal exists: with the file the
         same corpus files glass under the OS; the OS-agnostic table never has it."""
-        root = Path(tempfile.mkdtemp())
+        root = Path(_scratch(self))
         conf = self._corpus(root)
         conformance_with_shared_core(root, definitions=self.GLASS_DEFS)
         update_baseline(conf, "ios", env="local", os_key="ios-26.2")
@@ -147,7 +154,7 @@ class TheBakeRefusesWithoutDefinitionsTests(unittest.TestCase):
 
 class TheInputDigestNamesWhatMovedTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp())
+        self.root = Path(_scratch(self))
         self.conf = conformance_with_shared_core(self.root)
         (self.conf / "manifest.json").write_text("{}")
         (self.conf / "results").mkdir()
@@ -202,7 +209,7 @@ class TheCommandsPrintTheDigestOnceTests(unittest.TestCase):
         return [l for l in buf.getvalue().splitlines() if l.startswith("conformance inputs: ")]
 
     def test_the_gate_prints_it_once(self) -> None:
-        conf = _copy_committed_conformance(Path(tempfile.mkdtemp()))
+        conf = _copy_committed_conformance(Path(_scratch(self)))
         lines = self._run(["conformance", "gate", "--platform", "web", "--no-visual", "--dir", str(conf),
                            "--out", str(conf.parent / "R.md")])
         self.assertEqual(len(lines), 1, lines)
@@ -210,7 +217,7 @@ class TheCommandsPrintTheDigestOnceTests(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
     def test_a_bake_prints_it_once_even_when_it_refuses(self) -> None:
-        conf = TheBakeRefusesWithoutDefinitionsTests._corpus(None, Path(tempfile.mkdtemp()))
+        conf = TheBakeRefusesWithoutDefinitionsTests._corpus(None, Path(_scratch(self)))
         lines = self._run(["conformance", "baseline", "update", "--platform", "ios", "--env", "local",
                            "--dir", str(conf)])
         self.assertEqual(len(lines), 1, lines)
