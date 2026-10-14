@@ -128,17 +128,18 @@ class ConformanceGeneratorTest(unittest.TestCase):
         )
 
     def test_visibility_enum_expands_with_matching_assertions(self):
+        # Not drawn: notVisible (the viewport's) and hidden (wherever it is).
         expectations = {
-            "common/visibility__visible": "visible",
-            "common/visibility__invisible": "notVisible",
-            "common/visibility__gone": "notVisible",
+            "common/visibility__visible": ["visible"],
+            "common/visibility__invisible": ["notVisible", "hidden"],
+            "common/visibility__gone": ["notVisible", "hidden"],
         }
-        for fixture_id, expected_assert in expectations.items():
+        for fixture_id, expected_asserts in expectations.items():
             fixture = self.by_id[fixture_id]
             self.assertEqual(fixture["class"], "assertable")
             test = json.loads((self.out_dir / fixture["test"]).read_text(encoding="utf-8"))
             asserts = [s.get("assert") for s in test["cases"][0]["steps"] if "assert" in s]
-            self.assertEqual(asserts, [expected_assert], fixture_id)
+            self.assertEqual(asserts, expected_asserts, fixture_id)
 
     def test_hidden_boolean_generates_true_and_false_cases(self):
         self.assertIn("common/hidden__true", self.by_id)
@@ -493,16 +494,16 @@ class ConformanceInteractiveTest(unittest.TestCase):
 
     def test_visibility_binding_sweep_covers_all_enum_values(self):
         expectations = {
-            "common/visibility__binding_visible": "visible",
-            "common/visibility__binding_invisible": "notVisible",
-            "common/visibility__binding_gone": "notVisible",
+            "common/visibility__binding_visible": ["visible"],
+            "common/visibility__binding_invisible": ["notVisible", "hidden"],
+            "common/visibility__binding_gone": ["notVisible", "hidden"],
         }
-        for fixture_id, expected_assert in expectations.items():
+        for fixture_id, expected_asserts in expectations.items():
             fixture = self.by_id[fixture_id]
             self.assertEqual(fixture["class"], "interactive", fixture_id)
             steps = self._load(fixture, "test")["cases"][0]["steps"]
             asserts = [s["assert"] for s in steps if "assert" in s]
-            self.assertEqual(asserts, [expected_assert], fixture_id)
+            self.assertEqual(asserts, expected_asserts, fixture_id)
             # the swept enum value is the data default
             layout = self._load(fixture, "layout")
             self.assertEqual(
@@ -602,7 +603,7 @@ class ConformanceInteractiveTest(unittest.TestCase):
 
     def test_interactive_steps_stay_inside_runner_vocabulary(self):
         allowed_actions = {"waitFor", "tap", "input", "longPress", "selectOption", "swipe"}
-        allowed_asserts = {"text", "visible", "notVisible"}
+        allowed_asserts = {"text", "visible", "notVisible", "hidden"}
         for specs in interactive_rules.INTERACTIVE_SPECS.values():
             for spec in specs:
                 for step in spec.steps:

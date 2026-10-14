@@ -203,6 +203,8 @@ export interface WhenCondition {
   visible?: string;
   /** Instant check: element is currently absent or invisible */
   notVisible?: string;
+  /** Instant check: element is not drawn (absent, gone or invisible), wherever it is */
+  hidden?: string;
   /** Current platform matches (same matching rules as the step-level platform field) */
   platform?: PlatformTarget;
   /** Current size class / viewport size matches (resolved at runtime from the live viewport) */
@@ -220,6 +222,7 @@ export interface WhenCondition {
 export const KNOWN_CONDITION_KEYS: ReadonlySet<string> = new Set([
   'visible',
   'notVisible',
+  'hidden',
   'platform',
   'responsive',
   'state'
@@ -476,6 +479,7 @@ export type ActionType =
 export type AssertionType =
   | 'visible'
   | 'notVisible'
+  | 'hidden'
   | 'enabled'
   | 'disabled'
   | 'text'

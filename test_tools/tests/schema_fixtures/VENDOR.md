@@ -24,7 +24,7 @@ turning drift into a CI failure.
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
 - Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
-- Vendored at commit: `aae3b0a`
+- Vendored at commit: `b6f62d8` (actions.schema.json: the `hidden` assertion and condition key; the other four unchanged since `aae3b0a`)
 
   ⚠️ Nothing reads that line. The byte guard is
   `dev-guide/ci/check-canonical-sync.py`, which compares the FILES; the

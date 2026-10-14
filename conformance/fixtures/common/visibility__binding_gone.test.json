@@ -26,6 +26,10 @@
         {
           "assert": "notVisible",
           "id": "target"
+        },
+        {
+          "assert": "hidden",
+          "id": "target"
         }
       ]
     }

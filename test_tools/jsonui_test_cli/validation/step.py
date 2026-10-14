@@ -279,7 +279,7 @@ class StepValidator:
         if len(condition) == 0:
             result.errors.append(ValidationMessage(
                 path=path,
-                message="Condition object must have at least one key (visible/notVisible/platform/responsive/state)"
+                message="Condition object must have at least one key (visible/notVisible/hidden/platform/responsive/state)"
             ))
             return
 
@@ -290,7 +290,7 @@ class StepValidator:
                     message=f"Unknown condition key: {key}. Must be one of: {VALID_CONDITION_KEYS}"
                 ))
 
-        for key in ("visible", "notVisible"):
+        for key in ("visible", "notVisible", "hidden"):
             if key in condition:
                 value = condition[key]
                 if not isinstance(value, str) or not value.strip():

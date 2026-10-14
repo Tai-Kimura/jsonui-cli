@@ -5,7 +5,7 @@ screen a test names is checked (`screen_ids`); the element ids its steps name
 were not, so an id no layout has — a typo, a renamed node, web's old
 spelling of an id inside an include — ran against nothing until a device
 timed out on it. Each id a step names (`id`, `ids`, `container`, `cropId`,
-and `visible` / `notVisible` under `when` and `while`, in nested `steps` too)
+and `visible` / `notVisible` / `hidden` under `when` and `while`, in nested `steps` too)
 is classified by `jui_cli.core.layout_facts.classify_element` — the answer
 the spec validator and the coverage data axis give — against the ids of
 EVERY layout of the project, each resolved on every platform with its
@@ -67,7 +67,7 @@ from .models import ValidationMessage, ValidationResult
 ID_KEYS = ("id", "container", "cropId")
 #: Keys of a step whose value is a condition, and the condition's id keys.
 CONDITION_KEYS = ("when", "while")
-CONDITION_ID_KEYS = ("visible", "notVisible")
+CONDITION_ID_KEYS = ("visible", "notVisible", "hidden")
 
 #: What a layout id can be spelled with.
 LAYOUT_ID = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

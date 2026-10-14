@@ -3335,6 +3335,12 @@ def _not_visible() -> dict:
     return {"assert": "notVisible", "id": TARGET_ID}
 
 
+def _hidden() -> dict:
+    # Not drawn, wherever it is (test-runner `hidden`): the position-free
+    # check beside notVisible, which is the viewport's.
+    return {"assert": "hidden", "id": TARGET_ID}
+
+
 def _enabled() -> dict:
     return {"assert": "enabled", "id": TARGET_ID}
 
@@ -3353,8 +3359,8 @@ def _assertable_cases(section: str, attribute: str, host: str, defn: dict) -> tu
         _, enum_values = normalize_type(defn)
         assert_map = {
             "visible": (_visible(),),
-            "invisible": (_not_visible(),),
-            "gone": (_not_visible(),),
+            "invisible": (_not_visible(), _hidden()),
+            "gone": (_not_visible(), _hidden()),
         }
         cases = []
         for name, value in dedupe_case_names(enum_values):
@@ -3366,7 +3372,7 @@ def _assertable_cases(section: str, attribute: str, host: str, defn: dict) -> tu
 
     if attribute == "hidden":
         return (
-            CasePlan(name="true", value=True, written_key=attribute, assertions=(_not_visible(),)),
+            CasePlan(name="true", value=True, written_key=attribute, assertions=(_not_visible(), _hidden())),
             CasePlan(name="false", value=False, written_key=attribute, assertions=(_visible(),)),
         )
 

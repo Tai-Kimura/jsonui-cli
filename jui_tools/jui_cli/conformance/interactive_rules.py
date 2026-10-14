@@ -216,6 +216,10 @@ def _target_not_visible() -> dict:
     return {"assert": "notVisible", "id": rules.TARGET_ID}
 
 
+def _target_hidden() -> dict:
+    return {"assert": "hidden", "id": rules.TARGET_ID}
+
+
 # --------------------------------------------------------------------------- #
 # Spec factories
 # --------------------------------------------------------------------------- #
@@ -451,7 +455,7 @@ def _negation_hidden() -> InteractiveSpec:
         target_attrs=(("hidden", f"@{{!{FLAG_VAR}}}"),),
         vars=(),
         handlers=(),
-        steps=(_target_not_visible(),),
+        steps=(_target_not_visible(), _target_hidden()),
         data_vars=(DataVar(FLAG_VAR, "Bool", False),),
     )
 
@@ -512,7 +516,7 @@ def _visibility_sweep() -> tuple[InteractiveSpec, ...]:
                 target_attrs=(("visibility", f"@{{{VISIBILITY_VAR}}}"),),
                 vars=(StateVar(VISIBILITY_VAR, "String", value),),
                 handlers=(),
-                steps=(make_assert(),),
+                steps=(make_assert(),) + ((_target_hidden(),) if value != "visible" else ()),
             )
         )
     return tuple(specs)
