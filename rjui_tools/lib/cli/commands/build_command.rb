@@ -2338,7 +2338,28 @@ module RjuiTools
               );
               const cell = cells.length > 0 ? cells[n] : container.children[n];
               if (!cell) return;
-              scrollCollectionToElement(container, cell, anchor, animated, horizontal);
+              scrollCollectionToElement(container, cellBox(container, cell), anchor, animated, horizontal);
+            }
+
+            // The box the anchor lands is the CELL as the Collection lays it
+            // out, not the element its address sits on: with cellHeight the
+            // address is on the cell's content, inside a slot cellHeight
+            // high, and landing that content put a 28-high Label's bottom at
+            // the viewport's bottom where iOS and Compose put the 150-high
+            // cell's (conformance-collection-scrollanchor-family-does-not-
+            // discriminate, 2026-10-14: bottom left the list where it was).
+            // So climb from the address through every wrapper that holds
+            // nothing else, stopping below the container.
+            function cellBox(container#{is_ts ? ': HTMLElement' : ''}, cell#{is_ts ? ': Element' : ''})#{is_ts ? ': Element' : ''} {
+              let box = cell;
+              while (
+                box.parentElement &&
+                box.parentElement !== container &&
+                box.parentElement.childElementCount === 1
+              ) {
+                box = box.parentElement;
+              }
+              return box;
             }
 
             // The keys of the drawn cells, in section order (`lists`, each drawn

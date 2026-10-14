@@ -60,6 +60,7 @@ interface ManifestFixture {
   mode: string | string[] | null;
   test: string;
   layout: string;
+  state?: { afterFirstDraw?: { name: string; set: { var: string; value: string } } } | null;
 }
 interface Manifest {
   fixtures: ManifestFixture[];
@@ -71,6 +72,21 @@ interface ResultEntry {
   detail: string;
   screenshot?: string;
   frames?: string;
+  afterFirstDraw?: AfterFirstDrawResult;
+}
+
+/**
+ * RESULTS_SCHEMA.md `afterFirstDraw`: what the host stamped for a fixture
+ * that declares `state.afterFirstDraw`, and how the picture came to rest
+ * before it was taken. `fired` is the host's own stamp of a frame drawn with
+ * the changed value; anything else is `not-fired`, which the gate fails.
+ */
+interface AfterFirstDrawResult {
+  name: string;
+  status: 'fired' | 'not-fired';
+  firedAtMs?: number;
+  appliedAtMs?: number;
+  landing: string;
 }
 
 interface Frame {
@@ -239,6 +255,58 @@ function pngSize(png: Buffer): { width: number; height: number } {
   return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
 
+/**
+ * afterFirstDraw (INTERACTIVE_HOST_CONTRACT.md): wait for the host's stamp of a
+ * frame drawn with the changed value, then read where every id is drawn until
+ * it has stood still for STILL_MS — the shape of the iOS host's Landing.wait,
+ * a bounded read rather than a fixed sleep. The series goes into the result,
+ * so a red says whether the change never landed, or was still moving when the
+ * budget ran out.
+ */
+const AFTER_FIRST_DRAW_BUDGET_MS = 10000;
+const LANDING_STILL_MS = 1000;
+const LANDING_STEP_MS = 250;
+async function awaitAfterFirstDraw(page: Page, name: string): Promise<AfterFirstDrawResult> {
+  const start = Date.now();
+  let stamp: { firedAtMs: number | null; appliedAtMs: number | null } | undefined;
+  while (Date.now() - start < AFTER_FIRST_DRAW_BUDGET_MS) {
+    stamp = await page.evaluate(() => window.__conformanceAfterFirstDraw);
+    if (stamp?.appliedAtMs != null) break;
+    await page.waitForTimeout(50);
+  }
+  if (stamp?.appliedAtMs == null) {
+    return { name, status: 'not-fired', landing: `no applied stamp within ${AFTER_FIRST_DRAW_BUDGET_MS} ms (host stamp: ${JSON.stringify(stamp ?? null)})` };
+  }
+  const series: string[] = [];
+  let last: string | null = null;
+  let since = Date.now();
+  const landStart = Date.now();
+  let outcome = `budget ${AFTER_FIRST_DRAW_BUDGET_MS / 1000}s`;
+  for (;;) {
+    const doc = (await captureFrames(page, '')) as { frames?: unknown } | null;
+    const value = JSON.stringify(doc?.frames ?? null);
+    const t = Date.now() - landStart;
+    if (value !== last) {
+      series.push(`${(t / 1000).toFixed(2)} ${value.length > 200 ? value.slice(0, 200) + '…' : value}`);
+      last = value;
+      since = Date.now();
+    }
+    if (Date.now() - since >= LANDING_STILL_MS) {
+      outcome = `still ${LANDING_STILL_MS / 1000}s at ${(t / 1000).toFixed(2)}s`;
+      break;
+    }
+    if (t >= AFTER_FIRST_DRAW_BUDGET_MS) break;
+    await page.waitForTimeout(LANDING_STEP_MS);
+  }
+  return {
+    name,
+    status: 'fired',
+    firedAtMs: stamp.firedAtMs ?? undefined,
+    appliedAtMs: stamp.appliedAtMs,
+    landing: `${series.length} reading(s) (${outcome})`,
+  };
+}
+
 async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultEntry> {
   const testPath = path.join(conformanceDir, fixture.test);
   const test: ScreenTest = JSON.parse(fs.readFileSync(testPath, 'utf8'));
@@ -254,6 +322,7 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
 
   let screenshot: string | undefined;
   let frames: string | undefined;
+  let afterFirstDraw: AfterFirstDrawResult | undefined;
   try {
     await page.goto(`${baseUrl}/fixture/${fixture.id}`, { waitUntil: 'load' });
     // Pages are reused across fixtures per worker, and the mouse stays where
@@ -275,6 +344,11 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
       if (!platformIncludes(testCase.platform, 'web')) continue;
       for (const step of testCase.steps) {
         if (step.action === 'screenshot') {
+          const declared = fixture.state?.afterFirstDraw;
+          if (declared && !afterFirstDraw) {
+            afterFirstDraw = await awaitAfterFirstDraw(page, declared.name);
+            console.log(`[run] afterFirstDraw ${fixture.id}: ${afterFirstDraw.status} — ${afterFirstDraw.landing}`);
+          }
           const name = step.name ?? fixture.id.replace(/\//g, '_');
           const file = path.join(artifactsDir, `${name}.png`);
           // waitFor proves the element is in the DOM, not that it has been
@@ -345,12 +419,12 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
         }
       }
     }
-    return { id: fixture.id, status: 'pass', detail: '', screenshot, frames };
+    return { id: fixture.id, status: 'pass', detail: '', screenshot, frames, afterFirstDraw };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = classifyThrow(message);
     const pageErrorSuffix = pageErrors.length > 0 ? ` | pageerror: ${singleLine(pageErrors[0])}` : '';
-    return { id: fixture.id, status, detail: singleLine(message) + pageErrorSuffix, screenshot, frames };
+    return { id: fixture.id, status, detail: singleLine(message) + pageErrorSuffix, screenshot, frames, afterFirstDraw };
   } finally {
     page.off('pageerror', onPageError);
   }
@@ -440,6 +514,7 @@ async function main(): Promise<void> {
       const entry: Record<string, unknown> = { id: r.id, status: r.status, detail: r.detail };
       if (r.screenshot) entry.screenshot = r.screenshot;
       if (r.frames) entry.frames = r.frames;
+      if (r.afterFirstDraw) entry.afterFirstDraw = r.afterFirstDraw;
       return entry;
     }),
   };

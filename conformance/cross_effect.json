@@ -39,33 +39,6 @@
       "note": ""
     },
     {
-      "fixture": "Collection/defaultScrollAnchor__bottom",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/defaultScrollAnchor__center",
-      "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/defaultScrollAnchor__top",
-      "verdict": "uniformly-inert",
-      "declared": "top",
-      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
       "fixture": "Collection/layout__vertical",
       "verdict": "uniformly-inert",
       "declared": "vertical",
@@ -131,27 +104,6 @@
       "verdict": "uniformly-inert",
       "declared": "vertical",
       "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/scrollAnchor__bottom",
-      "verdict": "uniformly-inert",
-      "declared": "bottom",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/scrollAnchor__center",
-      "verdict": "uniformly-inert",
-      "declared": "center",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
-      "note": ""
-    },
-    {
-      "fixture": "Collection/scrollAnchor__top",
-      "verdict": "uniformly-inert",
-      "declared": "top",
-      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
       "note": ""
     },
     {

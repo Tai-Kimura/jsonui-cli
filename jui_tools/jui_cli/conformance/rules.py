@@ -2183,7 +2183,33 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     #
     # The withdrawal was right at the time and the entry said what would undo
     # it; both halves happened, so it goes in.
-    "Collection.scrollAnchor": {"scrollTo": "@{scrollTarget}"},
+    #
+    # The request itself is a CHANGE of the scrollTo value after the first
+    # draw (jsonui-cli 1.9.0: the value a list is drawn with scrolls nowhere),
+    # so a static fixture never made one: three 28-high cells sat in a
+    # 200-high list and top / center / bottom drew the control's picture on
+    # every face (conformance-collection-scrollanchor-family-does-not-
+    # discriminate, 2026-10-14). The host now changes `scrollTarget` once
+    # after the first draw (AFTER_FIRST_DRAW below), the cells are keyed by
+    # their title so a String names one, and each is 150 high in a 200-high
+    # list (450 of content): landing the middle cell ("Beta", drawn at 150)
+    # top, centre or bottom puts it at 0, 25 or 50 — every landing moves the
+    # list, none is clamped by the content's end, and the cell's content stays
+    # in view. Measured 2026-10-14 with 300-high cells and the last cell: the
+    # landings were 0 / -50 / -100 by the frames, but centre and bottom drew
+    # one picture, the cell's content being out of view in both.
+    "Collection.scrollAnchor": {
+        "scrollTo": "@{scrollTarget}", "cellIdProperty": "title", "cellHeight": 150,
+    },
+    # defaultScrollAnchor says where a list STARTS, which shows only when the
+    # content is taller than the list: the base's three cells (28 high each,
+    # 84 in a 200-high list) left nothing to scroll, so top / center / bottom
+    # all drew the control's picture on every face and cross_effect.json
+    # booked them as "value-is-default"
+    # (conformance-collection-scrollanchor-family-does-not-discriminate,
+    # 2026-10-14). Three 100-high cells are 300 in 200: top rests at 0, center
+    # at the middle cell's middle (50), bottom at the end (100).
+    "Collection.defaultScrollAnchor": {"cellHeight": 100},
     # itemWeight is the fraction of the container width ONE ITEM takes, which
     # is a grid concept: sjui folds it into the grid's column count
     # (fed0d27: round(1/weight) columns) and the default single-column
@@ -2710,14 +2736,36 @@ def root_node_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
 #: `CollectionDataSource` — does not survive kjui's `map_to_kotlin_type`,
 #: which passes unknown classes through verbatim into Kotlin source.
 BINDING_DATA_CLASSES: dict[str, str] = {
-    # Collection.scrollTo carries a cell INDEX unless cellIdProperty names an
-    # id, and the SSoT now says so in those words. `Int` is in the four-class
-    # vocabulary that survives all three generators.
-    "scrollTarget": "Int",
+    # Collection.scrollTo: the declared class decides what the value names
+    # (1.9.0) — a String is a cell's key. The scrollAnchor fixtures name the
+    # cell "Beta" by its title (cellIdProperty), set after the first draw
+    # (AFTER_FIRST_DRAW); its zero, "", names no cell, so the first draw
+    # scrolls nowhere.
+    "scrollTarget": "String",
     # The View host of tapBackground: its tap, and the tap's bound gate.
     "conformanceTap": "() -> Void",
     "conformanceTapGate": "Boolean",
 }
+
+
+#: Visual fixtures whose subject shows only after a value CHANGES once the
+#: fixture has been drawn, keyed by the ``@{name}`` binding that changes. A
+#: fixture (or control) whose layout binds one gets a manifest ``state`` with
+#: ``afterFirstDraw: {name, set: {var, value}}``: the host draws it, sets the
+#: var to the literal once, waits for the picture to come to rest and only
+#: then lets the screenshot be taken, and stamps the result
+#: (INTERACTIVE_HOST_CONTRACT.md "afterFirstDraw"; RESULTS_SCHEMA.md). The
+#: gate fails a declared fixture whose result does not say it fired, so a
+#: host that never fires cannot photograph the first draw and pass.
+#:
+#: ``scrollTarget`` (Collection.scrollAnchor and its control): a scroll is a
+#: change of the scrollTo value, never the value the list is drawn with.
+AFTER_FIRST_DRAW: dict[str, dict[str, str]] = {
+    "scrollTarget": {"value": "Beta"},
+}
+
+#: The name every afterFirstDraw operation carries (results and logs name it).
+AFTER_FIRST_DRAW_NAME = "conformanceAfterFirstDraw"
 
 
 def _fits(value: Any, cls: str) -> bool:

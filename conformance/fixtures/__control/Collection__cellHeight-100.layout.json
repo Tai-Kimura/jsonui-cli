@@ -24,7 +24,7 @@
         }
       ],
       "items": "@{items}",
-      "scrollTo": "@{scrollTarget}"
+      "cellHeight": 100
     }
   ],
   "data": [
@@ -42,11 +42,6 @@
           "title": "Gamma"
         }
       ]
-    },
-    {
-      "name": "scrollTarget",
-      "class": "Int",
-      "defaultValue": 0
     }
   ]
 }

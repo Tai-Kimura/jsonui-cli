@@ -187,6 +187,51 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
     end
   end
 
+  # The anchor lands the CELL, cellHeight high, not the element its address
+  # sits on (conformance-collection-scrollanchor-family-does-not-discriminate,
+  # 2026-10-14). rjui draws a cellHeight cell as a slot of that height holding
+  # the cell's content, and the content carries the address: three 150-high
+  # slots, each holding a 28-high addressed cell, in a 200-high list. Landing
+  # the middle cell (drawn at 150) top / center / bottom scrolls the list to
+  # 150 / 125 / 100, as iOS and Compose land it; landing the 28-high content
+  # scrolled to 150 / 64 / 0 — bottom did not move the list at all.
+  it 'lands the cellHeight slot, not the addressed content inside it' do
+    skip 'chromium is not available' unless chromium
+    Dir.mktmpdir('rjui_scroll_slot') do |dir|
+      File.write(File.join(dir, 'collectionScroll.js'), helper)
+      File.write(File.join(dir, 'app.js'), <<~JS)
+        import { scrollCollectionToCell } from './collectionScroll.js';
+        const out = {};
+        for (const anchor of ['top', 'center', 'bottom']) {
+          const list = document.createElement('div');
+          Object.assign(list.style, { height: '200px', width: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column' });
+          ['Alpha', 'Beta', 'Gamma'].forEach((title, i) => {
+            const slot = document.createElement('div');
+            Object.assign(slot.style, { height: '150px', flexShrink: '0', overflow: 'hidden' });
+            const content = document.createElement('div');
+            content.id = 'target_item_' + i;
+            Object.assign(content.style, { height: '28px' });
+            slot.append(content);
+            list.append(slot);
+          });
+          document.body.append(list);
+          scrollCollectionToCell(list, 'target', 'Beta', ['Alpha', 'Beta', 'Gamma'], anchor, false, false);
+          out[anchor] = list.scrollTop;
+          list.remove();
+        }
+        document.body.textContent = 'AT' + JSON.stringify(out);
+      JS
+      esbuild = File.expand_path('../support/node_modules/.bin/esbuild', __dir__)
+      skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
+      log, status = Open3.capture2e(esbuild, File.join(dir, 'app.js'), '--bundle', '--outfile=' + File.join(dir, 'out.js'))
+      raise "esbuild: #{log}" unless status.success?
+      File.write(File.join(dir, 'page.html'), '<html><body style="margin:0"><script src="out.js"></script></body></html>')
+      dom, = Open3.capture2e(chromium, *HeadlessChromium::FLAGS, '--allow-file-access-from-files', '--dump-dom',
+                             "file://#{File.join(dir, 'page.html')}")
+      expect(JSON.parse(dom[/AT(\{.*?\})</m, 1] || raise("no result in:\n#{dom}"))).to eq('top' => 150, 'center' => 125, 'bottom' => 100)
+    end
+  end
+
   # A cell's key is its cellId, else — only with cellIdProperty — that
   # property's value; the effect hands the keys either way (jsonui-cli 1.9.0:
   # with no cellIdProperty they were null, and a string never met a cellId).

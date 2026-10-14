@@ -92,7 +92,16 @@ module KjuiTools
                    elsif non_lazy_reversed && reversed_sections then last_emitted
                    else 'defaultAnchorCount - 1'
                    end
-            indent("collectionScrollToCell(#{cell}, #{non_lazy_reversed ? 2 : 0}, false)", level) + "\n"
+            # center lands the middle cell's middle at the viewport's middle
+            # (anchor 1), as iOS and the web draw a list longer than its
+            # viewport (kjui-defaultscrollanchor-center-differs-when-content-
+            # overflows): it went to the top edge, and a list whose middle cell
+            # could not reach it stopped at the end, drawing bottom's picture.
+            mode = if eager_anchor == 'center' then 1
+                   elsif non_lazy_reversed then 2
+                   else 0
+                   end
+            indent("collectionScrollToCell(#{cell}, #{mode}, false)", level) + "\n"
           end
           lazy_code = lambda do |level|
             cell = if lazy_anchor == 'center' then 'defaultAnchorCount / 2'
@@ -101,7 +110,27 @@ module KjuiTools
                    end
             out = indent("val cell = #{cell}", level) + "\n"
             out += scroll_item_code(json_data, sections, level - 1, route: route, grid_columns: grid_columns, is_horizontal: is_horizontal)
-            out + indent("if (index >= 0) #{state_var}.scrollToItem(index)", level) + "\n"
+            next out + indent("if (index >= 0) #{state_var}.scrollToItem(index)", level) + "\n" unless lazy_anchor == 'center'
+
+            # center: the middle cell's middle at the viewport's middle, as
+            # iOS and the web draw a list longer than its viewport
+            # (kjui-defaultscrollanchor-center-differs-when-content-overflows,
+            # 2026-10-14). scrollToItem puts the cell at the top edge, and a
+            # middle cell that could not get there stopped the list at its
+            # end — the picture bottom draws. The scroll range clamps the
+            # shift, so a list that cannot centre it rests at its nearer end.
+            required_imports&.add(:anchored_scroll_by)
+            axis = route == :grid ? (is_horizontal ? 'x' : 'y') : nil
+            offset = axis ? "item.offset.#{axis}" : 'item.offset'
+            size = { 'x' => 'item.size.width', 'y' => 'item.size.height' }.fetch(axis, 'item.size')
+            out += indent('if (index >= 0) {', level) + "\n"
+            out += indent("#{state_var}.scrollToItem(index)", level + 1) + "\n"
+            out += indent("#{state_var}.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { item ->", level + 1) + "\n"
+            out += indent("val defaultAnchorViewport = #{state_var}.layoutInfo.viewportEndOffset - #{state_var}.layoutInfo.viewportStartOffset", level + 2) + "\n"
+            out += indent("val defaultAnchorShift = #{offset} - (defaultAnchorViewport - #{size}) / 2", level + 2) + "\n"
+            out += indent("if (defaultAnchorShift != 0) #{state_var}.scrollBy(defaultAnchorShift.toFloat())", level + 2) + "\n"
+            out += indent('}', level + 1) + "\n"
+            out + indent('}', level) + "\n"
           end
 
           code = indent("val defaultAnchorCount = #{count}", depth) + "\n"

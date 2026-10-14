@@ -24,6 +24,7 @@
         }
       ],
       "items": "@{items}",
+      "cellHeight": 100,
       "defaultScrollAnchor": "center"
     }
   ],

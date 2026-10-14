@@ -187,6 +187,18 @@ def evaluate(
     # The iOS baselines assume the home indicator is never drawn (they hash the
     # bottom of the picture); a screenshot that shows it is a run that changed
     # what they compare (home_indicator).
+    if visual:
+        # afterFirstDraw (after_first_draw.py): a declaring fixture whose
+        # result does not say the host fired was photographed at its first
+        # draw, which every other check would read as the fixture.
+        from . import after_first_draw as after_first_draw_mod
+
+        problems, notices = after_first_draw_mod.judge(
+            conformance_dir, platforms, results_dir=results_dir, codegen=parity
+        )
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
+
     if visual and "ios" in platforms:
         problems, notices = home_indicator_mod.judge(conformance_dir)
         outcome.problems.extend(problems)

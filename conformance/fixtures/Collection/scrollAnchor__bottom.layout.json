@@ -25,6 +25,8 @@
       ],
       "items": "@{items}",
       "scrollTo": "@{scrollTarget}",
+      "cellIdProperty": "title",
+      "cellHeight": 150,
       "scrollAnchor": "bottom"
     }
   ],
@@ -46,8 +48,8 @@
     },
     {
       "name": "scrollTarget",
-      "class": "Int",
-      "defaultValue": 0
+      "class": "String",
+      "defaultValue": ""
     }
   ]
 }

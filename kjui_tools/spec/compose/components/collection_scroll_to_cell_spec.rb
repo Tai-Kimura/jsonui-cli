@@ -717,6 +717,10 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     # center the sixth, B0. The grid: B4 after its filler, item 11.
     expect(read(lines, 'stackAnchor ').values_at(:at, :index)).to eq(['B4', 12]), lines.inspect
     expect(read(lines, 'stackAnchorCenter ').values_at(:at, :index)).to eq(['B0', 8]), lines.inspect
+    # centred, not at the top edge (kjui-defaultscrollanchor-center-differs-
+    # when-content-overflows): scrollToItem puts B0 at 0, then it goes back
+    # by (100 - 28) / 2 to its middle. Until 2026-10-14 no shift was made.
+    expect(read(lines, 'stackAnchorCenter ')[:offset]).to eq(-36), lines.inspect
     expect(read(lines, 'gridAnchor ').values_at(:at, :index)).to eq(['B4', 11]), lines.inspect
   end
 
@@ -765,10 +769,14 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(read(lines, 'wrapNone 6')[:index]).to eq(-1), lines.inspect
   end
 
-  it 'defaultScrollAnchor on a non-lazy container: the middle or last cell at its top edge, once the cells arrive' do
+  # center lands the middle cell's middle at the viewport's middle, as iOS
+  # and the web draw a list longer than its viewport
+  # (kjui-defaultscrollanchor-center-differs-when-content-overflows,
+  # 2026-10-14); it went to the top edge, 168.
+  it 'defaultScrollAnchor on a non-lazy container: the last cell at its top edge, the middle one centred, once the cells arrive' do
     lines = run_emitted(routes)
     expect(read(lines, 'eagerAnchor ')[:index]).to eq(280), lines.inspect    # B4, the tenth cell: 28 × 10
-    expect(read(lines, 'wrapAnchor ')[:index]).to eq(168), lines.inspect     # center: B0, the sixth: 28 × 6
+    expect(read(lines, 'wrapAnchor ')[:index]).to eq(132), lines.inspect     # center: B0, the sixth, 28 × 6 - (100 - 28) / 2
   end
 
   it 'defaultScrollAnchor under reverseLayout: bottom is where the list rests, top the cell drawn at the visual top' do

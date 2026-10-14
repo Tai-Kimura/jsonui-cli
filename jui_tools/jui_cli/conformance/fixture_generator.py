@@ -720,6 +720,43 @@ def _source_label(definitions_path: Path) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def _attach_after_first_draw(out_dir: Path, entries: list[dict]) -> None:
+    """Give every visual fixture that binds an AFTER_FIRST_DRAW var its state.
+
+    Keyed by the binding in the written layout, not by the attribute, so the
+    shared control of a family gets the same change as its members — a
+    control that stayed at its first draw would be a different question.
+    """
+    for entry in entries:
+        if entry.get("class") != rules.CLASS_VISUAL:
+            continue
+        text = (out_dir / entry["layout"]).read_text(encoding="utf-8")
+        bound = [name for name in sorted(rules.AFTER_FIRST_DRAW) if f'"@{{{name}}}"' in text]
+        if not bound:
+            continue
+        if len(bound) > 1:
+            raise ValueError(
+                f"{entry['id']} binds {bound}: an afterFirstDraw state names ONE change"
+            )
+        name = bound[0]
+        if entry.get("state"):
+            raise ValueError(f"{entry['id']} already has a state; afterFirstDraw would replace it")
+        cls = rules.BINDING_DATA_CLASSES.get(name, "String")
+        if cls != "String":
+            raise ValueError(
+                f"afterFirstDraw sets {name} to a literal string (the `set` operation), "
+                f"but its data class is {cls}"
+            )
+        entry["state"] = {
+            "vars": [{"name": name, "class": cls, "defaultValue": ""}],
+            "handlers": [],
+            "afterFirstDraw": {
+                "name": rules.AFTER_FIRST_DRAW_NAME,
+                "set": {"var": name, "value": rules.AFTER_FIRST_DRAW[name]["value"]},
+            },
+        }
+
+
 def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSummary:
     """Generate fixtures + manifest under *out_dir*. Deterministic + idempotent.
 
@@ -1047,6 +1084,8 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")
     )
     summary.control_count += sum(1 for e in bounds_entries if e.get("isControl"))
+
+    _attach_after_first_draw(out_dir, fixture_entries)
 
     skipped_entries = [
         {"component": s.section, "attribute": s.attribute, "reason": s.reason}

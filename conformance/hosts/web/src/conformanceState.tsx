@@ -16,7 +16,7 @@
  *   `<var>` exists, a setter for `<var>` is injected (mirrors
  *   rjui_tools/lib/react/hook_generator.rb semantics).
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getEmbedNavigator } from './components/extensions/EmbedContainer';
 
 export interface ConformanceStateVar {
@@ -41,9 +41,50 @@ export interface ConformanceStateHandler {
   embed?: { id: string; action: string; screen?: string; params?: Record<string, unknown> };
 }
 
+/**
+ * A change the host makes ONCE, itself, after the fixture's first draw
+ * (INTERACTIVE_HOST_CONTRACT.md "afterFirstDraw"): for a visual fixture whose
+ * subject is a reaction to a change — a scrollTo request is a change of the
+ * value, never the value a list is drawn with.
+ */
+export interface ConformanceAfterFirstDraw {
+  name: string;
+  set: { var: string; value: string };
+}
+
 export interface ConformanceState {
   vars: ConformanceStateVar[];
   handlers: ConformanceStateHandler[];
+  afterFirstDraw?: ConformanceAfterFirstDraw;
+}
+
+/**
+ * What the host stamped for the runner (scripts/run.ts reads it and writes it
+ * into the result entry): when the change was made and when the first frame
+ * drawn with it was painted, in ms after the fixture's first paint.
+ */
+export interface AfterFirstDrawStamp {
+  name: string;
+  firedAtMs: number | null;
+  appliedAtMs: number | null;
+}
+
+declare global {
+  interface Window {
+    __conformanceAfterFirstDraw?: AfterFirstDrawStamp;
+  }
+}
+
+/** Resolves after the next painted frame (two animation frames). */
+function afterPaint(callback: () => void): () => void {
+  let second = 0;
+  const first = requestAnimationFrame(() => {
+    second = requestAnimationFrame(callback);
+  });
+  return () => {
+    cancelAnimationFrame(first);
+    cancelAnimationFrame(second);
+  };
 }
 
 type DataDict = Record<string, unknown>;
@@ -60,6 +101,30 @@ export function StateHost({
   Component: React.ComponentType<{ data: DataDict }>;
 }): React.JSX.Element {
   const [data, setData] = useState<DataDict>(() => createData());
+
+  // afterFirstDraw: once the first draw has been painted, set the var to the
+  // literal; once a frame drawn WITH that value has been painted, stamp it.
+  const afterFirstDraw = state.afterFirstDraw;
+  const firstPaint = useRef<number | null>(null);
+  useEffect(() => {
+    if (!afterFirstDraw) return;
+    window.__conformanceAfterFirstDraw = { name: afterFirstDraw.name, firedAtMs: null, appliedAtMs: null };
+    return afterPaint(() => {
+      firstPaint.current = performance.now();
+      const { var: varName, value } = afterFirstDraw.set;
+      setData((prev) => ({ ...prev, [varName]: value }));
+      window.__conformanceAfterFirstDraw = { name: afterFirstDraw.name, firedAtMs: 0, appliedAtMs: null };
+    });
+  }, [afterFirstDraw]);
+  useEffect(() => {
+    const stamp = window.__conformanceAfterFirstDraw;
+    if (!afterFirstDraw || !stamp || stamp.firedAtMs === null || stamp.appliedAtMs !== null) return;
+    if (data[afterFirstDraw.set.var] !== afterFirstDraw.set.value) return;
+    return afterPaint(() => {
+      const start = firstPaint.current ?? performance.now();
+      window.__conformanceAfterFirstDraw = { ...stamp, appliedAtMs: Math.round(performance.now() - start) };
+    });
+  }, [afterFirstDraw, data]);
 
   const merged = useMemo(() => {
     const out: DataDict = { ...data };

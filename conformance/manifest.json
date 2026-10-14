@@ -8,13 +8,13 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "a0860bf5e004d12e053011c2fb6c98695bacb5373cb5c72c991401e308cc5877",
+  "generatedFrom": "2ac30d170738048a88abd5512998055949c78f8aebc9544c176a760e1434e8ce",
   "counts": {
-    "fixtures": 1177,
+    "fixtures": 1178,
     "assertable": 51,
     "visual": 884,
     "interactive": 37,
-    "control": 127,
+    "control": 128,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -20689,10 +20689,26 @@
       "deprecated": null,
       "layout": "fixtures/Collection/scrollAnchor__top.layout.json",
       "test": "fixtures/Collection/scrollAnchor__top.test.json",
-      "state": null,
+      "state": {
+        "vars": [
+          {
+            "name": "scrollTarget",
+            "class": "String",
+            "defaultValue": ""
+          }
+        ],
+        "handlers": [],
+        "afterFirstDraw": {
+          "name": "conformanceAfterFirstDraw",
+          "set": {
+            "var": "scrollTarget",
+            "value": "Beta"
+          }
+        }
+      },
       "promotedFrom": null,
-      "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
-      "control": "__control/Collection__scrollTo--scrollTarget",
+      "peerGroup": "Collection/scrollAnchor@Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
+      "control": "__control/Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -20718,10 +20734,26 @@
       "deprecated": null,
       "layout": "fixtures/Collection/scrollAnchor__center.layout.json",
       "test": "fixtures/Collection/scrollAnchor__center.test.json",
-      "state": null,
+      "state": {
+        "vars": [
+          {
+            "name": "scrollTarget",
+            "class": "String",
+            "defaultValue": ""
+          }
+        ],
+        "handlers": [],
+        "afterFirstDraw": {
+          "name": "conformanceAfterFirstDraw",
+          "set": {
+            "var": "scrollTarget",
+            "value": "Beta"
+          }
+        }
+      },
       "promotedFrom": null,
-      "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
-      "control": "__control/Collection__scrollTo--scrollTarget",
+      "peerGroup": "Collection/scrollAnchor@Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
+      "control": "__control/Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -20747,10 +20779,26 @@
       "deprecated": null,
       "layout": "fixtures/Collection/scrollAnchor__bottom.layout.json",
       "test": "fixtures/Collection/scrollAnchor__bottom.test.json",
-      "state": null,
+      "state": {
+        "vars": [
+          {
+            "name": "scrollTarget",
+            "class": "String",
+            "defaultValue": ""
+          }
+        ],
+        "handlers": [],
+        "afterFirstDraw": {
+          "name": "conformanceAfterFirstDraw",
+          "set": {
+            "var": "scrollTarget",
+            "value": "Beta"
+          }
+        }
+      },
       "promotedFrom": null,
-      "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
-      "control": "__control/Collection__scrollTo--scrollTarget",
+      "peerGroup": "Collection/scrollAnchor@Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
+      "control": "__control/Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -20776,10 +20824,26 @@
       "deprecated": null,
       "layout": "fixtures/Collection/scrollAnchor__binding.layout.json",
       "test": "fixtures/Collection/scrollAnchor__binding.test.json",
-      "state": null,
+      "state": {
+        "vars": [
+          {
+            "name": "scrollTarget",
+            "class": "String",
+            "defaultValue": ""
+          }
+        ],
+        "handlers": [],
+        "afterFirstDraw": {
+          "name": "conformanceAfterFirstDraw",
+          "set": {
+            "var": "scrollTarget",
+            "value": "Beta"
+          }
+        }
+      },
       "promotedFrom": null,
-      "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
-      "control": "__control/Collection__scrollTo--scrollTarget",
+      "peerGroup": "Collection/scrollAnchor@Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
+      "control": "__control/Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -20807,8 +20871,8 @@
       "test": "fixtures/Collection/defaultScrollAnchor__center.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/defaultScrollAnchor@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/defaultScrollAnchor@Collection__cellHeight-100",
+      "control": "__control/Collection__cellHeight-100",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -20836,8 +20900,8 @@
       "test": "fixtures/Collection/defaultScrollAnchor__top.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/defaultScrollAnchor@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/defaultScrollAnchor@Collection__cellHeight-100",
+      "control": "__control/Collection__cellHeight-100",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -20865,8 +20929,8 @@
       "test": "fixtures/Collection/defaultScrollAnchor__bottom.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Collection/defaultScrollAnchor@Collection",
-      "control": "__control/Collection",
+      "peerGroup": "Collection/defaultScrollAnchor@Collection__cellHeight-100",
+      "control": "__control/Collection__cellHeight-100",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -24769,6 +24833,80 @@
       ]
     },
     {
+      "id": "__control/Collection__cellHeight-100",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__cellHeight-100.layout.json",
+      "test": "fixtures/__control/Collection__cellHeight-100.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget.layout.json",
+      "test": "fixtures/__control/Collection__cellHeight-150_cellIdProperty-title_scrollTo--scrollTarget.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "scrollTarget",
+            "class": "String",
+            "defaultValue": ""
+          }
+        ],
+        "handlers": [],
+        "afterFirstDraw": {
+          "name": "conformanceAfterFirstDraw",
+          "set": {
+            "var": "scrollTarget",
+            "value": "Beta"
+          }
+        }
+      },
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
       "id": "__control/Collection__columns-2",
       "component": "__control",
       "attribute": null,
@@ -24874,35 +25012,6 @@
       "deprecated": null,
       "layout": "fixtures/__control/Collection__orientation-horizontal.layout.json",
       "test": "fixtures/__control/Collection__orientation-horizontal.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true,
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
-      ]
-    },
-    {
-      "id": "__control/Collection__scrollTo--scrollTarget",
-      "component": "__control",
-      "attribute": null,
-      "case": "Collection",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/Collection__scrollTo--scrollTarget.layout.json",
-      "test": "fixtures/__control/Collection__scrollTo--scrollTarget.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

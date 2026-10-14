@@ -113,6 +113,59 @@ representation across the three runtimes. The state vocabulary is fixed:
 `conformanceFire` handler (`set` kind), and the `confPush` / `confPop`
 handlers (`embed` kind, Embed isolated fixtures).
 
+## afterFirstDraw — one change the host makes after the first draw (2026-10-14)
+
+Some visual fixtures photograph a REACTION to a change rather than a first
+draw. A Collection's scrollTo request is the one that made this necessary: the
+request is a change of the bound value, and the value a list is drawn with
+scrolls nowhere (jsonui-cli 1.9.0). A static fixture therefore never asked
+anything to scroll, and `scrollAnchor` top / center / bottom drew the same
+picture on every face (conformance-collection-scrollanchor-family-does-not-
+discriminate). Such a fixture declares the change in its manifest `state`:
+
+```json
+"state": {
+  "vars": [ { "name": "scrollTarget", "class": "String", "defaultValue": "" } ],
+  "handlers": [],
+  "afterFirstDraw": { "name": "conformanceAfterFirstDraw",
+                      "set": { "var": "scrollTarget", "value": "Gamma" } }
+}
+```
+
+The generator writes it (`rules.AFTER_FIRST_DRAW`, keyed by the binding the
+layout carries, so a family's shared control declares the same change). It is
+the `set` operation of §2, but it is not a handler: the layout does not name
+it, nothing in the layout calls it, and a host must not register it under
+`name` in the data — the codegen faces have no member of that name. `class`
+of every afterFirstDraw var is `String` and `value` a literal string, as with
+`set`.
+
+Every host face (iOS Dynamic and codegen, Android Dynamic and codegen, web):
+
+1. **Fire once, itself, after the first draw.** When the fixture's first frame
+   has been drawn, set `set.var` to `set.value` through the same path a `set`
+   handler uses on that face (the state store / data map / generated
+   ViewModel / React state), exactly once. A face that renders no `state.vars`
+   for the fixture still provisions the declared var with its default before
+   the first draw.
+2. **Stamp it.** Record the time the change was made (`firedAtMs`) and the time
+   the first frame drawn WITH the changed value was drawn (`appliedAtMs`), both
+   in ms after the first draw. The stamp is what the runner waits for; a
+   host that has not drawn the changed value has not applied it.
+3. **The runner waits, then photographs.** Before the fixture's `screenshot`
+   step the runner waits for the applied stamp (budget 10 s), then reads where
+   every id is drawn every 0.25 s until the reading has stood still for 1 s
+   (budget 10 s) — the shape of the iOS host's `Landing.wait`: a bounded read,
+   never a fixed sleep. A change whose effect starts later than that `still`
+   window would be photographed early; the series in the result says so.
+4. **The result says what happened** (RESULTS_SCHEMA.md `afterFirstDraw`):
+   `fired` with both times and the landing line, or `not-fired` with why.
+
+`jui conformance gate` fails a declaring fixture whose result has no stamp or
+a stamp other than `fired` (after_first_draw.py), on the dynamic faces always
+and on the codegen faces with `--parity`. A fixture that does not declare
+afterFirstDraw is captured exactly as before.
+
 ## 4. Collection data supply (F4 Phase 2 prerequisite, 2026-08-02)
 
 Static Collection fixtures need item data to render cells, and the four
