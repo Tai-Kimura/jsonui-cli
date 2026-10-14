@@ -1582,8 +1582,14 @@ module KjuiTools
       end
 
       def generate_scroll_with_constraints(child_data, ref_name, constraints, depth)
-        # Generate LazyColumn with constrainAs modifier
-        code = indent("LazyColumn(", depth)
+        # LazyRow or LazyColumn with constrainAs — on the ScrollView's own
+        # axis (Components::ScrollViewComponent.horizontal?). This path wrote
+        # LazyColumn for every ScrollView, so a horizontal one placed in a
+        # ConstraintLayout scrolled vertically
+        # (kjui-scroll-with-constraints-always-vertical).
+        lazy = Components::ScrollViewComponent.horizontal?(child_data) ? 'LazyRow' : 'LazyColumn'
+        @required_imports&.add(lazy == 'LazyRow' ? :lazy_row : :lazy_column)
+        code = indent("#{lazy}(", depth)
 
         modifiers = ["Modifier"]
 

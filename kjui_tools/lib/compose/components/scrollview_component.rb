@@ -19,6 +19,13 @@ module KjuiTools
           v == v.to_i ? v.to_i : v
         end
 
+        # The scroll axis — the one predicate every path that draws a
+        # ScrollView reads (this component, and ComposeBuilder's
+        # ConstraintLayout child, kjui-scroll-with-constraints-always-vertical).
+        def self.horizontal?(json_data)
+          (json_data['horizontalScroll'] ? true : false) || json_data['orientation'] == 'horizontal'
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           # スクロール方向の判定 — horizontalScroll true or orientation
           # horizontal scrolls sideways, anything else vertically, as sjui
@@ -28,8 +35,7 @@ module KjuiTools
           # vertical scroll (attribute_definitions.json ScrollView, user
           # ruling 2026-10-14, jui-scrollview-horizontalscroll-false-disagrees,
           # jui-scrollview-axis-from-child-web-disagrees).
-          is_horizontal = (json_data['horizontalScroll'] ? true : false) ||
-                          json_data['orientation'] == 'horizontal'
+          is_horizontal = horizontal?(json_data)
 
           # keyboardAvoidance属性の確認（デフォルトはtrue）
           keyboard_avoidance = json_data['keyboardAvoidance'] != false
