@@ -10,6 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { isInViewport } from './visibility.ts';
 import type { Page, Locator } from 'playwright';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
@@ -24,6 +25,12 @@ const CHANNEL_TOLERANCE = 16;
 export class AssertionExecutor {
   private page: Page;
   private defaultTimeout: number;
+  /**
+   * Cross-screen waits are legitimately slower than in-screen ones: real
+   * suites already hand-write 15-20s after a cold start. Kept distinct from
+   * defaultTimeout so raising one does not silently raise the other.
+   */
+  private screenTransitionTimeout: number;
   private stateProvider?: StateProvider;
   private baselineDir: string;
   private updateBaselines: boolean;
@@ -37,10 +44,12 @@ export class AssertionExecutor {
       stateProvider?: StateProvider;
       baselineDir?: string;
       updateBaselines?: boolean;
+      screenTransitionTimeout?: number;
     } = {}
   ) {
     this.page = page;
     this.defaultTimeout = defaultTimeout;
+    this.screenTransitionTimeout = options.screenTransitionTimeout ?? 10000;
     this.stateProvider = options.stateProvider;
     this.baselineDir = options.baselineDir ?? './baselines';
     this.updateBaselines = options.updateBaselines ?? false;
@@ -85,6 +94,9 @@ export class AssertionExecutor {
       case 'openedUrl':
         await this.assertOpenedUrl(step, timeout);
         break;
+      case 'screen':
+        await this.assertScreen(step, step.timeout ?? this.screenTransitionTimeout);
+        break;
       default:
         throw new Error(`Unknown assertion: ${assertion}`);
     }
@@ -118,27 +130,107 @@ export class AssertionExecutor {
     throw new Error(lastError);
   }
 
+  /**
+   * `assert: "screen"` — the named screen IS DISPLAYED.
+   *
+   * Not "displayed exclusively": embedded screens, split panes and tab hosts
+   * legitimately show several markers at once, so this only ever looks at the
+   * target's own marker.
+   *
+   * Measured with React 19 SSR + a suspending transition: a client-side swap
+   * never exposes two screens' markers at once, and a pending transition
+   * never mounts the destination's marker early — while it is pending, NO
+   * marker is present. So the predicate needs no exclusivity test and no
+   * transition handling, and a zero-marker reading is only meaningful once
+   * the timeout has expired.
+   *
+   * Known limitation (measured, deliberately not part of the predicate):
+   * server-rendered markup carries the marker before hydration, so on the
+   * FIRST document load this can pass while clicks are still being dropped.
+   * React exposes no standard "hydrated" signal, so gating on one is not
+   * implementable; it does not recur on client-side navigation.
+   */
+  private async assertScreen(step: TestStep, timeout: number): Promise<void> {
+    const screenId = step.name;
+    if (!screenId) {
+      throw new Error("screen requires 'name'");
+    }
+    await this.waitForScreenMarker(screenId, timeout);
+  }
+
+  /**
+   * Wait until the named screen's marker is displayed. Public because the
+   * runner's readiness gate needs the same predicate and, more importantly,
+   * the same diagnosis: a second implementation would answer "not ready"
+   * where this one answers "built for production" or "navigation went
+   * elsewhere", and those are the sentences that end the investigation.
+   *
+   * Throws the last diagnosis on timeout.
+   */
+  async waitForScreenMarker(screenId: string, timeout: number): Promise<void> {
+    const locator = this.page.locator(`[data-screen="${screenId}"]`);
+
+    await this.pollUntil(timeout, async () => {
+      if ((await locator.count()) === 0) return await this.screenDiagnosis(screenId);
+      if (await locator.first().isVisible()) return null;
+      return `marker-not-displayed: screen '${screenId}' is present but not visible`;
+    });
+  }
+
+  /**
+   * Canonical failure classes. The class names the likely CAUSE, not a
+   * severity — every one of them fails the assertion just the same. A missing
+   * marker anywhere points at the build (production build or stale generated
+   * code), while the previous screen still being the only one present points
+   * at the app or the test: the navigation did not happen.
+   */
+  private async screenDiagnosis(screenId: string): Promise<string> {
+    const present = await this.page
+      .locator('[data-screen]')
+      .evaluateAll((nodes) =>
+        nodes.map((n) => n.getAttribute('data-screen')).filter((v): v is string => !!v)
+      )
+      .catch(() => [] as string[]);
+
+    if (present.length === 0) {
+      // Name what the browser is actually showing: a redirect (auth wall,
+      // error page) also has no markers, and there the build is not the
+      // suspect — same misdiagnosis class as Android's foreground-app case.
+      const where = this.page.url();
+      return (
+        `marker-absent: no screen marker anywhere (current page: ${where}). ` +
+        'If this is not the screen under test, navigation went elsewhere — the build is ' +
+        'not the suspect. Otherwise the app is either built for production ' +
+        '(markers are development-only) or its generated code is stale — rebuild with `jui build`.'
+      );
+    }
+    return `previous-screen-only: '${screenId}' is not displayed; displayed screens are ${JSON.stringify(present)}`;
+  }
+
+  /** In the viewport (src/visibility.ts): shown, and some of it inside the
+   * window's viewport and every clipping ancestor — not merely laid out. */
   private async assertVisible(step: TestStep, timeout: number): Promise<void> {
     const id = this.requireId(step, 'visible');
     await this.pollUntil(timeout, async () => {
-      const element = this.getLocator(id).first();
+      const element = this.getLocator(id);
       if (await element.count() === 0) {
         return `Element '${id}' should be visible but it does not exist`;
       }
-      return await element.isVisible()
+      return await isInViewport(element)
         ? null
-        : `Element '${id}' should be visible but it is not`;
+        : `Element '${id}' should be visible but it is not in the viewport`;
     });
   }
 
   private async assertNotVisible(step: TestStep, timeout: number): Promise<void> {
     const id = this.requireId(step, 'notVisible');
     await this.pollUntil(timeout, async () => {
+      // Exactly not `visible`: absent, hidden, or nothing of it in the viewport.
       const element = this.getLocator(id);
       if (await element.count() === 0) {
         return null;
       }
-      return await element.first().isVisible()
+      return await isInViewport(element)
         ? `Element '${id}' should not be visible but it is`
         : null;
     });

@@ -15,6 +15,25 @@ export interface ScreenTest {
   launch?: LaunchConfig;
   /** API mock scenario set applied (and the screen reloaded) before the cases run */
   mocks?: MockScenarioMap;
+  /**
+   * How this file decides the page is ready, overriding the project-wide
+   * `screenReadyStrategy`. Needed by tests whose expected outcome is that the
+   * screen does NOT render — a permission refusal shown in its place, an
+   * expired session redirecting to login — for which waiting on the screen's
+   * own marker can only ever time out.
+   *
+   * - `'none'` — no gate; the test's first step does the waiting.
+   * - `{ marker }` — wait for a different screen's marker (where it lands).
+   * - `'networkidle'` / `'auto'` — the project-wide gates, per file.
+   */
+  /**
+   * Orientation this file runs in, applied once when the run starts.
+   * Overrides the run default from `jsonui-test-run.json`; a `setOrientation`
+   * step still wins for the rotation it performs, so the order is
+   * step > this field > run default.
+   */
+  orientation?: ResponsiveOrientation;
+  screenReady?: ScreenReady;
   setup?: TestStep[];
   teardown?: TestStep[];
   cases: TestCase[];
@@ -22,6 +41,14 @@ export interface ScreenTest {
 
 /** Map of OpenAPI operationId -> mock scenario name */
 export type MockScenarioMap = Record<string, string>;
+
+/** Per-file readiness gate — see `ScreenTest.screenReady`. */
+export type ScreenReady =
+  | 'auto'
+  | 'marker'
+  | 'networkidle'
+  | 'none'
+  | { marker: string };
 
 export interface TestSource {
   layout: string;
@@ -69,6 +96,13 @@ export interface FlowTest {
    * Parity with ScreenTest.mocks; step-level setMocks handles mid-flow switches.
    */
   mocks?: Record<string, string>;
+  /**
+   * Orientation this file runs in, applied once when the run starts.
+   * Overrides the run default from `jsonui-test-run.json`; a `setOrientation`
+   * step still wins for the rotation it performs, so the order is
+   * step > this field > run default.
+   */
+  orientation?: ResponsiveOrientation;
   setup?: FlowTestStep[];
   teardown?: FlowTestStep[];
   steps: FlowTestStep[];
@@ -448,7 +482,8 @@ export type AssertionType =
   | 'count'
   | 'state'
   | 'screenshot'
-  | 'openedUrl';
+  | 'openedUrl'
+  | 'screen';
 
 // MARK: - Platform Target
 
@@ -467,6 +502,30 @@ export function platformIncludes(target: PlatformTarget | undefined, platform: s
 /** Why a skipped result was skipped; only set for gate-caused skips (results.schema.json skipReason) */
 export type SkipReason = 'platform' | 'responsive';
 
+/**
+ * Machine-readable counterpart to a failed result's prose `error`
+ * (results.schema.json failureReason). Prose moves between releases: a
+ * consumer aggregation matched on a sentence another driver deleted, and
+ * would have reported zero occurrences of a thing that had only been
+ * reworded. `skipReason` has been an enum since it existed; failures had no
+ * such channel.
+ *
+ * The vocabulary is the failure's STAGE, not the error class — the three
+ * drivers share no taxonomy (this one throws a bare `Error` at 80 sites),
+ * so mapping classes would have produced three different enums.
+ */
+export type FailureReason =
+  | 'element-not-found'
+  | 'timeout'
+  | 'assertion'
+  | 'invalid-test'
+  | 'mock'
+  | 'setup'
+  | 'teardown'
+  | 'launch'
+  | 'action'
+  | 'other';
+
 export interface TestResult {
   testName: string;
   caseName: string;
@@ -476,9 +535,64 @@ export interface TestResult {
   /** Why the case was skipped (platform vs responsive gate); unset for plain `skip: true` skips */
   skipReason?: SkipReason;
   error?: string;
+  /**
+   * Machine-readable counterpart to `error`; only meaningful when the case
+   * failed. Unset on a failure whose cause could not be classified at all —
+   * absent reads as unknown, never as "no reason".
+   */
+  failureReason?: FailureReason;
   /** Warnings collected during the case (optional-step failures, baseline created, ...) */
   warnings?: string[];
+  /**
+   * How many times the case ran in total, retries included (1 = settled on
+   * the first run). Unset on skipped rows — a case that never ran has no
+   * attempt count (results.schema.json attempts).
+   */
+  attempts?: number;
+  /**
+   * The orientation this case ASKED for, after resolving the whole chain:
+   * a `setOrientation` step in the case, else the file's top-level
+   * `orientation`, else the run default for this viewport's tier. Unset when
+   * nothing declared one.
+   */
+  declaredOrientation?: ResponsiveOrientation;
+  /**
+   * The orientation the case ACTUALLY ran in, read from the viewport rather
+   * than derived from `declaredOrientation`.
+   *
+   * The two are separate fields because they can disagree. On Android
+   * `'portrait'` resolves to `setOrientationNatural()`, and a tablet whose
+   * natural orientation is landscape does not turn portrait — so a run that
+   * asked for one orientation and executed in the other is a real outcome
+   * with every assertion still passing. Deriving this from the declaration
+   * would make the two agree by construction, which is precisely the
+   * agreement the pair exists to measure. Web reports it the same way even
+   * though its viewport swap cannot disagree, so that a reader of the
+   * results does not have to branch per platform.
+   */
+  observedOrientation?: ResponsiveOrientation;
   durationMs: number;
+}
+
+/**
+ * Run-scoped defaults installed beside the tests as `jsonui-test-run.json`.
+ *
+ * The table is keyed by size tier, never resolved to one value, because one
+ * installed bundle is executed by every lane — phone and tablet run the same
+ * files against different devices — so a resolved value could be right for at
+ * most one of them. The driver reads the row for the tier it resolves at run
+ * time.
+ *
+ * `schemaVersion` exists because this file is read by drivers OLDER than the
+ * one that adds the next field to it, and `x-requires-driver` cannot gate
+ * them: iOS and Android driver versions are not readable from a project tree.
+ * A driver that does not know the version says so and ignores the file,
+ * rather than misreading it.
+ */
+export interface RunDefaults {
+  schemaVersion: number;
+  /** tier -> orientation. Present but empty when nothing is declared. */
+  orientation?: Partial<Record<ResponsiveSizeTier, ResponsiveOrientation>>;
 }
 
 export interface TestSuiteResult {

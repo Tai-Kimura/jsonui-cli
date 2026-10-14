@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Page, Locator } from 'playwright';
 import { type TestStep, deriveOrientation } from './types.ts';
+import { isInViewport } from './visibility.ts';
 
 export class ActionExecutor {
   private page: Page;
@@ -464,15 +465,19 @@ export class ActionExecutor {
 
     const targetSelect = hasSelect ? select : element;
 
-    // Select by value, label, or index
-    if (step.value !== undefined) {
+    // Selector precedence is the schema's: index, then value, then label
+    // (schemas/actions.schema.json selectOptionAction; ios and android resolve
+    // in the same order). A lower selector is ignored when a higher one is
+    // present, so a free-text note in 'label' next to an 'index' never
+    // becomes the option to look for.
+    if (step.index !== undefined) {
+      await targetSelect.selectOption({ index: step.index });
+    } else if (step.value !== undefined) {
       await targetSelect.selectOption({ value: step.value });
     } else if (step.label !== undefined) {
       await targetSelect.selectOption({ label: step.label });
-    } else if (step.index !== undefined) {
-      await targetSelect.selectOption({ index: step.index });
     } else {
-      throw new Error("selectOption requires 'value', 'label', or 'index'");
+      throw new Error("selectOption requires 'index', 'value', or 'label'");
     }
   }
 
@@ -517,9 +522,11 @@ export class ActionExecutor {
     const timeout = step.timeout ?? 20000;
     const target = this.getLocator(id).first();
 
-    const isTargetVisible = async (): Promise<boolean> => {
-      return (await target.count()) > 0 && await target.isVisible();
-    };
+    // The same predicate as `visible` (src/visibility.ts): stop when some of
+    // the target is in the viewport. isVisible() alone is true for an element
+    // laid out below a scroll container's fold, so the search stopped before
+    // scrolling and the next `visible` on the target failed.
+    const isTargetVisible = async (): Promise<boolean> => isInViewport(target);
 
     if (await isTargetVisible()) {
       return;
@@ -541,7 +548,7 @@ export class ActionExecutor {
       let unchangedCount = 0;
 
       while (Date.now() < deadline) {
-        const marker = await this.scrollOneStep(step.container, legDirection);
+        const marker = await this.scrollOneStep(step.container, legDirection, target);
 
         if (await isTargetVisible()) {
           return true;
@@ -584,7 +591,8 @@ export class ActionExecutor {
    */
   private async scrollOneStep(
     containerId: string | undefined,
-    direction: 'up' | 'down' | 'left' | 'right'
+    direction: 'up' | 'down' | 'left' | 'right',
+    target?: Locator
   ): Promise<string | null> {
     if (containerId) {
       const container = this.getLocator(containerId).first();
@@ -603,7 +611,37 @@ export class ActionExecutor {
       }, direction);
     }
 
-    // Scroll the window
+    // No container: the target's nearest ancestor that scrolls on this axis
+    // (overflow auto / scroll, content larger than the box), as iOS takes a
+    // scroll view and Android its scrollable parent. A JsonUI page scrolls in
+    // its ScrollView's element, not the window: scrolling only the window
+    // never moved a target laid out below that element's fold (measured on a
+    // consumer list page: "not found after scrolling to both ends of the
+    // page", and green once `container` named the ScrollView).
+    if (target && (await target.count()) > 0) {
+      const marker = await target.evaluate((el: Element, dir: string) => {
+        const vertical = dir === 'up' || dir === 'down';
+        for (let a = el.parentElement; a; a = a.parentElement) {
+          const cs = getComputedStyle(a);
+          const overflow = vertical ? cs.overflowY : cs.overflowX;
+          const scrolls = (overflow === 'auto' || overflow === 'scroll')
+            && (vertical ? a.scrollHeight > a.clientHeight : a.scrollWidth > a.clientWidth);
+          if (!scrolls) continue;
+          const step = Math.round((vertical ? a.clientHeight : a.clientWidth) * 0.7);
+          switch (dir) {
+            case 'up': a.scrollTop -= step; break;
+            case 'down': a.scrollTop += step; break;
+            case 'left': a.scrollLeft -= step; break;
+            case 'right': a.scrollLeft += step; break;
+          }
+          return `${a.scrollTop},${a.scrollLeft}`;
+        }
+        return null;
+      }, direction);
+      if (marker !== null) return marker;
+    }
+
+    // Nothing above the target scrolls (or it is not in the DOM yet): the window
     return this.page.evaluate((dir) => {
       const step = Math.round((dir === 'up' || dir === 'down' ? window.innerHeight : window.innerWidth) * 0.7);
       switch (dir) {
