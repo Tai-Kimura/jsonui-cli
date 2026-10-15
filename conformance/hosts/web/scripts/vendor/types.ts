@@ -34,10 +34,28 @@ export interface ScreenTest {
    */
   orientation?: ResponsiveOrientation;
   screenReady?: ScreenReady;
+  /**
+   * Whether the cases share one page state (`'shared'`, the default) or each
+   * case starts from a freshly opened screen (`'reopen'`).
+   *
+   * - `'shared'` — setup runs once, every case runs in the page state the
+   *   previous case left (scroll position, navigation), teardown runs once.
+   *   The order of the cases matters.
+   * - `'reopen'` — before each case the runner re-opens the URL the page was
+   *   on when the file started (file mocks re-applied, readiness gate
+   *   awaited), then runs setup; teardown runs after each case.
+   *
+   * Read for screen test files run directly; a flow that references a case
+   * runs it inside the flow and ignores this.
+   */
+  caseIsolation?: CaseIsolation;
   setup?: TestStep[];
   teardown?: TestStep[];
   cases: TestCase[];
 }
+
+/** Per-file case isolation — see `ScreenTest.caseIsolation`. */
+export type CaseIsolation = 'shared' | 'reopen';
 
 /** Map of OpenAPI operationId -> mock scenario name */
 export type MockScenarioMap = Record<string, string>;

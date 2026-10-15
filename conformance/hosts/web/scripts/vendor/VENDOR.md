@@ -9,7 +9,9 @@ conformance runner executes the exact same action/assertion semantics as
 the production Playwright driver, without requiring a sibling checkout at
 run time.
 
-Re-vendored 2026-10-15 from web driver branch feat/hidden-assertion (on the
+Re-vendored 2026-10-15 from web driver 1.14.0 (release/next 2d2c9c7): `types.ts`
+now carries `caseIsolation` (the runner that reads it is not vendored; conformance
+does not use it). Before that, the same day from branch feat/hidden-assertion (on the
 assertion-timeout reason history): the `hidden` assertion and `when: { hidden }`
 (visibility.ts isHidden), and a timed-out assertion names every reason it waited
 through (reasonHistory.ts). The re-vendor before, 2026-10-14 from 6b2c118 (1.13.0): `visible` /
