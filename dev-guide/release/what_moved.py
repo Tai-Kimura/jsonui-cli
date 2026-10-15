@@ -55,6 +55,11 @@ SURFACES = [
     ("validate PRINTING surface — quoted output changes even when gates do not",
      r"^test_tools/jsonui_test_cli/(cli\.py|validation/)"),
     ("test CLI — other", r"^test_tools/jsonui_test_cli/"),
+    # Outside the package dir but shipped with it: dependencies and entry
+    # points ride here, and so does pytest's own config. 1.9.31 changed only
+    # the pytest part (tmp_path retention), so read the diff before announcing.
+    ("test CLI packaging — dependencies, entry points, pytest config (read the diff)",
+     r"^test_tools/pyproject\.toml$"),
     ("jsonui-doc", r"^document_tools/"),
     ("vendored platform codegen — arrives via `jui sync_tool`",
      r"^(sjui_tools|kjui_tools|rjui_tools)/"),
