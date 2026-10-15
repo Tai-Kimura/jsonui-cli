@@ -185,6 +185,15 @@ SwiftJsonUI 10.29.10 を別々に撃ち、1 回で足りたところを 2 回に
 - ドライバは各自リポジトリ（-web / -android / -ios）でコミットし、親リポジトリで
   submodule ポインタ更新。conformance ホストの vendored driver 再同期も追随
   （kjui のローカルパッチ保持に注意）。
+- 🚨 **test-runner の main を動かす列車では、jsonui-cli の ci `ssot-guards`（Canonical sync）が
+  test-runner の main を ref なしで読む**（意図的に pin しない設計、ci.yml のコメント）。
+  - test-runner の `schemas/` が変わるなら、**同じ列車の jsonui-cli で `schema_fixtures/` を再 vendor** する。
+    1.9.30 は test-runner v1.12.0（schema の visible / notVisible の説明を変更）と同じ窓で出たのに再 vendor を落とし、
+    jsonui-cli の main が push 直後から赤だった（release-check は test-runner の main を動かす前に撃ったので緑）。
+  - release-check の時点では test-runner の main がまだ古いので、この job は**必ず赤**になる。判定は手元で
+    `python3 dev-guide/ci/check-canonical-sync.py <main になる test-runner の commit の checkout>` が OK であること。
+  - push は **test-runner（ドライバ・親の main とタグ）→ 続けて jsonui-cli（main とタグ）**。
+    jsonui-cli の push の後、**main の ci の結果を見届ける**（出荷後の main を見ないと、この赤は誰も見ない）。
 
 ### スキーマ ↔ validator の正本分担（クロスリポ・重要）
 
