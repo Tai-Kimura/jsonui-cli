@@ -7,10 +7,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { errors } from 'playwright';
 import type { Page, Locator } from 'playwright';
 import { type TestStep, deriveOrientation } from './types.ts';
-import { isInViewport, probe, DETACHED } from './visibility.ts';
+import { isInViewport, probe, DETACHED, isTimeoutError } from './visibility.ts';
 /**
  * Why Playwright could not act, from its timeout message: the last line of the
  * call log that states a condition ("element is not enabled", "<div> intercepts
@@ -871,7 +870,8 @@ export class ActionExecutor {
     try {
       return await op(timeout);
     } catch (e) {
-      if (e instanceof errors.TimeoutError) {
+      // By name, not class (isTimeoutError): the page may come from another playwright copy.
+      if (isTimeoutError(e)) {
         throw new Error(
           `${action} '${id ?? '(no id)'}': not actionable within ${timeout}ms — ${actionabilityReason(e.message)}`
         );
