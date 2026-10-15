@@ -123,12 +123,14 @@ EVERY_PLACE = [
         {"action": "retry", "steps": [{"assert": "visible", "id": "root"}]}]},
     {"action": "readText", "id": "summary", "variable": "not_an_element"},
     {"assert": "screen", "name": "detail", "screen": "detail"},
+    {"assert": "hidden", "id": "summary", "when": {"hidden": "sampleToggle"}},
 ]
 EVERY_PLACE_PATHS = [
     "steps[0].id", "steps[1].ids[0]", "steps[1].ids[1]", "steps[2].id",
     "steps[2].container", "steps[3].cropId", "steps[4].id", "steps[4].when.visible",
     "steps[5].id", "steps[5].when.notVisible", "steps[6].while.visible",
     "steps[6].steps[0].id", "steps[6].steps[1].steps[0].id", "steps[7].id",
+    "steps[9].id", "steps[9].when.hidden",
 ]
 
 
@@ -164,7 +166,7 @@ def test_each_place_misspelled_alone_is_the_one_reported(tmp_path, at, place):
     result = _validate(tmp_path, _misspell(EVERY_PLACE, place))
     missing = [m.path for m in result.infos if m.message.startswith("Element '")]
     assert [p.split(".test.json.", 1)[1] for p in missing] == [f"cases[0].{place}"]
-    assert dict(result.element_ids) == {"named": 14, "on_layout": 13, "missing": 1}
+    assert dict(result.element_ids) == {"named": 16, "on_layout": 15, "missing": 1}
 
 
 def test_ids_on_a_layout_pass_silently_wherever_the_layout_is(tmp_path, at):

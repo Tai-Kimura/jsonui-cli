@@ -10,7 +10,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { isInViewport } from './visibility.ts';
+import { isHidden, isInViewport } from './visibility.ts';
+import { ReasonHistory } from './reasonHistory.ts';
 import type { Page, Locator } from 'playwright';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
@@ -73,6 +74,9 @@ export class AssertionExecutor {
       case 'notVisible':
         await this.assertNotVisible(step, timeout);
         break;
+      case 'hidden':
+        await this.assertHidden(step, timeout);
+        break;
       case 'enabled':
         await this.assertEnabled(step, timeout);
         break;
@@ -105,29 +109,35 @@ export class AssertionExecutor {
   /**
    * Poll `check` every POLL_INTERVAL_MS until it returns null (pass) or the timeout
    * elapses. `check` returns an error message string while the condition is unmet.
-   * The last error message is thrown on timeout.
+   * The last error message is thrown on timeout, followed by every reason seen
+   * while waiting when it changed (ReasonHistory) — one reason, no block.
    */
   private async pollUntil(
     timeout: number,
     check: () => Promise<string | null>
   ): Promise<void> {
     const startTime = Date.now();
+    const history = new ReasonHistory();
     let lastError = 'assertion timed out';
+    let elapsed = 0;
 
     // Always evaluate at least once even if timeout is 0
     for (;;) {
+      const lookedAt = Date.now() - startTime;
       const error = await check();
       if (error === null) {
         return;
       }
       lastError = error;
-      if (Date.now() - startTime >= timeout) {
+      history.observe(error, lookedAt);
+      elapsed = Date.now() - startTime;
+      if (elapsed >= timeout) {
         break;
       }
       await this.page.waitForTimeout(POLL_INTERVAL_MS);
     }
 
-    throw new Error(lastError);
+    throw new Error(history.message(lastError, elapsed));
   }
 
   /**
@@ -234,6 +244,16 @@ export class AssertionExecutor {
         ? `Element '${id}' should not be visible but it is`
         : null;
     });
+  }
+
+  private async assertHidden(step: TestStep, timeout: number): Promise<void> {
+    const id = this.requireId(step, 'hidden');
+    // Not drawn, wherever it is (src/visibility.ts isHidden). Unlike
+    // notVisible it does not pass for an element below the fold or under a
+    // dialog: those are drawn.
+    await this.pollUntil(timeout, async () =>
+      (await isHidden(this.getLocator(id))) ? null : `Element '${id}' should be hidden but it is shown`
+    );
   }
 
   private async assertEnabled(step: TestStep, timeout: number): Promise<void> {

@@ -66,6 +66,25 @@ export async function geometry(locator: Locator): Promise<{ rect: Rect; clips: R
   });
 }
 
+/**
+ * `hidden` and `when: { hidden }`: not drawn, wherever it is. True when no
+ * element matches, or none of those that do is drawn: `checkVisibility` with
+ * `visibilityProperty` is false for `display: none` (JsonUI "gone"; the
+ * element stays in the DOM, so `count` still finds it) and for `visibility:
+ * hidden` (JsonUI "invisible" / `hidden: true`), on the element or an
+ * ancestor. It does not look at the viewport, scroll containers, overlays,
+ * opacity or size, so an element below the fold, under a dialog, at opacity
+ * 0 or 0 x 0 is drawn and `hidden` fails on it. Measured 2026-10-15 (the
+ * conformance web host, Chromium): the same answer as iOS (exists) and
+ * Android's semantics tree on every shape.
+ */
+export async function isHidden(locator: Locator): Promise<boolean> {
+  if ((await locator.count()) === 0) return true;
+  return locator.evaluateAll((els: Element[]) =>
+    els.every((el) => !el.checkVisibility({ visibilityProperty: true } as CheckVisibilityOptions))
+  );
+}
+
 /** Whether the first element the locator matches is in the viewport. */
 export async function isInViewport(locator: Locator): Promise<boolean> {
   if ((await locator.count()) === 0) return false;

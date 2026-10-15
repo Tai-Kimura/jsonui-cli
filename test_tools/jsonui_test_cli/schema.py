@@ -217,6 +217,11 @@ SUPPORTED_ASSERTIONS = {
         "required": ["id"],
         "optional": ["timeout"]
     },
+    "hidden": {
+        "description": "Assert element is not drawn, wherever it is (absent, gone, or invisible / hidden on itself or an ancestor; off screen or under a modal is drawn)",
+        "required": ["id"],
+        "optional": ["timeout"]
+    },
     "enabled": {
         "description": "Assert element is enabled",
         "required": ["id"],
@@ -275,7 +280,7 @@ VALID_DIRECTIONS = ["up", "down", "left", "right"]
 COMMON_STEP_ATTRIBUTES = ["label", "optional", "when"]
 
 # Valid keys in a condition object (when / repeat.while). Unknown keys are errors.
-VALID_CONDITION_KEYS = ["visible", "notVisible", "platform", "responsive", "state"]
+VALID_CONDITION_KEYS = ["visible", "notVisible", "hidden", "platform", "responsive", "state"]
 
 # Valid keys in a condition 'state' object
 VALID_CONDITION_STATE_KEYS = ["path", "equals"]

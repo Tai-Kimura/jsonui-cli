@@ -1,15 +1,18 @@
 # Vendored jsonui-test-runner web driver
 
 `types.ts`, `ActionExecutor.ts`, `AssertionExecutor.ts`,
-`StateProvider.ts` and `visibility.ts` are vendored from the
-`jsonui-test-runner` repository (`drivers/web/src/{models/types.ts,
+`reasonHistory.ts`, `StateProvider.ts` and `visibility.ts` are vendored
+from the `jsonui-test-runner` repository (`drivers/web/src/{models/types.ts,
 actions/ActionExecutor.ts, assertions/AssertionExecutor.ts,
-runner/StateProvider.ts, visibility.ts}`) so the
+assertions/reasonHistory.ts, runner/StateProvider.ts, visibility.ts}`) so the
 conformance runner executes the exact same action/assertion semantics as
 the production Playwright driver, without requiring a sibling checkout at
 run time.
 
-Re-vendored 2026-10-14 from web driver 6b2c118 (1.13.0): `visible` /
+Re-vendored 2026-10-15 from web driver branch feat/hidden-assertion (on the
+assertion-timeout reason history): the `hidden` assertion and `when: { hidden }`
+(visibility.ts isHidden), and a timed-out assertion names every reason it waited
+through (reasonHistory.ts). The re-vendor before, 2026-10-14 from 6b2c118 (1.13.0): `visible` /
 `notVisible` / scrollUntilVisible's stop condition mean in the viewport
 (the new `visibility.ts`), scrollUntilVisible without a `container` scrolls
 the target's nearest scrolling ancestor, and selectOption's selector
@@ -21,8 +24,9 @@ Local patches (kept intentionally minimal, re-apply when re-vendoring):
 1. Import specifiers rewritten for direct execution under Node's native
    TypeScript type stripping:
    - `from '../models/types'` → `from './types.ts'`,
-     `from '../runner/StateProvider'` → `from './StateProvider.ts'`, and
-     `from '../visibility'` → `from './visibility.ts'`
+     `from '../runner/StateProvider'` → `from './StateProvider.ts'`,
+     `from '../visibility'` → `from './visibility.ts'`, and
+     `from './reasonHistory'` → `from './reasonHistory.ts'`
      (relative TS imports need explicit extensions outside a bundler).
    - Type-only imports (`Page`, `Locator` from `playwright`; `TestStep`;
      `StateProvider`) marked `import type` so the erased binding is not
@@ -44,5 +48,5 @@ relative to the process cwd, while conformance artifacts must land in the
 artifacts directory; `run.ts` handles that one action itself (same
 Playwright `page.screenshot` call).
 
-To re-vendor: copy the five files from the jsonui-test-runner checkout
+To re-vendor: copy the six files from the jsonui-test-runner checkout
 and re-apply the patches above.
