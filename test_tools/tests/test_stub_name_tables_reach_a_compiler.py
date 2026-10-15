@@ -102,6 +102,8 @@ class TheSwiftTableStillAgreesWithSwiftc(unittest.TestCase):
             done = subprocess.run(
                 [swiftc, "-parse", str(src)],
                 capture_output=True, text=True, timeout=120,
+                # swiftc's own scratch goes with `d`, not into $TMPDIR.
+                env={**os.environ, "TMPDIR": f"{d}/"},
             )
             return done.returncode == 0
 

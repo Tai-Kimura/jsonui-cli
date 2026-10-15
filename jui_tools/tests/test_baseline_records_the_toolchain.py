@@ -24,6 +24,8 @@ import re
 import unittest
 from pathlib import Path
 
+from tests._shared_core import conformance_with_shared_core
+
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO / ".github" / "workflows" / "conformance-mobile.yml"
 
@@ -223,7 +225,7 @@ class WhatTheRecordCannotDo(unittest.TestCase):
         import json as _json
 
         with tempfile.TemporaryDirectory() as tmp:
-            conf = Path(tmp)
+            conf = conformance_with_shared_core(tmp)
             shots = conf / "artifacts" / "ios"
             shots.mkdir(parents=True)
             Image.new("L", (8, 8), 9).save(shots / "A.png")

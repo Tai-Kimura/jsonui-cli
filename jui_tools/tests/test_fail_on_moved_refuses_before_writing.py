@@ -24,9 +24,12 @@ write" directly rather than by inspecting the file afterwards.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+
+from tests._shared_core import conformance_with_shared_core
 
 from jui_cli.conformance.baseline import BaselineMoved, update_baseline
 
@@ -50,7 +53,8 @@ def _png(path: Path, shade: int) -> None:
 class TheFlagRefusesInsteadOfReporting(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
-        self.conf = self.tmp / "conformance"
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.conf = conformance_with_shared_core(self.tmp)
         (self.conf / "artifacts" / "ios").mkdir(parents=True)
         (self.conf / "baselines" / "local").mkdir(parents=True)
         self.art = self.conf / "artifacts" / "ios"

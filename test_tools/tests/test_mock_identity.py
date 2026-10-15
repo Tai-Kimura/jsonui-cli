@@ -7,6 +7,7 @@ control panel's 200, and five tests ran against the other project's mocks.
 The failures were reported as regressions of the change under test.
 """
 import json
+import shutil
 import tempfile
 import threading
 import time
@@ -265,7 +266,7 @@ class TestTheCorpusFields:
         finally:
             srv.shutdown()
 
-    def test_a_swagger_path_starts_with_the_projectRoot_beside_it(self, tmp_path):
+    def test_a_swagger_path_starts_with_the_projectRoot_beside_it(self, tmp_path, request):
         """The two fields must spell the same directory the same way.
 
         Asserted as a relation, not against a literal: the literal version
@@ -275,7 +276,9 @@ class TestTheCorpusFields:
         running the server outside the suite.
         """
         import os
-        root = Path(tempfile.mkdtemp()) / "projectA"   # NOT pre-resolved
+        _scratch = Path(tempfile.mkdtemp())
+        request.addfinalizer(lambda: shutil.rmtree(_scratch, True))
+        root = _scratch / "projectA"   # NOT pre-resolved
         root.mkdir(parents=True)
         spec_file = root / "spec.json"
         spec_file.write_text(json.dumps(SPEC))

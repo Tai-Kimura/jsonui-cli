@@ -60,6 +60,7 @@ from pathlib import Path
 
 from ..core.generated_marker import json_marker
 from .visual_stability import unstable_screenshots
+from . import shared_core
 from .os_dependence import os_dependent_screenshots_for
 
 GENERATOR_NAME = "jui conformance baseline update"
@@ -482,6 +483,12 @@ def update_baseline(
     changed, before deciding it wanted one.
     """
     conformance_dir = Path(conformance_dir)
+    # The os-dependent carve-out below reads the SSoT beside conformance/. On a
+    # copy without it the carve-out finds nothing and the availability-gated
+    # pictures land in the OS-agnostic table, silently (shared_core).
+    missing = shared_core.missing_for(conformance_dir, [shared_core.DEFINITIONS], asked="a bake")
+    if missing:
+        raise BaselineError(missing[0])
     if artifacts_dir is None:
         artifacts_dir = conformance_dir / "artifacts" / platform
     artifacts_dir = Path(artifacts_dir)

@@ -16,6 +16,7 @@ import io
 import os
 import stat
 import sys
+import shutil
 import tempfile
 import textwrap
 import time
@@ -46,6 +47,7 @@ CONSOLE = "[EmulatorConsole]: Failed to start Emulator console for 5554"
 class WatchTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, True)
         self.calls = self.dir / "adb-calls.txt"
         adb = self.dir / "adb"
         adb.write_text(textwrap.dedent(f"""\

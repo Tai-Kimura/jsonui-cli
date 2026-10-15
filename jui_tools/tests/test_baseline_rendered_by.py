@@ -18,6 +18,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests._shared_core import conformance_with_shared_core
+
 try:
     from PIL import Image
 
@@ -33,7 +35,7 @@ from jui_cli.conformance.report import ReportSummary
 class RenderedByTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         shots = self.conf / "artifacts" / "ios"
         shots.mkdir(parents=True)
         Image.new("L", (64, 48), 120).save(shots / "A.png")
@@ -81,7 +83,7 @@ class LibraryDriftNoticeTest(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         path = self.conf / "baselines" / "local" / "ios.hashes.json"
         path.parent.mkdir(parents=True)
         path.write_text(

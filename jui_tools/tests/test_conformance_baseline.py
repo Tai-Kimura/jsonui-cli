@@ -20,6 +20,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests._shared_core import conformance_with_shared_core
+
 try:
     from PIL import Image, ImageDraw
 
@@ -168,7 +170,7 @@ class IosLocalChromeCropTest(unittest.TestCase):
 class BaselineUpdateTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         self.artifacts = self.conf / "artifacts" / "web"
         _write_png(self.artifacts / "B_fixture.png")
         _write_png(self.artifacts / "A_fixture.png", box=(10, 10, 40, 40))
@@ -209,7 +211,7 @@ class AdditiveBakeTest(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         self.art = self.conf / "artifacts" / "web"
         _write_png(self.art / "stable.png")
         _write_png(self.art / "drifts.png", gradient_horizontal=True)
@@ -283,7 +285,7 @@ class AdditiveBakeTest(unittest.TestCase):
 class ComparePlatformTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         self.artifacts = self.conf / "artifacts" / "web"
         _write_png(self.artifacts / "stable.png")
         _write_png(self.artifacts / "changed.png", gradient_horizontal=False)
@@ -358,7 +360,7 @@ class EnvironmentKeyTest(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.conf = Path(self._tmp.name)
+        self.conf = conformance_with_shared_core(self._tmp.name)
         self.artifacts = self.conf / "artifacts" / "web"
         _write_png(self.artifacts / "stable.png")
 
@@ -433,7 +435,7 @@ class BaselineCommandTest(unittest.TestCase):
         from jui_cli.commands.conformance_cmd import cmd_conformance
 
         with tempfile.TemporaryDirectory() as tmp:
-            conf = Path(tmp)
+            conf = conformance_with_shared_core(tmp)
             _write_png(conf / "artifacts" / "web" / "one.png")
             args = argparse.Namespace(
                 conformance_target="baseline",

@@ -39,12 +39,20 @@ def _xcrun(*args: str) -> str:
     return subprocess.run(["xcrun", *args], capture_output=True, text=True, timeout=120).stdout.strip()
 
 
+def _tool_env(tmp_path: Path) -> dict:
+    """swiftc writes its own scratch (TemporaryDirectory.*) into $TMPDIR and
+    leaves it; point it inside this test's tmp_path so it goes with it."""
+    scratch = tmp_path / "swift-tmp"
+    scratch.mkdir(exist_ok=True)
+    return {**os.environ, "TMPDIR": f"{scratch}/"}
+
+
 def _require_default_isolation(tmp_path: Path) -> None:
     tc.tool("xcrun")
     probe = tmp_path / "probe.swift"
     probe.write_text("let x = 1\n", encoding="utf-8")
     run = subprocess.run(["xcrun", "swiftc", "-typecheck", "-default-isolation", "MainActor", str(probe)],
-                         capture_output=True, text=True, timeout=300)
+                         capture_output=True, text=True, timeout=300, env=_tool_env(tmp_path))
     if run.returncode == 0:
         return
     why = (f"swiftc has no -default-isolation (6.2+): {_xcrun('swiftc', '--version').splitlines()[0]}"
@@ -74,7 +82,7 @@ def _errors(tmp_path: Path, test_source: str, isolation: str) -> list[str]:
          "-default-isolation", isolation, "-sdk", _xcrun("--sdk", "macosx", "--show-sdk-path"),
          "-F", f"{platform}/Developer/Library/Frameworks", "-I", f"{platform}/Developer/usr/lib",
          str(tmp_path / "App.swift"), str(test)],
-        capture_output=True, text=True, timeout=600)
+        capture_output=True, text=True, timeout=600, env=_tool_env(tmp_path))
     errors = sorted({line.split(": error: ", 1)[1] for line in run.stderr.splitlines() if ": error: " in line})
     assert (run.returncode == 0) == (errors == []), run.stderr[:2000]
     return errors

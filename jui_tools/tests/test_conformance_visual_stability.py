@@ -20,6 +20,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+
+from tests._shared_core import conformance_with_shared_core
 from unittest import mock
 
 from jui_cli.conformance import baseline
@@ -35,7 +37,7 @@ class UnstableSetDerivation(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.dir = Path(self._tmp.name)
+        self.dir = conformance_with_shared_core(self._tmp.name)
         (self.dir / "fixtures").mkdir()
 
     def tearDown(self):
@@ -101,7 +103,7 @@ class MovedJudgment(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.dir = Path(self._tmp.name)
+        self.dir = conformance_with_shared_core(self._tmp.name)
         (self.dir / "fixtures").mkdir()
         (self.dir / "artifacts" / "ios").mkdir(parents=True)
         (self.dir / "baselines" / "local").mkdir(parents=True)

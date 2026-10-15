@@ -422,7 +422,12 @@ def cmd_build(args: argparse.Namespace) -> int:
     # and here is the bottom a reader looks at. Naming the file rather than
     # having the tools guess a path keeps the two sides from disagreeing
     # about where it is.
-    _stage_ledger = Path(tempfile.mkdtemp()) / "stage-failures.json"
+    #
+    # The directory is this run's and is removed when the run ends (the
+    # `finally` below): one was left in the temp dir per build until 1.9.30.
+    _stage_ledger_dir = Path(tempfile.mkdtemp(prefix="jui-build-"))
+    _stage_ledger = _stage_ledger_dir / "stage-failures.json"
+    _stage_env_before = os.environ.get("JUI_STAGE_FAILURES")
     os.environ["JUI_STAGE_FAILURES"] = str(_stage_ledger)
 
     def _halt(code: int) -> int:
@@ -645,6 +650,15 @@ def cmd_build(args: argparse.Namespace) -> int:
         except Exception:
             pass
         raise
+    finally:
+        # Every exit has read the ledger by now (the closing line, or _halt).
+        # The variable is put back too: a caller running builds in-process
+        # would otherwise hand the next build a path that no longer exists.
+        shutil.rmtree(_stage_ledger_dir, ignore_errors=True)
+        if _stage_env_before is None:
+            os.environ.pop("JUI_STAGE_FAILURES", None)
+        else:
+            os.environ["JUI_STAGE_FAILURES"] = _stage_env_before
 
 
 def _recorded_versions(manifest: dict) -> dict:

@@ -30,9 +30,12 @@ discriminating position fails by name instead of passing vacuously.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+
+from tests._shared_core import conformance_with_shared_core
 from unittest import mock
 
 from jui_cli.conformance import baseline
@@ -72,7 +75,8 @@ class AMoveInsideAColumnIsCaughtTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
-        self.conf = self.tmp / "conformance"
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.conf = conformance_with_shared_core(self.tmp)
         self.art = self.conf / "artifacts" / "web"
         self.art.mkdir(parents=True)
         (self.conf / "baselines" / "local").mkdir(parents=True)
