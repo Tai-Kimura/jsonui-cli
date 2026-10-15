@@ -16,6 +16,7 @@ from .required import check_required_top_level
 from .responsive import validate_responsive_field
 from ..schema import (
     VALID_SCREEN_READY_VALUES,
+    VALID_CASE_ISOLATION_VALUES,
     VALID_SCREEN_TOP_LEVEL_KEYS,
     VALID_FLOW_TOP_LEVEL_KEYS,
     VALID_CASE_KEYS,
@@ -192,6 +193,20 @@ class ScreenTestValidator:
                         "screenReady must be a string ("
                         f"{', '.join(VALID_SCREEN_READY_VALUES)}) or "
                         "{\"marker\": \"<screen id>\"}"
+                    )
+                ))
+
+        # `caseIsolation`: whether the cases share one screen state.
+        if "caseIsolation" in data:
+            isolation = data["caseIsolation"]
+            if not isinstance(isolation, str) or isolation not in VALID_CASE_ISOLATION_VALUES:
+                result.errors.append(ValidationMessage(
+                    path=f"{path}.caseIsolation",
+                    message=(
+                        f"Unknown caseIsolation value: {isolation!r} (allowed: "
+                        f"{', '.join(VALID_CASE_ISOLATION_VALUES)}). 'shared' runs "
+                        "setup once and every case in the state the previous case "
+                        "left; 'reopen' opens the screen afresh before each case."
                     )
                 ))
 
