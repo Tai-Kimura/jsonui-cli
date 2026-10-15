@@ -9,7 +9,12 @@ conformance runner executes the exact same action/assertion semantics as
 the production Playwright driver, without requiring a sibling checkout at
 run time.
 
-Re-vendored 2026-10-15 from web driver 1.14.0 (release/next 2d2c9c7): `types.ts`
+Re-vendored 2026-10-15 from web driver 1.14.1 (8641d1b): `visibility.ts` bounds every
+look at an element (`probe`, `DETACHED`, `viewportState`), `AssertionExecutor.ts`
+reads a detached element as absent within the assert's timeout, and
+`ActionExecutor.ts` gives every locator action the step's timeout
+(`actionabilityReason`; `errors` is a value import from playwright, the rest of
+that import stays `import type`). Before that, the same day from web driver 1.14.0 (release/next 2d2c9c7): `types.ts`
 now carries `caseIsolation` (the runner that reads it is not vendored; conformance
 does not use it). Before that, the same day from branch feat/hidden-assertion (on the
 assertion-timeout reason history): the `hidden` assertion and `when: { hidden }`

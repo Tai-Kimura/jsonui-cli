@@ -1,4 +1,4 @@
-import type { Locator } from 'playwright';
+import { errors, type Locator } from 'playwright';
 
 /**
  * `visible` / `notVisible`, `when: { visible }` and scrollUntilVisible's stop
@@ -52,8 +52,11 @@ export function inViewport(rect: Rect, clips: Rect[]): boolean {
  * the first `position: fixed` element (which is positioned against the
  * viewport, not against its ancestors).
  */
-export async function geometry(locator: Locator): Promise<{ rect: Rect; clips: Rect[] }> {
-  return locator.evaluate((el: Element) => {
+export async function geometry(
+  locator: Locator,
+  timeout: number = PROBE_TIMEOUT_MS
+): Promise<{ rect: Rect; clips: Rect[] } | null> {
+  const read = await probe((t) => locator.evaluate((el: Element) => {
     const box = (r: DOMRect) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
     const clips = [{ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }];
     let fixed = getComputedStyle(el).position === 'fixed';
@@ -63,7 +66,8 @@ export async function geometry(locator: Locator): Promise<{ rect: Rect; clips: R
       if (cs.position === 'fixed') fixed = true;
     }
     return { rect: box(el.getBoundingClientRect()), clips };
-  });
+  }, undefined, { timeout: t }), timeout);
+  return read === DETACHED ? null : read;
 }
 
 /**
@@ -85,11 +89,53 @@ export async function isHidden(locator: Locator): Promise<boolean> {
   );
 }
 
+/**
+ * How long one look waits for an element it has just counted.
+ *
+ * `locator.evaluate` (and boundingBox, textContent, ...) WAITS for the element
+ * to be attached, with no timeout of its own (Playwright's actionTimeout is 0).
+ * An element that left the DOM between `count()` and `evaluate` therefore held
+ * the look until the test's own timeout (30 s): the assert's timeout never got
+ * a turn, and the failure read "locator.evaluate: Test timeout of 30000ms
+ * exceeded" (reported from a consumer: 1 run in 31, an element made gone by a
+ * response arriving while `notVisible` looked at it). A look is now bounded: a
+ * counted element that is not there within this long is read as gone, and the
+ * poll around it carries on inside the assert's timeout.
+ */
+export const PROBE_TIMEOUT_MS = 1000;
+
+/** What a bounded look answers when the element left the DOM. */
+export const DETACHED: unique symbol = Symbol('detached');
+
+/** Run `op` with a timeout; a Playwright TimeoutError is the element having
+ * left the DOM (DETACHED), anything else is rethrown. */
+export async function probe<T>(
+  op: (timeout: number) => Promise<T>,
+  timeout: number = PROBE_TIMEOUT_MS
+): Promise<T | typeof DETACHED> {
+  try {
+    return await op(timeout);
+  } catch (e) {
+    if (e instanceof errors.TimeoutError) return DETACHED;
+    throw e;
+  }
+}
+
+/** Where the first element the locator matches is: not there (absent — also
+ * when it leaves the DOM while being read), there but not in the viewport, or
+ * in it. */
+export type ViewportState = 'absent' | 'out' | 'in';
+
+export async function viewportState(locator: Locator): Promise<ViewportState> {
+  if ((await locator.count()) === 0) return 'absent';
+  const first = locator.first();
+  if (!(await first.isVisible())) return 'out';
+  const g = await geometry(first);
+  if (g === null) return 'absent';
+  return inViewport(g.rect, g.clips) ? 'in' : 'out';
+}
+
 /** Whether the first element the locator matches is in the viewport. */
 export async function isInViewport(locator: Locator): Promise<boolean> {
-  if ((await locator.count()) === 0) return false;
-  const first = locator.first();
-  if (!(await first.isVisible())) return false;
-  const { rect, clips } = await geometry(first);
-  return inViewport(rect, clips);
+  return (await viewportState(locator)) === 'in';
 }
