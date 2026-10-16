@@ -119,8 +119,7 @@ module RjuiTools
 
           # Check for Array(ElementType) syntax -> ElementType[]
           if (match = base_type.match(/^Array\((.+)\)$/))
-            element_type = to_typescript_type(match[1].strip)
-            result = "#{element_type}[]"
+            result = array_of(to_typescript_type(match[1].strip))
             return is_optional ? "#{result} | undefined" : result
           end
 
@@ -144,7 +143,7 @@ module RjuiTools
                        value_type = to_typescript_type(inner[(colon + 1)..].strip)
                        "Record<#{key_type}, #{value_type}>"
                      else
-                       "#{to_typescript_type(inner)}[]"
+                       array_of(to_typescript_type(inner))
                      end
             return is_optional ? "#{result} | undefined" : result
           end
@@ -156,6 +155,44 @@ module RjuiTools
           # Return mapped type, or original type as-is if not found
           result = TYPE_MAPPING[base_type] || base_type
           is_optional ? "#{result} | undefined" : result
+        end
+
+        # `Element[]` for an already-converted element type. `[]` binds
+        # tighter than `|` and `=>` in TypeScript, so an element that is a
+        # union (`Double?` -> `number | undefined`) or a function type is
+        # written in parentheses: `[Double?]` -> `(number | undefined)[]`.
+        # Without them `number | undefined[]` reads as "a number, or an
+        # array of undefined", and an array holding values is rejected.
+        # Both array spellings ([Element] and Array(Element)) come through
+        # here, so nesting ([[Double?]] -> `(number | undefined)[][]`) does
+        # too: the outer element `(number | undefined)[]` has no top-level
+        # `|` and stays bare.
+        def array_of(element_type)
+          needs_parens = top_level_union_or_function?(element_type)
+          needs_parens ? "(#{element_type})[]" : "#{element_type}[]"
+        end
+
+        # True when a converted TypeScript type has `|` or `=>` outside any
+        # (), [], <> or {} — the operators `[]` would otherwise bind under.
+        # The `>` of `=>` is not a closing bracket.
+        def top_level_union_or_function?(ts_type)
+          depth = 0
+          prev = nil
+          ts_type.each_char do |ch|
+            case ch
+            when '(', '[', '<', '{' then depth += 1
+            when ')', ']', '}' then depth -= 1
+            when '>'
+              if prev == '='
+                return true if depth.zero?
+              else
+                depth -= 1
+              end
+            when '|' then return true if depth.zero?
+            end
+            prev = ch
+          end
+          false
         end
 
         # Index of the first colon at bracket/paren depth 0, or nil.

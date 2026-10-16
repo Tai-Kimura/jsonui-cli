@@ -564,7 +564,7 @@ module RjuiTools
           handler = attributes['onValueChange'] || attributes['onValueChanged'] || attributes['onChange']
           if handler
             if has_binding?(handler)
-              return operation_attr('onChange', '(e)', declared_handler_call(handler, changed_value_expr, selection_index_expr))
+              return operation_attr('onChange', '(e)', declared_handler_call(handler, changed_value_expr, handler_index_expr))
             else
               return operation_attr('onChange', '(e)', "#{handler}?.(#{changed_value_expr})")
             end
@@ -601,24 +601,48 @@ module RjuiTools
         # attribute. selectedOptions is the full set.
         # The call to a declared onValueChange, as the class the layout's data
         # declares it with says (attribute_definitions SelectBox.onValueChange,
-        # "the same on every platform"):
-        # - `(() -> Void)?` is called with nothing;
-        # - `(String, X)` with the viewId (JsonUIShared::LayoutPath.view_id:
-        #   the id, else `selectBox_<path>`) and the selection's new value —
-        #   the index where selectedIndex is bound, the item otherwise.
-        # web called every one with the value alone, so a declared
-        # `(String, String)` took the value where the viewId goes and a
-        # declared `()` took one it has no place for (TS2554 under strict,
-        # both). An undeclared handler (the build's binding warning asks for
-        # its declaration) and any other shape — a lone `(String)` among them,
-        # whose meaning is 4f's to rule — are called with the value as before.
+        # "the same on every platform"), by its parameters — the table sjui's
+        # pick_invocation and kjui's value_change_call switch on:
+        # - `()` with nothing;
+        # - a lone `(String)` with the item (the definition: "the selected item
+        #   as a String, with selectedIndex bound too");
+        # - a lone `(Int)` with the index;
+        # - `(String, Int)` with the viewId (JsonUIShared::LayoutPath.view_id:
+        #   the id, else `selectBox_<path>`) and the index;
+        # - `(String, String)` with the viewId and the item.
+        # The index is the picked row's place in the items (handler_index_expr)
+        # whatever is bound, as on sjui / kjui (the bound selectedIndex, else
+        # the item's place in `items`). A date box has none (index_expr nil):
+        # an Int-taking declaration there is the build's warning
+        # (BindingValidatorCore.date_pick_handler_problem) and is called with
+        # the value, as before.
+        #
+        # Through 1.9.33 the parameters were not read: `(String, X)` took the
+        # viewId and "the index where selectedIndex is bound, the item
+        # otherwise", and every other shape the value. So a lone `(Int)` took
+        # the item string (`e.target.value`), `(String, Int)` with selectedItem
+        # bound took it too, and `(String, String)` with selectedIndex bound
+        # took the index — TS2345 under strict each, and the wrong argument at
+        # run time. Before 1.9.0 every one took the value alone (TS2554 for a
+        # declared `()`). An undeclared handler (the build's binding warning
+        # asks for its declaration) and any other shape keep that reading.
         def declared_handler_call(handler, value_expr, index_expr)
           callee = extract_binding_property(handler)
-          klass = self.class.declared_class(handler, config['_data_classes'] || {})
+          classes = config['_data_classes'] || {}
+          name = handler.is_a?(String) ? handler[/\A@\{\s*([^}]+?)\s*\}\z/, 1] : nil
+          klass = self.class.declared_class(handler, classes)
+          params = name ? self.class.declared_parameters(name, classes).map { |t| t.delete_suffix('?') } : []
+          case params
+          when ['String'] then return "#{callee}?.(#{value_expr})"
+          when %w[String String] then return "#{callee}?.(#{view_id_expr}, #{value_expr})"
+          when ['Int'] then return "#{callee}?.(#{index_expr})" if index_expr
+          when %w[String Int] then return "#{callee}?.(#{view_id_expr}, #{index_expr})" if index_expr
+          end
+
           if klass.match?(/\(\s*\)\s*->/)
             "#{callee}?.()"
           elsif klass.match?(VIEW_ID_CLASS)
-            "#{callee}?.(#{view_id_expr}, #{index_expr || value_expr})"
+            "#{callee}?.(#{view_id_expr}, #{selection_index_expr || value_expr})"
           else
             "#{callee}?.(#{value_expr})"
           end
@@ -641,6 +665,16 @@ module RjuiTools
 
           handler = node['onValueChange'] || node['onValueChanged'] || node['onChange']
           declared_class(handler, data_classes).match?(VIEW_ID_CLASS)
+        end
+
+        # The picked row's place in the items, for a handler declared to take
+        # an Int: the DOM's selectedIndex, one less with a placeholder row
+        # (-1 for the placeholder itself, the "nothing selected" the value
+        # side renders for). nil for a multi-select, which picks no one row.
+        def handler_index_expr
+          return nil if multiple_select?
+
+          placeholder_row? ? 'e.target.selectedIndex - 1' : 'e.target.selectedIndex'
         end
 
         # The new index where selectedIndex is what is bound (no selected

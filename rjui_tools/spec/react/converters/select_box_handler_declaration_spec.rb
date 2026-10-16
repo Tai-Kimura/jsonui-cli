@@ -16,9 +16,21 @@ require 'core/layout_path'
 # goes, a declared `()` one it has no place for — TS2554 under strict, both.
 #
 # Undeclared (the build's binding warning asks for the declaration), and a
-# lone `(String)`, are called with the value as before: the web faces'
-# lone-(String) handlers read the value (what a lone String means is 4f's to
-# rule, 2026-09-26, and is not decided here).
+# lone `(String)`, are called with the value as before: the definition says a
+# lone (String) is the selected item, with selectedIndex bound too.
+#
+# A lone `(Int)` is the index — the definition's "with selectedIndex bound it
+# is the Int index (declare ((Int) -> Void)?)". Through 1.9.33 web called it
+# with the item string (`e.target.value`): TS2345 under strict, and at run
+# time the handler got the label, not the index. With a placeholder row the
+# index is one less than the DOM's, -1 for the placeholder itself — the same
+# index the undeclared write-back reports.
+#
+# The shape decides the argument, not the binding, as on sjui
+# (pick_invocation) and kjui (value_change_call): an Int parameter takes the
+# picked row's place in the items with selectedItem bound too, and
+# `(String, String)` takes the item with selectedIndex bound too. Through
+# 1.9.33 those two took the string for the Int and the index for the String.
 RSpec.describe 'a SelectBox calls its onValueChange as its data declares it' do
   classes = {
     'undeclared' => nil,
@@ -26,6 +38,11 @@ RSpec.describe 'a SelectBox calls its onValueChange as its data declares it' do
     'viewIdIndex' => '((String, Int) -> Void)?',
     'viewIdItem' => '((String, String) -> Void)?',
     'lone' => '((String) -> Void)?',
+    'loneIndex' => '((Int) -> Void)?',
+    'loneIndexHint' => '((Int) -> Void)?',
+    'loneIndexByItem' => '((Int) -> Void)?',
+    'viewIdIndexByItem' => '((String, Int) -> Void)?',
+    'viewIdItemByIndex' => '((String, String) -> Void)?',
     'viewIdDate' => '((String, String) -> Void)?'
   }
 
@@ -33,8 +50,11 @@ RSpec.describe 'a SelectBox calls its onValueChange as its data declares it' do
     data = classes.reject { |_, c| c.nil? }.map { |name, c| { 'name' => name, 'class' => c } } +
            [{ 'name' => 'idx', 'class' => 'Int' }, { 'name' => 'opts', 'class' => '[String]' },
             { 'name' => 'item', 'class' => 'String' }, { 'name' => 'day', 'class' => 'String' }]
-    boxes = %w[undeclared none viewIdIndex viewIdItem lone].map do |handler|
-      selection = handler == 'viewIdItem' ? { 'selectedItem' => '@{item}' } : { 'selectedIndex' => '@{idx}' }
+    by_item = %w[viewIdItem loneIndexByItem viewIdIndexByItem]
+    boxes = %w[undeclared none viewIdIndex viewIdItem lone loneIndex loneIndexHint
+               loneIndexByItem viewIdIndexByItem viewIdItemByIndex].map do |handler|
+      selection = by_item.include?(handler) ? { 'selectedItem' => '@{item}' } : { 'selectedIndex' => '@{idx}' }
+      selection['hint'] = 'Pick one' if handler == 'loneIndexHint'
       { 'type' => 'SelectBox', 'items' => '@{opts}', 'onValueChange' => "@{#{handler}}" }.merge(selection)
     end
     boxes << { 'type' => 'SelectBox', 'id' => 'when', 'selectItemType' => 'Date', 'selectedDate' => '@{day}',
@@ -56,6 +76,11 @@ RSpec.describe 'a SelectBox calls its onValueChange as its data declares it' do
     expect(call_of(screen, 'viewIdIndex')).to eq('data.viewIdIndex?.("selectBox_0_2", e.target.selectedIndex)')
     expect(call_of(screen, 'viewIdItem')).to eq('data.viewIdItem?.("selectBox_0_3", e.target.value)')
     expect(call_of(screen, 'lone')).to eq('data.lone?.(e.target.value)')
+    expect(call_of(screen, 'loneIndex')).to eq('data.loneIndex?.(e.target.selectedIndex)')
+    expect(call_of(screen, 'loneIndexHint')).to eq('data.loneIndexHint?.(e.target.selectedIndex - 1)')
+    expect(call_of(screen, 'loneIndexByItem')).to eq('data.loneIndexByItem?.(e.target.selectedIndex)')
+    expect(call_of(screen, 'viewIdIndexByItem')).to eq('data.viewIdIndexByItem?.("selectBox_0_8", e.target.selectedIndex)')
+    expect(call_of(screen, 'viewIdItemByIndex')).to eq('data.viewIdItemByIndex?.("selectBox_0_9", e.target.value)')
     expect(call_of(screen, 'viewIdDate')).to eq('data.viewIdDate?.("when", e.target.value)')
   end
 
@@ -64,7 +89,7 @@ RSpec.describe 'a SelectBox calls its onValueChange as its data declares it' do
   it 'hands the viewId LayoutPath gives the node' do
     tree = JsonUIShared::LayoutPath.stamp!(layout.call)
     expect(JsonUIShared::LayoutPath.view_id(tree['child'][2])).to eq('selectBox_0_2')
-    expect(JsonUIShared::LayoutPath.view_id(tree['child'][5])).to eq('when')
+    expect(JsonUIShared::LayoutPath.view_id(tree['child'][10])).to eq('when')
   end
 
   # The screen and the data model the build writes for it — each from its
@@ -86,6 +111,7 @@ RSpec.describe 'a SelectBox calls its onValueChange as its data declares it' do
                               model_writer.send(:extract_event_handler_bindings, tree),
                               model_writer.send(:extract_value_bindings, tree))
     expect(model).to include('viewIdIndex?: ((arg0: string, arg1: number) => void) | undefined;')
+    expect(model).to include('loneIndex?: ((arg0: number) => void) | undefined;')
     source = [model, screen].map { |file| file.lines.reject { |l| l.start_with?('import ') }.join }.join("\n")
     expect(source).to compile_as_typescript.with_ambient(<<~TS)
       declare function useStringManager(): Record<string, string>;

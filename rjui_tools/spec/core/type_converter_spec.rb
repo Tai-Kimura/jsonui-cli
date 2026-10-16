@@ -347,6 +347,31 @@ RSpec.describe RjuiTools::Core::TypeConverter do
       expect(described_class.to_typescript_type('[[Int]]')).to eq('number[][]')
     end
 
+    # `[]` binds tighter than `|` and `=>`: an element type that is a union
+    # or a function is written in parentheses, else `number | undefined[]`
+    # reads as "a number, or an array of undefined" and an array of numbers
+    # is not assignable to it. Through 1.9.33 the parentheses were missing.
+    it 'parenthesizes an optional element: [Double?] and [[Double?]]' do
+      expect(described_class.to_typescript_type('[Double?]')).to eq('(number | undefined)[]')
+      expect(described_class.to_typescript_type('[[Double?]]')).to eq('(number | undefined)[][]')
+      expect(described_class.to_typescript_type('[Double?]?')).to eq('(number | undefined)[] | undefined')
+      expect(described_class.to_typescript_type('[[String: Int]?]')).to eq('(Record<string, number> | undefined)[]')
+    end
+
+    it 'parenthesizes the element of Array(Element) the same way' do
+      expect(described_class.to_typescript_type('Array(Double?)')).to eq('(number | undefined)[]')
+      expect(described_class.to_typescript_type('Array(Array(Int?))')).to eq('(number | undefined)[][]')
+    end
+
+    it 'parenthesizes a function element' do
+      expect(described_class.to_typescript_type('[(() -> Void)?]')).to eq('((() => void) | undefined)[]')
+    end
+
+    it 'leaves an element bare when its union is nested, not top-level' do
+      expect(described_class.to_typescript_type('[[String: Int?]]')).to eq('Record<string, number | undefined>[]')
+      expect(described_class.to_typescript_type('[[Int]?]')).to eq('(number[] | undefined)[]')
+    end
+
     it 'converts [String: Any] dictionary shorthand to a Record' do
       expect(described_class.to_typescript_type('[String: Int]')).to eq('Record<string, number>')
     end
