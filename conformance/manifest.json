@@ -10,10 +10,10 @@
   "schemaVersion": 2,
   "generatedFrom": "b458a3677f80cf2a37b3bc6693d9bfdadaff739c099a7c7afc7f12dd3331ea74",
   "counts": {
-    "fixtures": 1178,
+    "fixtures": 1182,
     "assertable": 51,
     "visual": 884,
-    "interactive": 37,
+    "interactive": 41,
     "control": 128,
     "declarationOnly": 77,
     "skipped": 157,
@@ -28591,6 +28591,249 @@
       "test": "fixtures/View/emptyView__zero.test.json",
       "peerGroup": null,
       "control": "__control/View__empty-view-sized-8"
+    },
+    {
+      "id": "TestBridge/initialState__applied",
+      "component": "TestBridge",
+      "attribute": "initialState",
+      "case": "initialState__applied",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TestBridge/initialState__applied.layout.json",
+      "test": "fixtures/TestBridge/initialState__applied.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null,
+      "companions": [],
+      "testBridge": {
+        "data": [
+          {
+            "name": "tbEmail",
+            "class": "String",
+            "defaultValue": "unset"
+          },
+          {
+            "name": "tbCount",
+            "class": "Int",
+            "defaultValue": 0
+          },
+          {
+            "name": "tbAgreed",
+            "class": "Bool",
+            "defaultValue": false
+          },
+          {
+            "name": "tbNickname",
+            "class": "String?",
+            "defaultValue": "nick"
+          }
+        ],
+        "initialState": {
+          "tbEmail": "a@example.com",
+          "tbCount": 3,
+          "tbAgreed": true,
+          "tbNickname": null
+        },
+        "receipt": {
+          "applied": [
+            "tbAgreed",
+            "tbCount",
+            "tbEmail",
+            "tbNickname"
+          ],
+          "rejected": []
+        }
+      }
+    },
+    {
+      "id": "TestBridge/initialState__rejected",
+      "component": "TestBridge",
+      "attribute": "initialState",
+      "case": "initialState__rejected",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TestBridge/initialState__rejected.layout.json",
+      "test": "fixtures/TestBridge/initialState__rejected.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null,
+      "companions": [],
+      "testBridge": {
+        "data": [
+          {
+            "name": "tbEmail",
+            "class": "String",
+            "defaultValue": "unset"
+          },
+          {
+            "name": "tbCount",
+            "class": "Int",
+            "defaultValue": 0
+          },
+          {
+            "name": "tbAgreed",
+            "class": "Bool",
+            "defaultValue": false
+          },
+          {
+            "name": "tbNickname",
+            "class": "String?",
+            "defaultValue": "nick"
+          }
+        ],
+        "initialState": {
+          "tbEmail": "x",
+          "tbTypo": "y",
+          "tbCount": 1.5
+        },
+        "receipt": {
+          "applied": [
+            "tbEmail"
+          ],
+          "rejected": [
+            {
+              "key": "tbCount",
+              "reason": "type mismatch: expected Int"
+            },
+            {
+              "key": "tbTypo",
+              "reason": "not a data field"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "TestBridge/initialState__not_reapplied",
+      "component": "TestBridge",
+      "attribute": "initialState",
+      "case": "initialState__not_reapplied",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TestBridge/initialState__not_reapplied.layout.json",
+      "test": "fixtures/TestBridge/initialState__not_reapplied.test.json",
+      "state": {
+        "vars": [],
+        "handlers": []
+      },
+      "promotedFrom": null,
+      "companions": [],
+      "testBridge": {
+        "data": [
+          {
+            "name": "tbEmail",
+            "class": "String",
+            "defaultValue": "unset"
+          },
+          {
+            "name": "tbCount",
+            "class": "Int",
+            "defaultValue": 0
+          },
+          {
+            "name": "tbAgreed",
+            "class": "Bool",
+            "defaultValue": false
+          },
+          {
+            "name": "tbNickname",
+            "class": "String?",
+            "defaultValue": "nick"
+          }
+        ],
+        "initialState": {
+          "tbEmail": "a@example.com"
+        },
+        "receipt": {
+          "applied": [
+            "tbEmail"
+          ],
+          "rejected": []
+        },
+        "remount": true
+      }
+    },
+    {
+      "id": "TestBridge/initialState__bridge_follows",
+      "component": "TestBridge",
+      "attribute": "initialState",
+      "case": "initialState__bridge_follows",
+      "class": "interactive",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TestBridge/initialState__bridge_follows.layout.json",
+      "test": "fixtures/TestBridge/initialState__bridge_follows.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceResult",
+            "class": "String",
+            "defaultValue": "ready"
+          }
+        ],
+        "handlers": [],
+        "afterFirstDraw": {
+          "name": "conformanceAfterFirstDraw",
+          "set": {
+            "var": "conformanceResult",
+            "value": "fired"
+          }
+        }
+      },
+      "promotedFrom": null,
+      "companions": [],
+      "testBridge": {
+        "data": [
+          {
+            "name": "conformanceResult",
+            "class": "String",
+            "defaultValue": "ready"
+          }
+        ]
+      }
     },
     {
       "id": "__control/Collection__flow-sections-cells-only",

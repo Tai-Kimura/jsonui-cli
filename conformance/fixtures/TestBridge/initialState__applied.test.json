@@ -1,0 +1,54 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TestBridge/initialState__applied.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TestBridge.initialState__applied",
+    "description": "The host delivers String / Int / Bool / null-for-an-optional at launch; the screen applies all four once and says so in its receipt, the label shows the string and `state` reads every value back.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "TestBridge"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "initialState__applied",
+      "description": "The host delivers String / Int / Bool / null-for-an-optional at launch; the screen applies all four once and says so in its receipt, the label shows the string and `state` reads every value back.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "label_email",
+          "equals": "a@example.com"
+        },
+        {
+          "assert": "state",
+          "path": "tbEmail",
+          "equals": "a@example.com"
+        },
+        {
+          "assert": "state",
+          "path": "tbCount",
+          "equals": 3
+        },
+        {
+          "assert": "state",
+          "path": "tbAgreed",
+          "equals": true
+        },
+        {
+          "assert": "state",
+          "path": "tbNickname",
+          "equals": null
+        }
+      ]
+    }
+  ]
+}
