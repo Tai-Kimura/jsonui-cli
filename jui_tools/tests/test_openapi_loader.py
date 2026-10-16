@@ -2039,5 +2039,50 @@ class FormatRetentionTests(unittest.TestCase):
         self.assertIsNone(f.type.format)
 
 
+
+class ElementNullableTests(unittest.TestCase):
+    """``nullable: true`` on ``items`` / ``additionalProperties`` reaches the
+    element type (ticket jui-web-api-model-nullable-array-items-dropped).
+    It was read by no one: every face typed ``[[1, null]]`` as non-null."""
+
+    def _fields(self):
+        doc = parse_swagger(_doc({
+            "Pet": {"type": "object", "properties": {"name": {"type": "string"}}},
+            "M": {
+                "type": "object",
+                "required": ["cells"],
+                "properties": {
+                    "cells": {"type": "array", "items": {"type": "array", "items": {
+                        "type": "integer", "format": "int64", "nullable": True}}},
+                    "tags": {"type": "array", "items": {"type": "string", "nullable": True}},
+                    "scores": {"type": "object", "additionalProperties": {
+                        "type": "number", "nullable": True}},
+                    "pets": {"type": "array", "items": {
+                        "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+                    "plain": {"type": "array", "items": {"type": "integer"}},
+                },
+            },
+        }), "test.json")
+        return {f.wire_name: f for f in next(s for s in doc.schemas if s.name == "M").fields}
+
+    def test_the_element_carries_the_flag(self):
+        f = self._fields()
+        self.assertFalse(f["cells"].type.element.nullable)       # the inner array is not
+        self.assertTrue(f["cells"].type.element.element.nullable)
+        self.assertTrue(f["tags"].type.element.nullable)
+        self.assertTrue(f["scores"].type.element.nullable)
+        self.assertTrue(f["pets"].type.element.nullable)
+        self.assertTrue(f["pets"].type.element.is_object_ref)
+
+    def test_control_the_field_level_flags_do_not_move(self):
+        f = self._fields()
+        self.assertFalse(f["plain"].type.element.nullable)
+        self.assertEqual(
+            {k: (v.required, v.nullable, v.type.nullable) for k, v in f.items()},
+            {"cells": (True, False, False), "tags": (False, False, True),
+             "scores": (False, False, True), "pets": (False, False, True),
+             "plain": (False, False, True)})
+
+
 if __name__ == "__main__":
     unittest.main()

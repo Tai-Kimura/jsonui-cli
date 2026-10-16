@@ -1,6 +1,7 @@
 """Tests for android_api_model_generator — DTO + enum + Domain across 3 serializers."""
 from __future__ import annotations
 
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -1573,6 +1574,69 @@ class FormatAwareMappingTests(unittest.TestCase):
             "import kotlinx.datetime.serializers.InstantIso8601Serializer", src
         )
         self.assertIn("import kotlinx.datetime.Instant", src)
+
+
+
+#: ticket jui-web-api-model-nullable-array-items-dropped — measured on this
+#: face too: the element ``?`` was dropped, so a ``null`` element failed the
+#: whole decode (kotlinx: ``Unexpected symbol 'n' in numeric literal at
+#: path: $.cells[0][1]``).
+NULLABLE_ELEMENT_SCHEMAS = {
+    "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+    "Grid": {"type": "object", "required": ["cells", "tags", "scores"], "properties": {
+        "cells": {"type": "array", "items": {"type": "array", "items": {
+            "type": "integer", "format": "int64", "nullable": True}}},
+        "tags": {"type": "array", "items": {"type": "string", "nullable": True}},
+        "scores": {"type": "object", "additionalProperties": {"type": "number", "nullable": True}},
+        "when": {"type": "array", "items": {"type": "string", "format": "date-time",
+                                            "nullable": True}},
+        "when_by_key": {"type": "object", "additionalProperties": {
+            "type": "string", "format": "date-time", "nullable": True}},
+        "rows": {"type": "array", "nullable": True, "items": {
+            "type": "array", "nullable": True, "items": {"type": "integer", "nullable": True}}},
+        "pets": {"type": "array", "items": {
+            "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+        "plain": {"type": "array", "items": {"type": "integer"}},
+    }},
+    "Counts": {"type": "array", "items": {"type": "integer", "format": "int64", "nullable": True}},
+}
+
+
+class NullableElementTests(unittest.TestCase):
+    """An array element / map value declared ``nullable: true`` is ``T?``."""
+
+    def _sources(self, serializer: str) -> dict[str, str]:
+        doc = parse_swagger(_doc(NULLABLE_ELEMENT_SCHEMAS), "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), serializer)
+            # moshi has no non-object wrapper (it halts on one by design)
+            return {s.name: gen.generate_dto_source(s, doc) for s in doc.schemas
+                    if serializer == "kotlinx" or s.wrapped_type is None}
+
+    def test_dto_types_on_both_serializers(self):
+        for serializer in ("kotlinx", "moshi"):
+            src = self._sources(serializer)["Grid"]
+            for name, type_str in [("cells", "List<List<Long?>>"), ("tags", "List<String?>"),
+                                   ("scores", "Map<String, Double?>"),
+                                   ("rows", "List<List<Int?>?>?"), ("pets", "List<PetDto?>?"),
+                                   ("plain", "List<Int>?")]:  # control: unchanged
+                self.assertRegex(src, rf"val {name}: {re.escape(type_str)}[ ,]", serializer)
+
+    def test_wrapper_serializer_admits_a_null_element(self):
+        src = self._sources("kotlinx")["Counts"]
+        self.assertIn("data class CountsDto(val items: List<Long?>)", src)
+        self.assertIn(
+            "private val inner: KSerializer<List<Long?>> = ListSerializer(Long.serializer().nullable)",
+            src)
+        self.assertIn("import kotlinx.serialization.builtins.nullable", src)
+
+    def test_control_a_wrapper_without_null_elements_is_unchanged(self):
+        doc = parse_swagger(_doc({"Ids": {"type": "array", "items": {"type": "integer"}}}),
+                            "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("= ListSerializer(Int.serializer())\n", src)
+        self.assertNotIn(".nullable", src)
 
 
 if __name__ == "__main__":

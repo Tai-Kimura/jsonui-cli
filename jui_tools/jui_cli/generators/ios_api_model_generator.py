@@ -869,12 +869,14 @@ def _swift_date_decode_expr(ftype: FieldType, src: str) -> str:
     """
     if ftype.is_primitive:
         return f"try _juiParseIsoDate({src}, codingPath: decoder.codingPath)"
-    if ftype.is_array and ftype.element is not None:
+    if (ftype.is_array or ftype.is_map) and ftype.element is not None:
         inner = _swift_date_decode_expr(ftype.element, "$0")
-        return f"try {src}.map {{ {inner} }}"
-    if ftype.is_map and ftype.element is not None:
-        inner = _swift_date_decode_expr(ftype.element, "$0")
-        return f"try {src}.mapValues {{ {inner} }}"
+        if ftype.element.nullable:
+            # ``[String?]`` → ``[Date?]``: a null element stays nil
+            # (Optional.map), it is not handed to the parser.
+            inner = f"try $0.map {{ {inner} }}"
+        each = "map" if ftype.is_array else "mapValues"
+        return f"try {src}.{each} {{ {inner} }}"
     return src
 
 
@@ -882,12 +884,12 @@ def _swift_date_encode_expr(ftype: FieldType, src: str) -> str:
     """Conversion expression: native Date shape → raw (String-shaped) value."""
     if ftype.is_primitive:
         return f"_juiFormatIsoDate({src})"
-    if ftype.is_array and ftype.element is not None:
+    if (ftype.is_array or ftype.is_map) and ftype.element is not None:
         inner = _swift_date_encode_expr(ftype.element, "$0")
-        return f"{src}.map {{ {inner} }}"
-    if ftype.is_map and ftype.element is not None:
-        inner = _swift_date_encode_expr(ftype.element, "$0")
-        return f"{src}.mapValues {{ {inner} }}"
+        if ftype.element.nullable:
+            inner = f"$0.map {{ {inner} }}"
+        each = "map" if ftype.is_array else "mapValues"
+        return f"{src}.{each} {{ {inner} }}"
     return src
 
 

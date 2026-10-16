@@ -1816,6 +1816,21 @@ def _extract_fields(
     return fields, extra_inline, extra_enums
 
 
+def _with_element_nullable(element: FieldType, body: dict[str, Any]) -> FieldType:
+    """Carry ``nullable: true`` on an array's ``items`` / a map's
+    ``additionalProperties`` onto the element type.
+
+    A field's own ``nullable`` is folded in by :func:`_extract_fields`; an
+    element has no field around it, so without this the flag was read by no
+    one and every face typed ``[[1, null]]`` as an array of non-null values
+    (ticket jui-web-api-model-nullable-array-items-dropped). An element is
+    never "omitted", so here the flag means exactly "may be JSON ``null``".
+    """
+    if not body.get("nullable"):
+        return element
+    return FieldType(**{**element.__dict__, "nullable": True})
+
+
 def _field_type(
     body: dict[str, Any],
     *,
@@ -1903,7 +1918,7 @@ def _field_type(
             pointer=f"{pointer}/items",
         )
         return (
-            FieldType(is_array=True, element=element_type),
+            FieldType(is_array=True, element=_with_element_nullable(element_type, items)),
             derived,
             derived_enums,
         )
@@ -1924,7 +1939,7 @@ def _field_type(
                 pointer=f"{pointer}/additionalProperties",
             )
             return (
-                FieldType(is_map=True, element=value_type),
+                FieldType(is_map=True, element=_with_element_nullable(value_type, addl)),
                 derived,
                 derived_enums,
             )

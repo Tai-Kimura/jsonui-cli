@@ -823,5 +823,114 @@ class WriteBehaviorTests(unittest.TestCase):
             self.assertEqual(first.path.read_text(), "// custom\n")
 
 
+
+#: ticket jui-web-api-model-nullable-array-items-dropped — the swagger shape
+#: that found it (a pivot's ``cells``, array of array) plus one level, a
+#: map value, a date element (converted) and an object element (converted).
+NULLABLE_ELEMENT_SCHEMAS = {
+    "Pet": {"type": "object", "required": ["name"], "properties": {
+        "name": {"type": "string"},
+        "born_at": {"type": "string", "format": "date-time"}}},
+    "Grid": {"type": "object", "required": ["cells", "tags", "scores"], "properties": {
+        "cells": {"type": "array", "items": {"type": "array", "items": {
+            "type": "integer", "format": "int64", "nullable": True}}},
+        "tags": {"type": "array", "items": {"type": "string", "nullable": True}},
+        "scores": {"type": "object", "additionalProperties": {"type": "number", "nullable": True}},
+        "when": {"type": "array", "items": {"type": "string", "format": "date-time",
+                                            "nullable": True}},
+        "when_by_key": {"type": "object", "additionalProperties": {
+            "type": "string", "format": "date-time", "nullable": True}},
+        "rows": {"type": "array", "nullable": True, "items": {
+            "type": "array", "nullable": True, "items": {"type": "integer", "nullable": True}}},
+        "pets": {"type": "array", "items": {
+            "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+        "plain": {"type": "array", "items": {"type": "integer"}},
+    }},
+    "Counts": {"type": "array", "items": {"type": "integer", "format": "int64", "nullable": True}},
+}
+
+
+class NullableElementTests(unittest.TestCase):
+    """An array element / map value declared ``nullable: true`` says ``| null``."""
+
+    def _src(self, name: str, *, formats: bool, case: str = "camelCase") -> str:
+        doc = parse_swagger(_doc(NULLABLE_ELEMENT_SCHEMAS), "test.json")
+        schema = next(s for s in doc.schemas if s.name == name)
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _fmt_gen(Path(tmp), case) if formats else _gen(Path(tmp), case)
+            return gen.generate_dto_source(schema, doc)
+
+    def test_dto_types(self):
+        src = self._src("Grid", formats=False, case="snake_case")
+        for line in ["cells: (number | null)[][];", "tags: (string | null)[];",
+                     "scores: Record<string, number | null>;", "when?: (string | null)[];",
+                     "when_by_key?: Record<string, string | null>;",
+                     "rows?: ((number | null)[] | null)[] | null;",
+                     "pets?: (PetDto | null)[];",
+                     "plain?: number[];"]:  # control: not nullable, unchanged
+            self.assertIn(f"  {line}", src)
+
+    def test_format_mapping_dto_and_wire(self):
+        src = self._src("Grid", formats=True)
+        dto = src.split("export interface GridDto {")[1].split("}")[0]
+        wire = src.split("export interface GridWire {")[1].split("}")[0]
+        for line in ["when?: (Date | null)[];", "whenByKey?: Record<string, Date | null>;",
+                     "pets?: (PetDto | null)[];"]:
+            self.assertIn(f"  {line}", dto)
+        for line in ["when?: (string | null)[];", "when_by_key?: Record<string, string | null>;",
+                     "pets?: (PetWire | null)[];"]:
+            self.assertIn(f"  {line}", wire)
+
+    def test_a_null_element_is_not_converted(self):
+        src = self._src("Grid", formats=True)
+        self.assertIn("wire.when.map((v0) => v0 == null ? v0 : parseIsoDate(v0))", src)
+        self.assertIn("[k0, v0 == null ? v0 : parseIsoDate(v0)]", src)
+        self.assertIn("wire.pets.map((v0) => v0 == null ? v0 : parsePetDto(v0))", src)
+        self.assertIn("model.when.map((v0) => v0 == null ? v0 : v0.toISOString())", src)
+        self.assertIn("model.pets.map((v0) => v0 == null ? v0 : serializePetDto(v0))", src)
+
+    def test_wrapper_alias(self):
+        self.assertIn("export type CountsDto = (number | null)[];",
+                      self._src("Counts", formats=False))
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_round_trip_on_node(self):
+        # Before the fix a null date element parsed to 1970-01-01 (new Date(null)
+        # is valid) and a null object element threw in parsePetDto.
+        harness = """
+import { parseGridDto, serializeGridDto } from "./GridDto.ts";
+const wire = { cells: [[1, null], [null]], tags: ["a", null], scores: { x: 1.5, y: null },
+  when: ["2026-01-02T03:04:05Z", null], when_by_key: { a: null, b: "2026-01-02T03:04:05Z" },
+  rows: [[1, null], null], pets: [{ name: "p" }, null] };
+const dto = parseGridDto(wire as any);
+if (dto.when[1] !== null) throw new Error("when[1] must stay null, got " + String(dto.when[1]));
+if (!(dto.when[0] instanceof Date)) throw new Error("when[0] must be a Date");
+if (dto.whenByKey.a !== null) throw new Error("whenByKey.a must stay null");
+if (dto.pets[1] !== null) throw new Error("pets[1] must stay null");
+const back = serializeGridDto(dto);
+const want = '{"cells":[[1,null],[null]],"tags":["a",null],"scores":{"x":1.5,"y":null},'
+  + '"when":["2026-01-02T03:04:05.000Z",null],"when_by_key":{"a":null,"b":"2026-01-02T03:04:05.000Z"},'
+  + '"rows":[[1,null],null],"pets":[{"name":"p"},null]}';
+if (JSON.stringify(back) !== want) throw new Error(JSON.stringify(back));
+console.log("NULL_ELEMENT_OK");
+"""
+        doc = parse_swagger(_doc(NULLABLE_ELEMENT_SCHEMAS), "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "generated"
+            out.mkdir()
+            gen = _fmt_gen(Path(tmp), "camelCase")
+            for schema in doc.schemas:
+                src = gen.generate_dto_source(schema, doc)
+                (out / f"{schema.name}Dto.ts").write_text(
+                    re.sub(r'from "\./([A-Za-z0-9_]+)";', r'from "./\1.ts";', src),
+                    encoding="utf-8")
+            (out / "harness.ts").write_text(harness, encoding="utf-8")
+            proc = subprocess.run(["node", "--experimental-strip-types", "--no-warnings",
+                                   str(out / "harness.ts")], capture_output=True, text=True,
+                                  timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("NULL_ELEMENT_OK", proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

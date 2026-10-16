@@ -93,3 +93,56 @@ def test_the_check_can_fail(tmp_path):
     _emit(tmp_path, "camelCase", True)
     done = _check(tmp_path, CONSUMER + "\nconst wrong: number = ({} as PlaceDto).lat;\n")
     assert done.returncode != 0 and "TS2322" in done.stdout + done.stderr
+
+
+#: ticket jui-web-api-model-nullable-array-items-dropped: `nullable: true` on
+#: `items` / `additionalProperties` — the element has no field of its own.
+ELEMENT_SCHEMAS = {
+    "Pet": {"type": "object", "required": ["name"], "properties": {
+        "name": {"type": "string"},
+        "born_at": {"type": "string", "format": "date-time"}}},
+    "Grid": {"type": "object", "required": ["cells", "scores", "when", "pets"], "properties": {
+        "cells": {"type": "array", "items": {"type": "array", "items": {
+            "type": "integer", "format": "int64", "nullable": True}}},
+        "scores": {"type": "object", "additionalProperties": {"type": "number", "nullable": True}},
+        "when": {"type": "array", "items": {"type": "string", "format": "date-time",
+                                            "nullable": True}},
+        "pets": {"type": "array", "items": {
+            "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+        "plain": {"type": "array", "items": {"type": "integer"}},
+    }},
+}
+
+ELEMENT_CONSUMER = """
+import { GridDto, parseGridDto, serializeGridDto } from "./GridDto";
+
+// a null element is a value the type admits
+const fromServer: GridDto = { cells: [[1, null], [null]], scores: { x: 1, y: null },
+  when: [new Date(0), null], pets: [{ name: "p" }, null] };
+const cell: number | null = fromServer.cells[0][1];
+const score: number | null = fromServer.scores.y;
+const at: Date | null = parseGridDto(serializeGridDto(fromServer)).when[1];
+
+// @ts-expect-error — a null element is not a number: it has to be narrowed first
+const unchecked: number = fromServer.cells[0][0];
+
+// @ts-expect-error — `plain` declares no null element (the control)
+const plain: GridDto = { ...fromServer, plain: [1, null] };
+
+export { cell, score, at, unchecked, plain };
+"""
+
+
+def test_a_null_element_is_typed_null(tmp_path):
+    doc = parse_swagger({"openapi": "3.0.3", "info": {"title": "T", "version": "1"},
+                         "components": {"schemas": ELEMENT_SCHEMAS}}, "test.json")
+    gen = WebApiModelGenerator(WebApiPlatformConfig(
+        sources_root=tmp_path, model_dir="models", dto_subdir="generated",
+        case_convention="camelCase", format_mapping=True))
+    for schema in doc.schemas:
+        (tmp_path / f"{schema.name}Dto.ts").write_text(gen.generate_dto_source(schema, doc),
+                                                       encoding="utf-8")
+    (tmp_path / "consumer.ts").write_text(ELEMENT_CONSUMER, encoding="utf-8")
+    done = subprocess.run([str(_tsc()), *_TSC_ARGS, "PetDto.ts", "GridDto.ts", "consumer.ts"],
+                          cwd=tmp_path, capture_output=True, text=True)
+    assert done.returncode == 0, done.stdout + done.stderr
