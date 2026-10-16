@@ -52,6 +52,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     annotation class Composable
     interface Modifier { companion object : Modifier }
     fun Modifier.fillMaxSize(): Modifier = this
+    fun Modifier.clipToBounds(): Modifier = this
     fun Modifier.fillMaxWidth(): Modifier = this
     fun Modifier.fillMaxHeight(): Modifier = this
     fun Modifier.testTag(tag: String): Modifier = this

@@ -153,6 +153,7 @@ module ComposeStubUniverse
       fun Modifier.dropShadow(shape: Shape, shadow: Shadow): Modifier = this
       fun Modifier.border(width: Dp, color: Color, shape: Shape = RectangleShape): Modifier = this
       fun Modifier.clip(shape: Shape): Modifier = this
+      fun Modifier.clipToBounds(): Modifier = this
       fun Modifier.background(color: Color): Modifier = this
       fun Modifier.background(brush: Brush): Modifier = this
       fun Modifier.blur(radius: Dp): Modifier = this

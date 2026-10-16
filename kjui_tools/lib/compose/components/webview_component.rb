@@ -141,6 +141,16 @@ module KjuiTools
           # Without an id nothing is wrapped and the emit is byte-identical.
           # (kjui-webview-testtag-on-androidview-not-projected-as-resource-id;
           # the dynamic runtime's DynamicWebComponent does the same.)
+          # 🔻 CLIPPED TO ITS OWN BOUNDS. An AndroidView does not clip, and a
+          # WebView paints its background over the whole window until its
+          # first frame settles (~1.3 s on conf_ci, API 35): a screen with a
+          # 200dp WebView flashed white edge to edge on every open, and a
+          # conformance capture landed in either state (Web/html__static,
+          # 2 of 12 settled, parity distance 34-35). Clipped, the settled
+          # picture is the only one. Same on the dynamic face
+          # (DynamicWebComponent). Ticket
+          # kjui-webview-paints-the-whole-window-white-until-its-first-frame.
+          required_imports&.add(:shape)
           if json_data['id']
             required_imports&.add(:box)
             # Statements emitted before the call (`val webViewBgColor = …`)
@@ -151,11 +161,12 @@ module KjuiTools
             box += Helpers::ModifierBuilder.format(modifiers, depth)
             box += "\n" + indent(") {", depth)
             inner = call.split("\n").map { |l| l.empty? ? l : "    " + l }.join("\n")
-            inner += "\n" + indent("modifier = Modifier.fillMaxSize()", depth + 2)
+            inner += "\n" + indent("modifier = Modifier.fillMaxSize().clipToBounds()", depth + 2)
             inner += "\n" + indent(")", depth + 1)
             return box + "\n" + inner + "\n" + indent("}", depth)
           end
 
+          modifiers << ".clipToBounds()"
           code += Helpers::ModifierBuilder.format(modifiers, depth)
           
           code += "\n" + indent(")", depth)
