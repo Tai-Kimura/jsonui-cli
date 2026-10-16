@@ -12,6 +12,7 @@ require_relative '../core/data_model_updater_core'
 require_relative '../core/string_literals'
 require_relative 'style_loader'
 require_relative 'include_expander'
+require_relative 'test_bridge_code'
 
 module KjuiTools
   module Compose
@@ -249,8 +250,17 @@ module KjuiTools
 
         content += ") {\n"
 
+        # The test bridge (jsonui-test-runner spec section 10.3-10.4): the
+        # layout's declared fields with the class as written. A field this
+        # generator adds by itself is not declared (validate agrees:
+        # shared/core/layout_data_fields_vectors.json).
+        bridge_props = data_properties.select { |prop| declared_data_properties.key?(prop) }.map do |prop|
+          { name: prop['name'], declared: (prop['declaredClass'] || prop['class']).to_s }
+        end
+
         # Add companion object with update function
         content += "    companion object {\n"
+        content += TestBridgeCode.companion_members(bridge_props)
         content += "        // Update properties from map\n"
 
         # Add @Suppress("UNCHECKED_CAST") when any property needs an
@@ -326,6 +336,8 @@ module KjuiTools
         content += "        }\n"
         content += "    }\n"
 
+        content += TestBridgeCode.member_functions(bridge_props)
+
         # Add toMap function
         content += "\n"
         content += "    // Convert properties to map for runtime use\n"
@@ -340,8 +352,11 @@ module KjuiTools
             name = prop['name']
             default_value = prop['defaultValue']
 
-            # If it's nullable, check for null
-            if default_value.nil? || default_value == 'nil'
+            # If it's nullable, check for null. An optional class with a
+            # default is nullable too (`var n: Int? = 3`): through jsonui-cli
+            # 1.9.33 it was put in the non-null map as it was, and the Data
+            # class did not compile.
+            if default_value.nil? || default_value == 'nil' || map_to_kotlin_type(prop['class']).to_s.end_with?('?')
               content += "        #{name}?.let { map[\"#{name}\"] = it }\n"
             else
               content += "        map[\"#{name}\"] = #{name}\n"

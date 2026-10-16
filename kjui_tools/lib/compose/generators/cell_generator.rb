@@ -331,7 +331,7 @@ module KjuiTools
 
                 // >>> GENERATED_CODE_START
                 // Auto-generated updateData function - updated by 'kjui build'
-                fun updateData(updates: Map<String, Any>) {
+                fun updateData(updates: Map<String, Any?>) {
                     _data.update { current ->
                         var updated = current
                         updates.forEach { (key, value) ->
