@@ -10,6 +10,7 @@ require_relative '../core/generated_marker'
 require_relative '../core/data_model_updater_core'
 require_relative '../core/tap_accessibility'
 require_relative '../core/string_literals'
+require_relative 'test_bridge_code'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'helpers/string_manager_helper'
@@ -263,6 +264,20 @@ module SjuiTools
         end
 
         content += "    }\n"
+
+        # The test bridge's apply / snapshot (jsonui-test-runner spec section 10.3-10.4).
+        bridge_props = data_properties.map do |prop|
+          swift_type = swift_data_type(prop['class']).to_s
+          default_value = prop['defaultValue']
+          {
+            name: prop['name'],
+            declared: (prop['declaredClass'] || prop['class']).to_s,
+            swift_type: swift_type,
+            swift_optional: swift_type.end_with?('?') || default_value.nil? || default_value == 'nil'
+          }
+        end
+        content += TestBridgeCode.apply_function(bridge_props)
+        content += TestBridgeCode.snapshot_function(bridge_props)
 
         # Add toDictionary function
         content += "\n"

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'test_bridge_code'
 require_relative '../core/generated_marker'
 require_relative 'binding/binding_expression'
 require_relative '../core/string_literals'
@@ -159,9 +160,17 @@ module SjuiTools
         # would split test results by rendering mode. Applying it here also
         # keeps it off DynamicView's entry point, which cells, tabs, embeds
         # and dialogs re-enter (each would grow a false marker).
+        # The test bridge (jsonui-test-runner spec section 10.3-10.4) goes on
+        # the same outer Group for the same reason: the generated body and the
+        # Dynamic branch read and write the one `data`, so an initialState
+        # applied here reaches whichever branch draws, and `state` reads it in
+        # either mode. `data` is a Binding, so apply's writes reach the
+        # ViewModel.
         screen_marker_line = if screen_id
           "\n            // Requires SwiftJsonUI >= #{SCREEN_MARKER_MIN_LIBRARY_VERSION} (screen marker)" \
-          "\n            .jsonUIScreenMarker(\"#{screen_id}\")"
+          "\n            .jsonUIScreenMarker(\"#{screen_id}\")" \
+          "\n            // Requires SwiftJsonUI >= #{TestBridgeCode::MIN_LIBRARY_VERSION} (test bridge: initialState and state)" \
+          "\n            .jsonUITestBridge(\"#{screen_id}\", snapshot: { data.testSnapshot() }, apply: { data.applyTestInitialState($0) })"
         else
           ""
         end
