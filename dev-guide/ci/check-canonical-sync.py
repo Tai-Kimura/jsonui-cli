@@ -227,6 +227,10 @@ def check_condition_keys(canonical_root: Path) -> list[int]:
 VENDORED_VECTORS = [
     ("specs/vectors/initial-state-coercion.json",
      "shared/core/initial_state_coercion_vectors.json"),
+    # Read by `jsonui-test validate`'s tests (test_tools): which test files
+    # are validate errors / warnings, by code.
+    ("specs/vectors/initial-state-payload.json",
+     "shared/core/initial_state_payload_vectors.json"),
 ]
 
 
