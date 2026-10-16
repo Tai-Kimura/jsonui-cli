@@ -953,6 +953,11 @@ def _fold_const(body: dict[str, Any]) -> dict[str, Any]:
     return folded
 
 
+def _is_null_member(member: Any) -> bool:
+    """``{"type": "null"}`` as a combinator member — the normalizer's test."""
+    return isinstance(member, dict) and member.get("type") == "null"
+
+
 def _fold_null_type(body: dict[str, Any]) -> dict[str, Any]:
     """OpenAPI 3.1 ``type: [T, "null"]`` is the nullable that 3.0 spells
     ``type: T, nullable: true``.
@@ -967,8 +972,25 @@ def _fold_null_type(body: dict[str, Any]) -> dict[str, Any]:
     non-null type (an untagged union) or none at all is left alone for the
     existing ``unknown-type`` halt.
 
+    ``anyOf`` / ``oneOf`` of exactly one non-null member and one or more
+    ``{"type": "null"}`` members (Pydantic's ``Optional[X]``, either order)
+    is that member, nullable — the same set the normalizer folds as a null
+    union (ticket jui-api-model-anyof-null-optional-stops-build). The
+    member's keys are merged under the combinator's siblings (the
+    normalizer's ``{**inner, **rest}``), so a ``$ref`` member reads like the
+    3.0 ``$ref`` + ``nullable: true`` spelling. Every other ``anyOf`` keeps
+    the permanent stop, and a ``oneOf`` the union paths.
+
     Returns a shallow copy; never mutates the caller's schema dict.
     """
+    for comb in ("anyOf", "oneOf"):
+        members = body.get(comb)
+        if not isinstance(members, list):
+            continue
+        non_null = [m for m in members if not _is_null_member(m)]
+        if len(non_null) == 1 and len(non_null) < len(members) and isinstance(non_null[0], dict):
+            rest = {k: v for k, v in body.items() if k != comb}
+            return _fold_null_type({**non_null[0], **rest, "nullable": True})
     types = body.get("type")
     if not isinstance(types, list):
         return body

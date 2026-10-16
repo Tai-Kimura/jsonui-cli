@@ -2165,5 +2165,174 @@ class OpenApi31NullTypeTests(unittest.TestCase):
             self.assertEqual(cm.exception.code, "unknown-type")
 
 
+
+_NULL = {"type": "null"}
+_REF = {"$ref": "#/components/schemas/Pet"}
+
+
+def _null_union_schemas(spelling: str) -> dict:
+    """The same nullable shapes in five spellings: the null union (``anyOf``
+    / ``oneOf``, the null member first or last) and 3.0's two ``$ref``
+    spellings (``$ref`` + ``nullable`` / ``allOf: [$ref]`` + ``nullable``)."""
+    def n(member: dict, **extra) -> dict:
+        if spelling == "3.0-ref":
+            return {**member, "nullable": True, **extra}
+        if spelling == "3.0-allof":
+            if "$ref" in member:
+                return {"allOf": [member], "nullable": True, **extra}
+            return {**member, "nullable": True, **extra}
+        comb, null_first = {"anyOf-last": ("anyOf", False), "anyOf-first": ("anyOf", True),
+                            "oneOf-last": ("oneOf", False)}[spelling]
+        return {comb: [_NULL, member] if null_first else [member, _NULL], **extra}
+    return {
+        "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "Status": {"type": "string", "enum": ["on", "off"]},
+        "M": {"type": "object", "required": ["owner", "count"], "properties": {
+            "owner": n(_REF, description="who"),                      # required, nullable ref
+            "spare": n(_REF),                                         # optional, nullable ref
+            "status": n({"$ref": "#/components/schemas/Status"}),    # enum ref
+            "count": n({"type": "integer", "format": "int64"}),
+            "at": n({"type": "string", "format": "date-time"}),
+            "pets": {"type": "array", "items": n(_REF)},              # element
+            "by_key": {"type": "object", "additionalProperties": n({"type": "number"})},
+            "plain": {"type": "integer"},                             # control
+        }},
+        "Note": n({"type": "string"}),                                # top-level wrapper
+    }
+
+
+class AnyOfNullOptionalTests(unittest.TestCase):
+    """``anyOf`` / ``oneOf`` of one member and ``{"type": "null"}`` is that
+    member, nullable (ticket jui-api-model-anyof-null-optional-stops-build).
+    It stopped the build as an untagged union."""
+
+    SPELLINGS = ("anyOf-last", "anyOf-first", "oneOf-last", "3.0-ref", "3.0-allof")
+
+    def _doc(self, spelling: str):
+        return parse_swagger(_doc(_null_union_schemas(spelling)), "test.json")
+
+    def test_loads_nullable(self):
+        m = next(s for s in self._doc("anyOf-last").schemas if s.name == "M")
+        f = {x.wire_name: x for x in m.fields}
+        self.assertEqual((f["owner"].required, f["owner"].nullable, f["owner"].type.ref_name,
+                          f["owner"].description), (True, True, "Pet", "who"))
+        self.assertTrue(f["pets"].type.element.nullable and f["pets"].type.element.is_object_ref)
+        self.assertTrue(f["by_key"].type.element.nullable)
+        self.assertFalse(f["plain"].nullable)
+
+    def test_every_spelling_is_the_same_ir(self):
+        want = self._doc("3.0-ref")
+        for spelling in self.SPELLINGS:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(self._doc(spelling), want)
+
+    def test_every_spelling_generates_the_same_bytes_on_every_face(self):
+        from jui_cli.generators.android_api_model_generator import (
+            AndroidApiModelGenerator, AndroidApiPlatformConfig)
+        from jui_cli.generators.ios_api_model_generator import (
+            IosApiModelGenerator, IosApiPlatformConfig)
+        from jui_cli.generators.web_api_model_generator import (
+            WebApiModelGenerator, WebApiPlatformConfig)
+
+        def sources(doc):
+            with tempfile.TemporaryDirectory() as tmp:
+                t = Path(tmp)
+                gens = [WebApiModelGenerator(WebApiPlatformConfig(
+                            sources_root=t, model_dir="m", dto_subdir="g",
+                            case_convention="camelCase", format_mapping=True)),
+                        IosApiModelGenerator(IosApiPlatformConfig(sources_root=t, format_mapping=True)),
+                        AndroidApiModelGenerator(AndroidApiPlatformConfig(
+                            sources_root=t, format_mapping=True, serializer="kotlinx"))]
+                return [g.generate_dto_source(s, doc) for g in gens for s in doc.schemas]
+
+        want = sources(self._doc("3.0-ref"))
+        self.assertTrue(any("owner: PetDto | null;" in src for src in want))  # the shape is there
+        for spelling in self.SPELLINGS:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(sources(self._doc(spelling)), want)
+
+    def test_control_every_other_union_still_stops(self):
+        other = {"type": "object", "properties": {"x": {"type": "integer"}}}
+        for comb in ("anyOf", "oneOf"):
+            for members in ([_REF, other], [_REF, other, _NULL], [_NULL], [_NULL, _NULL]):
+                with self.subTest(comb=comb, members=members), self.assertRaises(OpenAPILoadError):
+                    parse_swagger(_doc({"Pet": _null_union_schemas("3.0-ref")["Pet"],
+                                        "M": {"type": "object", "properties": {
+                                            "a": {comb: members}}}}), "test.json")
+        with self.assertRaises(OpenAPILoadError):   # anyOf of one member and no null
+            parse_swagger(_doc({"Pet": _null_union_schemas("3.0-ref")["Pet"],
+                                "M": {"type": "object", "properties": {"a": {"anyOf": [_REF]}}}}),
+                          "test.json")
+
+
+def _load_normalizer():
+    """document_tools' normalizer from THIS checkout, by file — an installed
+    jsonui_doc_cli (``~/.jsonui-cli``) would be another release's copy."""
+    import importlib.util
+    import sys
+    path = Path(__file__).resolve().parents[2] / "document_tools/jsonui_doc_cli/check/openapi_normalize.py"
+    spec = importlib.util.spec_from_file_location("_openapi_normalize_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module   # dataclasses resolve their module by name
+    spec.loader.exec_module(module)
+    return module
+
+
+class NullUnionsAgreeWithTheNormalizerTests(unittest.TestCase):
+    """openapi-diff (document_tools) and the build read a null union the same
+    way: over every combination of up to three members from {a ref, a string,
+    an object, null, null with a description}, under ``anyOf`` and
+    ``oneOf``, the build folds it exactly when the normalizer does. The one
+    set apart — ``anyOf`` / ``oneOf`` of a single member and no null, which
+    the normalizer also unwraps — is the user's ruling (every non-null
+    ``anyOf`` keeps the stop) and is pinned here as that set, not as a
+    difference found by accident."""
+
+    MEMBERS = {
+        "ref": _REF,
+        "string": {"type": "string"},
+        "object": {"type": "object", "properties": {"x": {"type": "integer"}}},
+        "null": _NULL,
+        "null+doc": {"type": "null", "description": "absent"},
+    }
+
+    def test_the_two_fold_the_same_null_unions(self):
+        import itertools
+        norm = _load_normalizer()
+        pet = _null_union_schemas("3.0-ref")["Pet"]
+        agreed = apart = folded = 0
+        for comb in ("anyOf", "oneOf"):
+            for size in (1, 2, 3):
+                for names in itertools.product(self.MEMBERS, repeat=size):
+                    members = [self.MEMBERS[x] for x in names]
+                    field = {comb: members}
+                    doc = _doc({"Pet": pet, "M": {"type": "object", "properties": {"a": field}}})
+                    out = norm.normalize_schema(field, norm._Resolver(doc))
+                    normalizer_folds = isinstance(out, dict) and comb not in out
+                    try:
+                        parse_swagger(doc, "test.json")
+                        build_folds = True
+                    except OpenAPILoadError:
+                        build_folds = False
+                    has_null = any(m.get("type") == "null" for m in members)
+                    with self.subTest(comb=comb, members=names):
+                        if has_null:
+                            self.assertEqual(build_folds, normalizer_folds)
+                            if normalizer_folds:
+                                self.assertTrue(out.get("nullable"))
+                                folded += 1
+                            agreed += 1
+                        else:
+                            # the ruling: only the single-member unwrap differs
+                            self.assertFalse(build_folds)
+                            self.assertEqual(normalizer_folds, size == 1)
+                            apart += size == 1
+        print(f"[null-union agreement] {agreed} null unions compared ({folded} folded by both), "
+              f"{apart} non-null single-member unwraps set apart by the ruling")
+        self.assertEqual(apart, 2 * 3)   # 3 non-null members x anyOf / oneOf
+        # both outcomes occur, so agreement is not two calculators that never fold
+        self.assertTrue(0 < folded < agreed, (folded, agreed))
+
+
 if __name__ == "__main__":
     unittest.main()
