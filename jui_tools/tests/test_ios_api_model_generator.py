@@ -1,6 +1,8 @@
 """Tests for ios_api_model_generator — DTO + enum + Domain scaffold emission."""
 from __future__ import annotations
 
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -1322,3 +1324,97 @@ class NonisolatedDtoTests(unittest.TestCase):
         self.assertNotIn("nonisolated enum", src)
 
 
+#: ticket jui-web-api-model-nullable-array-items-dropped — measured on this
+#: face too: the element ``?`` was dropped, so a ``null`` element failed the
+#: whole decode (``valueNotFound … cells[0][1]``).
+NULLABLE_ELEMENT_SCHEMAS = {
+    "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+    "Grid": {"type": "object", "required": ["cells", "tags", "scores"], "properties": {
+        "cells": {"type": "array", "items": {"type": "array", "items": {
+            "type": "integer", "format": "int64", "nullable": True}}},
+        "tags": {"type": "array", "items": {"type": "string", "nullable": True}},
+        "scores": {"type": "object", "additionalProperties": {"type": "number", "nullable": True}},
+        "when": {"type": "array", "items": {"type": "string", "format": "date-time",
+                                            "nullable": True}},
+        "when_by_key": {"type": "object", "additionalProperties": {
+            "type": "string", "format": "date-time", "nullable": True}},
+        "rows": {"type": "array", "nullable": True, "items": {
+            "type": "array", "nullable": True, "items": {"type": "integer", "nullable": True}}},
+        "pets": {"type": "array", "items": {
+            "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+        "plain": {"type": "array", "items": {"type": "integer"}},
+    }},
+    "Counts": {"type": "array", "items": {"type": "integer", "format": "int64", "nullable": True}},
+}
+
+
+class NullableElementTests(unittest.TestCase):
+    """An array element / map value declared ``nullable: true`` is ``T?``."""
+
+    def _sources(self, *, formats: bool) -> dict[str, str]:
+        doc = parse_swagger(_doc(NULLABLE_ELEMENT_SCHEMAS), "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = IosApiModelGenerator(IosApiPlatformConfig(
+                sources_root=Path(tmp), format_mapping=formats))
+            return {s.name: gen.generate_dto_source(s, doc) for s in doc.schemas}
+
+    def test_dto_types(self):
+        src = self._sources(formats=False)["Grid"]
+        for line in ["let cells: [[Int64?]]", "let tags: [String?]",
+                     "let scores: [String: Double?]", "let when: [String?]?",
+                     "let whenByKey: [String: String?]?", "let rows: [[Int?]?]?",
+                     "let pets: [PetDto?]?",
+                     "let plain: [Int]?"]:  # control: not nullable, unchanged
+            self.assertIn(f"    {line}\n", src)
+
+    def test_wrapper(self):
+        src = self._sources(formats=False)["Counts"]
+        self.assertIn("let items: [Int64?]", src)
+        self.assertIn("try container.decode([Int64?].self)", src)
+
+    def test_format_mapping_skips_a_null_date(self):
+        src = self._sources(formats=True)["Grid"]
+        self.assertIn("let when: [Date?]?", src)
+        self.assertIn(
+            "decodeIfPresent([String?].self, forKey: .when).map { try $0.map { try $0.map { "
+            "try _juiParseIsoDate($0, codingPath: decoder.codingPath) } } }", src)
+        self.assertIn("self.whenByKey.map { $0.mapValues { $0.map { _juiFormatIsoDate($0) } } }",
+                      src)
+
+    @unittest.skipUnless(shutil.which("swiftc"), "swiftc not installed")
+    def test_compiles_and_round_trips(self):
+        main = r'''
+import Foundation
+let json = """
+{"cells":[[1,null],[null]],"tags":["a",null],"scores":{"x":1.5,"y":null},"when":["2026-01-02T03:04:05Z",null],"when_by_key":{"a":null,"b":"2026-01-02T03:04:05Z"},"rows":[[1,null],null],"pets":[{"name":"p"},null]}
+""".data(using: .utf8)!
+let g = try JSONDecoder().decode(GridDto.self, from: json)
+precondition(g.cells[0][0] == 1 && g.cells[0][1] == nil && g.cells[1][0] == nil)
+precondition(g.tags[1] == nil && g.scores["y"]! == nil && g.rows![1] == nil && g.pets![1] == nil)
+precondition(g.when![1] == nil && g.whenByKey!["a"]! == nil)
+let enc = JSONEncoder(); enc.outputFormatting = .sortedKeys
+let out = String(data: try enc.encode(g), encoding: .utf8)!
+precondition(out.contains("\"cells\":[[1,null],[null]]"), out)
+precondition(out.contains("\"when\":[\"2026-01-02T03:04:05.000Z\",null]"), out)
+precondition(out.contains("\"a\":null"), out)
+let c = try JSONDecoder().decode(CountsDto.self, from: "[1,null]".data(using: .utf8)!)
+precondition(c.items == [1, nil])
+print("NULL_ELEMENT_OK")
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            paths = []
+            for name, src in self._sources(formats=True).items():
+                (d / f"{name}Dto.swift").write_text(src, encoding="utf-8")
+                paths.append(str(d / f"{name}Dto.swift"))
+            typecheck = subprocess.run(["swiftc", "-typecheck", *paths],
+                                       capture_output=True, text=True, timeout=300)
+            self.assertEqual(typecheck.returncode, 0, typecheck.stderr)
+            self.assertNotIn("warning:", typecheck.stderr)
+            (d / "main.swift").write_text(main, encoding="utf-8")
+            build = subprocess.run(["swiftc", "-o", str(d / "h"), *paths, str(d / "main.swift")],
+                                   capture_output=True, text=True, timeout=300)
+            self.assertEqual(build.returncode, 0, build.stderr)
+            run = subprocess.run([str(d / "h")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("NULL_ELEMENT_OK", run.stdout)

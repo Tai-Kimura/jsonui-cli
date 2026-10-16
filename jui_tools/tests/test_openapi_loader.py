@@ -2039,5 +2039,300 @@ class FormatRetentionTests(unittest.TestCase):
         self.assertIsNone(f.type.format)
 
 
+
+class ElementNullableTests(unittest.TestCase):
+    """``nullable: true`` on ``items`` / ``additionalProperties`` reaches the
+    element type (ticket jui-web-api-model-nullable-array-items-dropped).
+    It was read by no one: every face typed ``[[1, null]]`` as non-null."""
+
+    def _fields(self):
+        doc = parse_swagger(_doc({
+            "Pet": {"type": "object", "properties": {"name": {"type": "string"}}},
+            "M": {
+                "type": "object",
+                "required": ["cells"],
+                "properties": {
+                    "cells": {"type": "array", "items": {"type": "array", "items": {
+                        "type": "integer", "format": "int64", "nullable": True}}},
+                    "tags": {"type": "array", "items": {"type": "string", "nullable": True}},
+                    "scores": {"type": "object", "additionalProperties": {
+                        "type": "number", "nullable": True}},
+                    "pets": {"type": "array", "items": {
+                        "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+                    "plain": {"type": "array", "items": {"type": "integer"}},
+                },
+            },
+        }), "test.json")
+        return {f.wire_name: f for f in next(s for s in doc.schemas if s.name == "M").fields}
+
+    def test_the_element_carries_the_flag(self):
+        f = self._fields()
+        self.assertFalse(f["cells"].type.element.nullable)       # the inner array is not
+        self.assertTrue(f["cells"].type.element.element.nullable)
+        self.assertTrue(f["tags"].type.element.nullable)
+        self.assertTrue(f["scores"].type.element.nullable)
+        self.assertTrue(f["pets"].type.element.nullable)
+        self.assertTrue(f["pets"].type.element.is_object_ref)
+
+    def test_control_the_field_level_flags_do_not_move(self):
+        f = self._fields()
+        self.assertFalse(f["plain"].type.element.nullable)
+        self.assertEqual(
+            {k: (v.required, v.nullable, v.type.nullable) for k, v in f.items()},
+            {"cells": (True, False, False), "tags": (False, False, True),
+             "scores": (False, False, True), "pets": (False, False, True),
+             "plain": (False, False, True)})
+
+
+
+def _spelled(null31: bool) -> dict:
+    """The same schemas, nullability spelled the 3.1 way or the 3.0 way."""
+    def n(t: str, **extra) -> dict:
+        if null31:
+            return {"type": [t, "null"], **extra}
+        return {"type": t, "nullable": True, **extra}
+    return {
+        "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "M": {"type": "object", "required": ["a", "cells", "kind"], "properties": {
+            "a": n("integer"),                                       # required, nullable
+            "b": n("string", format="date-time"),                    # optional, nullable
+            "cells": {"type": "array", "items": {"type": "array", "items": n(
+                "integer", format="int64")}},                        # element
+            "m": {"type": "object", "additionalProperties": n("number")},  # map value
+            "tags": {**n("array"), "items": {"type": "string"}},     # the array itself
+            "kind": n("string", enum=["x", "y"]),                    # inline enum
+            "plain": {"type": "integer"},                            # control
+        }},
+        "Counts": {"type": "array", "items": n("integer")},          # wrapper element
+        "Note": n("string"),                                         # top-level wrapper
+    }
+
+
+class OpenApi31NullTypeTests(unittest.TestCase):
+    """``type: [T, "null"]`` (3.1) is ``type: T, nullable: true`` (3.0) —
+    ticket jui-api-model-openapi-31-null-type-ignored. It halted with
+    ``unrecognized type ['integer', 'null']``."""
+
+    def _doc(self, null31: bool):
+        return parse_swagger(_doc(_spelled(null31)), "test.json")
+
+    def test_loads(self):
+        m = next(s for s in self._doc(True).schemas if s.name == "M")
+        f = {x.wire_name: x for x in m.fields}
+        self.assertEqual((f["a"].required, f["a"].nullable, f["a"].type.primitive),
+                         (True, True, PrimitiveKind.INTEGER))
+        self.assertTrue(f["cells"].type.element.element.nullable)
+        self.assertEqual(f["cells"].type.element.element.primitive, PrimitiveKind.INTEGER_64)
+        self.assertTrue(f["m"].type.element.nullable)
+        self.assertTrue(f["tags"].nullable and f["tags"].type.is_array)
+        self.assertEqual(f["b"].type.format, "date-time")
+        self.assertFalse(f["plain"].nullable)
+        note = next(s for s in self._doc(True).schemas if s.name == "Note")
+        self.assertTrue(note.is_wrapper and note.wrapped_type.primitive is PrimitiveKind.STRING)
+
+    def test_the_two_spellings_are_the_same_ir(self):
+        self.assertEqual(self._doc(True), self._doc(False))
+
+    def test_the_two_spellings_generate_the_same_bytes_on_every_face(self):
+        from jui_cli.generators.android_api_model_generator import (
+            AndroidApiModelGenerator, AndroidApiPlatformConfig)
+        from jui_cli.generators.ios_api_model_generator import (
+            IosApiModelGenerator, IosApiPlatformConfig)
+        from jui_cli.generators.web_api_model_generator import (
+            WebApiModelGenerator, WebApiPlatformConfig)
+
+        def sources(doc):
+            with tempfile.TemporaryDirectory() as tmp:
+                t = Path(tmp)
+                gens = [WebApiModelGenerator(WebApiPlatformConfig(
+                            sources_root=t, model_dir="m", dto_subdir="g",
+                            case_convention="camelCase", format_mapping=True)),
+                        IosApiModelGenerator(IosApiPlatformConfig(sources_root=t, format_mapping=True)),
+                        AndroidApiModelGenerator(AndroidApiPlatformConfig(
+                            sources_root=t, format_mapping=True, serializer="kotlinx"))]
+                return [g.generate_dto_source(s, doc) for g in gens for s in doc.schemas] + \
+                       [g.generate_enum_source(e, doc) for g in gens for e in doc.enums]
+
+        got = sources(self._doc(True))
+        self.assertEqual(got, sources(self._doc(False)))
+        self.assertTrue(any("(number | null)[][]" in src for src in got))  # the shape is there
+
+    def test_control_more_than_one_non_null_type_still_halts(self):
+        for types in (["string", "integer"], ["string", "integer", "null"], ["null"]):
+            with self.subTest(types=types), self.assertRaises(OpenAPILoadError) as cm:
+                parse_swagger(_doc({"M": {"type": "object", "properties": {
+                    "a": {"type": types}}}}), "test.json")
+            self.assertEqual(cm.exception.code, "unknown-type")
+
+
+
+_NULL = {"type": "null"}
+_REF = {"$ref": "#/components/schemas/Pet"}
+
+
+def _null_union_schemas(spelling: str) -> dict:
+    """The same nullable shapes in five spellings: the null union (``anyOf``
+    / ``oneOf``, the null member first or last) and 3.0's two ``$ref``
+    spellings (``$ref`` + ``nullable`` / ``allOf: [$ref]`` + ``nullable``)."""
+    def n(member: dict, **extra) -> dict:
+        if spelling == "3.0-ref":
+            return {**member, "nullable": True, **extra}
+        if spelling == "3.0-allof":
+            if "$ref" in member:
+                return {"allOf": [member], "nullable": True, **extra}
+            return {**member, "nullable": True, **extra}
+        comb, null_first = {"anyOf-last": ("anyOf", False), "anyOf-first": ("anyOf", True),
+                            "oneOf-last": ("oneOf", False)}[spelling]
+        return {comb: [_NULL, member] if null_first else [member, _NULL], **extra}
+    return {
+        "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "Status": {"type": "string", "enum": ["on", "off"]},
+        "M": {"type": "object", "required": ["owner", "count"], "properties": {
+            "owner": n(_REF, description="who"),                      # required, nullable ref
+            "spare": n(_REF),                                         # optional, nullable ref
+            "status": n({"$ref": "#/components/schemas/Status"}),    # enum ref
+            "count": n({"type": "integer", "format": "int64"}),
+            "at": n({"type": "string", "format": "date-time"}),
+            "pets": {"type": "array", "items": n(_REF)},              # element
+            "by_key": {"type": "object", "additionalProperties": n({"type": "number"})},
+            "plain": {"type": "integer"},                             # control
+        }},
+        "Note": n({"type": "string"}),                                # top-level wrapper
+    }
+
+
+class AnyOfNullOptionalTests(unittest.TestCase):
+    """``anyOf`` / ``oneOf`` of one member and ``{"type": "null"}`` is that
+    member, nullable (ticket jui-api-model-anyof-null-optional-stops-build).
+    It stopped the build as an untagged union."""
+
+    SPELLINGS = ("anyOf-last", "anyOf-first", "oneOf-last", "3.0-ref", "3.0-allof")
+
+    def _doc(self, spelling: str):
+        return parse_swagger(_doc(_null_union_schemas(spelling)), "test.json")
+
+    def test_loads_nullable(self):
+        m = next(s for s in self._doc("anyOf-last").schemas if s.name == "M")
+        f = {x.wire_name: x for x in m.fields}
+        self.assertEqual((f["owner"].required, f["owner"].nullable, f["owner"].type.ref_name,
+                          f["owner"].description), (True, True, "Pet", "who"))
+        self.assertTrue(f["pets"].type.element.nullable and f["pets"].type.element.is_object_ref)
+        self.assertTrue(f["by_key"].type.element.nullable)
+        self.assertFalse(f["plain"].nullable)
+
+    def test_every_spelling_is_the_same_ir(self):
+        want = self._doc("3.0-ref")
+        for spelling in self.SPELLINGS:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(self._doc(spelling), want)
+
+    def test_every_spelling_generates_the_same_bytes_on_every_face(self):
+        from jui_cli.generators.android_api_model_generator import (
+            AndroidApiModelGenerator, AndroidApiPlatformConfig)
+        from jui_cli.generators.ios_api_model_generator import (
+            IosApiModelGenerator, IosApiPlatformConfig)
+        from jui_cli.generators.web_api_model_generator import (
+            WebApiModelGenerator, WebApiPlatformConfig)
+
+        def sources(doc):
+            with tempfile.TemporaryDirectory() as tmp:
+                t = Path(tmp)
+                gens = [WebApiModelGenerator(WebApiPlatformConfig(
+                            sources_root=t, model_dir="m", dto_subdir="g",
+                            case_convention="camelCase", format_mapping=True)),
+                        IosApiModelGenerator(IosApiPlatformConfig(sources_root=t, format_mapping=True)),
+                        AndroidApiModelGenerator(AndroidApiPlatformConfig(
+                            sources_root=t, format_mapping=True, serializer="kotlinx"))]
+                return [g.generate_dto_source(s, doc) for g in gens for s in doc.schemas]
+
+        want = sources(self._doc("3.0-ref"))
+        self.assertTrue(any("owner: PetDto | null;" in src for src in want))  # the shape is there
+        for spelling in self.SPELLINGS:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(sources(self._doc(spelling)), want)
+
+    def test_control_every_other_union_still_stops(self):
+        other = {"type": "object", "properties": {"x": {"type": "integer"}}}
+        for comb in ("anyOf", "oneOf"):
+            for members in ([_REF, other], [_REF, other, _NULL], [_NULL], [_NULL, _NULL]):
+                with self.subTest(comb=comb, members=members), self.assertRaises(OpenAPILoadError):
+                    parse_swagger(_doc({"Pet": _null_union_schemas("3.0-ref")["Pet"],
+                                        "M": {"type": "object", "properties": {
+                                            "a": {comb: members}}}}), "test.json")
+        with self.assertRaises(OpenAPILoadError):   # anyOf of one member and no null
+            parse_swagger(_doc({"Pet": _null_union_schemas("3.0-ref")["Pet"],
+                                "M": {"type": "object", "properties": {"a": {"anyOf": [_REF]}}}}),
+                          "test.json")
+
+
+def _load_normalizer():
+    """document_tools' normalizer from THIS checkout, by file — an installed
+    jsonui_doc_cli (``~/.jsonui-cli``) would be another release's copy."""
+    import importlib.util
+    import sys
+    path = Path(__file__).resolve().parents[2] / "document_tools/jsonui_doc_cli/check/openapi_normalize.py"
+    spec = importlib.util.spec_from_file_location("_openapi_normalize_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module   # dataclasses resolve their module by name
+    spec.loader.exec_module(module)
+    return module
+
+
+class NullUnionsAgreeWithTheNormalizerTests(unittest.TestCase):
+    """openapi-diff (document_tools) and the build read a null union the same
+    way: over every combination of up to three members from {a ref, a string,
+    an object, null, null with a description}, under ``anyOf`` and
+    ``oneOf``, the build folds it exactly when the normalizer does. The one
+    set apart — ``anyOf`` / ``oneOf`` of a single member and no null, which
+    the normalizer also unwraps — is the user's ruling (every non-null
+    ``anyOf`` keeps the stop) and is pinned here as that set, not as a
+    difference found by accident."""
+
+    MEMBERS = {
+        "ref": _REF,
+        "string": {"type": "string"},
+        "object": {"type": "object", "properties": {"x": {"type": "integer"}}},
+        "null": _NULL,
+        "null+doc": {"type": "null", "description": "absent"},
+    }
+
+    def test_the_two_fold_the_same_null_unions(self):
+        import itertools
+        norm = _load_normalizer()
+        pet = _null_union_schemas("3.0-ref")["Pet"]
+        agreed = apart = folded = 0
+        for comb in ("anyOf", "oneOf"):
+            for size in (1, 2, 3):
+                for names in itertools.product(self.MEMBERS, repeat=size):
+                    members = [self.MEMBERS[x] for x in names]
+                    field = {comb: members}
+                    doc = _doc({"Pet": pet, "M": {"type": "object", "properties": {"a": field}}})
+                    out = norm.normalize_schema(field, norm._Resolver(doc))
+                    normalizer_folds = isinstance(out, dict) and comb not in out
+                    try:
+                        parse_swagger(doc, "test.json")
+                        build_folds = True
+                    except OpenAPILoadError:
+                        build_folds = False
+                    has_null = any(m.get("type") == "null" for m in members)
+                    with self.subTest(comb=comb, members=names):
+                        if has_null:
+                            self.assertEqual(build_folds, normalizer_folds)
+                            if normalizer_folds:
+                                self.assertTrue(out.get("nullable"))
+                                folded += 1
+                            agreed += 1
+                        else:
+                            # the ruling: only the single-member unwrap differs
+                            self.assertFalse(build_folds)
+                            self.assertEqual(normalizer_folds, size == 1)
+                            apart += size == 1
+        print(f"[null-union agreement] {agreed} null unions compared ({folded} folded by both), "
+              f"{apart} non-null single-member unwraps set apart by the ruling")
+        self.assertEqual(apart, 2 * 3)   # 3 non-null members x anyOf / oneOf
+        # both outcomes occur, so agreement is not two calculators that never fold
+        self.assertTrue(0 < folded < agreed, (folded, agreed))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1140,6 +1140,12 @@ def _kotlin_wrapper_serializer_expr(
         inner_expr, inner_imports = _kotlin_wrapper_serializer_expr(
             ftype.element, enum_names, format_native=format_native
         )
+        if ftype.element.nullable:
+            # ``List<Long?>`` needs ``ListSerializer(Long.serializer().nullable)``
+            # — the bare element serializer is a ``KSerializer<Long>`` and
+            # neither types nor decodes a null element.
+            inner_expr = f"{inner_expr}.nullable"
+            inner_imports = inner_imports + ["import kotlinx.serialization.builtins.nullable"]
         return (
             f"ListSerializer({inner_expr})",
             inner_imports + ["import kotlinx.serialization.builtins.ListSerializer"],

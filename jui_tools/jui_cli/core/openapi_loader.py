@@ -37,7 +37,10 @@ Format retention (2026-07, plan ``2026-07-24-v1-unsupported/03``):
 §3.3 ERROR halt rules enforced here (raise :class:`OpenAPILoadError`):
 
 - ``anyOf`` → halt (permanent — untagged unions have no portable native
-  representation)
+  representation). Not a halt: a null union — ``anyOf`` / ``oneOf`` of
+  exactly one non-null member plus ``{"type": "null"}``, and the 3.1 type
+  array ``type: [T, "null"]`` — which folds to that member / ``T``,
+  nullable (:func:`_fold_null_type`)
 - ``oneOf`` without ``discriminator`` → halt
 - union schema used as a variant of another union → halt (permanent)
 - non-string / duplicate / missing variant tags when inferring a
@@ -686,7 +689,7 @@ def parse_swagger(
     for name, body in schemas_root.items():
         if not isinstance(body, dict):
             continue
-        body = _fold_const(body)
+        body = _fold_null_type(_fold_const(body))
         # Skip filtered-out schemas before any parse work (lenient filter).
         if kept_schema_names is not None and name not in kept_schema_names:
             continue
@@ -950,6 +953,57 @@ def _fold_const(body: dict[str, Any]) -> dict[str, Any]:
     folded = {k: v for k, v in body.items() if k != "const"}
     folded["enum"] = [value]
     folded.setdefault("type", inferred)
+    return folded
+
+
+def _is_null_member(member: Any) -> bool:
+    """``{"type": "null"}`` as a combinator member — the normalizer's test."""
+    return isinstance(member, dict) and member.get("type") == "null"
+
+
+def _fold_null_type(body: dict[str, Any]) -> dict[str, Any]:
+    """OpenAPI 3.1 ``type: [T, "null"]`` is the nullable that 3.0 spells
+    ``type: T, nullable: true``.
+
+    Same reason as :func:`_fold_const`: openapi-diff's normalizer already
+    folds the two spellings to one, so a document written the 3.1 way gets
+    no drift finding while the build halted on it (``unrecognized type
+    ['integer', 'null']`` — an error that never says null). Folding before
+    classification gives the 3.1 spelling every 3.0 behavior — field,
+    array element, map value, wrapper (ticket
+    jui-api-model-openapi-31-null-type-ignored). A list with more than one
+    non-null type (an untagged union) or none at all is left alone for the
+    existing ``unknown-type`` halt.
+
+    ``anyOf`` / ``oneOf`` of exactly one non-null member and one or more
+    ``{"type": "null"}`` members (Pydantic's ``Optional[X]``, either order)
+    is that member, nullable — the same set the normalizer folds as a null
+    union (ticket jui-api-model-anyof-null-optional-stops-build). The
+    member's keys are merged under the combinator's siblings (the
+    normalizer's ``{**inner, **rest}``), so a ``$ref`` member reads like the
+    3.0 ``$ref`` + ``nullable: true`` spelling. Every other ``anyOf`` keeps
+    the permanent stop, and a ``oneOf`` the union paths.
+
+    Returns a shallow copy; never mutates the caller's schema dict.
+    """
+    for comb in ("anyOf", "oneOf"):
+        members = body.get(comb)
+        if not isinstance(members, list):
+            continue
+        non_null = [m for m in members if not _is_null_member(m)]
+        if len(non_null) == 1 and len(non_null) < len(members) and isinstance(non_null[0], dict):
+            rest = {k: v for k, v in body.items() if k != comb}
+            return _fold_null_type({**non_null[0], **rest, "nullable": True})
+    types = body.get("type")
+    if not isinstance(types, list):
+        return body
+    non_null = [t for t in types if t != "null"]
+    if len(non_null) != 1:
+        return body
+    folded = dict(body)
+    folded["type"] = non_null[0]
+    if len(non_null) != len(types):
+        folded["nullable"] = True
     return folded
 
 
@@ -1685,7 +1739,10 @@ def _check_polymorphic(
     Halted (both permanent — see the freeze declarations in plan
     ``2026-07-24-v1-unsupported/02``):
     - ``anyOf`` — untagged union; there is no portable native
-      representation across Swift / Kotlin / TypeScript
+      representation across Swift / Kotlin / TypeScript. A null union
+      (one non-null member plus ``{"type": "null"}``, under ``anyOf`` or
+      ``oneOf``) never reaches here: :func:`_fold_null_type` has already
+      read it as that member, nullable
     - ``oneOf`` without ``discriminator`` — no way to dispatch
     - ``discriminator`` without ``oneOf`` — meaningless alone
     """
@@ -1695,7 +1752,9 @@ def _check_polymorphic(
             "'anyOf' (untagged union) is not supported, permanently: "
             "there is no portable native representation across Swift / "
             "Kotlin / TypeScript codegen. Restructure the schema as "
-            "'oneOf' with a discriminator tag instead.",
+            "'oneOf' with a discriminator tag instead. (Only a null union is "
+            "read: exactly one non-null member plus {\"type\": \"null\"} "
+            "folds to that member, nullable.)",
             source=source_path,
             pointer=pointer,
         )
@@ -1784,6 +1843,7 @@ def _extract_fields(
     for prop_name, prop_body in properties.items():
         if not isinstance(prop_body, dict):
             continue
+        prop_body = _fold_null_type(prop_body)
         prop_pointer = f"{parent_pointer}/properties/{prop_name}"
         ftype, derived, enums = _field_type(
             prop_body,
@@ -1816,6 +1876,21 @@ def _extract_fields(
     return fields, extra_inline, extra_enums
 
 
+def _with_element_nullable(element: FieldType, body: dict[str, Any]) -> FieldType:
+    """Carry ``nullable: true`` on an array's ``items`` / a map's
+    ``additionalProperties`` onto the element type.
+
+    A field's own ``nullable`` is folded in by :func:`_extract_fields`; an
+    element has no field around it, so without this the flag was read by no
+    one and every face typed ``[[1, null]]`` as an array of non-null values
+    (ticket jui-web-api-model-nullable-array-items-dropped). An element is
+    never "omitted", so here the flag means exactly "may be JSON ``null``".
+    """
+    if not _fold_null_type(body).get("nullable"):
+        return element
+    return FieldType(**{**element.__dict__, "nullable": True})
+
+
 def _field_type(
     body: dict[str, Any],
     *,
@@ -1833,7 +1908,7 @@ def _field_type(
     (transitively, since nested inline objects can themselves contain inline
     objects/enums).
     """
-    body = _fold_const(body)
+    body = _fold_null_type(_fold_const(body))
     _check_polymorphic(body, source_path=source_path, pointer=pointer, at_field_level=True)
 
     # 1pre. ``oneOf`` + ``discriminator`` with explicit ``mapping`` →
@@ -1903,7 +1978,7 @@ def _field_type(
             pointer=f"{pointer}/items",
         )
         return (
-            FieldType(is_array=True, element=element_type),
+            FieldType(is_array=True, element=_with_element_nullable(element_type, items)),
             derived,
             derived_enums,
         )
@@ -1924,7 +1999,7 @@ def _field_type(
                 pointer=f"{pointer}/additionalProperties",
             )
             return (
-                FieldType(is_map=True, element=value_type),
+                FieldType(is_map=True, element=_with_element_nullable(value_type, addl)),
                 derived,
                 derived_enums,
             )
@@ -2085,7 +2160,8 @@ def _pascal(s: str) -> str:
 def _all_equatable(fields: list[FieldDef]) -> bool:
     """All field types support equality (no ``Any`` leakage).
 
-    In v1 we halt on oneOf/anyOf, so ``Any`` shouldn't actually appear.
+    anyOf halts (a null union folds to its member first) and oneOf needs a
+    discriminator, so ``Any`` shouldn't actually appear.
     Kept as a flag for future-proofing when v2 adds polymorphic types.
     """
     return True

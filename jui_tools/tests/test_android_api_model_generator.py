@@ -1,6 +1,9 @@
 """Tests for android_api_model_generator — DTO + enum + Domain across 3 serializers."""
 from __future__ import annotations
 
+import os
+import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -1573,6 +1576,215 @@ class FormatAwareMappingTests(unittest.TestCase):
             "import kotlinx.datetime.serializers.InstantIso8601Serializer", src
         )
         self.assertIn("import kotlinx.datetime.Instant", src)
+
+
+
+#: ticket jui-web-api-model-nullable-array-items-dropped — measured on this
+#: face too: the element ``?`` was dropped, so a ``null`` element failed the
+#: whole decode (kotlinx: ``Unexpected symbol 'n' in numeric literal at
+#: path: $.cells[0][1]``).
+NULLABLE_ELEMENT_SCHEMAS = {
+    "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+    "Grid": {"type": "object", "required": ["cells", "tags", "scores"], "properties": {
+        "cells": {"type": "array", "items": {"type": "array", "items": {
+            "type": "integer", "format": "int64", "nullable": True}}},
+        "tags": {"type": "array", "items": {"type": "string", "nullable": True}},
+        "scores": {"type": "object", "additionalProperties": {"type": "number", "nullable": True}},
+        "when": {"type": "array", "items": {"type": "string", "format": "date-time",
+                                            "nullable": True}},
+        "when_by_key": {"type": "object", "additionalProperties": {
+            "type": "string", "format": "date-time", "nullable": True}},
+        "rows": {"type": "array", "nullable": True, "items": {
+            "type": "array", "nullable": True, "items": {"type": "integer", "nullable": True}}},
+        "pets": {"type": "array", "items": {
+            "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+        "plain": {"type": "array", "items": {"type": "integer"}},
+    }},
+    "Counts": {"type": "array", "items": {"type": "integer", "format": "int64", "nullable": True}},
+}
+
+
+class NullableElementTests(unittest.TestCase):
+    """An array element / map value declared ``nullable: true`` is ``T?``."""
+
+    def _sources(self, serializer: str) -> dict[str, str]:
+        doc = parse_swagger(_doc(NULLABLE_ELEMENT_SCHEMAS), "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = _gen(Path(tmp), serializer)
+            # moshi has no non-object wrapper (it halts on one by design)
+            return {s.name: gen.generate_dto_source(s, doc) for s in doc.schemas
+                    if serializer == "kotlinx" or s.wrapped_type is None}
+
+    def test_dto_types_on_both_serializers(self):
+        for serializer in ("kotlinx", "moshi"):
+            src = self._sources(serializer)["Grid"]
+            for name, type_str in [("cells", "List<List<Long?>>"), ("tags", "List<String?>"),
+                                   ("scores", "Map<String, Double?>"),
+                                   ("rows", "List<List<Int?>?>?"), ("pets", "List<PetDto?>?"),
+                                   ("plain", "List<Int>?")]:  # control: unchanged
+                self.assertRegex(src, rf"val {name}: {re.escape(type_str)}[ ,]", serializer)
+
+    def test_wrapper_serializer_admits_a_null_element(self):
+        src = self._sources("kotlinx")["Counts"]
+        self.assertIn("data class CountsDto(val items: List<Long?>)", src)
+        self.assertIn(
+            "private val inner: KSerializer<List<Long?>> = ListSerializer(Long.serializer().nullable)",
+            src)
+        self.assertIn("import kotlinx.serialization.builtins.nullable", src)
+
+    def test_control_a_wrapper_without_null_elements_is_unchanged(self):
+        doc = parse_swagger(_doc({"Ids": {"type": "array", "items": {"type": "integer"}}}),
+                            "test.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _gen(Path(tmp), "kotlinx").generate_dto_source(doc.schemas[0], doc)
+        self.assertIn("= ListSerializer(Int.serializer())\n", src)
+        self.assertNotIn(".nullable", src)
+
+
+
+#: Every shape the DTO emitter has a branch for: object, enum ref, inline
+#: enum, oneOf field (custom serializer), schema-level union, wrapper, the
+#: three retained formats, default literals, and nullable elements.
+COMPILE_SCHEMAS = {
+    **NULLABLE_ELEMENT_SCHEMAS,
+    "Status": {"type": "string", "enum": ["active", "gone"]},
+    "Dog": {"type": "object", "required": ["kind", "bark"], "properties": {
+        "kind": {"type": "string"}, "bark": {"type": "string"}}},
+    "Cat": {"type": "object", "required": ["kind", "purr"], "properties": {
+        "kind": {"type": "string"}, "purr": {"type": "integer"}}},
+    "Animal": {"oneOf": [{"$ref": "#/components/schemas/Dog"}, {"$ref": "#/components/schemas/Cat"}],
+               "discriminator": {"propertyName": "kind", "mapping": {
+                   "dog": "#/components/schemas/Dog", "cat": "#/components/schemas/Cat"}}},
+    "Owner": {"type": "object", "required": ["id", "status", "kind", "pet"], "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "status": {"$ref": "#/components/schemas/Status"},
+        "level": {"type": "string", "enum": ["low", "high"], "default": "low"},
+        "kind": {"type": "string"},
+        "pet": {"oneOf": [{"$ref": "#/components/schemas/Dog"}, {"$ref": "#/components/schemas/Cat"}],
+                "discriminator": {"propertyName": "kind", "mapping": {
+                    "dog": "#/components/schemas/Dog", "cat": "#/components/schemas/Cat"}}},
+        "count": {"type": "integer", "default": 3},
+    }},
+    "Attachment": {"type": "object", "required": ["data", "at"], "properties": {
+        "data": {"type": "string", "format": "binary"},
+        "at": {"type": "string", "format": "date-time"},
+        "seen": {"type": "array", "items": {"type": "string", "format": "date-time",
+                                            "nullable": True}},
+    }},
+}
+
+KOTLINX_HARNESS = """
+import com.example.app.model.generated.*
+import kotlinx.serialization.json.Json
+
+fun main() {
+    val raw = \"\"\"{"cells":[[1,null],[null]],"tags":["a",null],"scores":{"x":1.5,"y":null},"when":["t",null],"when_by_key":{"a":null},"rows":[[1,null],null],"pets":[{"name":"p"},null]}\"\"\"
+    val g = Json.decodeFromString(GridDto.serializer(), raw)
+    check(g.cells[0][1] == null && g.cells[1][0] == null && g.tags[1] == null && g.scores["y"] == null)
+    check(g.rows!![1] == null && g.pets!![1] == null && g.whenByKey!!["a"] == null)
+    val out = Json.encodeToString(GridDto.serializer(), g)
+    check(out.contains("\\"cells\\":[[1,null],[null]]")) { out }
+    val c = Json.decodeFromString(CountsDto.serializer(), "[1,null]")
+    check(c.items == listOf(1L, null)) { c.toString() }
+    check(Json.encodeToString(CountsDto.serializer(), c) == "[1,null]")
+    println("KOTLINX_OK")
+}
+"""
+
+
+class GeneratedKotlinCompilesTests(unittest.TestCase):
+    """The DTOs reach a compiler (ticket
+    jui-android-api-model-kotlinx-compile-arm-uncovered): kotlinx with the
+    serialization plugin (and run — a decode / encode with null elements),
+    format-mapped kotlinx with kotlinx-datetime, and moshi. Until this arm no
+    generated DTO was compiled anywhere; the one kotlinc arm compiled enums
+    against the stdlib alone. Jars come from the fetch script's pins, as for
+    that arm, and in CI the collection gate refuses a skip."""
+
+    PLUGIN = ("org.jetbrains.kotlin", "kotlin-serialization-compiler-plugin-embeddable")
+    SERIALIZATION = [("org.jetbrains.kotlinx", "kotlinx-serialization-core-jvm"),
+                     ("org.jetbrains.kotlinx", "kotlinx-serialization-json-jvm")]
+    DATETIME = ("org.jetbrains.kotlinx", "kotlinx-datetime-jvm")
+    MOSHI = ("com.squareup.moshi", "moshi")
+
+    def setUp(self):
+        from tests.test_api_model_enum_case_names import (
+            FETCH_HINT, _kotlin_compiler, _pinned, _pinned_jar)
+        found = _kotlin_compiler()
+        if found[0] is None:
+            self.skipTest(found[1])
+        self.java, self.compiler_cp, self.stdlib, self.version = found
+        home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+        pinned = _pinned()
+        names = [self.PLUGIN, *self.SERIALIZATION, self.DATETIME, self.MOSHI]
+        self.jars = {n: _pinned_jar(home, *n, pinned) for n in names}
+        missing = [f"{g}:{a}:{pinned.get((g, a))}" for (g, a), j in self.jars.items() if j is None]
+        if missing:
+            self.skipTest(f"not in the Gradle cache at the pinned version: {', '.join(missing)}"
+                          f" — fetch: {FETCH_HINT}")
+        # the plugin is the compiler's own version, or the compiler refuses it
+        self.assertEqual(pinned[self.PLUGIN], self.version)
+
+    def _emit(self, out: Path, serializer: str, formats: bool) -> list[str]:
+        doc = parse_swagger(_doc(COMPILE_SCHEMAS), "test.json")
+        gen = AndroidApiModelGenerator(AndroidApiPlatformConfig(
+            sources_root=out, serializer=serializer, format_mapping=formats))
+        sources: dict[str, str] = {}
+        for schema in doc.schemas:
+            if serializer == "moshi" and (schema.wrapped_type is not None or any(
+                    f.type.is_one_of_ref for f in schema.fields)):
+                continue  # moshi halts on both by design
+            sources[f"{schema.name}Dto.kt"] = gen.generate_dto_source(schema, doc)
+            sources[f"{schema.name}.kt"] = gen.generate_domain_source(schema)
+        for enum in doc.enums:
+            sources[f"{enum.name}.kt"] = gen.generate_enum_source(enum, doc)
+        if serializer == "kotlinx":
+            for union in doc.unions:
+                sources[f"{union.name}Dto.kt"] = gen.generate_union_source(union, doc)
+                sources[f"{union.name}.kt"] = gen.generate_union_domain_source(union)
+        if formats:
+            sources["Uuid.kt"] = gen.generate_uuid_alias_source()
+            sources["Base64ByteArraySerializer.kt"] = gen.generate_base64_serializer_source()
+        out.mkdir(parents=True, exist_ok=True)
+        for name, src in sources.items():
+            (out / name).write_text(src, encoding="utf-8")
+        return [str(out / n) for n in sources]
+
+    def _compile(self, tmp: Path, paths: list[str], target: list[str], plugin: bool) -> None:
+        args = [self.java, "-cp", self.compiler_cp, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
+                "-no-stdlib", "-cp", ":".join([self.stdlib, *target]), "-d", str(tmp / "classes")]
+        if plugin:
+            args.append(f"-Xplugin={self.jars[self.PLUGIN]}")
+        print(f"[kotlinc] kotlin-compiler-embeddable {self.version}, {len(paths)} files")
+        r = subprocess.run([*args, *paths], capture_output=True, text=True, timeout=600)
+        diagnostics = [l for l in (r.stdout + r.stderr).splitlines()
+                       if "error:" in l or "warning:" in l]
+        self.assertEqual((r.returncode, diagnostics), (0, []), r.stdout + r.stderr)
+        self.assertTrue(list((tmp / "classes").rglob("*.class")), "kotlinc wrote no class")
+
+    def test_kotlinx_compiles_and_round_trips_null_elements(self):
+        target = [self.jars[n] for n in self.SERIALIZATION]
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            paths = self._emit(t / "src", "kotlinx", formats=False)
+            (t / "Main.kt").write_text(KOTLINX_HARNESS, encoding="utf-8")
+            self._compile(t, paths + [str(t / "Main.kt")], target, plugin=True)
+            run = subprocess.run([self.java, "-cp", ":".join([str(t / "classes"), self.stdlib, *target]),
+                                  "MainKt"], capture_output=True, text=True, timeout=120)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("KOTLINX_OK", run.stdout)
+
+    def test_kotlinx_with_format_mapping_compiles(self):
+        target = [self.jars[n] for n in self.SERIALIZATION] + [self.jars[self.DATETIME]]
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            self._compile(t, self._emit(t / "src", "kotlinx", formats=True), target, plugin=True)
+
+    def test_moshi_compiles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            self._compile(t, self._emit(t / "src", "moshi", formats=False),
+                          [self.jars[self.MOSHI]], plugin=False)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 """Normalization of OpenAPI documents into a comparable form.
 
 Why this exists (review §3-1): the docs side is hand-written OpenAPI 3.0
-(oneOf/anyOf banned by jui codegen), while implementation-side documents —
+(jui codegen halts on anyOf and on oneOf without a discriminator — except a
+null union, one non-null member plus `{"type": "null"}`, which it folds to
+nullable exactly as below), while implementation-side documents —
 especially FastAPI + Pydantic v2 — are OpenAPI 3.1 full of:
 
 - Optional fields as ``anyOf: [X, {"type": "null"}]``

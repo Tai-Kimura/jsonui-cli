@@ -783,8 +783,10 @@ def _ts_type_with_enums(
 ) -> str:
     """Render a :class:`FieldType` as a TypeScript type expression.
 
-    Optional / nullable are signaled by the parent (``?:`` and ``| null`` in
-    the field declaration) — this function only returns the bare type.
+    A field's own optional / nullable are signaled by the parent (``?:`` and
+    ``| null`` in the field declaration) — this function returns the bare
+    type of the field. An array element or map value has no declaration of
+    its own, so its ``nullable`` is rendered here (:func:`_ts_element`).
     """
     if ftype.is_primitive:
         base = _PRIMITIVE_TO_TS[ftype.primitive]
@@ -797,19 +799,38 @@ def _ts_type_with_enums(
         return f"{ftype.ref_name}Dto"
     if ftype.is_array:
         inner = (
-            _ts_type_with_enums(ftype.element, enum_names, format_native=format_native)
+            _ts_element(
+                _ts_type_with_enums(ftype.element, enum_names, format_native=format_native),
+                ftype.element,
+                in_array=True,
+            )
             if ftype.element
             else "string"
         )
         return f"{inner}[]"
     if ftype.is_map:
         inner = (
-            _ts_type_with_enums(ftype.element, enum_names, format_native=format_native)
+            _ts_element(
+                _ts_type_with_enums(ftype.element, enum_names, format_native=format_native),
+                ftype.element,
+                in_array=False,
+            )
             if ftype.element
             else "string"
         )
         return f"Record<string, {inner}>"
     return "string"
+
+
+def _ts_element(rendered: str, element: FieldType, *, in_array: bool) -> str:
+    """An array element / map value that may be JSON ``null`` says so:
+    ``(number | null)[]`` / ``Record<string, number | null>``.
+
+    Parenthesised inside ``[]``, which binds tighter than ``|``
+    (``number | null[]`` would be a number or an array of nulls)."""
+    if not element.nullable:
+        return rendered
+    return f"({rendered} | null)" if in_array else f"{rendered} | null"
 
 
 # --------------------------------------------------------------------------- #
@@ -892,14 +913,22 @@ def _ts_wire_type(
         return f"{ftype.ref_name}Wire"
     if ftype.is_array:
         inner = (
-            _ts_wire_type(ftype.element, enum_names, affected)
+            _ts_element(
+                _ts_wire_type(ftype.element, enum_names, affected),
+                ftype.element,
+                in_array=True,
+            )
             if ftype.element
             else "string"
         )
         return f"{inner}[]"
     if ftype.is_map:
         inner = (
-            _ts_wire_type(ftype.element, enum_names, affected)
+            _ts_element(
+                _ts_wire_type(ftype.element, enum_names, affected),
+                ftype.element,
+                in_array=False,
+            )
             if ftype.element
             else "string"
         )
@@ -907,6 +936,13 @@ def _ts_wire_type(
     # Primitives (incl. date-time → string) and unaffected refs match the
     # flag-off rendering exactly.
     return _ts_type_with_enums(ftype, enum_names)
+
+
+def _ts_null_element_guard(element: FieldType, v: str, converted: str) -> str:
+    """A null element / map value is carried as ``null``, not converted."""
+    if not element.nullable or converted == v:
+        return converted
+    return f"{v} == null ? {v} : {converted}"
 
 
 def _ts_parse_expr(
@@ -923,11 +959,15 @@ def _ts_parse_expr(
         return f"parse{ftype.ref_name}Dto({src})"
     if ftype.is_array and ftype.element is not None:
         v = f"v{depth}"
-        inner = _ts_parse_expr(ftype.element, v, affected, depth=depth + 1)
+        inner = _ts_null_element_guard(
+            ftype.element, v, _ts_parse_expr(ftype.element, v, affected, depth=depth + 1)
+        )
         return f"{src}.map(({v}) => {inner})"
     if ftype.is_map and ftype.element is not None:
         k, v = f"k{depth}", f"v{depth}"
-        inner = _ts_parse_expr(ftype.element, v, affected, depth=depth + 1)
+        inner = _ts_null_element_guard(
+            ftype.element, v, _ts_parse_expr(ftype.element, v, affected, depth=depth + 1)
+        )
         return (
             f"Object.fromEntries(Object.entries({src}).map("
             f"([{k}, {v}]) => [{k}, {inner}]))"
@@ -949,11 +989,15 @@ def _ts_serialize_expr(
         return f"serialize{ftype.ref_name}Dto({src})"
     if ftype.is_array and ftype.element is not None:
         v = f"v{depth}"
-        inner = _ts_serialize_expr(ftype.element, v, affected, depth=depth + 1)
+        inner = _ts_null_element_guard(
+            ftype.element, v, _ts_serialize_expr(ftype.element, v, affected, depth=depth + 1)
+        )
         return f"{src}.map(({v}) => {inner})"
     if ftype.is_map and ftype.element is not None:
         k, v = f"k{depth}", f"v{depth}"
-        inner = _ts_serialize_expr(ftype.element, v, affected, depth=depth + 1)
+        inner = _ts_null_element_guard(
+            ftype.element, v, _ts_serialize_expr(ftype.element, v, affected, depth=depth + 1)
+        )
         return (
             f"Object.fromEntries(Object.entries({src}).map("
             f"([{k}, {v}]) => [{k}, {inner}]))"
