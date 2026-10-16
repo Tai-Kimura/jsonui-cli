@@ -1,0 +1,39 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TestBridge/initialState__not_reapplied.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TestBridge.initialState__not_reapplied",
+    "description": "After the receipt is checked the host remounts the fixture, store and all. The new instance is the same screen in the same launch, so the payload is not applied again: it shows the defaults.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "TestBridge"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "initialState__not_reapplied",
+      "description": "After the receipt is checked the host remounts the fixture, store and all. The new instance is the same screen in the same launch, so the payload is not applied again: it shows the defaults.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "label_email",
+          "equals": "unset"
+        },
+        {
+          "assert": "state",
+          "path": "tbEmail",
+          "equals": "unset"
+        }
+      ]
+    }
+  ]
+}
