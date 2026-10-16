@@ -78,7 +78,10 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
                         fallback: () -> Unit = {}, onError: (Throwable) -> Unit = {}, onLoading: () -> Unit = {},
                         content: (Any) -> Unit = {}) {}
     fun DriveEmbedInitParams(viewModel: Any) {}
-    fun ScreenMarker(name: String) {}
+    fun ScreenMarker(name: String, bridge: String? = null) {}
+    class RejectedKey(val key: String, val reason: String)
+    fun rememberTestBridge(screenId: String, snapshot: () -> Map<String, Any?>,
+                           apply: (Map<String, Any?>) -> List<RejectedKey>): String? = null
     enum class Visibility { Visible, Invisible, Gone }
     fun VisibilityWrapper(visibility: Visibility, content: () -> Unit) {}
     class Context
@@ -96,8 +99,10 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     fun <T> AndroidView(factory: (Context) -> T, modifier: Modifier = Modifier, update: (T) -> Unit = {}) {}
     class ProbeData(val pageUrl: String = "", val pageVisibility: Visibility = Visibility.Visible) {
         fun toMap(): Map<String, Any> = emptyMap()
+        fun testSnapshot(): Map<String, Any?> = emptyMap()
+        fun applyTestInitialState(values: Map<String, Any?>, update: ((Map<String, Any?>) -> Unit)?): List<RejectedKey> = emptyList()
     }
-    class ProbeViewModel
+    class ProbeViewModel { fun updateData(updates: Map<String, Any?>) {} }
   KOTLIN
 
   it 'runs every converter that emits an AndroidView (a new one joins the matrix)' do

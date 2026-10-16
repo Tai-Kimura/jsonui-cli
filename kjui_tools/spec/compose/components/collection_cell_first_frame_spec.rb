@@ -177,7 +177,7 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
         Frame.effects += { kotlinx.coroutines.coroutineScope { block() } }
     }
     // What the scaffolded ViewModel holds (its Data's `item`, here the map).
-    open class Model { var item: Map<String, Any> = emptyMap() }
+    open class Model { var item: Map<String, Any?> = emptyMap() }
     inline fun <reified T : Any> viewModel(key: String? = null): T =
         Frame.models.getOrPut(key!!) { T::class.java.getDeclaredConstructor().newInstance() } as T
 

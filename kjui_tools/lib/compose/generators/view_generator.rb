@@ -443,7 +443,7 @@ module KjuiTools
                 // The shape below is byte-identical to what
                 // ComposeBuilder#generate_update_data_function emits for a view
                 // with no declared properties.
-                fun updateData(updates: Map<String, Any>) {
+                fun updateData(updates: Map<String, Any?>) {
                     _data.update { current ->
                         var updated = current
                         updates.forEach { (key, value) ->

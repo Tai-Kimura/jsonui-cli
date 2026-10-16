@@ -373,7 +373,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
     it 'applies a repeated update instead of comparing it to the last request' do
       code = described_class.new.send(:generate_update_data_function, [], 'Test')
       expect(code).not_to include('_lastUpdateData')
-      expect(code).to include('fun updateData(updates: Map<String, Any>) {')
+      expect(code).to include('fun updateData(updates: Map<String, Any?>) {')
       expect(code).to include('_data.update { current ->')
     end
   end

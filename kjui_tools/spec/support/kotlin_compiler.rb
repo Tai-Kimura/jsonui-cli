@@ -199,11 +199,46 @@ module KotlinCompiler
   # emitted code that calls them for real (the Dynamic wrappers read Gson).
   LIBRARIES = { gson: %w[com.google.code.gson gson] }.freeze
 
+  # KotlinJsonUI 2.44.0's test bridge (library core/TestBridge.kt), as far as
+  # generated code names it — the signatures, transcribed, not the behaviour.
+  # Compiled beside any source that names it, in the library's own package:
+  # every Data class kjui writes calls JsonUITestValue (fully qualified), so
+  # each arm that compiles a Data file would otherwise carry a copy. Only
+  # then: an arm that stubs the library as `object com { ... }` in its own
+  # file conflicts with a package `com`. An arm that asks what the bridge
+  # DOES supplies its own judge (spec/compose/test_bridge_code_spec.rb).
+  TEST_BRIDGE_STUBS = <<~KOTLIN
+    package com.kotlinjsonui.core
+
+    data class RejectedKey(val key: String, val reason: String)
+    sealed interface TestValueVerdict {
+        data class Accepted(val value: Any?) : TestValueVerdict
+        data class Rejected(val reason: String) : TestValueVerdict
+    }
+    object JsonUITestValue {
+        fun applyAll(
+            values: Map<String, Any?>,
+            declared: Map<String, String>,
+            update: ((Map<String, Any?>) -> Unit)?,
+            resolve: (key: String, accepted: Any?) -> TestValueVerdict = { _, v -> TestValueVerdict.Accepted(v) }
+        ): List<RejectedKey> = emptyList()
+        fun resolveColor(accepted: Any?, declaredClass: String, colorOf: (String) -> Any?): TestValueVerdict =
+            TestValueVerdict.Accepted(accepted)
+        fun snapshot(values: Map<String, Any?>, declared: Map<String, String>): Map<String, Any?> = values
+    }
+  KOTLIN
+  TEST_BRIDGE_STUBS_FILE = 'KotlinJsonUITestBridgeStubs.kt'
+
+  def with_test_bridge_stubs(source, files)
+    named = ([source] + files.values).any? { |text| text.match?(/com\.kotlinjsonui\.core\.(JsonUITestValue|RejectedKey|TestValueVerdict)\b/) }
+    named ? { TEST_BRIDGE_STUBS_FILE => TEST_BRIDGE_STUBS }.merge(files) : files
+  end
+
   # `files`: further sources compiled with it, by file name — for a stub that
   # must live in its own package, so that an emit naming it without its
   # import does not resolve (a single file has one package, so a stub beside
   # the emit would be found whether or not the emit imports it).
-  def compile(source, libraries: [], files: {})
+  def compile(source, libraries: [], files: {}, test_bridge_stubs: true)
     stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
     reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
     annots   = jar('org.jetbrains', 'annotations')
@@ -219,7 +254,8 @@ module KotlinCompiler
     Dir.mktmpdir('kjui_kotlin') do |dir|
       file = File.join(dir, 'Emitted.kt')
       File.write(file, source)
-      others = files.map do |name, text|
+      sources = test_bridge_stubs ? with_test_bridge_stubs(source, files) : files
+      others = sources.map do |name, text|
         path = File.join(dir, name)
         File.write(path, text)
         path
@@ -246,7 +282,7 @@ module KotlinCompiler
   # when it is open and not when it is shut — not only that it type-checks.
   # `libraries` as for compile (LIBRARIES): on the compile and the run
   # classpath both.
-  def run(source, libraries: [])
+  def run(source, libraries: [], files: {}, test_bridge_stubs: true)
     stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
     reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
     annots   = jar('org.jetbrains', 'annotations')
@@ -258,11 +294,17 @@ module KotlinCompiler
     Dir.mktmpdir('kjui_kotlin_run') do |dir|
       file = File.join(dir, 'Emitted.kt')
       File.write(file, source)
+      sources = test_bridge_stubs ? with_test_bridge_stubs(source, files) : files
+      others = sources.map do |name, text|
+        path = File.join(dir, name)
+        File.write(path, text)
+        path
+      end
       out_dir = File.join(dir, 'out')
       out, err, = Open3.capture3(
         java_bin, '-cp', compiler_cp,
         'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
-        '-no-stdlib', '-cp', target_cp, '-d', out_dir, file
+        '-no-stdlib', '-cp', target_cp, '-d', out_dir, file, *others
       )
       errors = "#{out}\n#{err}".lines.select { |l| l.include?('error:') }.map(&:strip)
       return Run.new(false, errors, '') unless errors.empty?

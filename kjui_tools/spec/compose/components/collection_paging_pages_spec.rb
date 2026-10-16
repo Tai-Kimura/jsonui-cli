@@ -37,7 +37,7 @@ RSpec.describe 'kjui codegen: a paging Collection draws a page per cell of every
     model = generator.send(:cell_viewmodel_content, class_name, 'x_cell', 'com.example')
     params = view[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
     update = model[/fun updateData\((.*?)\)/, 1] or raise 'no updateData in the scaffold'
-    "class #{class_name}ViewModel { var item: Map<String, Any> = emptyMap(); fun updateData(#{update}) { item = updates } }\n" \
+    "class #{class_name}ViewModel { var item: Map<String, Any?> = emptyMap(); fun updateData(#{update}) { item = updates } }\n" \
       "@Composable fun #{class_name}View(#{params.strip}) { Pages.draw(\"#{letter}\" + viewModel.item[\"id\"] + \"@\" + ((modifier as? Tagged)?.tag?.substringAfterLast('_') ?: \"\")) }\n"
   end
 

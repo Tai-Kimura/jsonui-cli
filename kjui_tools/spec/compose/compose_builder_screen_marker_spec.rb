@@ -62,7 +62,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       body = body_of(gen_path('home', 'HomeGeneratedView.kt'))
 
       expect(body).to include('Box(propagateMinConstraints = true) {')
-      expect(body).to include('ScreenMarker("home")')
+      expect(body).to include('ScreenMarker("home", bridge = testBridge)')
 
       # Outside the mode switch: a mode-dependent marker would split test
       # results by rendering mode.

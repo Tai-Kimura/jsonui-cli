@@ -340,6 +340,9 @@ module KjuiTools
             # and makes marked output fail to compile against an older
             # library (the version-skew guard).
             screen_marker: "import com.kotlinjsonui.core.ScreenMarker",
+            # The test bridge beside the marker (jsonui-test-runner spec
+            # 10.3-10.4), screens only. New in KotlinJsonUI 2.44.0.
+            test_bridge: "import com.kotlinjsonui.core.rememberTestBridge",
             embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
             # `hiltViewModel(viewModelStoreOwner, key)`. Works for both

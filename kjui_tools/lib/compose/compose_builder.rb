@@ -24,6 +24,7 @@ require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'interaction_stop_index'
 require_relative 'data_model_updater'
+require_relative 'test_bridge_code'
 require_relative 'helpers/import_manager'
 require_relative 'helpers/binding_expression'
 require_relative 'helpers/modifier_builder'
@@ -330,9 +331,17 @@ module KjuiTools
           if File.exist?(generated_view_file)
             # Calculate the layout name for dynamic mode (relative path without .json)
             dynamic_layout_name = relative_path.sub(/\.json$/, '')
+            screen_id = screen_id_for(json_file)
+            @viewmodel_has_update_data = viewmodel_has_generated_update_data?(viewmodel_file)
+            if screen_id && !@viewmodel_has_update_data
+              Core::Logger.warn "#{relative_path}: #{File.basename(viewmodel_file)} has no generated updateData " \
+                                "(no // >>> GENERATED_CODE_START / END block), so a UI test's initialState " \
+                                "cannot reach this screen: every key it sends is rejected with " \
+                                "'viewModel has no updateData'. Add the block to the ViewModel to let 'kjui build' write it."
+            end
             update_generated_file(generated_view_file, json_data, dynamic_layout_name,
                                   variant_structs: variant_structs,
-                                  screen_id: screen_id_for(json_file))
+                                  screen_id: screen_id)
             warn_if_generated_view_is_unreferenced(pascal_case_name, generated_view_file,
                                                    source_directory)
           else
@@ -2047,6 +2056,17 @@ module KjuiTools
         KOTLIN
       end
 
+      # Whether 'kjui build' writes this ViewModel's updateData (the block
+      # update_viewmodel_file fills), so the test bridge can hand it the
+      # accepted initialState values — `viewModel::updateData` with the
+      # generated `Map<String, Any?>` signature.
+      def viewmodel_has_generated_update_data?(viewmodel_file)
+        return false unless File.exist?(viewmodel_file)
+
+        content = File.read(viewmodel_file)
+        content.include?('// >>> GENERATED_CODE_START') && content.include?('// >>> GENERATED_CODE_END')
+      end
+
       def update_viewmodel_file(file_path, json_data, view_name)
         existing_content = File.read(file_path)
 
@@ -2174,7 +2194,11 @@ module KjuiTools
         if has_unchecked_cast
           code += "    @Suppress(\"UNCHECKED_CAST\")\n"
         end
-        code += "    fun updateData(updates: Map<String, Any>) {\n"
+        # `Any?`: an initialState may set an optional field to null (the test
+        # bridge, jsonui-test-runner spec 10.3). A nullable field takes the
+        # null; any other field keeps its value, as it does for a value of
+        # the wrong type.
+        code += "    fun updateData(updates: Map<String, Any?>) {\n"
         code += "        _data.update { current ->\n"
         code += "            var updated = current\n"
         code += "            updates.forEach { (key, value) ->\n"
@@ -2190,7 +2214,11 @@ module KjuiTools
             class_type = Core::TypeConverter.extract_platform_value(class_type, @mode) if class_type.is_a?(Hash)
             class_type = class_type.to_s
             kotlin_cast = get_kotlin_cast(class_type, name)
-            code += "                    \"#{name}\" -> updated.copy(#{name} = #{kotlin_cast})\n"
+            if nullable_data_field?(prop, class_type)
+              code += "                    \"#{name}\" -> updated.copy(#{name} = if (value == null) null else #{kotlin_cast})\n"
+            else
+              code += "                    \"#{name}\" -> updated.copy(#{name} = #{kotlin_cast})\n"
+            end
           end
           code += "                    else -> updated\n"
         end
@@ -2201,6 +2229,16 @@ module KjuiTools
         code += "        }\n"
         code += "    }\n"
         code
+      end
+
+      # The Data field is declared nullable (DataModelUpdater#generate_data_content):
+      # an optional class, or no default. A callback field is nullable too, but
+      # no initialState sets one (it is an unsupported type).
+      def nullable_data_field?(prop, class_type)
+        return false if class_type.include?('->')
+
+        default_value = prop['defaultValue']
+        class_type.end_with?('?') || default_value.nil? || default_value == 'nil'
       end
 
       def get_kotlin_cast(class_type, name)
@@ -2290,10 +2328,18 @@ module KjuiTools
           inner = body.lines.map { |line| line.strip.empty? ? line : "    #{line}" }.join
           @required_imports.add(:box)
           @required_imports.add(:screen_marker)
+          @required_imports.add(:test_bridge)
+          # The test bridge (jsonui-test-runner spec 10.3-10.4) wraps the same
+          # two branches for the same reason as the marker: both draw from
+          # this `data` and write through this `viewModel`, so an initialState
+          # reaches whichever branch draws, and `state` reads it in either
+          # mode. Its JSON rides on the marker node (no node of its own).
           code = "#{indent_str}Box(propagateMinConstraints = true) {\n"
+          code += TestBridgeCode.bridge_call(screen_id, has_update_data: @viewmodel_has_update_data != false,
+                                                        indent: "#{indent_str}    ")
           code += inner
           code += "#{indent_str}    // Requires KotlinJsonUI >= #{SCREEN_MARKER_MIN_LIBRARY_VERSION} (screen marker)\n"
-          code += "#{indent_str}    ScreenMarker(\"#{screen_id}\")\n"
+          code += "#{indent_str}    ScreenMarker(\"#{screen_id}\", bridge = testBridge)\n"
           code += "#{indent_str}}\n"
           return code
         end
