@@ -12,6 +12,7 @@ from .launch import validate_launch
 from .platform import validate_platform_field
 from .orientation import validate_orientation_field
 from .mock import find_mock_index, validate_mock_reference
+from .initial_state import check_flow_test as check_initial_state
 from ..schema import VALID_FLOW_TOP_LEVEL_KEYS, VALID_SCREEN_TOP_LEVEL_KEYS
 
 
@@ -81,6 +82,10 @@ class FlowTestValidator:
         # Validate launch configuration if present
         if "launch" in data:
             validate_launch(data["launch"], f"{path}.launch", result)
+
+        # initialState: `viewModels` by screen id, `screen` removed, values
+        # against each screen's Data (initial_state's docstring).
+        check_initial_state(data, path, result, self._test_file_path)
 
         # Validate steps
         steps = data.get("steps", [])

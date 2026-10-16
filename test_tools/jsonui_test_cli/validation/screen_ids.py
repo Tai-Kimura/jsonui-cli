@@ -126,10 +126,16 @@ class ScreenIdIndex:
     """Project screen vocabulary, or an inert index when it is unknown
     (``why`` then says why)."""
 
-    def __init__(self, index=None, collisions: dict | None = None, why: str = ""):
+    def __init__(self, index=None, collisions: dict | None = None, why: str = "",
+                 layouts_dir: Path | None = None, styles_dir: Path | None = None):
         self._index = index
         self.collisions = collisions or {}
         self.why = why if index is None else ""
+        #: Where the layouts the index classified live, and their styles —
+        #: what a reader of one layout's contents (its Data, for initialState)
+        #: needs to expand its includes and styles the way the build does.
+        self.layouts_dir = layouts_dir
+        self.styles_dir = styles_dir
 
     @property
     def available(self) -> bool:
@@ -144,6 +150,16 @@ class ScreenIdIndex:
     def role_of(self, screen_id: str) -> str | None:
         entry = self._index.get(screen_id) if self._index else None
         return entry.role if entry else None
+
+    def layout_of(self, screen_id: str) -> Path | None:
+        """The layout file of a screen id (the base file of a variant set),
+        or None: unknown, ambiguous (a collision), or app-owned (no layout)."""
+        if screen_id in self.collisions:
+            return None
+        entry = self._index.get(screen_id) if self._index else None
+        if entry is None or entry.reason == "app-owned":
+            return None
+        return entry.path
 
 
 _CACHE: dict[str, ScreenIdIndex] = {}
@@ -175,8 +191,10 @@ def _index_from_config(config: dict, config_path: Path) -> ScreenIdIndex:
     elif build_screen_index is None:
         result = ScreenIdIndex(why="jui_cli's screen classifier is not importable")
     else:
+        from .element_ids import _styles_dir
         index = build_screen_index(layouts_dir, app_owned)
-        result = ScreenIdIndex(index, index.collisions)
+        result = ScreenIdIndex(index, index.collisions, layouts_dir=layouts_dir,
+                               styles_dir=_styles_dir(config, config_path.parent, layouts_dir))
 
     _CACHE[cache_key] = result
     return result

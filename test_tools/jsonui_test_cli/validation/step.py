@@ -441,6 +441,14 @@ class StepValidator:
             elif resolved_path and resolved_path.exists():
                 # Validate args against referenced screen test
                 self._validate_file_step_args(step, path, result, resolved_path)
+                # Its initialState (the file's, or a case's it runs) is not
+                # applied inside the flow: warned.
+                try:
+                    referenced = json.loads(resolved_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    referenced = None
+                from .initial_state import check_referenced_file
+                check_referenced_file(step, referenced, path, result)
 
     def _validate_file_step_args(self, step: dict, path: str, result: ValidationResult, resolved_path: Path):
         """Validate that flow's args only override existing screen args (no new args allowed)."""
