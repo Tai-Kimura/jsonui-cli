@@ -198,6 +198,34 @@ PLATFORM_ENV_CHROME_CROP: dict[tuple[str, str], tuple[int, int]] = {
 }
 
 
+#: Spellings a host gives a screenshot it takes to EXPLAIN A FAILURE, not to
+#: record a fixture. SwiftJsonUI ConformanceHost writes them into the same
+#: artifacts/ios directory as the captures: ConformanceUITests'
+#: postTapDiagnosis (`<fixture>__post_tap_failure.png`) and the
+#: CellDataRefresh probe (`<name>__post_tap_failure_v<N>.png`).
+#:
+#: 🔻 run 38958247680: the Dynamic host missed a tap in an interactive
+#: fixture and kept the screenshot of it. The codegen host does not host
+#: interactive fixtures, so parity read the diagnostic as "rendered by only
+#: one pipeline — a host that skipped work" and the gate printed a second
+#: error for the one fixture that had already errored. A bake of the same run
+#: would have filed the diagnostic as a new baseline entry.
+DIAGNOSTIC_SCREENSHOT_MARKERS = ("__post_tap_failure",)
+
+
+def is_diagnostic_screenshot(name: str) -> bool:
+    """Whether *name* (a file name or stem) is a failure diagnostic, not a capture."""
+    return any(marker in name for marker in DIAGNOSTIC_SCREENSHOT_MARKERS)
+
+
+def capture_pngs(directory: Path) -> list[Path]:
+    """The fixture captures under *directory*, sorted — every ``*.png`` but
+    the failure diagnostics (DIAGNOSTIC_SCREENSHOT_MARKERS)."""
+    return sorted(
+        png for png in Path(directory).glob("*.png") if not is_diagnostic_screenshot(png.name)
+    )
+
+
 def chrome_crop(platform: str | None, env: str | None) -> tuple[int, int]:
     """``(top, bottom)`` rows to exclude from the hash for this lane."""
     if platform is None or env is None:
@@ -497,7 +525,7 @@ def update_baseline(
             f"artifacts directory not found: {artifacts_dir} — run the {platform} suite first"
         )
 
-    pngs = sorted(artifacts_dir.glob("*.png"))
+    pngs = capture_pngs(artifacts_dir)
     if not pngs:
         raise BaselineError(f"no screenshots under {artifacts_dir} — nothing to baseline")
 

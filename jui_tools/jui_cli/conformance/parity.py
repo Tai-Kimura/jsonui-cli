@@ -55,6 +55,7 @@ from pathlib import Path
 from .baseline import (
     DEFAULT_ENV,
     BaselineError,
+    capture_pngs,
     chrome_crop,
     dhash_file,
     hamming,
@@ -273,11 +274,11 @@ def measure(
     # Both sides are hashed with this lane's chrome crop; mixing crops would
     # read as a deviation on every fixture.
     crop = chrome_crop(platform, env)
-    codegen = {png.name: png for png in sorted(codegen_dir.glob("*.png"))}
+    codegen = {png.name: png for png in capture_pngs(codegen_dir)}
 
     dynamic = {}
     if dynamic_dir.is_dir():
-        dynamic = {png.name: png for png in sorted(dynamic_dir.glob("*.png"))}
+        dynamic = {png.name: png for png in capture_pngs(dynamic_dir)}
     if not dynamic:
         result.source = "baseline"
 
