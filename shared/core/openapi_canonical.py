@@ -160,6 +160,10 @@ class CanonicalOperation:
     #: whole body, so nothing inside it can be unconditionally required — but
     #: the reason sits two levels away from the symptom.
     muted_required: tuple = ()
+    #: Whether the operation declares a `requestBody` at all. False is what
+    #: `request_body_absence` reads: a contract row cannot match a body the
+    #: operation never sends.
+    has_request_body: bool = True
 
     def spec_params(self, convention: str | None = None) -> list:
         return [p.as_spec_param(convention) for p in self.params]
@@ -370,6 +374,7 @@ def index_documents(documents) -> dict:
                     wire_type=_response_wire_type(op),
                     source=source,
                     muted_required=tuple(_muted_required(op, schemas)),
+                    has_request_body=bool(op.get("requestBody")),
                 )
     return index
 
@@ -738,6 +743,59 @@ def lookup(index: dict, endpoint: str):
     if any(k[0] == key[0] for k in index):
         return None, "method_missing"
     return None, "path_missing"
+
+
+# --------------------------------------------------------------------------- #
+# request bodies
+# --------------------------------------------------------------------------- #
+
+#: Methods that carry no request body, whatever a document says: a browser's
+#: `fetch` refuses a body on them, and OpenAPI gives `requestBody` no meaning
+#: there.
+BODYLESS_METHODS = frozenset({"GET", "HEAD"})
+
+
+def request_body_absence(endpoint: str, index: dict | None = None) -> str | None:
+    """Why the operation `endpoint` (`"<METHOD> <path>"`) sends no request
+    body, or None when it does or this cannot tell.
+
+    The one answer to "has this operation a body" for the tools that read a
+    branch contract's `api.<op>.request` (a partial match on the request
+    BODY — `jsonui-doc validate spec`, and `jsonui-test generate
+    branch-tests` / `contracts coverage` through the same route binding):
+    GET / HEAD never have one; any other method has none when the API
+    canon (`index`, from `index_documents`) holds the operation and it
+    declares no `requestBody`. An operation the canon does not hold, or no
+    canon at all, is not judged — absent from the document is not "no body".
+    """
+    if not isinstance(endpoint, str):
+        return None
+    m = ENDPOINT_RE.match(endpoint.strip())
+    if not m:
+        return None
+    verb, path = m.group(1).upper(), m.group(2)
+    if verb not in HTTP_METHODS:
+        return None
+    if verb in BODYLESS_METHODS:
+        return f"{verb} {path} sends no request body ({verb} carries none)"
+    if index:
+        operation, _reason = lookup(index, f"{verb} {path}")
+        if operation is not None and not operation.has_request_body:
+            where = f" in {operation.source}" if operation.source else ""
+            return (f"{verb} {path} sends no request body (the operation{where} "
+                    "declares no requestBody)")
+    return None
+
+
+def request_match_on_bodyless_message(op: str, absence: str) -> str:
+    """The sentence every gate says for `api.<op>.request` on an operation
+    `request_body_absence` calls bodyless — one wording, so the generator and
+    the validator name the same defect the same way."""
+    return (f"'api.{op}.request' is a partial match on the request body, and {absence} "
+            "— the row can never pass, whatever the view model sends. The URL's "
+            "query and path are not recorded; a query expectation has no row "
+            "vocabulary (assert it in a unitContracts case). Remove the "
+            f"'.request' key, or write 'api.{op}': \"called\" for the reach.")
 
 
 # --------------------------------------------------------------------------- #

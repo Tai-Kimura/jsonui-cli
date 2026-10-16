@@ -1342,9 +1342,14 @@ class BranchApiOpQualification(unittest.TestCase):
             _errors_at(result, "then.api.PreferencesRepository.getProfile"), [])
 
     def test_a_qualified_request_match_is_accepted(self):
+        # POST: `.request` matches the request body, and a GET sends none
+        # (refused on its own — test_validator_request_on_a_bodyless_operation).
+        posts = [{"name": owner["name"], "methods": [
+            {**m, "endpoint": m["endpoint"].replace("GET ", "POST ", 1)}
+            for m in owner["methods"]]} for owner in _TWO_OWNERS]
         result = self._result(
             {"api.AccountRepository.getProfile": "success"},
-            {"api.AccountRepository.getProfile.request": {"scope": "full"}})
+            {"api.AccountRepository.getProfile.request": {"scope": "full"}}, posts)
         self.assertEqual(
             _errors_at(result, "then.api.AccountRepository.getProfile.request"), [])
 

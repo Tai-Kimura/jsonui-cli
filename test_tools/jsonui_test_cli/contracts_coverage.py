@@ -57,6 +57,7 @@ from .branch_tests import (
     _scenario_status,
     _screen_of,
     _spec_files,
+    canon_index_for,
     collect_bindings,
     collect_endpoint_ops,
     describe_overlap,
@@ -204,6 +205,9 @@ class Project:
     #: Where the data axis reads layouts and styles (config, jui's defaults).
     layouts_dir: Path | None = None
     styles_dir: Path | None = None
+    #: The API canon `jsonui-doc validate spec` reads (branch_tests
+    #: `canon_index_for`), for the bodyless `.request` refusal in binding.
+    canon_index: dict | None = None
 
 
 def _screen_classifier():
@@ -282,7 +286,8 @@ def load_project(root: Path) -> Project:
         mocks_dir=mocks_dir, mocks=index_mock_files(mocks_dir),
         api=load_api_index(resolved, api_dir if api_dir.is_dir() else None),
         app=app, describes_a_screen=classify,
-        layouts_dir=layouts_dir, styles_dir=styles_dir)
+        layouts_dir=layouts_dir, styles_dir=styles_dir,
+        canon_index=canon_index_for(config_path=root))
 
 
 @dataclass
@@ -600,7 +605,8 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
     if methods:
         bindings = collect_bindings(
             spec, methods, project.mocks, project.mocks_dir, platform,
-            rules=project.app.rules, declarations=declarations)
+            rules=project.app.rules, declarations=declarations,
+            canon_index=project.canon_index)
     else:
         bindings = Bindings(routes=[], rows=[], errors=[])
     by_op = {route.op: route for route in bindings.routes}
