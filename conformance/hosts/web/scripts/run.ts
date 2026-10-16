@@ -514,6 +514,15 @@ async function runFixture(page: Page, fixture: ManifestFixture, launchId: string
         }
       }
     }
+    // A declaring fixture with no screenshot step (an interactive one that
+    // asserts the change instead of photographing it, TestBridge/
+    // initialState__bridge_follows) still owes its stamp: the gate
+    // (after_first_draw.py) reads the result, not the steps.
+    const declaredChange = fixture.state?.afterFirstDraw;
+    if (declaredChange && !afterFirstDraw) {
+      afterFirstDraw = await awaitAfterFirstDraw(page, declaredChange.name);
+      console.log(`[run] afterFirstDraw ${fixture.id}: ${afterFirstDraw.status} — ${afterFirstDraw.landing}`);
+    }
     return { id: fixture.id, status: 'pass', detail: '', screenshot, frames, afterFirstDraw };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
