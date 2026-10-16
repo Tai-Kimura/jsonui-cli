@@ -1,0 +1,760 @@
+{
+  "_doc": [
+    "The Data fields a layout DECLARES — data[] items, after the layout's styles and includes are expanded — per platform, as [name, class as written in the layout].",
+    "Read by shared/core/layout_data_fields.py (the collector validate uses to check initialState keys and values; test_tools/tests/test_layout_data_fields_vectors.py runs it) and by each generator's spec (sjui / kjui / rjui), which run the generator's own expansion and extraction on the same files: the four must agree, case by case.",
+    "Only declared data counts (plan test-runner-initialstate-and-related, decision 1). Fields a generator adds by itself are listed as absent on purpose (generated_fields_are_not_declared).",
+    "files: paths under the project source, layouts/<name>.json and styles/<name>.json. screen: the layout whose fields are listed."
+  ],
+  "cases": [
+    {
+      "id": "flat_root_data",
+      "why": "Every data[] item of the root, in order, with the class as written (closures included: they are declared).",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "title",
+              "class": "String"
+            },
+            {
+              "name": "count",
+              "class": "Int"
+            },
+            {
+              "name": "isOn",
+              "class": "Bool"
+            },
+            {
+              "name": "note",
+              "class": "String?"
+            },
+            {
+              "name": "onTap",
+              "class": "() -> Void"
+            }
+          ],
+          "child": []
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "title",
+            "String"
+          ],
+          [
+            "count",
+            "Int"
+          ],
+          [
+            "isOn",
+            "Bool"
+          ],
+          [
+            "note",
+            "String?"
+          ],
+          [
+            "onTap",
+            "() -> Void"
+          ]
+        ],
+        "android": [
+          [
+            "title",
+            "String"
+          ],
+          [
+            "count",
+            "Int"
+          ],
+          [
+            "isOn",
+            "Bool"
+          ],
+          [
+            "note",
+            "String?"
+          ],
+          [
+            "onTap",
+            "() -> Void"
+          ]
+        ],
+        "web": [
+          [
+            "title",
+            "String"
+          ],
+          [
+            "count",
+            "Int"
+          ],
+          [
+            "isOn",
+            "Bool"
+          ],
+          [
+            "note",
+            "String?"
+          ],
+          [
+            "onTap",
+            "() -> Void"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "data_on_a_node_with_other_keys",
+      "why": "A data[] on a non-root node that also has other keys: sjui / kjui read data at any level; rjui reads it only on the root, an include root, or a node whose keys are data (and type).",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "a",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "type": "View",
+              "id": "box",
+              "data": [
+                {
+                  "name": "b",
+                  "class": "Int"
+                }
+              ],
+              "child": []
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "a",
+            "String"
+          ],
+          [
+            "b",
+            "Int"
+          ]
+        ],
+        "android": [
+          [
+            "a",
+            "String"
+          ],
+          [
+            "b",
+            "Int"
+          ]
+        ],
+        "web": [
+          [
+            "a",
+            "String"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "data_only_nodes",
+      "why": "A node of data alone, and of type + data, is read on every platform.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "a",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "data": [
+                {
+                  "name": "c",
+                  "class": "Bool"
+                }
+              ]
+            },
+            {
+              "type": "View",
+              "data": [
+                {
+                  "name": "d",
+                  "class": "Double"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "a",
+            "String"
+          ],
+          [
+            "c",
+            "Bool"
+          ],
+          [
+            "d",
+            "Double"
+          ]
+        ],
+        "android": [
+          [
+            "a",
+            "String"
+          ],
+          [
+            "c",
+            "Bool"
+          ],
+          [
+            "d",
+            "Double"
+          ]
+        ],
+        "web": [
+          [
+            "a",
+            "String"
+          ],
+          [
+            "c",
+            "Bool"
+          ],
+          [
+            "d",
+            "Double"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "first_declaration_wins",
+      "why": "A later item with a name already declared is dropped, whatever its class.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "x",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "data": [
+                {
+                  "name": "x",
+                  "class": "Int"
+                },
+                {
+                  "name": "y",
+                  "class": "Int"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "x",
+            "String"
+          ],
+          [
+            "y",
+            "Int"
+          ]
+        ],
+        "android": [
+          [
+            "x",
+            "String"
+          ],
+          [
+            "y",
+            "Int"
+          ]
+        ],
+        "web": [
+          [
+            "x",
+            "String"
+          ],
+          [
+            "y",
+            "Int"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "platform_filter",
+      "why": "An item's platform (comma-separated tokens of DataItemPlatform) keeps it to the platforms it names.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "pAll",
+              "class": "String"
+            },
+            {
+              "name": "pIos",
+              "class": "String",
+              "platform": "ios"
+            },
+            {
+              "name": "pAndroid",
+              "class": "String",
+              "platform": "android"
+            },
+            {
+              "name": "pWeb",
+              "class": "String",
+              "platform": "web"
+            },
+            {
+              "name": "pSwift",
+              "class": "String",
+              "platform": "swift"
+            },
+            {
+              "name": "pIosWeb",
+              "class": "String",
+              "platform": "ios, web"
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "pAll",
+            "String"
+          ],
+          [
+            "pIos",
+            "String"
+          ],
+          [
+            "pSwift",
+            "String"
+          ],
+          [
+            "pIosWeb",
+            "String"
+          ]
+        ],
+        "android": [
+          [
+            "pAll",
+            "String"
+          ],
+          [
+            "pAndroid",
+            "String"
+          ]
+        ],
+        "web": [
+          [
+            "pAll",
+            "String"
+          ],
+          [
+            "pWeb",
+            "String"
+          ],
+          [
+            "pIosWeb",
+            "String"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "mode_filter",
+      "why": "An item's mode keeps it to that mode: sjui is swiftui, kjui compose (its default); rjui does not read mode.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "mAll",
+              "class": "String"
+            },
+            {
+              "name": "mSwiftui",
+              "class": "String",
+              "mode": "swiftui"
+            },
+            {
+              "name": "mCompose",
+              "class": "String",
+              "mode": "compose"
+            },
+            {
+              "name": "mUikit",
+              "class": "String",
+              "mode": "uikit"
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "mAll",
+            "String"
+          ],
+          [
+            "mSwiftui",
+            "String"
+          ]
+        ],
+        "android": [
+          [
+            "mAll",
+            "String"
+          ],
+          [
+            "mCompose",
+            "String"
+          ]
+        ],
+        "web": [
+          [
+            "mAll",
+            "String"
+          ],
+          [
+            "mSwiftui",
+            "String"
+          ],
+          [
+            "mCompose",
+            "String"
+          ],
+          [
+            "mUikit",
+            "String"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "include_with_id",
+      "why": "An include's data (the partial's, then the include node's own) is the screen's, each name prefixed by the include id in camelCase.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "own",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "include": "part",
+              "id": "header",
+              "data": [
+                {
+                  "name": "extra",
+                  "class": "Int"
+                }
+              ]
+            }
+          ]
+        },
+        "layouts/part.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "title_text",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "type": "Label",
+              "id": "t",
+              "text": "@{title_text}"
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "headerTitleText",
+            "String"
+          ],
+          [
+            "headerExtra",
+            "Int"
+          ]
+        ],
+        "android": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "headerTitleText",
+            "String"
+          ],
+          [
+            "headerExtra",
+            "Int"
+          ]
+        ],
+        "web": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "headerTitleText",
+            "String"
+          ],
+          [
+            "headerExtra",
+            "Int"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "include_without_id",
+      "why": "Without an id the include's names are not prefixed.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "own",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "include": "part",
+              "data": [
+                {
+                  "name": "extra",
+                  "class": "Int"
+                }
+              ]
+            }
+          ]
+        },
+        "layouts/part.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "title_text",
+              "class": "String"
+            }
+          ],
+          "child": []
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "title_text",
+            "String"
+          ],
+          [
+            "extra",
+            "Int"
+          ]
+        ],
+        "android": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "title_text",
+            "String"
+          ],
+          [
+            "extra",
+            "Int"
+          ]
+        ],
+        "web": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "title_text",
+            "String"
+          ],
+          [
+            "extra",
+            "Int"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "data_from_a_style",
+      "why": "A style's data[] merged into a node with other keys: sjui / kjui read it; rjui does not (the node has keys besides data and type).",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "own",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "type": "View",
+              "style": "withdata"
+            }
+          ]
+        },
+        "styles/withdata.json": {
+          "background": "#FFFFFF",
+          "data": [
+            {
+              "name": "styled",
+              "class": "String"
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "styled",
+            "String"
+          ]
+        ],
+        "android": [
+          [
+            "own",
+            "String"
+          ],
+          [
+            "styled",
+            "String"
+          ]
+        ],
+        "web": [
+          [
+            "own",
+            "String"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "object_form_data_is_not_declared",
+      "why": "data as an object (the style shorthand) gives no declared field on any platform: sjui / kjui infer a property from it without declaring it, rjui does not read it.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": {
+            "k": 1
+          },
+          "child": []
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "id": "generated_fields_are_not_declared",
+      "why": "The fields a generator adds by itself — <id>IsFocused for a text field, the Radio group's selection — are not declared data.",
+      "files": {
+        "layouts/screen.json": {
+          "type": "View",
+          "data": [
+            {
+              "name": "own",
+              "class": "String"
+            }
+          ],
+          "child": [
+            {
+              "type": "TextField",
+              "id": "email_field",
+              "text": "@{own}"
+            },
+            {
+              "type": "Radio",
+              "id": "r1",
+              "text": "one"
+            }
+          ]
+        }
+      },
+      "screen": "screen",
+      "expected": {
+        "ios": [
+          [
+            "own",
+            "String"
+          ]
+        ],
+        "android": [
+          [
+            "own",
+            "String"
+          ]
+        ],
+        "web": [
+          [
+            "own",
+            "String"
+          ]
+        ]
+      }
+    }
+  ]
+}
