@@ -166,6 +166,7 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/helpers/responsive_helper_spec.rb' => "p4 — #{UNCONVERTED}",
     'compose/helpers/shared_string_advice_spec.rb' => "p4 — #{UNCONVERTED}",
     'compose/helpers/visibility_helper_spec.rb' => "p2 — #{UNCONVERTED}",
+    'compose/layout_data_fields_vectors_spec.rb' => '— asserts which data fields the layout declares and their written class, read from the generator\'s steps; no Kotlin is emitted',
     'compose/regen_idempotency_spec.rb' => FILE_EFFECTS,
     'compose/unreferenced_generated_view_spec.rb' => "p1 — #{UNCONVERTED}",
     'core/defined_colors_ledger_spec.rb' => '— asserts the defined_colors.json ledger the color manager writes, not the Kotlin it generates',

@@ -139,6 +139,7 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'swiftui/helpers/string_manager_helper_spec.rb' => "p3 — #{UNCONVERTED}",
     'swiftui/json_to_swiftui_converter_responsive_spec.rb' => "p1 — #{UNCONVERTED}",
     'swiftui/json_to_swiftui_converter_spec.rb' => "p1 — #{UNCONVERTED}",
+    'swiftui/layout_data_fields_vectors_spec.rb' => '— asserts which data fields the layout declares and their written class, read from the generator\'s steps; no Swift is emitted',
     'swiftui/scrolling_cell_index_spec.rb' => "p4 — #{UNCONVERTED}",
     'swiftui/section_bounder_spec.rb' => "p1 — #{UNCONVERTED}",
     'swiftui/setup/hotloader_generator_spec.rb' => "p4 — #{UNCONVERTED}",
