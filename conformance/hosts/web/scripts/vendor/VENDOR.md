@@ -1,15 +1,24 @@
 # Vendored jsonui-test-runner web driver
 
 `types.ts`, `ActionExecutor.ts`, `AssertionExecutor.ts`,
-`reasonHistory.ts`, `StateProvider.ts` and `visibility.ts` are vendored
-from the `jsonui-test-runner` repository (`drivers/web/src/{models/types.ts,
-actions/ActionExecutor.ts, assertions/AssertionExecutor.ts,
-assertions/reasonHistory.ts, runner/StateProvider.ts, visibility.ts}`) so the
+`reasonHistory.ts`, `StateProvider.ts`, `StateBridge.ts` and `visibility.ts`
+are vendored from the `jsonui-test-runner` repository
+(`drivers/web/src/{models/types.ts, actions/ActionExecutor.ts,
+assertions/AssertionExecutor.ts, assertions/reasonHistory.ts,
+runner/StateProvider.ts, runner/StateBridge.ts, visibility.ts}`) so the
 conformance runner executes the exact same action/assertion semantics as
 the production Playwright driver, without requiring a sibling checkout at
 run time.
 
-Re-vendored 2026-10-15 from web driver 1.14.2 (d6eb14b): a Playwright timeout is
+Re-vendored 2026-10-16 from web driver feat/test-state-launch (a1a7d9c, the
+1.15.0 train): `StateBridge.ts` is new (readBridge, the state-path rule) and
+`StateProvider.ts` now carries `BridgeStateProvider`, the default `state`
+provider reading `window.__JSONUI_STATE__[screenId]` (run.ts points it at
+each fixture's staged screen id — INTERACTIVE_HOST_CONTRACT.md §6);
+`AssertionExecutor.ts`'s `state` uses its pending / truncated outcomes;
+`types.ts` loses `FlowInitialState.screen`. `ActionExecutor.ts`,
+`reasonHistory.ts` and `visibility.ts` are unchanged from 1.14.2.
+Before that, 2026-10-15 from web driver 1.14.2 (d6eb14b): a Playwright timeout is
 recognised by its name (`isTimeoutError` in `visibility.ts`), so `ActionExecutor.ts`
 no longer imports `errors` from playwright. Before that, the same day from web driver 1.14.1 (8641d1b): `visibility.ts` bounds every
 look at an element (`probe`, `DETACHED`, `viewportState`), `AssertionExecutor.ts`
@@ -33,12 +42,17 @@ Local patches (kept intentionally minimal, re-apply when re-vendoring):
    TypeScript type stripping:
    - `from '../models/types'` → `from './types.ts'`,
      `from '../runner/StateProvider'` → `from './StateProvider.ts'`,
-     `from '../visibility'` → `from './visibility.ts'`, and
-     `from './reasonHistory'` → `from './reasonHistory.ts'`
+     `from '../visibility'` → `from './visibility.ts'`,
+     `from './reasonHistory'` → `from './reasonHistory.ts'`, and (in
+     `StateProvider.ts`) `from './StateBridge'` → `from './StateBridge.ts'`
      (relative TS imports need explicit extensions outside a bundler).
    - Type-only imports (`Page`, `Locator` from `playwright`; `TestStep`;
-     `StateProvider`) marked `import type` so the erased binding is not
-     looked up at module-link time.
+     `StateProvider`; `StateLookup`) marked `import type` (or an inline
+     `type` specifier) so the erased binding is not looked up at
+     module-link time.
+   - Node's type stripping also rejects TypeScript parameter properties;
+     the driver itself avoids them in the vendored files (a1a7d9c), so this
+     needs no patch — keep it that way.
 
 2. `ActionExecutor`: the `import { TestLoader } from '../runner/TestLoader'`
    dependency is dropped and its single use
@@ -56,5 +70,5 @@ relative to the process cwd, while conformance artifacts must land in the
 artifacts directory; `run.ts` handles that one action itself (same
 Playwright `page.screenshot` call).
 
-To re-vendor: copy the six files from the jsonui-test-runner checkout
+To re-vendor: copy the seven files from the jsonui-test-runner checkout
 and re-apply the patches above.
