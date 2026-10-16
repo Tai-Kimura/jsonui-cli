@@ -38,6 +38,15 @@ jars=(
   "com.squareup.okio okio-jvm 3.6.0 67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412"
   "junit junit 4.13.2 8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3"
   "org.hamcrest hamcrest-core 1.3 66fdef91e9739348df7a096aa384a5685f4e875584cce89386a7a47251c4d8e9"
+  # jui_tools' API model DTOs (tests/test_android_api_model_generator.py's
+  # compile arm): kotlinx DTOs need the serialization compiler plugin at the
+  # compiler's own version, moshi DTOs the moshi annotations, and
+  # format-mapped kotlinx DTOs kotlinx-datetime (Instant) at a version whose
+  # metadata 2.1.0 reads. Before these, no arm anywhere compiled a generated
+  # DTO (ticket jui-android-api-model-kotlinx-compile-arm-uncovered).
+  "org.jetbrains.kotlin kotlin-serialization-compiler-plugin-embeddable 2.1.0 c6032f2f87a9ae8ae7ad301987be1732c6cacfacb60eb89a77408fe5b2de7fc5"
+  "com.squareup.moshi moshi 1.15.2 767f7592c6c61eb693549a26d333c121f5383826bd287b899867aa326dae55e4"
+  "org.jetbrains.kotlinx kotlinx-datetime-jvm 0.6.2 102764921129e1e44a74f408b7a0b8dac6d1892c6042e0e48f8bdbbbf78c6d2e"
 )
 
 sha256() { sha256sum "$1" | cut -d' ' -f1; }
