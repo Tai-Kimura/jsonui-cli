@@ -94,6 +94,19 @@ RUN_ELSEWHERE = {
         "the android and android-codegen jobs run it (conformance-host/scripts/run_conformance.sh)",
 }
 
+# A class this job runs in a second invocation, in another build type of the
+# module, and why that build. kjui_device_tests.sh leaves it out of the debug
+# invocation (not-class) and runs it alone in the build named here
+# (gate-closed-classes), when the checkout has it. The judge still requires it
+# in the results — rglob reads every build type's directory — and a skipped
+# case of it is red: it skips only in the wrong build (its own assumption).
+SECOND_BUILD = {
+    ("conformance-host", "com.kotlinjsonui.conformance.TestBridgeGateClosedE2ETest"):
+        "gateClosed — the screen-marker gate closed (not debuggable, no com.kotlinjsonui.SCREEN_MARKER "
+        "meta-data): the screen must apply no initialState and publish no bridge, so the driver reports no "
+        "receipt (jsonui-test-runner spec section 10.5). A debuggable build cannot close the gate.",
+}
+
 # A module with device tests that no CI invocation runs, and why. A module
 # with @Test in its androidTest must be in MODULES or here.
 UNREACHED_MODULES = {
@@ -166,6 +179,11 @@ def _declared(kjui: Path, module: str) -> set[str]:
     return names
 
 
+def second_build_classes(kjui: Path) -> list[str]:
+    """The SECOND_BUILD classes the checkout declares (fully qualified, sorted)."""
+    return sorted(fq for (m, fq) in SECOND_BUILD if fq.rsplit(".", 1)[-1] in _declared(kjui, m))
+
+
 def modules_with_device_tests(kjui: Path) -> list[str]:
     """Every top-level module of the checkout whose src/androidTest holds an @Test."""
     found = []
@@ -217,6 +235,9 @@ def judge(kjui: Path, probes_raised: bool = False) -> int:
                 elif skip is not None:
                     skipped += 1
                     skipped_names.append(name)
+                    if (module, cls) in SECOND_BUILD:
+                        problems.append(f"{module}: {name} skipped — it runs only in its own build "
+                                        f"({SECOND_BUILD[(module, cls)].split(' — ')[0]}), and a skip means it ran in another")
                     reason = (skip.get("message") or skip.text or "").strip().splitlines()
                     skips.append(f"{name}: {reason[0][:160] if reason else '(no reason)'}")
                 else:
@@ -251,6 +272,8 @@ def judge(kjui: Path, probes_raised: bool = False) -> int:
             print(f"== {module}: not run by this job — {UNREACHED_MODULES[module]}")
     for (module, fq), why in sorted(RUN_ELSEWHERE.items()):
         print(f"== {module}: {fq.rsplit('.', 1)[-1]} left out here — {why}")
+    for (module, fq), why in sorted(SECOND_BUILD.items()):
+        print(f"== {module}: {fq.rsplit('.', 1)[-1]} runs in a second invocation, build {why}")
     for module in unreached(kjui):
         problems.append(f"{module}: has @Test in src/androidTest and no CI invocation runs it "
                         "(add it to MODULES, or name it in UNREACHED_MODULES with the reason)")
@@ -543,8 +566,8 @@ def main(argv: list[str]) -> int:
     raised = argv[0:1] == ["judge"] and argv[2:] == ["--probes-raised"]
     if raised:
         argv = argv[:2]
-    if len(argv) != 2 or argv[0] not in ("flags", "judge", "not-class"):
-        print("usage: kjui_device_tests.py flags|judge|not-class <KotlinJsonUI checkout> "
+    if len(argv) != 2 or argv[0] not in ("flags", "judge", "not-class", "gate-closed-classes"):
+        print("usage: kjui_device_tests.py flags|judge|not-class|gate-closed-classes <KotlinJsonUI checkout> "
               "(judge also takes --probes-raised)", file=sys.stderr)
         return 2
     kjui = Path(argv[1])
@@ -556,8 +579,14 @@ def main(argv: list[str]) -> int:
             print(name)
         return 0
     if argv[0] == "not-class":
-        # One comma-separated value for -Pandroid.testInstrumentationRunnerArguments.notClass.
-        print(",".join(sorted(fq for (_, fq) in RUN_ELSEWHERE)))
+        # One comma-separated value for -Pandroid.testInstrumentationRunnerArguments.notClass:
+        # the classes another job runs, and the ones the second invocation runs.
+        print(",".join(sorted({fq for (_, fq) in RUN_ELSEWHERE} | set(second_build_classes(kjui)))))
+        return 0
+    if argv[0] == "gate-closed-classes":
+        # One comma-separated value for the second invocation's `class`; empty
+        # when the checkout has none of them (a KotlinJsonUI before 2.44.0).
+        print(",".join(second_build_classes(kjui)))
         return 0
     print(f"probes raised: {'yes — an undeclared skip is red' if raised else 'no'}")
     return judge(kjui, probes_raised=raised)
