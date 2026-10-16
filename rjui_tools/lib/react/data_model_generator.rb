@@ -876,6 +876,7 @@ module RjuiTools
         collect_type_map_imports(data_properties).each do |line|
           imports += "#{line}\n"
         end
+        imports += test_bridge_imports(test_fields(data_properties), typescript: true)
         imports += "\n"
 
         content = <<~TS
@@ -1001,6 +1002,7 @@ module RjuiTools
 
         content += "});\n"
         content += "\n"
+        content += test_bridge_functions(view_name, test_fields(data_properties), typescript: true)
         content += Core::GeneratedMarker.comment_footer + "\n"
 
         content
@@ -1036,7 +1038,9 @@ module RjuiTools
           #{marker_header}
 
         JS
-        content += "import { StringManager } from '../StringManager';\n\n" if @resolved_string_defaults.any?
+        content += "import { StringManager } from '../StringManager';\n" if @resolved_string_defaults.any?
+        content += test_bridge_imports(test_fields(data_properties), typescript: false)
+        content += "\n" if @resolved_string_defaults.any? || !content.end_with?("\n\n")
         content += <<~JS
           /**
            * @typedef {Object} #{view_name}Data
@@ -1142,9 +1146,74 @@ module RjuiTools
 
         content += "});\n"
         content += "\n"
+        content += test_bridge_functions(view_name, test_fields(data_properties), typescript: false)
         content += Core::GeneratedMarker.comment_footer + "\n"
 
         content
+      end
+
+      # The Data fields the layout DECLARES (data[] items, not the members
+      # the generator adds), as [name, class as the layout writes it] —
+      # what initialState may set and the state bridge shows (test-runner
+      # spec §10.3; shared/core/layout_data_fields_vectors.json).
+      def test_fields(data_properties)
+        data_properties.select { |p| declared_data_properties.key?(p) }
+                       .map { |p| [p['name'], (p['declaredClass'] || p['class']).to_s] }
+      end
+
+      def test_bridge_imports(fields, typescript:)
+        names = fields.empty? ? 'jsonuiTestSnapshot' : 'checkTestValue, jsonuiTestSnapshot'
+        line = "import { #{names} } from '../jsonuiTestBridge';\n"
+        line += "import type { JsonUITestApplyResult } from '../jsonuiTestBridge';\n" if typescript
+        line
+      end
+
+      # testSnapshot<X>Data and applyTestInitialState<X>Data, the two
+      # functions useJsonUITestBridge is handed (emit_test_bridge_helper).
+      # The value check is the helper's checkTestValue, called once per
+      # declared field with the class as the layout writes it; a key that is
+      # no declared field is `not a data field`.
+      def test_bridge_functions(view_name, fields, typescript:)
+        data_type = "#{view_name}Data"
+        fields_const = "#{view_name}TestFields"
+        ty = ->(text) { typescript ? text : '' }
+        table = fields.map { |name, klass| "  #{name.to_json}: #{klass.to_json}," }.join("\n")
+        out = +''
+        out << "/** The Data fields the layout declares (name -> class as written): what initialState may set. */\n"
+        out << "export const #{fields_const}#{ty.(': Record<string, string>')} = {\n#{table}#{table.empty? ? '' : "\n"}};\n\n"
+        out << "/** The state bridge's data for #{data_type} (development builds only). */\n"
+        out << "export function testSnapshot#{data_type}(data#{ty.(": #{data_type}")})#{ty.(': Record<string, unknown>')} {\n"
+        out << "  return jsonuiTestSnapshot(data#{ty.(' as unknown as Record<string, unknown>')}, #{fields_const});\n"
+        out << "}\n\n"
+        out << "/** Check a test's initialState against the declared Data and return what to set. */\n"
+        result_type = "JsonUITestApplyResult<#{data_type}>"
+        if fields.empty?
+          out << "export function applyTestInitialState#{data_type}(values#{ty.(': Record<string, unknown>')})#{ty.(": #{result_type}")} {\n"
+          out << "  return { vars: {}, applied: [], rejected: Object.keys(values).map((key) => ({ key, reason: 'not a data field' })) };\n"
+          out << "}\n\n"
+          return out
+        end
+        out << "export function applyTestInitialState#{data_type}(values#{ty.(': Record<string, unknown>')})#{ty.(": #{result_type}")} {\n"
+        out << "  const result#{ty.(": #{result_type}")} = { vars: {}, applied: [], rejected: [] };\n"
+        out << "  for (const key of Object.keys(values)) {\n"
+        out << "    const value = values[key];\n"
+        out << "    let reason#{ty.(': string | null')};\n"
+        out << "    switch (key) {\n"
+        fields.each do |name, klass|
+          out << "      case #{name.to_json}:\n"
+          out << "        reason = checkTestValue(value, #{klass.to_json});\n"
+          out << "        if (reason === null) result.vars[#{name.to_json}] = value#{ty.(" as #{data_type}[#{name.to_json}]")};\n"
+          out << "        break;\n"
+        end
+        out << "      default:\n"
+        out << "        reason = 'not a data field';\n"
+        out << "    }\n"
+        out << "    if (reason === null) result.applied.push(key);\n"
+        out << "    else result.rejected.push({ key, reason });\n"
+        out << "  }\n"
+        out << "  return result;\n"
+        out << "}\n\n"
+        out
       end
 
       def announce_own_namespaces(json_file)
