@@ -290,3 +290,136 @@ class TestPlatformRootsFromConfig:
     def test_a_list_of_platforms_or_no_project_root_gives_none(self, tmp_path):
         assert platform_roots_from_config({"platforms": ["web"]}, tmp_path) == {}
         assert platform_roots_from_config({"platforms": {"web": {"root": "web"}}}, None) == {}
+
+
+# ------------------------------------------------------------- iOS / Android pins
+#
+# The mobile drivers' version is the project's pin: Package.resolved for iOS,
+# the version catalog (or a coordinate in a build file) for Android. Same
+# roots as web: platforms.<name>.root first, then the project root.
+
+
+def ios_pin(root: Path, version=None, branch=None, revision="6ecbba03fbc31e515869e6893ed1963a556ca5cc"):
+    state = {"revision": revision}
+    if version:
+        state["version"] = version
+    if branch:
+        state["branch"] = branch
+    path = root / "App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"version": 3, "pins": [
+        {"identity": "swiftjsonui", "kind": "remoteSourceControl",
+         "location": "https://github.com/Tai-Kimura/SwiftJsonUI", "state": {"version": "10.30.0"}},
+        {"identity": "jsonui-test-runner-ios", "kind": "remoteSourceControl",
+         "location": "https://github.com/Tai-Kimura/jsonui-test-runner-ios", "state": state}]}),
+        encoding="utf-8")
+    return root
+
+
+def android_catalog(root: Path, version: str):
+    # The shape the measured consumer apps use: version.ref.
+    path = root / "gradle/libs.versions.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '[versions]\njsonui-test-runner-android = "%s"\n\n[libraries]\n'
+        'jsonui-test-runner-android = { group = "io.github.tai-kimura", name = '
+        '"jsonui-test-runner-android", version.ref = "jsonui-test-runner-android" }\n' % version,
+        encoding="utf-8")
+    return root
+
+
+def android_direct(root: Path, version: str):
+    path = root / "app/build.gradle.kts"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('dependencies {\n    androidTestImplementation('
+                    f'"io.github.tai-kimura:jsonui-test-runner-android:{version}")\n}}\n',
+                    encoding="utf-8")
+    return root
+
+
+MOBILE = {
+    "ios": (ios_pin, {"initialState": {"ios": "1.15.0"}}, "1.14.0", "1.15.0"),
+    "android": (android_catalog, {"initialState": {"android": "1.17.0"}}, "1.16.0", "1.17.0"),
+}
+
+
+def _pin(platform, root, version):
+    writer = MOBILE[platform][0]
+    return writer(root, version=version) if platform == "ios" else writer(root, version)
+
+
+@pytest.mark.parametrize("platform", ["ios", "android"])
+class TestTheMobilePinIsRead:
+    def _declared(self, root):
+        return {"initialState": [write_test(root, initialState={"viewModel": {"email": "x"}})]}
+
+    def test_an_older_pin_is_an_error(self, tmp_path, platform):
+        _, req, old, _ = MOBILE[platform]
+        _pin(platform, tmp_path / "app", old)
+        roots = platform_roots_from_config({"platforms": {platform: {"root": "app"}}}, tmp_path)
+        errors, notes = check_declarations(self._declared(tmp_path), req, tmp_path, roots)
+        assert notes == [] and len(errors) == 1
+        assert f"requires the {platform} driver" in errors[0] and f"but {old} is installed" in errors[0]
+
+    def test_a_new_enough_pin_passes(self, tmp_path, platform):
+        _, req, _, new = MOBILE[platform]
+        _pin(platform, tmp_path / "app", new)
+        roots = platform_roots_from_config({"platforms": {platform: {"root": "app"}}}, tmp_path)
+        assert check_declarations(self._declared(tmp_path), req, tmp_path, roots) == ([], [])
+
+    def test_no_pin_is_todays_note(self, tmp_path, platform):
+        _, req, _, _ = MOBILE[platform]
+        errors, notes = check_declarations(self._declared(tmp_path), req, tmp_path)
+        assert errors == [] and len(notes) == 1
+        assert notes[0] == (
+            f"'initialState' requires the {platform} driver {req['initialState'][platform]} or "
+            "newer; the installed version could not be read, so this is not checked. An older "
+            "driver ignores the declaration silently (1 file(s) declare it).")
+
+    def test_with_a_pin_in_both_roots_the_platform_root_wins(self, tmp_path, platform):
+        _, req, old, new = MOBILE[platform]
+        _pin(platform, tmp_path, old)
+        _pin(platform, tmp_path / "app", new)
+        roots = platform_roots_from_config({"platforms": {platform: {"root": "app"}}}, tmp_path)
+        assert installed_driver_version(platform, tmp_path, roots[platform]) == new
+        assert check_declarations(self._declared(tmp_path), req, tmp_path, roots) == ([], [])
+        # And the other way round, so "wins" is not "the newer one wins".
+        _pin(platform, tmp_path, new)
+        _pin(platform, tmp_path / "app", old)
+        assert installed_driver_version(platform, tmp_path, roots[platform]) == old
+
+
+def test_an_ios_branch_pin_is_said_to_have_no_version(tmp_path):
+    # Both consumers measured with a committed Package.resolved pin this way.
+    ios_pin(tmp_path, branch="main")
+    declared = {"initialState": [write_test(tmp_path, initialState={"viewModel": {"email": "x"}})]}
+    errors, notes = check_declarations(declared, {"initialState": {"ios": "1.15.0"}}, tmp_path)
+    assert errors == [] and len(notes) == 1
+    assert "pins jsonui-test-runner-ios to branch 'main', not a version" in notes[0]
+    ios_pin(tmp_path)  # a revision alone
+    _, notes = check_declarations(declared, {"initialState": {"ios": "1.15.0"}}, tmp_path)
+    assert "to revision 6ecbba03fbc3, not a version" in notes[0]
+
+
+def test_an_android_coordinate_in_a_build_file_is_read(tmp_path):
+    android_direct(tmp_path, "1.16.0")
+    assert installed_driver_version("android", tmp_path) == "1.16.0"
+    android_direct(tmp_path, "$runnerVersion")
+    assert installed_driver_version("android", tmp_path) is None
+
+
+def test_a_files_platform_bounds_which_floors_are_checked(tmp_path):
+    # platform: web — the iOS / Android floors are not this file's business,
+    # so no note for them (the ticket's symptom); web is still checked.
+    with_driver(tmp_path, "1.15.0")
+    web_only = write_test(tmp_path, "w.test.json", platform="web",
+                          initialState={"viewModel": {"email": "x"}})
+    req = {"initialState": KEY_DRIVER_REQUIREMENTS["initialState"]}
+    assert check_declarations({"initialState": [web_only]}, req, tmp_path) == ([], [])
+    with_driver(tmp_path, "1.14.2")
+    errors, notes = check_declarations({"initialState": [web_only]}, req, tmp_path)
+    assert notes == [] and len(errors) == 1 and "web driver 1.15.0" in errors[0]
+    everywhere = write_test(tmp_path, "a.test.json", initialState={"viewModel": {"email": "x"}})
+    _, notes = check_declarations({"initialState": [everywhere]}, req, tmp_path)
+    assert sorted(n.split(" driver")[0] for n in notes) == [
+        "'initialState' requires the android", "'initialState' requires the ios"]

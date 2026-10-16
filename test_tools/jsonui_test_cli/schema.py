@@ -345,14 +345,11 @@ KEY_DRIVER_REQUIREMENTS = {
     # checks what was actually published against this, and a divergence
     # means the schema is lying.
     #
-    # LIMIT, so that "it is declared" is not read as "it is enforced": only
-    # `web` is checkable. `runtime_support.DRIVER_PACKAGES` can read a
-    # version for npm alone — the iOS and Android drivers arrive through SPM
-    # and Maven and leave nothing in a project tree to read — so those two
-    # floors produce a note naming the files, never an error. They are
-    # declared anyway: a note that says which files declare the key is more
-    # than silence, and the day either becomes resolvable the declaration is
-    # already here rather than being remembered then.
+    # All three floors are checked. web reads node_modules; iOS reads the
+    # project's Package.resolved and Android its version catalog or a
+    # coordinate in a build file (`runtime_support.read_pinned_driver`). A
+    # pin with no version (an SPM branch / revision) or no pin at all is a
+    # note naming the files, never an error.
     "orientation": {"android": "1.12.0", "ios": "1.12.0", "web": "1.12.0"},
     # The first release of each driver that reads it — the next minor of
     # each at the time the key was added (web / ios 1.13.0 -> 1.14.0,
