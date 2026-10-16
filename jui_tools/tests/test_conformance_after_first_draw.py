@@ -70,11 +70,16 @@ class TheGeneratorDeclaresIt(unittest.TestCase):
             )
 
     def test_only_layouts_that_bind_the_var_declare_it(self):
-        declaring = sorted(after_first_draw.declared(self.manifest))
+        declared = after_first_draw.declared(self.manifest)
+        declaring = sorted(declared)
         for fid in declaring:
             layout = (Path(self.tmp.name) / self.by_id[fid]["layout"]).read_text()
-            self.assertIn('"@{scrollTarget}"', layout, fid)
-        self.assertEqual(len(declaring), 5, declaring)
+            var = declared[fid]["decl"]["set"]["var"]
+            self.assertIn(f'"@{{{var}}}"', layout, fid)
+        # 5 scrollAnchor fixtures, and TestBridge/initialState__bridge_follows
+        # (the bridge publishes the changed value; jsonui-test-runner spec
+        # section 10.4).
+        self.assertEqual(len(declaring), 6, declaring)
 
     def test_the_changed_value_names_a_cell_and_the_first_draw_names_none(self):
         layout = json.loads((Path(self.tmp.name) / self.by_id["Collection/scrollAnchor__top"]["layout"]).read_text())

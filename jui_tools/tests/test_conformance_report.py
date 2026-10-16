@@ -72,6 +72,19 @@ def _write_results(
     }
     if web_markers is not None:
         payload["webMarkers"] = dict(web_markers)
+    # A fixture whose manifest declares afterFirstDraw is stamped by a host
+    # that implements the contract — a synthetic pass does what a real one
+    # does, or every test that writes one fails on a contract it is not about
+    # (the TestBridge family declares one and is generated whatever the defs).
+    manifest_path = out_dir / "manifest.json"
+    if manifest_path.is_file():
+        declares = {
+            f["id"] for f in json.loads(manifest_path.read_text(encoding="utf-8")).get("fixtures", [])
+            if ((f.get("state") or {}).get("afterFirstDraw"))
+        }
+        for entry in payload["results"]:
+            if entry["id"] in declares and entry["status"] == "pass":
+                entry["afterFirstDraw"] = {"status": "fired"}
     results_dir = out_dir / "results"
     results_dir.mkdir(exist_ok=True)
     path = results_dir / f"{platform}.results.json"

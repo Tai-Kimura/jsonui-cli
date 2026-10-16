@@ -1025,6 +1025,20 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     )
     summary.control_count += sum(1 for e in empty_entries if e.get("isControl"))
 
+    # initialState delivered at launch and `state` read through the test
+    # bridge (jsonui-test-runner spec section 10) — see test_bridge_fixtures.
+    from .test_bridge_fixtures import build_test_bridge_fixtures
+
+    bridge_files, bridge_entries = build_test_bridge_fixtures(source_label)
+    for rel_path, payload in bridge_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(bridge_entries)
+    summary.fixture_count += len(bridge_entries)
+    summary.interactive_count += len(bridge_entries)
+
     # A flow Collection whose sections declare a header and a footer (round 7
     # ruling: full-width rows around each section's wrap) — the corpus held
     # no section header on any layout; see flow_section_edge_fixtures.
