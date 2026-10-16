@@ -244,13 +244,20 @@ RSpec.describe 'initialState coercion vectors (rjui)' do
             setItem: (k, v) => store.set(k, String(v)),
           },
         };
+        const WRITTEN_AT = 1000000;
         store.set('JSONUI_TEST_INITIAL_STATE', JSON.stringify({
-          version: 1, launchId: 'L1', screens: { login: { email: 'a@example.com', nickname: 'x' } },
+          version: 1, launchId: 'L1', screens: { login: { email: 'a@example.com', nickname: 'x' } }, writtenAt: WRITTEN_AT,
         }));
+        // The document's own clock origin: 'mount' is a document the launch
+        // opened (after writtenAt), 'stale-mount' one that already existed.
+        const openDocument = (origin) => Object.defineProperty(globalThis, 'performance', {
+          value: { timeOrigin: origin }, configurable: true, writable: true,
+        });
         const out = [];
         let bridge = await import('./bridge.mjs?load=1');
         for (const load of #{JSON.generate(loads)}) {
           if (load === 'reload') { bridge = await import('./bridge.mjs?load=' + Math.random()); continue; }
+          openDocument(load === 'stale-mount' ? WRITTEN_AT - 1 : WRITTEN_AT + 1);
           let data = { email: '', count: 0 };
           const set = [];
           bridge.useJsonUITestBridge('login', data, (vars) => { set.push(vars); }, (d) => ({ ...d }),
@@ -282,6 +289,19 @@ RSpec.describe 'initialState coercion vectors (rjui)' do
         # Built again in the same launch: not applied again, the receipt stays.
         expect(second['set']).to eq([])
         expect(second['state']['login']['initialState']['applied']).to eq(['email'])
+      end
+    end
+
+    it 'a document opened before the payload was written leaves it untouched; the next document takes it' do
+      Dir.mktmpdir('rjui_bridge_stale') do |dir|
+        stale, fresh = mount(dir, node_env: 'development', loads: %w[stale-mount reload mount])
+        expect(stale['set']).to eq([])
+        expect(stale['state']['login']['launchId']).to be_nil
+        expect(stale['state']['login']['initialState']).to be_nil
+        expect(stale['stored']['screens'].keys).to eq(['login'])
+        expect(fresh['set']).to eq([{ 'email' => 'a@example.com' }])
+        expect(fresh['state']['login']['initialState']['applied']).to eq(['email'])
+        expect(fresh['stored']['screens']).to eq({})
       end
     end
 

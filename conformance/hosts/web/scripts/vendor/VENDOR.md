@@ -10,6 +10,10 @@ conformance runner executes the exact same action/assertion semantics as
 the production Playwright driver, without requiring a sibling checkout at
 run time.
 
+Checked 2026-10-16 against web driver 1.15.0 (088c2d3, afterLaunch + the
+payload's writtenAt): the seven vendored files are byte-for-byte what a1a7d9c
+gave (the change is in InitialState.ts / JsonUITestRunner.ts, not vendored);
+scripts/run.ts writes writtenAt itself.
 Re-vendored 2026-10-16 from web driver feat/test-state-launch (a1a7d9c, the
 1.15.0 train): `StateBridge.ts` is new (readBridge, the state-path rule) and
 `StateProvider.ts` now carries `BridgeStateProvider`, the default `state`

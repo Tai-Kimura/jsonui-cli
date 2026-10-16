@@ -1686,7 +1686,10 @@ module RjuiTools
         # - useJsonUITestBridge(screenId, data, setVars, snapshot, apply):
         #   after mount, once per launchId × screenId, applies this screen's
         #   entry of sessionStorage JSONUI_TEST_INITIAL_STATE and removes it
-        #   from the stored payload; publishes
+        #   from the stored payload — only in a document opened after the
+        #   payload's writtenAt (performance.timeOrigin > writtenAt), so a
+        #   document from before the launch leaves it to the reloaded one;
+        #   publishes
         #   window.__JSONUI_STATE__[screenId] = { launchId, initialState, data }
         #   on every data change.
         def emit_test_bridge_helper
@@ -1728,6 +1731,7 @@ module RjuiTools
               version?: number;
               launchId?: string;
               screens?: Record<string, Record<string, unknown>>;
+              writtenAt?: number;
             }
 
           TS
@@ -1836,12 +1840,21 @@ module RjuiTools
             // not applied again (the stored payload no longer holds it).
             const receipts#{t.(': Map<string, JsonUITestReceipt>')} = new Map();
 
+            // The payload is this document's only when the document was opened
+            // after the runner wrote it (spec §10.2 writtenAt): the launch's
+            // reload / goto opens a new document. One that already existed —
+            // still hydrating from before the launch — must not take it first,
+            // so it leaves the payload untouched (no apply, no removal, no
+            // receipt; its bridge says launchId null). Both times are the
+            // browser's clock: Date.now() in the page vs performance.timeOrigin.
             function readPayload()#{t.(': JsonUITestPayload | null')} {
               try {
                 const raw = window.sessionStorage.getItem(PAYLOAD_KEY);
                 if (!raw) return null;
                 const parsed = JSON.parse(raw);
-                return parsed && typeof parsed === 'object' ? parsed : null;
+                if (!parsed || typeof parsed !== 'object') return null;
+                if (typeof parsed.writtenAt !== 'number' || !(performance.timeOrigin > parsed.writtenAt)) return null;
+                return parsed;
               } catch {
                 return null;
               }

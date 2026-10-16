@@ -339,8 +339,13 @@ async function deliverInitialState(page: Page, batch: ManifestFixture[]): Promis
   if (Object.keys(screens).length === 0) return null;
   const launchId = crypto.randomUUID();
   await page.goto(baseUrl, { waitUntil: 'load' });
+  // writtenAt (spec §10.2): the page's clock when written. Each fixture is a
+  // new document (goto), opened after it, so the generated helper takes it.
   await page.evaluate((payload) => {
-    window.sessionStorage.setItem('JSONUI_TEST_INITIAL_STATE', payload);
+    window.sessionStorage.setItem(
+      'JSONUI_TEST_INITIAL_STATE',
+      JSON.stringify({ ...JSON.parse(payload), writtenAt: Date.now() })
+    );
   }, JSON.stringify({ version: 1, launchId, screens }));
   return launchId;
 }
