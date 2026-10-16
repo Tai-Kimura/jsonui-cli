@@ -37,7 +37,10 @@ Format retention (2026-07, plan ``2026-07-24-v1-unsupported/03``):
 §3.3 ERROR halt rules enforced here (raise :class:`OpenAPILoadError`):
 
 - ``anyOf`` → halt (permanent — untagged unions have no portable native
-  representation)
+  representation). Not a halt: a null union — ``anyOf`` / ``oneOf`` of
+  exactly one non-null member plus ``{"type": "null"}``, and the 3.1 type
+  array ``type: [T, "null"]`` — which folds to that member / ``T``,
+  nullable (:func:`_fold_null_type`)
 - ``oneOf`` without ``discriminator`` → halt
 - union schema used as a variant of another union → halt (permanent)
 - non-string / duplicate / missing variant tags when inferring a
@@ -1736,7 +1739,10 @@ def _check_polymorphic(
     Halted (both permanent — see the freeze declarations in plan
     ``2026-07-24-v1-unsupported/02``):
     - ``anyOf`` — untagged union; there is no portable native
-      representation across Swift / Kotlin / TypeScript
+      representation across Swift / Kotlin / TypeScript. A null union
+      (one non-null member plus ``{"type": "null"}``, under ``anyOf`` or
+      ``oneOf``) never reaches here: :func:`_fold_null_type` has already
+      read it as that member, nullable
     - ``oneOf`` without ``discriminator`` — no way to dispatch
     - ``discriminator`` without ``oneOf`` — meaningless alone
     """
@@ -1746,7 +1752,9 @@ def _check_polymorphic(
             "'anyOf' (untagged union) is not supported, permanently: "
             "there is no portable native representation across Swift / "
             "Kotlin / TypeScript codegen. Restructure the schema as "
-            "'oneOf' with a discriminator tag instead.",
+            "'oneOf' with a discriminator tag instead. (Only a null union is "
+            "read: exactly one non-null member plus {\"type\": \"null\"} "
+            "folds to that member, nullable.)",
             source=source_path,
             pointer=pointer,
         )
@@ -2152,7 +2160,8 @@ def _pascal(s: str) -> str:
 def _all_equatable(fields: list[FieldDef]) -> bool:
     """All field types support equality (no ``Any`` leakage).
 
-    In v1 we halt on oneOf/anyOf, so ``Any`` shouldn't actually appear.
+    anyOf halts (a null union folds to its member first) and oneOf needs a
+    discriminator, so ``Any`` shouldn't actually appear.
     Kept as a flag for future-proofing when v2 adds polymorphic types.
     """
     return True

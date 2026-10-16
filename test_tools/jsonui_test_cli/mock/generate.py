@@ -789,9 +789,9 @@ def _declares_null(schema) -> bool:
     A `oneOf` / `anyOf` with a null branch (`{"type": "null"}`, a `null` type
     member, `nullable`) admits null whichever position the branch takes;
     `resolve_schema` keeps only the first branch, so `[null, X]` passed and
-    `[X, null]` did not. (The codegen stops on both shapes by name —
-    unknown-type / polymorphic-not-supported — so there is no reading of its
-    to agree with there.)
+    `[X, null]` did not. (The codegen reads the same null unions as X,
+    nullable — one non-null member plus `{"type": "null"}` under `anyOf` /
+    `oneOf`, and `type: [T, "null"]` — and stops on every other anyOf.)
     """
     if not isinstance(schema, dict):
         return False
