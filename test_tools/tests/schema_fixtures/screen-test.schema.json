@@ -128,18 +128,26 @@
       "description": "Run this screen test inside a parent screen's `Embed` region. Format: 'ParentScreen#regionId' where ParentScreen is the parent screen name (PascalCase) and regionId is the Embed node's `id` attribute in the parent layout (camelCase). When set, the test runner mounts the parent screen first and asserts the screen-under-test renders into the matching Embed slot. Navigation assertions target the parent's NavController/Router (v1 supports `delegate` mode only). See jsonui-cli/docs/plans/2026-05-11-embed-feature.md §11.1."
     },
     "initialState": {
+      "x-requires-driver": {
+        "android": "1.17.0",
+        "ios": "1.15.0",
+        "web": "1.15.0"
+      },
       "type": "object",
-      "description": "Initial ViewModel state before test execution",
+      "description": "Values put into the Data of the screen under test (the screen id of source.layout) when the app is launched for this file, before its first case. Keys are that screen's Data names (the layout's `data` section), top level only, case-sensitive; no dot notation, and ViewModel properties outside `data` cannot be set. Each value must fit the Data's class (String: string; Int: an integral number within 32 bits, 2.0 accepted; Double/Float/CGFloat: any number; Bool: boolean only; Color: string; typed arrays element by element; null only for a class ending in `?`); closures, CollectionDataSource and Visibility cannot be set. The app applies it once, the first time the screen appears after launch, and reports what it applied; the driver fails the file's cases (setup) when the app did not confirm it or rejected a key — a library older than SwiftJsonUI 10.30.0 / KotlinJsonUI 2.44.0, or a build with the screen-marker gate closed, confirms nothing. Values an API provides are made with `mocks`. An empty `viewModel` is the same as none. Spec: specs/2026-07-08-advanced-test-features.md §10.",
       "properties": {
         "viewModel": {
           "type": "object",
-          "description": "Key-value pairs for ViewModel properties",
+          "description": "Data name -> value for the screen under test",
           "additionalProperties": true
         }
       },
       "additionalProperties": false
     },
     "launch": {
+      "x-requires-driver": {
+        "web": "1.15.0"
+      },
       "$ref": "actions.schema.json#/definitions/launch"
     },
     "mocks": {
@@ -250,11 +258,17 @@
             "description": "Run this case only when the current size matches (named size-class bucket or size constraint, resolved at runtime; unmet gates skip the case). ANDs with case-level platform"
           },
           "initialState": {
+            "x-requires-driver": {
+              "android": "1.17.0",
+              "ios": "1.15.0",
+              "web": "1.15.0"
+            },
             "type": "object",
-            "description": "Override initial state for this specific case",
+            "description": "This case's initialState, merged over the file's key by key (shallow: a value here replaces the file's value for that key whole; null replaces it too). Needs caseIsolation 'reopen' — under 'shared' the screen is opened once, before the first case, so a case-level initialState cannot be delivered: validate error, and the driver fails this case (setup). Same keys and value rules as the file-level initialState.",
             "properties": {
               "viewModel": {
                 "type": "object",
+                "description": "Data name -> value for the screen under test",
                 "additionalProperties": true
               }
             },

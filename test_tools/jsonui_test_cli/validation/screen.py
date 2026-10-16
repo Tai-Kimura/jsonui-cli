@@ -14,6 +14,7 @@ from .orientation import validate_orientation_field
 from . import declared_paths
 from .required import check_required_top_level
 from .responsive import validate_responsive_field
+from .initial_state import check_screen_test as check_initial_state
 from ..schema import (
     VALID_SCREEN_READY_VALUES,
     VALID_CASE_ISOLATION_VALUES,
@@ -209,6 +210,11 @@ class ScreenTestValidator:
                         "left; 'reopen' opens the screen afresh before each case."
                     )
                 ))
+
+        # initialState — the file's and each case's: shape, a case-level one
+        # under `shared`, and keys / values against the screen's Data
+        # (initial_state's docstring).
+        check_initial_state(data, path, result, self._test_file_path)
 
         # Required top-level keys. Errors, not warnings: the same schema's
         # `additionalProperties: false` is enforced as an error, and there is

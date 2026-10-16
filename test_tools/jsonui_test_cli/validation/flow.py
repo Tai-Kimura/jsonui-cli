@@ -12,7 +12,30 @@ from .launch import validate_launch
 from .platform import validate_platform_field
 from .orientation import validate_orientation_field
 from .mock import find_mock_index, validate_mock_reference
+from .initial_state import check_flow_test as check_initial_state
 from ..schema import VALID_FLOW_TOP_LEVEL_KEYS, VALID_SCREEN_TOP_LEVEL_KEYS
+
+
+def step_screens(data: dict, sections=("setup", "steps", "teardown")) -> list[str]:
+    """The `screen` values a flow's top-level steps name, in order, once each.
+
+    Only an inline step's own `screen` counts: a file step carries none, and a
+    block's inner steps run on the screen the flow is already on — the
+    drivers track the screen from the same field (web
+    `verifyScreenTransitionIfNeeded`). The sections are the caller's: the
+    sources check reads all three; whether a flow REACHES a screen is decided
+    before teardown runs, so that reader passes setup and steps.
+    """
+    seen: list[str] = []
+    for section in sections:
+        steps = data.get(section)
+        for step in (steps if isinstance(steps, list) else []):
+            if not isinstance(step, dict):
+                continue
+            screen = step.get("screen")
+            if isinstance(screen, str) and screen and screen not in seen:
+                seen.append(screen)
+    return seen
 
 
 class FlowTestValidator:
@@ -82,6 +105,10 @@ class FlowTestValidator:
         if "launch" in data:
             validate_launch(data["launch"], f"{path}.launch", result)
 
+        # initialState: `viewModels` by screen id, `screen` removed, values
+        # against each screen's Data (initial_state's docstring).
+        check_initial_state(data, path, result, self._test_file_path)
+
         # Validate steps
         steps = data.get("steps", [])
         if not steps:
@@ -149,31 +176,23 @@ class FlowTestValidator:
             # using a form this check cannot speak about.
             return
 
-        seen: set[str] = set()
-        for section in ("setup", "steps", "teardown"):
-            for step in (data.get(section) or []):
-                if not isinstance(step, dict):
-                    continue
-                screen = step.get("screen")
-                if not isinstance(screen, str) or not screen or screen in declared:
-                    continue
-                if screen in seen:
-                    continue
-                seen.add(screen)
-                result.warnings.append(ValidationMessage(
-                    path=f"{path}.sources",
-                    message=(
-                        f"steps name screen '{screen}', but no entry in "
-                        f"'sources' declares that alias (declared: "
-                        f"{', '.join(sorted(declared))}). The test still runs "
-                        f"— the driver resolves 'screen' to an app-side "
-                        f"marker and never reads 'sources' — but nothing "
-                        f"static can tell which layout the step runs on. Add "
-                        f"{{\"layout\": \"<path>\", \"alias\": \"{screen}\"}} "
-                        f"to 'sources'; do not rename the screen."
-                    ),
-                    level="warning"
-                ))
+        for screen in step_screens(data):
+            if screen in declared:
+                continue
+            result.warnings.append(ValidationMessage(
+                path=f"{path}.sources",
+                message=(
+                    f"steps name screen '{screen}', but no entry in "
+                    f"'sources' declares that alias (declared: "
+                    f"{', '.join(sorted(declared))}). The test still runs "
+                    f"— the driver resolves 'screen' to an app-side "
+                    f"marker and never reads 'sources' — but nothing "
+                    f"static can tell which layout the step runs on. Add "
+                    f"{{\"layout\": \"<path>\", \"alias\": \"{screen}\"}} "
+                    f"to 'sources'; do not rename the screen."
+                ),
+                level="warning"
+            ))
 
     def _validate_sources(self, sources, path: str, result: ValidationResult):
         """Validate the sources array.

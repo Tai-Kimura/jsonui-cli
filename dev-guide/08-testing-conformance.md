@@ -25,6 +25,27 @@
   `setup`/`teardown`、`embeddedIn`（`Parent#embedId` 形式で Embed 内実行）。
 - **flow test**（`type:"flow"`）: steps は fileStep（`{"file":"screens/login","case(s)":...}` で
   screen test を参照）か inlineStep。`checkpoints[]`（afterStep + screenshot）。
+- **initialState と state**（契約は jsonui-test-runner spec §10。driver ios 1.15.0 / android
+  1.17.0 / web 1.15.0、SwiftJsonUI 10.30.0、KotlinJsonUI 2.44.0、同じ列車の jsonui-cli で build）:
+  - `initialState.viewModel` はテスト対象画面（`source.layout` の screen id）の Data 名 → 値。
+    キーは layout の `data` の名前だけ（トップレベル、大小区別、ドット記法なし）。値は data の
+    class に合うものだけ（Int は 32bit の整数で `2.0` 可、Bool は boolean のみ、`null` は `?` 付きのみ、
+    closure・`CollectionDataSource`・`Visibility` 等は設定不可）。空（`{}`）は無いのと同じ。
+  - driver が起動時に payload `JSONUI_TEST_INITIAL_STATE` で届け、アプリはその画面の最初の表示で
+    1 回だけ適用して state ブリッジに受領（applied / rejected）を出す。受領が無い、または rejected が
+    あれば driver はその case を `failureReason: "setup"` で落とす（移行期間なし）。
+  - case 単位の `initialState` は file の値に key 単位で上書きし、`caseIsolation: "reopen"` が必須
+    （`shared` では画面が 1 回しか開かないので validate エラー `case-initial-state-needs-reopen`）。
+  - flow は `initialState.viewModels`（screen id → 値。step の `screen` と同じ値）。
+    `initialState.screen` は削除済み（validate エラー）。flow から参照した file / case の
+    initialState は flow 内では適用されない（validate と driver で warning）。
+  - `state` / `when.state` は既定でその画面の state ブリッジの `data` を読む（iOS は leaf
+    `__state_<id>`、Android は screen marker の `JsonUIState`、web は `window.__JSONUI_STATE__`）。
+    ハーネスの provider は不要で、渡せばそちらが優先。
+  - `jsonui-test validate` は形・case×shared・flow の screen id・各キーと値（その画面の layout が
+    platform ごとに宣言する Data に対して、アプリと同じ規則で）を検査する
+    （`test_tools/jsonui_test_cli/validation/initial_state.py`）。規則は vendored ベクタ
+    `shared/core/initial_state_{coercion,payload}_vectors.json` で固定。
 - **actions の正本は `actions.schema.json` 一本**（2026-08-01 の P3 で正本化完了）:
   definitions の oneOf が全ステップを列挙（現在 **38 = アクション 28 + アサーション 10**）し、
   各定義の `x-doc {ja, platforms}` から README/CLAUDE の表を `npm run docs` で生成

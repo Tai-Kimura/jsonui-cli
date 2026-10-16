@@ -359,6 +359,18 @@ KEY_DRIVER_REQUIREMENTS = {
     # android 1.15.12 -> 1.16.0). An older driver runs a 'reopen' file as
     # 'shared', which is the failure the declaration exists to name.
     "caseIsolation": {"android": "1.16.0", "ios": "1.14.0", "web": "1.14.0"},
+    # The drivers that deliver it, wait for the app's receipt and fail on a
+    # missing or rejecting one (spec §10). Declared on the file and on a
+    # case in screen-test, and on the file in flow-test, with one value: a
+    # case-level declaration is collected under the same key
+    # (`runtime_support.collect_declared_keys`). An older driver never
+    # delivers it, so the screen opens with its defaults and the steps fail
+    # on values nobody set.
+    "initialState": {"android": "1.17.0", "ios": "1.15.0", "web": "1.15.0"},
+    # Web only: before 1.15.0 the web runner did not apply `launch` at all
+    # (it was the harness's job, through `applyLaunchConfig`, which 1.15.0
+    # removes). iOS and Android applied it before the key carried a floor.
+    "launch": {"web": "1.15.0"},
 }
 
 # `screenReady` string forms. The object form is {"marker": "<screen id>"}.
