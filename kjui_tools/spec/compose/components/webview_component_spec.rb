@@ -85,8 +85,10 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
 
       # The control: a static url has nothing to follow, and its emit is
       # the same bytes it was before this arm existed — pinned whole, so
-      # "no update for a static url" cannot drift into "some other change".
-      it 'leaves a static url emit byte-identical (no update, no tag)' do
+      # "no update for a static url" cannot drift into "some other change" —
+      # but for the clip every WebView takes (1.9.34, ticket
+      # kjui-webview-paints-the-whole-window-white-until-its-first-frame).
+      it 'leaves a static url emit byte-identical but for the clip (no update, no tag)' do
         result = described_class.generate({ 'type' => 'WebView', 'url' => 'https://example.com' }, 0, required_imports)
         expect(result).to eq(<<~KOTLIN.chomp)
           AndroidView(
@@ -98,6 +100,7 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
                       loadUrl("https://example.com")
                   }
               },
+              modifier = Modifier.clipToBounds()
           )
         KOTLIN
       end
@@ -115,6 +118,7 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
               fun testTag(tag: String): Modifier = this
               fun semantics(block: SemanticsScope.() -> Unit): Modifier = this
               fun fillMaxSize(): Modifier = this
+              fun clipToBounds(): Modifier = this
           }
           @Composable
           fun Box(modifier: Modifier = Modifier, content: () -> Unit) { content() }
