@@ -16,12 +16,13 @@ from the layout's `data` sections, so this reads the layout the way they do:
   IncludeExpander;
 - then the declared items: `data` arrays, each item's `platform` checked
   against the platform's tokens (DataItemPlatform), the first declaration of a
-  name kept. The generators part ways in two places, both measured by
-  shared/core/layout_data_fields_vectors.json:
-  - ios and android (the shared DataModelUpdaterCore) read a `data` array on
-    any node and honour an item's `mode` (ios: swiftui, android: compose);
-  - web (rjui) reads it only on the layout's root, an include's root, or a
-    node whose keys are `data` (and `type`), and does not read `mode`.
+  name kept. Every generator reads a `data` array on any node (a data[] a
+  style merged in included). They part ways in one place, measured by
+  shared/core/layout_data_fields_vectors.json: ios and android (the shared
+  DataModelUpdaterCore) honour an item's `mode` (ios: swiftui, android:
+  compose); web (rjui) does not read `mode`. (Until the initialState train
+  rjui also skipped a data[] on a node with other keys and one from a style —
+  ticket rjui-data-declared-in-a-node-with-other-keys-or-a-style-is-not-collected.)
 
 Not declared, so not listed on any platform: `data` written as an object (the
 style shorthand), and the fields a generator adds by itself (`<id>IsFocused`,
@@ -110,11 +111,8 @@ def _collect_core(node, platform, fields, seen) -> None:
 # -- web: rjui DataModelGenerator.extract_data_properties ----------------
 
 def _declares_data(node: dict, is_root: bool) -> bool:
-    if not isinstance(node.get("data"), list):
-        return False
-    written = list(node.keys())
-    return (is_root or bool(node.get(_INCLUDE_ROOT)) or written == ["data"]
-            or not [k for k in written if k not in ("data", "type")])
+    # Any node's data[], as sjui / kjui read it (rjui IncludeExpander.declares_data?).
+    return isinstance(node.get("data"), list)
 
 
 def _collect_web(node, is_root, fields, seen) -> None:

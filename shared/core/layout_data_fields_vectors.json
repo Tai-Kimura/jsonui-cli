@@ -109,7 +109,7 @@
     },
     {
       "id": "data_on_a_node_with_other_keys",
-      "why": "A data[] on a non-root node that also has other keys: sjui / kjui read data at any level; rjui reads it only on the root, an include root, or a node whose keys are data (and type).",
+      "why": "A data[] on a non-root node that also has other keys is read on every platform.",
       "files": {
         "layouts/screen.json": {
           "type": "View",
@@ -160,6 +160,10 @@
           [
             "a",
             "String"
+          ],
+          [
+            "b",
+            "Int"
           ]
         ]
       }
@@ -632,7 +636,7 @@
     },
     {
       "id": "data_from_a_style",
-      "why": "A style's data[] merged into a node with other keys: sjui / kjui read it; rjui does not (the node has keys besides data and type).",
+      "why": "A style's data[] merged into a node with other keys is read on every platform.",
       "files": {
         "layouts/screen.json": {
           "type": "View",
@@ -684,6 +688,10 @@
         "web": [
           [
             "own",
+            "String"
+          ],
+          [
+            "styled",
             "String"
           ]
         ]
