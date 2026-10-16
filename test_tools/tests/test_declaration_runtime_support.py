@@ -151,6 +151,47 @@ class TestKeyCollection:
         assert collect_declared_keys([bad], {"screenReady"}) == {}
 
 
+class TestCaseKeysAreDeclarations:
+    """A case-level key needs the same driver as the file-level one."""
+
+    def test_a_case_initial_state_is_collected(self, tmp_path):
+        a = write_test(tmp_path, "a.test.json", caseIsolation="reopen",
+                       cases=[{"name": "c", "steps": [],
+                               "initialState": {"viewModel": {"email": "x"}}}])
+        assert collect_declared_keys([a], {"initialState"}) == {"initialState": [a]}
+
+    def test_a_file_is_listed_once_per_key(self, tmp_path):
+        state = {"viewModel": {"email": "x"}}
+        a = write_test(tmp_path, "a.test.json", initialState=state, caseIsolation="reopen",
+                       cases=[{"name": "c", "steps": [], "initialState": state},
+                              {"name": "d", "steps": [], "initialState": state}])
+        assert collect_declared_keys([a], {"initialState"}) == {"initialState": [a]}
+
+    def test_an_old_driver_is_an_error_for_a_case_only_declaration(self, tmp_path):
+        with_driver(tmp_path, "1.14.2")
+        a = write_test(tmp_path, "a.test.json", caseIsolation="reopen",
+                       cases=[{"name": "c", "steps": [],
+                               "initialState": {"viewModel": {"email": "x"}}}])
+        errors, _ = check_declarations(
+            collect_declared_keys([a], set(KEY_DRIVER_REQUIREMENTS)),
+            {"initialState": KEY_DRIVER_REQUIREMENTS["initialState"]}, tmp_path)
+        assert len(errors) == 1 and "'initialState' requires the web driver 1.15.0" in errors[0]
+
+    @pytest.mark.parametrize("empty", [{}, {"viewModel": {}}])
+    def test_an_empty_initial_state_is_not_a_declaration(self, tmp_path, empty):
+        # Spec §10.2: the same as none — nothing is delivered, so an older
+        # driver has nothing to ignore.
+        a = write_test(tmp_path, "a.test.json", initialState=empty,
+                       cases=[{"name": "c", "steps": [], "initialState": empty}])
+        assert collect_declared_keys([a], {"initialState"}) == {}
+
+    def test_an_empty_flow_view_models_is_not_a_declaration(self, tmp_path):
+        a = tmp_path / "f.test.json"
+        a.write_text(json.dumps({"type": "flow", "metadata": {"name": "f"}, "steps": [],
+                                 "initialState": {"viewModels": {}}}), encoding="utf-8")
+        assert collect_declared_keys([a], {"initialState"}) == {}
+
+
 class TestTheRequirementComesFromTheSchema:
     def test_screen_ready_is_declared_with_its_requirement(self):
         # Guards the class, not the instance: the requirement is data beside

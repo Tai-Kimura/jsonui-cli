@@ -172,9 +172,29 @@ def check_declarations(declared: dict[str, list[Path]],
     return errors, notes
 
 
+def _declares(key: str, value) -> bool:
+    """Is `key: value` a declaration a driver has to read?
+
+    An empty initialState is not one: spec §10.2 makes it the same as none
+    (no payload, no launch), so an older driver ignoring it changes nothing.
+    """
+    if key == "initialState":
+        from .initial_state import is_empty
+        return not is_empty(value)
+    return True
+
+
 def collect_declared_keys(files: list[Path],
                           keys: set[str]) -> dict[str, list[Path]]:
-    """Which of `keys` each file declares at the top level."""
+    """Which of `keys` each file declares, at the top level or on a case.
+
+    A case-level key is a declaration of the same key: a screen-test case's
+    `initialState` needs the same driver as the file's (both schemas carry
+    one floor per key, pinned by test_schema_drift). Reading the top level
+    alone let a file whose only initialState sits on a case pass an old
+    driver in silence. A file is listed once per key however many of its
+    cases declare it.
+    """
     found: dict[str, list[Path]] = {}
     for path in files:
         try:
@@ -183,6 +203,10 @@ def collect_declared_keys(files: list[Path],
             continue
         if not isinstance(data, dict):
             continue
-        for key in keys & data.keys():
+        cases = data.get("cases") if isinstance(data.get("cases"), list) else []
+        objects = [data, *(case for case in cases if isinstance(case, dict))]
+        declared = {key for obj in objects for key in keys & obj.keys()
+                    if _declares(key, obj[key])}
+        for key in sorted(declared):
             found.setdefault(key, []).append(Path(path))
     return found
