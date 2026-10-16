@@ -445,6 +445,12 @@ module JsonUIShared
         if normalized['class']
           raw_class = extract_platform_value(normalized['class'], mode)
           store_normalized_class(normalized, convert_type(raw_class, mode))
+          # The class as the layout spells it (this platform's value), kept
+          # beside the converted one: the initialState check judges values
+          # by it and names it verbatim in a rejection (test-runner spec
+          # section 10.3), and the converted class has already lost it
+          # (Boolean -> Bool, Array(String) -> [String]).
+          normalized['declaredClass'] = raw_class
         end
 
         # Extract platform-specific defaultValue and convert for special types
