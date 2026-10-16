@@ -2,6 +2,7 @@
 
 require 'open3'
 require 'tmpdir'
+require 'fileutils'
 
 # Type-check emitted TypeScript from the suite.
 #
@@ -81,6 +82,42 @@ module TypeScriptCompiler
     end.join("\n").gsub(/^export /, '')
   end
 
+  # The test-bridge helper `rjui build` emits (jsonuiTestBridge.ts): the
+  # real text for a source that imports it, and its exported signatures as
+  # global declarations for a source whose imports a spec cut — derived from
+  # the helper, so a name or a signature the helper changes is what the
+  # fragment is checked against.
+  module TestBridge
+    module_function
+
+    REACT_HOOKS = <<~TS
+      declare module 'react' {
+        export function useRef<T>(initial: T): { current: T };
+        export function useEffect(effect: () => void | (() => void), deps?: unknown[]): void;
+      }
+    TS
+
+    def helper
+      @helper ||= begin
+        require_relative '../../lib/cli/commands/build_command'
+        RjuiTools::CLI::Commands::BuildCommand.allocate.send(:test_bridge_helper_source, true)
+      end
+    end
+
+    def declarations
+      @declarations ||= begin
+        text = helper
+        interfaces = text.scan(/^export (interface \w+(?:<\w+>)? \{.*?\n\})/m).flatten
+        functions = text.scan(/^export function (\w+(?:<\w+>)?)\((.*?)\)(: [^{]+?) \{$/m).map do |name, params, ret|
+          "declare function #{name}(#{params})#{ret};"
+        end
+        raise 'jsonuiTestBridge: no exported functions found' if functions.empty?
+
+        (interfaces + functions).join("\n")
+      end
+    end
+  end
+
   Result = Struct.new(:success, :errors) do
     def success?
       success
@@ -92,8 +129,21 @@ module TypeScriptCompiler
   # what the consumer rejects.
   def compile(source, ambient: AMBIENT)
     Dir.mktmpdir('rjui_ts') do |dir|
-      File.write(File.join(dir, 'ambient.d.ts'), ambient)
-      File.write(File.join(dir, 'Emitted.tsx'), source)
+      File.write(File.join(dir, 'ambient.d.ts'), "#{ambient}\n#{TestBridge.declarations}")
+      # A Data model imports '../jsonuiTestBridge' (it sits one level below
+      # the generated root): the emitted helper itself is written there, so
+      # the import compiles against the real module, not a stub.
+      emitted_dir = dir
+      extra = []
+      if source.include?("from '../jsonuiTestBridge'")
+        emitted_dir = File.join(dir, 'data')
+        FileUtils.mkdir_p(emitted_dir)
+        File.write(File.join(dir, 'jsonuiTestBridge.ts'), TestBridge.helper)
+        File.write(File.join(dir, 'react-hooks.d.ts'), TestBridge::REACT_HOOKS)
+        extra = [File.join(dir, 'react-hooks.d.ts')]
+      end
+      emitted = File.join(emitted_dir, 'Emitted.tsx')
+      File.write(emitted, source)
       out, err, = Open3.capture3(
         # `--jsx react` (classic), not `react-jsx`: the automatic runtime
         # requires `react/jsx-runtime` to resolve, and React is deliberately
@@ -103,7 +153,7 @@ module TypeScriptCompiler
         tsc_path, '--noEmit', '--strict', '--jsx', 'react',
         '--target', 'ES2020', '--moduleResolution', 'bundler', '--module', 'esnext',
         '--skipLibCheck',
-        File.join(dir, 'ambient.d.ts'), File.join(dir, 'Emitted.tsx')
+        File.join(dir, 'ambient.d.ts'), *extra, emitted
       )
       text = "#{out}\n#{err}"
       errors = text.lines.select { |l| l.include?('error TS') }.map(&:strip)

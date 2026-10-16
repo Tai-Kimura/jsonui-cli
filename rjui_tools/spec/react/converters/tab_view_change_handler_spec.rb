@@ -49,6 +49,8 @@ RSpec.describe 'rjui calls a TabView onValueChange as its data declares it' do
       [model, generate.call(tree)].map { |file| file.lines.reject { |l| l.start_with?('import ', 'export default') }.join }
                                   .join("\n").gsub(/\bHome(Data|Props)?\b/) { "#{handler}Home#{Regexp.last_match(1)}" }
                                   .gsub('createHomeData', "create#{handler}HomeData")
+                                  .gsub(/(testSnapshot|applyTestInitialState)HomeData\b/) { "#{Regexp.last_match(1)}#{handler}HomeData" }
+                                  .gsub('HomeTestFields', "#{handler}HomeTestFields")
     end
     # The file's own helpers live once per file; the three are joined into
     # one source here, so JsonUIValueChange is declared once and its hooks are

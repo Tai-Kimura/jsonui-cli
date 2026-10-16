@@ -18,6 +18,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getEmbedNavigator } from './components/extensions/EmbedContainer';
+import { useJsonUITestBridge, type JsonUITestApplyResult } from './generated/jsonuiTestBridge';
 
 export interface ConformanceStateVar {
   name: string;
@@ -89,16 +90,53 @@ function afterPaint(callback: () => void): () => void {
 
 type DataDict = Record<string, unknown>;
 
+/** The generated Data module's test functions, over the host's untyped store. */
+export type BridgeSnapshot = (data: DataDict) => Record<string, unknown>;
+export type BridgeApply = (values: Record<string, unknown>) => JsonUITestApplyResult<DataDict>;
+
+/**
+ * testBridge (INTERACTIVE_HOST_CONTRACT.md §6): the fixture's screen id and
+ * the testSnapshot / applyTestInitialState functions rjui wrote into its Data
+ * model. The bridge itself is rjui's generated useJsonUITestBridge — the
+ * receiving side and the bridge a consumer's generated hook carries.
+ */
+export interface TestBridgeBinding {
+  screenId: string;
+  snapshot: BridgeSnapshot;
+  apply: BridgeApply;
+}
+
+function TestBridgeTap({
+  bridge,
+  data,
+  setData,
+}: {
+  bridge: TestBridgeBinding;
+  data: DataDict;
+  setData: React.Dispatch<React.SetStateAction<DataDict>>;
+}): null {
+  useJsonUITestBridge(
+    bridge.screenId,
+    data,
+    (vars: Partial<DataDict>) => setData((prev) => ({ ...prev, ...vars })),
+    bridge.snapshot,
+    bridge.apply
+  );
+  return null;
+}
+
 const TWOWAY_KEY = /^on([A-Z].*)Change$/;
 
 export function StateHost({
   createData,
   state,
   Component,
+  bridge,
 }: {
   createData: () => DataDict;
   state: ConformanceState;
   Component: React.ComponentType<{ data: DataDict }>;
+  bridge?: TestBridgeBinding;
 }): React.JSX.Element {
   const [data, setData] = useState<DataDict>(() => createData());
 
@@ -169,5 +207,10 @@ export function StateHost({
     return out;
   }, [data, state]);
 
-  return <Component data={merged} />;
+  return (
+    <>
+      {bridge ? <TestBridgeTap bridge={bridge} data={data} setData={setData} /> : null}
+      <Component data={merged} />
+    </>
+  );
 }

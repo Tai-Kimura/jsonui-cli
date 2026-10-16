@@ -46,6 +46,13 @@ RSpec.describe 'layout data fields vectors (rjui)' do
         declared = properties.select { |p| generator.send(:declared_data_properties).key?(p) }
 
         expect(declared.map { |p| [p['name'], written_class[p]] }).to eq(vector['expected']['web'])
+
+        # The Data type rjui writes from these properties — the declared
+        # fields plus the test bridge's table and functions over them —
+        # compiles beside the emitted helper.
+        model = generator.send(:generate_typescript_content, 'Screen', properties)
+        expect(model.scan(/^      case (".*"):$/).flatten).to eq(declared.map { |p| p['name'].to_json })
+        expect(model).to compile_as_typescript
       end
     end
   end

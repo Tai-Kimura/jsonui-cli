@@ -173,7 +173,7 @@ module RjuiTools
           scaffold(json_path, options, 'layout') { JSON.pretty_generate(layout) }
 
           # Generate page.tsx
-          generate_page_file(view_name, kebab_path, with_viewmodel, options)
+          generate_page_file(view_name, kebab_path, with_viewmodel, options, json_name)
 
           # Generate ViewModel only if --with-viewmodel is specified
           if with_viewmodel
@@ -253,13 +253,13 @@ module RjuiTools
           @config['typescript'] ? true : false
         end
 
-        def generate_page_file(view_name, kebab_path, with_viewmodel, options)
+        def generate_page_file(view_name, kebab_path, with_viewmodel, options, screen_id)
           # kebab_path can be nested like "learn/components/view"
           path_parts = kebab_path.split('/')
           page_dir = File.join('src', 'app', *path_parts)
           page_path = File.join(page_dir, typescript? ? 'page.tsx' : 'page.jsx')
           scaffold(page_path, options, 'page') do
-            content = page_content(view_name, with_viewmodel)
+            content = page_content(view_name, with_viewmodel, screen_id)
             typescript? ? content : javascript_page(content, view_name)
           end
         end
@@ -268,21 +268,28 @@ module RjuiTools
         # types — the type arguments, and the Data type from the import.
         def javascript_page(content, view_name)
           content.sub("useState<#{view_name}Data>(", 'useState(')
+                 .sub("(vars: Partial<#{view_name}Data>) =>", '(vars) =>')
                  .sub("useRef<#{view_name}ViewModel | null>(null)", 'useRef(null)')
-                 .sub("import { #{view_name}Data, create#{view_name}Data } from", "import { create#{view_name}Data } from")
+                 .sub("import { #{view_name}Data, create#{view_name}Data,", "import { create#{view_name}Data,")
         end
 
-        def page_content(view_name, with_viewmodel)
+        # Both page shapes call useJsonUITestBridge: a page that does not go
+        # through a generated ViewModel hook still receives a test's
+        # initialState and publishes the state bridge (development builds
+        # only; test-runner spec §10.3).
+        def page_content(view_name, with_viewmodel, screen_id)
           fw = Core::Frameworks.for(@config)
           if with_viewmodel
             page_content = <<~TSX
               #{fw.use_client_prefix}#{fw.router_hook_import_prefix}import { useRef, useState } from "react";
               import #{view_name} from "@/generated/components/#{view_name}";
               import { #{view_name}ViewModel } from "@/viewmodels/#{view_name}ViewModel";
-              import { #{view_name}Data, create#{view_name}Data } from "@/generated/data/#{view_name}Data";
+              import { #{view_name}Data, create#{view_name}Data, testSnapshot#{view_name}Data, applyTestInitialState#{view_name}Data } from "@/generated/data/#{view_name}Data";
+              import { useJsonUITestBridge } from "@/generated/jsonuiTestBridge";
 
               export default function #{view_name}Page() {
               #{fw.router_hook_statement_line}  const [data, setData] = useState<#{view_name}Data>(create#{view_name}Data());
+                useJsonUITestBridge(#{screen_id.to_json}, data, (vars: Partial<#{view_name}Data>) => setData(prev => ({ ...prev, ...vars })), testSnapshot#{view_name}Data, applyTestInitialState#{view_name}Data);
                 const dataRef = useRef(data);
                 dataRef.current = data;
 
@@ -302,10 +309,12 @@ module RjuiTools
             page_content = <<~TSX
               #{fw.use_client_prefix}#{fw.router_hook_import_prefix}import { useState } from "react";
               import #{view_name} from "@/generated/components/#{view_name}";
-              import { #{view_name}Data, create#{view_name}Data } from "@/generated/data/#{view_name}Data";
+              import { #{view_name}Data, create#{view_name}Data, testSnapshot#{view_name}Data, applyTestInitialState#{view_name}Data } from "@/generated/data/#{view_name}Data";
+              import { useJsonUITestBridge } from "@/generated/jsonuiTestBridge";
 
               export default function #{view_name}Page() {
               #{fw.router_hook_statement_line}  const [data, setData] = useState<#{view_name}Data>(create#{view_name}Data());
+                useJsonUITestBridge(#{screen_id.to_json}, data, (vars: Partial<#{view_name}Data>) => setData(prev => ({ ...prev, ...vars })), testSnapshot#{view_name}Data, applyTestInitialState#{view_name}Data);
 
                 return <#{view_name} data={data} />;
               }

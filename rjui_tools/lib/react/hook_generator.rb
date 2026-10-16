@@ -67,8 +67,12 @@ module RjuiTools
         text_field_bindings = extract_text_field_bindings(expanded_data)
         event_handlers = extract_event_handler_bindings(expanded_data)
 
+        # The screen id the test bridge publishes under: the layout's basename,
+        # variant removed (shared/core/screen_identity.json).
+        screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
+
         # Generate hook file (match ViewModel extension)
-        generate_hook_file(base_name, text_field_bindings, event_handlers, is_typescript)
+        generate_hook_file(base_name, text_field_bindings, event_handlers, is_typescript, screen_id)
       end
 
       def find_json_file(base_name)
@@ -171,22 +175,22 @@ module RjuiTools
         bindings
       end
 
-      def generate_hook_file(base_name, text_field_bindings, event_handlers, is_typescript)
+      def generate_hook_file(base_name, text_field_bindings, event_handlers, is_typescript, screen_id)
         view_name = to_pascal_case(base_name)
         extension = is_typescript ? '.ts' : '.js'
         hook_file_path = File.join(@hooks_dir, "use#{view_name}ViewModel#{extension}")
 
         content = if is_typescript
-                    generate_typescript_hook(view_name, text_field_bindings, event_handlers)
+                    generate_typescript_hook(view_name, text_field_bindings, event_handlers, screen_id)
                   else
-                    generate_javascript_hook(view_name, text_field_bindings, event_handlers)
+                    generate_javascript_hook(view_name, text_field_bindings, event_handlers, screen_id)
                   end
 
         File.write(hook_file_path, content)
         puts "  Generated hook: #{hook_file_path}"
       end
 
-      def generate_typescript_hook(view_name, text_field_bindings, event_handlers)
+      def generate_typescript_hook(view_name, text_field_bindings, event_handlers, screen_id)
         data_type = "#{view_name}Data"
         vm_type = "#{view_name}ViewModel"
 
@@ -211,7 +215,8 @@ module RjuiTools
           #{@framework.use_client_prefix}#{marker_header}
 
           import { useRef, useState } from "react";
-          #{@framework.router_type_import_prefix}import { #{data_type}, create#{data_type} } from "@/generated/data/#{data_type}";
+          #{@framework.router_type_import_prefix}import { #{data_type}, create#{data_type}, testSnapshot#{data_type}, applyTestInitialState#{data_type} } from "@/generated/data/#{data_type}";
+          import { useJsonUITestBridge } from "@/generated/jsonuiTestBridge";
           import { #{vm_type} } from "@/viewmodels/#{vm_type}";
 
           export function use#{view_name}ViewModel(router: #{@framework.router_type}) {
@@ -234,6 +239,10 @@ module RjuiTools
               viewModelRef.current?.setVars(vars);
             };
 
+            // Test support (development builds only): a test's initialState
+            // and the state bridge the test drivers read.
+            useJsonUITestBridge(#{screen_id.to_json}, data, (vars: Partial<#{data_type}>) => setData(prev => ({ ...prev, ...vars })), testSnapshot#{data_type}, applyTestInitialState#{data_type});
+
             return { data: dataWithDefaults, viewModel: viewModelRef.current, setVars };
           }
 
@@ -241,7 +250,7 @@ module RjuiTools
         TS
       end
 
-      def generate_javascript_hook(view_name, text_field_bindings, event_handlers)
+      def generate_javascript_hook(view_name, text_field_bindings, event_handlers, screen_id)
         data_type = "#{view_name}Data"
         vm_type = "#{view_name}ViewModel"
 
@@ -266,7 +275,8 @@ module RjuiTools
           #{@framework.use_client_prefix}#{marker_header}
 
           import { useRef, useState } from "react";
-          import { create#{data_type} } from "@/generated/data/#{data_type}";
+          import { create#{data_type}, testSnapshot#{data_type}, applyTestInitialState#{data_type} } from "@/generated/data/#{data_type}";
+          import { useJsonUITestBridge } from "@/generated/jsonuiTestBridge";
           import { #{vm_type} } from "@/viewmodels/#{vm_type}";
 
           /**
@@ -292,6 +302,10 @@ module RjuiTools
             const setVars = (vars) => {
               viewModelRef.current?.setVars(vars);
             };
+
+            // Test support (development builds only): a test's initialState
+            // and the state bridge the test drivers read.
+            useJsonUITestBridge(#{screen_id.to_json}, data, (vars) => setData(prev => ({ ...prev, ...vars })), testSnapshot#{data_type}, applyTestInitialState#{data_type});
 
             return { data: dataWithDefaults, viewModel: viewModelRef.current, setVars };
           }

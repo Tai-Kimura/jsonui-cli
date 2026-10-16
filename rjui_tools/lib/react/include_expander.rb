@@ -24,17 +24,20 @@ module RjuiTools
 
       module_function
 
-      # Whether a node's data[] is this layout's Data type's: a layout's
-      # root, an expanded include's root, or a node that holds data alone
-      # (its type at most). The one rule the Data type and the include call
-      # site both read — the call site hands the partial exactly the names
-      # its Data type declares, and a name the type does not have is an
-      # excess property to tsc.
-      def declares_data?(node, is_root)
-        return false unless node.is_a?(Hash) && node['data'].is_a?(Array)
-
-        written = Core::NodeKeys.written(node)
-        is_root || node[INCLUDE_ROOT] || written == ['data'] || (written - %w[data type]).empty?
+      # Whether a node's data[] is this layout's Data type's: any node's, as
+      # sjui / kjui read it (DataModelUpdaterCore) — the root, an expanded
+      # include's root, a node of data alone, a node with other keys, and a
+      # data[] a style merged in. Until the jsonui-cli of the initialState
+      # train rjui read only the first three, so the last two declared a
+      # field on iOS / Android and not on web (ticket rjui-data-declared-in-
+      # a-node-with-other-keys-or-a-style-is-not-collected; held by
+      # shared/core/layout_data_fields_vectors.json). The one rule the Data
+      # type and the include call site both read — the call site hands the
+      # partial exactly the names its Data type declares, and a name the
+      # type does not have is an excess property to tsc. `is_root` is kept
+      # for the callers; it no longer decides anything.
+      def declares_data?(node, _is_root)
+        node.is_a?(Hash) && node['data'].is_a?(Array)
       end
 
       # The data names an (expanded) layout's Data type declares, in

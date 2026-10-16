@@ -28,6 +28,8 @@ import { ActionExecutor } from './vendor/ActionExecutor.ts';
 import { AssertionExecutor } from './vendor/AssertionExecutor.ts';
 import type { ScreenTest, TestStep } from './vendor/types.ts';
 import { platformIncludes } from './vendor/types.ts';
+import { BridgeStateProvider } from './vendor/StateProvider.ts';
+import { readBridge, type BridgeSnapshot } from './vendor/StateBridge.ts';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const hostDir = path.resolve(scriptDir, '..');
@@ -61,6 +63,15 @@ interface ManifestFixture {
   test: string;
   layout: string;
   state?: { afterFirstDraw?: { name: string; set: { var: string; value: string } } } | null;
+  testBridge?: TestBridgeSpec | null;
+}
+
+/** INTERACTIVE_HOST_CONTRACT.md §6. */
+interface TestBridgeSpec {
+  data: { name: string; class: string; defaultValue?: unknown }[];
+  initialState?: Record<string, unknown>;
+  receipt?: { applied: string[]; rejected: { key: string; reason: string }[] };
+  remount?: boolean;
 }
 interface Manifest {
   fixtures: ManifestFixture[];
@@ -179,7 +190,7 @@ if (!fs.existsSync(fixtureMapPath)) {
   console.error('fixture-map.json missing — run `npm run generate` first');
   process.exit(1);
 }
-const fixtureMap: Record<string, { component: string; hasComponent: boolean }> = JSON.parse(
+const fixtureMap: Record<string, { component: string; screenId: string; hasComponent: boolean }> = JSON.parse(
   fs.readFileSync(fixtureMapPath, 'utf8')
 );
 
@@ -307,7 +318,63 @@ async function awaitAfterFirstDraw(page: Page, name: string): Promise<AfterFirst
   };
 }
 
-async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultEntry> {
+// ------------------------------------------------------------------ testBridge (contract §6)
+/** How long a fixture's receipt may take: the host's screen-ready time. */
+const RECEIPT_TIMEOUT_MS = 10000;
+
+/**
+ * Job 1 — deliver at launch. On web a launch is a tab: one
+ * JSONUI_TEST_INITIAL_STATE payload in its sessionStorage, carrying every
+ * testBridge fixture of the batch that has an initialState, each under the
+ * screen id this host staged it as (fx_NNNN). Written once per worker tab,
+ * before its first fixture; the generated useJsonUITestBridge consumes a
+ * screen's entry the first time that screen mounts.
+ */
+async function deliverInitialState(page: Page, batch: ManifestFixture[]): Promise<string | null> {
+  const screens: Record<string, Record<string, unknown>> = {};
+  for (const fixture of batch) {
+    const values = fixture.testBridge?.initialState;
+    if (values) screens[fixtureMap[fixture.id].screenId] = values;
+  }
+  if (Object.keys(screens).length === 0) return null;
+  const launchId = crypto.randomUUID();
+  await page.goto(baseUrl, { waitUntil: 'load' });
+  await page.evaluate((payload) => {
+    window.sessionStorage.setItem('JSONUI_TEST_INITIAL_STATE', payload);
+  }, JSON.stringify({ version: 1, launchId, screens }));
+  return launchId;
+}
+
+const asSet = (values: string[]): string => JSON.stringify([...new Set(values)].sort());
+
+/**
+ * Job 2 — check the receipt: wait for the fixture's bridge to show
+ * initialState with this launch's launchId, then compare applied and rejected
+ * (key + reason) with the manifest as sets. Null when it matches, else what
+ * was seen.
+ */
+async function checkReceipt(page: Page, screenId: string, launchId: string | null, spec: TestBridgeSpec): Promise<string | null> {
+  const expected = spec.receipt!;
+  const start = Date.now();
+  let seen: BridgeSnapshot | null = null;
+  for (;;) {
+    seen = await readBridge(page, screenId);
+    if (seen && launchId !== null && seen.launchId === launchId && seen.initialState) break;
+    if (Date.now() - start >= RECEIPT_TIMEOUT_MS) {
+      return `testBridge: no receipt for launch ${launchId} on screen '${screenId}' within ${RECEIPT_TIMEOUT_MS} ms (bridge: ${JSON.stringify(seen)})`;
+    }
+    await page.waitForTimeout(50);
+  }
+  const got = seen.initialState!;
+  const gotApplied = asSet(got.applied ?? []);
+  const gotRejected = asSet((got.rejected ?? []).map((r) => `${r.key}: ${r.reason}`));
+  const wantApplied = asSet(expected.applied);
+  const wantRejected = asSet(expected.rejected.map((r) => `${r.key}: ${r.reason}`));
+  if (gotApplied === wantApplied && gotRejected === wantRejected) return null;
+  return `testBridge: receipt differs on screen '${screenId}' — applied ${gotApplied} (expected ${wantApplied}), rejected ${gotRejected} (expected ${wantRejected})`;
+}
+
+async function runFixture(page: Page, fixture: ManifestFixture, launchId: string | null): Promise<ResultEntry> {
   const testPath = path.join(conformanceDir, fixture.test);
   const test: ScreenTest = JSON.parse(fs.readFileSync(testPath, 'utf8'));
 
@@ -318,7 +385,12 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
   page.on('pageerror', onPageError);
 
   const actions = new ActionExecutor(page, 10000);
-  const assertions = new AssertionExecutor(page, 10000);
+  // Job 3 — `state` reads this fixture's screen: the bridge rjui's generated
+  // helper publishes under the staged screen id.
+  const screenId = fixtureMap[fixture.id].screenId;
+  const assertions = new AssertionExecutor(page, 10000, {
+    stateProvider: new BridgeStateProvider(page, () => screenId),
+  });
 
   let screenshot: string | undefined;
   let frames: string | undefined;
@@ -337,6 +409,24 @@ async function runFixture(page: Page, fixture: ManifestFixture): Promise<ResultE
 
     if (!platformIncludes(test.platform, 'web')) {
       return { id: fixture.id, status: 'skipped', detail: `test platform ${JSON.stringify(test.platform)} excludes web` };
+    }
+
+    const bridgeSpec = fixture.testBridge;
+    if (bridgeSpec?.receipt) {
+      const differs = await checkReceipt(page, screenId, launchId, bridgeSpec);
+      if (differs !== null) {
+        return { id: fixture.id, status: 'fail', detail: differs };
+      }
+    }
+    if (bridgeSpec?.remount) {
+      // Job 4 — a new instance of the same screen in the same launch, its
+      // store rebuilt (src/main.tsx keys the fixture on a generation).
+      const remounted = await page.evaluate(() => {
+        if (!window.__conformanceRemount) return false;
+        window.__conformanceRemount();
+        return true;
+      });
+      if (!remounted) throw new Error('testBridge: the host page has no __conformanceRemount');
     }
 
     for (const testCase of test.cases) {
@@ -488,11 +578,13 @@ async function main(): Promise<void> {
     // name and the error face is photographed instead.
     await context.route('**pending.invalid**', () => { /* hold forever */ });
     const page = await context.newPage();
+    // One launch per worker tab: every testBridge fixture of the batch.
+    const launchId = await deliverInitialState(page, queue);
     for (;;) {
       const index = cursor++;
       if (index >= queue.length) break;
       const fixture = queue[index];
-      const result = await runFixture(page, fixture);
+      const result = await runFixture(page, fixture, launchId);
       results.set(fixture.id, result);
       done += 1;
       if (done % 50 === 0) console.log(`[run] ${done}/${queue.length}`);

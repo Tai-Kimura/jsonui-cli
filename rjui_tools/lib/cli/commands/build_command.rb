@@ -84,6 +84,7 @@ module RjuiTools
 
           # Emit the screen-marker helper (screen identity / test support)
           emit_screen_marker_helper
+          emit_test_bridge_helper
           emit_interaction_stop_helper
           emit_partial_text_helper
 
@@ -1667,6 +1668,265 @@ module RjuiTools
           File.write(path, content)
           note_emitted_helper(path)
           Core::Logger.info("Generated: #{path}")
+        end
+
+        # The test bridge (jsonui-test-runner spec §10.3 / §10.4): the
+        # receiving side of a test's initialState and the state bridge the
+        # drivers read. One module, emitted beside screenMarker and behind the
+        # same gate (`process.env.NODE_ENV`, the literal form bundlers
+        # replace — see emit_screen_marker_helper): a production build
+        # receives nothing and publishes nothing.
+        #
+        # - checkTestValue(value, declaredClass): the one place values are
+        #   judged against a Data class; the generated
+        #   applyTestInitialState<X>Data calls it once per field
+        #   (shared/core/initial_state_coercion_vectors.json pins it).
+        # - jsonuiTestSnapshot(data, fields): the bridge's `data` — the
+        #   fields whose class checkTestValue accepts.
+        # - useJsonUITestBridge(screenId, data, setVars, snapshot, apply):
+        #   after mount, once per launchId × screenId, applies this screen's
+        #   entry of sessionStorage JSONUI_TEST_INITIAL_STATE and removes it
+        #   from the stored payload; publishes
+        #   window.__JSONUI_STATE__[screenId] = { launchId, initialState, data }
+        #   on every data change.
+        def emit_test_bridge_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          path = File.join(generated_dir, "jsonuiTestBridge.#{is_ts ? 'ts' : 'js'}")
+          File.write(path, test_bridge_helper_source(is_ts))
+          note_emitted_helper(path)
+          Core::Logger.info("Generated: #{path}")
+        end
+
+        def test_bridge_helper_source(is_ts)
+          t = ->(text) { is_ts ? text : '' }
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: 'jsonuiTestBridge (initialState receiving + state bridge)',
+            generator: 'rjui build'
+          )
+          types = is_ts ? <<~TS : ''
+            declare const process: { env: { NODE_ENV?: string } };
+
+            export interface JsonUIRejectedKey {
+              key: string;
+              reason: string;
+            }
+
+            export interface JsonUITestApplyResult<T> {
+              vars: Partial<T>;
+              applied: string[];
+              rejected: JsonUIRejectedKey[];
+            }
+
+            interface JsonUITestReceipt {
+              applied: string[];
+              rejected: JsonUIRejectedKey[];
+            }
+
+            interface JsonUITestPayload {
+              version?: number;
+              launchId?: string;
+              screens?: Record<string, Record<string, unknown>>;
+            }
+
+          TS
+          <<~JS
+            #{marker_header}
+            import { useEffect, useRef } from 'react';
+
+            #{types}// --- the value check (test-runner spec §10.3) -------------------------
+
+            const SCALARS#{t.(': Record<string, string>')} = {
+              string: 'string', int: 'int', integer: 'int',
+              double: 'number', float: 'number', cgfloat: 'number', number: 'number',
+              bool: 'boolean', boolean: 'boolean', color: 'string'
+            };
+
+            function scalarKind(name#{t.(': string')})#{t.(': string | undefined')} {
+              return Object.prototype.hasOwnProperty.call(SCALARS, name.toLowerCase())
+                ? SCALARS[name.toLowerCase()]
+                : undefined;
+            }
+
+            function isPrimitive(v#{t.(': unknown')})#{t.(': boolean')} {
+              return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+            }
+
+            function fitsScalar(kind#{t.(': string')}, v#{t.(': unknown')})#{t.(': boolean')} {
+              switch (kind) {
+                case 'string': return typeof v === 'string';
+                case 'boolean': return typeof v === 'boolean';
+                case 'number': return typeof v === 'number' && Number.isFinite(v);
+                case 'int':
+                  return typeof v === 'number' && Number.isInteger(v) && v >= -2147483648 && v <= 2147483647;
+                default: return false;
+              }
+            }
+
+            // How a class takes a value: a scalar kind, an array of one, a
+            // bare array / object of primitives — or null when unsupported.
+            function shapeOf(base#{t.(': string')})#{t.(': { kind: string; element?: string } | null')} {
+              const scalar = scalarKind(base);
+              if (scalar) return { kind: scalar };
+              const element = /^Array\\((.+)\\)$/.exec(base) || /^\\[(.+)\\]$/.exec(base) || /^List<(.+)>$/.exec(base);
+              if (element) {
+                const inner = scalarKind(element[1].trim());
+                return inner ? { kind: 'array', element: inner } : null;
+              }
+              if (base === 'Array') return { kind: 'array' };
+              if (base === 'Object' || base === 'Hash') return { kind: 'object' };
+              return null;
+            }
+
+            function parseClass(declaredClass#{t.(': string')})#{t.(': { optional: boolean; shape: { kind: string; element?: string } | null }')} {
+              const raw = declaredClass.trim();
+              const optional = raw.endsWith('?');
+              const base = optional ? raw.slice(0, -1).trim() : raw;
+              return { optional, shape: shapeOf(base) };
+            }
+
+            /** Whether the bridge can carry, and initialState can set, a field of this class. */
+            export function isTestValueClass(declaredClass#{t.(': string')})#{t.(': boolean')} {
+              return parseClass(declaredClass).shape !== null;
+            }
+
+            /**
+             * Judge one initialState value against the class the layout declares
+             * (verbatim, `?` included). Null when it is accepted, else the
+             * rejection reason. Checked in the contract's order: unsupported
+             * type, null, then the type.
+             */
+            export function checkTestValue(value#{t.(': unknown')}, declaredClass#{t.(': string')})#{t.(': string | null')} {
+              const { optional, shape } = parseClass(declaredClass);
+              if (shape === null) return `unsupported type ${declaredClass}`;
+              if (value === null) return optional ? null : `null for non-optional ${declaredClass}`;
+              const mismatch = `type mismatch: expected ${declaredClass}`;
+              if (shape.kind === 'array') {
+                if (!Array.isArray(value)) return mismatch;
+                const element = shape.element;
+                const ok = element
+                  ? value.every((v) => fitsScalar(element, v))
+                  : value.every((v) => isPrimitive(v));
+                return ok ? null : mismatch;
+              }
+              if (shape.kind === 'object') {
+                if (typeof value !== 'object' || Array.isArray(value)) return mismatch;
+                return Object.values(value#{t.(' as Record<string, unknown>')}).every((v) => isPrimitive(v)) ? null : mismatch;
+              }
+              return fitsScalar(shape.kind, value) ? null : mismatch;
+            }
+
+            /** The bridge's `data`: each field whose class the check accepts, JSON-copied. */
+            export function jsonuiTestSnapshot(data#{t.(': Record<string, unknown>')}, fields#{t.(': Record<string, string>')})#{t.(': Record<string, unknown>')} {
+              const out#{t.(': Record<string, unknown>')} = {};
+              for (const name of Object.keys(fields)) {
+                if (!isTestValueClass(fields[name])) continue;
+                const value = data[name];
+                out[name] = value === undefined ? null : JSON.parse(JSON.stringify(value));
+              }
+              return out;
+            }
+
+            // --- receiving and publishing (test-runner spec §10.3 / §10.4) -------
+
+            const PAYLOAD_KEY = 'JSONUI_TEST_INITIAL_STATE';
+            // Receipts of this page load, by launchId and screen: a screen built
+            // again in the same launch shows the receipt it already gave and is
+            // not applied again (the stored payload no longer holds it).
+            const receipts#{t.(': Map<string, JsonUITestReceipt>')} = new Map();
+
+            function readPayload()#{t.(': JsonUITestPayload | null')} {
+              try {
+                const raw = window.sessionStorage.getItem(PAYLOAD_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                return parsed && typeof parsed === 'object' ? parsed : null;
+              } catch {
+                return null;
+              }
+            }
+
+            function bridgeRoot()#{t.(': Record<string, unknown>')} {
+              const w = window#{t.(' as unknown as { __JSONUI_STATE__?: Record<string, unknown> }')};
+              if (!w.__JSONUI_STATE__) w.__JSONUI_STATE__ = {};
+              return w.__JSONUI_STATE__;
+            }
+
+            /**
+             * Receive this screen's initialState and publish its state, in
+             * development builds only. Generated ViewModel hooks call it; a page
+             * that does not go through one calls it itself, with the
+             * testSnapshot / applyTestInitialState functions of its Data module.
+             */
+            export function useJsonUITestBridge#{t.('<T>')}(
+              screenId#{t.(': string')},
+              data#{t.(': T')},
+              setVars#{t.(': (vars: Partial<T>) => void')},
+              snapshot#{t.(': (data: T) => Record<string, unknown>')},
+              apply#{t.(': (values: Record<string, unknown>) => JsonUITestApplyResult<T>')}
+            )#{t.(': void')} {
+              const launchId = useRef#{t.('<string | null>')}(null);
+              const receipt = useRef#{t.('<JsonUITestReceipt | null>')}(null);
+              const published = useRef#{t.('<unknown>')}(null);
+              const dataRef = useRef(data);
+              dataRef.current = data;
+
+              const publish = (current#{t.(': T')}) => {
+                const entry = { launchId: launchId.current, initialState: receipt.current, data: snapshot(current) };
+                published.current = entry;
+                bridgeRoot()[screenId] = entry;
+              };
+
+              // After mount: once per launchId × screenId.
+              useEffect(() => {
+                if (process.env.NODE_ENV === 'production') {
+                  return;
+                }
+                const payload = readPayload();
+                launchId.current = payload && typeof payload.launchId === 'string' ? payload.launchId : null;
+                receipt.current = null;
+                let current = dataRef.current;
+                if (launchId.current !== null) {
+                  const key = `${launchId.current}\\u0000${screenId}`;
+                  const given = receipts.get(key);
+                  const values = payload && payload.screens ? payload.screens[screenId] : undefined;
+                  if (given) {
+                    receipt.current = given;
+                  } else if (values && typeof values === 'object') {
+                    const result = apply(values);
+                    receipt.current = { applied: result.applied, rejected: result.rejected };
+                    receipts.set(key, receipt.current);
+                    if (result.applied.length > 0) {
+                      setVars(result.vars);
+                      current = { ...current, ...result.vars };
+                    }
+                    if (payload && payload.screens) {
+                      delete payload.screens[screenId];
+                      window.sessionStorage.setItem(PAYLOAD_KEY, JSON.stringify(payload));
+                    }
+                  }
+                }
+                publish(current);
+                return () => {
+                  const root = bridgeRoot();
+                  if (root[screenId] === published.current) delete root[screenId];
+                };
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+              }, [screenId]);
+
+              // Every data change.
+              useEffect(() => {
+                if (process.env.NODE_ENV === 'production') {
+                  return;
+                }
+                publish(data);
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+              }, [screenId, data]);
+            }
+
+            #{Core::GeneratedMarker.comment_footer}
+          JS
         end
 
         # Runtime renderer for `partialAttributes`.
