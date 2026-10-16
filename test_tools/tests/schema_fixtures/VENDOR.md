@@ -24,7 +24,7 @@ turning drift into a CI failure.
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
 - Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
-- Vendored at commit: `f4e903a` (feat/test-state-launch: initialState described anew on the file and the case with `x-requires-driver` ios 1.15.0 / android 1.17.0 / web 1.15.0, `launch` `x-requires-driver` web 1.15.0, flow `initialState.screen` removed and `viewModels` keyed by screen id, the `state` / `when.state` / `launch` texts; re-point this line if the contract lands under another SHA)
+- Vendored at commit: `0eecf91` (feat/test-state-launch: f4e903a's initialState / launch / `state` texts, plus a4d3436's `when.state` reads the bridge and `condition.state.path` follows the state path rule; re-point this line if the contract lands under another SHA)
 
   ⚠️ Nothing reads that line. The byte guard is
   `dev-guide/ci/check-canonical-sync.py`, which compares the FILES; the

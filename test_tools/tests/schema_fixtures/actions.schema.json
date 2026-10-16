@@ -140,7 +140,7 @@
             "path": {
               "type": "string",
               "minLength": 1,
-              "description": "Dot-notation path to ViewModel property"
+              "description": "Dot-notation path into the screen's Data, the same rule as the state assertion's path. Instant: an absent bridge or a path that does not resolve is not met; a truncated bridge fails the step"
             },
             "equals": {
               "description": "Expected value (any type)"
