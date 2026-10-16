@@ -2,6 +2,7 @@
 
 require_relative 'base_view_converter'
 require_relative 'text_style_helper'
+require_relative 'user_edit_binding_helper'
 require_relative '../helpers/string_manager_helper'
 
 module SjuiTools
@@ -10,6 +11,7 @@ module SjuiTools
       class TextViewConverter < BaseViewConverter
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
         include SjuiTools::SwiftUI::Views::TextStyleHelper
+        include SjuiTools::SwiftUI::Views::UserEditBindingHelper
         def identifier_placed_inside?
           true
         end
@@ -48,7 +50,15 @@ module SjuiTools
           # TextViewWithPlaceholderを使用
           add_line "TextViewWithPlaceholder("
           indent do
-            add_line "text: $#{binding_path},"
+            # onTextChange is called from this binding's setter — the user's
+            # edits only; a programmatic change of the value does not fire it
+            # (UserEditBindingHelper).
+            editor_binding = "$#{binding_path}"
+            if handler_reference?(@component['onTextChange'])
+              handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
+              editor_binding = user_edit_binding(editor_binding, handler_call)
+            end
+            add_line "text: #{editor_binding},"
 
             # hint (placeholder) - hint takes priority, fallback to placeholder
             hint_value = @component['hint'] || @component['placeholder']
@@ -270,14 +280,10 @@ module SjuiTools
             add_modifier_line ".scrollDisabled(true)"
           end
 
-          # onTextChange handler - called when text changes
-          # onTextChange: '@{functionName}' or the bare name (handler_reference?)
-          if handler_reference?(@component['onTextChange'])
-            handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
-            indent_str = "    " * (@indent_level + 1)
-            # Guard: only call callback when value actually changed (prevent feedback loop)
-            @modifier_bag.append(:on_text_change, ".onChange(of: #{binding_path}) { oldValue, newValue in\n#{indent_str}guard oldValue != newValue else { return }\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}")
-          end
+          # onTextChange: wired into the `text:` binding above. It was
+          # `.onChange(of: <binding>)`, which also fired for a programmatic
+          # change of the value (ticket
+          # sjui-ontextchange-fires-on-programmatic-data-change).
 
           # textAlign / input. TextViewWithPlaceholder takes neither as an
           # initializer argument, and nothing here read them — both spellings

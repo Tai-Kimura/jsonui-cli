@@ -51,7 +51,11 @@ RSpec.describe 'sjui: event handlers in their declared forms' do
       declare('h' => '(String) -> Void')
       out = emit('type' => 'TextField', 'onTextChange' => '@{h}')
       expect(out).not_to include('.constant("")')
-      expect(out).to include('text: $targetText', '.onChange(of: targetText)', 'data.h?(newValue)')
+      # onTextChange is called from the setter of the binding the field
+      # writes through, not from `.onChange(of: targetText)` (ticket
+      # sjui-ontextchange-fires-on-programmatic-data-change).
+      expect(out).to include('text: SwiftUI.Binding(get: { $targetText.wrappedValue }', 'if changed { DispatchQueue.main.async { data.h?(newValue) } }')
+      expect(out).not_to include('.onChange(of: targetText)')
     end
 
     it 'focus events written as a binding call the handler by name' do

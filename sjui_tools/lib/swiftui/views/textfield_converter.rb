@@ -2,6 +2,7 @@
 
 require_relative 'base_view_converter'
 require_relative 'text_style_helper'
+require_relative 'user_edit_binding_helper'
 require_relative '../helpers/font_helper'
 require_relative '../helpers/string_manager_helper'
 
@@ -12,6 +13,7 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::FontHelper
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
         include SjuiTools::SwiftUI::Views::TextStyleHelper
+        include SjuiTools::SwiftUI::Views::UserEditBindingHelper
         def identifier_placed_inside?
           true
         end
@@ -77,6 +79,22 @@ module SjuiTools
                           @state_variables << "@State private var #{state_name}: String = #{swift_string_literal(initial)}"
                           "$#{state_name}"
                         end
+
+          # onTextChange: called from the binding the field writes through,
+          # so the user's edits fire it and the view model's own writes /
+          # a test's initialState do not (UserEditBindingHelper). The field
+          # and the clear button get this binding — tapping clear is the
+          # user's edit. The styled placeholder only reads the text, so it
+          # keeps the plain one.
+          display_binding = text_binding
+          if handler_reference?(@component['onTextChange']) && text_binding.start_with?('$')
+            handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
+            # The handler is handed the edit cut to maxLength where
+            # apply_max_length enforces it (a literal maxLength over a data
+            # binding), so it sees what the field keeps.
+            narrow = @component['maxLength'] if text_binding.start_with?('$data.')
+            text_binding = user_edit_binding(text_binding, handler_call, max_length: narrow)
+          end
 
           # Check if it should be a SecureField
           is_secure = textfield_handler.is_secure_field?(@component)
@@ -156,7 +174,7 @@ module SjuiTools
             style_args << "hintFontSize: #{@component['hintFontSize']}" if @component['hintFontSize']
             style_args << "fontSize: #{@component['fontSize']}" if @component['fontSize']
             alignment = text_alignment_to_swiftui(@component['textAlign'] || 'left')
-            add_modifier_line ".styledPlaceholder(#{hint_literal}, text: #{text_binding}, " \
+            add_modifier_line ".styledPlaceholder(#{hint_literal}, text: #{display_binding}, " \
                               "style: TextFieldPlaceholderStyle(#{style_args.join(', ')}), " \
                               "alignment: textFieldPlaceholderAlignment(for: #{alignment}))"
           end
@@ -220,19 +238,12 @@ module SjuiTools
             @modifier_bag.append(:padding, ".padding(.leading, #{@component['textPaddingLeft']})")
           end
 
-          # Text change handler
-          # onTextChange: '@{functionName}' or the bare name (handler_reference?)
-          if handler_reference?(@component['onTextChange'])
-            # Get the binding variable name from text_binding
-            binding_var = text_binding.gsub('$', '').gsub('.constant(', '').gsub(')', '')
-            if text_binding.start_with?('$')
-              handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
-              indent_str = "    " * (@indent_level + 1)
-              # Guard: only call callback when value actually changed (prevent feedback loop)
-              @modifier_bag.append(:on_text_change, ".onChange(of: #{binding_var}) { oldValue, newValue in\n#{indent_str}guard oldValue != newValue else { return }\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}")
-            else
-              add_line "// onTextChange requires data binding"
-            end
+          # Text change handler: wired into the field's binding above. It was
+          # `.onChange(of: <binding>)`, which also fired for a programmatic
+          # change of the value (ticket
+          # sjui-ontextchange-fires-on-programmatic-data-change).
+          if handler_reference?(@component['onTextChange']) && !display_binding.start_with?('$')
+            add_line "// onTextChange requires data binding"
           end
 
           # FocusState support - sync with Data property for ViewModel control.
