@@ -45,6 +45,7 @@ module SjuiTools
           # Store validation results
           @validation_warnings = []
           @outside_infos = []
+          @binding_infos = []
           @validation_errors = 0
           @binding_errors = []
 
@@ -150,17 +151,27 @@ module SjuiTools
           validator.take_outside_infos.each do |info|
             (@outside_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
           end
+          # and the bound values with a limitation declared on this face
+          # (AttributeValidatorCore#take_binding_infos), printed the same way
+          validator.take_binding_infos.each do |info|
+            (@binding_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
+          end
         end
 
         # Printed only in a verbose build (`sjui --verbose build`,
         # `--log-level debug`, or DEBUG in the environment — `DEBUG=1 jui
         # build`): a default build prints what it printed before.
         def print_outside_infos
-          return if @outside_infos.nil? || @outside_infos.empty?
           return unless Core::Logger.level == :debug || Core::AttributeValidator.verbose_build?
 
-          Core::Logger.info "Not built here (another mode or platform): #{@outside_infos.length} attribute(s)"
-          @outside_infos.each { |line| puts line }
+          unless @outside_infos.nil? || @outside_infos.empty?
+            Core::Logger.info "Not built here (another mode or platform): #{@outside_infos.length} attribute(s)"
+            @outside_infos.each { |line| puts line }
+          end
+          return if @binding_infos.nil? || @binding_infos.empty?
+
+          Core::Logger.info "Bound with a limitation on this platform: #{@binding_infos.length} attribute(s)"
+          @binding_infos.each { |line| puts line }
         end
 
         def print_validation_summary

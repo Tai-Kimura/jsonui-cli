@@ -40,6 +40,7 @@ module RjuiTools
           @binding_validator = Core::BindingValidator.new
           @all_warnings = []
           @outside_infos = []
+          @binding_infos = []
           @binding_warnings = []
           @binding_errors = []
         end
@@ -794,6 +795,10 @@ module RjuiTools
             @validator.take_outside_infos.each do |info|
               @outside_infos << @validator.info_line("[#{file_path}] #{info}")
             end
+            # and the bound values with a limitation declared on this face
+            @validator.take_binding_infos.each do |info|
+              @binding_infos << @validator.info_line("[#{file_path}] #{info}")
+            end
           end
 
           # Get this component's orientation for children validation
@@ -818,11 +823,16 @@ module RjuiTools
         # debug output reads — `DEBUG=1 jui build`): a default build prints
         # what it printed before.
         def print_outside_infos
-          return if @outside_infos.nil? || @outside_infos.empty?
           return unless Core::AttributeValidator.verbose_build?
 
-          Core::Logger.info("Not built here (another mode or platform): #{@outside_infos.length} attribute(s)")
-          @outside_infos.each { |line| puts line }
+          unless @outside_infos.nil? || @outside_infos.empty?
+            Core::Logger.info("Not built here (another mode or platform): #{@outside_infos.length} attribute(s)")
+            @outside_infos.each { |line| puts line }
+          end
+          return if @binding_infos.nil? || @binding_infos.empty?
+
+          Core::Logger.info("Bound with a limitation on this platform: #{@binding_infos.length} attribute(s)")
+          @binding_infos.each { |line| puts line }
         end
 
         # Print validation summary at the end of build

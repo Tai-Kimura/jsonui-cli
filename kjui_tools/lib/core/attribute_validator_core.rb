@@ -156,6 +156,7 @@ module JsonUIShared
       @structural_errors = []
       @infos = []
       @outside_infos = []
+      @binding_infos = []
       @normalized = false
       @styles_dir = styles_dir
       @styles_cache = {}
@@ -346,6 +347,17 @@ module JsonUIShared
       taken
     end
 
+    # A bound value with a limitation declared on this face (`bindingInfo`,
+    # add_binding_info): the same INFO, the same reset, printed by no build
+    # through jsonui-cli 1.9.33 (ticket
+    # jui-build-binding-infos-are-collected-and-never-printed). Kept and
+    # taken the same way, and printed under the same verbose switch.
+    def take_binding_infos
+      taken = @binding_infos
+      @binding_infos = []
+      taken
+    end
+
     # A verbose build: DEBUG in the environment, the switch the three tools'
     # own debug output already reads (it reaches them through `jui build`,
     # which passes its environment on). sjui's `--verbose` also counts there.
@@ -523,7 +535,7 @@ module JsonUIShared
       return unless info.is_a?(Hash) && value.is_a?(String) && value.include?('@{')
       return unless Array(info['platform']).include?(self.class::PLATFORM)
 
-      add_info("'#{key}' on #{type} is bound: #{info['note']}")
+      add_kept_info(@binding_infos, "'#{key}' on #{type} is bound: #{info['note']}")
     end
 
     def not_applicable_reason(attr_def, type)
@@ -1490,10 +1502,15 @@ module JsonUIShared
     end
 
     def add_outside_info(message)
+      add_kept_info(@outside_infos, message)
+    end
+
+    # An INFO that is also kept on `channel`, which `validate` does not reset.
+    def add_kept_info(channel, message)
       add_info(message)
       context = build_context_prefix
       full_message = context.empty? ? message : "#{context}#{message}"
-      @outside_infos << full_message unless @outside_infos.include?(full_message)
+      channel << full_message unless channel.include?(full_message)
     end
 
     # Add info for platform-specific attribute (not an error, just informational)

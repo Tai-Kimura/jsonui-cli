@@ -32,6 +32,17 @@ RSpec.describe 'mode / platform outside INFOs, through rjui build' do
     %w[bin lib].each do |d|
       raise "could not copy #{d}" unless system('cp', '-RL', File.join(tool_root, d), tool)
     end
+    # The SSoT declares `bindingInfo` for swift only (Image / NetworkImage
+    # contentMode); an extension definition declares one for this face, so
+    # this build has a bound value to name.
+    shipped = JSON.parse(File.read(File.join(tool, 'lib', 'core', 'attribute_definitions.json')))
+    ext = File.join(tool, 'lib', 'react', 'converters', 'extensions', 'attribute_definitions')
+    FileUtils.mkdir_p(ext)
+    File.write(File.join(ext, 'bound_probe.json'), JSON.generate(
+      'Image' => { 'contentMode' => shipped['Image']['contentMode'].merge(
+        'bindingInfo' => { 'platform' => ['react'], 'note' => 'a probe limitation declared for this face.' }
+      ) }
+    ))
     # No rjui.config.json: rjui writes its defaults (layouts in src/Layouts).
     layouts = File.join(@dir, 'src', 'Layouts')
     FileUtils.mkdir_p(layouts)
@@ -39,9 +50,10 @@ RSpec.describe 'mode / platform outside INFOs, through rjui build' do
     File.write(File.join(layouts, 'drag.json'), JSON.generate(
       'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent', 'orientation' => 'vertical',
       'child' => [
-        { 'data' => [{ 'name' => 'onDragStart', 'class' => '(() -> Void)?' }, { 'name' => 'onHold', 'class' => '(() -> Void)?' }] },
+        { 'data' => [{ 'name' => 'onDragStart', 'class' => '(() -> Void)?' }, { 'name' => 'onHold', 'class' => '(() -> Void)?' }, { 'name' => 'mode', 'class' => 'String' }] },
         node.call('View', 'dropzone', 'onDragStart' => '@{onDragStart}'),
         node.call('View', 'holder', 'onLongPress' => '@{onHold}'),
+        node.call('Image', 'photo', 'srcName' => 'icon', 'contentMode' => '@{mode}'),
         node.call('Label', 'title', 'text' => 'hello')
       ]
     ))
@@ -64,10 +76,19 @@ RSpec.describe 'mode / platform outside INFOs, through rjui build' do
   it 'prints no INFO in a default build' do
     expect(info_lines(@default)).to be_empty, @default
     expect(@default).not_to include('Not built here')
+    expect(@default).not_to include('Bound with a limitation')
   end
 
   it 'names the attribute, component and platform in a verbose build (cached layout)' do
-    expect(info_lines(@cached)).to eq(["ℹ️  [RJUI Info] [src/Layouts/drag.json] [id=holder] Attribute 'onLongPress' in 'View' is for Swift/Kotlin platform (current: React)"]), @cached
+    expect(info_lines(@cached).grep(/Attribute '/)).to eq(["ℹ️  [RJUI Info] [src/Layouts/drag.json] [id=holder] Attribute 'onLongPress' in 'View' is for Swift/Kotlin platform (current: React)"]), @cached
     expect(@cached).to include('Not built here (another mode or platform): 1 attribute(s)')
+  end
+
+  # The bound values with a limitation declared on this face (`bindingInfo`)
+  # were the same INFO, printed by no build (ticket
+  # jui-build-binding-infos-are-collected-and-never-printed).
+  it 'names a bound value with a declared limitation in a verbose build' do
+    expect(info_lines(@cached).grep(/is bound: /)).to eq(["ℹ️  [RJUI Info] [src/Layouts/drag.json] [id=photo] 'contentMode' on Image is bound: a probe limitation declared for this face."]), @cached
+    expect(@cached).to include('Bound with a limitation on this platform: 1 attribute(s)')
   end
 end
