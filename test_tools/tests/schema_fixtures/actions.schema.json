@@ -151,7 +151,7 @@
             "equals"
           ],
           "additionalProperties": false,
-          "description": "ViewModel state matches (requires a state provider)"
+          "description": "The screen's ViewModel Data matches, read from the state bridge (no harness provider needed with SwiftJsonUI >= 10.30.0 / KotlinJsonUI >= 2.44.0); see the `state` assertion for which screen"
         }
       },
       "additionalProperties": false,
@@ -159,16 +159,16 @@
     },
     "launch": {
       "type": "object",
-      "description": "App launch configuration applied before the app under test starts",
+      "description": "App launch configuration applied by the runner before the app under test starts, on all three platforms (web from driver 1.15.0: the runner clears / grants / writes sessionStorage and reloads once). The order and what the same launch carries are in spec §10.2.",
       "properties": {
         "clearState": {
           "type": "boolean",
           "default": false,
-          "description": "Clear app data before launch (iOS: JSONUI_TEST_CLEAR_STATE env contract; Android: in-process wipe of files, shared_prefs, databases, cache and code_cache — persisted state only, process memory survives the relaunch; Web: cookies + storage)"
+          "description": "Clear app data before launch (iOS: JSONUI_TEST_CLEAR_STATE env contract; Android: in-process wipe of files, shared_prefs, databases, cache and code_cache — persisted state only, process memory survives the relaunch; Web: cookies + the origin's local and session storage, not IndexedDB)"
         },
         "permissions": {
           "type": "object",
-          "description": "Permission grants applied before launch. Android deny is an ASSERT, not a revoke: satisfied when the permission is currently denied, and a loud per-file failure when it is granted — an in-run revoke kills the instrumented process (ActivityManager: permissions revoked), so the driver never executes one. Establish a denied baseline per run with a pre-instrumentation step (pregrant); grants persist across update-installs, so the run inherits the previous run's state. Android unset leaves inherited state untouched.",
+          "description": "Permission grants applied before launch. Android deny is an ASSERT, not a revoke: satisfied when the permission is currently denied, and a loud per-file failure when it is granted — an in-run revoke kills the instrumented process (ActivityManager: permissions revoked), so the driver never executes one. Establish a denied baseline per run with a pre-instrumentation step (pregrant); grants persist across update-installs, so the run inherits the previous run's state. Android unset leaves inherited state untouched. iOS: JSONUI_TEST_PERMISSIONS launch env. Web: when any value is deny or unset, the context's permissions are cleared first and the allows granted again, so an earlier file's allow does not survive.",
           "propertyNames": {
             "enum": [
               "camera",
@@ -192,7 +192,7 @@
         },
         "arguments": {
           "type": "object",
-          "description": "Launch arguments passed to the app (iOS: launchEnvironment JSONUI_TEST_ARGS; Android: intent extras; Web: sessionStorage)",
+          "description": "Launch arguments passed to the app (iOS: launchEnvironment JSONUI_TEST_ARGS, reset before every launch so it never reaches the next file; Android: intent extras; Web: sessionStorage JSONUI_TEST_ARGS, removed at the end of the file). Delivered only: reading them is the app's own code",
           "additionalProperties": {
             "type": [
               "string",
@@ -1540,7 +1540,7 @@
     "stateAssertion": {
       "type": "object",
       "x-doc": {
-        "ja": "ViewModel 状態を検証（`path` はドット記法、StateProvider 必須）"
+        "ja": "ViewModel の data を検証（`path` はドット記法。ハーネスの provider は不要 — JsonUI ライブラリ ≥ SwiftJsonUI 10.30.0 / KotlinJsonUI 2.44.0 の state ブリッジを読む）"
       },
       "properties": {
         "assert": {
@@ -1549,7 +1549,7 @@
         "path": {
           "type": "string",
           "minLength": 1,
-          "description": "Dot-notation path to ViewModel property (e.g., 'user.isLoggedIn')"
+          "description": "Dot-notation path into the screen's Data as the state bridge publishes it (e.g., 'user.isLoggedIn'; a decimal segment indexes an array, 'tags.0'). The screen is the screen under test, or in a flow the step's `screen` (else the last one named). No harness provider is needed with SwiftJsonUI >= 10.30.0 / KotlinJsonUI >= 2.44.0 / the jsonui-cli of the same train; a provider the harness passes still wins."
         },
         "equals": {
           "description": "Expected value (any type)"

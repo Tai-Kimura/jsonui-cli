@@ -365,14 +365,61 @@ def test_driver_requirements_match_the_schemas():
     carry, is a red test rather than a declaration that validates green and
     is then ignored by an older driver in silence.
     """
-    from_schema = {}
-    for name in ("screen-test", "flow-test"):
-        props = _load(name).get("properties", {})
-        for key, spec in props.items():
-            if isinstance(spec, dict) and "x-requires-driver" in spec:
-                from_schema[key] = spec["x-requires-driver"]
+    from_schema = _schema_driver_requirements()
     assert from_schema == sc.KEY_DRIVER_REQUIREMENTS, (
         "driver requirements drifted from the schemas.\n"
         f"    only in schema: {sorted(from_schema.keys() - sc.KEY_DRIVER_REQUIREMENTS.keys())}\n"
         f"    only in const : {sorted(sc.KEY_DRIVER_REQUIREMENTS.keys() - from_schema.keys())}"
     )
+
+
+def _schema_driver_requirements(schemas=None):
+    """`x-requires-driver` per key, read where the schemas declare it: the
+    top level of screen-test and flow-test, and a screen-test case.
+
+    KEY_DRIVER_REQUIREMENTS is keyed by name alone, and
+    `runtime_support.collect_declared_keys` counts a case-level declaration
+    under the same name, so every place a key is declared has to carry the
+    same floor. Two different floors for one name are an AssertionError here
+    rather than the last one read silently winning — which is what the first
+    version of this loop did across the two schemas.
+    """
+    schemas = schemas or {name: _load(name) for name in ("screen-test", "flow-test")}
+    found: dict = {}
+    for name, schema in schemas.items():
+        places = [("", schema.get("properties", {}))]
+        if name == "screen-test":
+            places.append((".cases[]", schema["properties"]["cases"]["items"]["properties"]))
+        for where, props in places:
+            for key, spec in props.items():
+                if isinstance(spec, dict) and "x-requires-driver" in spec:
+                    found.setdefault(key, []).append((f"{name}{where}", spec["x-requires-driver"]))
+    merged = {}
+    for key, seen in found.items():
+        floors = {json.dumps(req, sort_keys=True) for _, req in seen}
+        assert len(floors) == 1, (
+            f"'{key}' carries different x-requires-driver floors: {seen} — "
+            "KEY_DRIVER_REQUIREMENTS holds one per key")
+        merged[key] = seen[0][1]
+    return merged
+
+
+def test_case_level_driver_requirements_are_read():
+    """The case-level `initialState` carries a floor in screen-test, and it
+    is read: a case declaration is a declaration of the key."""
+    case_props = _load("screen-test")["properties"]["cases"]["items"]["properties"]
+    case_keys = {k for k, v in case_props.items()
+                 if isinstance(v, dict) and "x-requires-driver" in v}
+    assert case_keys, "screen-test cases carry no x-requires-driver — the case pin reads nothing"
+    assert case_keys <= sc.KEY_DRIVER_REQUIREMENTS.keys()
+    for key in case_keys:
+        assert case_props[key]["x-requires-driver"] == sc.KEY_DRIVER_REQUIREMENTS[key]
+
+
+def test_two_floors_for_one_key_are_refused():
+    """A case floor that differs from the file's is an error, not overwritten."""
+    screen = json.loads(json.dumps(_load("screen-test")))
+    case_props = screen["properties"]["cases"]["items"]["properties"]
+    case_props["initialState"]["x-requires-driver"] = {"ios": "9.9.9"}
+    with pytest.raises(AssertionError, match="different x-requires-driver floors"):
+        _schema_driver_requirements({"screen-test": screen, "flow-test": _load("flow-test")})
