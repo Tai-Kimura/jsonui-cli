@@ -14,6 +14,50 @@ require 'compose/components/webview_component'
 # kjui-webview-paints-the-whole-window-white-until-its-first-frame. The
 # dynamic face (DynamicWebComponent) clips the same way.
 RSpec.describe 'a WebView is clipped to its own bounds (kjui)' do
+  # The stubs the four emits below name — types only (spec/support/
+  # kotlin_compiler.rb): this says the emits are well-typed Kotlin, not valid
+  # Compose.
+  stubs = <<~KOTLIN
+    annotation class Composable
+    class Context
+    class SemanticsScope { var testTagsAsResourceId: Boolean = false }
+    interface Modifier { companion object : Modifier }
+    fun Modifier.fillMaxSize(): Modifier = this
+    fun Modifier.testTag(tag: String): Modifier = this
+    fun Modifier.semantics(block: SemanticsScope.() -> Unit): Modifier = this
+    fun Modifier.clipToBounds(): Modifier = this
+    @Composable
+    fun Box(modifier: Modifier = Modifier, content: () -> Unit) { content() }
+    class WebSettings { var javaScriptEnabled: Boolean = false }
+    open class WebViewClient
+    class KjuiWebViewClient : WebViewClient()
+    class WebChromeClient
+    class WebView(context: Context) {
+        val settings = WebSettings()
+        var webViewClient: WebViewClient = WebViewClient()
+        var webChromeClient: WebChromeClient? = null
+        fun loadUrl(u: String) {}
+    }
+    @Composable
+    fun AndroidView(factory: (Context) -> WebView, update: (WebView) -> Unit = {}, modifier: Modifier = Modifier) {}
+  KOTLIN
+
+  # One broad arm (each costs a JVM start): both types, with and without an id.
+  it 'emits Kotlin that compiles, all four shapes' do
+    emits = {
+      KjuiTools::Compose::Components::WebComponent => 'Web',
+      KjuiTools::Compose::Components::WebviewComponent => 'WebView'
+    }.flat_map do |component, type|
+      [{ 'id' => 'wv' }, {}].map do |extra|
+        component.generate({ 'type' => type, 'url' => 'https://example.com' }.merge(extra), 1, Set.new)
+      end
+    end
+    expect(emits.size).to eq(4)
+    expect(emits).to all(include('clipToBounds()'))
+    body = emits.each_with_index.map { |code, i| "@Composable\nfun Host#{i}() {\n#{code}\n}" }.join("\n")
+    expect("#{stubs}\n#{body}\n").to compile_as_kotlin
+  end
+
   {
     KjuiTools::Compose::Components::WebComponent => 'Web',
     KjuiTools::Compose::Components::WebviewComponent => 'WebView'
