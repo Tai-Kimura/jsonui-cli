@@ -31,9 +31,9 @@ import json
 import re
 from pathlib import Path
 
-#: npm package name per platform. Only web is resolvable locally; the iOS and
-#: Android drivers arrive through SPM and Maven, which leave nothing in the
-#: project tree to read a version out of.
+#: npm package name per platform: web's version is read from node_modules.
+#: The iOS and Android drivers arrive through SPM and Maven, and their
+#: version is read from the project's pin instead (`read_pinned_driver`).
 DRIVER_PACKAGES = {"web": "jsonui-test-runner-web"}
 
 
@@ -71,6 +71,8 @@ def installed_driver_version(platform: str, project_root: Path,
     said "could not be read" on every standard layout (2026-10-16, jsonui-cli
     1.9.33).
     """
+    if platform in _PIN_READERS:
+        return read_pinned_driver(platform, project_root, platform_root)[0]
     package = DRIVER_PACKAGES.get(platform)
     if not package:
         return None
@@ -88,6 +90,157 @@ def installed_driver_version(platform: str, project_root: Path,
                     return None
                 return version if isinstance(version, str) else None
     return None
+
+
+# ---------------------------------------------------------------- iOS / Android
+#
+# The mobile drivers arrive through SPM and Maven, so the version is the PIN
+# the project resolved, not an installed package. Measured on the consumers
+# (2026-10-16): the iOS projects that commit a Package.resolved keep it in
+# `<app>.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/`, and both pin
+# the driver by branch or revision, not by version; the Android projects pin
+# it in the version catalog (`gradle/libs.versions.toml`, `version.ref`). A
+# coordinate string written directly in a build file is read too. The plugins
+# DSL is not: the driver is a library, not a Gradle plugin, so no spelling of
+# it can appear there.
+#
+# Searched in the platform root, then the project root — not outward: there
+# is no hoisting in SPM or Gradle, and a parent directory holds OTHER
+# projects, whose pins are not this one's.
+
+IOS_PACKAGE = "jsonui-test-runner-ios"
+ANDROID_MODULE = "io.github.tai-kimura:jsonui-test-runner-android"
+
+
+def _distinct(found: list, where: Path, what: str):
+    """(version, why) from the pins one directory holds: one answer, or
+    unreadable when they disagree."""
+    answers = list(dict.fromkeys(found))
+    if not answers:
+        return None
+    if len(answers) == 1:
+        return answers[0]
+    return None, (f"{len(answers)} {what} under {where} pin it differently "
+                  f"({'; '.join(v or w for v, w in answers)})")
+
+
+def _ios_pin(root: Path):
+    files = [root / "Package.resolved",
+             *sorted(root.glob("*.xcworkspace/xcshareddata/swiftpm/Package.resolved")),
+             *sorted(root.glob("*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"))]
+    found = []
+    for path in files:
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        pins = data.get("pins") or (data.get("object") or {}).get("pins") or []
+        for pin in pins if isinstance(pins, list) else []:
+            if not isinstance(pin, dict):
+                continue
+            url = str(pin.get("location") or pin.get("repositoryURL") or "").rstrip("/")
+            if pin.get("identity") != IOS_PACKAGE and not url.removesuffix(".git").endswith("/" + IOS_PACKAGE):
+                continue
+            state = pin.get("state") if isinstance(pin.get("state"), dict) else {}
+            if isinstance(state.get("version"), str) and state["version"]:
+                found.append((state["version"], None))
+            else:
+                how = (f"branch '{state['branch']}'" if state.get("branch")
+                       else f"revision {str(state.get('revision', '?'))[:12]}")
+                found.append((None, f"{path} pins {IOS_PACKAGE} to {how}, not a version"))
+    return _distinct(found, root, "Package.resolved files")
+
+
+_DIRECT = re.compile(r"""["']""" + re.escape(ANDROID_MODULE) + r""":([^"']+)["']""")
+
+
+def _catalog_version(value, versions: dict):
+    """A catalog library's version: a string, `{ref = ...}`, or a rich
+    version (`strictly` / `require` / `prefer`)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        if "ref" in value:
+            return _catalog_version(versions.get(value["ref"]), versions)
+        for key in ("strictly", "require", "prefer"):
+            if isinstance(value.get(key), str):
+                return value[key]
+    return None
+
+
+def _android_pin(root: Path):
+    import tomllib
+    found = []
+    for path in sorted(root.glob("gradle/*.versions.toml")):
+        try:
+            catalog = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        versions = catalog.get("versions") or {}
+        for entry in (catalog.get("libraries") or {}).values():
+            if isinstance(entry, str):
+                if entry.startswith(ANDROID_MODULE + ":"):
+                    found.append((entry[len(ANDROID_MODULE) + 1:], None))
+                continue
+            if not isinstance(entry, dict):
+                continue
+            module = entry.get("module") or f"{entry.get('group')}:{entry.get('name')}"
+            if module != ANDROID_MODULE:
+                continue
+            version = _catalog_version(entry.get("version"), versions)
+            found.append((version, None) if version else
+                         (None, f"{path} declares {ANDROID_MODULE} with no version it can resolve"))
+    builds = [root / "build.gradle", root / "build.gradle.kts",
+              *sorted(root.glob("*/build.gradle")), *sorted(root.glob("*/build.gradle.kts"))]
+    for path in builds:
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for m in _DIRECT.finditer(text):
+            version = m.group(1)
+            found.append((None, f"{path} builds the {ANDROID_MODULE} version from a variable "
+                                f"({version})") if "$" in version else (version, None))
+    return _distinct(found, root, "pins")
+
+
+_PIN_READERS = {"ios": _ios_pin, "android": _android_pin}
+
+
+def read_pinned_driver(platform: str, project_root: Path | None,
+                       platform_root: Path | None = None) -> tuple[str | None, str | None]:
+    """(version, None), (None, why the pin has no version), or (None, None)
+    when no pin was found — the mobile drivers' counterpart of the web
+    search, from the same two roots, the platform root first."""
+    reader = _PIN_READERS[platform]
+    starts: list[Path] = []
+    for start in (platform_root, project_root):
+        if start is not None and Path(start).resolve() not in starts:
+            starts.append(Path(start).resolve())
+    for root in starts:
+        answer = reader(root)
+        if answer is not None:
+            return answer
+    return None, None
+
+
+def runs_on(path: Path, platform: str) -> bool:
+    """Does this test file run on *platform*? Its top-level `platform`
+    (`ios` / `android` / `web` / `all`, or a list); absent means every one."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    value = data.get("platform") if isinstance(data, dict) else None
+    if isinstance(value, str):
+        return value in ("all", platform)
+    if isinstance(value, list):
+        return platform in value
+    return True
 
 
 def platform_roots_from_config(config: dict, project_root: Path | None) -> dict[str, Path]:
@@ -138,9 +291,13 @@ def check_declarations(declared: dict[str, list[Path]],
         needed = requirements.get(key)
         if not needed:
             continue
-        files = declared[key]
         for platform in sorted(needed):
             required = needed[platform]
+            # A file that does not run on this platform has nothing for its
+            # driver to ignore.
+            files = [f for f in declared[key] if runs_on(f, platform)]
+            if not files:
+                continue
             if not project_root:
                 notes.append(
                     f"'{key}' requires the {platform} driver {required} or newer; "
@@ -153,6 +310,16 @@ def check_declarations(declared: dict[str, list[Path]],
                 continue
             found = installed_driver_version(
                 platform, project_root, (platform_roots or {}).get(platform))
+            why = (read_pinned_driver(platform, project_root,
+                                      (platform_roots or {}).get(platform))[1]
+                   if platform in _PIN_READERS else None)
+            if found is None and why:
+                notes.append(
+                    f"'{key}' requires the {platform} driver {required} or newer; "
+                    f"{why}, so this is not checked. An older driver ignores the "
+                    f"declaration silently ({len(files)} file(s) declare it)."
+                )
+                continue
             if found is None:
                 notes.append(
                     f"'{key}' requires the {platform} driver {required} or newer; "
