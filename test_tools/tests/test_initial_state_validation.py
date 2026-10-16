@@ -131,10 +131,11 @@ LOGIN = {
         {"name": "note", "class": "String?"},
         {"name": "onTap", "class": "() -> Void"},
         {"name": "perFace", "class": {"swift": "Int", "kotlin": "Int", "typescript": "number"}},
+        # DataItemPlatform: declared for the mobile platforms only — a Data
+        # name on two platforms of three.
+        {"name": "mobileOnly", "class": "String", "platform": "ios,android"},
     ],
     "child": [
-        # Read by sjui / kjui (any node) and not by rjui (a node with other
-        # keys): a Data name on two platforms of three.
         {"type": "View", "id": "box", "data": [{"name": "boxed", "class": "String"}]},
         {"include": "header", "id": "header"},
     ],
@@ -178,7 +179,8 @@ def test_fitting_values_are_clean(tmp_path):
     _project(tmp_path)
     result = _validate(tmp_path, _screen({
         "email": "a@example.com", "count": 2.0, "agreed": False, "note": None,
-        "perFace": 3, "boxed": "x", "headerTitle": "t"}, platform=["ios", "android"]))
+        "perFace": 3, "mobileOnly": "m", "boxed": "x", "headerTitle": "t"},
+        platform=["ios", "android"]))
     assert _state_errors(result) == []
     assert [m for m in result.infos if "initialState" in m.message] == []
 
@@ -201,19 +203,19 @@ def test_a_value_the_app_would_reject_is_an_error(tmp_path, key, value, reason):
 
 def test_a_data_name_on_some_platforms_names_the_others(tmp_path):
     _project(tmp_path)
-    errors = _state_errors(_validate(tmp_path, _screen({"boxed": "x"})))
+    errors = _state_errors(_validate(tmp_path, _screen({"mobileOnly": "x"})))
     assert len(errors) == 1 and "not a data field on web." in errors[0]
 
 
 def test_the_files_platform_bounds_the_check(tmp_path):
     _project(tmp_path)
-    assert _state_errors(_validate(tmp_path, _screen({"boxed": "x"}, platform="ios"))) == []
+    assert _state_errors(_validate(tmp_path, _screen({"mobileOnly": "x"}, platform="ios"))) == []
 
 
 def test_the_projects_platforms_bound_the_check(tmp_path):
     _project(tmp_path)
     set_project_platforms(["ios", "android"])
-    assert _state_errors(_validate(tmp_path, _screen({"boxed": "x"}))) == []
+    assert _state_errors(_validate(tmp_path, _screen({"mobileOnly": "x"}))) == []
 
 
 def test_a_per_platform_class_is_read_per_platform(tmp_path):
