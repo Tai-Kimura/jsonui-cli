@@ -118,7 +118,10 @@ class CodegenHostStagingSet(unittest.TestCase):
         # is-never-called), so `SelectBox/onValueChanged__callback_fire` — a
         # selectOption fixture — is no longer generated: interactive -1,
         # driving -1.
-        self.assertEqual(len(interactive), 36)
+        # 40 since the TestBridge family (initialState / state, jsonui-test-
+        # runner spec section 10): four interactive fixtures that assert and
+        # never drive — interactive +4, driving +0.
+        self.assertEqual(len(interactive), 40)
         self.assertEqual(len(driving), 15)
 
     def test_the_fixtures_measured_on_dynamic_are_hostable(self):

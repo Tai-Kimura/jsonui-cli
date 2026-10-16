@@ -1,0 +1,39 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TestBridge/initialState__bridge_follows.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TestBridge.initialState__bridge_follows",
+    "description": "No initialState: the host's afterFirstDraw sets a value after the first draw, and `state` reads the new value — the bridge is published again on every change.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "TestBridge"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "initialState__bridge_follows",
+      "description": "No initialState: the host's afterFirstDraw sets a value after the first draw, and `state` reads the new value — the bridge is published again on every change.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "state",
+          "path": "conformanceResult",
+          "equals": "fired"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "fired"
+        }
+      ]
+    }
+  ]
+}

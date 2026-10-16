@@ -10,6 +10,7 @@ require_relative '../core/generated_marker'
 require_relative '../core/data_model_updater_core'
 require_relative '../core/tap_accessibility'
 require_relative '../core/string_literals'
+require_relative 'test_bridge_code'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'helpers/string_manager_helper'
@@ -264,6 +265,25 @@ module SjuiTools
 
         content += "    }\n"
 
+        # The test bridge's apply / snapshot (jsonui-test-runner spec section 10.3-10.4).
+        # Only the Data the layout DECLARES (plan decision 1): fields the
+        # generator adds itself — <id>IsFocused, a Radio group's selection —
+        # and object-form data are not, so an initialState naming one gets
+        # `not a data field`, as on Android and in validate
+        # (shared/core/layout_data_fields_vectors.json).
+        bridge_props = data_properties.select { |prop| declared_data_properties.key?(prop) }.map do |prop|
+          swift_type = swift_data_type(prop['class']).to_s
+          default_value = prop['defaultValue']
+          {
+            name: prop['name'],
+            declared: (prop['declaredClass'] || prop['class']).to_s,
+            swift_type: swift_type,
+            swift_optional: swift_type.end_with?('?') || default_value.nil? || default_value == 'nil'
+          }
+        end
+        content += TestBridgeCode.apply_function(bridge_props)
+        content += TestBridgeCode.snapshot_function(bridge_props)
+
         # Add toDictionary function
         content += "\n"
         content += "    // Convert properties to dictionary for Dynamic mode\n"
@@ -324,7 +344,10 @@ module SjuiTools
             name = prop['name']
             class_type = prop['class']
             default_value = prop['defaultValue']
-            is_optional = default_value.nil? || default_value == 'nil'
+            # A declared `?` is optional whatever the default: the property is
+            # emitted `String?` either way, and binding it as Binding<String>
+            # did not compile (a `String?` with a defaultValue).
+            is_optional = default_value.nil? || default_value == 'nil' || class_type.to_s.end_with?('?')
 
             # Determine if type is bindable (primitive types)
             binding_type = case class_type.gsub('?', '')

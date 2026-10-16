@@ -135,6 +135,25 @@ module SwiftCompiler
         }
         extension Color { init(_ color: SwiftJsonUIConfiguration.PlatformColor) { self = .gray } }
         class ViewModel: ObservableObject {}
+        // SwiftJsonUI 10.30.0 TestBridge (JsonUITestValue.swift,
+        // StateBridgeModifier.swift), transcribed: the signatures, not the
+        // behaviour. Here rather than in EmittedSwift::LIBRARY_STUBS because
+        // every Data type emits applyTestInitialState / testSnapshot, and
+        // several arms compile a Data file without those stubs.
+        struct JsonUIRejectedKey: Equatable {
+            let key: String
+            let reason: String
+            init(key: String, reason: String) { self.key = key; self.reason = reason }
+            static func notADataField(_ key: String) -> JsonUIRejectedKey { JsonUIRejectedKey(key: key, reason: "not a data field") }
+        }
+        enum JsonUITestValue {
+            enum Outcome { case accept(Any?); case reject(String) }
+            static func check(_ value: Any?, declaredClass: String) -> Outcome { .reject("") }
+        }
+        extension View {
+            func jsonUITestBridge(_ screenId: String, snapshot: @escaping () -> [String: Any],
+                                  apply: @escaping ([String: Any]) -> [JsonUIRejectedKey]) -> some View { self }
+        }
       SWIFT
 
       <<~SWIFT

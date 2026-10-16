@@ -333,6 +333,77 @@ fixture; nothing today requires it.
 - **Web** (`conformance/hosts/web/scripts/run.ts`) — `page.route` on the host
   name, before `page.goto`, with a handler that neither fulfills nor aborts.
 
+## 6. testBridge — initialState delivered at launch, and `state` (2026-10-16)
+
+jsonui-test-runner spec §10: a screen applies a UI test's initialState once,
+the first time it appears after launch, and publishes its Data plus a receipt
+(the state bridge). Generator side:
+`jui_tools/jui_cli/conformance/test_bridge_fixtures.py` (section `TestBridge`).
+The four fixtures drive no input, so the codegen faces host them too.
+
+A fixture that carries `testBridge` in the manifest:
+
+```json
+"testBridge": {
+  "data": [ { "name": "tbEmail", "class": "String", "defaultValue": "unset" }, … ],
+  "initialState": { "tbEmail": "a@example.com", "tbCount": 3, "tbAgreed": true, "tbNickname": null },
+  "receipt": { "applied": ["tbAgreed", "tbCount", "tbEmail", "tbNickname"], "rejected": [] },
+  "remount": true
+}
+```
+
+- `data` is the layout's `data` section, repeated so a host need not parse the
+  layout. It is typed (Int, Bool, an optional String): these values do NOT go
+  through `state.vars` (String-only, see above).
+- `initialState` and `receipt` are absent on a fixture that only reads
+  `state` (`initialState__bridge_follows`).
+
+### The host's four jobs
+
+Once, for every testBridge fixture — no per-fixture code.
+
+1. **Deliver at launch.** For each launch, one `JSONUI_TEST_INITIAL_STATE`
+   payload `{version: 1, launchId: <a UUID>, screens: {…}}` carrying every
+   testBridge fixture in the batch that has an `initialState`, each under the
+   screen id THIS FACE gives that fixture's screen (its bridge's id): iOS env,
+   Android intent extra, web sessionStorage. One launch can carry many
+   fixtures — their screen ids differ.
+2. **Check the receipt.** When the fixture is on screen, read its bridge and
+   wait (up to the host's screen-ready time) for `initialState` with this
+   launch's `launchId`. Compare `applied` and `rejected` with
+   `testBridge.receipt` as sets (a rejection is key + reason). A receipt that
+   never comes, or differs, fails the fixture with what was seen.
+3. **Point `state` at the screen.** Before the steps run, tell the assertion
+   executor which screen `state` reads (iOS `setStateScreen`, the same idea on
+   the other drivers): this face's screen id for the fixture.
+4. **Remount when asked.** With `remount: true`, after the receipt check and
+   before the steps, rebuild the fixture view AND its data store, so a new
+   instance of the same screen appears in the same launch. The steps then
+   expect the defaults: the payload is applied once per launch and screen.
+
+### Where the bridge comes from on each face
+
+- **Codegen** (sjui / kjui / rjui output): the generated screen view carries
+  the bridge; the host passes the generated Data through as it does for any
+  fixture. Its screen id is the staged layout's (iOS `fx_NNNN`).
+- **Dynamic** (a host that drives the runtime's DynamicView directly): the
+  host attaches the library's bridge itself — iOS
+  `.jsonUITestBridge(screenId, snapshot:apply:)` — over a typed store made
+  from `testBridge.data` (defaults from `defaultValue`), with `apply`
+  judging each value by the library's check (iOS
+  `JsonUITestValue.check(_:declaredClass:)`, the one place a value is
+  judged) and `snapshot` returning the store as JSON values. The screen id
+  is the host's choice; it is the key used in job 1 and job 3.
+
+### The four fixtures
+
+| fixture | delivers | the steps check |
+|---|---|---|
+| `TestBridge/initialState__applied` | String, Int, Bool, null for `String?` | the label shows the string; `state` reads all four |
+| `TestBridge/initialState__rejected` | a string, an undeclared key, 1.5 for an Int | the string is in; the Int keeps 0; the receipt lists the two rejections with the spec's reasons |
+| `TestBridge/initialState__not_reapplied` | a string, then `remount` | after the remount the label and `state` show the default |
+| `TestBridge/initialState__bridge_follows` | nothing; afterFirstDraw sets `conformanceResult` | `state` reads the new value; the mirror label too |
+
 ## Fixture case types the host will encounter
 
 | case | mechanism exercised | trigger |

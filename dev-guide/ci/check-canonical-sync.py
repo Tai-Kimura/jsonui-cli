@@ -220,6 +220,42 @@ def check_condition_keys(canonical_root: Path) -> list[int]:
     return compared
 
 
+# Shared vectors jsonui-test-runner owns (specs/vectors/) that this repo
+# copies, byte for byte, for the generators' specs and for the libraries
+# that copy from here in turn (SwiftJsonUI's CI hashes its copies against
+# jsonui-cli). (canonical, local)
+VENDORED_VECTORS = [
+    ("specs/vectors/initial-state-coercion.json",
+     "shared/core/initial_state_coercion_vectors.json"),
+]
+
+
+def check_vector_bytes(canonical_root: Path) -> int:
+    """Byte-identical, for the same reason as the schemas: the copy step is
+    `cp`. A canonical vector that is missing is a problem too — the table
+    names it, so the copy has nothing to agree with."""
+    identical = 0
+    for canonical_rel, local_rel in VENDORED_VECTORS:
+        canonical = canonical_root / canonical_rel
+        local = HERE / local_rel
+        if not canonical.is_file():
+            problems.append(f"{canonical_rel}: not in the canonical checkout "
+                            f"{canonical_root} — the vendored copy {local_rel} "
+                            "has nothing to agree with")
+            continue
+        if not local.is_file():
+            problems.append(f"{local_rel}: missing (copy of {canonical_rel})")
+            continue
+        if canonical.read_bytes() != local.read_bytes():
+            problems.append(
+                f"{local_rel}: not byte-identical to {canonical_rel}.\n"
+                f"    canonical: {canonical}\n"
+                f"    local    : {local}")
+            continue
+        identical += 1
+    return identical
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(f"usage: {argv[0]} <path to jsonui-test-runner checkout>",
@@ -232,6 +268,7 @@ def main(argv: list[str]) -> int:
     identical, total = check_schema_bytes(canonical_root)
     map_entries = check_permission_map(canonical_root)
     compared = check_condition_keys(canonical_root)
+    vectors = check_vector_bytes(canonical_root)
 
     if problems:
         for problem in problems:
@@ -241,7 +278,8 @@ def main(argv: list[str]) -> int:
           f"(mock from the shipped copy, the rest vendored fixtures); "
           f"permission map agrees ({map_entries} entries); "
           f"condition keys agree across {len(compared)} driver(s), "
-          f"{'/'.join(str(n) for n in compared)} key(s) read")
+          f"{'/'.join(str(n) for n in compared)} key(s) read; "
+          f"{vectors}/{len(VENDORED_VECTORS)} vector(s) byte-identical")
     return 0
 
 
