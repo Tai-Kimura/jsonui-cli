@@ -73,9 +73,9 @@ class _Tree:
     def source(self, module: str, name: str, text: str) -> None:
         (self.root / module / "src" / "androidTest" / "kotlin" / f"{name}.kt").write_text(text)
 
-    def results(self, module: str, cases: str) -> None:
+    def results(self, module: str, cases: str, build: str = "debug") -> None:
         out = (self.root / module / "build" / "outputs" / "androidTest-results"
-               / "connected" / "debug" / "Pixel_Tablet(AVD) - 14")
+               / "connected" / build / "Pixel_Tablet(AVD) - 14")
         out.mkdir(parents=True, exist_ok=True)
         (out / "TEST-Pixel_Tablet(AVD) - 14-_library-.xml").write_text(_suite(cases))
 
@@ -225,6 +225,71 @@ class KjuiDeviceTestsJudge(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             self.assertEqual(0, K.main(["not-class", str(self.tree.root)]))
         self.assertEqual("com.kotlinjsonui.conformance.ConformanceSuiteTest", out.getvalue().strip())
+
+    # -- second build: a class that runs only in another build type --------
+
+    GATE_CLOSED = "TestBridgeGateClosedE2ETest"
+    GATE_CLOSED_FQ = "com.kotlinjsonui.conformance.TestBridgeGateClosedE2ETest"
+
+    def _gate_closed_source(self):
+        self.tree.source("conformance-host", self.GATE_CLOSED, TEST_CLASS.format(name=self.GATE_CLOSED))
+
+    def _gate_closed_results(self, body: str = ""):
+        case = (f'  <testcase name="one" classname="{self.GATE_CLOSED_FQ}" time="8.1">{body}</testcase>\n'
+                f'  <testcase name="two" classname="{self.GATE_CLOSED_FQ}" time="8.1">{body}</testcase>')
+        self.tree.results("conformance-host", case, build="gateClosed")
+
+    def _main(self, *argv) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(0, K.main([*argv, str(self.tree.root)]))
+        return out.getvalue().strip()
+
+    def test_a_second_build_class_is_left_out_of_the_debug_run_and_run_alone_in_its_build(self):
+        self._gate_closed_source()
+        self.assertEqual(
+            "com.kotlinjsonui.conformance.ConformanceSuiteTest," + self.GATE_CLOSED_FQ, self._main("not-class"))
+        self.assertEqual(self.GATE_CLOSED_FQ, self._main("gate-closed-classes"))
+
+    def test_a_checkout_without_the_class_runs_no_second_invocation(self):
+        # A KotlinJsonUI before 2.44.0: nothing to run, nothing left out.
+        self.assertEqual("", self._main("gate-closed-classes"))
+        self.assertEqual("com.kotlinjsonui.conformance.ConformanceSuiteTest", self._main("not-class"))
+
+    def test_its_cases_in_its_own_build_directory_are_judged_green(self):
+        self._green_tree()
+        self._gate_closed_source()
+        self._gate_closed_results()
+        rc, text = self._judge()
+        self.assertEqual(0, rc, text)
+        self.assertIn(f"{self.GATE_CLOSED} runs in a second invocation, build gateClosed", text)
+
+    def test_it_is_still_required_in_the_results(self):
+        self._green_tree()
+        self._gate_closed_source()
+        rc, text = self._judge()
+        self.assertEqual(1, rc, text)
+        self.assertIn(f"NOT RUN  {self.GATE_CLOSED}", text)
+
+    def test_a_skip_of_it_is_red_even_with_the_switches_down(self):
+        # It skips only by its own assumption, i.e. in the wrong build.
+        self._green_tree()
+        self._gate_closed_source()
+        self._gate_closed_results('<skipped message="the gateClosed build only" />')
+        rc, text = self._judge()
+        self.assertEqual(1, rc, text)
+        self.assertIn(f"{self.GATE_CLOSED}.one skipped — it runs only in its own build (gateClosed)", text)
+
+    def test_the_runner_runs_them_alone_in_the_gate_closed_build(self):
+        script = (REPO_ROOT / ".github" / "scripts" / "kjui_device_tests.sh").read_text()
+        start = script.index('gate_closed=$(python3 "$here/kjui_device_tests.py" gate-closed-classes')
+        block = script[start:script.index("\nfi\n", start)]
+        for needed in ("-PconformanceTestBuildType=gateClosed", ":conformance-host:connectedGateClosedAndroidTest",
+                       '-Pandroid.testInstrumentationRunnerArguments.class="$gate_closed"', '[ "$rc2" = 0 ] || rc=$rc2'):
+            self.assertIn(needed, block)
+        # After the debug invocation, before the judge.
+        self.assertLess(script.index(":conformance-host:connectedDebugAndroidTest"), start)
+        self.assertLess(start, script.index('python3 "$here/kjui_device_tests.py" judge'))
 
     # -- switches -----------------------------------------------------------
 

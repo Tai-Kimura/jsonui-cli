@@ -109,7 +109,7 @@ fi
 
 # The classes another job runs (kjui_device_tests.py RUN_ELSEWHERE).
 not_class=$(python3 "$here/kjui_device_tests.py" not-class "$kjui") || exit 2
-echo "left out here (run by another job): $not_class"
+echo "left out of this invocation (another job runs it, or the second invocation below): $not_class"
 
 # Can the IME show at all? Asked on a known field before the tests, so a
 # device whose IME never shows is red for the environment, by name, and not
@@ -131,6 +131,27 @@ rc=0
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
   ${args[@]+"${args[@]}"}) || rc=$?
 echo "gradle exit: $rc$([ "$rc" = 124 ] && echo ' (stopped by the watch: the cases stopped moving)')"
+
+# The classes that run only in another build type of their module
+# (kjui_device_tests.py SECOND_BUILD): today conformance-host's gate-closed arm
+# of the test bridge, in the gateClosed build (not debuggable, no
+# SCREEN_MARKER meta-data). Left out of the debug invocation above; run alone
+# here. The judge requires them in the results either way.
+gate_closed=$(python3 "$here/kjui_device_tests.py" gate-closed-classes "$kjui") || exit 2
+if [ -n "$gate_closed" ]; then
+  echo "second invocation (gateClosed build): $gate_closed"
+  rc2=0
+  (cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
+    --idle "${KJUI_IDLE_SECONDS:-600}" --focus "${KJUI_FOCUS_SECONDS:-15}" --evidence "$evidence/gate-closed" -- \
+    ./gradlew --no-daemon -PconformanceTestBuildType=gateClosed \
+    :conformance-host:connectedGateClosedAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class="$gate_closed" \
+    -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true) || rc2=$?
+  echo "gradle exit (gateClosed): $rc2"
+  [ "$rc2" = 0 ] || rc=$rc2
+else
+  echo "second invocation (gateClosed build): none — the checkout declares no SECOND_BUILD class"
+fi
 
 collect_evidence || echo "warning: evidence collection failed; the verdict is unchanged"
 
