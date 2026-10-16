@@ -266,11 +266,16 @@ def cmd_validate(args):
     # does the very thing it declared it would not — and nothing in that
     # output points at the declaration.
     from .schema import KEY_DRIVER_REQUIREMENTS
-    from .validation.runtime_support import check_declarations, collect_declared_keys
+    from .validation.runtime_support import (
+        check_declarations, collect_declared_keys, platform_roots_from_config)
+    # The driver lives under the platform's root on a `jui init` layout
+    # (`platforms.web.root`), read from the same config the run loaded.
+    _runtime_root = _project_root(getattr(args, "config", None))
     runtime_errors, runtime_notes = check_declarations(
         collect_declared_keys(valid_test_files, set(KEY_DRIVER_REQUIREMENTS)),
         KEY_DRIVER_REQUIREMENTS,
-        _project_root(getattr(args, "config", None)),
+        _runtime_root,
+        platform_roots_from_config(_read_config_doc(getattr(args, "config", None))[0], _runtime_root),
     )
     # The toolchain this project vendored, against the one running the gate.
     # Both values live inside the tool — the stamp `jui sync_tool` writes and

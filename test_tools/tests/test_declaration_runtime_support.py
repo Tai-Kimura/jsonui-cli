@@ -31,6 +31,7 @@ from jsonui_test_cli.validation.runtime_support import (  # noqa: E402
     collect_declared_keys,
     installed_driver_version,
     parse_version,
+    platform_roots_from_config,
 )
 
 REQ = {"screenReady": {"web": "1.8.4"}}
@@ -189,3 +190,62 @@ class TestNoProjectRootIsAThirdKindOfUnknowable:
         # Same opt-in rule as everywhere else: a project that declares nothing
         # hears nothing, wherever it is run from.
         assert check_declarations({}, REQ, None) == ([], [])
+
+
+class TestThePlatformRootIsSearched:
+    """`jui init` puts the web app, and its node_modules, under
+    `platforms.web.root`. A search from the project root alone never reached
+    it: every standard layout read "could not be read" (2026-10-16)."""
+
+    WEB_UNDER = {"platforms": {"web": {"root": "web"}}}
+
+    def test_an_older_driver_under_the_web_root_is_an_error(self, tmp_path):
+        with_driver(tmp_path, "1.8.3", at=tmp_path / "web")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        roots = platform_roots_from_config(self.WEB_UNDER, tmp_path)
+        errors, notes = check_declarations(declared, REQ, tmp_path, roots)
+        assert len(errors) == 1 and notes == []
+        assert "1.8.3" in errors[0]
+        # Control: the same tree searched from the project root alone is the
+        # old "could not be read" — the defect this fixes.
+        errors, notes = check_declarations(declared, REQ, tmp_path)
+        assert errors == [] and "could not be read" in notes[0]
+
+    def test_a_new_enough_driver_under_the_web_root_passes(self, tmp_path):
+        with_driver(tmp_path, "1.9.0", at=tmp_path / "web")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        roots = platform_roots_from_config(self.WEB_UNDER, tmp_path)
+        assert check_declarations(declared, REQ, tmp_path, roots) == ([], [])
+
+    def test_a_config_without_platforms_searches_as_before(self, tmp_path):
+        with_driver(tmp_path, "1.8.3")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        roots = platform_roots_from_config({"project_name": "x"}, tmp_path)
+        assert roots == {}
+        assert check_declarations(declared, REQ, tmp_path, roots) == check_declarations(declared, REQ, tmp_path)
+        assert len(check_declarations(declared, REQ, tmp_path, roots)[0]) == 1
+
+    def test_with_a_driver_in_both_places_the_web_root_wins(self, tmp_path):
+        # Old at the project root, new under web/: the web app resolves its
+        # own, so the new one is what runs.
+        with_driver(tmp_path, "1.8.3")
+        with_driver(tmp_path, "1.9.0", at=tmp_path / "web")
+        roots = platform_roots_from_config(self.WEB_UNDER, tmp_path)
+        assert installed_driver_version("web", tmp_path, roots["web"]) == "1.9.0"
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        assert check_declarations(declared, REQ, tmp_path, roots) == ([], [])
+        # And the other way round, so "wins" is not "the newer one wins".
+        with_driver(tmp_path, "1.9.0")
+        with_driver(tmp_path, "1.8.3", at=tmp_path / "web")
+        assert installed_driver_version("web", tmp_path, roots["web"]) == "1.8.3"
+
+
+class TestPlatformRootsFromConfig:
+    def test_roots_resolve_against_the_project_root(self, tmp_path):
+        config = {"platforms": {"web": {"root": "web"}, "ios": {"root": "app-ios"}, "android": {}}}
+        assert platform_roots_from_config(config, tmp_path) == {
+            "web": tmp_path / "web", "ios": tmp_path / "app-ios"}
+
+    def test_a_list_of_platforms_or_no_project_root_gives_none(self, tmp_path):
+        assert platform_roots_from_config({"platforms": ["web"]}, tmp_path) == {}
+        assert platform_roots_from_config({"platforms": {"web": {"root": "web"}}}, None) == {}

@@ -55,30 +55,65 @@ def parse_version(text: str) -> tuple[int, ...]:
     return tuple(int(p) for p in parts[:3]) or (0,)
 
 
-def installed_driver_version(platform: str, project_root: Path) -> str | None:
+def installed_driver_version(platform: str, project_root: Path,
+                             platform_root: Path | None = None) -> str | None:
     """Version of the installed driver, or None when it cannot be read.
 
-    Searched from the project root outward: a monorepo may hoist
-    node_modules above the package that declares the dependency.
+    Searched from the platform's own root (`platforms.<platform>.root`) and
+    then from the project root, each outward: a monorepo may hoist
+    node_modules above the package that declares the dependency. The
+    platform root comes first, so a project with a driver in both places is
+    judged by the one its platform actually resolves.
+
+    The platform root is not optional in practice: `jui init` puts the web
+    app under `platforms.web.root` (`web/`), with its node_modules inside it,
+    and a search from the project root alone never reached it — the check
+    said "could not be read" on every standard layout (2026-10-16, jsonui-cli
+    1.9.33).
     """
     package = DRIVER_PACKAGES.get(platform)
     if not package:
         return None
-    root = Path(project_root).resolve()
-    for directory in [root, *root.parents]:
-        manifest = directory / "node_modules" / package / "package.json"
-        if manifest.exists():
-            try:
-                version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
-            except (OSError, ValueError):
-                return None
-            return version if isinstance(version, str) else None
+    starts: list[Path] = []
+    for start in (platform_root, project_root):
+        if start is not None and Path(start).resolve() not in starts:
+            starts.append(Path(start).resolve())
+    for root in starts:
+        for directory in [root, *root.parents]:
+            manifest = directory / "node_modules" / package / "package.json"
+            if manifest.exists():
+                try:
+                    version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
+                except (OSError, ValueError):
+                    return None
+                return version if isinstance(version, str) else None
     return None
+
+
+def platform_roots_from_config(config: dict, project_root: Path | None) -> dict[str, Path]:
+    """`platforms.<name>.root` per platform, resolved against the project root.
+
+    Empty when there is no project root, or the config declares no platforms
+    or declares them as a plain list (no roots) — the search is then the
+    project root's, as before.
+    """
+    if project_root is None:
+        return {}
+    platforms = config.get("platforms") if isinstance(config, dict) else None
+    if not isinstance(platforms, dict):
+        return {}
+    roots: dict[str, Path] = {}
+    for name, spec in platforms.items():
+        root = spec.get("root") if isinstance(spec, dict) else None
+        if isinstance(root, str) and root:
+            roots[name] = Path(project_root) / root
+    return roots
 
 
 def check_declarations(declared: dict[str, list[Path]],
                        requirements: dict[str, dict[str, str]],
-                       project_root: Path | None) -> tuple[list[str], list[str]]:
+                       project_root: Path | None,
+                       platform_roots: dict[str, Path] | None = None) -> tuple[list[str], list[str]]:
     """Compare declared keys against the installed drivers.
 
     `declared` maps a top-level key to the files that use it. Returns
@@ -116,7 +151,8 @@ def check_declarations(declared: dict[str, list[Path]],
                     f"declaration silently ({len(files)} file(s) declare it)."
                 )
                 continue
-            found = installed_driver_version(platform, project_root)
+            found = installed_driver_version(
+                platform, project_root, (platform_roots or {}).get(platform))
             if found is None:
                 notes.append(
                     f"'{key}' requires the {platform} driver {required} or newer; "
