@@ -686,7 +686,7 @@ def parse_swagger(
     for name, body in schemas_root.items():
         if not isinstance(body, dict):
             continue
-        body = _fold_const(body)
+        body = _fold_null_type(_fold_const(body))
         # Skip filtered-out schemas before any parse work (lenient filter).
         if kept_schema_names is not None and name not in kept_schema_names:
             continue
@@ -950,6 +950,35 @@ def _fold_const(body: dict[str, Any]) -> dict[str, Any]:
     folded = {k: v for k, v in body.items() if k != "const"}
     folded["enum"] = [value]
     folded.setdefault("type", inferred)
+    return folded
+
+
+def _fold_null_type(body: dict[str, Any]) -> dict[str, Any]:
+    """OpenAPI 3.1 ``type: [T, "null"]`` is the nullable that 3.0 spells
+    ``type: T, nullable: true``.
+
+    Same reason as :func:`_fold_const`: openapi-diff's normalizer already
+    folds the two spellings to one, so a document written the 3.1 way gets
+    no drift finding while the build halted on it (``unrecognized type
+    ['integer', 'null']`` — an error that never says null). Folding before
+    classification gives the 3.1 spelling every 3.0 behavior — field,
+    array element, map value, wrapper (ticket
+    jui-api-model-openapi-31-null-type-ignored). A list with more than one
+    non-null type (an untagged union) or none at all is left alone for the
+    existing ``unknown-type`` halt.
+
+    Returns a shallow copy; never mutates the caller's schema dict.
+    """
+    types = body.get("type")
+    if not isinstance(types, list):
+        return body
+    non_null = [t for t in types if t != "null"]
+    if len(non_null) != 1:
+        return body
+    folded = dict(body)
+    folded["type"] = non_null[0]
+    if len(non_null) != len(types):
+        folded["nullable"] = True
     return folded
 
 
@@ -1784,6 +1813,7 @@ def _extract_fields(
     for prop_name, prop_body in properties.items():
         if not isinstance(prop_body, dict):
             continue
+        prop_body = _fold_null_type(prop_body)
         prop_pointer = f"{parent_pointer}/properties/{prop_name}"
         ftype, derived, enums = _field_type(
             prop_body,
@@ -1826,7 +1856,7 @@ def _with_element_nullable(element: FieldType, body: dict[str, Any]) -> FieldTyp
     (ticket jui-web-api-model-nullable-array-items-dropped). An element is
     never "omitted", so here the flag means exactly "may be JSON ``null``".
     """
-    if not body.get("nullable"):
+    if not _fold_null_type(body).get("nullable"):
         return element
     return FieldType(**{**element.__dict__, "nullable": True})
 
@@ -1848,7 +1878,7 @@ def _field_type(
     (transitively, since nested inline objects can themselves contain inline
     objects/enums).
     """
-    body = _fold_const(body)
+    body = _fold_null_type(_fold_const(body))
     _check_polymorphic(body, source_path=source_path, pointer=pointer, at_field_level=True)
 
     # 1pre. ``oneOf`` + ``discriminator`` with explicit ``mapping`` →

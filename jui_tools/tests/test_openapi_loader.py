@@ -2084,5 +2084,86 @@ class ElementNullableTests(unittest.TestCase):
              "plain": (False, False, True)})
 
 
+
+def _spelled(null31: bool) -> dict:
+    """The same schemas, nullability spelled the 3.1 way or the 3.0 way."""
+    def n(t: str, **extra) -> dict:
+        if null31:
+            return {"type": [t, "null"], **extra}
+        return {"type": t, "nullable": True, **extra}
+    return {
+        "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "M": {"type": "object", "required": ["a", "cells", "kind"], "properties": {
+            "a": n("integer"),                                       # required, nullable
+            "b": n("string", format="date-time"),                    # optional, nullable
+            "cells": {"type": "array", "items": {"type": "array", "items": n(
+                "integer", format="int64")}},                        # element
+            "m": {"type": "object", "additionalProperties": n("number")},  # map value
+            "tags": {**n("array"), "items": {"type": "string"}},     # the array itself
+            "kind": n("string", enum=["x", "y"]),                    # inline enum
+            "plain": {"type": "integer"},                            # control
+        }},
+        "Counts": {"type": "array", "items": n("integer")},          # wrapper element
+        "Note": n("string"),                                         # top-level wrapper
+    }
+
+
+class OpenApi31NullTypeTests(unittest.TestCase):
+    """``type: [T, "null"]`` (3.1) is ``type: T, nullable: true`` (3.0) —
+    ticket jui-api-model-openapi-31-null-type-ignored. It halted with
+    ``unrecognized type ['integer', 'null']``."""
+
+    def _doc(self, null31: bool):
+        return parse_swagger(_doc(_spelled(null31)), "test.json")
+
+    def test_loads(self):
+        m = next(s for s in self._doc(True).schemas if s.name == "M")
+        f = {x.wire_name: x for x in m.fields}
+        self.assertEqual((f["a"].required, f["a"].nullable, f["a"].type.primitive),
+                         (True, True, PrimitiveKind.INTEGER))
+        self.assertTrue(f["cells"].type.element.element.nullable)
+        self.assertEqual(f["cells"].type.element.element.primitive, PrimitiveKind.INTEGER_64)
+        self.assertTrue(f["m"].type.element.nullable)
+        self.assertTrue(f["tags"].nullable and f["tags"].type.is_array)
+        self.assertEqual(f["b"].type.format, "date-time")
+        self.assertFalse(f["plain"].nullable)
+        note = next(s for s in self._doc(True).schemas if s.name == "Note")
+        self.assertTrue(note.is_wrapper and note.wrapped_type.primitive is PrimitiveKind.STRING)
+
+    def test_the_two_spellings_are_the_same_ir(self):
+        self.assertEqual(self._doc(True), self._doc(False))
+
+    def test_the_two_spellings_generate_the_same_bytes_on_every_face(self):
+        from jui_cli.generators.android_api_model_generator import (
+            AndroidApiModelGenerator, AndroidApiPlatformConfig)
+        from jui_cli.generators.ios_api_model_generator import (
+            IosApiModelGenerator, IosApiPlatformConfig)
+        from jui_cli.generators.web_api_model_generator import (
+            WebApiModelGenerator, WebApiPlatformConfig)
+
+        def sources(doc):
+            with tempfile.TemporaryDirectory() as tmp:
+                t = Path(tmp)
+                gens = [WebApiModelGenerator(WebApiPlatformConfig(
+                            sources_root=t, model_dir="m", dto_subdir="g",
+                            case_convention="camelCase", format_mapping=True)),
+                        IosApiModelGenerator(IosApiPlatformConfig(sources_root=t, format_mapping=True)),
+                        AndroidApiModelGenerator(AndroidApiPlatformConfig(
+                            sources_root=t, format_mapping=True, serializer="kotlinx"))]
+                return [g.generate_dto_source(s, doc) for g in gens for s in doc.schemas] + \
+                       [g.generate_enum_source(e, doc) for g in gens for e in doc.enums]
+
+        got = sources(self._doc(True))
+        self.assertEqual(got, sources(self._doc(False)))
+        self.assertTrue(any("(number | null)[][]" in src for src in got))  # the shape is there
+
+    def test_control_more_than_one_non_null_type_still_halts(self):
+        for types in (["string", "integer"], ["string", "integer", "null"], ["null"]):
+            with self.subTest(types=types), self.assertRaises(OpenAPILoadError) as cm:
+                parse_swagger(_doc({"M": {"type": "object", "properties": {
+                    "a": {"type": types}}}}), "test.json")
+            self.assertEqual(cm.exception.code, "unknown-type")
+
+
 if __name__ == "__main__":
     unittest.main()
