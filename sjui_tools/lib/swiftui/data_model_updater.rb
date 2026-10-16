@@ -339,7 +339,10 @@ module SjuiTools
             name = prop['name']
             class_type = prop['class']
             default_value = prop['defaultValue']
-            is_optional = default_value.nil? || default_value == 'nil'
+            # A declared `?` is optional whatever the default: the property is
+            # emitted `String?` either way, and binding it as Binding<String>
+            # did not compile (a `String?` with a defaultValue).
+            is_optional = default_value.nil? || default_value == 'nil' || class_type.to_s.end_with?('?')
 
             # Determine if type is bindable (primitive types)
             binding_type = case class_type.gsub('?', '')

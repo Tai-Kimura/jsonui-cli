@@ -77,6 +77,10 @@ RSpec.describe 'test bridge (sjui)' do
       [
       { 'name' => 'email', 'class' => 'String', 'defaultValue' => '' },
       { 'name' => 'nickname', 'class' => 'String?' },
+      # An optional WITH a default: toDictionary(binding:) took optionality
+      # from the default alone and bound it as Binding<String>, which does not
+      # compile (found by the TestBridge conformance fixtures).
+      { 'name' => 'alias', 'class' => 'String?', 'defaultValue' => 'a' },
       { 'name' => 'count', 'class' => 'Integer', 'defaultValue' => 0 },
       { 'name' => 'ratio', 'class' => 'Double', 'defaultValue' => 0 },
       { 'name' => 'weight', 'class' => 'Float', 'defaultValue' => 0 },
@@ -127,7 +131,9 @@ RSpec.describe 'test bridge (sjui)' do
     # Color default as UIColor, which this macOS compile check lacks. Both are
     # outside the bridge; the Number spelling is held by the vector arm above.
     it 'compiles, every class kind included' do
-      data = build.lines.reject { |l| l.start_with?('import ') }.join
+      # The DEBUG-only half (toDictionary(binding:), Dynamic mode) is compiled
+      # too: this checker defines nothing, and a Debug app build compiles it.
+      data = build.lines.reject { |l| l.start_with?('import ') || l.strip == '#if DEBUG' || l.strip == '#endif' }.join
       expect("#{EmittedSwift::LIBRARY_STUBS}\n#{color_manager_stub}\n#{data}").to compile_as_swift.with_imports('SwiftUI')
     end
   end
