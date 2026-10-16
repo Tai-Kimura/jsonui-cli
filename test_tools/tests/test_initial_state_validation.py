@@ -369,3 +369,43 @@ def test_an_app_owned_screen_is_said_to_be_unchecked(tmp_path):
     infos = [m.message for m in result.infos if "initialState" in m.message]
     assert len(infos) == 1 and "screen 'native_settings' has no layout in this project " \
         "(declared app-owned)" in infos[0]
+
+
+# ------------------------------------------------------------- unreached screens
+
+UNREACHED = "was never checked: the flow never reached it (no step names that screen)"
+
+
+def _unreached(result):
+    return sorted(m.path.rsplit(".", 1)[1] for m in result.warnings if UNREACHED in m.message)
+
+
+def test_a_view_models_screen_no_step_names_is_warned():
+    result = Validator().validate_data(_flow({"login": {"email": "a"}, "home": {"tab": 1}}))
+    assert _unreached(result) == ["home"]
+    assert result.errors == []
+
+
+def test_a_screen_named_in_setup_is_reached():
+    data = _flow({"home": {"tab": 1}},
+                 setup=[{"screen": "home", "action": "tap", "id": "homeRoot"}])
+    assert _unreached(Validator().validate_data(data)) == []
+
+
+def test_a_screen_named_only_in_teardown_file_or_block_steps_is_not_reached():
+    # The driver decides before teardown runs, and a file step or a block's
+    # inner steps do not move the tracked screen.
+    data = _flow({"home": {"tab": 1}},
+                 steps=[{"screen": "login", "action": "tap", "id": "root"},
+                        {"block": "b", "steps": [{"screen": "home", "action": "tap", "id": "x"}]}],
+                 teardown=[{"screen": "home", "action": "tap", "id": "homeRoot"}])
+    assert _unreached(Validator().validate_data(data)) == ["home"]
+
+
+def test_a_screen_named_behind_a_when_is_not_warned():
+    # Skipped or not is decided at run time: no warning rather than a false one.
+    data = _flow({"home": {"tab": 1}},
+                 steps=[{"screen": "login", "action": "tap", "id": "root"},
+                        {"screen": "home", "action": "tap", "id": "homeRoot",
+                         "when": {"visible": "homeRoot"}}])
+    assert _unreached(Validator().validate_data(data)) == []

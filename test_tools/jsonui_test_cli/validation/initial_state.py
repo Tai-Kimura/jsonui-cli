@@ -439,6 +439,31 @@ def check_flow_test(data: dict, path: str, result: ValidationResult,
     if why and any(models.values()):
         unchecked.append(why)
     _say_unchecked(unchecked, state_path, result)
+    _warn_unreached(data, models, state_path, result)
+
+
+def _warn_unreached(data: dict, models: dict, path: str, result: ValidationResult) -> None:
+    """A screen in `viewModels` no step of the flow names: the driver checks
+    each screen's receipt when the flow reaches it, so this one's values are
+    sent and never checked, and the driver warns (spec §10.5). The same
+    warning here, with the driver's wording (web JsonUITestRunner).
+
+    Reached = an inline step's `screen` in setup or steps
+    (`flow.step_screens`, the walk the sources check uses): the driver
+    decides it after the flow body and before teardown, and a file step or a
+    block's inner steps do not set it. A screen a step names behind a `when`
+    may still be skipped at run time; that cannot be decided statically, so
+    it is not warned (a named screen is never warned).
+    """
+    from .flow import step_screens
+    named = set(step_screens(data, ("setup", "steps")))
+    for screen_id, values in models.items():
+        if not isinstance(values, dict) or screen_id in named:
+            continue
+        result.warnings.append(ValidationMessage(
+            path=f"{path}.viewModels.{screen_id}", level="warning",
+            message=(f"initialState for screen '{screen_id}' was never checked: the flow never "
+                     "reached it (no step names that screen)")))
 
 
 def check_referenced_file(step: dict, referenced: dict, path: str,
