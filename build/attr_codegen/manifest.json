@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "b458a3677f80cf2a37b3bc6693d9bfdadaff739c099a7c7afc7f12dd3331ea74"
+    "sha256": "0ee6ea3e7c75155028a500e247922fe129648e3ebef653e4919295fc5a3fb587"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
