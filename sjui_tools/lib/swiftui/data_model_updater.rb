@@ -266,7 +266,12 @@ module SjuiTools
         content += "    }\n"
 
         # The test bridge's apply / snapshot (jsonui-test-runner spec section 10.3-10.4).
-        bridge_props = data_properties.map do |prop|
+        # Only the Data the layout DECLARES (plan decision 1): fields the
+        # generator adds itself — <id>IsFocused, a Radio group's selection —
+        # and object-form data are not, so an initialState naming one gets
+        # `not a data field`, as on Android and in validate
+        # (shared/core/layout_data_fields_vectors.json).
+        bridge_props = data_properties.select { |prop| declared_data_properties.key?(prop) }.map do |prop|
           swift_type = swift_data_type(prop['class']).to_s
           default_value = prop['defaultValue']
           {

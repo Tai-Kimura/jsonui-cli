@@ -106,6 +106,24 @@ RSpec.describe 'test bridge (sjui)' do
       $stdout = STDOUT
     end
 
+    it 'leaves fields the generator adds out — they are not a data field' do
+      File.write(File.join(dir, 'Layouts', 'screen.json'), JSON.generate(
+        'type' => 'View', 'id' => 'root',
+        'child' => [{ 'data' => [{ 'name' => 'email', 'class' => 'String', 'defaultValue' => '' }] },
+                    { 'type' => 'TextField', 'id' => 'email_field', 'text' => '@{email}' }]
+      ))
+      $stdout = StringIO.new
+      SjuiTools::SwiftUI::DataModelUpdater.new.send(:process_json_file, File.join(dir, 'Layouts', 'screen.json'))
+      data = File.read(File.join(dir, 'Data', 'ScreenData.swift'))
+      # Control: the generator did add the focus field to the Data type.
+      expect(data).to include('var emailFieldIsFocused: Bool')
+      expect(data).to include('case "email":')
+      expect(data).not_to include('case "emailFieldIsFocused":')
+      expect(data).not_to include('snapshot["emailFieldIsFocused"]')
+    ensure
+      $stdout = STDOUT
+    end
+
     it 'checks every declared field by the class as the layout spells it' do
       data = build
       declared.each do |d|
