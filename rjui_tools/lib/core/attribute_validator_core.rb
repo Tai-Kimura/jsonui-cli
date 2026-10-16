@@ -155,6 +155,8 @@ module JsonUIShared
       @warnings = []
       @structural_errors = []
       @infos = []
+      @outside_infos = []
+      @binding_infos = []
       @normalized = false
       @styles_dir = styles_dir
       @styles_cache = {}
@@ -321,8 +323,46 @@ module JsonUIShared
     # Print all info messages to console
     def print_infos
       @infos.each do |info|
-        puts "\e[36mℹ️  [#{log_tag} Info] #{info}\e[0m"
+        puts info_line(info)
       end
+    end
+
+    # The console line an INFO is printed as.
+    def info_line(info)
+      "\e[36mℹ️  [#{log_tag} Info] #{info}\e[0m"
+    end
+
+    # An attribute this build leaves out because it belongs to another mode
+    # or platform (add_mode_info / add_platform_info): a shared layout writes
+    # web-only handlers and UIKit-only attributes legitimately, so these are
+    # not warnings. `validate` resets @infos on every node, and no build ever
+    # called print_infos, so through jsonui-cli 1.9.33 they reached no one
+    # (ticket jui-build-mode-outside-infos-are-collected-and-never-printed).
+    # They accumulate here across nodes; the build takes them once per file
+    # and prints them only in a verbose build (verbose_build?), so a default
+    # build's output is what it was.
+    def take_outside_infos
+      taken = @outside_infos
+      @outside_infos = []
+      taken
+    end
+
+    # A bound value with a limitation declared on this face (`bindingInfo`,
+    # add_binding_info): the same INFO, the same reset, printed by no build
+    # through jsonui-cli 1.9.33 (ticket
+    # jui-build-binding-infos-are-collected-and-never-printed). Kept and
+    # taken the same way, and printed under the same verbose switch.
+    def take_binding_infos
+      taken = @binding_infos
+      @binding_infos = []
+      taken
+    end
+
+    # A verbose build: DEBUG in the environment, the switch the three tools'
+    # own debug output already reads (it reaches them through `jui build`,
+    # which passes its environment on). sjui's `--verbose` also counts there.
+    def self.verbose_build?(env = ENV)
+      !env['DEBUG'].nil?
     end
 
     # Check if there are any warnings
@@ -495,7 +535,7 @@ module JsonUIShared
       return unless info.is_a?(Hash) && value.is_a?(String) && value.include?('@{')
       return unless Array(info['platform']).include?(self.class::PLATFORM)
 
-      add_info("'#{key}' on #{type} is bound: #{info['note']}")
+      add_kept_info(@binding_infos, "'#{key}' on #{type} is bound: #{info['note']}")
     end
 
     def not_applicable_reason(attr_def, type)
@@ -1436,7 +1476,7 @@ module JsonUIShared
       mode_str = attr_modes.map { |m| m.capitalize }.join('/')
       current_mode_str = @mode.to_s.capitalize
 
-      add_info("Attribute '#{attr_name}' in '#{component_type}' is for #{mode_str} mode (current: #{current_mode_str})")
+      add_outside_info("Attribute '#{attr_name}' in '#{component_type}' is for #{mode_str} mode (current: #{current_mode_str})")
     end
 
     MODE_SPELLINGS = { 'uikit' => 'UIKit', 'swiftui' => 'SwiftUI', 'compose' => 'Compose', 'react' => 'React' }.freeze
@@ -1449,10 +1489,28 @@ module JsonUIShared
     # `onDisappear` are SwiftUI / Compose lifecycle callbacks: web and UIKit
     # draw no call to the handler, so a layout written for them was built
     # with no word while the handler it declares was never called.
+    #
+    # The sentence names the attribute's mode; one limited by platform alone
+    # (no `mode`) is named by its platforms — it read the mode only, and said
+    # `is  only` for one (ticket
+    # jui-build-mode-outside-infos-are-collected-and-never-printed).
     def add_outside_mode_warning(attr_name, attr_def, component_type)
-      modes = Array(attr_def['mode']).map { |m| MODE_SPELLINGS.fetch(m, m.capitalize) }
-      add_warning("Attribute '#{attr_name}' in '#{component_type}' is #{modes.join('/')} only — " \
+      limits = Array(attr_def['mode']).map { |m| MODE_SPELLINGS.fetch(m, m.capitalize) }
+      limits = Array(attr_def['platform']).map { |p| p.capitalize } if limits.empty?
+      add_warning("Attribute '#{attr_name}' in '#{component_type}' is #{limits.join('/')} only — " \
                   "#{attr_def['description']}")
+    end
+
+    def add_outside_info(message)
+      add_kept_info(@outside_infos, message)
+    end
+
+    # An INFO that is also kept on `channel`, which `validate` does not reset.
+    def add_kept_info(channel, message)
+      add_info(message)
+      context = build_context_prefix
+      full_message = context.empty? ? message : "#{context}#{message}"
+      channel << full_message unless channel.include?(full_message)
     end
 
     # Add info for platform-specific attribute (not an error, just informational)
@@ -1460,7 +1518,7 @@ module JsonUIShared
       attr_platforms = Array(attr_def['platform'])
       platform_str = attr_platforms.map { |p| p.capitalize }.join('/')
 
-      add_info("Attribute '#{attr_name}' in '#{component_type}' is for #{platform_str} platform (current: #{self.class::PLATFORM.capitalize})")
+      add_outside_info("Attribute '#{attr_name}' in '#{component_type}' is for #{platform_str} platform (current: #{self.class::PLATFORM.capitalize})")
     end
 
     # Merge style attributes into component for validation
