@@ -44,6 +44,7 @@ module SjuiTools
 
           # Store validation results
           @validation_warnings = []
+          @outside_infos = []
           @validation_errors = 0
           @binding_errors = []
 
@@ -75,6 +76,7 @@ module SjuiTools
 
           # Print validation summary if there were warnings
           print_validation_summary if options[:validate] != false && @validation_warnings.any?
+          print_outside_infos
 
           # Error-severity canonical binding rules (binding_semantics.json
           # validatorRules) always fail the build, strict or not
@@ -140,6 +142,25 @@ module SjuiTools
           options[:validate] = true if options[:validate].nil?
 
           options
+        end
+
+        # The attributes this build left out as another mode's or platform's
+        # (AttributeValidatorCore#take_outside_infos), named with their file.
+        def collect_outside_infos(validator, relative_path)
+          validator.take_outside_infos.each do |info|
+            (@outside_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
+          end
+        end
+
+        # Printed only in a verbose build (`sjui --verbose build`,
+        # `--log-level debug`, or DEBUG in the environment — `DEBUG=1 jui
+        # build`): a default build prints what it printed before.
+        def print_outside_infos
+          return if @outside_infos.nil? || @outside_infos.empty?
+          return unless Core::Logger.level == :debug || Core::AttributeValidator.verbose_build?
+
+          Core::Logger.info "Not built here (another mode or platform): #{@outside_infos.length} attribute(s)"
+          @outside_infos.each { |line| puts line }
         end
 
         def print_validation_summary
@@ -284,6 +305,7 @@ module SjuiTools
           if validator
             validator.normalized = Core::Normalization.canonicalized?(json_data)
             warnings = validate_json(json_data, validator, file_name)
+            collect_outside_infos(validator, relative_path)
             if warnings.any?
               @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
               @validation_errors += warnings.length
@@ -664,6 +686,7 @@ module SjuiTools
                 # canonical-only validation path
                 validator.normalized = Core::Normalization.canonicalized?(json_data)
                 warnings = validate_json(json_data, validator, file_name)
+                collect_outside_infos(validator, relative_path)
                 if warnings.any?
                   @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
                   @validation_errors += warnings.length
@@ -789,6 +812,7 @@ module SjuiTools
                 if validator
                   validator.normalized = Core::Normalization.canonicalized?(variant_json)
                   warnings = validate_json(variant_json, validator, File.basename(variant_file, '.json'))
+                  collect_outside_infos(validator, variant_rel)
                   if warnings.any?
                     @validation_warnings.concat(warnings.map { |w| "[#{variant_rel}] #{w}" })
                     @validation_errors += warnings.length

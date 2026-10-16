@@ -39,6 +39,7 @@ module RjuiTools
           @validator = Core::AttributeValidator.new(:react)
           @binding_validator = Core::BindingValidator.new
           @all_warnings = []
+          @outside_infos = []
           @binding_warnings = []
           @binding_errors = []
         end
@@ -358,6 +359,7 @@ module RjuiTools
 
           # Print all collected warnings at the end
           print_validation_summary
+          print_outside_infos
           print_binding_warnings
           print_binding_errors
 
@@ -789,6 +791,9 @@ module RjuiTools
             warnings.each do |warning|
               @all_warnings << { file: file_path, message: warning }
             end
+            @validator.take_outside_infos.each do |info|
+              @outside_infos << @validator.info_line("[#{file_path}] #{info}")
+            end
           end
 
           # Get this component's orientation for children validation
@@ -805,6 +810,19 @@ module RjuiTools
             children = component['child'].is_a?(Array) ? component['child'] : [component['child']]
             children.each { |child| validate_component(child, file_path, current_orientation) }
           end
+        end
+
+        # The attributes this build left out as another mode's or platform's
+        # (AttributeValidatorCore#take_outside_infos), printed only in a
+        # verbose build (DEBUG in the environment, the switch rjui's own
+        # debug output reads — `DEBUG=1 jui build`): a default build prints
+        # what it printed before.
+        def print_outside_infos
+          return if @outside_infos.nil? || @outside_infos.empty?
+          return unless Core::AttributeValidator.verbose_build?
+
+          Core::Logger.info("Not built here (another mode or platform): #{@outside_infos.length} attribute(s)")
+          @outside_infos.each { |line| puts line }
         end
 
         # Print validation summary at the end of build

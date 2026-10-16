@@ -31,6 +31,7 @@ module KjuiTools
 
           # Store validation results
           @validation_warnings = []
+          @outside_infos = []
           @validation_errors = 0
           @binding_errors = []
           @structural_errors = []
@@ -55,6 +56,7 @@ module KjuiTools
 
           # Print validation summary if there were warnings
           print_validation_summary if options[:validate] != false && @validation_warnings.any?
+          print_outside_infos
 
           # A `child`/`children` that does not hold nodes is not a style
           # question the author can weigh: the renderer wraps it, iterates
@@ -135,6 +137,25 @@ module KjuiTools
           options[:validate] = true if options[:validate].nil?
 
           options
+        end
+
+        # The attributes this build left out as another mode's or platform's
+        # (AttributeValidatorCore#take_outside_infos), named with their file.
+        def collect_outside_infos(validator, relative_path)
+          validator.take_outside_infos.each do |info|
+            (@outside_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
+          end
+        end
+
+        # Printed only in a verbose build (DEBUG in the environment, the
+        # switch kjui's own debug output reads — `DEBUG=1 jui build`): a
+        # default build prints what it printed before.
+        def print_outside_infos
+          return if @outside_infos.nil? || @outside_infos.empty?
+          return unless Core::AttributeValidator.verbose_build?
+
+          Core::Logger.info "Not built here (another mode or platform): #{@outside_infos.length} attribute(s)"
+          @outside_infos.each { |line| puts line }
         end
 
         def print_validation_summary
@@ -232,6 +253,7 @@ module KjuiTools
           if validator
             validator.normalized = Core::Normalization.canonicalized?(json_data)
             warnings = validate_json(json_data, validator, File.basename(json_file, '.json'))
+            collect_outside_infos(validator, relative_path)
             if warnings.any?
               @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
               @validation_errors += warnings.length
@@ -524,6 +546,7 @@ module KjuiTools
                 # AttributeValidator#structural_errors) — clear per file.
                 validator.reset_structural_errors!
                 warnings = validate_json(json_data, validator, file_name)
+                collect_outside_infos(validator, relative_path)
                 @structural_errors.concat(
                   validator.structural_errors.map { |e| "[#{relative_path}] #{e}" }
                 )
@@ -553,6 +576,7 @@ module KjuiTools
                   validator.normalized = Core::Normalization.canonicalized?(variant_data)
                   validator.reset_structural_errors!
                   v_warnings = validate_json(variant_data, validator, File.basename(variant_file, '.json'))
+                  collect_outside_infos(validator, variant_rel)
                   @structural_errors.concat(
                     validator.structural_errors.map { |e| "[#{variant_rel}] #{e}" }
                   )
