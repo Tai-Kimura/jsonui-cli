@@ -1024,10 +1024,28 @@ module JsonUIShared
 
       if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
         binding_expr = value[2..-2]
-        if binding_expr.match?(/^(is|has|can|should)[A-Z]/)
+        if visibility_binding_boolean?(binding_expr)
           @warnings << "#{build_context_prefix}'#{component_type}.visibility' binding '@{#{binding_expr}}' appears to be Boolean. Use String property with values: \"visible\", \"gone\", or \"invisible\"."
         end
       end
+    end
+
+    BOOLEAN_CLASS_SPELLINGS = %w[Bool Boolean boolean].freeze
+
+    # Whether a visibility binding names a Boolean. A bare property the data
+    # section declares is judged by its declared class (as check_color_type
+    # does): Bool / Boolean warn, any other declared class does not — a
+    # String named `hasMoreVisibility` holding "visible" / "gone" is the
+    # shape the warning asks for. Only an undeclared name, or an expression,
+    # falls back to the name guess (is / has / can / should + capital).
+    def visibility_binding_boolean?(binding_expr)
+      name = binding_expr.strip[/\A[A-Za-z_][A-Za-z0-9_]*\z/]
+      declared = name && @data_types[name]
+      if declared.is_a?(String)
+        return BOOLEAN_CLASS_SPELLINGS.include?(declared.strip.chomp('?'))
+      end
+
+      binding_expr.match?(/^(is|has|can|should)[A-Z]/)
     end
 
     # Color-attribute bindings: String and Color declared types are both
