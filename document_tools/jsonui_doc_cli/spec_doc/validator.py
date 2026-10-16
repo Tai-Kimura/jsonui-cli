@@ -2194,6 +2194,7 @@ class SpecValidator:
         """
         owners_of: dict[str, list[str]] = {}
         endpoint_owners_of: dict[str, list[str]] = {}
+        endpoint_of: dict[tuple[str, str], str] = {}
         data_flow = (self._spec_data or {}).get("dataFlow") or {}
         for section in ("repositories", "useCases"):
             for entry in data_flow.get(section, []) or []:
@@ -2218,6 +2219,7 @@ class SpecValidator:
                         owners_of.setdefault(name, []).append(owner)
                         if has_endpoint:
                             endpoint_owners_of.setdefault(name, []).append(owner)
+                            endpoint_of[(owner, name)] = method["endpoint"].strip()
 
         names: set[str] = set()
         ambiguous: dict[str, list[str]] = {}
@@ -2233,7 +2235,17 @@ class SpecValidator:
             endpoint_owners = endpoint_owners_of.get(name, [])
             if len(endpoint_owners) > 1:
                 ambiguous[name] = [f"{o}.{name}" for o in endpoint_owners]
+        # The endpoint each spelling binds to, as the generator binds it
+        # (`collect_endpoint_ops`): the bare name only while one owner
+        # declares it with an endpoint, the qualified one always.
+        endpoints: dict[str, str] = {}
+        for (owner, name), endpoint in endpoint_of.items():
+            if owner:
+                endpoints[f"{owner}.{name}"] = endpoint
+            if len(endpoint_owners_of.get(name, [])) == 1:
+                endpoints[name] = endpoint
         self._ambiguous_api_ops = ambiguous
+        self._api_op_endpoints = endpoints
         return names
 
     @staticmethod
@@ -3116,6 +3128,8 @@ class SpecValidator:
             if rest.endswith(".request"):
                 op = rest[: -len(".request")]
                 self._check_branch_api_op(op, entry_path, api_ops, result, use="request")
+                if self._reject_request_on_bodyless(op, entry_path, result):
+                    return
                 self._validate_branch_request_match(
                     value, entry_path, data_fields, result
                 )
@@ -3314,6 +3328,31 @@ class SpecValidator:
                 "scope, since it binds the contract to the mock body)"
             )
         return f"{base}, got {type(value).__name__}"
+
+    def _reject_request_on_bodyless(
+        self, op: str, path: str, result: SpecValidationResult,
+    ) -> bool:
+        """An error when `op` binds to an operation that sends no request
+        body (shared/core/openapi_canonical.py `request_body_absence`: GET /
+        HEAD, or one the API canon declares without a `requestBody`).
+
+        `.request` is a partial match on the BODY the runtimes record; on
+        such an operation the recorded body is always absent, so the row
+        failed every run with "$: expected object, got undefined" while
+        this validator, the generator and `jsonui-test validate` all passed
+        it. True when it was rejected."""
+        endpoint = getattr(self, "_api_op_endpoints", {}).get(op)
+        canon = shared_core.openapi_canonical()
+        if endpoint is None or canon is None:
+            return False
+        context = self._canon_context()
+        absence = canon.request_body_absence(
+            endpoint, context.index if context is not None else None)
+        if absence is None:
+            return False
+        result.errors.append(SpecValidationMessage(
+            path=path, message=canon.request_match_on_bodyless_message(op, absence)))
+        return True
 
     def _validate_branch_request_match(
         self, value: Any, path: str, data_fields: set[str],

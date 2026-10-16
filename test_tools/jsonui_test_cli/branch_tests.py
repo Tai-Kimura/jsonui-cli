@@ -961,10 +961,47 @@ def _mocks_dir_label(mocks_dir: Path | None) -> str:
     return str(mocks_dir)
 
 
+def _openapi_canonical():
+    """shared/core/openapi_canonical — the one reader of the API canon,
+    shared with `jsonui-doc validate spec` — or None in a tool tree without
+    it."""
+    from . import shared_core
+    return shared_core.load("openapi_canonical")
+
+
+def canon_index_for(spec_path=None, *, config_path=None, extra_roots=()) -> dict | None:
+    """The API canon the spec validator reads for this spec / project
+    (`build_spec_canon_context`, the same candidate order), or None."""
+    core = _openapi_canonical()
+    if core is None:
+        return None
+    try:
+        context = core.build_spec_canon_context(
+            spec_path, config_path=config_path, extra_roots=extra_roots)
+    except (OSError, ValueError):
+        return None
+    return context.index or None
+
+
+def _request_on_bodyless(op: str, route: "Route", canon_index: dict | None) -> str | None:
+    """The refusal for `api.<op>.request` on a route that sends no request
+    body, or None. `.request` is a partial match on the body the runtimes
+    record (`rec.lastBodyFor`); on GET / HEAD, or an operation the canon
+    declares without a `requestBody`, that body is always absent, and the
+    generated assertion failed every run with "$: expected object, got
+    undefined" — written, generated and validated without a word."""
+    core = _openapi_canonical()
+    if core is None:
+        return None
+    absence = core.request_body_absence(f"{route.method} {route.path}", canon_index)
+    return core.request_match_on_bodyless_message(op, absence) if absence else None
+
+
 def resolve_routes(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
     mocks_dir: Path | None = None, errors: list | None = None,
     side_calls: dict | None = None, side_calls_unread: str | None = None,
+    canon_index: dict | None = None,
 ) -> list[Route]:
     """Bind every referenced api.<op> (plus every declared endpoint with a
     mock, so incidental calls get their default scenario) to a Route.
@@ -976,6 +1013,9 @@ def resolve_routes(
     why the rules could not be read at all (no spec_directory to find the app
     contracts spec in) — said in the "no endpoint declaration" error, which
     otherwise reads as advice to name an op the rules may already name.
+    ``canon_index``: the project's API canon (`canon_index_for`), so a
+    `.request` on an operation the canon declares without a `requestBody` is
+    refused as one on GET / HEAD is (`request_body_absence`).
 
     Unbindable references raise — a branch whose scenario cannot be found
     must fail generation, not soften into a weaker test. Given an ``errors``
@@ -1058,6 +1098,10 @@ def resolve_routes(
                         raise BranchTestGenerationError(problem)
                     continue        # served by its side route
                 route = bind(op, where)
+                if where.endswith(".request"):
+                    problem = _request_on_bodyless(op, route, canon_index)
+                    if problem:
+                        raise BranchTestGenerationError(f"{where}: {problem}")
                 if scenario is not None and scenario not in route.scenarios:
                     raise BranchTestGenerationError(
                         f"{where}: scenario '{scenario}' not found in "
@@ -1762,7 +1806,7 @@ def side_routes(rules, mocks: list[MockFile], routes: list[Route],
 def collect_bindings(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
     mocks_dir: Path | None, platform: str, rules=(), declarations=None,
-    rules_unread: str | None = None,
+    rules_unread: str | None = None, canon_index: dict | None = None,
 ) -> Bindings:
     """Everything one platform's generated tests need, and everything that
     stops them — collected, not raised.
@@ -1779,7 +1823,8 @@ def collect_bindings(
     errors: list[BindingError] = []
     routes = resolve_routes(spec, methods_contracts, mocks, mocks_dir, errors=errors,
                             side_calls=side_call_mocks(rules, mocks),
-                            side_calls_unread=rules_unread)
+                            side_calls_unread=rules_unread,
+                            canon_index=canon_index)
     extra = side_routes(rules, mocks, routes, errors)
     if extra:
         from .mock.generate import route_match_order
@@ -6371,7 +6416,8 @@ def generate_branch_tests(
     bindings = collect_bindings(
         spec, bc["methods"], mocks, mocks_path, platform,
         rules=app_rules.rules, declarations=declarations,
-        rules_unread=None if app_rules.spec_directory else _rules_unread(project_root))
+        rules_unread=None if app_rules.spec_directory else _rules_unread(project_root),
+        canon_index=canon_index_for(spec_file, extra_roots=(project_root,)))
     _raise_binding_errors(bindings.errors)
     routes, rows = bindings.routes, bindings.rows
     for row in rows:

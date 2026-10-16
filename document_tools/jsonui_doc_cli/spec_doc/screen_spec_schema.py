@@ -1418,7 +1418,10 @@ SCREEN_SPEC_SCHEMA = {
                 "spec's harnessConditions declares). then keys: 'data.<field>' (literal, "
                 "'@strings_key', or '@data.<field>') / 'transition' / 'api' "
                 "(value 'none') / 'api.<op>' ('called' | 'not-called') / "
-                "'api.<op>.request' (partial request-body match)."
+                "'api.<op>.request' (partial request-body match; refused on "
+                "an operation that sends no body — GET / HEAD, or one the API "
+                "document declares without a requestBody — since the URL's "
+                "query is not recorded)."
             ),
             "oneOf": [
                 {

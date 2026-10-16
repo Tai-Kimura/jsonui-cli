@@ -32,19 +32,22 @@ def _write(path: Path, data) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+# POST, not GET: two rows below read `.request`, a match on the request body,
+# and a GET sends none — the generator refuses `.request` there
+# (shared/core/openapi_canonical.py `request_body_absence`).
 _TWO_OWNERS = {
     "repositories": [
         {"name": "AccountRepository", "methods": [
-            {"name": "getProfile", "endpoint": "GET /api/account/profile"}]},
+            {"name": "getProfile", "endpoint": "POST /api/account/profile"}]},
         {"name": "PreferencesRepository", "methods": [
-            {"name": "getProfile", "endpoint": "GET /api/preferences/profile"}]},
+            {"name": "getProfile", "endpoint": "POST /api/preferences/profile"}]},
     ],
 }
 
 _ONE_OWNER = {
     "repositories": [
         {"name": "AccountRepository", "methods": [
-            {"name": "getProfile", "endpoint": "GET /api/account/profile"}]},
+            {"name": "getProfile", "endpoint": "POST /api/account/profile"}]},
     ],
 }
 
@@ -70,7 +73,7 @@ def _project(tmp_path: Path, data_flow_extra, branches) -> Path:
     for name, path in (("account", "/api/account/profile"),
                        ("preferences", "/api/preferences/profile")):
         _write(root / f"tests/mocks/{name}.mock.json", {
-            "source": {"method": "GET", "path": path},
+            "source": {"method": "POST", "path": path},
             "activeScenario": "success",
             "scenarios": {"success": {"status": 200, "body": {"ok": True}},
                           "failure": {"status": 500, "body": {"ok": False}}},

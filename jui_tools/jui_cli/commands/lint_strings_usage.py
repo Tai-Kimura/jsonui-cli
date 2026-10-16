@@ -736,6 +736,56 @@ def collect_ios_catalog_keys(root: Path) -> set[str]:
     return keys
 
 
+_TYPE_OPENERS = {"<": ">", "[": "]", "(": ")", "{": "}"}
+
+
+def _declaration_initializer_eq(text: str, name_end: int) -> int | None:
+    """Offset of the '=' that initializes the name ending at *name_end*,
+    or None when the name is not being declared there.
+
+    Right after the name: whitespace, then either '=' directly, or a ':'
+    type annotation and then '='. The annotation may hold brackets and
+    generics (``Record<string, string>``, ``[String: String]``,
+    ``Map<String, String>``, ``() => string``); they are balanced so a
+    ':' / ',' / '=' inside them does not end it. At depth 0 the
+    annotation ends at '='; a ';', ',', newline, or a closer it did not
+    open ends it with no initializer (an object key or a destructuring
+    pattern, not a declaration).
+    """
+    n = len(text)
+    i = name_end
+    while i < n and text[i] in " \t":
+        i += 1
+    if i < n and text[i] == "=":
+        nxt = text[i + 1] if i + 1 < n else ""
+        return i if nxt not in "=>" else None
+    if i >= n or text[i] != ":" or text.startswith("::", i):
+        return None
+    i += 1
+    closers: list[str] = []
+    while i < n:
+        ch = text[i]
+        if closers:
+            if ch == closers[-1]:
+                closers.pop()
+            elif ch in _TYPE_OPENERS:
+                closers.append(_TYPE_OPENERS[ch])
+            elif ch == "=" and text.startswith("=>", i):
+                i += 1
+        elif ch in _TYPE_OPENERS:
+            closers.append(_TYPE_OPENERS[ch])
+        elif ch == "=":
+            if text.startswith("=>", i):
+                # a function type's arrow (`: () => string =`)
+                i += 2
+                continue
+            return i if not text.startswith("==", i) else None
+        elif ch in ";,\n)]}>":
+            return None
+        i += 1
+    return None
+
+
 def _extract_keys_map_literals(text: str) -> tuple[list[str], list[str]]:
     """``(strict, lenient)`` string literals from every ``*_STRING_KEYS``
     declaration.
@@ -753,17 +803,19 @@ def _extract_keys_map_literals(text: str) -> tuple[list[str], list[str]]:
     strict: list[str] = []
     lenient: list[str] = []
     for m in _KEYS_MAP_NAME_RE.finditer(text):
-        eq = text.find("=", m.end())
-        if eq < 0:
+        # Only a declaration has an initializer: the name, an optional
+        # type annotation, then '='. A mention (a use such as
+        # FOO_STRING_KEYS[k], an import, an argument) is not one — the
+        # next '=' in the file then belongs to another statement, and
+        # reading its object as this map made its strings missing keys
+        # (dict) or marked them used (list).
+        eq = _declaration_initializer_eq(text, m.end())
+        if eq is None:
             continue
-        # A mention (not a declaration) has no initializer right after it;
         # only walk when an opening brace/bracket follows the '='.
         i = eq + 1
         while i < len(text) and text[i] in " \t\r\n":
             i += 1
-        # Type annotations between name and '=' are fine (the '=' search
-        # skipped them); a colon path like FOO_STRING_KEYS[x] has no '='
-        # nearby and lands here with a non-brace char.
         # Kotlin spells the initializer mapOf( ... ) — skip a builder-call
         # name so the walk starts at its parenthesis.
         call = re.match(r"\s*(?:mapOf|listOf|setOf|arrayOf)\s*", text[i:])

@@ -221,6 +221,49 @@ class WebScanTests(unittest.TestCase):
         self.assertEqual(len(report.dynamic), 1)
         self.assertTrue(report.dynamic[0].site.endswith(":1"))
 
+    def test_a_mention_does_not_read_a_later_object_as_its_map(self):
+        # The false-positive direction: the '=' search had no bound, so
+        # the first initializer after a MENTION (a use, an import) was
+        # read as the map — an unrelated config object's strings became
+        # missing keys (reported from a real consumer, 2026-10-16).
+        self.fx.write(
+            "src/vm.ts",
+            'import { OTHER_STRING_KEYS } from "./other";\n'
+            'const PROBE_STRING_KEYS: Record<string, string> = { a: "screen_title" };\n'
+            "export function label(k: string): string {\n"
+            "  return StringManager.getString(PROBE_STRING_KEYS[k]);\n"
+            "}\n"
+            'const chartConfig = { mode: "stacked", unit: "per_day" };\n'
+            'const OTHER = OTHER_STRING_KEYS;\n'
+            'const rows = ["screen_gone"];\n')
+        report = self._run()
+        self.assertEqual(report.missing, [])
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+
+    def test_a_mention_does_not_mark_a_later_literal_used(self):
+        # The false-negative direction: a later `= { name: "..." }` read
+        # as the map put a dead key into the used set and hid it.
+        self.fx.write(
+            "src/vm.ts",
+            'const PROBE_STRING_KEYS = { a: "screen_title" };\n'
+            "const t = StringManager.getString(PROBE_STRING_KEYS[k]);\n"
+            'const analyticsEvent = { name: "screen_help" };\n'
+            'const tags = ["screen_help"];\n')
+        report = self._run()
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+        self.assertEqual(report.missing, [])
+
+    def test_a_declaration_with_a_type_annotation_is_still_read(self):
+        # The bound must not cost the declarations it is for: a typed
+        # TS map (generic in the annotation) and an `as const` map.
+        self.fx.write(
+            "src/vm.ts",
+            'export const A_STRING_KEYS: Record<string, string> = { a: "screen_title" };\n'
+            'export const B_STRING_KEYS = { b: "screen_help" } as const;\n')
+        report = self._run()
+        self.assertEqual(report.unused, [])
+        self.assertEqual(report.missing, [])
+
     def test_map_literal_not_in_strings_json_is_a_missing_key(self):
         self.fx.write("src/vm.ts",
                       'const K_STRING_KEYS = { a: "screen_gone" };\n')
@@ -587,6 +630,32 @@ class IosAndroidScanTests(unittest.TestCase):
             '  "a" to "member_list_title",\n'
             ')\n')
         report = _usage(self.GROUPS, roots={"android": self.android.root})
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.leave_button"])
+
+
+    def test_swift_and_kotlin_mentions_do_not_read_a_later_initializer(self):
+        # The declaration forms each face writes (a type annotation with
+        # brackets / generics between the name and '=') are still read; a
+        # use of the name is not a declaration, so the next statement's
+        # initializer is not the map.
+        self.ios.write(
+            "App/VM.swift",
+            "static let ROW_STRING_KEYS: [String: String] = [\n"
+            '    "a": "member_list_title",\n'
+            "]\n"
+            "let t = StringManager.getString(ROW_STRING_KEYS[k] ?? \"\")\n"
+            'let config = ["mode": "stacked"]\n')
+        self.android.write(
+            "app/src/main/kotlin/VM.kt",
+            "val FIELD_STRING_KEYS: Map<String, String> = mapOf(\n"
+            '  "a" to "member_list_title",\n'
+            ")\n"
+            "val t = getString(FIELD_STRING_KEYS[k])\n"
+            'val event = mapOf("name" to "member_list_leave_button")\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root,
+                                             "android": self.android.root})
+        self.assertEqual(report.missing, [])
         self.assertEqual([f.site for f in report.unused],
                          ["member_list.leave_button"])
 

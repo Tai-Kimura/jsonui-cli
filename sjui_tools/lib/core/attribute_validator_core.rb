@@ -1439,13 +1439,18 @@ module JsonUIShared
       add_info("Attribute '#{attr_name}' in '#{component_type}' is for #{mode_str} mode (current: #{current_mode_str})")
     end
 
+    MODE_SPELLINGS = { 'uikit' => 'UIKit', 'swiftui' => 'SwiftUI', 'compose' => 'Compose', 'react' => 'React' }.freeze
+
     # An attribute declared `warn_outside_mode` is read by its mode alone, and
     # a layout that writes it elsewhere expects something that does not
     # happen — so it is named, a WARNING, not the usual INFO:
     # `touchDisabledState` is UIKit's hit-test mode, and SwiftUI read any
-    # value of it as "stop everything" until jsonui-cli 1.9.0.
+    # value of it as "stop everything" until jsonui-cli 1.9.0. `onAppear` /
+    # `onDisappear` are SwiftUI / Compose lifecycle callbacks: web and UIKit
+    # draw no call to the handler, so a layout written for them was built
+    # with no word while the handler it declares was never called.
     def add_outside_mode_warning(attr_name, attr_def, component_type)
-      modes = Array(attr_def['mode']).map { |m| m == 'uikit' ? 'UIKit' : m.capitalize }
+      modes = Array(attr_def['mode']).map { |m| MODE_SPELLINGS.fetch(m, m.capitalize) }
       add_warning("Attribute '#{attr_name}' in '#{component_type}' is #{modes.join('/')} only — " \
                   "#{attr_def['description']}")
     end
