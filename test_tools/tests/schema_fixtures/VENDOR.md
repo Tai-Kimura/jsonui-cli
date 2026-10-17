@@ -23,7 +23,8 @@ turning drift into a CI failure.
 ## Source provenance
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
-- Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
+- Source path: `schemas/{actions,screen-test,flow-test,results,description,progress}.schema.json`
+- `progress.schema.json` vendored at commit: `d3048cf` (feat/jui-viz-test-progress: the per-line progress record the three drivers emit for `jui viz`; re-point this line when it lands on jsonui-test-runner's main under another SHA). ⚠️ Order: this copy must reach jsonui-cli's main **before or with** the canonical file reaching jsonui-test-runner's main — the CI job `Canonical sync` checks out jsonui-test-runner unpinned and fails for a canonical schema with no copy here, while an extra copy here is not checked.
 - Vendored at commit: `0eecf91` (feat/test-state-launch: f4e903a's initialState / launch / `state` texts, plus a4d3436's `when.state` reads the bridge and `condition.state.path` follows the state path rule; re-point this line if the contract lands under another SHA)
 
   ⚠️ Nothing reads that line. The byte guard is
