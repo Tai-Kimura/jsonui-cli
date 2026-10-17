@@ -10,8 +10,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from pathlib import Path
+
 from . import robots
 from .rooms import Rooms, tilde
+from .sources.jsonui_project import JsonUIProject
+from .sources.tasks import TaskBook
 from .state import VizState
 
 #: The 18 events the hooks are installed for; anything else is dropped.
@@ -30,6 +34,8 @@ DONE_TO_IDLE_MS = 3_000
 CARRY_MS = 3_000
 THINKING_AFTER_MS = 30_000
 ENDED_LINGER_MS = 60_000
+TEST_RUNS_KEPT = 50
+EDIT_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 
 def clip_strings(value: Any, limit: int) -> Any:
@@ -70,7 +76,14 @@ class World:
         # agent settles it — otherwise the id stays open and the robot never idles.
         self._asking: dict[str, str] = {}
         self.pid_to_session: dict[int, str] = {}
+        self.tasks = TaskBook()
+        self.tests: dict[str, dict] = {}
+        self.jsonui: dict[str, JsonUIProject] = {}
+        self.jsonui_errors: dict[str, str] = {}
         self._dirty: set[str] = set()
+        self._now = 0
+        # Called with each JsonUIProject once it is loaded (serve starts its file watcher).
+        self.on_project_loaded = None
 
     # ---------------------------------------------------------------- labels
 
@@ -97,6 +110,8 @@ class World:
             self.sessions[sid] = session
             self._dirty |= {"sessions", "projects"}
             self._main(sid, at)
+            if project["jsonui"]:
+                self.jsonui_project(project["id"], at)
         elif cwd and session["cwd"] == "?":
             self._move(session, cwd)
         return session
@@ -158,10 +173,66 @@ class World:
             self._dirty.add("sessions")
         session["updatedAt"] = at
 
+    # ---------------------------------------------------------------- JsonUI projects
+
+    def jsonui_project(self, project_id: str, at: int) -> JsonUIProject | None:
+        """The loaded JsonUI project of a room, loading it on first sight."""
+        if project_id in self.jsonui:
+            return self.jsonui[project_id]
+        project = self.rooms.projects.get(project_id)
+        if not project or not project["jsonui"] or project_id in self.jsonui_errors:
+            return None
+        root = self.rooms.root_of(project_id)
+        try:
+            loaded = JsonUIProject(Path(root), project_id)
+            loaded.load_all(at)
+        except (OSError, ValueError) as exc:
+            self.jsonui_errors[project_id] = f"{type(exc).__name__}: {exc}"[:200]
+            return None
+        self.jsonui[project_id] = loaded
+        self._dirty |= {"specs", "tasks"}
+        if self.on_project_loaded is not None:
+            self.on_project_loaded(loaded)
+        return loaded
+
+    def file_changed(self, project_id: str, path: str, at: int, by: str | None = None) -> None:
+        """A spec, layout or test file changed (an edit by a robot, or the watcher)."""
+        project = self.jsonui.get(project_id)
+        if project is None:
+            return
+        target = Path(path)
+        if target.name.endswith(".spec.json"):
+            project.reload_spec(target, at, by)
+        elif target.name.endswith(".test.json"):
+            project.load_tests()
+        for sid in project.specs_touching(path):
+            if by:
+                entry = project.specs[sid]
+                entry.by, entry.by_until = by, at + 10_000
+        self._dirty.add("specs")
+
+    def _touch_files(self, session: dict, agent: dict, tool_input: dict, at: int, after: bool) -> None:
+        path = tool_input.get("file_path") or tool_input.get("notebook_path")
+        if not isinstance(path, str):
+            return
+        project = self.jsonui_project(session["projectId"], at)
+        if project is None:
+            return
+        if after:
+            self.file_changed(session["projectId"], path, at, by=agent["id"])
+        else:
+            hits = project.specs_touching(path)
+            for sid in hits:
+                entry = project.specs[sid]
+                entry.by, entry.by_until = agent["id"], at + 10_000
+            if hits:
+                self._dirty.add("specs")
+
     # ---------------------------------------------------------------- hooks
 
     def apply_hook(self, payload: dict, at: int) -> dict | None:
         """Apply one hook payload. Returns the event added to the log, or None if dropped."""
+        self._now = max(self._now, at)
         kind = payload.get("hook_event_name")
         sid = _s(payload.get("session_id"))
         if kind not in KNOWN_EVENTS or sid is None:
@@ -207,6 +278,21 @@ class World:
             self._set(agent, at, state, act, target=target)
             if state == "carry":
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
+            if tool in EDIT_TOOLS:
+                self._touch_files(session, agent, tool_input, at, after=False)
+            if tool == "TodoWrite":
+                self.tasks.from_todowrite(sid, agent["id"], tool_input.get("todos"), at)
+                self._dirty.add("tasks")
+            if state == "phone" and use_id:
+                command = str(tool_input.get("command", ""))
+                self.tests[use_id] = {
+                    "id": use_id, "projectId": session["projectId"], "agentId": agent["id"],
+                    "platform": robots.test_platform(command), "command": robots._clip(command, 200),
+                    "status": "running", "startedAt": at,
+                }
+                for old in sorted(self.tests, key=lambda k: self.tests[k]["startedAt"])[:-TEST_RUNS_KEPT]:
+                    del self.tests[old]
+                self._dirty.add("tests")
             text = act
         elif kind in ("PostToolUse", "PostToolUseFailure") and tool:
             opened = self._open.get(agent["id"], [])
@@ -217,6 +303,22 @@ class World:
             if not opened and agent["state"] not in ("carry",):
                 self._set(agent, at, "idle", agent["act"])
             failed = kind == "PostToolUseFailure"
+            if tool in EDIT_TOOLS and not failed:
+                self._touch_files(session, agent, tool_input, at, after=True)
+            run = self.tests.get(use_id) if use_id else None
+            if run is not None and run["status"] == "running":
+                response = payload.get("tool_response")
+                output = ""
+                if isinstance(response, dict):
+                    output = f"{response.get('stdout') or ''}\n{response.get('stderr') or ''}"
+                elif isinstance(response, str):
+                    output = response
+                summary, passed, n_failed = robots.test_summary(output[-200_000:])
+                run["status"] = "failed" if failed or (n_failed or 0) > 0 else "passed"
+                if summary:
+                    run["summary"] = summary
+                run["endedAt"] = at
+                self._dirty.add("tests")
             text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
         elif kind == "PermissionRequest":
             opened = self._open.get(agent["id"])
@@ -249,6 +351,11 @@ class World:
             self._until[agent["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
             text = f"退場 {agent_type or aid}"
         elif kind in ("TaskCreated", "TaskCompleted"):
+            if kind == "TaskCreated":
+                self.tasks.created(sid, payload, agent["id"], at)
+            else:
+                self.tasks.completed(sid, payload, at)
+            self._dirty.add("tasks")
             subject = _head(payload.get("task_subject"), 120) or ""
             if kind == "TaskCreated":
                 self._set(agent, at, "carry", f"タスク {subject}")
@@ -321,6 +428,15 @@ class World:
     # ---------------------------------------------------------------- time
 
     def tick(self, at: int) -> None:
+        self._now = max(self._now, at)
+        for project in self.jsonui.values():
+            for entry in project.specs.values():
+                due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]
+                if due:
+                    if entry.by_until and entry.by_until <= at:
+                        entry.by, entry.by_until = None, 0
+                    entry.writing_until = {k: t for k, t in entry.writing_until.items() if t > at}
+                    self._dirty.add("specs")
         for aid, (due, to) in list(self._until.items()):
             if at < due:
                 continue
@@ -339,7 +455,8 @@ class World:
                 del self.sessions[sid]
                 for aid in [a for a, ag in self.agents.items() if ag["sessionId"] == sid]:
                     del self.agents[aid]
-                self._dirty |= {"sessions", "agents"}
+                self.tasks.drop_session(sid)
+                self._dirty |= {"sessions", "agents", "tasks"}
             elif session["status"] == "busy":
                 agent = self.agents.get(sid)
                 if agent and agent["state"] == "idle" and at - agent["updatedAt"] >= THINKING_AFTER_MS and agent["act"] != "考え中":
@@ -358,4 +475,22 @@ class World:
             self.state.set_slice("sessions", sorted((dict(s) for s in self.sessions.values()), key=lambda s: s["startedAt"]))
         if "agents" in self._dirty:
             self.state.set_slice("agents", sorted((dict(a) for a in self.agents.values()), key=lambda a: (a["startedAt"], a["id"])))
+        if "specs" in self._dirty or "tasks" in self._dirty:
+            names: dict[str, str] = {}
+            for project in self.jsonui.values():
+                for sid, entry in project.specs.items():
+                    meta = (entry.data or {}).get("metadata") or {}
+                    for name in (meta.get("name"), meta.get("displayName"), entry.path.name.replace(".spec.json", "")):
+                        if isinstance(name, str) and name:
+                            names[name.lower()] = sid
+            self.tasks.link_specs(names)
+        if "specs" in self._dirty:
+            specs = []
+            for project in self.jsonui.values():
+                specs.extend(project.summaries(self._now))
+            self.state.set_slice("specs", specs)
+        if "tasks" in self._dirty:
+            self.state.set_slice("tasks", self.tasks.items())
+        if "tests" in self._dirty:
+            self.state.set_slice("tests", sorted((dict(t) for t in self.tests.values()), key=lambda t: t["startedAt"]))
         self._dirty.clear()

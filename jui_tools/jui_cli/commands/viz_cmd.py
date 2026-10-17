@@ -304,6 +304,31 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             log(f"{name}: {error}")
 
     rec = recorder.Recorder(Path(record)) if record else None
+    observers: list = []
+    loop = asyncio.get_running_loop()
+
+    def sheet(spec_id: str):
+        from ..viz.sheet import sheet_for
+
+        for project in world.jsonui.values():
+            if spec_id in project.specs:
+                return sheet_for(project, spec_id)
+        return None
+
+    ctx.sheet = sheet
+
+    def watch_project(project) -> None:
+        from ..viz.sources import jsonui_project
+
+        def on_change(path: str) -> None:
+            loop.call_soon_threadsafe(lambda: (world.file_changed(project.project_id, path, now_ms()), world.publish()))
+
+        observer = jsonui_project.watch(project, on_change)
+        if observer is not None:
+            observers.append(observer)
+
+    if not replay:
+        world.on_project_loaded = watch_project
 
     def on_hook(payload: dict) -> None:
         at = now_ms()
@@ -338,7 +363,6 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     pid = os.getpid()
     tasks: list[asyncio.Task] = []
     observer = None
-    loop = asyncio.get_running_loop()
     try:
         _write_private_json(paths.server_json(), {
             "pid": pid, "port": port, "token": ctx.token,
@@ -416,9 +440,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                 await task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
-        if observer is not None:
-            observer.stop()
-            observer.join(timeout=2)
+        for watcher in [observer, *observers]:
+            if watcher is not None:
+                watcher.stop()
+                watcher.join(timeout=2)
         if rec is not None:
             rec.close()
         await runner.cleanup()

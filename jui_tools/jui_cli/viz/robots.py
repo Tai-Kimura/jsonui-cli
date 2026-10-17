@@ -78,3 +78,44 @@ def act_for_tool(tool: str, tool_input: dict, root: str | None) -> str:
         name = tool.split("__", 2)[-1]
         return _clip(f"{name} {_rel(str(path), root)}" if path else name)
     return _clip(tool)
+
+
+# ---------------------------------------------------------------- test runs (09 §4)
+
+_SUMMARY_PATTERNS = (
+    # xcodebuild: "Executed 12 tests, with 1 failure (0 unexpected)"
+    (re.compile(r"Executed (\d+) tests?, with (\d+) failures?"), lambda m: (int(m[1]) - int(m[2]), int(m[2]))),
+    # Gradle: "12 tests completed, 1 failed"
+    (re.compile(r"(\d+) tests completed, (\d+) failed"), lambda m: (int(m[1]) - int(m[2]), int(m[2]))),
+)
+_PLAYWRIGHT_PASSED = re.compile(r"(\d+) passed")
+_PLAYWRIGHT_FAILED = re.compile(r"(\d+) failed")
+_GRADLE_OK = re.compile(r"BUILD SUCCESSFUL")
+
+
+def test_platform(command: str) -> str:
+    if "xcodebuild" in command or "simctl" in command:
+        return "ios"
+    if "gradlew" in command or re.search(r"(^|[\s;&|(])adb(\s|$)", command):
+        return "android"
+    if "playwright" in command or "jest" in command:
+        return "web"
+    return "unknown"
+
+
+def test_summary(output: str) -> tuple[str, int | None, int | None]:
+    """(text, passed, failed) read from a test command's output; unknown counts are None."""
+    for pattern, counts in _SUMMARY_PATTERNS:
+        matches = list(pattern.finditer(output))
+        if matches:
+            passed, failed = counts(matches[-1])  # the last summary is the run's total
+            return f"{passed} passed, {failed} failed", passed, failed
+    p = _PLAYWRIGHT_PASSED.findall(output)
+    f = _PLAYWRIGHT_FAILED.findall(output)
+    if p or f:
+        passed = int(p[-1]) if p else 0
+        failed = int(f[-1]) if f else 0
+        return f"{passed} passed, {failed} failed", passed, failed
+    if _GRADLE_OK.search(output):
+        return "BUILD SUCCESSFUL", None, 0
+    return "", None, None

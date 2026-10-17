@@ -99,6 +99,8 @@ class ServerContext:
     state: VizState = field(default_factory=VizState)
     # Called with each accepted hook payload (P2 plugs ingest in here).
     on_hook: Callable[[dict], Awaitable[None] | None] | None = None
+    # spec id -> the sheet's doc (P4), or None when the spec is unknown.
+    sheet: Callable[[str], dict | None] | None = None
     # Each authed socket and the (rev, seq) it has already been sent, so a
     # change made before it connected is not delivered twice.
     sockets: dict = field(default_factory=dict)
@@ -297,6 +299,13 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         older = [e for e in ctx.state.events if e["seq"] < before][-min(limit, 500):]
         await sock.send_json({"type": "events", "items": older, "older": True})
         await sock.send_json({"type": "ack", "reqId": req_id, "ok": True})
+    elif kind == "spec.sheet":
+        spec_id = message.get("specId")
+        cards = ctx.sheet(spec_id) if isinstance(spec_id, str) and ctx.sheet is not None else None
+        if cards is None:
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "unknown spec"})
+            return
+        await sock.send_json({"type": "sheet", "reqId": req_id, "specId": spec_id, "cards": cards})
     elif kind == "presence":
         return  # used from P6
     elif req_id is not None:
