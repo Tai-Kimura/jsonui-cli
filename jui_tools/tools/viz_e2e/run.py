@@ -77,6 +77,42 @@ class Server:
                 self.proc.kill()
 
 
+class RealServer:
+    """`jui viz serve --replay FILE` from this checkout, in a throwaway HOME, with the e2e hook (JUI_VIZ_E2E=1).
+
+    JUI_VIZ_E2E_SERVE overrides the command (default: `<python> <jui_tools>/bin/jui`)."""
+
+    def __init__(self, replay: pathlib.Path, home: pathlib.Path, speed: float = 1.0):
+        self.port = free_port()
+        self.url = f"http://127.0.0.1:{self.port}"
+        home.mkdir(parents=True, exist_ok=True)
+        base = os.environ.get("JUI_VIZ_E2E_SERVE", "").split() or [sys.executable, str(HERE.parents[1] / "bin" / "jui")]
+        env = dict(os.environ, HOME=str(home), JUI_VIZ_E2E="1")
+        self.log = open(home / "serve.log", "w")
+        self.proc = subprocess.Popen(base + ["viz", "serve", "--port", str(self.port), "--replay", str(replay), "--speed", str(speed)],
+                                     stdout=self.log, stderr=subprocess.STDOUT, env=env)
+        import urllib.request
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"{self.url}/health", timeout=1).read()
+                return
+            except OSError:
+                if self.proc.poll() is not None:
+                    break
+                time.sleep(0.1)
+        self.stop()
+        raise RuntimeError(f"jui viz serve did not start: {(home / 'serve.log').read_text()[-500:]}")
+
+    def stop(self):
+        if self.proc.poll() is None:
+            self.proc.terminate()  # our own child
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        self.log.close()
+
+
 def diff(a, b, path="") -> list[str]:
     """Readable differences between two JSON-like values."""
     if isinstance(a, dict) and isinstance(b, dict):
@@ -180,6 +216,7 @@ def main(argv=None) -> int:
             if a.only in (None, "live"):
                 import live
                 await live.run(pw, out, failures, Server)
+                await live.run_real(pw, out, failures, RealServer)
 
     asyncio.run(go())
     if a.record_demo:

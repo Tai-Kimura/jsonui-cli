@@ -11,6 +11,7 @@ import pathlib
 import time
 import urllib.request
 
+import hooks
 import scenarios
 from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
 
@@ -249,3 +250,52 @@ async def run(pw, out, failures, Server):
     finally:
         await browser.close()
     (out / "live-results.json").write_text(dump(res) + "\n")
+
+
+async def run_real(pw, out, failures, RealServer):
+    """The same view against the real `jui viz serve`, fed a recording (hooks.two_projects) with --replay."""
+    out = pathlib.Path(out) / "real"
+    out.mkdir(parents=True, exist_ok=True)
+    rec = hooks.write(hooks.two_projects(), out / "two-projects.record.jsonl")
+    res = {}
+    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+    t0 = time.monotonic()
+    srv = None
+    try:
+        srv = RealServer(rec, out / "home", speed=1.0)
+        watch = Watch(origin=srv.url)
+        page = await new_page(browser, watch, "real", **DESKTOP)
+        await page.goto(srv.url + "/")
+        await ready(page)
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelectorAll('.tag.room').length === 2 && window.__dbg.robots.length >= 3", label="two rooms, three robots")
+        res["rooms"] = await rooms(page)
+        await wait(page, "() => { const s = window.__dbg.robotState().a0; return s && s.state === 'typing'; }", polling=50, label="a0 typing")
+        await wait(page, "() => window.__dbg.robots.some((x) => x.def.id === 'a3')", label="the subagent comes in")
+        res["sub"] = await robot(page, "a3")
+        await wait(page, "() => !window.__dbg.robots.some((x) => x.def.id === 'a3')", timeout=40000, label="the subagent leaves")
+        await wait(page, "() => { const R = window.__dbg.robots.find((x) => x.def.id === '4f'); return R && R.def.room === window.__dbg.robots.find((x) => x.def.id === 'a0').def.room && !R.path.length && R.robot.state !== 'carry'; }", timeout=40000, label="4f moved to shop-app/")
+        res["moved"] = await robot(page, "4f")
+        res["ticker"] = await page.evaluate("() => [...document.querySelectorAll('#ticker li')].map((l) => l.textContent)")
+        await page.screenshot(path=f"{out}/real-end.png")
+        check(failures, res["rooms"] == ["shop-app/", "jsonui-cli/"], f"real: rooms {res['rooms']}")
+        await page.close()
+        # The demo from the real server: same files, the server's CSP and static routes.
+        page = await new_page(browser, watch, "real-demo", **DESKTOP)
+        await page.goto(srv.url + "/?demo=1")
+        await ready(page)
+        res["demoChips"] = await page.evaluate("() => [...document.querySelectorAll('.chips .chip')].slice(0, 3).map((c) => c.textContent)")
+        check(failures, res["demoChips"][0] == "デモ（実データではない）", f"real: ?demo=1 is the demo: {res['demoChips']}")
+        await page.close()
+        for line in watch.console:
+            failures.append(f"real: console: {line}")
+        for u in watch.foreign:
+            failures.append(f"real: request outside the server: {u}")
+    except Exception as e:
+        failures.append(f"real: {type(e).__name__}: {str(e).splitlines()[0]}")
+    finally:
+        if srv:
+            srv.stop()
+        await browser.close()
+    print(f"  real/two-projects: {time.monotonic() - t0:.0f}s", flush=True)
+    (out / "real-results.json").write_text(dump(res) + "\n")
