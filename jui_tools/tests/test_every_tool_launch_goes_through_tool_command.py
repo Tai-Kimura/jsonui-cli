@@ -58,6 +58,8 @@ NOT_A_TOOL = {
         "jsonui-doc check's configured commands: an interpreter from _ALLOWED_INTERPRETERS and the project's script",
     ("jui_tools/jui_cli/commands/viz_cmd.py", "_doctor_checks", "[claude, '--version']"):
         "the Claude Code CLI, located by shutil.which('claude') — jui viz doctor reads its version",
+    ("jui_tools/jui_cli/viz/sources/agents_cli.py", "poll_once", "claude"):
+        "the Claude Code CLI, located by shutil.which('claude') — `claude agents --json` for the session list",
 }
 
 #: The launches that must be found and must conform — the scan's positive side.

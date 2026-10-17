@@ -19,6 +19,38 @@ async function freshToken() {
   return doc.querySelector('meta[name="jui-viz-token"]')?.content || '';
 }
 
+const COLUMNS = {
+  projects: ['name', 'displayRoot', 'jsonui', 'order'],
+  sessions: ['label', 'status', 'waitingFor', 'cwd', 'title', 'lastPrompt'],
+  agents: ['label', 'kind', 'role', 'agentType', 'state', 'act'],
+};
+
+function renderTable(name, rows) {
+  const table = document.getElementById(name);
+  if (!table || !Array.isArray(rows)) return;
+  const cols = COLUMNS[name];
+  table.replaceChildren();
+  const head = table.insertRow();
+  for (const c of cols) {
+    const th = document.createElement('th');
+    th.textContent = c;
+    head.appendChild(th);
+  }
+  for (const row of rows) {
+    const tr = table.insertRow();
+    for (const c of cols) {
+      const v = row[c];
+      tr.insertCell().textContent = v === undefined || v === null ? '' : String(v);
+    }
+  }
+}
+
+function renderSlices(slices) {
+  for (const name of Object.keys(COLUMNS)) {
+    if (name in slices) renderTable(name, slices[name]);
+  }
+}
+
 function addEvents(items) {
   for (const e of items) {
     const li = document.createElement('li');
@@ -38,9 +70,11 @@ function connect(token, retry) {
       setConn('接続中', true);
       revEl.textContent = `rev ${m.rev}`;
       serverEl.textContent = JSON.stringify(m.slices.server, null, 2);
+      renderSlices(m.slices);
     } else if (m.type === 'slices') {
       revEl.textContent = `rev ${m.rev}`;
       if (m.changed.server) serverEl.textContent = JSON.stringify(m.changed.server, null, 2);
+      renderSlices(m.changed);
     } else if (m.type === 'events') {
       addEvents(m.items || []);
     }

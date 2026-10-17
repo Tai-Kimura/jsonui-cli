@@ -1,10 +1,15 @@
 """The guards of the viz server: Host, Origin, the per-start token, response headers.
 
-The server binds 127.0.0.1 only. The Host check stops DNS rebinding (a page
-on another name that resolves to 127.0.0.1); the Origin check stops another
-site's page from opening the WebSocket; the token, written only to a 0600
-file and into the served HTML, stops other local processes and pages from
-posting hook events or reading state.
+The server binds 127.0.0.1 only. What this guards against is OTHER SITES'
+PAGES in the user's browser: the Host check stops DNS rebinding (a page on
+another name that resolves to 127.0.0.1), the Origin check stops another
+site's page from opening the WebSocket, and the token (in a 0600 file and in
+the served page) is needed to post hook events or read state.
+
+What it does NOT guard against: another process of the same user. ``GET /``
+hands the token to anyone who sends a matching Host header, as
+``jsonui-test mock serve`` does — a local process can read it. Anything that
+must hold against local processes needs more than this module.
 """
 from __future__ import annotations
 
@@ -36,10 +41,14 @@ def origin_ok(origin: str | None, port: int) -> bool:
     return origin.lower() in {f"http://{name}:{port}" for name in LOCAL_NAMES}
 
 
-def token_ok(given: str | None, expected: str) -> bool:
-    if not given or not expected:
+def token_ok(given, expected: str) -> bool:
+    """Constant-time compare. Anything but a non-empty str is a mismatch, never an error."""
+    if not isinstance(given, str) or not isinstance(expected, str) or not given or not expected:
         return False
-    return hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
+    try:
+        return hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
+    except UnicodeEncodeError:  # lone surrogates from a header decoded as latin-1
+        return False
 
 
 def script_hash(source: str) -> str:
@@ -61,17 +70,26 @@ def csp(port: int, script_hashes: Iterable[str] = ()) -> str:
 
 
 def make_middleware(port: int, script_hashes: Iterable[str] = ()):
-    """Refuse a foreign Host with 421 and add the security headers to every response."""
-    policy = csp(port, script_hashes)
+    """Refuse a foreign Host with 421 before any handler runs."""
 
     @web.middleware
     async def guard(request: web.Request, handler):
         if not host_ok(request.headers.get("Host"), port):
             return web.Response(status=421, text="misdirected request\n")
-        response = await handler(request)
+        return await handler(request)
+
+    return guard
+
+
+def install_headers(app: web.Application, port: int, script_hashes: Iterable[str] = ()) -> None:
+    """The security headers on EVERY response — 421, 404, 500 and raised HTTP
+    errors included. A middleware only sees responses its handler returns,
+    so this hooks the moment a response is prepared instead."""
+    policy = csp(port, script_hashes)
+
+    async def add(request: web.Request, response: web.StreamResponse) -> None:
         response.headers["Content-Security-Policy"] = policy
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        return response
 
-    return guard
+    app.on_response_prepare.append(add)

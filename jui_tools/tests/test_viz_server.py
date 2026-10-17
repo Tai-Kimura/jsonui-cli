@@ -226,6 +226,13 @@ def test_ws_closes_on_a_wrong_token_and_when_auth_does_not_come():
             assert msg.type == aiohttp.WSMsgType.CLOSE and ws.close_code == 4401
             assert ctx.sockets == {}
 
+            for odd in (123, [TOKEN], None):
+                ws_odd = await client.ws_connect("/ws", headers=_ws_headers(ctx))
+                await ws_odd.receive_json(timeout=2)
+                await ws_odd.send_json({"type": "auth", "token": odd})
+                msg = await ws_odd.receive(timeout=2)
+                assert msg.type == aiohttp.WSMsgType.CLOSE and ws_odd.close_code == 4401, odd
+
             ws2 = await client.ws_connect("/ws", headers=_ws_headers(ctx))
             await ws2.receive_json(timeout=2)
             msg = await ws2.receive(timeout=4)  # the server waits 2 s for auth

@@ -1,0 +1,156 @@
+"""Hook payloads → projects / sessions / agents / events (jui_cli/viz/ingest.py, robots.py, rooms.py)."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from jui_cli.viz import robots
+from jui_cli.viz.ingest import World
+from jui_cli.viz.rooms import Rooms, find_root
+from jui_cli.viz.state import VizState
+
+PROBE = sorted((Path(__file__).parent / "fixtures" / "viz" / "probe").glob("*.json"))
+
+
+def _world() -> tuple[World, VizState]:
+    state = VizState()
+    return World(state, tool_input_max=50), state
+
+
+def _hook(kind, sid="s-aaaa", at=0, **fields):
+    return {"hook_event_name": kind, "session_id": sid, "cwd": "/work/shop-app", **fields}
+
+
+def _agent(state, aid):
+    return next(a for a in state.slices["agents"] if a["id"] == aid)
+
+
+def test_the_probe_recording_walks_a_robot_through_its_states():
+    world, state = _world()
+    seen = []
+    for i, path in enumerate(PROBE):
+        world.apply_hook(json.loads(path.read_text()), i * 500)
+        world.publish()
+        main = state.slices["agents"][0]
+        seen.append(main["state"])
+    assert len(PROBE) == 22
+    assert {"idle", "reading", "typing", "waiting", "command", "carry", "done"} <= set(seen)
+    # The Explore subagent appeared, and leaves 5 s after SubagentStop.
+    world.tick(len(PROBE) * 500 + 5_000)
+    world.publish()
+    assert [a["kind"] for a in state.slices["agents"]] == ["main"]
+    assert [s["status"] for s in state.slices["sessions"]] == ["ended"]
+
+
+def test_a_refused_tool_that_never_reports_back_does_not_keep_the_robot_busy():
+    """In -p a refused Write sent PermissionRequest and then nothing (no Post,
+    no PermissionDenied): the next PreToolUse settles it."""
+    world, state = _world()
+    world.apply_hook(_hook("PreToolUse", tool_name="Write", tool_use_id="w1", tool_input={"file_path": "/work/shop-app/a.txt"}), 1)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Write", tool_input={"file_path": "/work/shop-app/a.txt"}), 2)
+    world.publish()
+    assert _agent(state, "s-aaaa")["state"] == "waiting"
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b1", tool_input={"command": "ls"}), 3)
+    world.apply_hook(_hook("PostToolUse", tool_name="Bash", tool_use_id="b1", tool_input={"command": "ls"}), 4)
+    world.publish()
+    assert _agent(state, "s-aaaa")["state"] == "idle"
+
+
+def test_parallel_tools_keep_the_robot_busy_until_the_last_one_ends():
+    world, state = _world()
+    for use_id, tool in (("r1", "Read"), ("r2", "Grep")):
+        world.apply_hook(_hook("PreToolUse", tool_name=tool, tool_use_id=use_id, tool_input={"file_path": "/work/shop-app/x"}), 1)
+    world.apply_hook(_hook("PostToolUse", tool_name="Read", tool_use_id="r1", tool_input={}), 2)
+    world.publish()
+    assert _agent(state, "s-aaaa")["state"] == "reading"
+    world.apply_hook(_hook("PostToolUse", tool_name="Grep", tool_use_id="r2", tool_input={}), 3)
+    world.publish()
+    assert _agent(state, "s-aaaa")["state"] == "idle"
+
+
+def test_unknown_events_and_payloads_without_a_session_are_dropped():
+    world, state = _world()
+    assert world.apply_hook(_hook("MessageDisplay"), 1) is None
+    assert world.apply_hook({"hook_event_name": "PreToolUse"}, 1) is None
+    assert world.apply_hook(_hook("SessionStart", sid=""), 1) is None
+    assert len(state.events) == 0
+
+
+def test_tool_input_strings_are_cut_and_paths_are_relative_to_the_project():
+    world, state = _world()
+    event = world.apply_hook(_hook("PreToolUse", tool_name="Write", tool_use_id="w",
+                                   tool_input={"file_path": "/work/shop-app/docs/a.json", "content": "x" * 500}), 1)
+    assert event["detail"]["content"] == "x" * 50 + "…"
+    assert event["text"] == "Write docs/a.json"  # relative to the project root
+
+
+def test_labels_are_unique_across_all_robots():
+    world, state = _world()
+    for sid in ("abc111", "abc222", "abd333"):
+        world.apply_hook(_hook("SessionStart", sid=sid), 1)
+    world.publish()
+    labels = [a["label"] for a in state.slices["agents"]]
+    assert labels == ["ab", "abc", "abd"]
+
+
+def test_a_session_seen_only_by_the_agents_list_gets_a_room_and_a_robot():
+    world, state = _world()
+    world.apply_agents_list([{"sessionId": "x1", "cwd": "/work/other", "status": "busy", "pid": 42, "name": "n"},
+                             {"no": "id"}, "junk"], 5)
+    world.publish()
+    (session,) = state.slices["sessions"]
+    assert session["status"] == "busy" and session["title"] == "n"
+    assert world.pid_to_session == {42: "x1"}
+    assert [a["id"] for a in state.slices["agents"]] == ["x1"]
+    assert [p["name"] for p in state.slices["projects"]] == ["other/"]
+
+
+def test_stop_with_background_tasks_keeps_the_session_busy():
+    world, state = _world()
+    world.apply_hook(_hook("UserPromptSubmit", prompt="p" * 300), 1)
+    world.apply_hook(_hook("Stop", background_tasks=[{"id": "b"}]), 2)
+    world.publish()
+    session = state.slices["sessions"][0]
+    assert session["status"] == "busy" and len(session["lastPrompt"]) == 200
+    world.apply_hook(_hook("Stop", background_tasks=[]), 3)
+    world.publish()
+    assert state.slices["sessions"][0]["status"] == "idle"
+
+
+@pytest.mark.parametrize("command,state", [
+    ("xcodebuild test -scheme App", "phone"),
+    ("./gradlew connectedDebugAndroidTest", "phone"),
+    ("adb -s emulator-5554 shell ls", "phone"),
+    ("npx playwright test", "phone"),
+    ("jsonui-test run", "phone"),
+    ("git status", "command"),
+    ("readb file", "command"),
+])
+def test_bash_commands_that_drive_a_device_are_phone(command, state):
+    assert robots.state_for_tool("Bash", {"command": command}) == state
+
+
+def test_roles_follow_the_agent_type():
+    assert robots.role_for("jsonui-navigation-ios", False) == "navigation"
+    assert robots.role_for("jsonui-test", False) == "test"
+    assert robots.role_for("Explore", False) == "other"
+    assert robots.role_for(None, True) == "main"
+
+
+def test_rooms_prefer_jui_config_then_git_then_the_cwd(tmp_path):
+    app = tmp_path / "repo" / "apps" / "shop"
+    (app / "src").mkdir(parents=True)
+    (tmp_path / "repo" / ".git").mkdir()
+    assert find_root(str(app / "src")) == (str(tmp_path / "repo"), False)
+    (app / "jui.config.json").write_text("{}")
+    assert find_root(str(app / "src")) == (str(app), True)
+    lone = tmp_path / "lone"
+    lone.mkdir()
+    assert find_root(str(lone)) == (str(lone), False)
+    rooms = Rooms()
+    p1 = rooms.project_for(str(app / "src"))
+    p2 = rooms.project_for(str(app))
+    assert p1["id"] == p2["id"] and p1["jsonui"] is True and p1["name"] == "shop/"
+    assert str(tmp_path) not in json.dumps({k: v for k, v in p1.items() if k != "displayRoot"})
