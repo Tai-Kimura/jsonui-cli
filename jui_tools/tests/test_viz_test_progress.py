@@ -207,3 +207,25 @@ def test_mock_status_tells_our_mock_from_another_projects(tmp_path):
     assert mock_status.status(tmp_path, config) == {"running": False, "port": port}
     assert mock_status.mock_port({}) == 8790 and mock_status.mock_port({"mock": {"server": {"port": True}}}) == 8790
 
+
+
+def test_records_the_real_drivers_wrote_are_all_accepted():
+    """16 lines from the Android driver and 10 from the iOS driver, captured
+    from real runs (b6, 10-18): every one fits, and each run's last case_end
+    statuses add up to its run_end."""
+    folder = Path(__file__).parent / "fixtures" / "viz" / "progress"
+    for name, platform in (("android.jsonl", "android"), ("ios.jsonl", "ios")):
+        lines = (folder / name).read_text().splitlines()
+        assert lines, name
+        book = tp.ProgressBook()
+        for line in lines:
+            rec = json.loads(line)
+            assert tp.valid(rec), (name, line[:120])
+            assert rec["platform"] == platform
+            book.add(rec, platform)
+        assert book.dropped == {}
+        for run in book.runs.values():
+            if "passed" in run:
+                counts = [c["status"] for c in run["cases"].values()]
+                assert (counts.count("passed"), counts.count("failed"), counts.count("skipped")) == \
+                       (run["passed"], run["failed"], run["skipped"]), (name, run["run"])
