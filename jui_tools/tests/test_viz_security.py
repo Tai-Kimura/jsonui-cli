@@ -45,6 +45,9 @@ def test_token_compare_needs_an_exact_non_empty_match():
     assert not security.token_ok("", token)
     assert not security.token_ok(None, token)
     assert not security.token_ok("", "")  # an unset token never matches
+    # Not a str: a mismatch, never an exception (it was a 500 / a 1006 close).
+    for odd in (123, [token], {"t": token}, b"x", None, "\udcff\udcfe"):
+        assert security.token_ok(odd, token) is False
 
 
 def test_csp_names_our_port_and_the_given_script_hashes_only():
@@ -64,6 +67,7 @@ def _run(coro):
 def test_middleware_answers_421_to_a_foreign_host_and_sets_headers_otherwise():
     async def main():
         app = web.Application(middlewares=[security.make_middleware(PORT)])
+        security.install_headers(app, PORT)
         async def ok(request):
             return web.Response(text="ok")
 
@@ -71,6 +75,10 @@ def test_middleware_answers_421_to_a_foreign_host_and_sets_headers_otherwise():
         async with TestClient(TestServer(app)) as client:
             bad = await client.get("/", headers={"Host": "example.com:7788"})
             assert bad.status == 421
+            # The refusal carries the headers too (it did not, when a middleware added them).
+            assert bad.headers["X-Content-Type-Options"] == "nosniff"
+            missing = await client.get("/nope", headers={"Host": "127.0.0.1:7788"})
+            assert missing.status == 404 and "default-src 'self'" in missing.headers["Content-Security-Policy"]
             good = await client.get("/", headers={"Host": "127.0.0.1:7788"})
             assert good.status == 200
             assert good.headers["X-Content-Type-Options"] == "nosniff"

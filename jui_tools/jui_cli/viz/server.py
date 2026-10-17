@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import sys
@@ -42,6 +43,24 @@ _CONTENT_TYPES = {
     ".json": "application/json", ".woff2": "font/woff2", ".woff": "font/woff",
     ".svg": "image/svg+xml", ".png": "image/png", ".md": "text/plain", ".txt": "text/plain",
 }
+
+
+class _OneLine(logging.Handler):
+    """aiohttp's own errors (a malformed request, a handler crash) as one line,
+    without the traceback: any local process could otherwise grow the log at will."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        exc = record.exc_info[1] if record.exc_info else None
+        reason = type(exc).__name__ if exc else record.getMessage().splitlines()[0][:120]
+        log(f"拒否: 不正なリクエスト（{reason}）")
+
+
+def quiet_aiohttp_logs() -> None:
+    for name in ("aiohttp.server", "aiohttp.web", "aiohttp.access", "aiohttp.internal", "aiohttp.websocket"):
+        logger = logging.getLogger(name)
+        logger.handlers = [_OneLine()]
+        logger.propagate = False
+        logger.setLevel(logging.WARNING)
 
 
 def log(message: str) -> None:
@@ -80,6 +99,8 @@ class ServerContext:
     state: VizState = field(default_factory=VizState)
     # Called with each accepted hook payload (P2 plugs ingest in here).
     on_hook: Callable[[dict], Awaitable[None] | None] | None = None
+    # spec id -> the sheet's doc (P4), or None when the spec is unknown.
+    sheet: Callable[[str], dict | None] | None = None
     # Each authed socket and the (rev, seq) it has already been sent, so a
     # change made before it connected is not delivered twice.
     sockets: dict = field(default_factory=dict)
@@ -96,10 +117,12 @@ def _page_html(ctx: ServerContext) -> str | None:
 
 def make_app(ctx: ServerContext) -> web.Application:
     page = _page_html(ctx) or ""
+    hashes = _importmap_hashes(page)
     app = web.Application(
-        middlewares=[security.make_middleware(ctx.port, _importmap_hashes(page))],
+        middlewares=[security.make_middleware(ctx.port, hashes)],
         client_max_size=MAX_HOOK_BODY,
     )
+    security.install_headers(app, ctx.port, hashes)
 
     def _with_token(html: str) -> web.Response:
         body = html.replace(TOKEN_PLACEHOLDER, ctx.token)
@@ -276,6 +299,13 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         older = [e for e in ctx.state.events if e["seq"] < before][-min(limit, 500):]
         await sock.send_json({"type": "events", "items": older, "older": True})
         await sock.send_json({"type": "ack", "reqId": req_id, "ok": True})
+    elif kind == "spec.sheet":
+        spec_id = message.get("specId")
+        cards = ctx.sheet(spec_id) if isinstance(spec_id, str) and ctx.sheet is not None else None
+        if cards is None:
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "unknown spec"})
+            return
+        await sock.send_json({"type": "sheet", "reqId": req_id, "specId": spec_id, "cards": cards})
     elif kind == "presence":
         return  # used from P6
     elif req_id is not None:

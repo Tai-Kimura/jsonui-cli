@@ -16,6 +16,9 @@
   pre { margin: 0; padding: 8px; border: 1px solid var(--line); overflow: auto; max-height: 30vh; font: 12px/1.4 ui-monospace, monospace; }
   ol { margin: 0; padding-left: 24px; font: 12px/1.5 ui-monospace, monospace; max-height: 45vh; overflow: auto; }
   .muted { color: var(--muted); }
+  table { border-collapse: collapse; font: 12px/1.4 ui-monospace, monospace; width: 100%; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 2px 6px; text-align: left; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -23,6 +26,12 @@
 <p>状態: <span id="conn" class="ng">未接続</span> <span id="rev" class="muted"></span></p>
 <h2>server</h2>
 <pre id="server">-</pre>
+<h2>部屋</h2>
+<table id="projects"></table>
+<h2>セッション</h2>
+<table id="sessions"></table>
+<h2>ロボット</h2>
+<table id="agents"></table>
 <h2>受けたイベント（最新 100 件）</h2>
 <ol id="events" reversed></ol>
 <script type="module" src="/debug.js"></script>

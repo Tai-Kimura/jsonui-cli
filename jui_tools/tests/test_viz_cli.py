@@ -94,12 +94,47 @@ def test_status_and_stop_clear_files_left_by_a_dead_server(home, capsys):
     capsys.readouterr()
 
 
-def test_stop_refuses_when_the_pid_files_disagree(home, capsys):
+def test_a_pid_that_now_belongs_to_another_process_is_never_signalled(home, capsys):
+    """After a crash the pid in the files can be reused. stop must check that
+    the process really is a viz server (its /health answers with that pid)."""
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        paths.viz_home().mkdir(parents=True, exist_ok=True)
+        for with_server_json in (True, False):
+            paths.pid_file().write_text(str(other.pid))
+            if with_server_json:
+                paths.server_json().write_text(json.dumps({"pid": other.pid, "port": _free_port(), "token": "t"}))
+            else:
+                old = time.time() - 3600  # a leftover, not a serve still starting
+                os.utime(paths.pid_file(), (old, old))
+            assert main(["viz", "stop"]) == 0
+            assert "起動していません" in capsys.readouterr().out
+            assert other.poll() is None, "stop signalled a process that is not viz"
+            assert not paths.pid_file().exists() and not paths.server_json().exists()
+    finally:
+        other.terminate()  # our own child
+        other.wait(timeout=10)
+
+
+@pytest.mark.parametrize("text", ["0", "-1", " -1 ", "1", "+5", "abc", ""])
+def test_a_broken_pid_file_is_cleared_and_nothing_is_signalled(home, capsys, monkeypatch, text):
+    signalled = []
+    real_kill = os.kill
+    monkeypatch.setattr(os, "kill", lambda pid, sig: signalled.append((pid, sig)) or real_kill(os.getpid(), 0))
+    paths.viz_home().mkdir(parents=True, exist_ok=True)
+    paths.pid_file().write_text(text)
+    paths.server_json().write_text(json.dumps({"pid": 0, "port": 1}))
+    assert main(["viz", "stop"]) == 0
+    assert signalled == []
+    assert not paths.pid_file().exists() and not paths.server_json().exists()
+
+
+def test_stop_waits_out_a_serve_that_is_still_starting(home, capsys):
+    """viz.pid freshly taken by a live process, no server.json yet: starting."""
     paths.viz_home().mkdir(parents=True, exist_ok=True)
     paths.pid_file().write_text(str(os.getpid()))  # alive: this test process
-    paths.server_json().write_text(json.dumps({"pid": os.getpid() + 1, "port": 1}))
     assert main(["viz", "stop"]) == 1
-    assert "食い違う" in capsys.readouterr().err
+    assert "起動の途中" in capsys.readouterr().err
     assert paths.pid_file().exists()  # nothing was signalled or removed
 
 
@@ -108,10 +143,29 @@ def test_open_without_a_server_is_a_usage_error(home, capsys):
     assert "起動していません" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("sub", ["hooks", "relay"])
-def test_later_phase_commands_say_so_and_exit_1(home, capsys, sub):
-    assert main(["viz", sub]) == 1
+def test_relay_says_which_phase_brings_it(home, capsys):
+    assert main(["viz", "relay"]) == 1
     assert "実装予定" in capsys.readouterr().err
+
+
+def test_hooks_without_an_action_prints_usage(home, capsys):
+    assert main(["viz", "hooks"]) == 1
+    assert "使い方" in capsys.readouterr().err
+
+
+def test_hooks_install_status_uninstall_through_the_cli(home, capsys):
+    assert main(["viz", "hooks", "install", "--dry-run"]) == 0
+    assert not paths.claude_settings().exists()
+    assert main(["viz", "hooks", "install"]) == 0
+    assert "18 イベント" in capsys.readouterr().out
+    assert main(["viz", "hooks", "status", "--json"]) == 0
+    info = json.loads(capsys.readouterr().out)
+    assert info["installed"] == 18 and info["broken"] == []
+    assert main(["viz", "hooks", "uninstall"]) == 0
+    assert json.loads(paths.claude_settings().read_text()) == {}
+    paths.claude_settings().write_text("{broken")
+    assert main(["viz", "hooks", "install"]) == 1
+    assert "JSON として読めません" in capsys.readouterr().err
 
 
 def test_broken_config_warns_and_falls_back_to_defaults(home, capsys):
@@ -242,6 +296,46 @@ def test_serve_refuses_a_port_another_process_listens_on_all_addresses(home):
         assert f"ポート {port} は使用中です" in done.stderr
     finally:
         holder.close()
+
+
+def test_two_serves_started_together_leave_exactly_one_running(home):
+    """Each checked "not running" and then bound its own port: both ran, and
+    one was left with no files naming it. The lock is taken before binding."""
+    env = dict(os.environ, HOME=str(home))
+    procs = [subprocess.Popen([sys.executable, str(JUI), "viz", "serve", "--port", str(_free_port()), "--no-agents-poll"],
+                              env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(2)]
+    try:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not (paths.server_json().exists() and any(p.poll() is not None for p in procs)):
+            time.sleep(0.05)
+        running = [p for p in procs if p.poll() is None]
+        assert len(running) == 1, [p.poll() for p in procs]
+        refused = next(p for p in procs if p.poll() is not None)
+        assert refused.returncode == 1 and "起動中です" in refused.communicate()[1]
+        assert json.loads(paths.server_json().read_text())["pid"] == running[0].pid
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                p.terminate()  # our own children
+                p.wait(timeout=10)
+
+
+def test_malformed_requests_are_one_line_each_on_stderr(home):
+    port = _free_port()
+    proc = _start_serve(home, port)
+    try:
+        for raw in (b"GET / HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nHost: example.com\r\n\r\n" % port,
+                    b"POST /hook HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nX-Jui-Viz-Token: \xff\xfe\r\nContent-Length: 2\r\n\r\n{}" % port):
+            with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+                s.sendall(raw)
+                status = s.recv(64).split(b" ")[1]
+                assert status in (b"400", b"401"), status
+    finally:
+        proc.terminate()  # our own child
+        proc.wait(timeout=10)
+    _, err = proc.communicate()
+    assert "Traceback" not in err
+    assert len(err.strip().splitlines()) <= 5, err
 
 
 def test_doctor_reports_each_check(home, capsys, monkeypatch):
