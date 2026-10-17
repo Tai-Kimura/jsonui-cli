@@ -143,9 +143,30 @@ def test_open_without_a_server_is_a_usage_error(home, capsys):
     assert "起動していません" in capsys.readouterr().err
 
 
-def test_relay_says_which_phase_brings_it(home, capsys):
+def test_relay_without_an_action_prints_usage(home, capsys):
     assert main(["viz", "relay"]) == 1
-    assert "実装予定" in capsys.readouterr().err
+    assert "使い方" in capsys.readouterr().err
+
+
+def test_relay_install_shows_the_command_and_asks_first(home, capsys, monkeypatch, tmp_path):
+    calls = tmp_path / "calls"
+    fake = tmp_path / "bin" / "claude"
+    fake.parent.mkdir()
+    fake.write_text(f"#!/bin/sh\necho \"$@\" >> {calls}\nexit 0\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake.parent))
+    assert main(["viz", "relay", "install", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "mcp add --scope user jui-viz --" in out and "channel.py" in out
+    assert not calls.exists()  # dry-run ran nothing
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+    assert main(["viz", "relay", "install"]) == 1 and not calls.exists()
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+    assert main(["viz", "relay", "install"]) == 0
+    assert "mcp add --scope user jui-viz -- " in calls.read_text()
+    assert "--dangerously-load-development-channels server:jui-viz" in capsys.readouterr().out
+    assert main(["viz", "relay", "uninstall", "--yes"]) == 0
+    assert "mcp remove --scope user jui-viz" in calls.read_text()
 
 
 def test_hooks_without_an_action_prints_usage(home, capsys):

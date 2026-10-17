@@ -60,8 +60,10 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     hooks.add_argument("hooks_action", nargs="?", choices=["install", "uninstall", "status"])
     hooks.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the change, write nothing")
     hooks.add_argument("--json", action="store_true", help="Machine-readable status")
-    relay = sub.add_parser("relay", help="Register the permission relay (P5)")
-    relay.add_argument("relay_action", nargs="?", choices=["install", "uninstall"])
+    relay = sub.add_parser("relay", help="Register the permission relay (an MCP channel) with Claude Code")
+    relay.add_argument("relay_action", nargs="?", choices=["install", "uninstall", "status"])
+    relay.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the command, run nothing")
+    relay.add_argument("--yes", action="store_true", help="Do not ask before running claude mcp")
 
 
 def cmd_viz(args: argparse.Namespace) -> int:
@@ -72,7 +74,7 @@ def cmd_viz(args: argparse.Namespace) -> int:
         "open": _cmd_open,
         "doctor": _cmd_doctor,
         "hooks": _cmd_hooks,
-        "relay": lambda a: _not_yet("jui viz relay", "P5"),
+        "relay": _cmd_relay,
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
@@ -355,6 +357,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         return None
 
     ctx.sheet = sheet
+    ctx.world = world
+    ctx.publish = world.publish
 
     def watch_project(project) -> None:
         from ..viz.sources import jsonui_project
@@ -499,6 +503,69 @@ def _someone_listens(port: int) -> bool:
             return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------- relay (08 §2)
+
+RELAY_NAME = "jui-viz"
+RELAY_ALIAS = "alias claude-viz='claude --dangerously-load-development-channels server:jui-viz'"
+
+
+def _relay_argv(action: str, claude: str) -> list[str]:
+    if action == "install":
+        channel = Path(__file__).resolve().parents[1] / "viz" / "channel.py"
+        return [claude, "mcp", "add", "--scope", "user", RELAY_NAME, "--", sys.executable, "-I", str(channel)]
+    return [claude, "mcp", "remove", "--scope", "user", RELAY_NAME]
+
+
+def _relay_registered(claude: str) -> bool | None:
+    try:
+        done = subprocess.run([claude, "mcp", "get", RELAY_NAME], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return done.returncode == 0
+
+
+def _cmd_relay(args: argparse.Namespace) -> int:
+    import shlex
+
+    action = getattr(args, "relay_action", None)
+    if action is None:
+        _err("使い方: jui viz relay {install,uninstall,status} [--dry-run] [--yes]")
+        return 1
+    claude = shutil.which("claude")
+    if claude is None:
+        _err("claude が PATH にありません")
+        return 1
+    if action == "status":
+        registered = _relay_registered(claude)
+        print(f"jui viz: 許可の中継は{'登録済み' if registered else '未登録' if registered is False else '確かめられません'}")
+        return 0
+    argv = _relay_argv(action, claude)
+    print("実行するコマンド:")
+    print("  " + shlex.join(argv))
+    if getattr(args, "dry_run", False):
+        return 0
+    if not getattr(args, "yes", False):
+        try:
+            answer = input("実行しますか？ [y/N] ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            print("jui viz: 中止しました")
+            return 1
+    done = subprocess.run(argv, capture_output=True, text=True, timeout=60)
+    if done.returncode != 0:
+        _err(f"claude mcp が失敗しました（{done.returncode}）: {(done.stderr or done.stdout).strip()[:300]}")
+        return 1
+    if action == "install":
+        print("jui viz: 許可の中継を登録しました。ブラウザから答えるセッションは、次のように起動してください:")
+        print("  claude --dangerously-load-development-channels server:jui-viz")
+        print("  （起動時の警告では「I am using this for local development」を選びます。対話モードだけで有効です）")
+        print(f"  エイリアスの例: {RELAY_ALIAS}")
+    else:
+        print("jui viz: 許可の中継の登録を外しました")
+    return 0
 
 
 # ---------------------------------------------------------------- hooks
@@ -666,6 +733,10 @@ def _doctor_checks() -> list[dict]:
         total = len(hooks_installer.EVENTS)
         ok = hooks["installed"] == total and not hooks["broken"]
         add("hooks", ok, f"{hooks['installed']}/{total} イベント" + ("" if ok else "（jui viz hooks install で入れる）"))
+
+    if claude is not None:
+        registered = _relay_registered(claude)
+        add("relay", True, "許可の中継: " + ("登録済み" if registered else "未登録（jui viz relay install）" if registered is False else "確かめられません"))
 
     running = _running()
     if running is not None:

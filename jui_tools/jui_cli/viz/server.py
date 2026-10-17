@@ -30,6 +30,7 @@ from .state import VizState, now_ms
 
 MAX_HOOK_BODY = 2_000_000
 AUTH_TIMEOUT_SEC = 2.0
+POLL_SEC = 25.0
 PROTOCOL = 1
 TOKEN_PLACEHOLDER = "__JUI_VIZ_TOKEN__"
 _PUSH_TASK = web.AppKey("push_task", asyncio.Task)
@@ -102,6 +103,10 @@ class ServerContext:
     on_hook: Callable[[dict], Awaitable[None] | None] | None = None
     # spec id -> the sheet's doc (P4), or None when the spec is unknown.
     sheet: Callable[[str], dict | None] | None = None
+    # The World (P5: channel_hello / channel_request / decide / perms), and
+    # what to call after changing it.
+    world: object | None = None
+    publish: Callable[[], None] | None = None
     # Each authed socket and the (rev, seq) it has already been sent, so a
     # change made before it connected is not delivered twice.
     sockets: dict = field(default_factory=dict)
@@ -238,6 +243,58 @@ def make_app(ctx: ServerContext) -> web.Application:
             ctx.sockets.pop(sock, None)
         return sock
 
+    async def _json_body(request: web.Request) -> dict | None:
+        try:
+            data = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    async def channel_hello(request: web.Request) -> web.Response:
+        refused = _check_token(request)
+        if refused is not None:
+            return refused
+        body = await _json_body(request)
+        if body is None or ctx.world is None:
+            return web.Response(status=400, text="bad request\n")
+        channel_id = ctx.world.channel_hello(body.get("ppid"), body.get("cwd"), body.get("sessionId"), now_ms())
+        if ctx.publish:
+            ctx.publish()
+        return web.json_response({"channelId": channel_id})
+
+    async def channel_request(request: web.Request) -> web.Response:
+        refused = _check_token(request)
+        if refused is not None:
+            return refused
+        body = await _json_body(request)
+        if body is None or ctx.world is None or not isinstance(body.get("channelId"), str):
+            return web.Response(status=400, text="bad request\n")
+        fields = {k: body.get(k) for k in ("request_id", "tool_name", "description", "input_preview")}
+        if not ctx.world.channel_request(body["channelId"], fields, now_ms()):
+            return web.Response(status=404, text="unknown channel\n")
+        if ctx.publish:
+            ctx.publish()
+        return web.Response(status=204)
+
+    async def channel_poll(request: web.Request) -> web.Response:
+        refused = _check_token(request)
+        if refused is not None:
+            return refused
+        channel_id = request.query.get("channelId", "")
+        if ctx.world is None:
+            return web.Response(status=400, text="bad request\n")
+        deadline = asyncio.get_running_loop().time() + POLL_SEC
+        while True:
+            verdicts = ctx.world.perms.take_verdicts(channel_id, now_ms())
+            if verdicts is None:
+                return web.Response(status=404, text="unknown channel\n")
+            if verdicts or asyncio.get_running_loop().time() >= deadline:
+                return web.json_response({"verdicts": verdicts})
+            await asyncio.sleep(0.1)
+
+    app.router.add_post("/channel/hello", channel_hello)
+    app.router.add_post("/channel/request", channel_request)
+    app.router.add_get("/channel/poll", channel_poll)
     app.router.add_get("/", index)
     app.router.add_get("/debug", debug)
     app.router.add_get("/health", health)
@@ -307,6 +364,18 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "unknown spec"})
             return
         await sock.send_json({"type": "sheet", "reqId": req_id, "specId": spec_id, "cards": cards})
+    elif kind == "perm.decide":
+        perm_id, behavior = message.get("permId"), message.get("behavior")
+        if ctx.world is None or not isinstance(perm_id, str) or not isinstance(behavior, str):
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "permId and behavior are required"})
+            return
+        error = ctx.world.decide(perm_id, behavior, now_ms())
+        if ctx.publish:
+            ctx.publish()
+        reply = {"type": "ack", "reqId": req_id, "ok": error is None}
+        if error:
+            reply["error"] = error
+        await sock.send_json(reply)
     elif kind == "presence":
         return  # used from P6
     elif req_id is not None:

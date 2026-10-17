@@ -15,6 +15,7 @@ from pathlib import Path
 from . import robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject
+from .permissions import PermissionBook
 from .sources.tasks import TaskBook
 from .state import VizState
 
@@ -78,6 +79,7 @@ class World:
         self._asking: dict[str, str] = {}
         self.pid_to_session: dict[int, str] = {}
         self.tasks = TaskBook()
+        self.perms = PermissionBook()
         self.tests: dict[str, dict] = {}
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
@@ -260,6 +262,8 @@ class World:
             self._set(agent, at, "idle", "待機")
             text = f"出勤 {payload.get('source') or ''}".strip()
         elif kind == "SessionEnd":
+            self.perms.session_stopped(sid, at)
+            self._dirty.add("perms")
             self._status(session, "ended", at)
             self._set(agent, at, "idle", "退勤", leftAt=at)
             text = f"退勤 {payload.get('reason') or ''}".strip()
@@ -303,6 +307,8 @@ class World:
             if use_id in opened:
                 opened.remove(use_id)
             self._open_tool.pop(use_id or "", None)
+            if self.perms.tool_finished(sid, use_id, True, at):
+                self._dirty.add("perms")
             if self._asking.get(agent["id"]) == use_id:
                 self._asking.pop(agent["id"], None)
             if not opened and agent["state"] not in ("carry",):
@@ -332,11 +338,17 @@ class World:
             same = [u for u in opened if self._open_tool.get(u) == tool]
             if same:
                 self._asking[agent["id"]] = same[-1]
+            self.perms.from_hook(sid, agent["id"], tool or "?", tool_input, self._asking.get(agent["id"]),
+                                 payload.get("permission_suggestions"), at)
+            self._dirty.add("perms")
             self._status(session, "waiting", at, "permission prompt")
             self._set(agent, at, "waiting", f"許可待ち {robots.act_for_tool(tool or '?', tool_input, root)}")
             cat = "perm"
             text = agent["act"]
         elif kind == "PermissionDenied":
+            denied_id = use_id or self._asking.get(agent["id"])
+            if self.perms.tool_finished(sid, denied_id, False, at):
+                self._dirty.add("perms")
             self._settle_asking(agent["id"])
             self._status(session, "busy", at)
             self._set(agent, at, "idle", f"拒否 {tool or ''}".strip())
@@ -376,6 +388,9 @@ class World:
             cat = "task"
             text = f"{'タスク作成' if kind == 'TaskCreated' else 'タスク完了'} {subject}"
         elif kind in ("Stop", "StopFailure"):
+            if agent["kind"] == "main":
+                self.perms.session_stopped(sid, at)
+                self._dirty.add("perms")
             background = payload.get("background_tasks")
             busy = isinstance(background, list) and len(background) > 0
             self._status(session, "busy" if busy else "idle", at)
@@ -446,10 +461,44 @@ class World:
         """~/.claude/sessions/<pid>.json (never a .key file)."""
         self.apply_agents_list([data], at)
 
+    # ---------------------------------------------------------------- relay channel (08 §2)
+
+    def channel_hello(self, ppid, cwd, session_id, at: int) -> str:
+        """Register a channel; find its session by id, by the parent pid, or by a unique cwd."""
+        sid = session_id if isinstance(session_id, str) and session_id in self.sessions else None
+        if sid is None and isinstance(ppid, int):
+            sid = self.pid_to_session.get(ppid)
+        if sid is None and isinstance(cwd, str):
+            relay = self.perms.relay_sessions()
+            same = [s for s, v in self.sessions.items() if v["cwd"] == tilde(cwd) and v["status"] != "ended" and s not in relay]
+            sid = same[0] if len(same) == 1 else None
+        channel = self.perms.hello(sid, at)
+        self._dirty.add("sessions")
+        return channel.id
+
+    def channel_request(self, channel_id: str, request: dict, at: int) -> bool:
+        ok = self.perms.channel_request(channel_id, request, at)
+        if ok:
+            self._dirty.add("perms")
+        return ok
+
+    def decide(self, perm_id: str, behavior: str, at: int) -> str | None:
+        error = self.perms.decide(perm_id, behavior, at)
+        if error is None:
+            card = self.perms.perms[perm_id]
+            self.state.add_event({
+                "at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "PermissionAnswered",
+                "cat": "perm", "text": f"ブラウザで{'許可' if behavior == 'allow' else '拒否'}を送信 {card['summary']}",
+            })
+            self._dirty.add("perms")
+        return error
+
     # ---------------------------------------------------------------- time
 
     def tick(self, at: int) -> None:
         self._now = max(self._now, at)
+        if self.perms.tick(at):
+            self._dirty |= {"perms", "sessions"}
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]
@@ -492,6 +541,13 @@ class World:
             used = {s["projectId"] for s in self.sessions.values()}
             projects = [p for p in self.rooms.projects.values() if p["id"] in used]
             self.state.set_slice("projects", sorted(projects, key=lambda p: p["order"]))
+        relay = self.perms.relay_sessions()
+        for sid, session in self.sessions.items():
+            if session["relay"] != (sid in relay):
+                session["relay"] = sid in relay
+                self._dirty.add("sessions")
+        if "perms" in self._dirty:
+            self.state.set_slice("perms", self.perms.items())
         if "sessions" in self._dirty:
             self.state.set_slice("sessions", sorted((dict(s) for s in self.sessions.values()), key=lambda s: s["startedAt"]))
         if "agents" in self._dirty:
