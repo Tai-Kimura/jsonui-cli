@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/progress.schema.json",
+  "title": "JsonUI Test Progress",
+  "description": "One record of a test run's progress, emitted by all platform drivers while the run is under way (results.schema.json is written only at the end). One JSON object per line. Web appends to <JSONUI_TEST_PROGRESS_DIR>/<run>.jsonl; Android logs it under the logcat tag JsonUITestProgress at Info; iOS logs it to unified logging, subsystem com.jsonui.testrunner, category progress, public. Consumed by `jui viz`. A driver never lets emitting a record change a test's result. A key is added only with a new `v`.",
+  "type": "object",
+  "required": ["v", "t", "platform", "run", "event"],
+  "properties": {
+    "v": { "const": 1, "description": "Record format version." },
+    "t": { "type": "integer", "minimum": 0, "description": "Wall-clock time of the event, epoch milliseconds." },
+    "platform": { "type": "string", "enum": ["ios", "android", "web"] },
+    "run": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID (lower-case) of one runner instance's run; every record of that run carries it."
+    },
+    "event": { "type": "string", "enum": ["run_start", "case_start", "case_end", "run_end"] },
+
+    "device": { "type": "string", "description": "run_start, when known: the simulator's name (iOS), Build.MODEL (Android), the browser's name (Web)." },
+    "deviceId": { "type": "string", "description": "run_start, when known: the simulator's UDID (iOS). Android cannot read its serial from inside the device; a reader knows it from the logcat it reads." },
+    "files": { "type": "integer", "minimum": 0, "description": "run_start: the number of test files this run will read." },
+
+    "file": { "type": "string", "maxLength": 201, "description": "The test file as the runner read it, relative to its tests root, '/'-separated." },
+    "test": { "type": "string", "maxLength": 201, "description": "The same string as results.json's testName." },
+    "case": { "type": "string", "maxLength": 201, "description": "The same string as results.json's caseName. A flow's body is one case." },
+    "truncated": { "const": true, "description": "Present when file, test or case was longer than 200 characters and was cut to 200 followed by '…'; match it to results.json by prefix." },
+    "attempt": { "type": "integer", "minimum": 0, "description": "1-based attempt of the case (a retried case emits one case_start / case_end pair per attempt). 0 only on the single case_end of a case that never ran (status skipped)." },
+    "status": { "type": "string", "enum": ["passed", "failed", "skipped"], "description": "case_end: the attempt's outcome; the last attempt's is the case's." },
+    "durationMs": { "type": "number", "minimum": 0, "description": "case_end: the attempt's duration." },
+
+    "passed": { "type": "integer", "minimum": 0, "description": "run_end: cases passed, counted as results.json counts them (a retried case once, by its last attempt)." },
+    "failed": { "type": "integer", "minimum": 0, "description": "run_end: cases failed." },
+    "skipped": { "type": "integer", "minimum": 0, "description": "run_end: cases skipped." }
+  },
+  "additionalProperties": false,
+
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "const": "run_start" } } },
+      "then": {
+        "required": ["files"],
+        "propertyNames": { "enum": ["v", "t", "platform", "run", "event", "device", "deviceId", "files"] }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "case_start" } } },
+      "then": {
+        "required": ["file", "test", "case", "attempt"],
+        "properties": { "attempt": { "minimum": 1 } },
+        "propertyNames": { "enum": ["v", "t", "platform", "run", "event", "file", "test", "case", "truncated", "attempt"] }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "case_end" } } },
+      "then": {
+        "required": ["file", "test", "case", "attempt", "status", "durationMs"],
+        "propertyNames": { "enum": ["v", "t", "platform", "run", "event", "file", "test", "case", "truncated", "attempt", "status", "durationMs"] },
+        "if": { "properties": { "attempt": { "const": 0 } } },
+        "then": { "properties": { "status": { "const": "skipped" }, "durationMs": { "const": 0 } } },
+        "else": { "properties": { "status": { "enum": ["passed", "failed"] } } }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "run_end" } } },
+      "then": {
+        "required": ["passed", "failed", "skipped"],
+        "propertyNames": { "enum": ["v", "t", "platform", "run", "event", "passed", "failed", "skipped"] }
+      }
+    }
+  ]
+}
