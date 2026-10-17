@@ -272,7 +272,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         if card is None or card["status"] != "pending" or not ctx.browser_present():
             return web.json_response({})
         future = asyncio.get_running_loop().create_future()
-        ctx.world.perms.hook_waiting(card, future)
+        ctx.world.hook_waiting(card, future)  # through World: it marks the perms slice to send
         if ctx.publish:
             ctx.publish()
         try:
@@ -281,7 +281,7 @@ def make_app(ctx: ServerContext) -> web.Application:
             answer = {}
         finally:
             if card.get("_future") is future:
-                ctx.world.perms.hook_gave_up(card)
+                ctx.world.hook_gave_up(card)
                 if ctx.publish:
                     ctx.publish()
         return web.json_response(answer)

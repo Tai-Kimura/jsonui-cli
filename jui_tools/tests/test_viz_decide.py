@@ -104,6 +104,15 @@ def test_from_now_on_returns_only_the_requests_own_suggestions(tmp_path):
             proc = _start_hook(tmp_path, _payload())
             card = await _wait_card(world, lambda c: "_future" in c)
             assert card["can"] == {"allowDeny": True, "always": True, "reason": True}
+            # What the PAGE receives, not the server's dict: the waiting hook's
+            # card must reach the socket with can set (it did not, d2 10-18).
+            deadline = time.monotonic() + 3
+            seen = None
+            while time.monotonic() < deadline and seen != card["can"]:
+                msg = await ws.receive_json(timeout=3)
+                if msg.get("type") == "slices" and "perms" in msg["changed"]:
+                    seen = next((c["can"] for c in msg["changed"]["perms"] if c["id"] == card["id"]), None)
+            assert seen == {"allowDeny": True, "always": True, "reason": True}
             # Out of range, or "from now on" with deny: refused, the hook still waits.
             assert (await _answer(ws, permId=card["id"], behavior="allow", always=[5]))["ok"] is False
             assert (await _answer(ws, permId=card["id"], behavior="deny", always=True))["ok"] is False

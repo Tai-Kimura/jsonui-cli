@@ -521,6 +521,15 @@ class World:
         self._dirty.add("perms")
         return card
 
+    def hook_waiting(self, card: dict, future) -> None:
+        """A --decide hook now waits on this card: the page must learn that it can answer."""
+        self.perms.hook_waiting(card, future)
+        self._dirty.add("perms")
+
+    def hook_gave_up(self, card: dict) -> None:
+        self.perms.hook_gave_up(card)
+        self._dirty.add("perms")
+
     def decide(self, perm_id: str, behavior: str, at: int, always=None, reason=None) -> str | None:
         error = self.perms.decide(perm_id, behavior, at, always, reason)
         if error is None:
