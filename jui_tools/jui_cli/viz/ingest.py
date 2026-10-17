@@ -330,10 +330,15 @@ class World:
             self._open_tool.pop(use_id or "", None)
             if self.perms.tool_finished(sid, use_id, True, at):
                 self._dirty.add("perms")
+            if session["status"] == "waiting":
+                self._status(session, "busy", at)  # the tool it asked for has run
             if self._asking.get(agent["id"]) == use_id:
                 self._asking.pop(agent["id"], None)
             if not opened and agent["state"] not in ("carry",):
-                self._set(agent, at, "idle", agent["act"])
+                act = agent["act"]
+                if act.startswith("許可待ち "):
+                    act = act[len("許可待ち "):]
+                self._set(agent, at, "idle", act)
             failed = kind == "PostToolUseFailure"
             if tool in EDIT_TOOLS and not failed:
                 self._touch_files(session, agent, tool_input, at, after=True, use_id=use_id)
@@ -517,7 +522,7 @@ class World:
         opened = self._open.get(agent["id"]) or []
         same = [u for u in opened if self._open_tool.get(u) == tool]
         card = self.perms.from_hook(sid, agent["id"], tool, tool_input, same[-1] if same else None,
-                                    payload.get("permission_suggestions"), at)
+                                    payload.get("permission_suggestions"), at, source="decide")
         self._dirty.add("perms")
         return card
 

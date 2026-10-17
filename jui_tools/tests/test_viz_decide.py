@@ -203,3 +203,15 @@ def test_no_answer_in_time_gives_back_the_dialog(tmp_path):
 def test_decide_without_a_server_prints_nothing(tmp_path):
     proc = _start_hook(tmp_path, _payload())
     assert _finish(proc) is None
+
+
+def test_two_equal_waiting_hooks_are_two_cards(tmp_path):
+    """Two identical --decide requests within 3 s were merged; the first hook was
+    left waiting the full decideWaitSec (review, 10-18)."""
+    world = World(VizState())
+    first = world.hook_decide(_payload(), 1)
+    second = world.hook_decide(_payload(), 2)
+    assert first is not second
+    # The async forward of the first still joins the first's card.
+    world.apply_hook(_payload(), 3)
+    assert len([c for c in world.perms.perms.values()]) == 2
