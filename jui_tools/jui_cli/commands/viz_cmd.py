@@ -113,7 +113,7 @@ def _read_pid() -> int | None:
         text = path.read_text().strip()
     except OSError:
         return None
-    if text.isdigit() and int(text) >= 2:
+    if text.isascii() and text.isdigit() and int(text) >= 2:
         return int(text)
     _clear_runtime_files()
     return None
@@ -153,18 +153,45 @@ def _clear_runtime_files(pid: int | None = None) -> None:
             pass
 
 
-def _health_pid(port: int) -> int | None:
-    """The pid the server on 127.0.0.1:<port> says it has, or None."""
-    import urllib.request
+#: _health_pid's answers besides a pid.
+REFUSED = "refused"  # nothing listens there: certainly not our server
+UNKNOWN = "unknown"  # no answer in time / not a viz answer: cannot tell
 
-    req = urllib.request.Request(f"http://127.0.0.1:{port}/health", headers={"Host": f"127.0.0.1:{port}"})
+
+def _health_pid(port: int, timeout: float = 1.0):
+    """The pid the server on 127.0.0.1:<port> reports, REFUSED or UNKNOWN.
+
+    A raw socket, like forward.py: urllib follows HTTP(S)_PROXY, and a proxy
+    variable once turned a live server into "not answering" and its files
+    were removed (independent review, 10-18).
+    """
     try:
-        with urllib.request.urlopen(req, timeout=1.0) as res:
-            data = json.loads(res.read().decode("utf-8"))
-    except (OSError, ValueError):
-        return None
-    pid = data.get("pid") if isinstance(data, dict) else None
-    return pid if isinstance(pid, int) else None
+        sock = socket.create_connection(("127.0.0.1", port), timeout=timeout)
+    except ConnectionRefusedError:
+        return REFUSED
+    except OSError:
+        return UNKNOWN
+    try:
+        sock.settimeout(timeout)
+        sock.sendall(f"GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n".encode("ascii"))
+        raw = b""
+        while len(raw) < 65536:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            raw += chunk
+    except OSError:
+        return UNKNOWN
+    finally:
+        sock.close()
+    head, _, body = raw.partition(b"\r\n\r\n")
+    if not head.startswith(b"HTTP/1.1 200"):
+        return UNKNOWN
+    try:
+        pid = json.loads(body.decode("utf-8")).get("pid")
+    except (UnicodeDecodeError, ValueError, AttributeError):
+        return UNKNOWN
+    return pid if isinstance(pid, int) else UNKNOWN
 
 
 def _identify() -> tuple[str, int, dict | None] | None:
@@ -186,9 +213,14 @@ def _identify() -> tuple[str, int, dict | None] | None:
     data = _read_server_json()
     port = (data or {}).get("port")
     if data is not None and data.get("pid") == pid and isinstance(port, int):
-        if _health_pid(port) == pid:
+        answer = _health_pid(port)
+        if answer == pid:
             return "running", pid, data
-        _clear_runtime_files(pid)
+        if answer == UNKNOWN:
+            # Alive, files agree, but no clear answer (load, a hung loop):
+            # keep the files and signal nothing.
+            return "unresponsive", pid, data
+        _clear_runtime_files(pid)  # refused, or another pid answers there
         return None
     try:
         age = time.time() - paths.pid_file().stat().st_mtime
@@ -212,17 +244,24 @@ def _take_lock() -> bool:
     """Create viz.pid exclusively. False if a serve holds it (or is starting)."""
     folder = paths.pid_file().parent
     folder.mkdir(parents=True, exist_ok=True)
-    for _ in range(2):
-        try:
-            fd = os.open(paths.pid_file(), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            if _identify() is not None:
-                return False
-            continue  # it was a leftover and has been removed: try again
-        with os.fdopen(fd, "w") as f:
-            f.write(str(os.getpid()))
-        return True
-    return False
+    # The pid file appears WITH its content: written to a private temp file,
+    # then hard-linked into place (link fails if the name exists). Created
+    # empty and filled afterwards, a second serve read it empty in between,
+    # took it for a broken file, removed it, and both ran.
+    tmp = folder / f".viz.pid.{os.getpid()}.tmp"
+    tmp.write_text(str(os.getpid()))
+    try:
+        for _ in range(2):
+            try:
+                os.link(tmp, paths.pid_file())
+                return True
+            except FileExistsError:
+                if _identify() is not None:
+                    return False
+                # a leftover, now removed: try once more
+        return False
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _url(port: int) -> str:
@@ -376,10 +415,13 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             async def run_replay() -> None:
                 def apply(body: dict, t: int) -> None:
                     world.apply_hook(body, t)
+                    world.publish()
+
+                def tick(t: int) -> None:
                     world.tick(t)
                     world.publish()
 
-                count = await recorder.replay(Path(replay), apply, speed)
+                count = await recorder.replay(Path(replay), apply, speed, tick)
                 log(f"再生が終わりました（{count} 件）")
 
             tasks.append(asyncio.create_task(run_replay()))
@@ -519,12 +561,16 @@ def _cmd_status(args: argparse.Namespace) -> int:
         info = {"running": False}
     elif found[0] == "starting":
         info = {"running": False, "starting": True, "pid": found[1]}
+    elif found[0] == "unresponsive":
+        info = {"running": True, "unresponsive": True, "pid": found[1], "url": None}
     else:
         _, pid, data = found
         port = (data or {}).get("port")
         info = {"running": True, "pid": pid, "url": _url(port) if isinstance(port, int) else None}
     if getattr(args, "json", False):
         print(json.dumps(info))
+    elif info.get("unresponsive"):
+        print(f"jui viz: 起動中ですが /health に応答しません（pid {info['pid']}）")
     elif info.get("starting"):
         print(f"jui viz: 起動の途中（pid {info['pid']}）")
     elif info["running"]:
@@ -542,6 +588,9 @@ def _cmd_stop(args: argparse.Namespace) -> int:
     state, pid, _ = found
     if state == "starting":
         _err("起動の途中です。少し待ってから jui viz stop を再実行してください")
+        return 1
+    if state == "unresponsive":
+        _err(f"pid {pid} が /health に応答しないため止めません（viz か確かめられません）。少し待って再実行してください")
         return 1
     try:
         os.kill(pid, signal.SIGTERM)  # the pid this tool wrote to its own pid file

@@ -338,6 +338,46 @@ def test_malformed_requests_are_one_line_each_on_stderr(home):
     assert len(err.strip().splitlines()) <= 5, err
 
 
+def test_a_proxy_variable_does_not_make_a_live_server_look_dead(home):
+    """/health went through urllib, which follows HTTP_PROXY: status then
+    removed a live server's files (review, 10-18)."""
+    port = _free_port()
+    proc = _start_serve(home, port)
+    try:
+        env = dict(os.environ, HOME=str(home), HTTP_PROXY="http://127.0.0.1:9", http_proxy="http://127.0.0.1:9")
+        env.pop("NO_PROXY", None)
+        env.pop("no_proxy", None)
+        done = subprocess.run([sys.executable, str(JUI), "viz", "status", "--json"], env=env,
+                              capture_output=True, text=True, timeout=30)
+        assert json.loads(done.stdout)["running"] is True
+        assert paths.server_json().exists() and paths.pid_file().exists()
+    finally:
+        proc.terminate()  # our own child
+        proc.wait(timeout=10)
+        proc.communicate()
+
+
+def test_a_server_that_does_not_answer_is_neither_signalled_nor_forgotten(home, capsys):
+    """Something listens on the port but never answers /health: cannot tell,
+    so keep the files and send nothing."""
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    mute = socket.socket()
+    mute.bind(("127.0.0.1", 0))
+    mute.listen(5)
+    try:
+        paths.viz_home().mkdir(parents=True, exist_ok=True)
+        paths.pid_file().write_text(str(other.pid))
+        paths.server_json().write_text(json.dumps({"pid": other.pid, "port": mute.getsockname()[1], "token": "t"}))
+        assert main(["viz", "stop"]) == 1
+        assert "応答しない" in capsys.readouterr().err
+        assert other.poll() is None
+        assert paths.pid_file().exists() and paths.server_json().exists()
+    finally:
+        mute.close()
+        other.terminate()  # our own child
+        other.wait(timeout=10)
+
+
 def test_doctor_reports_each_check(home, capsys, monkeypatch):
     monkeypatch.setenv("PATH", "")  # no claude: reported, not a crash
     rc = main(["viz", "doctor", "--json"])

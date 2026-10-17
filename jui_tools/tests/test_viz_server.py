@@ -144,8 +144,34 @@ def test_static_serves_web_files_and_refuses_paths_out_of_it():
         try:
             res = await client.get("/debug.js", headers=_host(ctx))
             assert res.status == 200 and "javascript" in res.headers["Content-Type"]
-            for path in ("/../server.py", "/%2e%2e/server.py", "/.hidden", "/nope.js", "/debug.html"):
+            for path in ("/../server.py", "/%2e%2e/server.py", "/.hidden", "/nope.js", "/debug.html",
+                         "/vendor/../server.py", "/vendor/.x/a.js", "/a/./b.js"):
                 assert (await client.get(path, headers=_host(ctx))).status == 404, path
+        finally:
+            await client.close()
+
+    _run(main())
+
+
+def test_static_reaches_a_folder_with_a_dot_in_its_name(tmp_path, monkeypatch):
+    """vendor/three-0.160.0/ was refused by a pattern that allowed no dot in
+    folder names, and the page could not load three.js (d2, 10-18)."""
+    from jui_cli.viz import server as srv
+
+    web = tmp_path / "web"
+    (web / "vendor" / "three-0.160.0" / "addons").mkdir(parents=True)
+    (web / "vendor" / "three-0.160.0" / "three.module.min.js").write_text("export {};")
+    (web / "vendor" / "three-0.160.0" / "addons" / "x.js").write_text("export {};")
+    (web / "debug.html").write_text("<meta name=\"jui-viz-token\" content=\"__JUI_VIZ_TOKEN__\">")
+    monkeypatch.setattr(srv, "web_root", lambda: web)
+
+    async def main():
+        ctx = _ctx()
+        client = await _client(ctx)
+        try:
+            for path in ("/vendor/three-0.160.0/three.module.min.js", "/vendor/three-0.160.0/addons/x.js"):
+                res = await client.get(path, headers=_host(ctx))
+                assert res.status == 200 and "javascript" in res.headers["Content-Type"], path
         finally:
             await client.close()
 

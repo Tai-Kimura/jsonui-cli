@@ -69,6 +69,7 @@ class World:
         self.agents: dict[str, dict] = {}
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
+        self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
         self._until: dict[str, tuple[int, str]] = {}  # agent id -> (time, state to go to)
         # The tool_use_id an agent was asking permission for. PermissionRequest
         # carries no tool_use_id and a refusal may send no PostToolUse (nor
@@ -255,7 +256,7 @@ class World:
             if _s(payload.get("session_title")):
                 session["title"] = _head(payload["session_title"], 120)
             self._status(session, "idle", at)
-            self._open.pop(agent["id"], None)
+            self._clear_open(agent["id"])
             self._set(agent, at, "idle", "待機")
             text = f"出勤 {payload.get('source') or ''}".strip()
         elif kind == "SessionEnd":
@@ -265,6 +266,8 @@ class World:
         elif kind == "UserPromptSubmit":
             session["lastPrompt"] = _head(payload.get("prompt"), PROMPT_MAX)
             self._status(session, "busy", at)
+            # A new prompt: whatever the last turn left open was interrupted (Esc).
+            self._clear_open(agent["id"])
             self._set(agent, at, "idle", "指示を受けた")
             text = f"指示 {session['lastPrompt'] or ''}".strip()
         elif kind == "PreToolUse" and tool:
@@ -274,6 +277,7 @@ class World:
             act = robots.act_for_tool(tool, tool_input, root)
             if use_id:
                 self._open.setdefault(agent["id"], []).append(use_id)
+                self._open_tool[use_id] = tool
             target = {"file": robots._rel(str(tool_input["file_path"]), root)} if _s(tool_input.get("file_path")) else None
             self._set(agent, at, state, act, target=target)
             if state == "carry":
@@ -298,6 +302,7 @@ class World:
             opened = self._open.get(agent["id"], [])
             if use_id in opened:
                 opened.remove(use_id)
+            self._open_tool.pop(use_id or "", None)
             if self._asking.get(agent["id"]) == use_id:
                 self._asking.pop(agent["id"], None)
             if not opened and agent["state"] not in ("carry",):
@@ -321,9 +326,12 @@ class World:
                 self._dirty.add("tests")
             text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
         elif kind == "PermissionRequest":
-            opened = self._open.get(agent["id"])
-            if opened:
-                self._asking[agent["id"]] = opened[-1]
+            # No tool_use_id here: take the newest open call of the same tool
+            # (parallel calls are real: Bash and ToolSearch overlapped in P0).
+            opened = self._open.get(agent["id"]) or []
+            same = [u for u in opened if self._open_tool.get(u) == tool]
+            if same:
+                self._asking[agent["id"]] = same[-1]
             self._status(session, "waiting", at, "permission prompt")
             self._set(agent, at, "waiting", f"許可待ち {robots.act_for_tool(tool or '?', tool_input, root)}")
             cat = "perm"
@@ -341,6 +349,8 @@ class World:
                 self._set(agent, at, "waiting")
             elif ntype == "idle_prompt":
                 self._status(session, "idle", at)
+                if agent["state"] == "waiting":
+                    self._set(agent, at, "idle", "待機")
             text = f"通知 {ntype} {_head(payload.get('message'), 120) or ''}".strip()
         elif kind == "SubagentStart":
             self._set(agent, at, "idle", f"起動 {agent_type or ''}".strip())
@@ -370,8 +380,14 @@ class World:
             busy = isinstance(background, list) and len(background) > 0
             self._status(session, "busy" if busy else "idle", at)
             message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
-            self._open.pop(agent["id"], None)
-            self._asking.pop(agent["id"], None)
+            self._clear_open(agent["id"])
+            if not busy and agent["kind"] == "main":
+                # An interrupted subagent sends no SubagentStop; with nothing in
+                # the background, none of this session's subagents is still working.
+                for sub in [a for a in self.agents.values() if a["sessionId"] == sid and a["kind"] == "sub" and "leftAt" not in a]:
+                    self._clear_open(sub["id"])
+                    self._set(sub, at, "done", "完了", leftAt=at)
+                    self._until[sub["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
             self._set(agent, at, "done", "バックグラウンド作業中" if busy else "完了", lastMessage=message)
             self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
             text = "停止（失敗）" if kind == "StopFailure" else "停止"
@@ -393,6 +409,11 @@ class World:
         if tool_input:
             event["detail"] = clip_strings(tool_input, self.tool_input_max)
         return self.state.add_event(event)
+
+    def _clear_open(self, aid: str) -> None:
+        for use_id in self._open.pop(aid, []):
+            self._open_tool.pop(use_id, None)
+        self._asking.pop(aid, None)
 
     def _settle_asking(self, aid: str) -> None:
         use_id = self._asking.pop(aid, None)

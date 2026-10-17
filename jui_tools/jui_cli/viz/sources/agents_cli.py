@@ -45,7 +45,16 @@ async def poll_once(claude: str) -> list[dict] | None:
             os.killpg(proc.pid, signal.SIGKILL)  # the group started just above
         except ProcessLookupError:
             pass
-        await proc.wait()
+        # A grandchild that left the group (setsid) can still hold stdout,
+        # and asyncio's wait() lasts until every pipe closes: drop our end of
+        # the pipes and bound the wait, or one poll takes as long as it lives.
+        transport = getattr(proc, "_transport", None)
+        if transport is not None:
+            transport.close()
+        try:
+            await asyncio.wait_for(proc.wait(), 1.0)
+        except asyncio.TimeoutError:
+            pass
         return None
     if proc.returncode != 0:
         return None

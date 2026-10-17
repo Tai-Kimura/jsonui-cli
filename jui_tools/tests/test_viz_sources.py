@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import builtins
+import sys
 import io
 import json
 import os
@@ -111,3 +112,33 @@ def test_session_files_watch_reports_changes_and_ignores_keys(tmp_path):
         observer.join(timeout=2)
     assert got and all(row.get("sessionId") == "s77" for row in got)
     assert session_files.watch(tmp_path / "missing", got.append) is None
+
+
+def test_a_grandchild_that_leaves_the_group_cannot_hold_the_poll_open(tmp_path, monkeypatch):
+    """setsid + holding stdout kept poll_once waiting 13.6 s with a 2 s limit (review, 10-18).
+
+    The fake claude waits until the grandchild has left the group, so the
+    timeout cannot land before the situation exists (it did, at first: the
+    arm passed against the unfixed code).
+    """
+    monkeypatch.setattr(agents_cli, "TIMEOUT_SEC", 1.0)
+    ready = tmp_path / "ready"
+    holder = tmp_path / "hold.py"
+    holder.write_text(f"import os, time\nos.setsid()\nopen({str(ready)!r}, 'w').close()\ntime.sleep(8)\n")
+    exe = _fake_claude(tmp_path, f'{sys.executable} {holder} &\nwhile [ ! -f {ready} ]; do sleep 0.02; done\nsleep 8\n')
+    start = time.monotonic()
+    assert asyncio.run(agents_cli.poll_once(exe)) is None
+    assert ready.exists()  # the situation existed
+    assert time.monotonic() - start < 3.5
+
+
+def test_session_files_do_not_follow_symlinks_or_take_other_digits(tmp_path):
+    folder = tmp_path / "sessions"
+    folder.mkdir()
+    key = folder / "222.abc.key"
+    key.write_text('{"sessionId": "from-key"}')
+    (folder / "222.json").symlink_to(key)
+    (folder / "٣.json").write_text('{"sessionId": "arabic-digit"}')
+    assert session_files.scan(folder) == []
+    assert session_files.read_session_file(folder / "222.json") is None
+

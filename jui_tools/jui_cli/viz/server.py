@@ -34,10 +34,11 @@ PROTOCOL = 1
 TOKEN_PLACEHOLDER = "__JUI_VIZ_TOKEN__"
 _PUSH_TASK = web.AppKey("push_task", asyncio.Task)
 
-# Static files the page may ask for: a flat name or one folder level deep
-# (fonts/, vendor/...). Anything with "..", a leading dot or other
-# characters is refused before it reaches the resource reader.
-_STATIC_PATH = re.compile(r"^(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+$")
+# Static files the page may ask for, in folders whose names may hold a dot
+# after the first character (vendor/three-0.160.0/). A name starting with a
+# dot — "..", ".hidden" — or other characters is refused before it reaches
+# the resource reader.
+_STATIC_PATH = re.compile(r"^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
 _CONTENT_TYPES = {
     ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
     ".json": "application/json", ".woff2": "font/woff2", ".woff": "font/woff",
