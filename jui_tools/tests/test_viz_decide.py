@@ -104,6 +104,15 @@ def test_from_now_on_returns_only_the_requests_own_suggestions(tmp_path):
             proc = _start_hook(tmp_path, _payload())
             card = await _wait_card(world, lambda c: "_future" in c)
             assert card["can"] == {"allowDeny": True, "always": True, "reason": True}
+            # What the PAGE receives, not the server's dict: the waiting hook's
+            # card must reach the socket with can set (it did not, d2 10-18).
+            deadline = time.monotonic() + 3
+            seen = None
+            while time.monotonic() < deadline and seen != card["can"]:
+                msg = await ws.receive_json(timeout=3)
+                if msg.get("type") == "slices" and "perms" in msg["changed"]:
+                    seen = next((c["can"] for c in msg["changed"]["perms"] if c["id"] == card["id"]), None)
+            assert seen == {"allowDeny": True, "always": True, "reason": True}
             # Out of range, or "from now on" with deny: refused, the hook still waits.
             assert (await _answer(ws, permId=card["id"], behavior="allow", always=[5]))["ok"] is False
             assert (await _answer(ws, permId=card["id"], behavior="deny", always=True))["ok"] is False
@@ -194,3 +203,15 @@ def test_no_answer_in_time_gives_back_the_dialog(tmp_path):
 def test_decide_without_a_server_prints_nothing(tmp_path):
     proc = _start_hook(tmp_path, _payload())
     assert _finish(proc) is None
+
+
+def test_two_equal_waiting_hooks_are_two_cards(tmp_path):
+    """Two identical --decide requests within 3 s were merged; the first hook was
+    left waiting the full decideWaitSec (review, 10-18)."""
+    world = World(VizState())
+    first = world.hook_decide(_payload(), 1)
+    second = world.hook_decide(_payload(), 2)
+    assert first is not second
+    # The async forward of the first still joins the first's card.
+    world.apply_hook(_payload(), 3)
+    assert len([c for c in world.perms.perms.values()]) == 2

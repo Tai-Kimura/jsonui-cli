@@ -289,3 +289,41 @@ def test_the_channel_answers_only_request_ids_it_received():
     bridge.remember("r1")
     assert bridge.take("never-seen") is False
     assert bridge.take("r1") is True and bridge.take("r1") is False  # once
+
+
+def test_a_lone_card_is_not_linked_to_a_different_request():
+    """P-a (review, 10-18): one "ls" card, a channel request for "rm -rf x"."""
+    world, _ = _world()
+    world.apply_hook(_hook("SessionStart"), 0)
+    channel_id = world.channel_hello(None, None, "s1", 0)
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b1", tool_input={"command": "ls"}), 1)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Bash", tool_input={"command": "ls"}), 2)
+    world.channel_request(channel_id, {"request_id": "R-rm", "tool_name": "Bash", "input_preview": "rm -rf x"}, 3)
+    (card,) = [c for c in world.perms.perms.values()]
+    assert "_requestId" not in card and card["can"]["allowDeny"] is False
+
+
+def test_requests_that_came_first_link_by_content_not_by_arrival_order():
+    """P-a': rm then ls reach the channel before the ls hook; allowing "ls" must not allow rm."""
+    world, _ = _world()
+    world.apply_hook(_hook("SessionStart"), 0)
+    channel_id = world.channel_hello(None, None, "s1", 0)
+    world.channel_request(channel_id, {"request_id": "R-rm", "tool_name": "Bash", "input_preview": "rm -rf x"}, 1)
+    world.channel_request(channel_id, {"request_id": "R-ls", "tool_name": "Bash", "input_preview": "ls"}, 1)
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b1", tool_input={"command": "ls"}), 2)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Bash", tool_input={"command": "ls"}), 2)
+    card = next(c for c in world.perms.perms.values() if c["toolName"] == "Bash" and not c.get("relayOnly"))
+    assert card["_requestId"] == "R-ls"
+    assert world.decide(card["id"], "allow", 3) is None
+    assert world.perms.take_verdicts(channel_id, 4) == [{"request_id": "R-ls", "behavior": "allow"}]
+
+
+def test_after_the_asked_tool_runs_nothing_still_says_waiting():
+    world, state = _world()
+    world.apply_hook(_hook("PreToolUse", tool_name="Write", tool_use_id="w", tool_input={"file_path": "/work/app/a"}), 1)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Write", tool_input={"file_path": "/work/app/a"}), 2)
+    world.apply_hook(_hook("PostToolUse", tool_name="Write", tool_use_id="w", tool_input={"file_path": "/work/app/a"}), 3)
+    world.publish()
+    assert state.slices["sessions"][0]["status"] == "busy"
+    agent = state.slices["agents"][0]
+    assert agent["state"] == "idle" and not agent["act"].startswith("許可待ち")

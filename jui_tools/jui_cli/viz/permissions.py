@@ -94,19 +94,23 @@ class PermissionBook:
     # ---------------------------------------------------------------- from hooks
 
     def from_hook(self, sid: str, aid: str, tool: str, tool_input: dict, use_id: str | None,
-                  suggestions, at: int) -> dict:
+                  suggestions, at: int, source: str = "forward") -> dict:
         # The async forward and the synchronous --decide hook both report the
-        # same PermissionRequest: one card for both.
+        # same PermissionRequest: one card for the pair. Only for the pair — a
+        # second report from the SAME source is a second request (two equal
+        # --decide waits were merged once, and the first was left waiting
+        # 30 s; independent review, 10-18).
         for card in self.perms.values():
             if (card["status"] == "pending" and card["sessionId"] == sid and card["agentId"] == aid
                     and card["toolName"] == tool and card.get("_input") == tool_input
-                    and at - card["createdAt"] <= DEDUPE_MS):
+                    and at - card["createdAt"] <= DEDUPE_MS and source not in card["_sources"]):
+                card["_sources"].add(source)
                 if use_id and "_useId" not in card:
                     card["_useId"] = use_id
                 if suggestions is not None and "suggestions" not in card:
                     card["suggestions"] = suggestions
                 return card
-        card = self._card(sid, aid, tool, tool_input, at, _input=tool_input)
+        card = self._card(sid, aid, tool, tool_input, at, _input=tool_input, _sources={source})
         if use_id:
             card["_useId"] = use_id
         if suggestions is not None:
@@ -185,10 +189,12 @@ class PermissionBook:
             if c["sessionId"] == channel.session_id and c["toolName"] == tool and c["status"] == "pending"
             and "_requestId" not in c and at - c["createdAt"] <= LINK_WINDOW_MS
         ]
-        if len(candidates) > 1:
-            narrowed = [c for c in candidates if _keys(c["toolName"], c.get("_input", {}))
-                        and all(k in preview for k in _keys(c["toolName"], c.get("_input", {})))]
-            candidates = narrowed
+        # Every candidate must agree with the preview, even a lone one: a lone
+        # "ls" card once linked to an "rm -rf x" request and the browser's
+        # allow for "ls" went to rm (independent review, 10-18). A card with
+        # nothing to compare is not linked; it stays answerable in the terminal.
+        candidates = [c for c in candidates if _keys(c["toolName"], c.get("_input", {}))
+                      and all(k in preview for k in _keys(c["toolName"], c.get("_input", {})))]
         if len(candidates) != 1:
             return False  # none, or still more than one: do not guess
         card = candidates[0]

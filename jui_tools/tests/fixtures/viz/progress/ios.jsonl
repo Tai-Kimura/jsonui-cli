@@ -1,0 +1,10 @@
+{"device":"p7-ios","deviceId":"A2B58AAF-7CF3-431E-897E-AB0209F96B9F","event":"run_start","files":1,"platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","t":1792262571625,"v":1}
+{"attempt":1,"case":"passes","event":"case_start","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","t":1792262571648,"test":"progress p7","v":1}
+{"attempt":1,"case":"passes","durationMs":18,"event":"case_end","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","status":"passed","t":1792262571666,"test":"progress p7","v":1}
+{"attempt":0,"case":"skipped by flag","durationMs":0,"event":"case_end","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","status":"skipped","t":1792262571683,"test":"progress p7","v":1}
+{"attempt":0,"case":"android only","durationMs":0,"event":"case_end","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","status":"skipped","t":1792262571684,"test":"progress p7","v":1}
+{"attempt":1,"case":"fails with retry","event":"case_start","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","t":1792262571684,"test":"progress p7","v":1}
+{"attempt":1,"case":"fails with retry","durationMs":1069,"event":"case_end","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","status":"failed","t":1792262572753,"test":"progress p7","v":1}
+{"attempt":2,"case":"fails with retry","event":"case_start","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","t":1792262572753,"test":"progress p7","v":1}
+{"attempt":2,"case":"fails with retry","durationMs":1131,"event":"case_end","file":"progress/p7.test.json","platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","status":"failed","t":1792262573884,"test":"progress p7","v":1}
+{"event":"run_end","failed":1,"passed":1,"platform":"ios","run":"b0a648a8-f7a8-49bd-b5ee-a5b550f8fd3e","skipped":2,"t":1792262573901,"v":1}
