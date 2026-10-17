@@ -10,6 +10,7 @@
   "platform": "ios",
   "environment": "local",
   "algorithm": "dhash-64",
+  "hashed_with": "pillow-12",
   "threshold": 8,
   "rendered_by": {
     "ios.toolchain": "xcode=26.6 (17F113);sdk=iphonesimulator26.5;simulator_os=iOS 26.5;device=iPhone 16 Pro",

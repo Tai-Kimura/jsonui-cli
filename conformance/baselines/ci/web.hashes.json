@@ -10,6 +10,7 @@
   "platform": "web",
   "environment": "ci",
   "algorithm": "dhash-64",
+  "hashed_with": "pillow-12",
   "threshold": 8,
   "rendered_by": {
     "chromium": "Version 1.64.1",

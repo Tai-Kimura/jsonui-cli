@@ -77,6 +77,29 @@ HASH_SIZE = 64
 #: parameters change (stale-algorithm baselines are reported, not compared).
 ALGORITHM = f"dhash-{HASH_SIZE}"
 
+#: Where a manifest records WHAT computed its hashes, beside ``algorithm``
+#: (which records only how they are shaped). Value: :func:`hasher_identity`.
+#:
+#: 🔻 WHY THE SHAPE WAS NOT ENOUGH. Every bit of a dHash compares two pixels
+#: of a 65x64 picture Pillow resampled (LANCZOS) — so the hash is a function
+#: of the screenshot AND of Pillow's resampler. Pillow 13.0.0 resamples
+#: differently: conformance-mobile run 39012627109 read 99 byte-identical iOS
+#: screenshots as regressions, while the same artifacts under Pillow 12.3.0
+#: read 0 (ticket jui-conformance-dhash-depends-on-pillow-major). A distance
+#: across two hashers measures the library, not the screenshot, and it can
+#: err either way — it is only luck that this one came out red.
+#:
+#: 🔑 GRANULARITY IS THE MAJOR, AND THAT IS MEASURED, NOT ASSUMED. Measured
+#: 2026-10-17 on that run's ci artifacts (ios 946 / android 898 / web 894):
+#: Pillow 10.4.0, 11.3.0, 12.0.0, 12.1.0, 12.1.1, 12.2.0 and 12.3.0 give
+#: bit-identical dHash AND vdHash on all 2738 pictures; 13.0.0 moves the
+#: horizontal hash of 843 of 946 iOS pictures (max 46 bits; android and web
+#: 0). No minor in that window moved one bit, so a full-version pin would
+#: stop the gate on every patch release for a difference the evidence does
+#: not show. A future minor that DOES move bits is not covered — that is the
+#: price of the choice, stated rather than hidden.
+HASHER_FIELD = "hashed_with"
+
 #: Maximum Hamming distance treated as "same rendering".
 #:
 #: Calibrated 2026-07-02 against repeat-run variance of the web host
@@ -118,6 +141,61 @@ def _load_pillow():
             "install with: pip install 'jui-tools[conformance]' (or pip install Pillow)"
         ) from exc
     return Image
+
+
+def _pillow_version() -> str:
+    _load_pillow()
+    import PIL  # noqa: PLC0415
+
+    return str(PIL.__version__)
+
+
+def hasher_identity() -> str:
+    """``pillow-<major>`` of the Pillow this process hashes with.
+
+    Raises :class:`BaselineError` when Pillow is missing — there is then no
+    hasher to name, and no hash could be computed anyway.
+    """
+    return f"pillow-{_pillow_version().split('.', 1)[0]}"
+
+
+def hasher_mismatch(manifest: dict, label: str, platform: str, env: str) -> str | None:
+    """Why *manifest* cannot be compared with hashes computed HERE, or None.
+
+    A STOP, never a pass and never a verdict: the caller compares nothing and
+    reports this string. A manifest with no recorded hasher stops too — its
+    absence cannot be told apart from "made by another library", and every
+    manifest this repo commits records one.
+
+    The re-bake line below is kept on ONE source line for the same reason as
+    the env recipe in :func:`compare_platform`: line-oriented scanners
+    (tests/test_every_bake_recipe_forces_the_review.py) must see it whole.
+    """
+    current = hasher_identity()
+    recorded = manifest.get(HASHER_FIELD)
+    if recorded == current:
+        return None
+    rehash = f"`jui conformance baseline update --platform {platform} --env {env} --rehash --fail-on-moved`"
+    if not recorded:
+        head = (
+            f"cannot measure: {label} does not record which library computed its hashes "
+            f"(`{HASHER_FIELD}`), and this run hashes with {current} (Pillow {_pillow_version()})"
+        )
+    else:
+        head = (
+            f"cannot measure: {label} was hashed with {recorded}, and this run hashes with "
+            f"{current} (Pillow {_pillow_version()})"
+        )
+    return (
+        head
+        + " — dHash resamples through Pillow, and a different major draws a different "
+        "grid from the same bytes, so a distance across the two measures the library, "
+        "not the screenshot. Nothing was compared. Either judge with the recorded major "
+        "(`pip install 'jui-tools[conformance]'` — the extra in jui_tools/setup.py "
+        "caps Pillow at it), or move to the new one by re-baking EVERY baseline with it "
+        "in the same commit that raises that cap, after the old major's gate has judged "
+        f"the same artifacts clean: {rehash}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -472,6 +550,20 @@ class BaselineUpdateSummary:
     unstable_total: int = 0
     dropped: tuple[str, ...] = ()
     only_new: bool = False
+    #: The hasher this bake recorded (:func:`hasher_identity`).
+    hashed_with: str = ""
+    #: Set by a ``rehash`` bake: the hasher the committed file recorded
+    #: ("" when it recorded none). Its entries are listed in ``rehashed``
+    #: instead of same/moved, because a distance across two hashers is not a
+    #: measurement — the review of those pictures is the OLD major's gate run
+    #: on the same artifacts, not this classification.
+    rehashed_from: str | None = None
+    rehashed: tuple[str, ...] = ()
+    #: Per-OS buckets of OTHER OSes a rehash removed: their pictures are not
+    #: in this run's artifacts, so they cannot be re-hashed, and keeping them
+    #: under the new identity would be the mixed file the field exists to rule
+    #: out. Named so the loss of coverage is visible.
+    dropped_os_buckets: tuple[str, ...] = ()
 
     @property
     def written(self) -> int:
@@ -488,6 +580,7 @@ def update_baseline(
     os_key: str | None = None,
     only_new: bool = False,
     refuse_if_moved: bool = False,
+    rehash: bool = False,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
@@ -509,6 +602,14 @@ def update_baseline(
     Either way the summary carries the full classification (new / same / moved
     / dropped) so the caller can see what a wholesale write *would* have
     changed, before deciding it wanted one.
+
+    The manifest records the hasher (:data:`HASHER_FIELD`). A committed file
+    made by another one — or recording none — is refused: classifying against
+    it would compare across hashers, and an only-new bake would file hashes
+    from two libraries under one name. *rehash* is the one way across: a
+    wholesale bake whose committed entries are listed as ``rehashed`` rather
+    than classified. It is refused when the hasher did NOT change, because
+    there it would only be a way around *refuse_if_moved*.
     """
     conformance_dir = Path(conformance_dir)
     # The os-dependent carve-out below reads the SSoT beside conformance/. On a
@@ -541,6 +642,29 @@ def update_baseline(
 
     # Classify against what is already committed, whichever mode we are in.
     previous = load_baseline(conformance_dir, platform, env) or {}
+    current_hasher = hasher_identity()
+    previous_hasher = previous.get(HASHER_FIELD) or ""
+    previous_has_entries = bool(previous.get("hashes") or any(
+        (previous.get("hashes_by_os") or {}).values()
+    ))
+    hasher_changed = previous_has_entries and previous_hasher != current_hasher
+    label = f"baselines/{env}/{platform}.hashes.json"
+    if rehash and only_new:
+        raise BaselineError(
+            "--rehash and --only-new do not combine: only-new keeps the committed "
+            "hashes, and a rehash exists because they were made by another library"
+        )
+    if rehash and not hasher_changed:
+        raise BaselineError(
+            f"--rehash: {label} already records {current_hasher}, the hasher this run "
+            "uses — there is nothing to rehash, and passing it anyway would skip the "
+            "moved review. Drop the flag."
+        )
+    if hasher_changed and not rehash:
+        raise BaselineError(
+            (hasher_mismatch(previous, label, platform, env) or "")
+            + f" — {label} was NOT written"
+        )
     # 🔻 WHAT THIS RUN IS COMPARED AGAINST: the OS-agnostic entries plus THIS
     # OS's bucket. An entry filed under a different OS is deliberately not
     # prior — separating those is the whole point of the key, and folding them
@@ -596,6 +720,13 @@ def update_baseline(
         and _distance(n) < limit
     )
     dropped_names = sorted(n for n in prior if n not in measured)
+    rehashed_names: list[str] = []
+    if rehash:
+        # A distance from a hash another library computed is not a
+        # measurement, so nothing here is "same" or "moved"; the entries are
+        # named as rehashed and the file is rewritten wholesale.
+        rehashed_names = sorted(n for n in measured if n in prior)
+        same_names, moved_pairs, tolerated_pairs = [], (), ()
 
     if only_new:
         # Existing entries keep their committed hash; nothing is removed.
@@ -612,6 +743,10 @@ def update_baseline(
     # different axis). Keying the whole file by OS would assert the stronger
     # thing and make every re-bake answer a question it did not ask.
     by_os = {k: dict(v) for k, v in previous_by_os.items()}
+    dropped_os_buckets: tuple[str, ...] = ()
+    if rehash:
+        dropped_os_buckets = tuple(sorted(k for k in by_os if k != os_key))
+        by_os = {}
     os_dependent = os_dependent_screenshots_for(conformance_dir)
     carved = {n: hashes.pop(n) for n in sorted(hashes) if n in os_dependent}
     if carved:
@@ -694,6 +829,9 @@ def update_baseline(
         "platform": platform,
         "environment": env,
         "algorithm": ALGORITHM,
+        # What computed the hashes below — see HASHER_FIELD. Compared before
+        # anything else is, by every reader of these hashes.
+        HASHER_FIELD: current_hasher,
         "threshold": DEFAULT_THRESHOLD if threshold is None else int(threshold),
         # Which library drew these pixels. The manifest already recorded how
         # the measurement was taken (platform, env, algorithm, threshold) and
@@ -766,6 +904,10 @@ def update_baseline(
         only_new=only_new,
         tolerated=tolerated_pairs,
         unstable_total=len(unstable),
+        hashed_with=current_hasher,
+        rehashed_from=previous_hasher if rehash else None,
+        rehashed=tuple(rehashed_names),
+        dropped_os_buckets=dropped_os_buckets,
     )
 
 
@@ -932,6 +1074,21 @@ def compare_platform(
 
     if baseline.get("algorithm") != ALGORITHM:
         comparison.algorithm_mismatch = str(baseline.get("algorithm"))
+        return comparison
+
+    # Same shape is not same measurement: the hashes are also a function of
+    # the library that resampled the picture (HASHER_FIELD). Across two
+    # hashers every distance below would measure the library, so stop here
+    # and say so — an error, which the gate fails on as "not compared".
+    try:
+        stop = hasher_mismatch(
+            baseline, f"baselines/{env}/{platform}.hashes.json", platform, env
+        )
+    except BaselineError as exc:
+        comparison.error = str(exc)
+        return comparison
+    if stop:
+        comparison.error = stop
         return comparison
 
     hashes: dict = dict(baseline.get("hashes", {}))

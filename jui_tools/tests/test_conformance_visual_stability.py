@@ -125,6 +125,9 @@ class MovedJudgment(unittest.TestCase):
     #: these arms draw an arbitrary non-zero, because their subject is the
     #: HAMMING judgment and nothing here is about ink.
     MEASURED_INK = 4096
+    #: Stubbed like the readers: these arms run without Pillow, and the bake
+    #: names the hasher before it hashes anything.
+    HASHER = "pillow-12"
 
     def _artifact(self, name: str):
         # Only has to exist and end in .png: update_baseline globs the
@@ -143,6 +146,7 @@ class MovedJudgment(unittest.TestCase):
             json.dumps({
                 "platform": "ios", "environment": "local",
                 "algorithm": baseline.ALGORITHM,
+                baseline.HASHER_FIELD: self.HASHER,
                 "threshold": baseline.DEFAULT_THRESHOLD,
                 "rendered_by": {}, "hashes": {name: digest},
             }),
@@ -188,6 +192,7 @@ class MovedJudgment(unittest.TestCase):
         with mock.patch.object(baseline, "dhash_file", return_value=self.MEASURED), \
                 mock.patch.object(baseline, "vdhash_file", return_value=self.MEASURED), \
                 mock.patch.object(baseline, "ink_file", return_value=self.MEASURED_INK), \
+                mock.patch.object(baseline, "hasher_identity", return_value=self.HASHER), \
                 mock.patch.object(baseline, "_load_pillow", _no_pillow):
             summary = baseline.update_baseline(self.dir, "ios", env="local")
         return name, summary
