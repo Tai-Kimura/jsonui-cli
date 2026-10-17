@@ -1,0 +1,387 @@
+{
+ "perm": {
+  "dark": {
+   "board": {
+    "permNotes": [
+     "ProductDetail のレイアウトを実装",
+     "spec の構造ページの HTML を生成"
+    ],
+    "strip": [
+     "c9セッション c91e…待ち 0:11Bash jsonui-doc generate html --spec docs/screens/json/spec-",
+     "f2jsonui-implement待ち 0:01Bash jui buildb4 #2 ProductDetail のレイアウトを実装 › 詳細許可今後も許可"
+    ]
+   },
+   "detail": {
+    "act": "許可待ち: Bash jui build",
+    "focus": "tbd-close",
+    "perm": true,
+    "title": "ProductDetail のレイアウトを実装"
+   },
+   "robot": {
+    "act": "Write docs/screens/json/login.spec.json",
+    "name": "jsonui-define",
+    "recent": 2,
+    "spec": "ログイン（Login）の spec 書き込み中 39% · 状態",
+    "state": "入力",
+    "tasks": [
+     "作業中a0 #2Login 画面の spec を書く"
+    ]
+   },
+   "side": {
+    "chip": "許可待ち 2",
+    "rows": [
+     "task t-in_progress has-perm | b4 #2ProductDetail のレイアウトを実装許可待ちf2 jsonui-implementshop-app/Bash jui build許可今後も許可拒否",
+     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…JsonUIDocument/Bash jsonui-doc generate html -",
+     "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…jsonui-cli/"
+    ],
+    "sum": "未着手 5待ち 8作業中 8完了 3許可待ち 2"
+   }
+  },
+  "light": {
+   "afterAlways": {
+    "chip": "許可待ち 1",
+    "focus": "tbd-close",
+    "hist": [
+     "14:20:27ビューで許可し、Bash(jui build:*) を追加 · Bash jui build",
+     "14:20:27許可した Bash jui build（今後も許可: Bash(jui build:*)）"
+    ],
+    "rules": "このデモで足した常時許可: Bash(jui build:*) 取り消す",
+    "toast": "f2 の Bash を許可し、ルールを追加した（デモ。実際は Claude Code へ答えを返す）"
+   },
+   "afterDeny": {
+    "chipHidden": true,
+    "log": [
+     "14:20:27c9拒否したBash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.json",
+     "14:20:27f2許可したBash jui build（今後も許可: Bash(jui build:*)）"
+    ],
+    "stripCards": 0
+   },
+   "board": {
+    "permNotes": [
+     "ProductDetail のレイアウトを実装",
+     "spec の構造ページの HTML を生成"
+    ],
+    "strip": [
+     "c9セッション c91e…待ち 0:11Bash jsonui-doc generate html --spec docs/screens/json/spec-",
+     "f2jsonui-implement待ち 0:01Bash jui buildb4 #2 ProductDetail のレイアウトを実装 › 詳細許可今後も許可"
+    ]
+   },
+   "detail": {
+    "act": "許可待ち: Bash jui build",
+    "focus": "tbd-close",
+    "perm": true,
+    "title": "ProductDetail のレイアウトを実装"
+   },
+   "detailClosed": {
+    "focus": "note-open",
+    "hidden": true
+   },
+   "fromRobot": {
+    "detail": "ProductDetail の ViewModel を実装",
+    "rbHidden": true
+   },
+   "robot": {
+    "act": "Write docs/screens/json/login.spec.json",
+    "name": "jsonui-define",
+    "recent": 2,
+    "spec": "ログイン（Login）の spec 書き込み中 39% · 状態",
+    "state": "入力",
+    "tasks": [
+     "作業中a0 #2Login 画面の spec を書く"
+    ]
+   },
+   "robotB4": {
+    "name": "b4 のメインセッション",
+    "subs": [
+     "e6jsonui-define作業中Write docs/screens/json/signup.spec.json",
+     "f2jsonui-implement作業中Bash jui build（ビューで許可）"
+    ],
+    "tasks": 5
+   },
+   "side": {
+    "chip": "許可待ち 2",
+    "rows": [
+     "task t-in_progress has-perm | b4 #2ProductDetail のレイアウトを実装許可待ちf2 jsonui-implementshop-app/Bash jui build許可今後も許可拒否",
+     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…JsonUIDocument/Bash jsonui-doc generate html -",
+     "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…jsonui-cli/"
+    ],
+    "sum": "未着手 5待ち 8作業中 8完了 3許可待ち 2"
+   }
+  },
+  "phone": {
+   "perm": true,
+   "rbPos": "fixed",
+   "sw": 390
+  }
+ },
+ "phone": {
+  "pop-dark": {
+   "left": 8,
+   "right": 382,
+   "rows": [
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    }
+   ],
+   "sw": 390
+  },
+  "pop-light": {
+   "left": 8,
+   "right": 382,
+   "rows": [
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    }
+   ],
+   "sw": 390
+  },
+  "tasks-dark": {
+   "kanbanScroll": true,
+   "notesOut": false,
+   "overlap": false,
+   "sw": 390
+  },
+  "tasks-light": {
+   "kanbanScroll": true,
+   "notesOut": false,
+   "overlap": false,
+   "sw": 390
+  }
+ },
+ "scope": {
+  "afterUncheck": {
+   "count": "1 / 2 を表示",
+   "notes": 3,
+   "sess": "セッションc9"
+  },
+  "all": {
+   "chips": [
+    "セッション 7",
+    "許可待ち 2"
+   ],
+   "groups": [
+    "shop-app/3 セッション · 作業中 2",
+    "jsonui-cli/2 セッション · 許可待ち 1",
+    "JsonUIDocument/2 セッション · 許可待ち 1 · 作業中 1"
+   ],
+   "scope": "プロジェクトすべて",
+   "sessFilter": "すべて7動いている5許可待ち2待機2",
+   "specGroups": [
+    "shop-app/5",
+    "JsonUIDocument/1"
+   ]
+  },
+  "cli": {
+   "scope": "プロジェクトjsonui-cli/",
+   "specs": "jsonui-cli/ には画面の spec がない",
+   "tagOn": "jsonui-cli/"
+  },
+  "doc": {
+   "chips": "セッション 2 / 7",
+   "focus": "scope-top",
+   "groups": [
+    "JsonUIDocument/2 セッション · 許可待ち 1 · 作業中 1"
+   ],
+   "popHidden": true,
+   "scope": "プロジェクトJsonUIDocument/",
+   "specs": [
+    "属性リファレンス書き込み中 19%e1"
+   ],
+   "tasks": [
+    "c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…Bash jsonui-doc ",
+    "e1 #1属性リファレンスの spec を書く作業中e1 セッション e1d4…",
+    "e1 #2属性リファレンスを実装#1 待ち担当なし",
+    "c9 #2コンポーネント一覧に新しい属性を反映未着手担当なし",
+    "c9 #3検索ページの文言を直す完了c9 セッション c91e…"
+   ],
+   "tests": "JsonUIDocument/ で動いているテストはない",
+   "ticker": [
+    "14:20:20e1Writedocs/screens/json/attribu",
+    "14:20:16c9PermissionRequestBash jsonui-d",
+    "14:20:00c9Readdocs/screens/json/spec-ana"
+   ]
+  },
+  "docSpecs": {
+   "cards": 6,
+   "side": 7,
+   "title": "spec ボード · JsonUIDocument/"
+  },
+  "docTasks": {
+   "notes": 5,
+   "sess": "セッションすべて（2）",
+   "strip": "許可を求めています1ターミナルでも答えられ、先に答えた方が使われるc9セッション c91e…待ち 0:15Bash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.jsonc9 #1 spec の構造ページの HTML を生成 › 詳細許可今後も許可拒否ほかのプロジェクトでも 1 件が許可を待っている すべての",
+   "title": "タスクボード · JsonUIDocument/"
+  },
+  "folded": {
+   "expanded": "false",
+   "shopSessions": 0
+  },
+  "lanes": {
+   "lanes": [
+    "7cjsonui-cli/許可待ち2 件",
+    "c9JsonUIDocument/許可待ち3 件",
+    "a0shop-app/作業中8 件",
+    "b4shop-app/作業中5 件",
+    "4fjsonui-cli/待機3 件",
+    "d8shop-app/待機1 件"
+   ],
+   "sess": "セッション6 / 7",
+   "stripCards": 2
+  },
+  "log": {
+   "count": "11 件（全 21 件）",
+   "rowsWithA0": 0,
+   "who": "ロボット8 / 13"
+  },
+  "phone": {
+   "left": 8,
+   "right": 382,
+   "sw": 390
+  },
+  "pop": [
+   "すべてのプロジェクト3 プロジェクト · 7 セッション許可待ち 2作業中 6 体作業中の spec 6",
+   "shop-app/~/work/shop-app · 3 セッション作業中 5 体作業中の spec 5",
+   "jsonui-cli/~/resource/jsonui-cli · 2 セッション許可待ち 1",
+   "JsonUIDocument/~/resource/JsonUIDocument · 2 セッション許可待ち 1作業中 1 体作業中の spec 1"
+  ],
+  "popClosed": {
+   "focus": "tb-sess",
+   "hidden": true,
+   "tbOpen": true
+  },
+  "sessPop": [
+   "c9セッション c91e…3 タスク許可待ち",
+   "e1セッション e1d4…2 タスク作業中"
+  ],
+  "waitingOnly": [
+   "7cセッション 7c3f…許可待ち",
+   "c9セッション c91e…許可待ち"
+  ]
+ },
+ "shots": {
+  "click_board": {
+   "tb": false,
+   "title": "spec ボード",
+   "wb": true
+  },
+  "click_tasks": {
+   "tb": true,
+   "title": "spec ボード",
+   "wb": false
+  },
+  "click_tile-login": {
+   "tb": false,
+   "title": "ログイン（Login）",
+   "wb": true
+  },
+  "home": {
+   "nav": [
+    "-:概要記入済み",
+    "c-impl:構造実装 8/12",
+    "-:状態実装 0/5",
+    "-:データ実装 0/6",
+    "-:操作実装 0/4",
+    "-:遷移実装 0/2",
+    "-:分岐テスト 0/3"
+   ]
+  },
+  "login": {
+   "act": "wb-sec-2",
+   "empty": 5,
+   "focus": "wb-code",
+   "title": "ログイン（Login）",
+   "writing": 1
+  },
+  "overview": {
+   "cards": 30,
+   "groups": [
+    "作業中6",
+    "途中8",
+    "未着手6",
+    "完了10"
+   ]
+  },
+  "panel": {
+   "filters": [
+    "作業中6",
+    "途中8",
+    "未着手6",
+    "完了10",
+    "すべて30"
+   ],
+   "rows": [
+    "ログイン書き込み中 39%a3",
+    "新規登録書き込み中 31%e6",
+    "ホーム実装中 28%a5",
+    "商品詳細実装中 36%f2",
+    "カートテスト中 1/8a2",
+    "属性リファレンス書き込み中 12%e1"
+   ],
+   "taskSum": "未着手 5待ち 8作業中 8完了 3許可待ち 2"
+  },
+  "phone": {
+   "sw": 390
+  },
+  "phoneDrawer": {
+   "open": true,
+   "pos": "absolute"
+  },
+  "phoneDrawerClosed": true,
+  "phoneTasks": {
+   "cols": "346px",
+   "sw": 390
+  },
+  "wideBtn": "パネルを開く"
+ },
+ "waiting": {
+  "chips": [
+   "すべて7",
+   "動いている5",
+   "許可待ち2",
+   "待機2"
+  ],
+  "groupNotes": [
+   "条件に合うセッションはない"
+  ],
+  "idleRows": [
+   "d8セッション d8a5…待機",
+   "4fセッション 4f2b…待機"
+  ],
+  "pop": [
+   "すべてのプロジェクト3 プロジェクト · 7 セッション許可待ち 2作業中 7 体作業中の spec 6",
+   "shop-app/~/work/shop-app · 3 セッション作業中 6 体作業中の spec 5",
+   "jsonui-cli/~/resource/jsonui-cli · 2 セッション許可待ち 1",
+   "JsonUIDocument/~/resource/JsonUIDocument · 2 セッション許可待ち 1作業中 1 体作業中の spec 1"
+  ],
+  "waitingRows": [
+   "7cセッション 7c3f…許可待ち",
+   "c9セッション c91e…許可待ち"
+  ]
+ }
+}
