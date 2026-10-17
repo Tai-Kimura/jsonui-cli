@@ -171,3 +171,39 @@ def test_progress_records_fill_the_test_run_the_device_and_the_spec(tmp_path):
     world.publish()
     assert "busyBy" not in state.slices["devices"][0]
     assert "progressRun" not in state.slices["tests"][0]  # the link stays on the server
+
+
+def test_mock_status_tells_our_mock_from_another_projects(tmp_path):
+    """identity names the projectRoot: another project's mock on our port is not ours."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+
+    from jui_cli.viz.sources import mock_status
+
+    root = {"value": str(tmp_path)}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            body = json.dumps({"pid": 4242, "projectRoot": root["value"], "mockDir": "x"}).encode()
+            self.send_response(200 if self.path == "/__jsonui__/identity" else 404)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    config = {"mock": {"server": {"port": port}}}
+    try:
+        assert mock_status.status(tmp_path, config) == {"running": True, "port": port, "pid": 4242}
+        root["value"] = "/work/another-project"
+        assert mock_status.status(tmp_path, config) == {"running": False, "port": port, "other": True}
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert mock_status.status(tmp_path, config) == {"running": False, "port": port}
+    assert mock_status.mock_port({}) == 8790 and mock_status.mock_port({"mock": {"server": {"port": True}}}) == 8790
+

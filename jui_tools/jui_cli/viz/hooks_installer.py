@@ -76,6 +76,24 @@ def _is_python(exe: str) -> bool:
     return os.path.basename(exe).startswith("python")
 
 
+#: The synchronous PermissionRequest hook (P6) is cut off by Claude Code
+#: after this many seconds; the server answers within decideWaitSec (30 by
+#: default), so this must stay well above it.
+DECIDE_TIMEOUT_SEC = 60
+
+
+def our_decide_handler(python: str | None = None, forward: Path | None = None) -> dict:
+    """Not async: Claude Code waits for its answer — and, measured, shows the
+    terminal dialog meanwhile and takes whichever answer comes first."""
+    python = python or sys.executable
+    forward = forward or forward_path()
+    return {
+        "type": "command",
+        "command": f"{shlex.quote(python)} -I -S {shlex.quote(str(forward))} --decide",
+        "timeout": DECIDE_TIMEOUT_SEC,
+    }
+
+
 def is_ours(handler) -> bool:
     """A python running forward.py — not merely a command that mentions its path.
 
@@ -135,7 +153,7 @@ def strip_ours(settings: dict) -> tuple[dict, bool]:
     return out, removed_any
 
 
-def add_ours(settings: dict, handler: dict) -> dict:
+def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None) -> dict:
     out, _ = strip_ours(settings)
     hooks = out.get("hooks")
     if hooks is None:
@@ -150,6 +168,8 @@ def add_ours(settings: dict, handler: dict) -> dict:
             raise SettingsError(f"settings.json の hooks.{event} が配列ではありません。直してから再実行してください")
         group = {"matcher": "*", "hooks": [handler]} if event in TOOL_EVENTS else {"hooks": [handler]}
         groups.append(group)
+        if event == "PermissionRequest" and decide_handler is not None:
+            groups.append({"matcher": "*", "hooks": [decide_handler]})
     return out
 
 
@@ -268,10 +288,11 @@ def _apply(transform, dry_run: bool) -> Result:
 
 def install(dry_run: bool = False, python: str | None = None) -> Result:
     handler = our_handler(python)
+    decide_handler = our_decide_handler(python)
     value = str(progress_dir())
 
     def transform(data: dict):
-        new = add_ours(data, handler)
+        new = add_ours(data, handler, decide_handler)
         new, warning = add_env(new, value)
         return new, [w for w in (warning,) if w] + _disabled_warning(new)
 
@@ -325,8 +346,12 @@ def status() -> dict:
         script = next((a for a in argv if a.endswith("forward.py")), "")
         if not (exe and Path(exe).exists() and script and Path(script).exists()):
             broken.append(command)
+    decide = any(is_ours(h) and "--decide" in str(h.get("command", ""))
+                 for g in (hooks.get("PermissionRequest") or []) if isinstance(g, dict)
+                 for h in (g.get("hooks") or []))
     env = data.get("env") if isinstance(data.get("env"), dict) else {}
     return {
+        "decide": decide,
         "readable": True,
         "path": str(path),
         "events": events,

@@ -12,6 +12,45 @@ import sys
 MAX_BODY = 2_000_000
 
 
+def decide(body: bytes, info: dict) -> None:
+    """--decide: the synchronous PermissionRequest hook (P6).
+
+    Posts the request to /hook/decide and prints the server's answer — a
+    hookSpecificOutput JSON — when the browser gave one in time. No answer,
+    no server, any error: print nothing, so the usual terminal dialog stays.
+    Measured 2026-10-18 (Claude Code 2.1.302): the dialog shows at once while
+    this waits, an answer in the terminal goes through without waiting for it,
+    and an answer printed here closes the dialog.
+    """
+    import json
+    import socket
+
+    port = int(info["port"])
+    wait = float(info.get("decideWaitSec", 30))
+    head = (
+        f"POST /hook/decide HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+        f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
+        f"X-Jui-Viz-Token: {info['token']}\r\nConnection: close\r\n\r\n"
+    )
+    with socket.create_connection(("127.0.0.1", port), timeout=1.0) as s:
+        s.sendall(head.encode("ascii") + body)
+        s.settimeout(wait + 5)
+        raw = b""
+        while len(raw) < 1_000_000:
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            raw += chunk
+    status, _, rest = raw.partition(b"\r\n")
+    if b" 200 " not in status + b" ":
+        return
+    answer = rest.partition(b"\r\n\r\n")[2]
+    data = json.loads(answer.decode("utf-8"))
+    if isinstance(data, dict) and isinstance(data.get("hookSpecificOutput"), dict):
+        sys.stdout.write(json.dumps(data))
+        sys.stdout.flush()
+
+
 def main() -> int:
     try:
         # Drain stdin first so Claude Code never writes into a closed pipe.
@@ -25,6 +64,9 @@ def main() -> int:
 
         with open(info_path, encoding="utf-8") as f:
             info = json.load(f)
+        if "--decide" in sys.argv[1:]:
+            decide(body, info)
+            return 0
         port = int(info["port"])
         head = (
             f"POST /hook HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
