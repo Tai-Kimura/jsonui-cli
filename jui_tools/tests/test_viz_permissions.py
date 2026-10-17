@@ -327,3 +327,14 @@ def test_after_the_asked_tool_runs_nothing_still_says_waiting():
     assert state.slices["sessions"][0]["status"] == "busy"
     agent = state.slices["agents"][0]
     assert agent["state"] == "idle" and not agent["act"].startswith("許可待ち")
+
+
+def test_a_command_card_shows_the_command_not_only_the_models_description():
+    """The summary was the description ("run"): the page asked for a decision
+    without showing what would run (d2, 10-18)."""
+    book = PermissionBook()
+    card = book.from_hook("s1", "s1", "Bash", {"command": "rm -rf build", "description": "run"}, "u", None, 0)
+    assert card["summary"] == "rm -rf build" and card["description"] == "run"
+    plain = book.from_hook("s1", "s1", "Bash", {"command": "ls"}, "v", None, 0)
+    assert plain["summary"] == "ls" and "description" not in plain
+

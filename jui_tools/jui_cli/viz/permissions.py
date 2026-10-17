@@ -35,8 +35,14 @@ def _clip(text, n: int) -> str:
 
 
 def summary_for(tool: str, tool_input: dict) -> str:
+    """What the request will do — for a command, the command itself.
+
+    It was the description first ("run"), and the page asked for a decision
+    without showing what would run (d2, 10-18). The description, written by
+    the model, goes in its own field next to it.
+    """
     if tool == "Bash":
-        return _clip(tool_input.get("description") or tool_input.get("command") or "Bash", SUMMARY_MAX)
+        return _clip(tool_input.get("command") or tool_input.get("description") or "Bash", SUMMARY_MAX)
     path = tool_input.get("file_path") or tool_input.get("notebook_path")
     if path:
         return _clip(f"{tool} {path}", SUMMARY_MAX)
@@ -82,6 +88,8 @@ class PermissionBook:
         card = {
             "id": self._new_id(), "sessionId": sid, "agentId": aid, "toolName": tool,
             "summary": summary_for(tool, tool_input),
+            **({"description": _clip(tool_input["description"], SUMMARY_MAX)}
+               if isinstance(tool_input.get("description"), str) and tool_input["description"].strip() else {}),
             "preview": _clip(json.dumps(tool_input, ensure_ascii=False), PREVIEW_MAX),
             "status": "pending",
             "can": {"allowDeny": False, "always": False, "reason": False},
