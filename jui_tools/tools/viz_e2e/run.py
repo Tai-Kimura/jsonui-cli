@@ -86,10 +86,14 @@ class RealServer:
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
         home.mkdir(parents=True, exist_ok=True)
-        base = os.environ.get("JUI_VIZ_E2E_SERVE", "").split() or [sys.executable, str(HERE.parents[1] / "bin" / "jui")]
-        env = dict(os.environ, HOME=str(home), JUI_VIZ_E2E="1")
+        self.home, self.replay, self.speed = home, replay, speed
         self.log = open(home / "serve.log", "w")
-        self.proc = subprocess.Popen(base + ["viz", "serve", "--port", str(self.port), "--replay", str(replay), "--speed", str(speed)],
+        self._start()
+
+    def _start(self):
+        base = os.environ.get("JUI_VIZ_E2E_SERVE", "").split() or [sys.executable, str(HERE.parents[1] / "bin" / "jui")]
+        env = dict(os.environ, HOME=str(self.home), JUI_VIZ_E2E="1")
+        self.proc = subprocess.Popen(base + ["viz", "serve", "--port", str(self.port), "--replay", str(self.replay), "--speed", str(self.speed)],
                                      stdout=self.log, stderr=subprocess.STDOUT, env=env)
         import urllib.request
         for _ in range(100):
@@ -101,15 +105,30 @@ class RealServer:
                     break
                 time.sleep(0.1)
         self.stop()
-        raise RuntimeError(f"jui viz serve did not start: {(home / 'serve.log').read_text()[-500:]}")
+        raise RuntimeError(f"jui viz serve did not start: {(self.home / 'serve.log').read_text()[-500:]}")
 
-    def stop(self):
+    def _end(self):
         if self.proc.poll() is None:
             self.proc.terminate()  # our own child
             try:
                 self.proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+
+    def restart(self):
+        """Stop the server and start it again on the same port: a new process, so a new token."""
+        self._end()
+        self._start()
+
+    def token(self) -> str:
+        import re
+        import urllib.request
+        html = urllib.request.urlopen(f"{self.url}/", timeout=2).read().decode()
+        m = re.search(r'<meta name="jui-viz-token" content="([^"]*)">', html)
+        return m.group(1) if m else ""
+
+    def stop(self):
+        self._end()
         self.log.close()
 
 
@@ -217,6 +236,7 @@ def main(argv=None) -> int:
                 import live
                 await live.run(pw, out, failures, Server)
                 await live.run_real(pw, out, failures, RealServer)
+                await live.run_real_decide(pw, out, failures)
 
     asyncio.run(go())
     if a.record_demo:

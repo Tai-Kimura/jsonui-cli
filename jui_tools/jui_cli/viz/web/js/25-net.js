@@ -72,6 +72,11 @@ function netConnect() {
       }
       case 'events': if (H) H.events(Array.isArray(msg.items) ? msg.items : [], !!msg.older); break;
       case 'notice': if (H) H.notice(msg.level === 'warn' ? 'warn' : 'info', String(msg.text || '')); break;
+      case 'sheet': {   // the answer to spec.sheet (plan 09 §6); a failure comes as an ack
+        if (H) H.sheet(msg);
+        const w = NET.waits.get(msg.reqId); if (w) { NET.waits.delete(msg.reqId); w({ ok: true }); }
+        break;
+      }
       case 'ack': { const w = NET.waits.get(msg.reqId); if (w) { NET.waits.delete(msg.reqId); w({ ok: !!msg.ok, error: msg.error }); } break; }
       default: break;
     }

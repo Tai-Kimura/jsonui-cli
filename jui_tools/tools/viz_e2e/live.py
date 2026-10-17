@@ -228,6 +228,112 @@ async def scenario_themes(browser, srv, out, failures, res):
         failures.append(f"live/themes: request outside the server: {u}")
 
 
+async def scenario_work(browser, srv, out, failures, res):
+    """P4 / P5: tasks, the big spec board and its links, the sheet, the test run, the permission cards."""
+    watch = Watch(origin=srv.url)
+    step(srv, "start")
+    page = await new_page(browser, watch, "work", **DESKTOP)
+    await page.goto(srv.url + "/")
+    await ready(page)
+    await wait(page, "() => window.__dbg.model().specs.length === 10 && window.__dbg.model().tasks.length === 3", label="specs and tasks")
+    await page.wait_for_timeout(1500)
+    await page.screenshot(path=f"{out}/work-main.png")
+    # the big spec board, its tiles, and the line from the writing robot
+    res["board"] = await page.evaluate("""() => { const L = window.__dbg.live3d(); const R = L && L.rooms['p-shop'];
+      const ln = window.__dbg.links().a3; return { big: !!(R && R.pb.big), tiles: R ? R.pb.tiles.length : 0, easel: !!(R && R.tb), cli: !!(L && L.rooms['p-cli'] && !L.rooms['p-cli'].pb.big) }; }""")
+    check(failures, res["board"] == {"big": True, "tiles": 10, "easel": True, "cli": True}, f"work: boards {res['board']}")
+    # side panel: the test run (escaped case names) and the tasks
+    res["tests"] = await page.evaluate("() => ({ text: document.getElementById('tests').textContent.replace(/\\s+/g, ' '), rows: document.querySelectorAll('#tests .cases li').length, injected: !!document.querySelector('#tests script') })")
+    check(failures, res["tests"]["rows"] == 3 and "<script>x</script>" in res["tests"]["text"] and not res["tests"]["injected"], f"work: tests panel {res['tests']}")
+    check(failures, "iPhone 16（iOS 26.2）" in res["tests"]["text"], "work: the run's device is named")
+    # the task board: columns, the waiting task, the permission strip
+    await page.click("#btn-taskboard")
+    await page.wait_for_function("() => { const el = document.getElementById('tb'); return !el.hidden && el.classList.contains('show'); }")
+    await page.wait_for_timeout(600)
+    res["kanban"] = await page.evaluate("""() => Object.fromEntries([...document.querySelectorAll('#kanban .kcol')].map((c) => [c.className.split(' ').find((x) => x.startsWith('k-')),
+      [...c.querySelectorAll('.n-subj')].map((n) => n.textContent)]))""")
+    check(failures, res["kanban"].get("k-todo") == ["文言を strings.json に登録"] and res["kanban"].get("k-doing") == ["Login 画面の spec を書く"]
+          and res["kanban"].get("k-wait") == ["Login 画面を実装"], f"work: kanban columns {res['kanban']}")
+    res["strip"] = await page.evaluate("""() => [...document.querySelectorAll('#perm-strip .pcard')].map((c) => ({ text: c.textContent.replace(/\\s+/g, ' '),
+      buttons: [...c.querySelectorAll('[data-do]')].map((b) => b.dataset.do), relay: !!c.querySelector('.perm-relay') }))""")
+    await page.screenshot(path=f"{out}/work-taskboard.png")
+    s1 = next((x for x in res["strip"] if "login.spec.json" in x["text"]), None)
+    s2 = next((x for x in res["strip"] if "xcodebuild" in x["text"]), None)
+    check(failures, s1 and s1["buttons"] == ["allow", "deny"] and not s1["relay"], f"work: relay prompt has 許可 / 拒否 only: {s1}")
+    check(failures, s2 and s2["buttons"] == [] and s2["relay"] and "jui viz relay install" in s2["text"], f"work: no-relay prompt guides instead: {s2}")
+    check(failures, s1 and "#2" in s1["text"] and s2 and "タスクなし" in s2["text"], "work: the prompt is on its owner's task only")
+    # allow from the view: perm.decide goes out, the card turns "sent"
+    await page.click('#perm-strip [data-do="allow"][data-perm="perm-1"]')
+    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('送信済み'))", label="perm-1 sent")
+    res["decisions"] = fake_state(srv)["decisions"]
+    check(failures, res["decisions"] == [{"permId": "perm-1", "behavior": "allow", "always": None, "reason": None}], f"work: perm.decide sent {res['decisions']}")
+    await page.screenshot(path=f"{out}/work-sent.png")
+    # P6: "from now on" asks first — the rules and where they go, one box each; Esc sends nothing
+    await page.click('#perm-strip [data-do="always"][data-perm="perm-3"]')
+    await wait(page, "() => !!document.querySelector('.perm-confirm')", label="the from-now-on dialog")
+    res["confirm"] = await page.evaluate("() => [...document.querySelectorAll('.pcf-list li')].map((l) => l.textContent.replace(/\\s+/g, ' '))")
+    await page.screenshot(path=f"{out}/work-always-confirm.png")
+    check(failures, len(res["confirm"]) == 2 and "Bash(npm test:*)" in res["confirm"][0] and "settings.local.json" in res["confirm"][0]
+          and "Bash(npm:*)" in res["confirm"][1] and "共有" in res["confirm"][1], f"work: the dialog lists the rules and where: {res['confirm']}")
+    await page.keyboard.press("Escape")
+    await wait(page, "() => !document.querySelector('.perm-confirm')", label="Esc closes the dialog")
+    check(failures, len(fake_state(srv)["decisions"]) == 1, "work: Esc sent nothing")
+    await page.click('#perm-strip [data-do="always"][data-perm="perm-3"]')
+    await wait(page, "() => !!document.querySelector('.perm-confirm')", label="the dialog again")
+    await page.click('.perm-confirm [data-pcf="1"]')        # keep only the narrow rule
+    await page.click('.perm-confirm [data-pcf-ok]')
+    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('ルール 1 件を追加・フック経由'))", label="perm-3 sent with one rule")
+    res["perm4Buttons"] = await page.evaluate("() => [...document.querySelectorAll('#perm-strip [data-perm=\"perm-4\"]')].map((b) => b.dataset.do)")
+    check(failures, res["perm4Buttons"] == ["allow", "deny"], f"work: no suggestions, no 今後も許可: {res['perm4Buttons']}")
+    # P6: a reason goes with deny, from the detail drawer
+    await page.click('#perm-strip [data-open="perm:perm-4"]')
+    await wait(page, "() => !!document.getElementById('tbd-reason')", label="the reason box")
+    await page.fill('#tbd-reason', 'ビルドの成果物は消さないで <b>x</b>')
+    await page.click('#tb-detail [data-do="deny"]')
+    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('拒否・理由つき'))", label="perm-4 denied with a reason")
+    res["decisionsP6"] = fake_state(srv)["decisions"][1:]
+    check(failures, res["decisionsP6"] == [{"permId": "perm-3", "behavior": "allow", "always": [0], "reason": None},
+                                           {"permId": "perm-4", "behavior": "deny", "always": None, "reason": "ビルドの成果物は消さないで <b>x</b>"}],
+          f"work: P6 decisions {res['decisionsP6']}")
+    if await page.evaluate("() => !document.getElementById('tb-detail').hidden"):
+        await page.keyboard.press("Escape")
+    await page.keyboard.press("Escape")
+    await page.wait_for_function("() => document.getElementById('tb').hidden")
+    await page.wait_for_timeout(2600)
+    # the sheet of the spec being written
+    await page.click("#btn-specboard")
+    await page.wait_for_function("() => { const el = document.getElementById('wb'); return !el.hidden && el.classList.contains('show'); }")
+    login = await page.evaluate("() => window.__dbg.model().specs.findIndex((x) => x.name === 'Login')")
+    await page.click(f'.ov-card[data-idx="{login}"]')
+    await wait(page, "() => document.querySelectorAll('#wb-code section.sc').length === 8", label="the sheet")
+    res["sheet"] = await page.evaluate("""() => ({ title: document.getElementById('wb-title').textContent, writing: [...document.querySelectorAll('#wb-code .sc-writing h3')].map((h) => h.textContent),
+      components: document.querySelectorAll('#wb-sec-1 .rows li').length, wf: document.querySelectorAll('#wb-sec-1 .wf').length,
+      escaped: document.getElementById('wb-sec-1').textContent.includes('<b>escaped</b>'), injected: !!document.querySelector('#wb-sec-1 .rows b, #wb-sec-1 .wf-id b'),
+      related: document.getElementById('wb-sec-7').textContent.replace(/\\s+/g, ' ') })""")
+    await page.screenshot(path=f"{out}/work-sheet.png")
+    check(failures, res["sheet"]["writing"] == ["状態"] and res["sheet"]["components"] == 5 and res["sheet"]["escaped"] and not res["sheet"]["injected"], f"work: sheet {res['sheet']}")
+    await page.keyboard.press("Escape")
+    await page.wait_for_function("() => document.getElementById('wb').hidden")
+    # progress: task 2 done, task 3 free; the run ends failed
+    step(srv, "progress")
+    await wait(page, "() => window.__dbg.model().tasks.find((t) => t.id === '3').col === 'todo' && window.__dbg.model().tasks.find((t) => t.id === '2').col === 'done'", label="task 2 done, 3 to do")
+    await wait(page, "() => document.getElementById('tests').textContent.includes('2 passed, 1 failed')", label="the run's summary")
+    res["afterProgress"] = await page.evaluate("() => ({ tests: document.getElementById('tests').textContent.replace(/\\s+/g, ' ').slice(0, 120), links: !!(window.__dbg.links().a3 && window.__dbg.model().specs[0].by) })")
+    step(srv, "terminal")
+    await wait(page, "() => document.getElementById('chip-perm').textContent === '許可待ち 1'", label="one prompt left (the sent one)")
+    # a project that is not JsonUI: no spec, no test
+    await page.click('.tag.room[data-set-project="p-cli"]')
+    await page.wait_for_timeout(2500)
+    res["cli"] = await page.evaluate("() => ({ specs: document.getElementById('spec-list').textContent, tests: document.getElementById('tests').textContent })")
+    check(failures, "spec がない" in res["cli"]["specs"] and "まだ無い" in res["cli"]["tests"], f"work: non-JsonUI room {res['cli']}")
+    await page.screenshot(path=f"{out}/work-cli.png")
+    await page.close()
+    for line in watch.console:
+        failures.append(f"live/work: console: {line}")
+    for u in watch.foreign:
+        failures.append(f"live/work: request outside the server: {u}")
+
+
 async def run(pw, out, failures, Server):
     out = pathlib.Path(out) / "live"
     out.mkdir(parents=True, exist_ok=True)
@@ -236,7 +342,8 @@ async def run(pw, out, failures, Server):
     try:
         for name, build, fn in (("two-projects", scenarios.two_projects, scenario_two_projects),
                                 ("themes", scenarios.two_projects, scenario_themes),
-                                ("empty", scenarios.empty, scenario_empty)):
+                                ("empty", scenarios.empty, scenario_empty),
+                                ("work", scenarios.work, scenario_work)):
             path = scenarios.write(build(), out / f"{name}.jsonl")
             srv = Server(scenario=path)
             t0 = time.monotonic()
@@ -279,6 +386,18 @@ async def run_real(pw, out, failures, RealServer):
         res["ticker"] = await page.evaluate("() => [...document.querySelectorAll('#ticker li')].map((l) => l.textContent)")
         await page.screenshot(path=f"{out}/real-end.png")
         check(failures, res["rooms"] == ["shop-app/", "jsonui-cli/"], f"real: rooms {res['rooms']}")
+        # The server goes away and comes back on the same port with a new token (dd's P3 review): the page shows
+        # 再接続中…, fetches the new token itself and is connected again — the same page, never reloaded.
+        await page.evaluate("() => { window.__notReloaded = true; }")
+        before = srv.token()
+        srv.restart()
+        res["restart"] = {"newToken": bool(before) and srv.token() != before}
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '再接続中…'", polling=50, label="reconnecting after the restart")
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", timeout=40000, label="connected again")
+        await wait(page, "() => document.querySelectorAll('.tag.room').length === 2", label="the rooms after the restart")
+        res["restart"]["sameTab"] = await page.evaluate("() => window.__notReloaded === true")
+        res["restart"]["metaKeptOld"] = await page.evaluate("(t) => document.querySelector('meta[name=\"jui-viz-token\"]').content === t", before)
+        check(failures, res["restart"] == {"newToken": True, "sameTab": True, "metaKeptOld": True}, f"real: reconnect after a restart {res['restart']}")
         await page.close()
         # The demo from the real server: same files, the server's CSP and static routes.
         page = await new_page(browser, watch, "real-demo", **DESKTOP)
@@ -299,3 +418,111 @@ async def run_real(pw, out, failures, RealServer):
         await browser.close()
     print(f"  real/two-projects: {time.monotonic() - t0:.0f}s", flush=True)
     (out / "real-results.json").write_text(dump(res) + "\n")
+
+
+async def run_real_decide(pw, out, failures):
+    """P6 end to end on the real server: `jui viz serve` in a throwaway HOME, the real forward.py posting a
+    session's tool call and a PermissionRequest (async) and waiting with --decide (the synchronous hook); the
+    page answers "from now on" with one of two suggestions, then a reasoned deny; the hook prints them."""
+    import json as _json
+    import os
+    import subprocess
+    import sys as _sys
+    out = pathlib.Path(out) / "real-decide"
+    out.mkdir(parents=True, exist_ok=True)
+    home = out / "home"
+    home.mkdir(exist_ok=True)
+    jt = pathlib.Path(__file__).resolve().parents[2]
+    forward = jt / "jui_cli" / "viz" / "forward.py"
+    from run import free_port
+    port = free_port()
+    env = dict(os.environ, HOME=str(home), JUI_VIZ_E2E="1")
+    log = open(out / "serve.log", "w")
+    srv = subprocess.Popen([_sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
+    url = f"http://127.0.0.1:{port}"
+    res = {}
+
+    def hook(payload, decide=False):
+        args = [_sys.executable, "-I", "-S", str(forward)] + (["--decide"] if decide else [])
+        p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(os.environ, HOME=str(home)))
+        p.stdin.write(_json.dumps(payload).encode()); p.stdin.close()
+        if decide:
+            return p
+        p.wait(timeout=10)
+        return None
+
+    sid, cwd = "e2e00000-0000-4000-8000-000000000001", "/work/decide-app"
+    base = {"session_id": sid, "cwd": cwd, "transcript_path": "/work/home/t.jsonl", "permission_mode": "default"}
+    sugg = [{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm test:*"}], "behavior": "allow", "destination": "localSettings"},
+            {"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm:*"}], "behavior": "allow", "destination": "projectSettings"}]
+    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+    t0 = time.monotonic()
+    try:
+        import urllib.request
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"{url}/health", timeout=1).read(); break
+            except OSError:
+                time.sleep(0.1)
+        watch = Watch(origin=url)
+        page = await new_page(browser, watch, "real-decide", **DESKTOP)
+        await page.goto(url + "/")
+        await ready(page)
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        hook(dict(base, hook_event_name="SessionStart", source="startup"))
+        await wait(page, "() => window.__dbg.robots.length === 1", label="the session's robot")
+        await page.wait_for_timeout(5500)   # one presence report after the page is up
+        for n, (cmd, answer) in enumerate((("npm test -- --progress", "always"), ("rm -rf build", "deny"))):
+            req = dict(base, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": cmd, "description": "run"},
+                       permission_suggestions=sugg)
+            hook(req)                       # the async forward reports it first
+            # The card is drawn before --decide arrives (nothing allowed yet: answer in the terminal); --decide then
+            # allows the buttons on the same card — a card cached on its id and status alone would keep that note.
+            await wait(page, "(cmd) => [...document.querySelectorAll('#tasks li')].some((li) => li.textContent.includes(cmd) && li.querySelector('.perm-relay'))", arg=cmd,
+                       timeout=15000, label=f"the card for {cmd} before --decide")
+            waiting = hook(req, decide=True)
+            await wait(page, "(cmd) => [...document.querySelectorAll('#tasks .perm-box, #tasks li')].some((li) => li.textContent.includes(cmd) && li.querySelector('[data-do]'))", arg=cmd,
+                       timeout=15000, label=f"the card for {cmd}")
+            if answer == "always":
+                await page.click(f"#tasks li:has-text('{cmd}') [data-do='always']")
+                await wait(page, "() => !!document.querySelector('.perm-confirm')", label="the dialog")
+                await page.click('.perm-confirm [data-pcf="1"]')
+                await page.click('.perm-confirm [data-pcf-ok]')
+            else:
+                await page.click(f"#tasks li:has-text('{cmd}') .task-open")
+                await page.wait_for_function("() => { const el = document.getElementById('tb'); return !el.hidden && el.classList.contains('show'); }")
+                await wait(page, "() => !!document.getElementById('tbd-reason')", label="the reason box")
+                await page.fill("#tbd-reason", "成果物は残して")
+                await page.click("#tb-detail [data-do='deny']")
+            outp, err = waiting.communicate(timeout=40)
+            res[answer] = _json.loads(outp) if outp else None
+            if answer == "deny":
+                await page.keyboard.press("Escape"); await page.keyboard.press("Escape")
+        await page.screenshot(path=f"{out}/real-decide.png")
+        want_always = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow", "updatedPermissions": [sugg[0]]}}}
+        want_deny = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "deny", "message": "成果物は残して"}}}
+        check(failures, res.get("always") == want_always, f"real-decide: from now on reached the hook: {res.get('always')}")
+        check(failures, res.get("deny") == want_deny, f"real-decide: the reasoned deny reached the hook: {res.get('deny')}")
+        await page.close()
+        for line in watch.console:
+            failures.append(f"real-decide: console: {line}")
+        for u in watch.foreign:
+            failures.append(f"real-decide: request outside the server: {u}")
+    except Exception as e:
+        failures.append(f"real-decide: {type(e).__name__}: {str(e).splitlines()[0]}")
+        try:
+            diag = await page.evaluate("() => ({ perms: window.__dbg.model().perms.map((p) => [p.id, p.who, p.status, JSON.stringify(p.can)]), tasks: document.getElementById('tasks').textContent.slice(0, 400), robots: window.__dbg.robots.map((R) => R.def.id) })")
+            (out / "diag.json").write_text(dump(diag) + "\n")
+        except Exception:
+            pass
+    finally:
+        if srv.poll() is None:
+            srv.terminate()   # our own child
+            try:
+                srv.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                srv.kill()
+        log.close()
+        await browser.close()
+    print(f"  real/decide: {time.monotonic() - t0:.0f}s", flush=True)
+    (out / "real-decide-results.json").write_text(dump(res) + "\n")
