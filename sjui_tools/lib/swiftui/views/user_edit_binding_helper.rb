@@ -29,8 +29,20 @@ module SjuiTools
       # holds "12" (measured on a consumer app's TextField, iOS 27.0, before
       # this was deferred). Deferred, the write-back is a change of its own and the
       # field follows it — the order `.onChange(of:)` had, and the order
-      # Compose's LaunchedEffect has. The value handed over is the one the
-      # edit wrote, so two quick edits are two calls with their own values.
+      # Compose's LaunchedEffect has.
+      #
+      # A deferred call that is no longer current is dropped: when it runs,
+      # it reads the binding again, and if the value there is not the one
+      # this edit wrote, a later edit (or a programmatic change) came first
+      # and the call is stale. jsonui-cli 1.9.35 handed every deferred call
+      # its own edit's value, so a burst — the runner's `clear` sends six
+      # deletes in one typeText, "strin" ... "" — queued six calls, and a
+      # handler that writes the value back (`data.x = v`, the common shape)
+      # put an intermediate "s" / "str" back into the field after the burst
+      # and the next input landed behind it (ticket
+      # sjui-ontextchange-deferred-handler-replays-stale-value). Now a burst
+      # is one call with the latest value — intermediate values coalesce, as
+      # under `.onChange` and LaunchedEffect.
       module UserEditBindingHelper
         # `binding` is a `$`-prefixed Binding<String> expression (`$data.x`
         # or a local `$<id>Text`). `handler_call` reads the value as
@@ -43,14 +55,18 @@ module SjuiTools
             # An edit past the limit that the clamp takes back is no edit.
             changed = "#{binding}.wrappedValue != #{kept}"
             narrow = "let newValue = #{kept}; "
+            # Compared cut, too: maxLength's clamp may have run first.
+            current = "String(#{binding}.wrappedValue.prefix(#{max_length}))"
           else
             changed = "#{binding}.wrappedValue != newValue"
             narrow = ''
+            current = "#{binding}.wrappedValue"
           end
           "SwiftUI.Binding(get: { #{binding}.wrappedValue }, set: { newValue in " \
             "let changed = #{changed}; " \
             "#{binding}.wrappedValue = newValue; " \
-            "if changed { DispatchQueue.main.async { #{narrow}#{handler_call} } } })"
+            "if changed { DispatchQueue.main.async { #{narrow}" \
+            "guard #{current} == newValue else { return }; #{handler_call} } } })"
         end
       end
     end

@@ -5,6 +5,8 @@ require 'swiftui/view_registry'
 require 'swiftui/converter_factory'
 require 'swiftui/views/color_helper'
 require_relative '../../support/emitted_swift'
+require 'open3'
+require 'tmpdir'
 
 # onTextChange is the USER'S stream (ticket
 # sjui-ontextchange-fires-on-programmatic-data-change). The generated
@@ -44,11 +46,13 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
   # The setter the control writes through: it stores the edit, then calls
   # the handler on the main queue's next turn — so a handler that narrows the
   # value and writes it back is a change of its own, which the field follows
-  # (UserEditBindingHelper).
+  # — and only if the value is still the one this edit wrote (a later edit
+  # makes the call stale; UserEditBindingHelper).
   def setter_calling(binding, handler)
     "SwiftUI.Binding(get: { #{binding}.wrappedValue }, set: { newValue in " \
       "let changed = #{binding}.wrappedValue != newValue; #{binding}.wrappedValue = newValue; " \
-      "if changed { DispatchQueue.main.async { #{handler} } } })"
+      "if changed { DispatchQueue.main.async { guard #{binding}.wrappedValue == newValue else { return }; " \
+      "#{handler} } } })"
   end
 
   let(:handler) { 'data.onEmailChange?("email_field", newValue)' }
@@ -102,7 +106,8 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     expect(out).to include(
       'SwiftUI.Binding(get: { $data.code.wrappedValue }, set: { newValue in ' \
       'let changed = $data.code.wrappedValue != String(newValue.prefix(6)); $data.code.wrappedValue = newValue; ' \
-      'if changed { DispatchQueue.main.async { let newValue = String(newValue.prefix(6)); data.h?(newValue) } } })'
+      'if changed { DispatchQueue.main.async { let newValue = String(newValue.prefix(6)); ' \
+      'guard String($data.code.wrappedValue.prefix(6)) == newValue else { return }; data.h?(newValue) } } })'
     )
     # The value's own clamp (a programmatic write longer than the limit)
     # stays, and calls no handler.
@@ -165,5 +170,72 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     SWIFT
     expect(source).to include('SwiftUI.Binding(get: { $data.email.wrappedValue }', 'SwiftUI.Binding(get: { $targetText.wrappedValue }')
     expect(source).to compile_as_swift
+  end
+  # Run, not only type-checked: the emitted setter in a program that types
+  # the way the race in ticket sjui-ontextchange-deferred-handler-replays-
+  # stale-value needs — a key event landing between two deferred calls —
+  # with the handler shape most screens use, `data.x = newValue`.
+  #
+  #   delete              -> "strin", call A queued
+  #   (next key event queued here)
+  #   delete              -> "stri",  call B queued
+  #   queue: A, key, B
+  #
+  # 1.9.35 ran A with its own "strin": the write-back put the field back to
+  # "strin", the next delete started from there and one delete was lost
+  # (final "stri", where three deletes leave "str"). Now A and B find the
+  # value moved on and drop; the key's own call writes the latest value.
+  it 'a deferred call that a later edit overtook is dropped, so a write-back handler loses no edit', :swift_compile do
+    declare('onNoteTextChange' => '(String, String) -> Void')
+    out = emit('type' => 'TextView', 'id' => 'note_text_field', 'text' => '@{noteText}',
+               'onTextChange' => '@{onNoteTextChange}')
+    expr = out.lines.map(&:strip).find { |l| l.start_with?('text: SwiftUI.Binding(') }
+    expect(expr).not_to be_nil
+    expr = expr.delete_prefix('text: ').delete_suffix(',')
+    program = <<~SWIFT
+      import SwiftUI
+      struct TestData {
+          var noteText = "string"
+          var onNoteTextChange: ((String, String) -> Void)?
+      }
+      final class Store { var data = TestData() }
+      struct EmittedHost {
+          @SwiftUI.Binding var data: TestData
+          var field: SwiftUI.Binding<String> { #{expr} }
+      }
+      let store = Store()
+      var calls: [String] = []
+      var staleWrites = 0
+      store.data.onNoteTextChange = { _, value in
+          calls.append(value)
+          if value != store.data.noteText { staleWrites += 1 }
+          store.data.noteText = value
+      }
+      let host = EmittedHost(data: SwiftUI.Binding(get: { store.data }, set: { store.data = $0 }))
+      func delete() { let f = host.field; f.wrappedValue = String(f.wrappedValue.dropLast()) }
+      delete()
+      DispatchQueue.main.async { delete() }
+      delete()
+      RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+      // A programmatic change while a call is queued: the call is stale too.
+      delete()
+      store.data.noteText = "from the view model"
+      RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+      print("RESULT final=\\(store.data.noteText) calls=\\(calls) stale=\\(staleWrites)")
+    SWIFT
+    if (reason = SwiftCompiler.unavailable_reason)
+      skip "#{reason}; this example runs where the SwiftUI SDK is present"
+    end
+    Dir.mktmpdir('sjui_otc_run') do |dir|
+      src = File.join(dir, 'main.swift')
+      bin = File.join(dir, 'main')
+      File.write(src, program)
+      sdk = `xcrun --show-sdk-path 2>/dev/null`.strip
+      built, status = Open3.capture2e('swiftc', *(sdk.empty? ? [] : ['-sdk', sdk]), src, '-o', bin)
+      expect(status).to be_success, built
+      ran, status = Open3.capture2e(bin)
+      expect(status).to be_success, ran
+      expect(ran).to include('RESULT final=from the view model calls=["str"] stale=0')
+    end
   end
 end
