@@ -115,6 +115,12 @@ SURFACES = [
     # local `pip wheel .` had its output committed).
     ("repository housekeeping (.gitignore) — nothing shipped",
      r"^\.gitignore$"),
+    # Not copied by bootstrap into a face's tools: it reaches a user through
+    # `/plugin marketplace add Tai-Kimura/jsonui-cli` + `/plugin install
+    # jui-viz@jsonui`, at the version in plugin.json.
+    ("license — the terms changed, nothing shipped changed", r"^LICENSE$"),
+    ("Claude Code plugin (jui viz) — arrives via /plugin install; bump plugin.json's version",
+     r"^(\.claude-plugin|plugins)/"),
     ("tests only — no shipped behaviour", r"^[^/]+/tests?/"),
     # Docs are a shipped surface: a config key a face has to WRITE lives here
     # before it lives anywhere else. v1.7.50 added `test.testDir` and the only

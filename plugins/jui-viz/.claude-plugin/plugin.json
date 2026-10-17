@@ -1,0 +1,26 @@
+{
+  "name": "jui-viz",
+  "displayName": "jui viz",
+  "version": "1.0.0",
+  "description": "Shows this machine's Claude Code sessions and subagents in the local jui viz page (jui viz serve), and lets the page answer permission prompts.",
+  "author": {
+    "name": "Tai-Kimura"
+  },
+  "repository": "https://github.com/Tai-Kimura/jsonui-cli",
+  "license": "MIT",
+  "mcpServers": {
+    "jui-viz": {
+      "command": "python3",
+      "args": [
+        "-I",
+        "${CLAUDE_PLUGIN_ROOT}/scripts/channel.py"
+      ]
+    }
+  },
+  "channels": [
+    {
+      "server": "jui-viz",
+      "displayName": "jui viz"
+    }
+  ]
+}

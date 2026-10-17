@@ -286,12 +286,37 @@ def _apply(transform, dry_run: bool) -> Result:
     raise SettingsError("settings.json が書き込みの直前に別の手で変わり続けたため中止しました。少し待って再実行してください")
 
 
+PLUGIN_PREFIX = "jui-viz@"
+
+
+def plugin_enabled(data: dict | None = None) -> str | None:
+    """The enabledPlugins key of the jui-viz plugin when it is enabled, else None.
+
+    The plugin (plugins/jui-viz, `/plugin install jui-viz@jsonui`) carries the
+    same hooks; installing these as well would forward every event twice.
+    """
+    if data is None:
+        try:
+            _, data, _ = _read(_target())
+        except SettingsError:
+            return None
+    enabled = data.get("enabledPlugins") if isinstance(data.get("enabledPlugins"), dict) else {}
+    for key, on in enabled.items():
+        if isinstance(key, str) and key.startswith(PLUGIN_PREFIX) and on is True:
+            return key
+    return None
+
+
 def install(dry_run: bool = False, python: str | None = None) -> Result:
     handler = our_handler(python)
     decide_handler = our_decide_handler(python)
     value = str(progress_dir())
 
     def transform(data: dict):
+        plugin = plugin_enabled(data)
+        if plugin:
+            raise SettingsError(f"プラグイン {plugin} が有効なので、フックは入れません（二重に転送されます）。"
+                                "プラグインを使わない場合は /plugin で無効にしてから再実行してください")
         new = add_ours(data, handler, decide_handler)
         new, warning = add_env(new, value)
         return new, [w for w in (warning,) if w] + _disabled_warning(new)
@@ -351,6 +376,7 @@ def status() -> dict:
                  for h in (g.get("hooks") or []))
     env = data.get("env") if isinstance(data.get("env"), dict) else {}
     return {
+        "plugin": plugin_enabled(data),
         "decide": decide,
         "readable": True,
         "path": str(path),

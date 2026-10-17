@@ -22,12 +22,24 @@ subagents — as robots in three.js rooms, one room per project, in a local page
 (127.0.0.1 only). In a JsonUI project the page also lines up the specs, tasks,
 test runs and permission prompts, and can answer a prompt from the browser.
 
+Once, in Claude Code, install the plugin that forwards its hook events:
+
+```
+/plugin marketplace add Tai-Kimura/jsonui-cli
+/plugin install jui-viz@jsonui
+```
+
+Then:
+
 ```bash
-jui viz hooks install      # once: forward Claude Code's hook events (~/.claude/settings.json)
 jui viz serve --open       # start, and open the page
 jui viz doctor             # when nothing shows up
-jui viz hooks uninstall    # take the hooks out again
 ```
+
+Without plugins, `jui viz hooks install` writes the same hooks into
+`~/.claude/settings.json` instead (`jui viz hooks uninstall` takes them out).
+To answer permission prompts from the page, start a session with
+`claude --dangerously-load-development-channels plugin:jui-viz@jsonui`.
 
 ## The attribute SSoT — `shared/core/`
 

@@ -544,10 +544,12 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         print(f"jui viz: {_url(port)} で待ち受けています（Ctrl+C で終了）", flush=True)
         if replay:
             print(f"  再生: {replay}（{speed} 倍速）。フックの受信とセッション一覧の取得は止めています", flush=True)
+        elif hook_state.get("plugin"):
+            print(f"  フック: プラグイン {hook_state['plugin']} で入っています", flush=True)
         elif hook_state.get("installed"):
             print(f"  フック: 入っています（{hook_state['installed']} イベント）", flush=True)
         else:
-            print("  フック: 入っていません（jui viz hooks install で入れます）", flush=True)
+            print("  フック: 入っていません（/plugin install jui-viz@jsonui、または jui viz hooks install）", flush=True)
         if not replay:
             print(f"  セッション一覧: {'claude agents --json を ' + format(config.agentsPollSec, 'g') + ' 秒ごとに取得' if agents_poll else '取得しません'}", flush=True)
         if rec is not None:
@@ -683,6 +685,8 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
         if not info.get("readable"):
             _err(info.get("error", "settings.json を読めません"))
             return 1
+        if info.get("plugin"):
+            print(f"jui viz: プラグイン {info['plugin']} で入っています")
         print(f"jui viz: フック {info['installed']}/{len(hi.EVENTS)} イベント（{info['path']}）")
         missing = [e for e, ok in info["events"].items() if not ok]
         if missing and info["installed"]:
@@ -828,8 +832,12 @@ def _doctor_checks() -> list[dict]:
     hooks = hooks_installer.status()
     if hooks.get("readable"):
         total = len(hooks_installer.EVENTS)
-        ok = hooks["installed"] == total and not hooks["broken"]
-        add("hooks", ok, f"{hooks['installed']}/{total} イベント" + ("" if ok else "（jui viz hooks install で入れる）"))
+        if hooks.get("plugin"):
+            add("hooks", hooks["installed"] == 0, f"プラグイン {hooks['plugin']}" +
+                ("" if hooks["installed"] == 0 else f"、加えて settings.json にも {hooks['installed']} イベント（二重。jui viz hooks uninstall で外す）"))
+        else:
+            ok = hooks["installed"] == total and not hooks["broken"]
+            add("hooks", ok, f"{hooks['installed']}/{total} イベント" + ("" if ok else "（/plugin install jui-viz@jsonui、または jui viz hooks install）"))
 
     if claude is not None:
         registered = _relay_registered(claude)

@@ -136,7 +136,13 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
 - **停止**: `stop` は viz.pid と server.json の pid が一致し、その port の `/health`（生のソケット。urllib は
   HTTP_PROXY に従う）が同じ pid を返すときだけ SIGTERM。viz.pid は 2 以上の整数だけ、中身つきの一時ファイルを
   `os.link` して作る（O_EXCL で空のまま作ると、同時に起動した 2 つ目が空を「壊れている」として消した）。
-- **フック**（`hooks_installer.py`）: `~/.claude/settings.json` に 18 イベントの async の転送と、
+- **配り方**: 主は Claude Code のプラグイン（`plugins/jui-viz/`、マーケットプレイスはルートの
+  `.claude-plugin/marketplace.json` の `jsonui`）。フック・チャンネル（MCP サーバー）・SessionStart で
+  `CLAUDE_ENV_FILE` に `JSONUI_TEST_PROGRESS_DIR` を書くスクリプトを持つ。`scripts/forward.py` と
+  `scripts/channel.py` は `jui_cli/viz/` の写しで、`tests/test_viz_plugin.py` がバイト一致を見る
+  （片方だけ直すと赤）。中身を変えたら `plugin.json` の `version` を上げる（上げないと利用者の版が動かない）。
+  プラグインが有効な環境では `jui viz hooks install` は二重の転送を避けて止まる。
+- **フック**（`hooks_installer.py`、プラグインを使わない環境の代わり）: `~/.claude/settings.json` に 18 イベントの async の転送と、
   PermissionRequest の同期の `forward.py --decide`（P6）を足す。自分のものの見分けは「python で、
   引数が `jui_cli/viz/forward.py` で終わる」だけ。読めない JSON には書かない、バックアップ 10 個、
   stat を読む前と後に取る、書く直前に変わっていたら読み直す。`env` に `JSONUI_TEST_PROGRESS_DIR`。
