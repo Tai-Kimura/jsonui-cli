@@ -60,6 +60,9 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     hooks.add_argument("hooks_action", nargs="?", choices=["install", "uninstall", "status"])
     hooks.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the change, write nothing")
     hooks.add_argument("--json", action="store_true", help="Machine-readable status")
+    export = sub.add_parser("export-demo", help="Write the demo page as a static folder (for a docs site)")
+    export.add_argument("--out", required=True, help="An empty or new folder")
+
     relay = sub.add_parser("relay", help="Register the permission relay (an MCP channel) with Claude Code")
     relay.add_argument("relay_action", nargs="?", choices=["install", "uninstall", "status"])
     relay.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the command, run nothing")
@@ -75,10 +78,11 @@ def cmd_viz(args: argparse.Namespace) -> int:
         "doctor": _cmd_doctor,
         "hooks": _cmd_hooks,
         "relay": _cmd_relay,
+        "export-demo": _cmd_export_demo,
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("使い方: jui viz {serve,status,stop,open,doctor,hooks,relay}")
+        _err("使い方: jui viz {serve,status,stop,open,doctor,hooks,relay,export-demo}")
         return 1
     try:
         return handler(args)
@@ -580,6 +584,22 @@ def _someone_listens(port: int) -> bool:
             return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------- export-demo (P8)
+
+
+def _cmd_export_demo(args: argparse.Namespace) -> int:
+    from ..viz.export_demo import ExportError, export
+
+    try:
+        result = export(Path(args.out))
+    except ExportError as exc:
+        _err(str(exc))
+        return 1
+    print(f"jui viz: デモを書き出しました: {result['out']}（{result['files']} ファイル、{result['bytes'] / 1_000_000:.1f} MB）")
+    print("  静的なサーバーやサイトの中で index.html を開いてください（file:// ではモジュールが読み込めません）")
+    return 0
 
 
 # ---------------------------------------------------------------- relay (08 §2)
