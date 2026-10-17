@@ -14,7 +14,17 @@ setup(
     description="JsonUI cross-platform project tool",
     packages=find_packages(),
     # The iOS home-indicator template the conformance gate compares against.
-    package_data={"jui_cli.conformance": ["data/*.png"]},
+    package_data={
+        "jui_cli.conformance": ["data/*.png"],
+        # `jui viz` page. Patterns do not reach into subfolders, so each
+        # folder is listed (P3 adds the page's own folders here).
+        "jui_cli.viz": [
+            "web/*.html", "web/*.css", "web/*.js", "web/js/*.js", "web/fonts/*",
+            "web/vendor/*.md", "web/vendor/three-0.160.0/*",
+            "web/vendor/three-0.160.0/addons/controls/*.js",
+            "web/vendor/three-0.160.0/addons/geometries/*.js",
+        ],
+    },
     python_requires=">=3.11",
     install_requires=[
         "watchdog>=4.0.0",

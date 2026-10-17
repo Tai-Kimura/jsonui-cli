@@ -56,6 +56,8 @@ NOT_A_TOOL = {
         "the mock server's run target: a shell command the project wrote in its mock config",
     ("document_tools/jsonui_doc_cli/check/runner.py", "run_subprocess", "argv"):
         "jsonui-doc check's configured commands: an interpreter from _ALLOWED_INTERPRETERS and the project's script",
+    ("jui_tools/jui_cli/commands/viz_cmd.py", "_doctor_checks", "[claude, '--version']"):
+        "the Claude Code CLI, located by shutil.which('claude') — jui viz doctor reads its version",
 }
 
 #: The launches that must be found and must conform — the scan's positive side.

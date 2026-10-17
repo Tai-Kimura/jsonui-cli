@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="jui-viz-token" content="__JUI_VIZ_TOKEN__">
+<title>jui viz 確認画面</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fafaf7; --fg: #1d1d1b; --muted: #6b6b66; --ok: #1f7a3a; --ng: #b3261e; --line: #d9d9d2; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecece6; --muted: #9b9b94; --ok: #5ccf7d; --ng: #ff8a80; --line: #33332f; } }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  h2 { font-size: 15px; margin: 20px 0 8px; }
+  #conn { font-weight: 600; }
+  #conn.ok { color: var(--ok); } #conn.ng { color: var(--ng); }
+  pre { margin: 0; padding: 8px; border: 1px solid var(--line); overflow: auto; max-height: 30vh; font: 12px/1.4 ui-monospace, monospace; }
+  ol { margin: 0; padding-left: 24px; font: 12px/1.5 ui-monospace, monospace; max-height: 45vh; overflow: auto; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>jui viz 確認画面</h1>
+<p>状態: <span id="conn" class="ng">未接続</span> <span id="rev" class="muted"></span></p>
+<h2>server</h2>
+<pre id="server">-</pre>
+<h2>受けたイベント（最新 100 件）</h2>
+<ol id="events" reversed></ol>
+<script type="module" src="/debug.js"></script>
+</body>
+</html>

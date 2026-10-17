@@ -20,6 +20,7 @@ from .commands.sync_tool_cmd import register_sync_tool_command, cmd_sync_tool
 from .commands.hotload_cmd import register_hotload_command, cmd_hotload
 from .commands.conformance_cmd import register_conformance_command, cmd_conformance
 from .commands.screens_cmd import register_screens_command, cmd_screens
+from .commands.viz_cmd import register_viz_command, cmd_viz
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     # jui screens — screen-identity classification (MCP consumes --json)
     register_screens_command(subparsers)
 
+    # jui viz — local browser view of the Claude Code sessions
+    register_viz_command(subparsers)
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -91,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         "hotload": cmd_hotload,
         "conformance": cmd_conformance,
         "screens": cmd_screens,
+        "viz": cmd_viz,
     }
 
     handler = command_map.get(args.command)
