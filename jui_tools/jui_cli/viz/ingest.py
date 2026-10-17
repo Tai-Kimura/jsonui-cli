@@ -79,6 +79,7 @@ class World:
         # PermissionDenied: measured in -p), so the next PreToolUse from that
         # agent settles it — otherwise the id stays open and the robot never idles.
         self._asking: dict[str, str] = {}
+        self._new_files: set[str] = set()  # tool_use_ids writing a file that did not exist
         self.pid_to_session: dict[int, str] = {}
         self.tasks = TaskBook()
         self.perms = PermissionBook()
@@ -218,15 +219,25 @@ class World:
                 entry.by, entry.by_until = by, at + 10_000
         self._dirty.add("specs")
 
-    def _touch_files(self, session: dict, agent: dict, tool_input: dict, at: int, after: bool) -> None:
+    def _touch_files(self, session: dict, agent: dict, tool_input: dict, at: int, after: bool,
+                     use_id: str | None = None) -> None:
         path = tool_input.get("file_path") or tool_input.get("notebook_path")
         if not isinstance(path, str):
             return
         project = self.jsonui_project(session["projectId"], at)
         if project is None:
             return
+        target = Path(path)
+        in_artifacts = any(target.is_relative_to(d) for d in (project.spec_dir, project.layouts_dir, project.tests_dir))
+        if not after and in_artifacts and use_id and not target.exists():
+            self._new_files.add(use_id)  # a new spec / layout / test is being written
         if after:
             self.file_changed(session["projectId"], path, at, by=agent["id"])
+            if use_id in self._new_files and target.exists():
+                # A new artifact: the robot carries the paper to the shelf (P7 §A4).
+                self._set(agent, at, "carry", robots._clip(f"運ぶ {robots._rel(path, str(project.root))}"))
+                self._until[agent["id"]] = (at + CARRY_MS, "idle")
+            self._new_files.discard(use_id or "")
         else:
             hits = project.specs_touching(path)
             for sid in hits:
@@ -291,7 +302,7 @@ class World:
             if state == "carry":
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
             if tool in EDIT_TOOLS:
-                self._touch_files(session, agent, tool_input, at, after=False)
+                self._touch_files(session, agent, tool_input, at, after=False, use_id=use_id)
             if tool == "TodoWrite":
                 self.tasks.from_todowrite(sid, agent["id"], tool_input.get("todos"), at)
                 self._dirty.add("tasks")
@@ -325,7 +336,7 @@ class World:
                 self._set(agent, at, "idle", agent["act"])
             failed = kind == "PostToolUseFailure"
             if tool in EDIT_TOOLS and not failed:
-                self._touch_files(session, agent, tool_input, at, after=True)
+                self._touch_files(session, agent, tool_input, at, after=True, use_id=use_id)
             run = self.tests.get(use_id) if use_id else None
             if run is not None and run["status"] == "running":
                 response = payload.get("tool_response")
@@ -509,6 +520,12 @@ class World:
         if devices != self.devices:
             self.devices = devices
             self._dirty.add("devices")
+
+    def apply_mock(self, project_id: str, info: dict) -> None:
+        project = self.rooms.projects.get(project_id)
+        if project is not None and project.get("mock") != info:
+            project["mock"] = info
+            self._dirty.add("projects")
 
     def running_tests(self, platform: str | None = None) -> list[dict]:
         return [r for r in self.tests.values() if r["status"] == "running" and (platform is None or r["platform"] == platform)]

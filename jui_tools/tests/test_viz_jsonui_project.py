@@ -250,3 +250,24 @@ def test_test_command_summaries():
     assert robots.test_summary("") == ("", None, None)
     assert robots.test_platform("./gradlew connectedDebugAndroidTest") == "android"
     assert robots.test_platform("npx playwright test") == "web"
+
+
+def test_a_new_artifact_is_carried_but_an_edit_is_not(tmp_path):
+    root = make_project(tmp_path)
+    state = VizState()
+    world = World(state)
+    base = {"session_id": "s1", "cwd": str(root)}
+    world.apply_hook({**base, "hook_event_name": "SessionStart"}, 0)
+    new = root / "tests/screens/home.test.json"
+    world.apply_hook({**base, "hook_event_name": "PreToolUse", "tool_name": "Write", "tool_use_id": "n", "tool_input": {"file_path": str(new)}}, 10)
+    new.write_text("{}")
+    world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Write", "tool_use_id": "n", "tool_input": {"file_path": str(new)}}, 20)
+    world.publish()
+    agent = state.slices["agents"][0]
+    assert agent["state"] == "carry" and agent["act"] == "運ぶ tests/screens/home.test.json"
+    old = root / "docs/screens/layouts/login.json"
+    world.tick(5_000)
+    world.apply_hook({**base, "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_use_id": "e", "tool_input": {"file_path": str(old)}}, 6_000)
+    world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_use_id": "e", "tool_input": {"file_path": str(old)}}, 6_100)
+    world.publish()
+    assert state.slices["agents"][0]["state"] == "idle"  # an edit of an existing file is not carried

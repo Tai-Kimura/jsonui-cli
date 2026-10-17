@@ -519,7 +519,18 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     except (asyncio.CancelledError, Exception):  # noqa: BLE001
                         pass
 
+            async def mock_loop() -> None:
+                from ..viz.sources import mock_status
+
+                while True:
+                    for project in list(world.jsonui.values()):
+                        info = await loop.run_in_executor(None, mock_status.status, project.root, project.config)
+                        world.apply_mock(project.project_id, info)
+                    world.publish()
+                    await asyncio.sleep(mock_status.INTERVAL_SEC)
+
             tasks.append(asyncio.create_task(tick_loop()))
+            tasks.append(asyncio.create_task(mock_loop()))
             reader_cleanup.append(stop_readers)
 
         stop = asyncio.Event()
