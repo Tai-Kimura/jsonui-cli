@@ -229,3 +229,43 @@ def test_records_the_real_drivers_wrote_are_all_accepted():
                 counts = [c["status"] for c in run["cases"].values()]
                 assert (counts.count("passed"), counts.count("failed"), counts.count("skipped")) == \
                        (run["passed"], run["failed"], run["skipped"]), (name, run["run"])
+
+
+def test_two_rows_with_the_same_name_stay_two_cases():
+    """A reopen whose teardown fails twice writes two "teardown" rows to
+    results.json; the board folded them into one (independent review, 10-18).
+    A retry of the same row stays one case."""
+    book = tp.ProgressBook()
+    recs = [
+        _rec("case_start", t=1, file="f", test="T", case="teardown", attempt=1),
+        _rec("case_end", t=2, file="f", test="T", case="teardown", attempt=1, status="failed", durationMs=1),
+        _rec("case_start", t=3, file="f", test="T", case="teardown", attempt=1),
+        _rec("case_end", t=4, file="f", test="T", case="teardown", attempt=1, status="failed", durationMs=1),
+        _rec("case_start", t=5, file="f", test="T", case="retried", attempt=1),
+        _rec("case_end", t=6, file="f", test="T", case="retried", attempt=1, status="failed", durationMs=1),
+        _rec("case_start", t=7, file="f", test="T", case="retried", attempt=2),
+        _rec("case_end", t=8, file="f", test="T", case="retried", attempt=2, status="passed", durationMs=1),
+    ]
+    for rec in recs:
+        book.add(rec, "ios")
+    cases = book.cases(RUN)
+    assert [(c["name"], c["status"]) for c in cases] == [("teardown", "failed"), ("teardown", "failed"), ("retried", "passed")]
+
+
+def test_the_raw_device_log_captures_read_back_every_record():
+    """Real captures (d2, 10-18): iOS `log stream --style ndjson` with its
+    non-JSON first line, and Android logcat with "--------- beginning of main"."""
+    folder = Path(__file__).parent / "fixtures" / "viz" / "progress"
+    for name, parse in (("ios-log-stream.ndjson", tp.parse_ndjson_line), ("android-logcat.txt", tp.parse_logcat_line)):
+        lines = (folder / name).read_text().splitlines()
+        records = [r for r in (parse(line) for line in lines) if r is not None]
+        assert len(records) >= 40 and all(tp.valid(r) for r in records), name
+        book = tp.ProgressBook()
+        for r in records:
+            book.add(r, name)
+        assert book.dropped == {}
+        for run in book.runs.values():
+            if "passed" in run:
+                statuses = [c["status"] for c in run["cases"].values()]
+                assert (statuses.count("passed"), statuses.count("failed"), statuses.count("skipped")) == \
+                       (run["passed"], run["failed"], run["skipped"]), (name, run["run"])

@@ -103,7 +103,21 @@ class ProgressBook:
             run.update({k: rec[k] for k in ("device", "deviceId", "files") if k in rec})
             run["startedAt"] = rec["t"]
         elif event in ("case_start", "case_end"):
-            key = f"{rec['file']}␟{rec['test']}␟{rec['case']}"
+            # One results.json row per occurrence, not per name: a reopen whose
+            # teardown fails twice writes two "teardown" rows, and keying by
+            # name alone folded them into one case (independent review, 10-18).
+            # A start that does not continue the attempt sequence of a finished
+            # case of that name — or a lone skipped end — opens a new occurrence.
+            base = f"{rec['file']}␟{rec['test']}␟{rec['case']}"
+            seen = run.setdefault("_occ", {})
+            n = seen.get(base, 0)
+            current = run["cases"].get(f"{base}␟{n}")
+            if current is not None and current["status"] != "running" and (
+                    (event == "case_start" and rec["attempt"] <= current["attempt"])
+                    or (event == "case_end" and rec["attempt"] == 0)):
+                n += 1
+            seen[base] = n
+            key = f"{base}␟{n}"
             case = run["cases"].setdefault(key, {"name": rec["case"], "test": rec["test"], "file": rec["file"]})
             case["attempt"] = rec["attempt"]
             case["status"] = "running" if event == "case_start" else rec["status"]
