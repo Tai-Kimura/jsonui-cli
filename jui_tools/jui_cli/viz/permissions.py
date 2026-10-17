@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 import secrets
 
 EXPIRE_MS = 10 * 60_000
@@ -79,6 +80,37 @@ def summary_for(tool: str, tool_input: dict) -> str:
     if path:
         return _clip(f"{tool} {path}", SUMMARY_MAX)
     return _clip(tool, SUMMARY_MAX)
+
+
+_ELIDED = re.compile(r"⋯ \d+ code points elided ⋯")
+
+
+def _fold(text: str) -> str:
+    return " ".join(text.split())
+
+
+def preview_contains(preview: str, key: str) -> bool:
+    """Is ``key`` (a command or path from the hook) in the channel's
+    input_preview, as Claude Code relays it?
+
+    Claude Code (v2.1.211+) folds every run of whitespace to one space, cuts a
+    value over 3,500 code points to its start and end around
+    "⋯ N code points elided ⋯", and the preview is JSON-shaped text, so quotes
+    and backslashes inside a value arrive escaped. A plain substring test
+    therefore missed commands with double spaces or quotes, and their cards
+    could not be answered (found reading the channels reference, 10-18).
+    Folded, in both spellings; a long key matches on its start and its end.
+    """
+    folded = _fold(preview)
+    for form in (key, json.dumps(key, ensure_ascii=False)[1:-1]):
+        f = _fold(form)
+        if f in folded:
+            return True
+        if _ELIDED.search(preview) and len(f) > 400:
+            head, tail = f[:200], f[-200:]
+            if head in folded and tail in folded:
+                return True
+    return False
 
 
 def _keys(tool: str, tool_input: dict) -> list[str]:
@@ -235,7 +267,7 @@ class PermissionBook:
         # allow for "ls" went to rm (independent review, 10-18). A card with
         # nothing to compare is not linked; it stays answerable in the terminal.
         candidates = [c for c in candidates if _keys(c["toolName"], c.get("_input", {}))
-                      and all(k in preview for k in _keys(c["toolName"], c.get("_input", {})))]
+                      and all(preview_contains(preview, k) for k in _keys(c["toolName"], c.get("_input", {})))]
         if len(candidates) != 1:
             return False  # none, or still more than one: do not guess
         card = candidates[0]

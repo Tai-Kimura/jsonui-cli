@@ -363,3 +363,33 @@ def test_a_card_carries_the_command_verbatim_and_a_too_long_one_gets_no_buttons(
     content = "y" * 3000
     w = world.perms.from_hook("s1", "s1", "Write", {"file_path": "/work/app/out.txt", "content": content}, "w", None, 6)
     assert w["exact"]["file_path"] == "/work/app/out.txt" and w["exact"]["contentTruncated"] == 3000
+
+
+def test_matching_reads_the_preview_as_claude_code_relays_it():
+    """Claude Code folds whitespace, escapes quotes (JSON-shaped preview) and
+    keeps only the start and end of a value over 3,500 code points."""
+    from jui_cli.viz.permissions import preview_contains
+
+    assert preview_contains('{"command": "printf \'%s\' \'a b\'"}', "printf '%s' 'a     b'")
+    assert preview_contains('{"command": "echo \\"hi\\" > /work/a"}', 'echo "hi" > /work/a')
+    long = "echo " + "x" * 5000 + " ; rm -rf ~/tail"
+    relayed = '{"command": "' + long[:1700] + " ⋯ 3320 code points elided ⋯ " + long[-1700:] + '"}'
+    assert preview_contains(relayed, long)
+    assert not preview_contains('{"command": "ls"}', "rm -rf x")
+    other = "echo " + "y" * 5000 + " ; rm -rf ~/tail"
+    assert not preview_contains(relayed, other)  # same tail, different start
+
+
+def test_a_folded_and_escaped_relay_still_links_its_card():
+    """Through the linking path: the card holds the raw command, the channel
+    request carries Claude Code's folded, JSON-shaped preview."""
+    world, _ = _world()
+    world.apply_hook(_hook("SessionStart"), 0)
+    channel_id = world.channel_hello(None, None, "s1", 0)
+    raw = 'printf "%s"   "a     b" > /work/app/out'
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b1", tool_input={"command": raw}), 1)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Bash", tool_input={"command": raw}), 2)
+    relayed = '{"command": "printf \\"%s\\" \\"a b\\" > /work/app/out"}'
+    world.channel_request(channel_id, {"request_id": "rF", "tool_name": "Bash", "input_preview": relayed}, 3)
+    (card,) = world.perms.perms.values()
+    assert card.get("_requestId") == "rF" and card["can"]["allowDeny"] is True
