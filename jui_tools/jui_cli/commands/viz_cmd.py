@@ -410,7 +410,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     try:
         _write_private_json(paths.server_json(), {
             "pid": pid, "port": port, "token": ctx.token,
-            "startedAt": started_at, "version": ctx.version,
+            "startedAt": started_at, "version": ctx.version, "decideWaitSec": config.decideWaitSec,
         })
         hooks_installer.progress_dir().mkdir(parents=True, exist_ok=True)
 

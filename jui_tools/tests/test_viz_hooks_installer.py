@@ -42,11 +42,20 @@ def test_install_into_no_file_then_uninstall_leaves_an_empty_object(home):
     data = _read()
     assert sorted(data["hooks"]) == sorted(hi.EVENTS) and len(hi.EVENTS) == 18
     for event in hi.EVENTS:
-        (group,) = data["hooks"][event]
+        groups = data["hooks"][event]
+        group = groups[0]
         assert ("matcher" in group) == (event in hi.TOOL_EVENTS)
         (handler,) = group["hooks"]
         assert hi.is_ours(handler) and handler["async"] is True and handler["timeout"] == 5
         assert handler["command"].startswith(PY + " -I -S ")
+        if event == "PermissionRequest":
+            # P6: a second, synchronous item that waits for the browser.
+            (decide,) = groups[1]["hooks"]
+            assert decide["command"].endswith(" --decide") and "async" not in decide
+            assert decide["timeout"] == hi.DECIDE_TIMEOUT_SEC > 30
+        else:
+            assert len(groups) == 1
+    assert hi.status()["decide"] is True
     assert data["env"][hi.PROGRESS_ENV] == str(paths.viz_home() / "test-progress")
     hi.uninstall()
     assert _read() == {}

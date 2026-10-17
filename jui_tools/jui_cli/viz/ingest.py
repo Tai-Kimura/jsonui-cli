@@ -503,13 +503,32 @@ class World:
             self._dirty.add("perms")
         return ok
 
-    def decide(self, perm_id: str, behavior: str, at: int) -> str | None:
-        error = self.perms.decide(perm_id, behavior, at)
+    def hook_decide(self, payload: dict, at: int) -> dict | None:
+        """The synchronous PermissionRequest hook: the card it waits on (same card
+        as the async forward's), or None if the payload is not a permission request."""
+        if payload.get("hook_event_name") != "PermissionRequest" or not _s(payload.get("session_id")):
+            return None
+        sid = payload["session_id"]
+        self._session(sid, _s(payload.get("cwd")), at)
+        aid = _s(payload.get("agent_id"))
+        agent = self._sub(sid, aid, _s(payload.get("agent_type")), at) if aid else self._main(sid, at)
+        tool = _s(payload.get("tool_name")) or "?"
+        tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
+        opened = self._open.get(agent["id"]) or []
+        same = [u for u in opened if self._open_tool.get(u) == tool]
+        card = self.perms.from_hook(sid, agent["id"], tool, tool_input, same[-1] if same else None,
+                                    payload.get("permission_suggestions"), at)
+        self._dirty.add("perms")
+        return card
+
+    def decide(self, perm_id: str, behavior: str, at: int, always=None, reason=None) -> str | None:
+        error = self.perms.decide(perm_id, behavior, at, always, reason)
         if error is None:
             card = self.perms.perms[perm_id]
+            extra = "（今後も許可）" if card.get("sentRules") else "（理由つき）" if card.get("sentReason") else ""
             self.state.add_event({
                 "at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "PermissionAnswered",
-                "cat": "perm", "text": f"ブラウザで{'許可' if behavior == 'allow' else '拒否'}を送信 {card['summary']}",
+                "cat": "perm", "text": f"ブラウザで{'許可' if behavior == 'allow' else '拒否'}を送信{extra} {card['summary']}",
             })
             self._dirty.add("perms")
         return error

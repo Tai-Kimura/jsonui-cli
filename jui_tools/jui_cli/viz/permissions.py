@@ -23,6 +23,7 @@ LINK_WINDOW_MS = 15_000
 HOOK_WAIT_MS = 2_000
 CHANNEL_DEAD_MS = 60_000
 PREVIEW_MAX = 2_000
+DEDUPE_MS = 3_000
 SUMMARY_MAX = 160
 
 
@@ -94,6 +95,17 @@ class PermissionBook:
 
     def from_hook(self, sid: str, aid: str, tool: str, tool_input: dict, use_id: str | None,
                   suggestions, at: int) -> dict:
+        # The async forward and the synchronous --decide hook both report the
+        # same PermissionRequest: one card for both.
+        for card in self.perms.values():
+            if (card["status"] == "pending" and card["sessionId"] == sid and card["agentId"] == aid
+                    and card["toolName"] == tool and card.get("_input") == tool_input
+                    and at - card["createdAt"] <= DEDUPE_MS):
+                if use_id and "_useId" not in card:
+                    card["_useId"] = use_id
+                if suggestions is not None and "suggestions" not in card:
+                    card["suggestions"] = suggestions
+                return card
         card = self._card(sid, aid, tool, tool_input, at, _input=tool_input)
         if use_id:
             card["_useId"] = use_id
@@ -107,6 +119,9 @@ class PermissionBook:
         return card
 
     def _resolve(self, card: dict, status: str, at: int, by: str | None = None) -> None:
+        future = card.pop("_future", None)
+        if future is not None and not future.done():
+            future.set_result({})  # the terminal (or an expiry) settled it: the hook prints nothing
         card["status"] = status
         card["decidedAt"] = at
         if by:
@@ -182,8 +197,34 @@ class PermissionBook:
         card["can"]["allowDeny"] = True
         return True
 
-    def decide(self, perm_id: str, behavior: str, at: int) -> str | None:
-        """Browser answer. Returns None when queued, or why it was refused."""
+    # ---------------------------------------------------------------- the synchronous hook (P6)
+
+    def hook_waiting(self, card: dict, future) -> None:
+        """A --decide hook is waiting on this card: it can take allow / deny,
+        "from now on" (only the request's own suggestions) and a reason."""
+        card["_future"] = future
+        card["can"] = {"allowDeny": True, "always": bool(card.get("suggestions")), "reason": True}
+
+    def hook_gave_up(self, card: dict) -> None:
+        card.pop("_future", None)
+        linked = card.get("_requestId") and card.get("_channel") in self.channels
+        card["can"] = {"allowDeny": bool(linked), "always": False, "reason": False}
+
+    @staticmethod
+    def hook_output(behavior: str, rules: list | None, reason: str | None) -> dict:
+        decision: dict = {"behavior": behavior}
+        if behavior == "allow" and rules:
+            decision["updatedPermissions"] = rules
+        if behavior == "deny" and reason:
+            decision["message"] = reason
+        return {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}
+
+    def decide(self, perm_id: str, behavior: str, at: int, always=None, reason=None) -> str | None:
+        """Browser answer. Returns None when sent, or why it was refused.
+
+        Through the waiting --decide hook when there is one (it carries
+        "from now on" and a reason), else through the channel relay.
+        """
         card = self.perms.get(perm_id)
         if card is None:
             return "unknown permission"
@@ -191,6 +232,36 @@ class PermissionBook:
             return "behavior must be allow or deny"
         if card["status"] != "pending":
             return f"already {card['status']}"
+        future = card.get("_future")
+        if future is not None and not future.done():
+            rules = None
+            if always:
+                suggestions = card.get("suggestions") if isinstance(card.get("suggestions"), list) else []
+                if behavior != "allow" or not suggestions:
+                    return "from now on needs allow and this request's suggestions"
+                if always is True:
+                    rules = list(suggestions)
+                elif isinstance(always, list) and all(isinstance(i, int) and not isinstance(i, bool) and 0 <= i < len(suggestions) for i in always) and always:
+                    rules = [suggestions[i] for i in sorted(set(always))]
+                else:
+                    return "always must be true or a list of suggestion indexes"
+            if reason is not None and (not isinstance(reason, str) or behavior != "deny"):
+                return "a reason goes with deny, as text"
+            text = reason.strip()[:1000] if isinstance(reason, str) and reason.strip() else None
+            future.set_result(self.hook_output(behavior, rules, text))
+            card.pop("_future", None)
+            card["status"] = "sent"
+            card["sentBehavior"] = behavior
+            card["sentBy"] = "hook"
+            if rules:
+                card["sentRules"] = rules
+            if text:
+                card["sentReason"] = text
+            self.decisions.append({"permId": perm_id, "behavior": behavior, "at": at, "sessionId": card["sessionId"],
+                                   "always": bool(rules), "reason": bool(text)})
+            return None
+        if always or reason:
+            return "from now on and reasons need the waiting hook, which this request does not have"
         channel = self.channels.get(card.get("_channel", ""))
         rid = card.get("_requestId")
         if channel is None or not rid or rid not in channel.open:
@@ -198,6 +269,7 @@ class PermissionBook:
         channel.verdicts.append({"request_id": rid, "behavior": behavior})
         card["status"] = "sent"
         card["sentBehavior"] = behavior
+        card["sentBy"] = "relay"
         self.decisions.append({"permId": perm_id, "behavior": behavior, "at": at, "sessionId": card["sessionId"]})
         return None
 

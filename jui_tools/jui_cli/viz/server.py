@@ -31,6 +31,7 @@ from .state import VizState, now_ms
 MAX_HOOK_BODY = 2_000_000
 AUTH_TIMEOUT_SEC = 2.0
 POLL_SEC = 25.0
+PRESENCE_MS = 12_000
 PROTOCOL = 1
 TOKEN_PLACEHOLDER = "__JUI_VIZ_TOKEN__"
 _PUSH_TASK = web.AppKey("push_task", asyncio.Task)
@@ -107,6 +108,11 @@ class ServerContext:
     # what to call after changing it.
     world: object | None = None
     publish: Callable[[], None] | None = None
+    # Until when a page reported itself visible (presence), epoch ms.
+    present_until: int = 0
+
+    def browser_present(self) -> bool:
+        return self.present_until > now_ms()
     # Each authed socket and the (rev, seq) it has already been sent, so a
     # change made before it connected is not delivered twice.
     sockets: dict = field(default_factory=dict)
@@ -250,6 +256,38 @@ def make_app(ctx: ServerContext) -> web.Application:
             return None
         return data if isinstance(data, dict) else None
 
+    async def hook_decide(request: web.Request) -> web.Response:
+        """The synchronous PermissionRequest hook (forward.py --decide): wait up to
+        decideWaitSec for the browser's answer. No visible page: answer at once
+        with nothing, so the terminal dialog is never delayed for no one."""
+        refused = _check_token(request)
+        if refused is not None:
+            return refused
+        body = await _json_body(request)
+        if body is None or ctx.world is None:
+            return web.Response(status=400, text="bad request\n")
+        card = ctx.world.hook_decide(body, now_ms())
+        if ctx.publish:
+            ctx.publish()
+        if card is None or card["status"] != "pending" or not ctx.browser_present():
+            return web.json_response({})
+        future = asyncio.get_running_loop().create_future()
+        ctx.world.perms.hook_waiting(card, future)
+        if ctx.publish:
+            ctx.publish()
+        try:
+            answer = await asyncio.wait_for(asyncio.shield(future), ctx.config.decideWaitSec)
+        except asyncio.TimeoutError:
+            answer = {}
+        finally:
+            if card.get("_future") is future:
+                ctx.world.perms.hook_gave_up(card)
+                if ctx.publish:
+                    ctx.publish()
+        return web.json_response(answer)
+
+    app.router.add_post("/hook/decide", hook_decide)
+
     async def channel_hello(request: web.Request) -> web.Response:
         refused = _check_token(request)
         if refused is not None:
@@ -369,7 +407,7 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         if ctx.world is None or not isinstance(perm_id, str) or not isinstance(behavior, str):
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "permId and behavior are required"})
             return
-        error = ctx.world.decide(perm_id, behavior, now_ms())
+        error = ctx.world.decide(perm_id, behavior, now_ms(), message.get("always"), message.get("reason"))
         if ctx.publish:
             ctx.publish()
         reply = {"type": "ack", "reqId": req_id, "ok": error is None}
@@ -377,7 +415,8 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
             reply["error"] = error
         await sock.send_json(reply)
     elif kind == "presence":
-        return  # used from P6
+        # A visible page answers for 12 s (it reports every 5 s); hidden: at once not.
+        ctx.present_until = now_ms() + PRESENCE_MS if message.get("visible") is True else 0
     elif req_id is not None:
         await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": f"unknown type {kind!r}"})
 
