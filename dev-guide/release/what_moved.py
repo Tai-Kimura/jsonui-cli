@@ -110,6 +110,11 @@ SURFACES = [
     # which the canonical guard had no subject to read.
     ("CI configuration — a gate changed, nothing shipped changed",
      r"^\.github/"),
+    # What git tracks, not what ships: neither bootstrap nor sync_tool copies
+    # it. First moved in the jui viz branch (/jui_tools/build/ ignored after a
+    # local `pip wheel .` had its output committed).
+    ("repository housekeeping (.gitignore) — nothing shipped",
+     r"^\.gitignore$"),
     ("tests only — no shipped behaviour", r"^[^/]+/tests?/"),
     # Docs are a shipped surface: a config key a face has to WRITE lives here
     # before it lives anywhere else. v1.7.50 added `test.testDir` and the only
