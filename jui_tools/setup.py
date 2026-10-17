@@ -29,7 +29,16 @@ setup(
         # visual-regression section of `jui conformance report`). Optional:
         # everything else works without it, baseline features raise a clear
         # error pointing here when Pillow is missing.
-        "conformance": ["Pillow>=10.0.0"],
+        #
+        # 🔻 Capped below 13: every committed hash (baselines/ci, baselines/
+        # local, codegen parity) was computed with Pillow 12, and 13 resamples
+        # the 9x8 LANCZOS reduction differently. conformance-mobile run
+        # 39012627109 installed 13.0.0 and its gate read 99 iOS screenshots
+        # as visual regressions whose bytes were identical (md5) to run
+        # 38958247680's, which 12.3.0 judged with 0. Same inputs replayed
+        # locally: 12.x 0, 13.0.0 99. Raising the cap means re-baking every
+        # baseline with the new version in the same commit.
+        "conformance": ["Pillow>=10.0.0,<13"],
     },
     entry_points={
         "console_scripts": [
