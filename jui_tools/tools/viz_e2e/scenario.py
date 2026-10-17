@@ -1,0 +1,107 @@
+"""Scenario files for fake_server.py: what the server would send, line by line (JSON lines).
+
+Each line is one of
+    {"t": 1.5, "msg": {"type": "slices", "changed": {"sessions": [...]}}}   a message (rev is filled in)
+    {"t": 1.5, "msg": {"type": "events", "items": [...]}}
+    {"t": 2.0, "msg": {"type": "notice", "level": "warn", "text": "..."}}
+    {"mark": "name"}                                                     a point the tests can jump to
+
+`t` (seconds from the start) is used only by --autoplay; the tests step with POST /_fake/step?to=<mark>,
+which sends everything before that mark and then the block it starts.
+The scenario keeps the slices it has sent, so a browser that connects (or reconnects) gets the same snapshot the
+real server would give, plus the last events.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import copy
+import json
+import pathlib
+
+EVENT_BACKLOG = 200
+
+
+class Scenario:
+    def __init__(self, items: list[dict]):
+        self.items = items
+        self.position = 0
+        self.rev = 0
+        self.slices: dict[str, list] = {}
+        self.events: list[dict] = []
+
+    @classmethod
+    def load(cls, path: pathlib.Path) -> "Scenario":
+        items = []
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            line = line.strip()
+            if not line or line.startswith("//"):
+                continue
+            try:
+                items.append(json.loads(line))
+            except ValueError as e:
+                raise ValueError(f"{path}:{n}: {e}") from None
+        return cls(items)
+
+    def state(self):
+        return self.rev, copy.deepcopy(self.slices)
+
+    def backlog(self):
+        return [{"type": "events", "items": self.events[-EVENT_BACKLOG:]}] if self.events else []
+
+    def _apply(self, msg: dict) -> dict:
+        msg = copy.deepcopy(msg)
+        if msg.get("type") == "slices":
+            self.rev += 1
+            msg["rev"] = self.rev
+            for k, v in msg.get("changed", {}).items():
+                self.slices[k] = v
+        elif msg.get("type") == "events":
+            self.events.extend(msg.get("items", []))
+        elif msg.get("type") == "snapshot":
+            self.rev += 1
+            msg["rev"] = self.rev
+            self.slices = copy.deepcopy(msg.get("slices", {}))
+        return msg
+
+    async def advance(self, send, to: str | None = None, n: int = 0) -> int:
+        """``to``: send everything up to the mark ``to``, then the block that follows it (up to the next mark), so
+        a mark names what it starts. ``n``: send the next ``n`` messages. Returns how many were sent."""
+        sent = 0
+        if to is not None:
+            found = False
+            while self.position < len(self.items):
+                item = self.items[self.position]
+                self.position += 1
+                if "mark" in item:
+                    if found:
+                        self.position -= 1   # the next block stays for the next step
+                        break
+                    found = item["mark"] == to
+                    continue
+                await send(self._apply(item["msg"]))
+                sent += 1
+            return sent
+        while self.position < len(self.items) and (not n or sent < n):
+            item = self.items[self.position]
+            self.position += 1
+            if "mark" in item:
+                continue
+            await send(self._apply(item["msg"]))
+            sent += 1
+        return sent
+
+    async def play(self, send):
+        """Send every item at its `t` (seconds from now)."""
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        while self.position < len(self.items):
+            item = self.items[self.position]
+            if "mark" in item:
+                self.position += 1
+                continue
+            delay = start + float(item.get("t", 0)) - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            self.position += 1
+            await send(self._apply(item["msg"]))

@@ -1,0 +1,937 @@
+
+/* ---------- side panel ---------- */
+const $ = (id) => document.getElementById(id);
+const setHTML = (el, html) => { if (el._html !== html) { el.innerHTML = html; el._html = html; } };
+const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
+const STATUS_CLASS = { idle: 'st-idle', write: 'st-write', written: 'st-idle', impl: 'st-impl', verify: 'st-verify', 'impl-done': 'st-idle', paused: 'st-paused', test: 'st-test', done: 'st-complete' };
+function robotBadge(id) {
+  const s = robotState[id].state;
+  if (s === 'waiting') return ['st-waiting', '許可待ち'];
+  if (s === 'done') return ['st-done', '完了'];
+  if (s === 'idle') return ['st-idle', '待機'];
+  return ['st-busy', '作業中'];
+}
+/* What the view is narrowed to: one project (or all), which sessions, how the session list is shown. */
+const prefJSON = (key, fallback) => { try { return JSON.parse(readPref(key, JSON.stringify(fallback))); } catch (err) { return fallback; } };
+const UI = {
+  project: PROJECT[readPref('project', 'all')] ? readPref('project', 'all') : 'all',
+  hiddenLists: new Set(),          // task lists left off the task board
+  lanes: readPref('lanes', 'off') === 'on',
+  sessFilter: readPref('sessFilter', 'all'),
+  collapsed: new Set(prefJSON('collapsed', [])),
+};
+if (!['all', 'active', 'waiting', 'idle'].includes(UI.sessFilter)) UI.sessFilter = 'all';
+const inScope = (project) => UI.project === 'all' || UI.project === project;
+const scopeLabel = () => (UI.project === 'all' ? 'すべて' : PROJECT[UI.project].name);
+function sessionBadge(s) {
+  const b = s.robots.map(robotBadge);
+  return b.some((x) => x[0] === 'st-waiting') ? ['st-waiting', '許可待ち'] : b.some((x) => x[0] === 'st-busy') ? ['st-busy', '作業中'] : ['st-idle', '待機'];
+}
+const roleVar = (s) => (s.by ? ` style="--c:${ROLES[DEF[s.by].role].color}"` : '');
+/* Lists of buttons are rebuilt only when their membership changes, so keyboard focus survives the
+   four-times-a-second refresh; the changing text and bars inside are updated in place. */
+function keyed(el, sig, build) {
+  if (el._sig === sig) return;
+  const a = document.activeElement, fk = el.contains(a) ? a.dataset.fk : undefined;
+  el.innerHTML = build(); el._sig = sig; el._html = null;
+  if (fk !== undefined) { const again = el.querySelector(`[data-fk="${CSS.escape(fk)}"]`); if (again) again.focus({ preventScroll: true }); }
+}
+const SEGS = `<span class="segs" aria-hidden="true">${'<i></i>'.repeat(7)}</span>`;
+const SG_CLASS = { empty: 'sg-empty', writing: 'sg-writing', written: 'sg-written', impl: 'sg-impl', done: 'sg-done', test: 'sg-test', tested: 'sg-tested' };
+function paintSegs(el, s) {
+  const act = s.by ? activeSec(s) : -1;
+  [...el.children].forEach((node, k) => {
+    const g = secState(s, k), cls = SG_CLASS[g.kind] + (k === act ? ' sg-now' : ''), f = `${pct(g.f)}%`;
+    if (node.className !== cls) node.className = cls;
+    if (node._f !== f) { node.style.setProperty('--f', f); node._f = f; }
+  });
+}
+
+/* panel open / close */
+const mainEl = document.querySelector('.main');
+let sideOpen = readPref('side', 'open') === 'open';
+function applySide() {
+  mainEl.classList.toggle('side-closed', !sideOpen);
+  const b = $('btn-side');
+  b.setAttribute('aria-expanded', String(sideOpen));
+  b.textContent = sideOpen ? 'パネルを閉じる' : 'パネルを開く';
+}
+$('btn-side').addEventListener('click', () => { sideOpen = !sideOpen; writePref('side', sideOpen ? 'open' : 'closed'); applySide(); });
+applySide();
+
+let specFilter = readPref('specFilter', 'live');
+if (!['live', 'partial', 'todo', 'done', 'all'].includes(specFilter)) specFilter = 'live';
+const specFilterEl = $('spec-filter'), specListEl = $('spec-list');
+specFilterEl.innerHTML = [...BUCKETS, ['all', 'すべて']].map(([b, label]) => `<button type="button" data-f="${b}" aria-pressed="${b === specFilter}">${label}<b></b></button>`).join('');
+specFilterEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-f]');
+  if (!b) return;
+  specFilter = b.dataset.f; writePref('specFilter', specFilter);
+  [...specFilterEl.children].forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  renderPanel(latestModel);
+});
+specListEl.addEventListener('click', (e) => { const b = e.target.closest('[data-idx]'); if (b) openWhiteboard(Number(b.dataset.idx), b); });
+$('btn-specboard').addEventListener('click', (e) => openWhiteboard(-1, e.currentTarget));
+$('btn-taskboard').addEventListener('click', (e) => openTaskBoard(e.currentTarget));
+
+const COL_STATE = { doing: ['st-busy', '作業中'], wait: ['st-waiting', '待ち'], todo: ['st-idle', '未着手'], done: ['st-done', '完了'] };
+const paintState = (node, [cls, label]) => { if (!node) return; const c = `state ${cls}`; if (node.className !== c) node.className = c; setText(node, label); };
+const SESS_FILTERS = [['all', 'すべて'], ['active', '動いている'], ['waiting', '許可待ち'], ['idle', '待機']];
+const sessFilterEl = $('sess-filter');
+sessFilterEl.innerHTML = SESS_FILTERS.map(([k, label]) => `<button type="button" data-sf="${k}" aria-pressed="${k === UI.sessFilter}">${label}<b></b></button>`).join('');
+sessFilterEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sf]');
+  if (!b) return;
+  UI.sessFilter = b.dataset.sf; writePref('sessFilter', UI.sessFilter);
+  [...sessFilterEl.children].forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  renderSessions();
+});
+const sessMatch = (s, f) => { const [c] = sessionBadge(s); return f === 'all' || (f === 'active' && c !== 'st-idle') || (f === 'waiting' && c === 'st-waiting') || (f === 'idle' && c === 'st-idle'); };
+$('sessions').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-fold]');
+  if (!b) return;
+  if (UI.collapsed.has(b.dataset.fold)) UI.collapsed.delete(b.dataset.fold); else UI.collapsed.add(b.dataset.fold);
+  writePref('collapsed', JSON.stringify([...UI.collapsed]));
+  renderSessions();
+});
+const SB_ORDER = { 'st-waiting': 0, 'st-busy': 1, 'st-idle': 2 };
+function renderSessions() {
+  const el = $('sessions'), scoped = SESSIONS.filter((s) => inScope(s.project));
+  [...sessFilterEl.children].forEach((b) => setText(b.lastElementChild, String(scoped.filter((s) => sessMatch(s, b.dataset.sf)).length)));
+  // Sessions that need you come first: waiting for permission, then working, then idle.
+  const groups = ROOMS.filter((r) => inScope(r.id)).map((r) => [r, scoped.filter((s) => s.project === r.id && sessMatch(s, UI.sessFilter)).sort((a, b) => SB_ORDER[sessionBadge(a)[0]] - SB_ORDER[sessionBadge(b)[0]] || a.id.localeCompare(b.id))]);
+  keyed(el, JSON.stringify([UI.project, UI.sessFilter, [...UI.collapsed], groups.map(([r, l]) => [r.id, l.map((x) => x.id)])]), () => groups.map(([r, list]) => {
+    const folded = UI.collapsed.has(r.id), any = scoped.some((x) => x.project === r.id);
+    const items = list.map((x) => {
+      const subs = x.robots.filter((id) => id !== x.id).map((id) => `<li><button type="button" class="who-btn" data-robot-open="${id}" data-fk="ss-${id}">${pill(id, DEF[id].role)}<span>${esc(DEF[id].agent)}</span></button><span class="state" data-st="${id}"></span><p class="act" data-sact="${id}"></p></li>`).join('');
+      return `<li class="session"><div class="srow"><button type="button" class="who-btn" data-robot-open="${x.id}" data-fk="ss-${x.id}">${pill(x.id, 'main')}<span class="sname">${esc(DEF[x.id].agent)}</span></button><span class="state" data-sst="${x.id}"></span></div><p class="act" data-sact="${x.id}"></p>${subs ? `<ul class="subs">${subs}</ul>` : ''}</li>`;
+    }).join('');
+    return `<section class="pgroup"><button type="button" class="pg-toggle" data-fold="${r.id}" data-fk="pg-${r.id}" aria-expanded="${!folded}"><span class="pg-caret" aria-hidden="true"></span><b>${esc(r.name)}</b><small data-pgsum="${r.id}"></small></button>${folded ? '' : items ? `<ul class="sessions">${items}</ul>` : `<p class="empty-note">${any ? '条件に合うセッションはない' : 'セッションはない'}</p>`}</section>`;
+  }).join(''));
+  for (const [r] of groups) {
+    const all = scoped.filter((x) => x.project === r.id), badges = all.map(sessionBadge);
+    const w = badges.filter((b) => b[0] === 'st-waiting').length, busy = badges.filter((b) => b[0] === 'st-busy').length;
+    setText(el.querySelector(`[data-pgsum="${r.id}"]`), `${all.length} セッション${w ? ` · 許可待ち ${w}` : ''}${busy ? ` · 作業中 ${busy}` : ''}`);
+  }
+  for (const x of scoped) {
+    paintState(el.querySelector(`[data-sst="${x.id}"]`), sessionBadge(x));
+    for (const id of x.robots) {
+      if (id !== x.id) paintState(el.querySelector(`[data-st="${id}"]`), robotBadge(id));
+      setText(el.querySelector(`[data-sact="${id}"]`), robotState[id].act);
+    }
+  }
+}
+function renderPanel(model) {
+  renderSessions();
+
+  const scopedSpecs = model.specs.filter((x) => inScope(x.project)), counts = bucketCounts(scopedSpecs);
+  [...specFilterEl.children].forEach((b) => setText(b.lastElementChild, String(b.dataset.f === 'all' ? scopedSpecs.length : counts[b.dataset.f])));
+  const roomOrder = Object.fromEntries(ROOMS.map((r, k) => [r.id, k]));
+  const shown = model.specs.map((s, i) => [s, i]).filter(([s]) => inScope(s.project) && (specFilter === 'all' || s.bucket === specFilter)).sort((a, b) => roomOrder[a[0].project] - roomOrder[b[0].project] || a[1] - b[1]);
+  const multi = new Set(shown.map(([x]) => x.project)).size > 1;
+  keyed(specListEl, JSON.stringify([UI.project, specFilter, shown.map(([x, i]) => `${i}:${x.bucket}:${x.by || ''}`)]), () => (shown.length
+    ? shown.map(([x, i], k) => `${multi && (k === 0 || shown[k - 1][0].project !== x.project) ? `<li class="sl-group">${esc(PROJECT[x.project].name)}<b>${shown.filter(([y]) => y.project === x.project).length}</b></li>` : ''}<li><button type="button" class="spec-row b-${x.bucket}" data-idx="${i}" data-fk="sp-${i}"${roleVar(x)}><span class="nm">${esc(x.name)}</span><span class="stx"></span>${x.by ? pill(x.by, DEF[x.by].role) : ''}${SEGS}</button></li>`).join('')
+    : `<li class="empty-note">${!scopedSpecs.length ? `${esc(scopeLabel())} には画面の spec がない` : specFilter === 'live' ? '今は誰も spec を触っていない' : 'この状態の spec はない'}</li>`));
+  specListEl.querySelectorAll('.spec-row').forEach((b) => { const s = model.specs[+b.dataset.idx]; setText(b.querySelector('.stx'), s.status.text); paintSegs(b.querySelector('.segs'), s); });
+
+  const T = model.tests, n = CASES.length;
+  const pPct = (T.passed / n) * 100, rPct = T.runningIdx >= 0 ? 100 / n : 0;
+  if (SOURCE.mode === 'live') setHTML($('tests'), `<p class="empty-note">テストの実行はまだ無い</p>`);
+  else if (!inScope('shop')) setHTML($('tests'), `<p class="empty-note">${esc(scopeLabel())} で動いているテストはない</p>`);
+  else setHTML($('tests'), `<div class="test-head"><div>${pill('a2', 'test')} <code>${T.file}</code></div><code>${T.device} · ${esc(T.statusText)}</code>
+<div class="prog" role="img" aria-label="通過 ${T.passed} 件 / 全 ${n} 件"><span class="p" style="width:${pPct}%"></span><span class="${T.retrying ? 'f' : 'r'}" style="width:${rPct}%"></span></div></div>
+<ul class="cases">${T.rows.map((c, i) => {
+    const icon = { pending: '○', running: '▶', passed: '✓', flaky: '⚠' }[c.status];
+    const sub = c.status === 'running' ? `<span class="step">${c.attempt > 1 ? '1 回目は失敗 · 再実行中 · ' : ''}${esc(c.step)}</span>` : `<span class="br">分岐: ${esc(c.branch)}${c.status === 'flaky' ? ' · 1 回目は失敗、再実行で通過' : ''}</span>`;
+    return `<li class="c-${c.status}"><span class="ic">${icon}</span><span>${i + 1}. ${esc(c.name)}</span>${sub}</li>`;
+  }).join('')}</ul>`);
+
+  // Tasks: a task whose owner is waiting for permission comes first with the answer buttons; prompts that
+  // belong to no task get their own row on top.
+  const order = { doing: 0, wait: 1, todo: 2, done: 3 };
+  const scopedTasks = model.tasks.filter((x) => inScope(PROJECT_OF[x.list]));
+  const tasks = [...scopedTasks].sort((a, b) => (b.perm ? 1 : 0) - (a.perm ? 1 : 0) || order[a.col] - order[b.col] || a.list.localeCompare(b.list) || a.id - b.id);
+  const scopedPend = model.pending.filter((p) => inScope(projectOfRobot(p.who)));
+  const loose = scopedPend.filter((p) => !p.task);
+  const where = (list) => (UI.project === 'all' ? `<span class="ptag">${esc(PROJECT[PROJECT_OF[list]].name)}</span>` : '');
+  setHTML($('task-sum'), KCOLS.map(([c, label]) => `<span class="state ${COL_STATE[c][0]}">${label} ${scopedTasks.filter((x) => x.col === c).length}</span>`).join('') + (scopedPend.length ? `<span class="state st-waiting">許可待ち ${scopedPend.length}</span>` : ''));
+  keyed($('tasks'), JSON.stringify([UI.project, loose.map((p) => p.id), tasks.map((x) => `${x.key}:${x.col}:${x.perm ? x.perm.id : ''}`)]), () => [
+    ...loose.map((p) => `<li class="task has-perm perm-only"><button type="button" class="task-open" data-open="perm:${p.id}" data-fk="to-${p.id}"><span class="tid">${esc(SESSION_OF[p.who])} セッション</span><span class="subject">タスクの外で許可を求めている</span></button><span class="state st-waiting">許可待ち</span><span class="meta">${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)}${where(SESSION_OF[p.who])}</span>${permBox(p)}</li>`),
+    ...tasks.map((x) => {
+      const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? ['st-waiting', `#${x.blockedBy} 待ち`] : COL_STATE[x.col];
+      return `<li class="task t-${x.status}${x.perm ? ' has-perm' : ''}${x.fresh ? ' t-new' : ''}"><button type="button" class="task-open" data-open="${x.key}" data-fk="to-${x.key}"><span class="tid">${esc(x.list)} #${x.id}</span><span class="subject">${esc(x.subject)}</span></button><span class="state ${c}">${l}</span><span class="meta">${x.owner ? `${pill(x.owner, DEF[x.owner].role)} ${esc(DEF[x.owner].agent)}` : '担当なし'}${where(x.list)}</span>${x.perm ? permBox(x.perm) : ''}</li>`;
+    }),
+  ].join('') || `<li class="empty-note">${esc(scopeLabel())} にタスクはない</li>`);
+
+  const chip = $('chip-perm');
+  chip.hidden = model.pending.length === 0;
+  setText(chip, `許可待ち ${model.pending.length}`);
+  const sIn = SESSIONS.filter((x) => inScope(x.project)).length, rIn = ROBOT_DEFS.filter((d) => inScope(projectOfRobot(d.id))).length;
+  setText($('chip-robots'), UI.project === 'all' ? `ロボット ${ROBOT_DEFS.length}` : `ロボット ${rIn} / ${ROBOT_DEFS.length}`);
+  setText($('chip-sessions'), UI.project === 'all' ? `セッション ${SESSIONS.length}` : `セッション ${sIn} / ${SESSIONS.length}`);
+}
+
+/* ---------- answering permission prompts from the view ---------- */
+const PERM_NOTE = 'ターミナルでも答えられ、先に答えた方が使われる';
+const permButtons = (p, where) => `<button type="button" class="pa pa-allow" data-do="allow" data-perm="${p.id}" data-fk="${where}a-${p.id}">許可</button><button type="button" class="pa pa-always" data-do="always" data-perm="${p.id}" data-fk="${where}w-${p.id}" title="${esc(p.rule)} を今後は聞かずに許可する">今後も許可</button><button type="button" class="pa pa-deny" data-do="deny" data-perm="${p.id}" data-fk="${where}d-${p.id}">拒否</button>`;
+const permBox = (p) => `<div class="perm-box"><p class="perm-q"><b>${esc(p.tool)}</b> <code>${esc(permSummary(p))}</code></p><div class="perm-acts">${permButtons(p, 's')}</div></div>`;
+function recentHTML(id) {
+  const items = logItems.filter((e) => e.who === id).slice(0, 6);
+  return items.length ? items.map((e) => `<li><time>${fmtClock(BASE_CLOCK + e.abs)}</time><span><b>${esc(e.kind)}</b> ${esc(e.what)}</span></li>`).join('') : '<li><span>まだ記録がない</span></li>';
+}
+let toastTimer = 0;
+function showToast(text) {
+  const el = $('toast');
+  el.textContent = text; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
+}
+function refreshNow() {
+  const t = ((simT % LOOP) + LOOP) % LOOP;
+  latestModel = computeModel(t, Math.floor(simT / LOOP));
+  updateRobotStates(simT, t, latestModel.perms);
+  renderPanel(latestModel); renderTicker(); renderTaskBoard(latestModel); renderRobot(latestModel); renderLog(true);
+  if (has3D) redrawBoards(latestModel, performance.now() / 1000, true);
+}
+function decide(id, behavior, btn) {
+  const p = latestModel.pending.find((q) => q.id === id);
+  if (!p) return;
+  const where = btn.closest('#tasks, #perm-strip, #kanban, #tb-detail, #rb');
+  const reasonEl = $('tbd-reason') || $('rb-reason');
+  const reason = behavior === 'deny' && reasonEl && where && where.contains(reasonEl) ? reasonEl.value.trim() : '';
+  SOURCE.decide(id, behavior, { perm: p, reason });
+  refreshNow();
+  // The answered buttons are gone; keep the keyboard where the person was.
+  if (!document.activeElement || document.activeElement === document.body) {
+    const next = where && (where.querySelector(`[data-open="${CSS.escape(p.task || `perm:${id}`)}"]`) || where.querySelector('#tbd-close, #rb-close, button'));
+    (next || $(tb.open ? 'tb-close' : 'btn-taskboard')).focus({ preventScroll: true });
+  }
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-do], [data-open], [data-robot-open], [data-spec-open], [data-log-robot], [data-close-detail], [data-reset-rules], [data-rb-close], [data-set-all]');
+  if (!t) return;
+  if (t.dataset.do) decide(t.dataset.perm, t.dataset.do, t);
+  else if (t.dataset.open) openTaskBoard(t, t.dataset.open);
+  else if (t.dataset.robotOpen) openRobot(t.dataset.robotOpen, t);
+  else if (t.dataset.specOpen !== undefined) openWhiteboard(Number(t.dataset.specOpen), t);
+  else if (t.dataset.logRobot) openLogFor(t.dataset.logRobot, t);
+  else if (t.hasAttribute('data-close-detail')) closeTaskDetail();
+  else if (t.hasAttribute('data-reset-rules')) { alwaysRules.clear(); showToast('このデモで足した常時許可を取り消した'); refreshNow(); }
+  else if (t.hasAttribute('data-rb-close')) closeRobot();
+  else if (t.hasAttribute('data-set-all')) setProject('all');
+});
+$('chip-perm').addEventListener('click', (e) => openTaskBoard(e.currentTarget));
+
+/* ---------- scope: which project (or all) every panel and board shows, and which sessions ---------- */
+function paintScopeButtons() {
+  document.querySelectorAll('[data-scope-btn]').forEach((b) => setHTML(b, `<span class="sb-k">プロジェクト</span><b>${esc(scopeLabel())}</b><span class="sb-caret" aria-hidden="true"></span>`));
+  const scoped = SESSIONS.filter((s) => inScope(s.project));
+  const shown = scoped.filter((s) => !UI.hiddenLists.has(s.id));
+  setHTML($('tb-sess'), `<span class="sb-k">セッション</span><b>${shown.length === scoped.length ? `すべて（${scoped.length}）` : shown.length === 1 ? esc(shown[0].id) : `${shown.length} / ${scoped.length}`}</b><span class="sb-caret" aria-hidden="true"></span>`);
+  const robotsIn = ROBOT_DEFS.filter((d) => inScope(projectOfRobot(d.id)));
+  const shownR = robotsIn.filter((d) => !logState.hiddenRobots.has(d.id));
+  setHTML($('log-who'), `<span class="sb-k">ロボット</span><b>${shownR.length === robotsIn.length ? `すべて（${robotsIn.length}）` : shownR.length === 1 ? esc(shownR[0].id) : `${shownR.length} / ${robotsIn.length}`}</b><span class="sb-caret" aria-hidden="true"></span>`);
+  $('tb-lanes').checked = UI.lanes;
+  document.body.dataset.scope = UI.project;
+}
+function roomPose(id) {
+  if (SOURCE.mode === 'live') return liveRoomPose(id);
+  if (id === 'all') return { p: new THREE.Vector3(6.8, 15.9, 22.1), t: new THREE.Vector3(0.3, 0.4, -0.4) };
+  const r = PROJECT[id], c = new THREE.Vector3((r.x0 + r.x1) / 2, 0.4, (r.z0 + r.z1) / 2);
+  const size = Math.max(r.x1 - r.x0, (r.z1 - r.z0) * 1.3);
+  return { p: c.clone().add(new THREE.Vector3(6.5, 15.5, 22.5).normalize().multiplyScalar(size * 1.9 + 3)), t: c };
+}
+function focusProject(id, instant) {
+  if (!has3D) return;
+  const pose = roomPose(id);
+  if (zoom.zoomed) { zoom.returnPose = pose; return; }
+  controls.enabled = false;
+  flyTo(pose.p, pose.t, controls.target, instant || reduceMotion ? 0 : 0.8, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });
+}
+function setProject(id, { camera: moveCamera = true } = {}) {
+  if (!(id === 'all' || PROJECT[id]) || UI.project === id) return;
+  UI.project = id; writePref('project', id);
+  if (wb.open && wb.idx >= 0 && !inScope(SPECS[wb.idx].project)) wb.idx = -1;
+  if (tb.detail && !tb.detail.startsWith('perm:') && !inScope(PROJECT_OF[tb.detail.split('#')[0]])) tb.detail = null;
+  if (moveCamera) focusProject(id);
+  paintScopeButtons();
+  refreshNow();
+  if (wb.open) { wbCode.scrollTop = 0; renderWhiteboard(latestModel, true); }
+  // A zoomed board view moves to the board of the project now shown.
+  if (has3D && zoom.zoomed && !camTween && (wb.open || tb.open)) { const pose = wb.open ? specPose(wb.idx) : taskPose(); camera.position.copy(pose.p); viewTarget.copy(pose.t); }
+  showToast(id === 'all' ? 'すべてのプロジェクトを表示' : `${PROJECT[id].name} だけを表示`);
+}
+
+/* ---------- popovers: project switcher, session picker, robot picker ---------- */
+const popEl = $('pop');
+const pop = { anchor: null, kind: null, q: '' };
+function openPop(anchor, kind) {
+  if (pop.anchor === anchor && !popEl.hidden) { closePop(); return; }
+  if (pop.anchor) pop.anchor.setAttribute('aria-expanded', 'false');
+  pop.anchor = anchor; pop.kind = kind; pop.q = '';
+  const titles = { project: 'プロジェクトで絞り込む', lists: 'セッションで絞り込む', robots: 'ロボットで絞り込む' };
+  popEl.setAttribute('aria-label', titles[kind]);
+  popEl.innerHTML = `<p class="pop-title">${titles[kind]}<small data-pop-count></small></p>${kind === 'project' && ROOMS.length <= 6 ? '' : `<input type="search" class="pop-search" placeholder="${kind === 'project' ? '名前で探す' : 'ID・フォルダ・役割で探す'}" aria-label="${titles[kind]}（検索）">`}${kind === 'project' ? '' : `<div class="pop-quick" role="group" aria-label="まとめて選ぶ"><button type="button" data-quick="all">すべて</button><button type="button" data-quick="active">動いているだけ</button><button type="button" data-quick="waiting">許可待ちだけ</button><button type="button" data-quick="none">全部外す</button></div>`}<div class="pop-body"></div>`;
+  renderPopBody();
+  popEl.hidden = false;
+  anchor.setAttribute('aria-expanded', 'true');
+  placePop();
+  const first = popEl.querySelector('.pop-search') || popEl.querySelector('[role="option"][aria-selected="true"]') || popEl.querySelector('input, button');
+  if (first) first.focus({ preventScroll: true });
+}
+function closePop(back = true) {
+  if (popEl.hidden) return;
+  popEl.hidden = true;
+  const a = pop.anchor;
+  pop.anchor = null; pop.kind = null;
+  if (a) { a.setAttribute('aria-expanded', 'false'); if (back && document.contains(a)) a.focus({ preventScroll: true }); }
+}
+function placePop() {
+  const r = pop.anchor.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, w = Math.min(380, vw - 16);
+  popEl.style.width = `${w}px`;
+  popEl.style.left = `${Math.max(8, Math.min(r.left, vw - w - 8))}px`;
+  const below = vh - r.bottom - 14, above = r.top - 14;
+  if (below >= 280 || below >= above) { popEl.style.top = `${r.bottom + 6}px`; popEl.style.bottom = 'auto'; popEl.style.maxHeight = `${below}px`; }
+  else { popEl.style.top = 'auto'; popEl.style.bottom = `${vh - r.top + 6}px`; popEl.style.maxHeight = `${above}px`; }
+}
+document.addEventListener('pointerdown', (e) => { if (!popEl.hidden && !popEl.contains(e.target) && !(pop.anchor && pop.anchor.contains(e.target))) closePop(false); }, true);
+window.addEventListener('resize', () => { if (!popEl.hidden) placePop(); });
+function projectStats(model, id) {
+  const sess = SESSIONS.filter((s) => id === 'all' || s.project === id);
+  const robotIds = sess.flatMap((s) => s.robots);
+  return {
+    sessions: sess.length,
+    busy: robotIds.filter((r) => robotBadge(r)[0] === 'st-busy').length,
+    pend: model.pending.filter((p) => id === 'all' || projectOfRobot(p.who) === id).length,
+    live: model.specs.filter((s) => (id === 'all' || s.project === id) && s.bucket === 'live').length,
+  };
+}
+const matchQ = (text) => !pop.q || text.toLowerCase().includes(pop.q);
+function renderPopBody() {
+  const body = popEl.querySelector('.pop-body');
+  if (!body) return;
+  const keepFocus = popEl.contains(document.activeElement) && document.activeElement.closest('.pop-body') ? document.activeElement.dataset.fk : null;
+  if (pop.kind === 'project') {
+    const ids = ['all', ...ROOMS.map((r) => r.id)].filter((id) => id === 'all' || matchQ(`${PROJECT[id].name} ${PROJECT[id].path}`));
+    body.innerHTML = `<ul class="pop-list" role="listbox" aria-label="プロジェクト">${ids.map((id) => {
+      const st = projectStats(latestModel, id), sel = UI.project === id;
+      return `<li role="option" tabindex="${sel ? 0 : -1}" aria-selected="${sel}" data-pick-project="${id}" data-fk="pp-${id}"><span class="po-main"><b>${id === 'all' ? 'すべてのプロジェクト' : esc(PROJECT[id].name)}</b><small>${id === 'all' ? `${ROOMS.length} プロジェクト` : esc(PROJECT[id].path)} · ${st.sessions} セッション</small></span><span class="po-badges">${st.pend ? `<span class="state st-waiting">許可待ち ${st.pend}</span>` : ''}${st.busy ? `<span class="state st-busy">作業中 ${st.busy} 体</span>` : ''}${st.live ? `<span class="state st-write">作業中の spec ${st.live}</span>` : ''}</span></li>`;
+    }).join('')}</ul>`;
+  } else {
+    const isLog = pop.kind === 'robots';
+    const hidden = isLog ? logState.hiddenRobots : UI.hiddenLists;
+    const sess = SESSIONS.filter((s) => inScope(s.project));
+    const groups = ROOMS.filter((r) => inScope(r.id)).map((r) => [r, sess.filter((s) => s.project === r.id && matchQ(`${s.id} ${s.room} ${s.robots.map((id) => `${id} ${DEF[id].agent}`).join(' ')} ${sessionBadge(s)[1]}`))]).filter(([, l]) => l.length);
+    const row = (s) => {
+      const [c, l] = sessionBadge(s), n = latestModel.tasks.filter((x) => x.list === s.id).length;
+      if (!isLog) return `<label class="pg-item"><input type="checkbox" data-pick-list="${s.id}" data-fk="pl-${s.id}"${hidden.has(s.id) ? '' : ' checked'}>${pill(s.id, 'main')}<span class="pg-name">${esc(DEF[s.id].agent)}<small>${n} タスク</small></span><span class="state ${c}">${l}</span></label>`;
+      const on = s.robots.filter((id) => !hidden.has(id)).length;
+      const subs = s.robots.filter((id) => id !== s.id).map((id) => `<label class="pg-item pg-sub"><input type="checkbox" data-pick-robot="${id}" data-fk="pr-${id}"${hidden.has(id) ? '' : ' checked'}>${pill(id, DEF[id].role)}<span class="pg-name">${esc(DEF[id].agent)}</span><span class="state ${robotBadge(id)[0]}">${robotBadge(id)[1]}</span></label>`).join('');
+      return `<label class="pg-item"><input type="checkbox" data-pick-session="${s.id}" data-fk="ps-${s.id}"${on === s.robots.length ? ' checked' : ''}${on > 0 && on < s.robots.length ? ' data-mixed' : ''}>${pill(s.id, 'main')}<span class="pg-name">${esc(DEF[s.id].agent)}<small>ロボット ${s.robots.length}</small></span><span class="state ${c}">${l}</span></label>${subs}`;
+    };
+    body.innerHTML = `<div class="pop-groups">${groups.map(([r, list]) => `<p class="pg-label">${esc(r.name)}</p>${list.map(row).join('')}`).join('') || '<p class="pop-none">該当するセッションがない</p>'}</div>`;
+    body.querySelectorAll('[data-mixed]').forEach((x) => { x.indeterminate = true; });
+    const total = isLog ? ROBOT_DEFS.filter((d) => inScope(projectOfRobot(d.id))).length : sess.length;
+    const shown = isLog ? ROBOT_DEFS.filter((d) => inScope(projectOfRobot(d.id)) && !hidden.has(d.id)).length : sess.filter((s) => !hidden.has(s.id)).length;
+    setText(popEl.querySelector('[data-pop-count]'), `${shown} / ${total} を表示`);
+  }
+  if (keepFocus) { const again = body.querySelector(`[data-fk="${CSS.escape(keepFocus)}"]`); if (again) again.focus({ preventScroll: true }); }
+}
+function afterPick() {
+  paintScopeButtons();
+  renderPopBody();
+  if (pop.kind === 'robots') renderLog(true); else renderTaskBoard(latestModel);
+}
+popEl.addEventListener('input', (e) => { if (e.target.matches('.pop-search')) { pop.q = e.target.value.trim().toLowerCase(); renderPopBody(); } });
+popEl.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset.pickList) { if (t.checked) UI.hiddenLists.delete(t.dataset.pickList); else UI.hiddenLists.add(t.dataset.pickList); }
+  else if (t.dataset.pickRobot) { if (t.checked) logState.hiddenRobots.delete(t.dataset.pickRobot); else logState.hiddenRobots.add(t.dataset.pickRobot); }
+  else if (t.dataset.pickSession) { for (const id of SESSIONS.find((s) => s.id === t.dataset.pickSession).robots) { if (t.checked) logState.hiddenRobots.delete(id); else logState.hiddenRobots.add(id); } }
+  else return;
+  afterPick();
+});
+popEl.addEventListener('click', (e) => {
+  const opt = e.target.closest('[data-pick-project]');
+  if (opt) { setProject(opt.dataset.pickProject); closePop(); return; }
+  const q = e.target.closest('[data-quick]');
+  if (!q) return;
+  const isLog = pop.kind === 'robots', hidden = isLog ? logState.hiddenRobots : UI.hiddenLists;
+  for (const s of SESSIONS.filter((x) => inScope(x.project))) {
+    const [c] = sessionBadge(s);
+    const keep = q.dataset.quick === 'all' || (q.dataset.quick === 'active' && c !== 'st-idle') || (q.dataset.quick === 'waiting' && c === 'st-waiting');
+    for (const id of isLog ? s.robots : [s.id]) { if (keep) hidden.delete(id); else hidden.add(id); }
+  }
+  afterPick();
+});
+popEl.addEventListener('keydown', (e) => {
+  const opt = e.target.closest('[role="option"]');
+  if (!opt) { if (e.key === 'ArrowDown' && e.target.matches('.pop-search')) { const f = popEl.querySelector('[role="option"], .pop-body input'); if (f) { e.preventDefault(); f.focus(); } } return; }
+  const opts = [...popEl.querySelectorAll('[role="option"]')], i = opts.indexOf(opt);
+  const go = (j) => { e.preventDefault(); opts.forEach((o) => { o.tabIndex = -1; }); opts[j].tabIndex = 0; opts[j].focus(); };
+  if (e.key === 'ArrowDown') go(Math.min(opts.length - 1, i + 1));
+  else if (e.key === 'ArrowUp') go(Math.max(0, i - 1));
+  else if (e.key === 'Home') go(0);
+  else if (e.key === 'End') go(opts.length - 1);
+  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opt.click(); }
+});
+document.addEventListener('click', (e) => {
+  const sb = e.target.closest('[data-scope-btn]');
+  if (sb) { openPop(sb, 'project'); return; }
+  const pk = e.target.closest('[data-picker]');
+  if (pk) { openPop(pk, pk.dataset.picker); return; }
+  const sp = e.target.closest('[data-set-project]');
+  if (sp) setProject(UI.project === sp.dataset.setProject ? 'all' : sp.dataset.setProject);
+});
+
+/* ---------- event ticker ---------- */
+const tickerItems = [];
+const fmtClock = (sec) => { const s = Math.floor(sec) % 86400; return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((v) => String(v).padStart(2, '0')).join(':'); };
+function emitEvents(prev, now) {
+  for (let k = Math.floor(prev / LOOP); k <= Math.floor(now / LOOP); k++) {
+    for (const [et, who, kind, what, perm] of EVENTS) {
+      const abs = k * LOOP + et;
+      if (abs > prev && abs <= now) {
+        if (perm && ruleCovers(PERM_BY_ID[perm], abs)) continue;   // an "always allow" rule answered it: no prompt at all
+        const item = { abs, who, kind, what, perm, seq: ++logSeq };
+        tickerItems.unshift(item);
+        logItems.unshift(item);
+      }
+    }
+  }
+  tickerItems.length = Math.min(tickerItems.length, 40);
+  logItems.length = Math.min(logItems.length, 600);
+}
+function renderTicker() {
+  setHTML($('ticker'), tickerItems.filter((e) => inScope(projectOfRobot(e.who))).slice(0, 5).map((e) => `<li><time>${fmtClock(BASE_CLOCK + e.abs)}</time>${pill(e.who, DEF[e.who].role)}<span class="kind">${esc(e.kind)}</span><span class="what">${esc(e.what)}</span></li>`).join(''));
+}
+
+/* ---------- zooming into a board: camera flight, then the board as a page ---------- */
+const zoom = { zoomed: false, returnPose: null, opener: null };
+let camTween = null;
+const viewTarget = new THREE.Vector3();
+function flyTo(pos, target, fromTarget, dur, done) {
+  camTween = { p0: camera.position.clone(), t0: fromTarget.clone(), p1: pos.clone(), t1: target.clone(), start: performance.now(), dur, done };
+}
+function stepTween(ms) {
+  if (!camTween) return;
+  const k = camTween.dur <= 0 ? 1 : Math.min(1, (ms - camTween.start) / (camTween.dur * 1000));
+  const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  camera.position.lerpVectors(camTween.p0, camTween.p1, e);
+  viewTarget.lerpVectors(camTween.t0, camTween.t1, e);
+  if (k >= 1) { const done = camTween.done; camTween = null; if (done) done(); }
+}
+function showOverlay(el) { el.hidden = false; requestAnimationFrame(() => el.classList.add('show')); }
+function hideOverlay(el) { el.classList.remove('show'); setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, reduceMotion ? 0 : 240); }
+function zoomTo(pose, opener, arrive) {
+  if (opener) zoom.opener = opener;
+  if (!has3D) { arrive(); return; }
+  if (!zoom.zoomed) {
+    zoom.returnPose = { p: camera.position.clone(), t: controls.target.clone() };
+    zoom.zoomed = true; controls.enabled = false;
+    flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.9, arrive);
+  } else flyTo(pose.p, pose.t, viewTarget, reduceMotion ? 0 : 0.5, arrive);
+}
+function zoomBack() {
+  if (has3D && zoom.returnPose) {
+    const back = zoom.returnPose;
+    flyTo(back.p, back.t, viewTarget, reduceMotion ? 0 : 0.8, () => { controls.target.copy(back.t); zoom.zoomed = false; controls.enabled = true; controls.update(); });
+  }
+  if (zoom.opener && document.contains(zoom.opener)) zoom.opener.focus({ preventScroll: true });
+}
+const boardProject = (pref) => pref || (UI.project !== 'all' ? UI.project : SOURCE.mode === 'demo' ? 'shop' : ((ROOMS.find((r) => r.shown) || ROOMS[0] || {}).id));
+function meshPose(mesh, w, h, px, py, dist) {
+  const c = mesh.localToWorld(new THREE.Vector3(px === undefined ? 0 : (px - 0.5) * w, py === undefined ? 0 : (0.5 - py) * h, 0));
+  const n = new THREE.Vector3(0, 0, 1).applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion()));
+  return { p: c.clone().add(n.multiplyScalar(dist)), t: c };
+}
+function specPose(i, pref) {
+  if (SOURCE.mode === 'live') return liveBoardPose(i >= 0 ? SPECS[i].project : boardProject(pref), 'spec', i);
+  if (i >= 0 && SPECS[i].project === 'shop') { const p = sbTile(SHOP_POS[i]), c = sbPoint(p.x + SB.tw / 2, p.y + SB.th / 2); return { p: c.clone().add(new THREE.Vector3(0, 0, 2.2)), t: c }; }
+  const proj = i >= 0 ? SPECS[i].project : boardProject(pref);
+  if (proj === 'shop') { const c = new THREE.Vector3(SB.cx, SB.cy, SB.z); return { p: c.clone().add(new THREE.Vector3(0, 0, 4.6)), t: c }; }
+  const pb = PBOARD[proj], t = i >= 0 && pb.tiles.find((q) => q.i === i);
+  return t ? meshPose(pb.mesh, pb.w, pb.h, (t.x + t.w / 2) / pb.W, (t.y + t.h / 2) / pb.H, 1.6) : meshPose(pb.mesh, pb.w, pb.h, undefined, undefined, pb.w * 1.15 + 0.6);
+}
+function taskPose(pref) {
+  if (SOURCE.mode === 'live') return liveBoardPose(boardProject(pref), 'tasks');
+  const proj = boardProject(pref);
+  if (proj === 'shop') { const c = new THREE.Vector3(KB.cx, KB.cy, KB.z); return { p: c.clone().add(new THREE.Vector3(0, 0, 3.4)), t: c }; }
+  const pb = PBOARD[proj];
+  return meshPose(pb.mesh, pb.w, pb.h, undefined, undefined, pb.w * 1.15 + 0.6);
+}
+
+/* ---------- spec board up close: every spec (overview) or one spec as a readable sheet ---------- */
+const wbEl = $('wb'), wbCode = $('wb-code'), wbNav = $('wb-nav'), wbBody = $('wb-body'), wbSideList = $('wb-side-list');
+const wb = { open: false, idx: -1, lastActive: null, q: '' };
+let wbSideOpen = readPref('wbSide', 'open') === 'open';
+const narrowWb = () => sceneEl.clientWidth < 800;
+function applyWbSide() {
+  wbBody.classList.toggle('side-closed', !wbSideOpen);
+  const b = $('wb-side-btn');
+  b.setAttribute('aria-expanded', String(wbSideOpen));
+  b.textContent = wbSideOpen ? '一覧を閉じる' : 'spec 一覧';
+}
+$('wb-side-btn').addEventListener('click', () => {
+  wbSideOpen = !wbSideOpen;
+  if (!narrowWb()) writePref('wbSide', wbSideOpen ? 'open' : 'closed');
+  applyWbSide();
+  if (wbSideOpen) $('wb-search').focus({ preventScroll: true });
+});
+$('wb-search').addEventListener('input', (e) => { wb.q = e.target.value.trim().toLowerCase(); renderWbSide(latestModel); });
+wbSideList.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-idx]');
+  if (!b) return;
+  openWhiteboard(Number(b.dataset.idx));
+  if (narrowWb()) { wbSideOpen = false; applyWbSide(); wbCode.focus({ preventScroll: true }); }
+});
+wbCode.addEventListener('click', (e) => { const b = e.target.closest('.ov-card'); if (b) { openWhiteboard(Number(b.dataset.idx)); wbCode.focus({ preventScroll: true }); } });
+wbNav.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-sec]');
+  if (!b) return;
+  $('wb-follow').checked = false;
+  const el = document.getElementById(`wb-sec-${b.dataset.sec}`);
+  if (el) wbCode.scrollTop += el.getBoundingClientRect().top - wbCode.getBoundingClientRect().top - 8;
+});
+// Scrolling by hand stops the automatic follow until the box is ticked again.
+['wheel', 'touchmove'].forEach((type) => wbCode.addEventListener(type, () => { if (wb.idx >= 0) $('wb-follow').checked = false; }, { passive: true }));
+
+function openWhiteboard(i, opener, board) {
+  if (tb.open) { tb.open = false; tb.detail = null; hideOverlay(tbEl); }
+  if (rbState.id) closeRobot(true);
+  if (i >= 0 && !inScope(SPECS[i].project)) setProject(SPECS[i].project, { camera: false });
+  wb.idx = i; wb.lastActive = null; wb.board = board || null;
+  if (wb.open) {
+    if (opener) zoom.opener = opener;
+    $('wb-follow').checked = true;
+    wbCode.scrollTop = 0;
+    renderWhiteboard(latestModel, true);
+    if (has3D && !camTween) { const pose = specPose(i, wb.board); camera.position.copy(pose.p); viewTarget.copy(pose.t); }
+    return;
+  }
+  wb.open = true;
+  wbSideOpen = narrowWb() ? false : readPref('wbSide', 'open') === 'open';
+  applyWbSide();
+  zoomTo(specPose(i, wb.board), opener, () => {
+    if (!wb.open) return;
+    showOverlay(wbEl);
+    $('wb-follow').checked = true;
+    renderWhiteboard(latestModel, true);
+    $('wb-close').focus({ preventScroll: true });
+  });
+}
+function closeWhiteboard() {
+  if (!wb.open) return;
+  wb.open = false;
+  hideOverlay(wbEl);
+  zoomBack();
+}
+$('wb-close').addEventListener('click', closeWhiteboard);
+
+function renderWhiteboard(model, force) {
+  if (!wb.open) return;
+  renderWbSide(model);
+  if (wb.idx < 0) renderOverview(model); else renderSheet(model, force);
+}
+function renderWbSide(model) {
+  const q = wb.q;
+  const match = (s) => inScope(s.project) && (!q || `${s.name} ${s.screen} ${s.file} ${PROJECT[s.project].name}`.toLowerCase().includes(q));
+  const groups = BUCKETS.map(([b, label]) => [label, model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && match(s))]).filter(([, items]) => items.length);
+  const n = model.specs.filter((s) => inScope(s.project)).length;
+  keyed(wbSideList, JSON.stringify([UI.project, q, wb.idx, groups.map(([label, items]) => [label, items.map(([s, i]) => `${i}:${s.by || ''}`)])]), () => {
+    const all = `<button type="button" class="ws-item ws-all" data-idx="-1" data-fk="ws--1" aria-current="${wb.idx === -1}"><span class="dot" aria-hidden="true"></span><span class="nm">全体を見る</span><span></span><small>${esc(scopeLabel())} · ${n} 画面の進み具合</small></button>`;
+    const body = groups.map(([label, items]) => `<p class="ws-group"><span>${label}</span><b>${items.length}</b></p>${items.map(([s, i]) => `<button type="button" class="ws-item b-${s.bucket}" data-idx="${i}" data-fk="ws-${i}" aria-current="${wb.idx === i}"${roleVar(s)}><span class="dot" aria-hidden="true"></span><span class="nm">${esc(s.name)}</span>${s.by ? pill(s.by, DEF[s.by].role) : '<span></span>'}<small></small></button>`).join('')}`).join('');
+    return all + (body || '<p class="ws-none">該当する画面がない</p>');
+  });
+  wbSideList.querySelectorAll('.ws-item:not(.ws-all)').forEach((b) => { const x = model.specs[+b.dataset.idx]; setText(b.lastElementChild, UI.project === 'all' ? `${PROJECT[x.project].name} · ${x.status.text}` : x.status.text); });
+}
+
+const SWATCHES = '<span><i class="sw sw-writing"></i>書き込み中</span><span><i class="sw sw-written"></i>記入済み</span><span><i class="sw sw-impl"></i>実装済み</span><span><i class="sw sw-tested"></i>テスト済み</span><span><i class="sw sw-empty"></i>未記入</span>';
+const OV_LEGEND = `${SWATCHES}<span>バーは左から 概要・構造・状態・データ・操作・遷移・分岐</span><span>カードを押すとその spec を開く</span>`;
+const SHEET_LEGEND = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 実装済み・テスト済み</span><span><b class="m-doing">●</b> 実装中</span><span><b class="m-todo">○</b> 未実装・未テスト</span><span><b class="m-test">▶</b> テスト中</span><span><b class="m-flaky">⚠</b> 再実行で通過</span><span>中身はデモの例</span>';
+function setHead(title, file, stCls, stText, who) {
+  setText($('wb-title'), title);
+  setText($('wb-file'), file);
+  const st = $('wb-status'), cls = `state ${stCls}`;
+  if (st.className !== cls) st.className = cls;
+  setText(st, stText);
+  setHTML($('wb-who'), who);
+}
+function specSummary(s) {
+  if (s.bucket === 'todo') return 'spec ファイルなし';
+  const w = s.written.reduce((a, b) => a + b, 0) / 7;
+  return `記述 ${pct(w)}% · 実装 ${s.implPhase ? `${sumImpl(s.implN)}/${sumImpl(s.totals)}` : '—'} · テスト ${s.implPhase ? `${s.implN[6]}/${s.totals[6]}` : '—'}`;
+}
+function renderOverview(model) {
+  const inS = model.specs.filter((s) => inScope(s.project)), c = bucketCounts(inS);
+  setHead(UI.project === 'all' ? 'spec ボード' : `spec ボード · ${PROJECT[UI.project].name}`, `docs/screens/json/（${inS.length} 画面）`, 'st-busy', `作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, '');
+  wbNav.hidden = true; $('wb-follow-label').hidden = true;
+  setHTML($('wb-legend'), OV_LEGEND);
+  const sig = JSON.stringify(['ov', UI.project, model.specs.map((s) => `${s.bucket}:${s.by || ''}`)]);
+  if (wbCode._sig !== sig) {
+    wbCode.innerHTML = !inS.length ? `<p class="sc-ph ov-none">${esc(scopeLabel())} には画面の spec がない（CLI ツールなど）。上の「プロジェクト」で別のプロジェクトを選べる</p>` : BUCKETS.map(([b, label]) => {
+      const items = model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && inScope(s.project));
+      if (!items.length) return '';
+      return `<section class="ov-group" aria-label="${label}"><h3>${label}<small>${items.length}</small></h3><div class="ov-grid">${items.map(([s, i]) => `<button type="button" class="ov-card b-${s.bucket}" data-idx="${i}"${roleVar(s)}><span class="ov-top"><strong>${esc(s.name)}</strong><span class="state"></span></span><code class="ov-file">${UI.project === 'all' ? `${esc(PROJECT[s.project].name)} · ` : ''}${esc(s.file)}</code><span class="ov-who"></span><span class="ov-secs">${SEGS}<span class="ov-labels" aria-hidden="true">${SECTIONS.map((x) => `<span>${x}</span>`).join('')}</span></span><span class="ov-sum"></span></button>`).join('')}</div></section>`;
+    }).join('');
+    wbCode._sig = sig; wbCode._html = null;
+  }
+  wbCode.querySelectorAll('.ov-card').forEach((card) => {
+    const s = model.specs[+card.dataset.idx], st = card.querySelector('.state'), cls = `state ${STATUS_CLASS[s.status.kind]}`;
+    if (st.className !== cls) st.className = cls;
+    setText(st, s.status.text);
+    setHTML(card.querySelector('.ov-who'), s.by ? `${pill(s.by, DEF[s.by].role)}<span>${esc(robotState[s.by].act)}</span>` : `<span>${esc(s.note)}</span>`);
+    paintSegs(card.querySelector('.segs'), s);
+    setText(card.querySelector('.ov-sum'), specSummary(s));
+  });
+}
+
+const TYPE_JA = { View: 'コンテナ', SafeAreaView: '画面枠', ScrollView: 'スクロール', Label: 'テキスト', TextField: '入力欄', TextView: '複数行入力', Button: 'ボタン', Image: '画像', NetworkImage: '画像', Collection: '一覧', Indicator: '読み込み', Segment: '切り替え', SelectBox: '選択', CheckBox: 'チェック', Switch: 'スイッチ', TabView: 'タブ' };
+const PLATFORM_JA = { ios: 'iOS', android: 'Android', web: 'Web' };
+const CHIP = { empty: 'c-empty', writing: 'c-writing', written: '', impl: 'c-impl', done: 'c-done', test: 'c-test', tested: 'c-done' };
+// A section with nothing implemented or tested yet stays plain; colour marks progress.
+const chipCls = (g) => ((g.kind === 'impl' || g.kind === 'test') && g.f === 0 ? '' : CHIP[g.kind]);
+/* [section, card title, key in the spec file, full width] */
+const SHEET = [[0, '概要', 'metadata', true], [1, '構造（部品と並び）', 'structure', true], [2, '状態', 'stateManagement', false], [3, 'データの流れ', 'dataFlow', false], [4, '操作', 'userActions', false], [5, '遷移', 'transitions', false], [6, '分岐（テストで確かめる条件）', 'branchContracts', true], [7, '関連ファイル', 'relatedFiles', true]];
+const reveal = (n, w) => (w >= 1 ? n : w <= 0 ? 0 : Math.min(n, Math.max(1, Math.ceil(n * w))));
+function markOf(s, model, k, i) {
+  if (s.id === 'cart' && k === 6 && model.t >= 18) {
+    const st = (model.tests.rows[i] || {}).status;
+    if (st === 'passed') return ['✓', 'm-done', ''];
+    if (st === 'flaky') return ['⚠', 'm-flaky', ''];
+    if (st === 'running') return ['▶', 'm-test', 'is-testing'];
+    return ['○', 'm-todo', ''];
+  }
+  if (!s.implPhase) return ['', '', ''];
+  const n = s.implN[k];
+  if (i < n) return ['✓', 'm-done', ''];
+  if (i === n && s.implIdx === k) return ['●', 'm-doing', 'is-doing'];
+  return ['○', 'm-todo', ''];
+}
+function wfElement([type, id, desc], state) {
+  let inner;
+  if (type === 'Button') inner = `<b class="wf-btn">${esc(desc)}</b>`;
+  else if (type === 'TextField' || type === 'TextView') inner = `<span class="wf-input">${esc(desc)}</span>`;
+  else if (type === 'SelectBox') inner = `<span class="wf-input">${esc(desc)} ▾</span>`;
+  else if (type === 'Collection') inner = '<span class="wf-tiles"><i></i><i></i><i></i></span>';
+  else if (type === 'Indicator') inner = '<span class="wf-spin"></span>';
+  else if (type === 'Segment') inner = '<span class="wf-seg"><i></i><i></i><i></i></span>';
+  else if (type === 'Image' || type === 'NetworkImage') inner = '<span class="wf-img"></span>';
+  else if (type === 'Switch' || type === 'CheckBox') inner = `<span class="wf-check"><span class="bar short"></span><i class="${type === 'CheckBox' ? 'cb' : ''}"></i></span>`;
+  else inner = `<span class="bar${type === 'Label' ? ' short' : ''}"></span>`;
+  return `<div class="wf s-${state}"><span class="wf-id">${esc(id)}</span>${inner}</div>`;
+}
+function renderNav(s) {
+  if (wbNav._idx !== wb.idx) { wbNav.innerHTML = SECTIONS.map((label, k) => `<button type="button" data-sec="${k}"><span>${label}</span><small></small></button>`).join(''); wbNav._idx = wb.idx; }
+  [...wbNav.children].forEach((b, k) => { const g = secState(s, k); const cls = chipCls(g); if (b.className !== cls) b.className = cls; setText(b.lastElementChild, g.text); });
+}
+function renderSheet(model, force) {
+  const s = model.specs[wb.idx], d = s.doc, T = model.tests;
+  setHead(`${s.name}（${s.screen}）`, `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
+  wbNav.hidden = false; $('wb-follow-label').hidden = false;
+  setHTML($('wb-legend'), SHEET_LEGEND);
+  renderNav(s);
+  if (wbCode._sig) { wbCode._sig = null; wbCode._html = null; }
+
+  let activeKey = null;
+  const actAttr = (cls, key) => ((cls === 'is-doing' || cls === 'is-testing') && activeKey === null ? (activeKey = key, ' data-act') : '');
+  const li = (m, key, inner) => `<li class="rw ${m[2]}"${actAttr(m[2], key)}><span class="mk ${m[1]}">${m[0]}</span><span>${inner}</span></li>`;
+  const tr = (m, key, cells) => `<tr class="${m[2]}"${actAttr(m[2], key)}><td class="mk ${m[1]}">${m[0]}</td>${cells}</tr>`;
+  // The first n items of a section; while it is being written the newest one is highlighted instead of marked.
+  const pick = (k, arr, n, fresh) => arr.slice(0, n).map((x, i) => [x, i, fresh ? ['', '', i === n - 1 ? 'is-new' : ''] : markOf(s, model, k, i)]);
+  const bodies = [
+    (w) => {
+      const m = d.metadata;
+      const rows = [['画面名', `${esc(m.displayName)}（<span class="mono">${esc(m.name)}</span>）`], ['説明', esc(m.description)], ['対応', m.platforms.map((p) => `<span class="bdg">${PLATFORM_JA[p] || esc(p)}</span>`).join(' ')], ['レイアウト', `<code>docs/screens/layouts/${esc(m.layoutFile)}.json</code>`], ['作成日', esc(m.createdAt)]];
+      return `<dl class="kv">${rows.slice(0, reveal(rows.length, w)).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>`;
+    },
+    (w, writing) => {
+      const items = pick(1, d.components, reveal(d.components.length, w), writing);
+      const rows = items.map(([[type, id, desc], i, m]) => li(m, `c${i}`, `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> <span class="desc">${esc(desc)}</span>`)).join('');
+      const byId = new Map(items.map((x) => [x[0][1], x]));
+      const wf = d.layoutChildren.filter((id) => byId.has(id)).map((id) => {
+        const [c, , m] = byId.get(id);
+        const state = writing ? (m[2] === 'is-new' ? 'writing' : 'defined') : !s.implPhase ? 'defined' : m[1] === 'm-done' ? 'done' : m[1] === 'm-doing' ? 'doing' : 'todo';
+        return wfElement(c, state);
+      }).join('');
+      return `<div class="st-grid"><div class="wf-phone" role="img" aria-label="${esc(d.components[0][1])} の中に並ぶ部品の配置図">${wf}</div><ul class="rows">${rows}</ul></div>`;
+    },
+    (w, writing) => {
+      const rows = pick(2, d.uiVariables, reveal(d.uiVariables.length, w), writing).map(([[name, type, init], i, m]) => tr(m, `v${i}`, `<td class="mono">${esc(name)}</td><td class="mono">${esc(type)}</td><td class="mono">${esc(init)}</td>`)).join('');
+      const ev = !writing || w >= 0.6 ? `<p class="sub-h">イベント</p><ul class="rows">${d.eventHandlers.map(([name, desc]) => `<li class="rw"><span class="mk"></span><span><span class="id">${esc(name)}</span> <span class="desc">${esc(desc)}</span></span></li>`).join('')}</ul>` : '';
+      return `<table class="vt"><thead><tr><th><span class="sr">状態</span></th><th>変数</th><th>型</th><th>初期値</th></tr></thead><tbody>${rows}</tbody></table>${ev}`;
+    },
+    (w, writing) => {
+      const M = d.vmMethods.length, shown = writing ? reveal(M + 2 + d.apis.length, w) : M + 2 + d.apis.length;
+      const methods = pick(3, d.vmMethods, Math.min(shown, M), writing && shown <= M).map(([name, i, m]) => li(m, `m${i}`, `<span class="id">${esc(name)}</span>`)).join('');
+      const vars = shown > M ? `<p class="fb-vars">持つ値: ${d.vmVars.map((v) => `<code>${esc(v)}</code>`).join(' ')}</p>` : '';
+      const repos = shown > M + 1 ? `<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">Repository</p><p>${d.repositories.map((r) => `<span class="bdg">${esc(r)}</span>`).join(' ')}</p></div>` : '';
+      const apiN = Math.max(0, shown - M - 2);
+      let apis = '';
+      if (shown > M + 1 && !d.apis.length) apis = '<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">API</p><p class="sc-ph">通信しない</p></div>';
+      else if (apiN > 0) apis = `<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">API</p><ul class="rows">${d.apis.slice(0, apiN).map(([op, method, path]) => `<li class="api"><span class="http http-${method}">${method}</span><code>${esc(path)}</code><span class="desc">${esc(op)}</span></li>`).join('')}</ul></div>`;
+      return `<div class="flow"><div class="fbox"><p class="fb-h">ViewModel</p><ul class="rows">${methods}</ul>${vars}</div>${repos}${apis}</div>`;
+    },
+    (w, writing) => `<ul class="rows">${pick(4, d.userActions, reveal(d.userActions.length, w), writing).map(([[a, p], i, m]) => li(m, `a${i}`, `${esc(a)}<span class="to">→</span><code>${esc(p)}</code>`)).join('')}</ul>`,
+    (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest], i, m]) => li(m, `t${i}`, `${esc(trig)}<span class="to">→</span><span class="scr" title="${esc(dest)}">${esc(SCREEN_JA[dest] || dest)}</span>`)).join('')}</ul>`,
+    (w, writing) => {
+      const rows = pick(6, d.branches, reveal(d.branches.length, w), writing).map(([[method, when, then], i, m]) => tr(m, `b${i}`, `<td class="mono">${esc(method)}</td><td>${esc(when)}</td><td>${esc(then)}</td>`)).join('');
+      const note = s.id === 'cart' && model.t >= 18 ? `<p class="sc-note">tests/screens/cart.test.json の 8 ケースと 1 対 1（${T.passed}/8 通過）</p>` : '';
+      return `<table class="vt"><thead><tr><th><span class="sr">状態</span></th><th>メソッド</th><th>条件</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table>${note}`;
+    },
+    () => `<ul class="files">${s.related.map(([type, path], i) => {
+      const now = i === s.relatedNow && s.by;
+      return `<li class="${now ? 'now' : ''}"><span class="bdg">${type}</span><code>${esc(path)}</code>${now ? `<span class="editing">${pill(s.by, DEF[s.by].role)} ${s.status.kind === 'test' ? '実行中' : '編集中'}</span>` : ''}</li>`;
+    }).join('')}</ul>`,
+  ];
+  const html = SHEET.map(([k, title, key, wide]) => {
+    const w = k === 7 ? (s.written[6] >= 1 ? 1 : 0) : s.written[k];
+    const g = k === 7 ? (w ? { kind: 'written', text: '記入済み' } : { kind: 'empty', text: '未記入' }) : secState(s, k);
+    const writing = w > 0 && w < 1, live = !!s.by && k === activeSec(s);
+    const cls = ['sc', wide && 'wide', w <= 0 && 'sc-empty', live && (k === s.writingIdx ? 'sc-writing' : k === s.testIdx ? 'sc-testing' : 'sc-active')].filter(Boolean).join(' ');
+    const head = `<header><h3>${title}</h3><code>${key}</code>${live ? pill(s.by, DEF[s.by].role) : ''}<span class="sc-chip ${chipCls(g)}">${g.text}</span></header>`;
+    if (w <= 0) return `<section class="${cls}" id="wb-sec-${k}">${head}<p class="sc-ph">まだ書かれていません</p></section>`;
+    const act = live && k === s.writingIdx && activeKey === null ? (activeKey = `w${k}`, ' data-act') : '';
+    const tail = !writing ? '' : s.by ? `<p class="sc-typing">✎ ${esc(s.by)} が書き込み中<span class="caret" aria-hidden="true"></span></p>` : '<p class="sc-ph">ここで書きかけのまま止まっている</p>';
+    return `<section class="${cls}" id="wb-sec-${k}"${act}>${head}${bodies[k](w, writing)}${tail}</section>`;
+  }).join('');
+  setHTML(wbCode, html);
+
+  // Follow: keep the card being written, or the row being implemented or tested, in view.
+  if ($('wb-follow').checked && activeKey) {
+    const el = wbCode.querySelector('[data-act]');
+    if (el) {
+      const r = el.getBoundingClientRect(), c = wbCode.getBoundingClientRect();
+      if (el.tagName === 'SECTION') { const over = r.bottom - (c.top + c.height * 0.85); if (force || activeKey !== wb.lastActive || over > 0) wbCode.scrollTop += over; }
+      else if (force || activeKey !== wb.lastActive) wbCode.scrollTop += r.top + r.height / 2 - (c.top + c.height / 2);
+    }
+  }
+  wb.lastActive = activeKey;
+}
+
+/* ---------- task board up close: one column per task state, permission prompts on top ---------- */
+const tbEl = $('tb'), kanbanEl = $('kanban'), stripEl = $('perm-strip'), detailEl = $('tb-detail');
+const tb = { open: false, detail: null, board: null };
+$('tb-lanes').addEventListener('change', (e) => { UI.lanes = e.target.checked; writePref('lanes', UI.lanes ? 'on' : 'off'); renderTaskBoard(latestModel); });
+function openTaskBoard(opener, detail, board) {
+  if (detail !== undefined) tb.detail = detail;
+  if (board !== undefined) tb.board = board;
+  if (detail && !detail.startsWith('perm:') && !inScope(PROJECT_OF[detail.split('#')[0]])) setProject(PROJECT_OF[detail.split('#')[0]], { camera: false });
+  if (detail && detail.startsWith('perm:') && !inScope(projectOfRobot(PERM_BY_ID[detail.slice(5)].who))) setProject(projectOfRobot(PERM_BY_ID[detail.slice(5)].who), { camera: false });
+  if (wb.open) { wb.open = false; hideOverlay(wbEl); }
+  if (rbState.id) closeRobot(true);
+  if (tb.open) { renderTaskBoard(latestModel); if (detail) $('tbd-close').focus({ preventScroll: true }); return; }
+  tb.open = true;
+  zoomTo(taskPose(tb.board), opener, () => {
+    if (!tb.open) return;
+    showOverlay(tbEl);
+    renderTaskBoard(latestModel);
+    $(tb.detail ? 'tbd-close' : 'tb-close').focus({ preventScroll: true });
+  });
+}
+function closeTaskDetail() {
+  const key = tb.detail;
+  tb.detail = null;
+  renderTaskBoard(latestModel);
+  const back = key && (kanbanEl.querySelector(`[data-open="${CSS.escape(key)}"]`) || stripEl.querySelector(`[data-open="${CSS.escape(key)}"]`));
+  (back || $('tb-close')).focus({ preventScroll: true });
+}
+function closeTaskBoard() {
+  if (!tb.open) return;
+  tb.open = false; tb.detail = null;
+  hideOverlay(tbEl);
+  zoomBack();
+}
+$('tb-close').addEventListener('click', closeTaskBoard);
+const COL_HINT = { todo: '担当が決まれば始められる', wait: '先に終わるタスクがある', doing: 'ロボットが今やっている', done: '' };
+const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+const paintSince = (root, t, word) => root.querySelectorAll('[data-since]').forEach((el) => setText(el, `${word} ${mmss(Math.max(0, t - Number(el.dataset.since)))}`));
+function renderTaskBoard(model) {
+  if (!tb.open) return;
+  const visible = (list) => inScope(PROJECT_OF[list]) && !UI.hiddenLists.has(list);
+  const tasks = model.tasks.filter((x) => visible(x.list));
+  // Permission prompts stay on top for the whole project even when some sessions are filtered out; prompts in
+  // other projects are counted so they are never missed.
+  const pend = model.pending.filter((p) => inScope(projectOfRobot(p.who)));
+  const elsewhere = model.pending.length - pend.length;
+  setText($('tb-count'), `${tasks.length} 件`);
+  setText($('tb-title'), UI.project === 'all' ? 'タスクボード' : `タスクボード · ${PROJECT[UI.project].name}`);
+  stripEl.hidden = !pend.length && !alwaysRules.size && !elsewhere;
+  keyed(stripEl, JSON.stringify([pend.map((p) => p.id), [...alwaysRules.keys()], elsewhere]), () => {
+    const cards = pend.map((p) => {
+      const x = p.task && TASK_BY_KEY[p.task];
+      return `<li class="pcard"><div class="pc-who">${pill(p.who, DEF[p.who].role)}<span>${esc(DEF[p.who].agent)}</span><span class="pc-wait" data-since="${p.at}"></span></div><p class="pc-what"><b>${esc(p.tool)}</b> <code>${esc(permSummary(p))}</code></p><button type="button" class="pc-task" data-open="${x ? p.task : `perm:${p.id}`}" data-fk="pt-${p.id}">${x ? `${esc(x.list)} #${x.id} ${esc(x.subject)}` : `${esc(SESSION_OF[p.who])} セッション · タスクなし`} › 詳細</button><div class="perm-acts">${permButtons(p, 'p')}</div></li>`;
+    }).join('');
+    const rules = alwaysRules.size ? `<p class="ps-rules">このデモで足した常時許可: ${[...alwaysRules.keys()].map((r) => `<code>${esc(r)}</code>`).join(' ')} <button type="button" class="link-btn" data-reset-rules data-fk="rules">取り消す</button></p>` : '';
+    const other = elsewhere ? `<p class="ps-rules">ほかのプロジェクトでも ${elsewhere} 件が許可を待っている <button type="button" class="link-btn" data-set-all data-fk="ps-all">すべてのプロジェクトを表示</button></p>` : '';
+    return `<h3 class="ps-title">許可を求めています<b>${pend.length}</b><small>${PERM_NOTE}</small></h3>${cards ? `<ul class="ps-list">${cards}</ul>` : '<p class="ps-none">このプロジェクトでは今は誰も許可を求めていない</p>'}${other}${rules}`;
+  });
+  paintSince(stripEl, model.t, '待ち');
+  const loopStart = simT - model.t;
+  const lists = SESSIONS.filter((x) => visible(x.id)).map((x) => x.id);
+  const noteHTML = (x, col) => {
+      const owner = x.owner ? `${pill(x.owner, DEF[x.owner].role)}<span>${esc(DEF[x.owner].agent)}</span>` : '<span>担当なし</span>';
+      const extra = col === 'doing' ? `<span class="n-doing">▶ ${esc(x.activeForm || x.subject)}<span data-since="${x.start}"></span></span>`
+        : col === 'wait' ? `<span class="n-wait">#${x.dep.id}「${esc(x.dep.subject)}」の完了待ち</span>`
+          : col === 'done' ? `<span class="n-time">${fmtClock(BASE_CLOCK + loopStart + x.end)} に完了</span>` : '';
+      const perm = x.perm ? `<div class="n-permbox"><p class="n-permq"><b>許可待ち</b> ${esc(x.perm.tool)} <code>${esc(permSummary(x.perm))}</code></p><div class="perm-acts">${permButtons(x.perm, 'k')}</div></div>` : '';
+      return `<li class="note${x.perm ? ' n-perm' : ''}${x.fresh ? ' n-new' : ''}"><button type="button" class="note-open" data-open="${x.key}" data-fk="nb-${x.key}"><span class="n-top"><span>#${x.id}</span><span>${UI.lanes ? '' : `${esc(x.list)} の一覧${UI.project === 'all' ? ` · ${esc(PROJECT[PROJECT_OF[x.list]].name)}` : ''}`}</span></span><span class="n-subj">${esc(x.subject)}</span>${extra}<span class="n-owner">${owner}</span></button>${perm}</li>`;
+  };
+  const sortCol = (col) => (a, b) => (b.perm ? 1 : 0) - (a.perm ? 1 : 0) || (col === 'done' ? b.end - a.end : 0) || a.list.localeCompare(b.list) || a.id - b.id;
+  kanbanEl.classList.toggle('lanes', UI.lanes);
+  keyed(kanbanEl, JSON.stringify([UI.lanes, lists, KCOLS.map(([col]) => tasks.filter((x) => x.col === col).map((x) => `${x.key}:${x.perm ? x.perm.id : ''}:${x.fresh ? 1 : 0}`))]), () => {
+    if (!lists.length) return `<p class="k-none">表示するセッションがない。上の「セッション」で選ぶ</p>`;
+    if (!UI.lanes) return KCOLS.map(([col, label]) => {
+      const items = tasks.filter((x) => x.col === col).sort(sortCol(col));
+      return `<section class="kcol k-${col}" aria-label="${label} ${items.length} 件"><h3 class="ktab"><span>${label}${COL_HINT[col] ? `<small>${COL_HINT[col]}</small>` : ''}</span><b>${items.length}</b></h3><ol class="knotes">${items.map((x) => noteHTML(x, col)).join('') || '<li class="k-empty">なし</li>'}</ol></section>`;
+    }).join('');
+    // One lane per session: its four state columns side by side, sessions that need you first.
+    const head = `<div class="lane-cols" aria-hidden="true"><span></span>${KCOLS.map(([col, label]) => `<span class="k-${col}">${label}<b>${tasks.filter((x) => x.col === col).length}</b></span>`).join('')}</div>`;
+    const ordered = SESSIONS.filter((x) => lists.includes(x.id)).sort((a, b) => SB_ORDER[sessionBadge(a)[0]] - SB_ORDER[sessionBadge(b)[0]] || a.id.localeCompare(b.id));
+    return head + ordered.map((x) => {
+      const mine = tasks.filter((t) => t.list === x.id), [c, l] = sessionBadge(x);
+      return `<section class="lane" aria-label="${esc(x.id)} のタスク ${mine.length} 件"><header class="lane-head"><button type="button" class="who-btn" data-robot-open="${x.id}" data-fk="lh-${x.id}">${pill(x.id, 'main')}<span>${esc(PROJECT[x.project].name)}</span></button><span class="state ${c}">${l}</span><small>${mine.length} 件</small></header>${KCOLS.map(([col, label]) => { const items = mine.filter((t) => t.col === col).sort(sortCol(col)); return `<div class="lane-cell k-${col}" aria-label="${label} ${items.length} 件"><span class="lane-label">${label} ${items.length}</span><ol class="knotes">${items.map((t) => noteHTML(t, col)).join('')}</ol></div>`; }).join('')}</section>`;
+    }).join('');
+  });
+  paintSince(kanbanEl, model.t, '経過');
+  renderTaskDetail(model);
+}
+
+/* The detail drawer: one task (or one prompt that belongs to no task) with its permission prompt, links and history. */
+function renderTaskDetail(model) {
+  const key = tb.detail;
+  detailEl.hidden = !key;
+  if (!key) { detailEl._sig = null; return; }
+  const permOnly = key.startsWith('perm:');
+  const x = permOnly ? null : model.tasks.find((q) => q.key === key) || null;
+  const base = permOnly ? null : TASK_BY_KEY[key];
+  const here = model.perms.filter((q) => (permOnly ? q.id === key.slice(5) : q.task === key));
+  const pending = here.find((q) => q.status === 'pending') || null;
+  const known = permOnly ? PERM_BY_ID[key.slice(5)] : null;
+  const who = base ? base.owner : known ? known.who : null;
+  const sig = JSON.stringify([key, x && x.col, x && x.status, pending && pending.id, here.map((q) => q.status)]);
+  keyed(detailEl, sig, () => {
+    const loopStart = simT - model.t;
+    const clock = (v) => fmtClock(BASE_CLOCK + loopStart + v);
+    const [cls, label] = x ? (x.perm ? ['st-waiting', '作業中・許可待ち'] : x.col === 'wait' ? ['st-waiting', '待ち'] : COL_STATE[x.col]) : ['st-idle', 'まだ作られていない'];
+    const blocks = base ? TASKS.filter((q) => q.list === base.list && q.blockedBy === base.id) : [];
+    const specIdx = base && base.spec ? SPEC_INDEX[base.spec] : -1;
+    const spec = specIdx >= 0 ? model.specs[specIdx] : null;
+    const hist = here.filter((q) => q.status !== 'pending').map((q) => {
+      const how = q.status === 'terminal' ? 'ターミナルで許可された' : q.status === 'rule' ? `ルール ${q.rule} で自動許可` : q.status === 'deny' ? 'ビューで拒否した' : q.status === 'always' ? `ビューで許可し、${q.rule} を追加` : 'ビューで許可した';
+      const at = q.decided ? fmtClock(BASE_CLOCK + q.decided.at) : clock(q.status === 'rule' ? q.at : q.end);
+      return `<li><time>${at}</time><span>${how} · ${esc(q.tool)} <code>${esc(permSummary(q))}</code></span></li>`;
+    }).join('');
+    const sample = pending || here[here.length - 1] || known;
+    const times = base ? [base.created >= 0 ? `作成 ${clock(base.created)}` : '', base.start !== null && base.start <= model.t ? `開始 ${clock(base.start)}` : '', base.end !== null && base.end <= model.t ? `完了 ${clock(base.end)}` : ''].filter(Boolean).join(' · ') : '';
+    return `<div class="tbd-top"><p class="tbd-id">${base ? `${esc(base.list)} #${base.id} · ${esc(base.list)} の一覧` : `${esc(SESSION_OF[who])} セッション · タスクなし`}</p><button type="button" class="wb-btn" id="tbd-close" data-close-detail data-fk="tbd-close">閉じる</button></div>
+<h3 id="tbd-title">${base ? esc(base.subject) : `${esc(known.tool)} の実行許可`}</h3>
+${base ? `<p class="tbd-state"><span class="state ${cls}">${label}</span></p>` : ''}
+${pending ? permDetail(pending, 'tbd') : ''}
+<dl class="tbd-kv">
+<dt>担当</dt><dd>${who ? `<button type="button" class="link-btn" data-robot-open="${who}" data-fk="tbd-who">${pill(who, DEF[who].role)} ${esc(DEF[who].agent)}</button>` : '担当なし'}</dd>
+${who ? `<dt>今の作業</dt><dd data-live-act="${who}"></dd>` : ''}
+${base ? `<dt>依存</dt><dd>${base.blockedBy ? `<button type="button" class="link-btn" data-open="${base.list}#${base.blockedBy}" data-fk="tbd-dep">#${base.blockedBy}「${esc(TASK_BY_KEY[`${base.list}#${base.blockedBy}`].subject)}」</button>${x && x.blocked ? ' の完了待ち' : ''}` : 'なし'}</dd>` : ''}
+${base ? `<dt>後続</dt><dd>${blocks.length ? blocks.map((q) => `<button type="button" class="link-btn" data-open="${q.list}#${q.id}" data-fk="tbd-b${q.id}">#${q.id}「${esc(q.subject)}」</button>`).join(' ') : 'なし'}</dd>` : ''}
+${times ? `<dt>時刻</dt><dd>${times}</dd>` : ''}
+${spec ? `<dt>spec</dt><dd><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="tbd-spec">${esc(spec.name)}（${esc(spec.screen)}）を開く</button><span class="state ${STATUS_CLASS[spec.status.kind]}">${esc(spec.status.text)}</span></dd>` : ''}
+</dl>
+${hist ? `<h4>許可の履歴</h4><ul class="tbd-list">${hist}</ul>` : ''}
+${who ? `<h4>${esc(who)} の最近の動き</h4><ul class="tbd-list" data-recent="${who}"></ul>` : ''}
+${sample ? rawDetails(sample) : ''}`;
+  });
+  paintSince(detailEl, model.t, '待ち');
+  detailEl.querySelectorAll('[data-live-act]').forEach((el) => setText(el, robotState[el.dataset.liveAct].act));
+  detailEl.querySelectorAll('[data-recent]').forEach((el) => setHTML(el, recentHTML(el.dataset.recent)));
+}
+const permDetail = (p, where) => `<div class="tbd-perm"><h4>許可を求めています</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} が <b>${esc(p.tool)}</b> を使いたい<span class="tbd-wait" data-since="${p.at}"></span></p><pre class="tbd-cmd">${esc(permSummary(p))}</pre><label class="tbd-reason">拒否するときの理由（任意。Claude に伝わる）<input type="text" id="${where}-reason" placeholder="例: 先に jui build を通して" autocomplete="off"></label><div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}。「今後も許可」は <code>${esc(p.rule)}</code> を設定に足す。これと拒否の理由は PermissionRequest フック経由のときだけ返せる（channel の許可中継は許可・拒否のみ）</p></div>`;
+/* The relay's request id: five lowercase letters without "l". */
+const relayId = (p) => [...`${p.id}${p.who}xyz`].slice(0, 5).map((ch, k) => 'abcdefghijkmnopqrstuvwxyz'[(ch.charCodeAt(0) * 7 + k * 11) % 25]).join('');
+const rawDetails = (p) => {
+  const id = relayId(p);
+  const relayIn = { method: 'notifications/claude/channel/permission_request', params: { request_id: id, tool_name: p.tool, description: `${p.tool} ${permSummary(p)}`, input_preview: JSON.stringify(p.input) } };
+  const relayOut = { method: 'notifications/claude/channel/permission', params: { request_id: id, behavior: 'allow' } };
+  return `<details class="tbd-raw"><summary>Claude Code とのやりとり（例）</summary><p>channel の許可中継で受け取る（ターミナルのダイアログも開いたまま）</p><pre>${esc(JSON.stringify(relayIn, null, 2))}</pre><p>返す（「許可」または「拒否」）</p><pre>${esc(JSON.stringify(relayOut, null, 2))}</pre><p>PermissionRequest フックで受け取る場合</p><pre>${esc(JSON.stringify(permRequestPayload(p), null, 2))}</pre><p>返す（「今後も許可」）</p><pre>${esc(JSON.stringify(permResponse(p, 'always'), null, 2))}</pre></details>`;
+};
+
+/* ---------- a robot up close: what it is doing, its tasks and its prompts ---------- */
+const rbEl = $('rb');
+const rbState = { id: null };
+const CAM_DIR = new THREE.Vector3(0.25, 0.42, 0.87).normalize();
+function robotPose(id) {
+  const R = robots.find((x) => x.def.id === id);
+  const dist = 8, wide = sceneEl.clientWidth > 900;
+  const right = new THREE.Vector3().crossVectors(CAM_DIR.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
+  const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), viewW = viewH * camera.aspect;
+  const t = R.robot.root.position.clone().add(new THREE.Vector3(0, 1.15, 0));
+  // Wide: the card covers the right of the scene, so the robot sits left of centre. Narrow: the card is a
+  // bottom sheet, so the robot sits high.
+  if (wide) t.add(right.multiplyScalar((Math.min(420, sceneEl.clientWidth - 28) / 2 / sceneEl.clientWidth) * viewW));
+  else t.y -= viewH * 0.2;
+  return { p: t.clone().add(CAM_DIR.clone().multiplyScalar(dist)), t };
+}
+function openRobot(id, opener) {
+  if (wb.open) { wb.open = false; hideOverlay(wbEl); }
+  if (tb.open) { tb.open = false; tb.detail = null; hideOverlay(tbEl); }
+  const showing = !!rbState.id;
+  rbState.id = id;
+  if (showing) { renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
+  if (!has3D) { showOverlay(rbEl); renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
+  zoomTo(robotPose(id), opener, () => {
+    if (rbState.id !== id) return;
+    showOverlay(rbEl);
+    renderRobot(latestModel);
+    $('rb-close').focus({ preventScroll: true });
+  });
+}
+function closeRobot(keepZoom) {
+  if (!rbState.id) return;
+  rbState.id = null;
+  hideOverlay(rbEl);
+  if (!keepZoom) zoomBack();
+}
+function renderRobot(model) {
+  const id = rbState.id;
+  if (!id || rbEl.hidden) return;
+  const d = DEF[id], sess = SESSION_OF[id], isMain = sess === id, st = robotState[id];
+  const specIdx = model.specs.findIndex((s) => s.by === id), spec = specIdx >= 0 ? model.specs[specIdx] : null;
+  const pending = model.pending.find((p) => p.who === id) || null;
+  const order = { doing: 0, wait: 1, todo: 2, done: 3 };
+  const owned = model.tasks.filter((x) => (isMain ? x.list === id : x.owner === id)).sort((a, b) => order[a.col] - order[b.col] || a.id - b.id);
+  const subs = isMain ? (SESSIONS.find((s) => s.id === id) || { robots: [] }).robots.filter((r) => r !== id) : [];
+  keyed(rbEl, JSON.stringify([id, pending && pending.id, specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}`)]), () => {
+    const room = (SESSIONS.find((s) => s.id === sess) || { room: (PROJECT[projectOfRobot(id)] || {}).name || '' }).room;
+    const tasks = owned.length ? `<ul class="rb-tasks">${owned.map((x) => {
+      const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? ['st-waiting', '待ち'] : COL_STATE[x.col];
+      return `<li><button type="button" class="task-open" data-open="${x.key}" data-fk="rt-${x.key}"><span class="state ${c}">${l}</span><span class="tid">${esc(x.list)} #${x.id}</span><span class="subject">${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
+    }).join('')}</ul>` : `<p class="rb-none">${isMain ? 'このセッションのタスク一覧は空' : '担当しているタスクはない'}</p>`;
+    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div>
+<div class="rb-body">
+<section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">今やっていること</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">ランプ: <span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(spec.name)}（${esc(spec.screen)}）の spec</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>
+${pending ? `<section class="rb-sec" aria-label="許可">${permDetail(pending, 'rb')}</section>` : ''}
+<section class="rb-sec" aria-labelledby="rb-h-tasks"><h3 id="rb-h-tasks">${isMain ? 'このセッションのタスク' : '担当しているタスク'}<small>${owned.length} 件</small></h3>${tasks}</section>
+${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-h-subs">サブエージェント</h3><ul class="rb-subs">${subs.map((r) => `<li><button type="button" class="who-btn" data-robot-open="${r}" data-fk="rs-${r}">${pill(r, DEF[r].role)}<span>${esc(DEF[r].agent)}</span></button><span class="state" data-rb-sub="${r}"></span><p class="act" data-rb-subact="${r}"></p></li>`).join('')}</ul></section>` : ''}
+<section class="rb-sec" aria-labelledby="rb-h-log"><h3 id="rb-h-log">最近の動き</h3><ul class="tbd-list" data-recent="${id}"></ul><button type="button" class="link-btn" data-log-robot="${id}" data-fk="rb-log">ログで ${esc(id)} だけを見る</button></section>
+</div>`;
+  });
+  const S = STATES[st.state] || STATES.idle;
+  setText(rbEl.querySelector('[data-rb-state]'), S.name);
+  setText(rbEl.querySelector('[data-rb-lampname]'), LAMP_TEXT[S.lamp] || '');
+  const lamp = rbEl.querySelector('[data-rb-lamp]'); if (lamp) lamp.style.background = LAMP[S.lamp];
+  setText(rbEl.querySelector('[data-rb-act]'), st.act);
+  if (spec) {
+    const k = activeSec(spec);
+    setText(rbEl.querySelector('[data-rb-specnow]'), `${spec.status.text}${k >= 0 ? ` · ${SECTIONS[k]}` : ''}`);
+    paintSegs(rbEl.querySelector('.rb-segs .segs'), spec);
+  }
+  if ((SOURCE.mode === 'demo' && id === 'a2')) {
+    const T = model.tests, n = CASES.length;
+    setText(rbEl.querySelector('[data-rb-test]'), `${T.file} · ${T.statusText}`);
+    const bar = rbEl.querySelector('[data-rb-prog]');
+    bar.setAttribute('aria-label', `通過 ${T.passed} 件 / 全 ${n} 件`);
+    bar.children[0].style.width = `${(T.passed / n) * 100}%`; bar.children[1].style.width = `${T.runningIdx >= 0 ? 100 / n : 0}%`;
+  }
+  rbEl.querySelectorAll('[data-rb-sub]').forEach((el) => paintState(el, robotBadge(el.dataset.rbSub)));
+  rbEl.querySelectorAll('[data-rb-subact]').forEach((el) => setText(el, robotState[el.dataset.rbSubact].act));
+  paintSince(rbEl, model.t, '待ち');
+  rbEl.querySelectorAll('[data-recent]').forEach((el) => setHTML(el, recentHTML(el.dataset.recent)));
+}
