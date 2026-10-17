@@ -175,9 +175,10 @@ function renderPanel(model) {
 /* ---------- answering permission prompts from the view ---------- */
 const PERM_NOTE = 'ターミナルでも答えられ、先に答えた方が使われる';
 const RELAY_HOW = '有効にするには <code>jui viz relay install</code> を 1 回、セッションを <code>claude --dangerously-load-development-channels server:jui-viz</code> で起動';
-const permButtonsLive = (p, where) => (p.status === 'sent' ? `<p class="perm-sent">送信済み（${p.sentBehavior === 'deny' ? '拒否' : '許可'}）· Claude Code の確定を待っている</p>`
+const sentWhat = (p) => `${p.sentBehavior === 'deny' ? `拒否${p.sentReason ? '・理由つき' : ''}` : p.sentRules ? `許可・ルール ${p.sentRules.length} 件を追加` : '許可'}${p.sentBy ? `・${p.sentBy === 'hook' ? 'フック' : '中継'}経由` : ''}`;
+const permButtonsLive = (p, where) => (p.status === 'sent' ? `<p class="perm-sent">送信済み（${sentWhat(p)}）· Claude Code の確定を待っている</p>`
   : !p.can.allowDeny ? `<p class="perm-relay">ターミナルで答えてください（このセッションは中継が無効）<small>${RELAY_HOW}</small></p>`
-    : `<button type="button" class="pa pa-allow" data-do="allow" data-perm="${esc(p.id)}" data-fk="${where}a-${esc(p.id)}">許可</button>${p.can.always ? `<button type="button" class="pa pa-always" data-do="always" data-perm="${esc(p.id)}" data-fk="${where}w-${esc(p.id)}">今後も許可</button>` : ''}<button type="button" class="pa pa-deny" data-do="deny" data-perm="${esc(p.id)}" data-fk="${where}d-${esc(p.id)}">拒否</button>`);
+    : `<button type="button" class="pa pa-allow" data-do="allow" data-perm="${esc(p.id)}" data-fk="${where}a-${esc(p.id)}">許可</button>${p.can.always && Array.isArray(p.suggestions) && p.suggestions.length ? `<button type="button" class="pa pa-always" data-do="always" data-perm="${esc(p.id)}" data-fk="${where}w-${esc(p.id)}">今後も許可</button>` : ''}<button type="button" class="pa pa-deny" data-do="deny" data-perm="${esc(p.id)}" data-fk="${where}d-${esc(p.id)}">拒否</button>`);
 const permButtons = (p, where) => (SOURCE.mode === 'live' ? permButtonsLive(p, where) : permButtonsDemo(p, where));
 const permButtonsDemo = (p, where) => `<button type="button" class="pa pa-allow" data-do="allow" data-perm="${p.id}" data-fk="${where}a-${p.id}">許可</button><button type="button" class="pa pa-always" data-do="always" data-perm="${p.id}" data-fk="${where}w-${p.id}" title="${esc(p.rule)} を今後は聞かずに許可する">今後も許可</button><button type="button" class="pa pa-deny" data-do="deny" data-perm="${p.id}" data-fk="${where}d-${p.id}">拒否</button>`;
 const permBox = (p) => `<div class="perm-box"><p class="perm-q"><b>${esc(p.tool)}</b> <code>${esc(permSummary(p))}</code></p><div class="perm-acts">${permButtons(p, 's')}</div></div>`;
@@ -204,6 +205,7 @@ function decide(id, behavior, btn) {
   const where = btn.closest('#tasks, #perm-strip, #kanban, #tb-detail, #rb');
   const reasonEl = $('tbd-reason') || $('rb-reason');
   const reason = behavior === 'deny' && reasonEl && where && where.contains(reasonEl) ? reasonEl.value.trim() : '';
+  if (SOURCE.mode === 'live' && behavior === 'always') { openAlwaysConfirm(p, btn); return; }   // confirm the rules first (plan 08 §5)
   SOURCE.decide(id, behavior, { perm: p, reason });
   refreshNow();
   // The answered buttons are gone; keep the keyboard where the person was.
@@ -872,7 +874,8 @@ const permDetailDemo = (p, where) => `<div class="tbd-perm"><h4>許可を求め�
 /* The relay's request id: five lowercase letters without "l". */
 const relayId = (p) => [...`${p.id}${p.who}xyz`].slice(0, 5).map((ch, k) => 'abcdefghijkmnopqrstuvwxyz'[(ch.charCodeAt(0) * 7 + k * 11) % 25]).join('');
 const livePermHow = (q) => (q.status === 'terminal' ? (q.terminalBehavior === 'deny' ? 'ターミナルで拒否された' : 'ターミナルで許可された')
-  : q.status === 'allow' ? (q.decidedBy === 'terminal' ? 'ターミナルで許可された' : 'ビューで許可した') : q.status === 'deny' ? (q.decidedBy === 'terminal' ? 'ターミナルで拒否された' : 'ビューで拒否した')
+  : q.status === 'allow' ? (q.decidedBy === 'terminal' ? 'ターミナルで許可された' : q.sentRules ? `ビューで許可し、ルール ${q.sentRules.length} 件を追加` : 'ビューで許可した')
+    : q.status === 'deny' ? (q.decidedBy === 'terminal' ? 'ターミナルで拒否された' : q.sentReason ? `ビューで拒否した（理由: ${esc(q.sentReason)}）` : 'ビューで拒否した')
     : q.status === 'expired' ? '答えないまま終わった' : esc(q.status));
 const rawDetails = (p) => {
   if (SOURCE.mode === 'live') return `<details class="tbd-raw"><summary>受け取った内容</summary><pre>${esc(p.preview || permSummary(p))}</pre>${p.suggestions ? `<p>Claude Code が示した選択肢</p><pre>${esc(JSON.stringify(p.suggestions, null, 2))}</pre>` : ''}</details>`;
@@ -974,4 +977,57 @@ function liveTestsHTML(T) {
   return `<div class="test-head"><div>${who} <code>${esc(T.file)}</code></div><code>${esc(T.device)}${T.device ? ' · ' : ''}${esc(T.statusText)}</code>
 <div class="prog" role="img" aria-label="通過 ${T.passed} 件 / 全 ${n} 件"><span class="p" style="width:${pPct}%"></span><span class="r" style="width:${rPct}%"></span><span class="x" style="width:${fPct}%"></span></div></div>
 <ul class="cases">${T.rows.map((c, i) => `<li class="c-${c.status}"><span class="ic">${CASE_ICON[c.status] || '○'}</span><span>${i + 1}. ${esc(c.name)}</span>${c.status === 'running' ? `<span class="step">${esc(c.step)}</span>` : ''}</li>`).join('')}</ul>`;
+}
+
+/* ---------- live: "from now on" asks first (plan 08 §5) ----------
+   Only the request's own suggestions can be added. The dialog lists each one — the rules and where they are
+   saved — with a box each; the answer goes out only from its confirm button. */
+const DEST_JA = {
+  localSettings: 'このプロジェクトの .claude/settings.local.json（自分だけ）',
+  projectSettings: 'このプロジェクトの .claude/settings.json（共有）',
+  userSettings: '~/.claude/settings.json（すべてのプロジェクト）',
+  session: 'このセッションの間だけ',
+};
+function suggestionHTML(sg) {
+  if (!sg || typeof sg !== 'object') return `<code>${esc(JSON.stringify(sg))}</code>`;
+  const where = sg.destination ? `<small>保存先: ${esc(DEST_JA[sg.destination] || sg.destination)}</small>` : '';
+  if (sg.type === 'addRules' && Array.isArray(sg.rules)) {
+    const rules = sg.rules.map((r) => `<code>${esc(r && r.toolName ? `${r.toolName}${r.ruleContent ? `(${r.ruleContent})` : ''}` : JSON.stringify(r))}</code>`).join(' ');
+    return `<span>${sg.behavior === 'deny' ? '拒否するルール' : '許可するルール'} ${rules}</span>${where}`;
+  }
+  if (sg.type === 'setMode') return `<span>モードを <code>${esc(sg.mode)}</code> にする</span>${where}`;
+  if (sg.type === 'addDirectories' && Array.isArray(sg.directories)) return `<span>作業フォルダを足す ${sg.directories.map((d) => `<code>${esc(d)}</code>`).join(' ')}</span>${where}`;
+  return `<code>${esc(JSON.stringify(sg))}</code>${where}`;
+}
+let alwaysDlg = null;
+function openAlwaysConfirm(p, opener) {
+  const list = Array.isArray(p.suggestions) ? p.suggestions : [];
+  if (!list.length) { showToast('この要求には今後も許可できるルールが無い'); return; }
+  closeAlwaysConfirm(false);
+  const el = document.createElement('div');
+  el.className = 'perm-confirm'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'pcf-title');
+  el.innerHTML = `<div class="pcf-box"><h3 id="pcf-title">今後も許可する内容を確かめる</h3><p>${pill(p.who, DEF[p.who].role)} の <b>${esc(p.tool)}</b> <code>${esc(permSummary(p))}</code> を許可し、次を設定に足す。外したものは足さない。</p>
+<ul class="pcf-list">${list.map((sg, i) => `<li><label><input type="checkbox" data-pcf="${i}" checked>${suggestionHTML(sg)}</label></li>`).join('')}</ul>
+<div class="pcf-acts"><button type="button" class="pa pa-always" data-pcf-ok>この内容で今後も許可</button><button type="button" class="pa" data-pcf-cancel>やめる</button></div></div>`;
+  document.body.append(el);
+  alwaysDlg = { el, p, opener };
+  el.addEventListener('click', (e) => {
+    if (e.target === el || e.target.closest('[data-pcf-cancel]')) { closeAlwaysConfirm(true); return; }
+    if (!e.target.closest('[data-pcf-ok]')) return;
+    const keep = [...el.querySelectorAll('[data-pcf]')].filter((c) => c.checked).map((c) => Number(c.dataset.pcf));
+    if (!keep.length) { showToast('足すルールを 1 つ以上選んでください'); return; }
+    const perm = alwaysDlg.p;
+    closeAlwaysConfirm(true);
+    SOURCE.decide(perm.id, 'allow', { perm, always: keep.length === list.length ? true : keep });
+    refreshNow();
+  });
+  el.addEventListener('change', () => { el.querySelector('[data-pcf-ok]').disabled = ![...el.querySelectorAll('[data-pcf]')].some((c) => c.checked); });
+  el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAlwaysConfirm(true); } });
+  el.querySelector('[data-pcf-ok]').focus();
+}
+function closeAlwaysConfirm(back) {
+  if (!alwaysDlg) return;
+  const { el, opener } = alwaysDlg;
+  alwaysDlg = null; el.remove();
+  if (back && opener && document.contains(opener)) opener.focus({ preventScroll: true });
 }

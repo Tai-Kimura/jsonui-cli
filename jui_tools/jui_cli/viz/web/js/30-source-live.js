@@ -57,10 +57,15 @@ const ROLE_OF = (a) => {
 const SOURCE = {
   mode: 'live', layoutRev: 0, connected: false, replaySpeed: 1,
   /* perm.decide to the server; the answer shows when the perms slice changes (P5). */
-  decide(id, behavior, { perm: p, reason = '' }) {
-    const always = behavior === 'always';
-    netRequest('perm.decide', { permId: (p && p.realId) || id, behavior: always ? 'allow' : behavior, always, reason: reason || undefined })
-      .then((ack) => showToast(ack.ok ? `${p.who} の ${p.tool} への答えを Claude Code へ送った` : `送れなかった（${ack.error || '不明'}）`));
+  /* perm.decide (plan 04 §5, P6): `always` is true (every suggestion) or the indexes the person kept, and goes
+     with allow only; a reason goes with deny only. The answer shows when the perms slice says "sent". */
+  decide(id, behavior, { perm: p, reason = '', always = null }) {
+    const msg = { permId: (p && p.realId) || id, behavior: behavior === 'deny' ? 'deny' : 'allow' };
+    if (msg.behavior === 'allow' && always) msg.always = always;
+    if (msg.behavior === 'deny' && reason) msg.reason = reason;
+    netRequest('perm.decide', msg).then((ack) => showToast(ack.ok
+      ? `${p.who} の ${p.tool} を${msg.behavior === 'deny' ? `拒否${reason ? '（理由つき）' : ''}` : msg.always ? '許可し、ルールを追加' : '許可'}した（Claude Code へ送った）`
+      : `送れなかった（${ack.error || '不明'}）`));
   },
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
   /* 40-scene.js calls this when a leaving robot has walked out of the door. */
@@ -259,6 +264,7 @@ function rebuildPerms() {
       input: { command: String(x.summary || '') }, preview: String(x.preview || ''), suggestions: x.suggestions, rule: '',
       at: secOfDay(x.createdAt || Date.now()), end: x.decidedAt ? secOfDay(x.decidedAt) : null,
       status: PERM_STATUS[x.status] || 'pending', decidedBy: x.decidedBy || null, sentBehavior: x.sentBehavior || null,
+      sentBy: x.sentBy || null, sentRules: Array.isArray(x.sentRules) ? x.sentRules : null, sentReason: x.sentReason ? String(x.sentReason) : '',
       terminalBehavior: x.terminalBehavior || null, relayOnly: !!x.relayOnly,
       decided: x.decidedAt ? { at: secOfDay(x.decidedAt), behavior: x.status === 'deny' || x.terminalBehavior === 'deny' ? 'deny' : 'allow' } : null,
       can: { allowDeny: !!can.allowDeny, always: !!can.always, reason: !!can.reason },

@@ -786,3 +786,13 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .cases .c-failed .ic { color: var(--bad); }
 .cases .c-skipped { color: var(--ink-soft); }
 .tag.room.mock-on { box-shadow: inset 0 0 0 2px var(--ok); }
+.perm-confirm { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(10, 20, 35, 0.45); }
+.pcf-box { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 16px 18px; border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 12px 40px var(--shadow); }
+.pcf-box h3 { margin: 0 0 8px; font: 700 16px/1.5 var(--font-body); }
+.pcf-box p { margin: 0 0 10px; font-size: 13px; overflow-wrap: anywhere; }
+.pcf-list { display: grid; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+.pcf-list label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.pcf-list input { grid-row: span 2; margin-top: 3px; }
+.pcf-list code { font: 500 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.pcf-list small { color: var(--ink-soft); }
+.pcf-acts { display: flex; flex-wrap: wrap; gap: 8px; }

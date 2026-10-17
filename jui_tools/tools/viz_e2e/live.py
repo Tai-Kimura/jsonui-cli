@@ -266,8 +266,37 @@ async def scenario_work(browser, srv, out, failures, res):
     await page.click('#perm-strip [data-do="allow"][data-perm="perm-1"]')
     await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('送信済み'))", label="perm-1 sent")
     res["decisions"] = fake_state(srv)["decisions"]
-    check(failures, res["decisions"] == [{"permId": "perm-1", "behavior": "allow", "always": False, "reason": None}], f"work: perm.decide sent {res['decisions']}")
+    check(failures, res["decisions"] == [{"permId": "perm-1", "behavior": "allow", "always": None, "reason": None}], f"work: perm.decide sent {res['decisions']}")
     await page.screenshot(path=f"{out}/work-sent.png")
+    # P6: "from now on" asks first — the rules and where they go, one box each; Esc sends nothing
+    await page.click('#perm-strip [data-do="always"][data-perm="perm-3"]')
+    await wait(page, "() => !!document.querySelector('.perm-confirm')", label="the from-now-on dialog")
+    res["confirm"] = await page.evaluate("() => [...document.querySelectorAll('.pcf-list li')].map((l) => l.textContent.replace(/\\s+/g, ' '))")
+    await page.screenshot(path=f"{out}/work-always-confirm.png")
+    check(failures, len(res["confirm"]) == 2 and "Bash(npm test:*)" in res["confirm"][0] and "settings.local.json" in res["confirm"][0]
+          and "Bash(npm:*)" in res["confirm"][1] and "共有" in res["confirm"][1], f"work: the dialog lists the rules and where: {res['confirm']}")
+    await page.keyboard.press("Escape")
+    await wait(page, "() => !document.querySelector('.perm-confirm')", label="Esc closes the dialog")
+    check(failures, len(fake_state(srv)["decisions"]) == 1, "work: Esc sent nothing")
+    await page.click('#perm-strip [data-do="always"][data-perm="perm-3"]')
+    await wait(page, "() => !!document.querySelector('.perm-confirm')", label="the dialog again")
+    await page.click('.perm-confirm [data-pcf="1"]')        # keep only the narrow rule
+    await page.click('.perm-confirm [data-pcf-ok]')
+    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('ルール 1 件を追加・フック経由'))", label="perm-3 sent with one rule")
+    res["perm4Buttons"] = await page.evaluate("() => [...document.querySelectorAll('#perm-strip [data-perm=\"perm-4\"]')].map((b) => b.dataset.do)")
+    check(failures, res["perm4Buttons"] == ["allow", "deny"], f"work: no suggestions, no 今後も許可: {res['perm4Buttons']}")
+    # P6: a reason goes with deny, from the detail drawer
+    await page.click('#perm-strip [data-open="perm:perm-4"]')
+    await wait(page, "() => !!document.getElementById('tbd-reason')", label="the reason box")
+    await page.fill('#tbd-reason', 'ビルドの成果物は消さないで <b>x</b>')
+    await page.click('#tb-detail [data-do="deny"]')
+    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('拒否・理由つき'))", label="perm-4 denied with a reason")
+    res["decisionsP6"] = fake_state(srv)["decisions"][1:]
+    check(failures, res["decisionsP6"] == [{"permId": "perm-3", "behavior": "allow", "always": [0], "reason": None},
+                                           {"permId": "perm-4", "behavior": "deny", "always": None, "reason": "ビルドの成果物は消さないで <b>x</b>"}],
+          f"work: P6 decisions {res['decisionsP6']}")
+    if await page.evaluate("() => !document.getElementById('tb-detail').hidden"):
+        await page.keyboard.press("Escape")
     await page.keyboard.press("Escape")
     await page.wait_for_function("() => document.getElementById('tb').hidden")
     await page.wait_for_timeout(2600)
@@ -377,3 +406,107 @@ async def run_real(pw, out, failures, RealServer):
         await browser.close()
     print(f"  real/two-projects: {time.monotonic() - t0:.0f}s", flush=True)
     (out / "real-results.json").write_text(dump(res) + "\n")
+
+
+async def run_real_decide(pw, out, failures):
+    """P6 end to end on the real server: `jui viz serve` in a throwaway HOME, the real forward.py posting a
+    session's tool call and a PermissionRequest (async) and waiting with --decide (the synchronous hook); the
+    page answers "from now on" with one of two suggestions, then a reasoned deny; the hook prints them."""
+    import json as _json
+    import os
+    import subprocess
+    import sys as _sys
+    out = pathlib.Path(out) / "real-decide"
+    out.mkdir(parents=True, exist_ok=True)
+    home = out / "home"
+    home.mkdir(exist_ok=True)
+    jt = pathlib.Path(__file__).resolve().parents[2]
+    forward = jt / "jui_cli" / "viz" / "forward.py"
+    from run import free_port
+    port = free_port()
+    env = dict(os.environ, HOME=str(home), JUI_VIZ_E2E="1")
+    log = open(out / "serve.log", "w")
+    srv = subprocess.Popen([_sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
+    url = f"http://127.0.0.1:{port}"
+    res = {}
+
+    def hook(payload, decide=False):
+        args = [_sys.executable, "-I", "-S", str(forward)] + (["--decide"] if decide else [])
+        p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(os.environ, HOME=str(home)))
+        p.stdin.write(_json.dumps(payload).encode()); p.stdin.close()
+        if decide:
+            return p
+        p.wait(timeout=10)
+        return None
+
+    sid, cwd = "e2e00000-0000-4000-8000-000000000001", "/work/decide-app"
+    base = {"session_id": sid, "cwd": cwd, "transcript_path": "/work/home/t.jsonl", "permission_mode": "default"}
+    sugg = [{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm test:*"}], "behavior": "allow", "destination": "localSettings"},
+            {"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm:*"}], "behavior": "allow", "destination": "projectSettings"}]
+    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+    t0 = time.monotonic()
+    try:
+        import urllib.request
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"{url}/health", timeout=1).read(); break
+            except OSError:
+                time.sleep(0.1)
+        watch = Watch(origin=url)
+        page = await new_page(browser, watch, "real-decide", **DESKTOP)
+        await page.goto(url + "/")
+        await ready(page)
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        hook(dict(base, hook_event_name="SessionStart", source="startup"))
+        await wait(page, "() => window.__dbg.robots.length === 1", label="the session's robot")
+        await page.wait_for_timeout(5500)   # one presence report after the page is up
+        for n, (cmd, answer) in enumerate((("npm test -- --progress", "always"), ("rm -rf build", "deny"))):
+            req = dict(base, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": cmd, "description": "run"},
+                       permission_suggestions=sugg)
+            hook(req)                       # the async forward reports it first
+            waiting = hook(req, decide=True)
+            await wait(page, "(cmd) => [...document.querySelectorAll('#tasks .perm-box, #tasks li')].some((li) => li.textContent.includes(cmd) && li.querySelector('[data-do]'))", arg=cmd,
+                       timeout=15000, label=f"the card for {cmd}")
+            if answer == "always":
+                await page.click(f"#tasks li:has-text('{cmd}') [data-do='always']")
+                await wait(page, "() => !!document.querySelector('.perm-confirm')", label="the dialog")
+                await page.click('.perm-confirm [data-pcf="1"]')
+                await page.click('.perm-confirm [data-pcf-ok]')
+            else:
+                await page.click(f"#tasks li:has-text('{cmd}') .task-open")
+                await page.wait_for_function("() => { const el = document.getElementById('tb'); return !el.hidden && el.classList.contains('show'); }")
+                await wait(page, "() => !!document.getElementById('tbd-reason')", label="the reason box")
+                await page.fill("#tbd-reason", "成果物は残して")
+                await page.click("#tb-detail [data-do='deny']")
+            outp, err = waiting.communicate(timeout=40)
+            res[answer] = _json.loads(outp) if outp else None
+            if answer == "deny":
+                await page.keyboard.press("Escape"); await page.keyboard.press("Escape")
+        await page.screenshot(path=f"{out}/real-decide.png")
+        want_always = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow", "updatedPermissions": [sugg[0]]}}}
+        want_deny = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "deny", "message": "成果物は残して"}}}
+        check(failures, res.get("always") == want_always, f"real-decide: from now on reached the hook: {res.get('always')}")
+        check(failures, res.get("deny") == want_deny, f"real-decide: the reasoned deny reached the hook: {res.get('deny')}")
+        await page.close()
+        for line in watch.console:
+            failures.append(f"real-decide: console: {line}")
+        for u in watch.foreign:
+            failures.append(f"real-decide: request outside the server: {u}")
+    except Exception as e:
+        failures.append(f"real-decide: {type(e).__name__}: {str(e).splitlines()[0]}")
+        try:
+            diag = await page.evaluate("() => ({ perms: window.__dbg.model().perms.map((p) => [p.id, p.who, p.status, JSON.stringify(p.can)]), tasks: document.getElementById('tasks').textContent.slice(0, 400), robots: window.__dbg.robots.map((R) => R.def.id) })")
+            (out / "diag.json").write_text(dump(diag) + "\n")
+        except Exception:
+            pass
+    finally:
+        if srv.poll() is None:
+            srv.terminate()   # our own child
+            try:
+                srv.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                srv.kill()
+        log.close()
+        await browser.close()
+    print(f"  real/decide: {time.monotonic() - t0:.0f}s", flush=True)
+    (out / "real-decide-results.json").write_text(dump(res) + "\n")

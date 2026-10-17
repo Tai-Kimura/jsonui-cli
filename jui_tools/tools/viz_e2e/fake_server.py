@@ -48,7 +48,7 @@ PROTOCOL = {
     "notice": "as plan: {level, text} when the scenario says",
     # browser -> server
     "auth": "as P1: {token}; a wrong token, or none within 2 s, closes the socket with 4401",
-    "perm.decide": "as P5: the perm goes to status 'sent' (sentBehavior), slices pushed, ack ok; a perm not pending acks ok=false 'already sent' (recorded in /_fake/state)",
+    "perm.decide": "as P5/P6: checked like permissions.py (always with allow and the hook's suggestions; reason with deny and the hook); the perm goes 'sent' with sentBehavior / sentBy / sentRules / sentReason, slices pushed, ack ok; otherwise ack ok=false with the reason (recorded in /_fake/state)",
     "events.more": "acked; no older events",
     "snapshot.get": "answered with the current snapshot",
     "presence": "recorded (/_fake/state); no answer, as P1",
@@ -206,9 +206,10 @@ class FakeServer:
             await ws.send_json({"type": "ack", "reqId": rid, "ok": True})
         elif kind == "perm.decide":
             self.decisions.append({k: req.get(k) for k in ("permId", "behavior", "always", "reason")})
-            changed = self.scenario.decide(str(req.get("permId")), str(req.get("behavior"))) if self.scenario else None
+            changed, error = (self.scenario.decide(str(req.get("permId")), str(req.get("behavior")), req.get("always"), req.get("reason"))
+                              if self.scenario else (None, "no scenario"))
             if changed is None:
-                await ws.send_json({"type": "ack", "reqId": rid, "ok": False, "error": "already sent"})
+                await ws.send_json({"type": "ack", "reqId": rid, "ok": False, "error": error})
             else:
                 await self.broadcast(changed)
                 await ws.send_json({"type": "ack", "reqId": rid, "ok": True})

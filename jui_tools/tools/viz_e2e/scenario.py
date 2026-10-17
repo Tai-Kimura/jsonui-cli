@@ -96,16 +96,36 @@ class Scenario:
             sent += 1
         return sent
 
-    def decide(self, perm_id: str, behavior: str):
-        """perm.decide as P5's server answers it: a pending perm becomes 'sent'. Returns the slices message, or
-        None when there is no pending perm with that id."""
+    def decide(self, perm_id: str, behavior: str, always=None, reason=None):
+        """perm.decide as the P5/P6 server answers it (permissions.py decide): a pending perm becomes 'sent'.
+        "from now on" (always: true or suggestion indexes) needs allow and the waiting hook (can.always);
+        a reason needs deny and the hook (can.reason). Returns (slices message, None) or (None, error)."""
         perms = self.slices.get("perms") or []
         for p in perms:
-            if p.get("id") == perm_id and p.get("status") == "pending":
-                p["status"] = "sent"
-                p["sentBehavior"] = behavior
-                return self._apply({"type": "slices", "changed": {"perms": perms}})
-        return None
+            if p.get("id") != perm_id:
+                continue
+            if p.get("status") != "pending":
+                return None, f"already {p.get('status')}"
+            can, sugg = p.get("can") or {}, p.get("suggestions") or []
+            rules = None
+            if always:
+                if behavior != "allow" or not can.get("always") or not sugg:
+                    return None, "from now on needs allow and this request's suggestions"
+                if always is True:
+                    rules = list(sugg)
+                elif isinstance(always, list) and always and all(isinstance(i, int) and 0 <= i < len(sugg) for i in always):
+                    rules = [sugg[i] for i in sorted(set(always))]
+                else:
+                    return None, "always must be true or a list of suggestion indexes"
+            if reason is not None and (behavior != "deny" or not can.get("reason")):
+                return None, "a reason goes with deny, as text"
+            p.update(status="sent", sentBehavior=behavior, sentBy="hook" if can.get("reason") else "relay")
+            if rules:
+                p["sentRules"] = rules
+            if reason:
+                p["sentReason"] = reason
+            return self._apply({"type": "slices", "changed": {"perms": perms}}), None
+        return None, "unknown permission"
 
     async def play(self, send):
         """Send every item at its `t` (seconds from now)."""

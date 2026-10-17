@@ -189,8 +189,13 @@ def work():
            "status": "running", "startedAt": T0 + 1000, "deviceId": "dev-1",
            "cases": [{"name": "初期表示", "status": "passed"}, {"name": "ログイン失敗", "status": "running"}, {"name": "<script>x</script>", "status": "pending"}]}
     devices = [{"id": "dev-1", "platform": "ios", "name": "iPhone 16（iOS 26.2）", "state": "booted", "busyBy": S_A0}]
+    hook = {"allowDeny": True, "always": True, "reason": True}   # a synchronous --decide hook is waiting (P6)
+    sugg = [{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm test:*"}], "behavior": "allow", "destination": "localSettings"},
+            {"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm:*"}], "behavior": "allow", "destination": "projectSettings"}]
     perms = [perm("perm-1", SUB_A3, "Write", "docs/screens/json/login.spec.json", can_relay=True),
-             perm("perm-2", S_A0, "Bash", "xcodebuild test -scheme ShopApp", can_relay=False)]
+             perm("perm-2", S_A0, "Bash", "xcodebuild test -scheme ShopApp", can_relay=False),
+             perm("perm-3", S_4F, "Bash", "npm test -- --progress", sessionId=S_4F, can=hook, suggestions=sugg),
+             perm("perm-4", S_4F, "Bash", "rm -rf build", sessionId=S_4F, can=dict(hook, always=False))]   # as the server: always = has suggestions
     items = [{"sheets": {s["id"]: sheet_for(s["id"].split("/")[-1].replace(".spec.json", "")) for s in specs}},
              {"mark": "start"}, slices(0, projects=P, sessions=S, agents=A, specs=specs, tasks=tasks, tests=[run], devices=devices, perms=perms, server=server_slice())]
     # progress: the spec is written, task 2 done (3 can start), the run finishes with one failure

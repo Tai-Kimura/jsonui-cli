@@ -217,6 +217,7 @@ def main(argv=None) -> int:
                 import live
                 await live.run(pw, out, failures, Server)
                 await live.run_real(pw, out, failures, RealServer)
+                await live.run_real_decide(pw, out, failures)
 
     asyncio.run(go())
     if a.record_demo:
