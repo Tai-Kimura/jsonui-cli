@@ -386,6 +386,18 @@ async def run_real(pw, out, failures, RealServer):
         res["ticker"] = await page.evaluate("() => [...document.querySelectorAll('#ticker li')].map((l) => l.textContent)")
         await page.screenshot(path=f"{out}/real-end.png")
         check(failures, res["rooms"] == ["shop-app/", "jsonui-cli/"], f"real: rooms {res['rooms']}")
+        # The server goes away and comes back on the same port with a new token (dd's P3 review): the page shows
+        # 再接続中…, fetches the new token itself and is connected again — the same page, never reloaded.
+        await page.evaluate("() => { window.__notReloaded = true; }")
+        before = srv.token()
+        srv.restart()
+        res["restart"] = {"newToken": bool(before) and srv.token() != before}
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '再接続中…'", polling=50, label="reconnecting after the restart")
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", timeout=40000, label="connected again")
+        await wait(page, "() => document.querySelectorAll('.tag.room').length === 2", label="the rooms after the restart")
+        res["restart"]["sameTab"] = await page.evaluate("() => window.__notReloaded === true")
+        res["restart"]["metaKeptOld"] = await page.evaluate("(t) => document.querySelector('meta[name=\"jui-viz-token\"]').content === t", before)
+        check(failures, res["restart"] == {"newToken": True, "sameTab": True, "metaKeptOld": True}, f"real: reconnect after a restart {res['restart']}")
         await page.close()
         # The demo from the real server: same files, the server's CSP and static routes.
         page = await new_page(browser, watch, "real-demo", **DESKTOP)
@@ -464,6 +476,10 @@ async def run_real_decide(pw, out, failures):
             req = dict(base, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": cmd, "description": "run"},
                        permission_suggestions=sugg)
             hook(req)                       # the async forward reports it first
+            # The card is drawn before --decide arrives (nothing allowed yet: answer in the terminal); --decide then
+            # allows the buttons on the same card — a card cached on its id and status alone would keep that note.
+            await wait(page, "(cmd) => [...document.querySelectorAll('#tasks li')].some((li) => li.textContent.includes(cmd) && li.querySelector('.perm-relay'))", arg=cmd,
+                       timeout=15000, label=f"the card for {cmd} before --decide")
             waiting = hook(req, decide=True)
             await wait(page, "(cmd) => [...document.querySelectorAll('#tasks .perm-box, #tasks li')].some((li) => li.textContent.includes(cmd) && li.querySelector('[data-do]'))", arg=cmd,
                        timeout=15000, label=f"the card for {cmd}")

@@ -249,6 +249,18 @@ function liveTestsFor(projectId) {
 /* ---------- permission prompts (plan 04 Permission, plan 08 §4 → the demo's perm rows) ---------- */
 const PERMS_LIVE = [];
 const PERM_STATUS = { pending: 'pending', sent: 'sent', allow: 'allow', deny: 'deny', answered_in_terminal: 'terminal', expired: 'expired' };
+/* What the card shows as the thing being allowed: the command or the path itself, read from the tool input the
+   server forwards (preview). The server's summary prefers a Bash call's description ("run"), which says nothing
+   about what runs; it is the fallback when the preview was clipped or is not JSON. */
+function permWhat(x) {
+  try {
+    const input = JSON.parse(String(x.preview || ''));
+    for (const k of ['command', 'file_path', 'notebook_path', 'url', 'pattern']) {
+      if (input && typeof input[k] === 'string' && input[k].trim()) return input[k];
+    }
+  } catch (err) { /* clipped or not JSON */ }
+  return String(x.summary || '');
+}
 function rebuildPerms() {
   const list = Array.isArray(LIVE.slices.perms) ? LIVE.slices.perms : [];
   const rows = [];
@@ -261,7 +273,7 @@ function rebuildPerms() {
     const can = x.can && typeof x.can === 'object' ? x.can : {};
     rows.push({
       id: String(x.id), realId: String(x.id), who, task: doing ? `${doing.list}#${doing.id}` : null, tool: String(x.toolName || ''),
-      input: { command: String(x.summary || '') }, preview: String(x.preview || ''), suggestions: x.suggestions, rule: '',
+      input: { command: permWhat(x) }, preview: String(x.preview || ''), suggestions: x.suggestions, rule: '',
       at: secOfDay(x.createdAt || Date.now()), end: x.decidedAt ? secOfDay(x.decidedAt) : null,
       status: PERM_STATUS[x.status] || 'pending', decidedBy: x.decidedBy || null, sentBehavior: x.sentBehavior || null,
       sentBy: x.sentBy || null, sentRules: Array.isArray(x.sentRules) ? x.sentRules : null, sentReason: x.sentReason ? String(x.sentReason) : '',
