@@ -19,7 +19,7 @@ jsonui-mcp-server / jsonui-test-runner を修正する人**。コンシューマ
 |---|---|---|
 | 1 | [01-architecture-overview.md](01-architecture-overview.md) | リポジトリ地図・全体データフロー・設計原則・不変条件 |
 | 2 | [02-ssot-shared-core.md](02-ssot-shared-core.md) | shared/core の中身、SSoT 消費マトリクス、正規化 L0/L1/L2、attr-codegen |
-| 3 | [03-jui-cli-internals.md](03-jui-cli-internals.md) | Python `jui` CLI の内部構造（build / verify / generate / sync_tool / hotload） |
+| 3 | [03-jui-cli-internals.md](03-jui-cli-internals.md) | Python `jui` CLI の内部構造（build / verify / generate / sync_tool / hotload / viz） |
 | 4 | [04-platform-ios.md](04-platform-ios.md) | SwiftJsonUI + sjui_tools（改修ポイント・ビルド・罠） |
 | 5 | [05-platform-android.md](05-platform-android.md) | KotlinJsonUI + kjui_tools（同上、XML凍結の実態含む） |
 | 6 | [06-platform-web.md](06-platform-web.md) | ReactJsonUI + rjui_tools（ランタイムレス静的生成の実態） |

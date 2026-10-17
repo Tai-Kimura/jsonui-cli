@@ -15,6 +15,20 @@ cross-platform CLI, **the attribute SSoT that defines the JsonUI language**, and
 | **test_tools** | Cross-platform | Python | `jsonui-test` | Test file validation, reports (JUnit/HTML), mock server, artifacts |
 | **document_tools** | Cross-platform | Python | `jsonui-doc` | Spec validation, HTML/Mermaid documentation, API contract checks |
 
+## Watching the agents — `jui viz`
+
+`jui viz serve --open` shows the Claude Code sessions on this machine — and their
+subagents — as robots in three.js rooms, one room per project, in a local page
+(127.0.0.1 only). In a JsonUI project the page also lines up the specs, tasks,
+test runs and permission prompts, and can answer a prompt from the browser.
+
+```bash
+jui viz hooks install      # once: forward Claude Code's hook events (~/.claude/settings.json)
+jui viz serve --open       # start, and open the page
+jui viz doctor             # when nothing shows up
+jui viz hooks uninstall    # take the hooks out again
+```
+
 ## The attribute SSoT — `shared/core/`
 
 `shared/core/attribute_definitions.json` is the canonical definition of the

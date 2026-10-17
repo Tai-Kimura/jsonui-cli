@@ -19,6 +19,7 @@ deps は watchdog / aiohttp、extra `conformance` で Pillow。
 | `jui ls api-specs\|api-models` | `commands/ls_cmd.py` | MCP 用 `--json`。swagger halt 条件を build 前に検出 |
 | `jui sync_tool` | `commands/sync_tool_cmd.py` | 下記 §5 |
 | `jui hotload listen\|status\|stop` | `commands/hotload_cmd.py` → `hotloader/` | WebSocket wire protocol v2。サーバーは jui に集約済み（sjui watch はレガシー） |
+| `jui viz serve\|status\|stop\|open\|doctor\|hooks\|relay\|export-demo` | `commands/viz_cmd.py` → `viz/` | 下記 §6.6。jui.config.json 不要（どこからでも起動）。127.0.0.1 だけ |
 | `jui conformance generate\|report\|gate\|compat-doc\|baseline` | `commands/conformance_cmd.py` → `conformance/` | 08章。`gate` は CI と同一判定をローカル実行（ratchet 台帳 = `conformance/gate_ratchet.json`） |
 
 ほとんどのハンドラは `ConfigManager()`（`jui.config.json` を上方探索）をまず作る。
@@ -116,6 +117,41 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   param nullable）は `openapi_normalize.py` + diff 側 skipped 集約で吸収済み。
   新しい偽陽性クラスを見つけたら emitter でなく正規化層に足す。
 
+## 6.6 jui viz（`jui_cli/viz/`、2026-10-18 追加）
+
+手元の Claude Code のセッションとサブエージェントを、three.js の部屋とロボットでブラウザに出す。
+計画書と判断の記録はリポジトリの外（引き継ぎパッケージの `plan/` と `PROGRESS.md`）。ここは保守に要る形だけ。
+
+- **構成**: `serve`（aiohttp、127.0.0.1:7788）が、フック（`forward.py` → `POST /hook`）、`claude agents --json`
+  （`sources/agents_cli.py`、3 秒）、`~/.claude/sessions/<digits>.json`（`sources/session_files.py`、watchdog）、
+  JsonUI のプロジェクトのファイル（`sources/jsonui_project.py`）、端末（`sources/devices.py`）、
+  テストの進捗（`sources/test_progress.py`）を `ingest.World` に集め、スライス（`state.py`）として
+  200ms ごとに WebSocket で配る。画面は `web/`（試作第 4 版を持ち込み、`bundle.py` が `web/js/` を連結）。
+- **時刻は引数**: `World` のどの入口も時刻を引数で受け、`tick(at)` でタイマー（退場 5 秒、done→idle 3 秒、
+  ended の 60 秒）を進める。`--replay` は記録の時刻で仮想の時計を回す（500ms ごと、最後のあと 70 秒）。
+  これで「記録して再生すると同じ最終状態」が成り立つ。
+- **守り**（`security.py`）: Host（421）、`/ws` の Origin（403）、起動ごとのトークン（`server.json` 0600 と
+  ページの meta）。守る相手は「利用者のブラウザの別のサイトのページ」。同じ利用者の別プロセスは守らない
+  （`GET /` がトークン入りの HTML を返す。mock serve と同じ）。ヘッダーは `on_response_prepare` で全応答に。
+- **停止**: `stop` は viz.pid と server.json の pid が一致し、その port の `/health`（生のソケット。urllib は
+  HTTP_PROXY に従う）が同じ pid を返すときだけ SIGTERM。viz.pid は 2 以上の整数だけ、中身つきの一時ファイルを
+  `os.link` して作る（O_EXCL で空のまま作ると、同時に起動した 2 つ目が空を「壊れている」として消した）。
+- **フック**（`hooks_installer.py`）: `~/.claude/settings.json` に 18 イベントの async の転送と、
+  PermissionRequest の同期の `forward.py --decide`（P6）を足す。自分のものの見分けは「python で、
+  引数が `jui_cli/viz/forward.py` で終わる」だけ。読めない JSON には書かない、バックアップ 10 個、
+  stat を読む前と後に取る、書く直前に変わっていたら読み直す。`env` に `JSONUI_TEST_PROGRESS_DIR`。
+- **許可**（`permissions.py`、`channel.py`）: 段階 A（PermissionRequest でカード）、B（MCP チャンネル
+  `jui-viz` の中継）、C（同期のフック。今後も許可＝その要求の `permission_suggestions` だけ、理由つきの拒否）。
+  照合は推測でつながない（候補が 1 枚でも、コマンドやパスが中継の preview に含まれること）。
+  チャンネルは JSON-RPC 以外を stdout に書かず、`notifications/claude/channel`（Claude の文脈への書き込み）を送らない。
+  同期のフックは、表示中のページ（presence、12 秒）が無ければ即座に空で返る。
+- **テストの進捗**: driver 3 種が `schemas/progress.schema.json`（jsonui-test-runner、写しは
+  `test_tools/tests/schema_fixtures/`）の 1 行を出す。Web はフォルダの .jsonl、Android は logcat、
+  iOS は unified logging。jui_tools に JSON Schema のライブラリが無いので検証は手書きで、
+  テストがスキーマのファイルと機械で突き合わせる。
+- **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
+  CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
+
 ## 7. 罠（jui_tools 固有）
 
 - **pip editable ポインタ乗っ取り**: 別 checkout からの `pip install -e` が console script を
@@ -129,3 +165,9 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   Swift の external-label drift チェックは iOS のみ。
 - テスト実行: `cd jui_tools && python -m unittest discover -s tests`。
   決定論チェック 2 種（attr-bindings 2回一致 / conformance generate diff ゼロ）もローカルで回せる。
+- **jui viz のテストで本物の `~/.jsonui-cli` / `~/.claude` に触らない**: `viz/paths.py` は呼ぶたびに `Path.home()`
+  から作るので、テストは HOME を一時フォルダに向ける。ポートは 7788 を避ける（手元で動いている serve とぶつかる）。
+- **jui_tools の中で `pip wheel .` すると `jui_tools/build/` ができる**: ルートの `.gitignore` は `/build/*` だけを
+  無視していたので、`git add jui_tools` がこれを拾った（2026-10-18、push 前に枝を作り直した）。今は
+  `/jui_tools/build/` も無視している。
+
