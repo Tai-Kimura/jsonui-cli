@@ -5,6 +5,7 @@ Each line is one of
     {"t": 1.5, "msg": {"type": "events", "items": [...]}}
     {"t": 2.0, "msg": {"type": "notice", "level": "warn", "text": "..."}}
     {"mark": "name"}                                                     a point the tests can jump to
+    {"sheets": {"<specId>": {...cards}}}                                 what spec.sheet answers (plan 09 §6)
 
 `t` (seconds from the start) is used only by --autoplay; the tests step with POST /_fake/step?to=<mark>,
 which sends everything before that mark and then the block it starts.
@@ -29,6 +30,10 @@ class Scenario:
         self.rev = 0
         self.slices: dict[str, list] = {}
         self.events: list[dict] = []
+        self.sheets: dict[str, dict] = {}
+        for item in items:
+            self.sheets.update(item.get("sheets", {}))
+        self.items = [i for i in items if "sheets" not in i]
 
     @classmethod
     def load(cls, path: pathlib.Path) -> "Scenario":
@@ -90,6 +95,17 @@ class Scenario:
             await send(self._apply(item["msg"]))
             sent += 1
         return sent
+
+    def decide(self, perm_id: str, behavior: str):
+        """perm.decide as P5's server answers it: a pending perm becomes 'sent'. Returns the slices message, or
+        None when there is no pending perm with that id."""
+        perms = self.slices.get("perms") or []
+        for p in perms:
+            if p.get("id") == perm_id and p.get("status") == "pending":
+                p["status"] = "sent"
+                p["sentBehavior"] = behavior
+                return self._apply({"type": "slices", "changed": {"perms": perms}})
+        return None
 
     async def play(self, send):
         """Send every item at its `t` (seconds from now)."""

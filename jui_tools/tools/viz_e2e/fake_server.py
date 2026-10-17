@@ -48,11 +48,11 @@ PROTOCOL = {
     "notice": "as plan: {level, text} when the scenario says",
     # browser -> server
     "auth": "as P1: {token}; a wrong token, or none within 2 s, closes the socket with 4401",
-    "perm.decide": "as P1 until P5: acked ok=false error=\"unknown type 'perm.decide'\" (recorded in /_fake/state)",
+    "perm.decide": "as P5: the perm goes to status 'sent' (sentBehavior), slices pushed, ack ok; a perm not pending acks ok=false 'already sent' (recorded in /_fake/state)",
     "events.more": "acked; no older events",
     "snapshot.get": "answered with the current snapshot",
     "presence": "recorded (/_fake/state); no answer, as P1",
-    "spec.sheet": "as P1 until P4: acked ok=false error=\"unknown type 'spec.sheet'\"",
+    "spec.sheet": "as P4: {type: 'sheet', reqId, specId, cards} from the scenario's sheets; an unknown spec acks ok=false",
 }
 
 HOST_OK = re.compile(r"^(127\.0\.0\.1|localhost):(\d+)$")
@@ -206,14 +206,23 @@ class FakeServer:
             await ws.send_json({"type": "ack", "reqId": rid, "ok": True})
         elif kind == "perm.decide":
             self.decisions.append({k: req.get(k) for k in ("permId", "behavior", "always", "reason")})
-            await ws.send_json({"type": "ack", "reqId": rid, "ok": False, "error": "unknown type 'perm.decide'"})
+            changed = self.scenario.decide(str(req.get("permId")), str(req.get("behavior"))) if self.scenario else None
+            if changed is None:
+                await ws.send_json({"type": "ack", "reqId": rid, "ok": False, "error": "already sent"})
+            else:
+                await self.broadcast(changed)
+                await ws.send_json({"type": "ack", "reqId": rid, "ok": True})
         elif kind == "events.more":
             await ws.send_json({"type": "events", "items": [], "older": True})
             await ws.send_json({"type": "ack", "reqId": rid, "ok": True})
         elif kind == "presence":
             self.presence.append({"visible": bool(req.get("visible"))})
         elif kind == "spec.sheet":
-            await ws.send_json({"type": "ack", "reqId": rid, "ok": False, "error": "unknown type 'spec.sheet'"})
+            cards = self.scenario.sheets.get(str(req.get("specId"))) if self.scenario else None
+            if cards is None:
+                await ws.send_json({"type": "ack", "reqId": rid, "ok": False, "error": "unknown spec"})
+            else:
+                await ws.send_json({"type": "sheet", "reqId": rid, "specId": req.get("specId"), "cards": cards})
 
     def app(self) -> web.Application:
         app = web.Application(middlewares=[self.host_guard])

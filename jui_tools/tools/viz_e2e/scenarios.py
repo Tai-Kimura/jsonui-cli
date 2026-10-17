@@ -111,3 +111,137 @@ def write(items, path: pathlib.Path) -> pathlib.Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in items), encoding="utf-8")
     return path
+
+
+# ---------------------------------------------------------------- P4 / P5: specs, tasks, tests, permissions
+SECTION_KEYS = ["metadata", "structure", "stateManagement", "dataFlow", "userActions", "transitions", "branchContracts"]
+SCREENS = ["login", "signup", "home", "search", "detail", "cart", "checkout", "orders", "mypage", "settings"]
+
+
+def spec(name, state="written", items=None, impl=(0, 0), tests=(0, 0, 0, False), bucket="partial", by=None, writing=None):
+    items = items or [5, 6, 3, 4, 2, 2, 3]
+    sections = [{"key": k, "state": ("writing" if writing == k else state if n else "empty"), "items": n}
+                for k, n in zip(SECTION_KEYS, items)]
+    s = {"id": f"p-shop:docs/screens/json/{name}.spec.json", "projectId": "p-shop", "name": name.capitalize(),
+         "file": f"docs/screens/json/{name}.spec.json", "sections": sections,
+         "impl": {"total": impl[0], "done": impl[1]},
+         "tests": {"total": tests[0], "passed": tests[1], "failed": tests[2], "running": tests[3]},
+         "bucket": bucket, "updatedAt": T0}
+    if by:
+        s["by"] = by
+    return s
+
+
+def task(tid, subject, status="pending", owner=None, blocked_by=(), spec_id=None, sid=S_A0):
+    t = {"key": f"{sid}#{tid}", "sessionId": sid, "id": str(tid), "subject": subject, "status": status,
+         "blocks": [], "blockedBy": [str(b) for b in blocked_by], "createdAt": T0}
+    if owner:
+        t["owner"] = owner
+    if spec_id:
+        t["specId"] = spec_id
+    if status in ("in_progress", "completed"):
+        t["startedAt"] = T0 + 1000
+    if status == "completed":
+        t["completedAt"] = T0 + 5000
+    return t
+
+
+def perm(pid, agent_id, tool, summary, status="pending", can_relay=True, **kw):
+    p = {"id": pid, "sessionId": S_A0, "agentId": agent_id, "toolName": tool, "summary": summary,
+         "preview": f"{tool} {summary}", "status": status, "createdAt": T0 + 2000,
+         "can": {"allowDeny": can_relay, "always": False, "reason": False}}
+    p.update(kw)
+    return p
+
+
+def sheet_for(name):
+    """spec.sheet's cards for one spec (the shape of sheet.py's build_doc)."""
+    return {"metadata": {"name": name.capitalize(), "displayName": f"{name} 画面", "description": f"{name} の画面",
+                         "platforms": ["ios", "android", "web"], "layoutFile": name},
+            "components": [["View", f"{name}_root", "View"], ["Label", "title_label", "  Label"], ["TextField", "email_input", "  TextField"],
+                           ["Button", "submit_button", "  Button"], ["Label", "<b>escaped</b>", "  Label"]],
+            "layoutChildren": [f"{name}_root", "title_label", "email_input", "submit_button", "<b>escaped</b>"],
+            "uiVariables": [["email", "String", '""'], ["isLoading", "Bool", "false"], ["error", "String?", "null"]],
+            "eventHandlers": [["onSubmit", "送信する"]], "vmMethods": ["load()", "submit()", "validate()", "reset()"],
+            "vmVars": ["email"], "repositories": ["AuthRepository"], "apis": [["login", "POST", "/auth/login"]],
+            "userActions": [["送信を押す", "submit()"], ["入力する", "validate()"]],
+            "transitions": [["submit() 成功", "Home"], ["戻る", "Top"]],
+            "branches": [["submit", "成功", "Home へ"], ["submit", "失敗", "エラーを表示"], ["validate", "空", "ボタンを無効"]],
+            "related": [["Layout", f"docs/screens/layouts/{name}.json", True], ["Test", f"tests/screens/{name}.test.json", False]],
+            "impl": {"total": 12, "done": 4}}
+
+
+def work():
+    """One JsonUI project with ten specs (the big board), a session and its define subagent, three tasks (one
+    waiting on another), a test run and two permission prompts (one through a relay, one without).
+    Marks: start, progress, terminal, end."""
+    P = [project("p-shop", "shop-app", 0), project("p-cli", "jsonui-cli", 1, jsonui=False)]
+    S = [session(S_A0, "a0", "p-shop", "shop-app"), session(S_4F, "4f", "p-cli", "jsonui-cli")]
+    A = [agent(S_A0, "a0", S_A0, state="phone", act="Bash xcodebuild test（iPhone 16（iOS 26.2））"),
+         agent(SUB_A3, "a3", S_A0, kind="sub", role="define", state="typing", act="Write docs/screens/json/login.spec.json", agent_type="jsonui-define"),
+         agent(S_4F, "4f", S_4F, state="idle", act="待機")]
+    login = f"p-shop:docs/screens/json/login.spec.json"
+    specs = [spec("login", by=SUB_A3, writing="stateManagement", bucket="live", items=[5, 6, 2, 0, 0, 0, 0], state="written")]
+    specs += [spec(n, impl=(12, 4 + k), tests=(3, k % 4, 0, False)) for k, n in enumerate(SCREENS[1:])]
+    tasks = [task(1, "文言を strings.json に登録"), task(2, "Login 画面の spec を書く", "in_progress", owner=SUB_A3, spec_id=login),
+             task(3, "Login 画面を実装", blocked_by=[2], spec_id=login)]
+    run = {"id": "run-1", "projectId": "p-shop", "agentId": S_A0, "platform": "ios", "command": "xcodebuild test -scheme ShopApp",
+           "status": "running", "startedAt": T0 + 1000, "deviceId": "dev-1",
+           "cases": [{"name": "初期表示", "status": "passed"}, {"name": "ログイン失敗", "status": "running"}, {"name": "<script>x</script>", "status": "pending"}]}
+    devices = [{"id": "dev-1", "platform": "ios", "name": "iPhone 16（iOS 26.2）", "state": "booted", "busyBy": S_A0}]
+    perms = [perm("perm-1", SUB_A3, "Write", "docs/screens/json/login.spec.json", can_relay=True),
+             perm("perm-2", S_A0, "Bash", "xcodebuild test -scheme ShopApp", can_relay=False)]
+    items = [{"sheets": {s["id"]: sheet_for(s["id"].split("/")[-1].replace(".spec.json", "")) for s in specs}},
+             {"mark": "start"}, slices(0, projects=P, sessions=S, agents=A, specs=specs, tasks=tasks, tests=[run], devices=devices, perms=perms, server=server_slice())]
+    # progress: the spec is written, task 2 done (3 can start), the run finishes with one failure
+    specs2 = [spec("login", items=[5, 6, 4, 3, 2, 2, 3], bucket="partial")] + specs[1:]
+    tasks2 = [tasks[0], task(2, "Login 画面の spec を書く", "completed", owner=SUB_A3, spec_id=login), tasks[2]]
+    run2 = dict(run, status="failed", summary="2 passed, 1 failed", endedAt=T0 + 9000,
+                cases=[{"name": "初期表示", "status": "passed"}, {"name": "ログイン失敗", "status": "passed"}, {"name": "<script>x</script>", "status": "failed"}])
+    items += [{"mark": "progress"}, slices(5, specs=specs2, tasks=tasks2, tests=[run2])]
+    items += [{"mark": "terminal"}, slices(8, perms=[perm("perm-1", SUB_A3, "Write", "docs/screens/json/login.spec.json", status="sent", sentBehavior="allow"),
+                                                      perm("perm-2", S_A0, "Bash", "xcodebuild test -scheme ShopApp", status="answered_in_terminal", can_relay=False,
+                                                           terminalBehavior="allow", decidedAt=T0 + 7000, decidedBy="terminal")])]
+    items.append({"mark": "end"})
+    return items
+
+
+def heavy(seconds=90, rate=5):
+    """Load for P4 (plan 10 §7): 20 sessions (60 robots) in 6 projects, 300 tasks, 300 specs; `rate` times a
+    second a spec section changes state, a task moves, a robot changes what it does. Played by --autoplay."""
+    import random
+    random.seed(11)
+    names = ["shop-app", "jsonui-cli", "JsonUIDocument", "admin-web", "client-ios", "tools"]
+    P = [project(f"p{k}", n, k, jsonui=k != 1) for k, n in enumerate(names)]
+    S, A = [], []
+    for i in range(20):
+        sid = f"{i:02x}000000-0000-4000-8000-{i:012x}"
+        S.append(session(sid, f"{i:02x}", f"p{i % 6}", names[i % 6]))
+        A.append(agent(sid, f"{i:02x}", sid, state="typing", act="Edit docs/screens/layouts/x.json"))
+        for k in range(2):
+            A.append(agent(f"{i:02x}s{k}", f"{i:02x}{'ab'[k]}", sid, kind="sub", role=random.choice(["define", "implement", "test"]),
+                           state=random.choice(["typing", "reading", "command"]), act="Read docs/screens/json/x.spec.json", agent_type="jsonui-define"))
+    specs = []
+    for j in range(300):
+        pid = f"p{[0, 2, 3, 4, 5][j % 5]}"
+        s = spec(f"s{j:03d}", impl=(10, j % 11), tests=(3, j % 4, 0, False), bucket=random.choice(["partial", "todo", "done"]))
+        s.update(id=f"{pid}:docs/screens/json/s{j:03d}.spec.json", projectId=pid, file=f"docs/screens/json/s{j:03d}.spec.json")
+        specs.append(s)
+    tasks = []
+    for j in range(300):
+        sid = S[j % 20]["id"]
+        t = task(j // 20 + 1, f"タスク {j}", random.choice(["pending", "in_progress", "completed"]), sid=sid,
+                 blocked_by=[j // 20] if j // 20 and random.random() < 0.3 else ())
+        tasks.append(t)
+    items = [{"mark": "start"}, slices(0, projects=P, sessions=S, agents=A, specs=specs, tasks=tasks, server=server_slice())]
+    t = 1.0
+    for n in range(int(seconds * rate)):
+        j = random.randrange(300)
+        specs[j] = dict(specs[j], bucket="live", by=A[(j * 3) % 60]["id"],
+                        sections=[dict(q, state="writing" if k == n % 7 else q["state"]) for k, q in enumerate(specs[j]["sections"])])
+        tasks[n % 300] = dict(tasks[n % 300], status=random.choice(["pending", "in_progress", "completed"]))
+        a = A[n % 60]
+        A[n % 60] = dict(a, state=random.choice(["typing", "reading", "command", "idle"]), act=f"Edit docs/screens/layouts/s{n % 300:03d}.json")
+        items.append(slices(t, specs=list(specs), tasks=list(tasks), agents=list(A)))
+        t += 1 / rate
+    return items

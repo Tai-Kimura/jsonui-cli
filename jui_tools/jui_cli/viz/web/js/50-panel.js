@@ -129,14 +129,15 @@ function renderPanel(model) {
   const roomOrder = Object.fromEntries(ROOMS.map((r, k) => [r.id, k]));
   const shown = model.specs.map((s, i) => [s, i]).filter(([s]) => inScope(s.project) && (specFilter === 'all' || s.bucket === specFilter)).sort((a, b) => roomOrder[a[0].project] - roomOrder[b[0].project] || a[1] - b[1]);
   const multi = new Set(shown.map(([x]) => x.project)).size > 1;
-  keyed(specListEl, JSON.stringify([UI.project, specFilter, shown.map(([x, i]) => `${i}:${x.bucket}:${x.by || ''}`)]), () => (shown.length
+  keyed(specListEl, JSON.stringify([UI.project, specFilter, scopedSpecs.length, shown.map(([x, i]) => `${i}:${x.bucket}:${x.by || ''}:${x.name}`)]), () => (shown.length
     ? shown.map(([x, i], k) => `${multi && (k === 0 || shown[k - 1][0].project !== x.project) ? `<li class="sl-group">${esc(PROJECT[x.project].name)}<b>${shown.filter(([y]) => y.project === x.project).length}</b></li>` : ''}<li><button type="button" class="spec-row b-${x.bucket}" data-idx="${i}" data-fk="sp-${i}"${roleVar(x)}><span class="nm">${esc(x.name)}</span><span class="stx"></span>${x.by ? pill(x.by, DEF[x.by].role) : ''}${SEGS}</button></li>`).join('')
     : `<li class="empty-note">${!scopedSpecs.length ? `${esc(scopeLabel())} には画面の spec がない` : specFilter === 'live' ? '今は誰も spec を触っていない' : 'この状態の spec はない'}</li>`));
   specListEl.querySelectorAll('.spec-row').forEach((b) => { const s = model.specs[+b.dataset.idx]; setText(b.querySelector('.stx'), s.status.text); paintSegs(b.querySelector('.segs'), s); });
 
   const T = model.tests, n = CASES.length;
   const pPct = (T.passed / n) * 100, rPct = T.runningIdx >= 0 ? 100 / n : 0;
-  if (SOURCE.mode === 'live') setHTML($('tests'), `<p class="empty-note">テストの実行はまだ無い</p>`);
+  if (SOURCE.mode === 'live' && !T.rows.length && !T.command) setHTML($('tests'), `<p class="empty-note">${T.statusText === 'まだ無い' ? 'テストの実行はまだ無い' : esc(T.statusText)}</p>`);
+  else if (SOURCE.mode === 'live') setHTML($('tests'), liveTestsHTML(T));
   else if (!inScope('shop')) setHTML($('tests'), `<p class="empty-note">${esc(scopeLabel())} で動いているテストはない</p>`);
   else setHTML($('tests'), `<div class="test-head"><div>${pill('a2', 'test')} <code>${T.file}</code></div><code>${T.device} · ${esc(T.statusText)}</code>
 <div class="prog" role="img" aria-label="通過 ${T.passed} 件 / 全 ${n} 件"><span class="p" style="width:${pPct}%"></span><span class="${T.retrying ? 'f' : 'r'}" style="width:${rPct}%"></span></div></div>
@@ -155,7 +156,7 @@ function renderPanel(model) {
   const loose = scopedPend.filter((p) => !p.task);
   const where = (list) => (UI.project === 'all' ? `<span class="ptag">${esc(PROJECT[PROJECT_OF[list]].name)}</span>` : '');
   setHTML($('task-sum'), KCOLS.map(([c, label]) => `<span class="state ${COL_STATE[c][0]}">${label} ${scopedTasks.filter((x) => x.col === c).length}</span>`).join('') + (scopedPend.length ? `<span class="state st-waiting">許可待ち ${scopedPend.length}</span>` : ''));
-  keyed($('tasks'), JSON.stringify([UI.project, loose.map((p) => p.id), tasks.map((x) => `${x.key}:${x.col}:${x.perm ? x.perm.id : ''}`)]), () => [
+  keyed($('tasks'), JSON.stringify([UI.project, loose.map((p) => `${p.id}:${p.status}`), tasks.map((x) => `${x.key}:${x.col}:${x.perm ? `${x.perm.id}:${x.perm.status}` : ''}:${x.subject}:${x.owner || ''}`)]), () => [
     ...loose.map((p) => `<li class="task has-perm perm-only"><button type="button" class="task-open" data-open="perm:${p.id}" data-fk="to-${p.id}"><span class="tid">${esc(SESSION_OF[p.who])} セッション</span><span class="subject">タスクの外で許可を求めている</span></button><span class="state st-waiting">許可待ち</span><span class="meta">${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)}${where(SESSION_OF[p.who])}</span>${permBox(p)}</li>`),
     ...tasks.map((x) => {
       const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? ['st-waiting', `#${x.blockedBy} 待ち`] : COL_STATE[x.col];
@@ -173,7 +174,12 @@ function renderPanel(model) {
 
 /* ---------- answering permission prompts from the view ---------- */
 const PERM_NOTE = 'ターミナルでも答えられ、先に答えた方が使われる';
-const permButtons = (p, where) => `<button type="button" class="pa pa-allow" data-do="allow" data-perm="${p.id}" data-fk="${where}a-${p.id}">許可</button><button type="button" class="pa pa-always" data-do="always" data-perm="${p.id}" data-fk="${where}w-${p.id}" title="${esc(p.rule)} を今後は聞かずに許可する">今後も許可</button><button type="button" class="pa pa-deny" data-do="deny" data-perm="${p.id}" data-fk="${where}d-${p.id}">拒否</button>`;
+const RELAY_HOW = '有効にするには <code>jui viz relay install</code> を 1 回、セッションを <code>claude --dangerously-load-development-channels server:jui-viz</code> で起動';
+const permButtonsLive = (p, where) => (p.status === 'sent' ? `<p class="perm-sent">送信済み（${p.sentBehavior === 'deny' ? '拒否' : '許可'}）· Claude Code の確定を待っている</p>`
+  : !p.can.allowDeny ? `<p class="perm-relay">ターミナルで答えてください（このセッションは中継が無効）<small>${RELAY_HOW}</small></p>`
+    : `<button type="button" class="pa pa-allow" data-do="allow" data-perm="${esc(p.id)}" data-fk="${where}a-${esc(p.id)}">許可</button>${p.can.always ? `<button type="button" class="pa pa-always" data-do="always" data-perm="${esc(p.id)}" data-fk="${where}w-${esc(p.id)}">今後も許可</button>` : ''}<button type="button" class="pa pa-deny" data-do="deny" data-perm="${esc(p.id)}" data-fk="${where}d-${esc(p.id)}">拒否</button>`);
+const permButtons = (p, where) => (SOURCE.mode === 'live' ? permButtonsLive(p, where) : permButtonsDemo(p, where));
+const permButtonsDemo = (p, where) => `<button type="button" class="pa pa-allow" data-do="allow" data-perm="${p.id}" data-fk="${where}a-${p.id}">許可</button><button type="button" class="pa pa-always" data-do="always" data-perm="${p.id}" data-fk="${where}w-${p.id}" title="${esc(p.rule)} を今後は聞かずに許可する">今後も許可</button><button type="button" class="pa pa-deny" data-do="deny" data-perm="${p.id}" data-fk="${where}d-${p.id}">拒否</button>`;
 const permBox = (p) => `<div class="perm-box"><p class="perm-q"><b>${esc(p.tool)}</b> <code>${esc(permSummary(p))}</code></p><div class="perm-acts">${permButtons(p, 's')}</div></div>`;
 function recentHTML(id) {
   const items = logItems.filter((e) => e.who === id).slice(0, 6);
@@ -537,7 +543,7 @@ function renderWbSide(model) {
   const match = (s) => inScope(s.project) && (!q || `${s.name} ${s.screen} ${s.file} ${PROJECT[s.project].name}`.toLowerCase().includes(q));
   const groups = BUCKETS.map(([b, label]) => [label, model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && match(s))]).filter(([, items]) => items.length);
   const n = model.specs.filter((s) => inScope(s.project)).length;
-  keyed(wbSideList, JSON.stringify([UI.project, q, wb.idx, groups.map(([label, items]) => [label, items.map(([s, i]) => `${i}:${s.by || ''}`)])]), () => {
+  keyed(wbSideList, JSON.stringify([UI.project, q, wb.idx, groups.map(([label, items]) => [label, items.map(([s, i]) => `${i}:${s.by || ''}:${s.name}`)])]), () => {
     const all = `<button type="button" class="ws-item ws-all" data-idx="-1" data-fk="ws--1" aria-current="${wb.idx === -1}"><span class="dot" aria-hidden="true"></span><span class="nm">全体を見る</span><span></span><small>${esc(scopeLabel())} · ${n} 画面の進み具合</small></button>`;
     const body = groups.map(([label, items]) => `<p class="ws-group"><span>${label}</span><b>${items.length}</b></p>${items.map(([s, i]) => `<button type="button" class="ws-item b-${s.bucket}" data-idx="${i}" data-fk="ws-${i}" aria-current="${wb.idx === i}"${roleVar(s)}><span class="dot" aria-hidden="true"></span><span class="nm">${esc(s.name)}</span>${s.by ? pill(s.by, DEF[s.by].role) : '<span></span>'}<small></small></button>`).join('')}`).join('');
     return all + (body || '<p class="ws-none">該当する画面がない</p>');
@@ -547,6 +553,7 @@ function renderWbSide(model) {
 
 const SWATCHES = '<span><i class="sw sw-writing"></i>書き込み中</span><span><i class="sw sw-written"></i>記入済み</span><span><i class="sw sw-impl"></i>実装済み</span><span><i class="sw sw-tested"></i>テスト済み</span><span><i class="sw sw-empty"></i>未記入</span>';
 const OV_LEGEND = `${SWATCHES}<span>バーは左から 概要・構造・状態・データ・操作・遷移・分岐</span><span>カードを押すとその spec を開く</span>`;
+const SHEET_LEGEND_LIVE = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 実装済み・テスト済み</span><span><b class="m-doing">●</b> 実装中</span><span><b class="m-todo">○</b> 未実装・未テスト</span><span><b class="m-test">▶</b> テスト中</span>';
 const SHEET_LEGEND = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 実装済み・テスト済み</span><span><b class="m-doing">●</b> 実装中</span><span><b class="m-todo">○</b> 未実装・未テスト</span><span><b class="m-test">▶</b> テスト中</span><span><b class="m-flaky">⚠</b> 再実行で通過</span><span>中身はデモの例</span>';
 function setHead(title, file, stCls, stText, who) {
   setText($('wb-title'), title);
@@ -626,9 +633,23 @@ function renderNav(s) {
 }
 function renderSheet(model, force) {
   const s = model.specs[wb.idx], d = s.doc, T = model.tests;
-  setHead(`${s.name}（${s.screen}）`, `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
+  if (SOURCE.mode === 'live') {
+    liveWantSheet(s);
+    if (!d) {
+      setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
+      wbNav.hidden = false; $('wb-follow-label').hidden = false;
+      setHTML($('wb-legend'), SHEET_LEGEND_LIVE);
+      renderNav(s);
+      const failed = LIVE.sheetFailed[s.id];
+      setHTML(wbCode, `<p class="sc-ph">${failed ? `この spec を読めなかった（${esc(failed)}）` : 'spec を読み込んでいます…'}</p>`);
+      wbCode._sig = null;
+      return;
+    }
+  }
+  if (SOURCE.mode === 'live') setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
+  else setHead(`${s.name}（${s.screen}）`, `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
   wbNav.hidden = false; $('wb-follow-label').hidden = false;
-  setHTML($('wb-legend'), SHEET_LEGEND);
+  setHTML($('wb-legend'), SOURCE.mode === 'live' ? SHEET_LEGEND_LIVE : SHEET_LEGEND);
   renderNav(s);
   if (wbCode._sig) { wbCode._sig = null; wbCode._html = null; }
 
@@ -641,11 +662,13 @@ function renderSheet(model, force) {
   const bodies = [
     (w) => {
       const m = d.metadata;
-      const rows = [['画面名', `${esc(m.displayName)}（<span class="mono">${esc(m.name)}</span>）`], ['説明', esc(m.description)], ['対応', m.platforms.map((p) => `<span class="bdg">${PLATFORM_JA[p] || esc(p)}</span>`).join(' ')], ['レイアウト', `<code>docs/screens/layouts/${esc(m.layoutFile)}.json</code>`], ['作成日', esc(m.createdAt)]];
+      const rows = [['画面名', `${esc(m.displayName)}（<span class="mono">${esc(m.name)}</span>）`], ['説明', esc(m.description)], ['対応', m.platforms.map((p) => `<span class="bdg">${PLATFORM_JA[p] || esc(p)}</span>`).join(' ')], ['レイアウト', m.layoutFile ? `<code>docs/screens/layouts/${esc(m.layoutFile)}.json</code>` : ''], ['作成日', esc(m.createdAt)]].filter(([, v]) => v !== '');
       return `<dl class="kv">${rows.slice(0, reveal(rows.length, w)).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>`;
     },
     (w, writing) => {
-      const items = pick(1, d.components, reveal(d.components.length, w), writing);
+      const COMP_MAX = 60, compAll = reveal(d.components.length, w);
+      const items = pick(1, d.components, Math.min(COMP_MAX, compAll), writing);
+      const more = compAll > COMP_MAX ? `<p class="sc-note">ほか ${compAll - COMP_MAX} 個の部品（Layout が大きいので先頭の ${COMP_MAX} 個だけ）</p>` : '';
       const rows = items.map(([[type, id, desc], i, m]) => li(m, `c${i}`, `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> <span class="desc">${esc(desc)}</span>`)).join('');
       const byId = new Map(items.map((x) => [x[0][1], x]));
       const wf = d.layoutChildren.filter((id) => byId.has(id)).map((id) => {
@@ -653,7 +676,7 @@ function renderSheet(model, force) {
         const state = writing ? (m[2] === 'is-new' ? 'writing' : 'defined') : !s.implPhase ? 'defined' : m[1] === 'm-done' ? 'done' : m[1] === 'm-doing' ? 'doing' : 'todo';
         return wfElement(c, state);
       }).join('');
-      return `<div class="st-grid"><div class="wf-phone" role="img" aria-label="${esc(d.components[0][1])} の中に並ぶ部品の配置図">${wf}</div><ul class="rows">${rows}</ul></div>`;
+      return `<div class="st-grid"><div class="wf-phone" role="img" aria-label="${esc((d.components[0] || [])[1] || '')} の中に並ぶ部品の配置図">${wf}</div><ul class="rows">${rows}</ul></div>${more}`;
     },
     (w, writing) => {
       const rows = pick(2, d.uiVariables, reveal(d.uiVariables.length, w), writing).map(([[name, type, init], i, m]) => tr(m, `v${i}`, `<td class="mono">${esc(name)}</td><td class="mono">${esc(type)}</td><td class="mono">${esc(init)}</td>`)).join('');
@@ -678,9 +701,9 @@ function renderSheet(model, force) {
       const note = s.id === 'cart' && model.t >= 18 ? `<p class="sc-note">tests/screens/cart.test.json の 8 ケースと 1 対 1（${T.passed}/8 通過）</p>` : '';
       return `<table class="vt"><thead><tr><th><span class="sr">状態</span></th><th>メソッド</th><th>条件</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table>${note}`;
     },
-    () => `<ul class="files">${s.related.map(([type, path], i) => {
+    () => `<ul class="files">${s.related.map(([type, path, exists], i) => {
       const now = i === s.relatedNow && s.by;
-      return `<li class="${now ? 'now' : ''}"><span class="bdg">${type}</span><code>${esc(path)}</code>${now ? `<span class="editing">${pill(s.by, DEF[s.by].role)} ${s.status.kind === 'test' ? '実行中' : '編集中'}</span>` : ''}</li>`;
+      return `<li class="${now ? 'now' : ''}"><span class="bdg">${esc(type)}</span><code>${esc(path)}</code>${exists === false ? '<span class="desc">まだ無い</span>' : ''}${now ? `<span class="editing">${pill(s.by, DEF[s.by].role)} ${s.status.kind === 'test' ? '実行中' : '編集中'}</span>` : ''}</li>`;
     }).join('')}</ul>`,
   ];
   const html = SHEET.map(([k, title, key, wide]) => {
@@ -756,7 +779,7 @@ function renderTaskBoard(model) {
   setText($('tb-count'), `${tasks.length} 件`);
   setText($('tb-title'), UI.project === 'all' ? 'タスクボード' : `タスクボード · ${PROJECT[UI.project].name}`);
   stripEl.hidden = !pend.length && !alwaysRules.size && !elsewhere;
-  keyed(stripEl, JSON.stringify([pend.map((p) => p.id), [...alwaysRules.keys()], elsewhere]), () => {
+  keyed(stripEl, JSON.stringify([pend.map((p) => `${p.id}:${p.status}`), [...alwaysRules.keys()], elsewhere]), () => {
     const cards = pend.map((p) => {
       const x = p.task && TASK_BY_KEY[p.task];
       return `<li class="pcard"><div class="pc-who">${pill(p.who, DEF[p.who].role)}<span>${esc(DEF[p.who].agent)}</span><span class="pc-wait" data-since="${p.at}"></span></div><p class="pc-what"><b>${esc(p.tool)}</b> <code>${esc(permSummary(p))}</code></p><button type="button" class="pc-task" data-open="${x ? p.task : `perm:${p.id}`}" data-fk="pt-${p.id}">${x ? `${esc(x.list)} #${x.id} ${esc(x.subject)}` : `${esc(SESSION_OF[p.who])} セッション · タスクなし`} › 詳細</button><div class="perm-acts">${permButtons(p, 'p')}</div></li>`;
@@ -778,7 +801,7 @@ function renderTaskBoard(model) {
   };
   const sortCol = (col) => (a, b) => (b.perm ? 1 : 0) - (a.perm ? 1 : 0) || (col === 'done' ? b.end - a.end : 0) || a.list.localeCompare(b.list) || a.id - b.id;
   kanbanEl.classList.toggle('lanes', UI.lanes);
-  keyed(kanbanEl, JSON.stringify([UI.lanes, lists, KCOLS.map(([col]) => tasks.filter((x) => x.col === col).map((x) => `${x.key}:${x.perm ? x.perm.id : ''}:${x.fresh ? 1 : 0}`))]), () => {
+  keyed(kanbanEl, JSON.stringify([UI.lanes, lists, KCOLS.map(([col]) => tasks.filter((x) => x.col === col).map((x) => `${x.key}:${x.perm ? `${x.perm.id}:${x.perm.status}` : ''}:${x.fresh ? 1 : 0}:${x.subject}:${x.owner || ''}`))]), () => {
     if (!lists.length) return `<p class="k-none">表示するセッションがない。上の「セッション」で選ぶ</p>`;
     if (!UI.lanes) return KCOLS.map(([col, label]) => {
       const items = tasks.filter((x) => x.col === col).sort(sortCol(col));
@@ -808,7 +831,7 @@ function renderTaskDetail(model) {
   const pending = here.find((q) => q.status === 'pending') || null;
   const known = permOnly ? PERM_BY_ID[key.slice(5)] : null;
   const who = base ? base.owner : known ? known.who : null;
-  const sig = JSON.stringify([key, x && x.col, x && x.status, pending && pending.id, here.map((q) => q.status)]);
+  const sig = JSON.stringify([key, x && x.col, x && x.status, x && x.subject, pending && pending.id, here.map((q) => q.status)]);
   keyed(detailEl, sig, () => {
     const loopStart = simT - model.t;
     const clock = (v) => fmtClock(BASE_CLOCK + loopStart + v);
@@ -816,8 +839,8 @@ function renderTaskDetail(model) {
     const blocks = base ? TASKS.filter((q) => q.list === base.list && q.blockedBy === base.id) : [];
     const specIdx = base && base.spec ? SPEC_INDEX[base.spec] : -1;
     const spec = specIdx >= 0 ? model.specs[specIdx] : null;
-    const hist = here.filter((q) => q.status !== 'pending').map((q) => {
-      const how = q.status === 'terminal' ? 'ターミナルで許可された' : q.status === 'rule' ? `ルール ${q.rule} で自動許可` : q.status === 'deny' ? 'ビューで拒否した' : q.status === 'always' ? `ビューで許可し、${q.rule} を追加` : 'ビューで許可した';
+    const hist = here.filter((q) => q.status !== 'pending' && q.status !== 'sent').map((q) => {
+      const how = SOURCE.mode === 'live' ? livePermHow(q) : q.status === 'terminal' ? 'ターミナルで許可された' : q.status === 'rule' ? `ルール ${q.rule} で自動許可` : q.status === 'deny' ? 'ビューで拒否した' : q.status === 'always' ? `ビューで許可し、${q.rule} を追加` : 'ビューで許可した';
       const at = q.decided ? fmtClock(BASE_CLOCK + q.decided.at) : clock(q.status === 'rule' ? q.at : q.end);
       return `<li><time>${at}</time><span>${how} · ${esc(q.tool)} <code>${esc(permSummary(q))}</code></span></li>`;
     }).join('');
@@ -843,10 +866,16 @@ ${sample ? rawDetails(sample) : ''}`;
   detailEl.querySelectorAll('[data-live-act]').forEach((el) => setText(el, robotState[el.dataset.liveAct].act));
   detailEl.querySelectorAll('[data-recent]').forEach((el) => setHTML(el, recentHTML(el.dataset.recent)));
 }
-const permDetail = (p, where) => `<div class="tbd-perm"><h4>許可を求めています</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} が <b>${esc(p.tool)}</b> を使いたい<span class="tbd-wait" data-since="${p.at}"></span></p><pre class="tbd-cmd">${esc(permSummary(p))}</pre><label class="tbd-reason">拒否するときの理由（任意。Claude に伝わる）<input type="text" id="${where}-reason" placeholder="例: 先に jui build を通して" autocomplete="off"></label><div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}。「今後も許可」は <code>${esc(p.rule)}</code> を設定に足す。これと拒否の理由は PermissionRequest フック経由のときだけ返せる（channel の許可中継は許可・拒否のみ）</p></div>`;
+const permDetail = (p, where) => (SOURCE.mode === 'live' ? permDetailLive(p, where) : permDetailDemo(p, where));
+const permDetailLive = (p, where) => `<div class="tbd-perm"><h4>許可を求めています</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} が <b>${esc(p.tool)}</b> を使いたい<span class="tbd-wait" data-since="${p.at}"></span></p><pre class="tbd-cmd">${esc(permSummary(p))}</pre>${p.can.reason ? `<label class="tbd-reason">拒否するときの理由（任意。Claude に伝わる）<input type="text" id="${where}-reason" autocomplete="off"></label>` : ''}<div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${p.relayOnly ? '。フックと照合できなかった中継の要求（内容は中継の文から）' : ''}</p></div>`;
+const permDetailDemo = (p, where) => `<div class="tbd-perm"><h4>許可を求めています</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} が <b>${esc(p.tool)}</b> を使いたい<span class="tbd-wait" data-since="${p.at}"></span></p><pre class="tbd-cmd">${esc(permSummary(p))}</pre><label class="tbd-reason">拒否するときの理由（任意。Claude に伝わる）<input type="text" id="${where}-reason" placeholder="例: 先に jui build を通して" autocomplete="off"></label><div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}。「今後も許可」は <code>${esc(p.rule)}</code> を設定に足す。これと拒否の理由は PermissionRequest フック経由のときだけ返せる（channel の許可中継は許可・拒否のみ）</p></div>`;
 /* The relay's request id: five lowercase letters without "l". */
 const relayId = (p) => [...`${p.id}${p.who}xyz`].slice(0, 5).map((ch, k) => 'abcdefghijkmnopqrstuvwxyz'[(ch.charCodeAt(0) * 7 + k * 11) % 25]).join('');
+const livePermHow = (q) => (q.status === 'terminal' ? (q.terminalBehavior === 'deny' ? 'ターミナルで拒否された' : 'ターミナルで許可された')
+  : q.status === 'allow' ? (q.decidedBy === 'terminal' ? 'ターミナルで許可された' : 'ビューで許可した') : q.status === 'deny' ? (q.decidedBy === 'terminal' ? 'ターミナルで拒否された' : 'ビューで拒否した')
+    : q.status === 'expired' ? '答えないまま終わった' : esc(q.status));
 const rawDetails = (p) => {
+  if (SOURCE.mode === 'live') return `<details class="tbd-raw"><summary>受け取った内容</summary><pre>${esc(p.preview || permSummary(p))}</pre>${p.suggestions ? `<p>Claude Code が示した選択肢</p><pre>${esc(JSON.stringify(p.suggestions, null, 2))}</pre>` : ''}</details>`;
   const id = relayId(p);
   const relayIn = { method: 'notifications/claude/channel/permission_request', params: { request_id: id, tool_name: p.tool, description: `${p.tool} ${permSummary(p)}`, input_preview: JSON.stringify(p.input) } };
   const relayOut = { method: 'notifications/claude/channel/permission', params: { request_id: id, behavior: 'allow' } };
@@ -898,7 +927,7 @@ function renderRobot(model) {
   const order = { doing: 0, wait: 1, todo: 2, done: 3 };
   const owned = model.tasks.filter((x) => (isMain ? x.list === id : x.owner === id)).sort((a, b) => order[a.col] - order[b.col] || a.id - b.id);
   const subs = isMain ? (SESSIONS.find((s) => s.id === id) || { robots: [] }).robots.filter((r) => r !== id) : [];
-  keyed(rbEl, JSON.stringify([id, pending && pending.id, specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}`)]), () => {
+  keyed(rbEl, JSON.stringify([id, pending && `${pending.id}:${pending.status}`, specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}:${x.subject}`)]), () => {
     const room = (SESSIONS.find((s) => s.id === sess) || { room: (PROJECT[projectOfRobot(id)] || {}).name || '' }).room;
     const tasks = owned.length ? `<ul class="rb-tasks">${owned.map((x) => {
       const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? ['st-waiting', '待ち'] : COL_STATE[x.col];
@@ -934,4 +963,15 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   rbEl.querySelectorAll('[data-rb-subact]').forEach((el) => setText(el, robotState[el.dataset.rbSubact].act));
   paintSince(rbEl, model.t, '待ち');
   rbEl.querySelectorAll('[data-recent]').forEach((el) => setHTML(el, recentHTML(el.dataset.recent)));
+}
+
+/* ---------- live: the test run in the side panel (plan 09 §4) ---------- */
+const CASE_ICON = { pending: '○', running: '▶', passed: '✓', flaky: '⚠', failed: '✗', skipped: '–' };
+function liveTestsHTML(T) {
+  const n = T.rows.length, pPct = n ? (T.passed / n) * 100 : T.runStatus === 'passed' ? 100 : 0, rPct = n && T.runningIdx >= 0 ? 100 / n : 0;
+  const fPct = n ? (T.failed / n) * 100 : T.runStatus === 'failed' ? 100 : 0;
+  const who = T.who && DEF[T.who] ? pill(T.who, DEF[T.who].role) : '';
+  return `<div class="test-head"><div>${who} <code>${esc(T.file)}</code></div><code>${esc(T.device)}${T.device ? ' · ' : ''}${esc(T.statusText)}</code>
+<div class="prog" role="img" aria-label="通過 ${T.passed} 件 / 全 ${n} 件"><span class="p" style="width:${pPct}%"></span><span class="r" style="width:${rPct}%"></span><span class="x" style="width:${fPct}%"></span></div></div>
+<ul class="cases">${T.rows.map((c, i) => `<li class="c-${c.status}"><span class="ic">${CASE_ICON[c.status] || '○'}</span><span>${i + 1}. ${esc(c.name)}</span>${c.status === 'running' ? `<span class="step">${esc(c.step)}</span>` : ''}</li>`).join('')}</ul>`;
 }

@@ -77,4 +77,4 @@ Promise.all([
   document.fonts.load(`700 16px ${FONT_BODY}`, 'ログインカート購入する未着手待ち作業中完了'),
 ]).then(redrawAll, redrawAll);
 requestAnimationFrame(frame);
-if (SOURCE.mode === 'live') netConnect();
+if (SOURCE.mode === 'live') { LIVE.uiReady = true; netConnect(); }

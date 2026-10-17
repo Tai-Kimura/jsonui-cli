@@ -43,6 +43,7 @@ const PBOARD = Object.fromEntries(PBOARDS.map((pb) => [pb.project, pb]));
 const pbPoint = (pb, px, py) => pb.mesh.localToWorld(new THREE.Vector3((px / pb.W - 0.5) * pb.w, (0.5 - py / pb.H) * pb.h, 0.03));
 const TB = { x: -9.57, cy: 2.05, cz: 1.5, w: 2.6, h: 2.08, W: 1024, H: 820 };
 const tbRowTop = (i) => 186 + i * 78;
+const TB_DEMO = TB;
 /* The task board: a cork board beside the spec board, one column per task state. */
 const KB = { cx: 1.12, cy: 2.55, z: -4.98, w: 2.8, h: 2.3, W: 1024, H: 842 };
 
@@ -243,8 +244,9 @@ function drawTaskBoard(full, project = 'shop', board = null) {
   tx.needsUpdate = true;
 }
 
-function drawTestBoard(model) {
-  const T = model.tests, ctx = tbCanvas.getContext('2d');
+function drawTestBoard(model, board = null, run = null) {
+  const T = run || model.tests, TB = board || TB_DEMO, ctx = (board ? board.canvas : tbCanvas).getContext('2d');
+  const nCases = Math.max(1, T.rows.length), maxRows = Math.floor((TB.H - 186) / 78);
   ctx.fillStyle = '#102640'; ctx.fillRect(0, 0, TB.W, TB.H);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#ffffff'; ctx.font = `40px ${FONT_DISPLAY}`; ctx.fillText('テスト実行', 36, 62);
@@ -252,21 +254,25 @@ function drawTestBoard(model) {
   ctx.fillStyle = '#d6e4f7'; ctx.font = `700 23px ${FONT_BODY}`; ctx.fillText(T.statusText, 36, 134);
   const bx = 36, bw = TB.W - 72, by = 150;
   rr(ctx, bx, by, bw, 14, 7); ctx.fillStyle = '#23405f'; ctx.fill();
-  const pw = (bw * T.passed) / CASES.length;
+  const pw = (bw * T.passed) / nCases;
   if (pw > 0) { rr(ctx, bx, by, Math.max(14, pw), 14, 7); ctx.fillStyle = '#4fd48a'; ctx.fill(); }
-  if (T.runningIdx >= 0) { ctx.fillStyle = T.retrying ? '#ffc14d' : '#7ab4ff'; ctx.fillRect(bx + pw, by, bw / CASES.length, 14); }
-  T.rows.forEach((c, i) => {
-    const y = tbRowTop(i);
+  if (T.runningIdx >= 0) { ctx.fillStyle = T.retrying ? '#ffc14d' : '#7ab4ff'; ctx.fillRect(bx + pw, by, bw / nCases, 14); }
+  // a long run: the window of rows around the one running
+  const first = T.rows.length > maxRows ? Math.max(0, Math.min(T.rows.length - maxRows, (T.runningIdx >= 0 ? T.runningIdx : T.rows.length) - Math.floor(maxRows / 2))) : 0;
+  T.rows.slice(first, first + maxRows).forEach((c, j) => {
+    const i = first + j;
+    const y = tbRowTop(j);
     if (c.status === 'running') { rr(ctx, 20, y, TB.W - 40, 72, 12); ctx.fillStyle = T.retrying ? '#4a3a12' : '#1f4f8a'; ctx.fill(); }
-    const icon = { pending: '○', running: '▶', passed: '✓', flaky: '⚠' }[c.status];
-    ctx.fillStyle = { pending: '#6f87a6', running: '#ffffff', passed: '#4fd48a', flaky: '#ffc14d' }[c.status];
+    const icon = { pending: '○', running: '▶', passed: '✓', flaky: '⚠', failed: '✗', skipped: '–' }[c.status];
+    ctx.fillStyle = { pending: '#6f87a6', running: '#ffffff', passed: '#4fd48a', flaky: '#ffc14d', failed: '#ff7a85', skipped: '#8aa0bd' }[c.status];
     ctx.font = `700 28px ${FONT_MONO}`; ctx.fillText(icon, 36, y + 36);
     ctx.fillStyle = c.status === 'pending' ? '#8aa0bd' : '#ffffff'; ctx.font = `700 25px ${FONT_BODY}`; ctx.fillText(`${i + 1}. ${c.name}`, 80, y + 34);
     ctx.font = `500 18px ${FONT_MONO}`;
     if (c.status === 'running') { ctx.fillStyle = '#7ef9ff'; ctx.fillText(`${c.attempt > 1 ? '再実行 2 回目 · ' : ''}${c.step}`, 80, y + 62); }
-    else { ctx.fillStyle = '#8fa6c4'; ctx.fillText(`分岐: ${c.branch}${c.status === 'flaky' ? ' · 再実行で通過' : ''}`, 80, y + 62); }
+    else if (c.branch) { ctx.fillStyle = '#8fa6c4'; ctx.fillText(`分岐: ${c.branch}${c.status === 'flaky' ? ' · 再実行で通過' : ''}`, 80, y + 62); }
   });
-  tbTex.needsUpdate = true;
+  if (!T.rows.length && T.command) { ctx.fillStyle = '#8fa6c4'; ctx.font = `500 20px ${FONT_MONO}`; wrapText(ctx, T.command, 36, 220, TB.W - 72, 28, 6); }
+  (board ? board.tex : tbTex).needsUpdate = true;
 }
 
 function drawCartUI(r, t) {
@@ -570,13 +576,31 @@ function liveBuildRoom(room) {
   // the doorway: a mat at the front right, where robots come in and go out
   const mat = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.02, 0.6), toon('#c9d0db')); mat.position.set(room.x1 - 0.7, 0.01, room.z1 - 0.3); g.add(mat);
   const frameMat = toon('#7a5a3c');
-  // project board on the back wall
-  const pbW = Math.min(w - 2.2, 4.2), pb = { project: room.id, W: 1024, H: 560, w: pbW, h: pbW * 560 / 1024, specs: [], tiles: [], splitY: 0, sig: '' };
+  // project board on the back wall; a room with many specs gets the big spec board instead (plan 09 §7)
+  const pbW = room.big ? w - 1.2 : Math.min(w - 2.2, 4.2);
+  const pb = room.big ? { project: room.id, big: true, W: 2048, H: 1024, w: pbW, h: Math.min(room.back - 0.9, pbW * 1024 / 2048), specs: [], tiles: [], splitY: 1e9, sig: '' }
+    : { project: room.id, W: 1024, H: 560, w: pbW, h: pbW * 560 / 1024, specs: [], tiles: [], splitY: 0, sig: '' };
+  if (room.big) pb.W = Math.round(pb.H * pb.w / pb.h);
   pb.canvas = makeCanvas(pb.W, pb.H); pb.tex = texFrom(pb.canvas);
   pb.mesh = new THREE.Mesh(new THREE.PlaneGeometry(pb.w, pb.h), new THREE.MeshBasicMaterial({ map: pb.tex, toneMapped: false }));
-  pb.mesh.position.set(cx + 0.4, 2.35, room.z0 + 0.02); g.add(pb.mesh);
+  const pbX = room.big ? cx : cx + 0.4, pbY = room.big ? Math.max(2.35, pb.h / 2 + 0.75) : 2.35;
+  pb.mesh.position.set(pbX, pbY, room.z0 + 0.02); g.add(pb.mesh);
   for (const [bw, bh, x, y] of [[pb.w + 0.16, 0.08, 0, pb.h / 2 + 0.04], [pb.w + 0.16, 0.08, 0, -pb.h / 2 - 0.04], [0.08, pb.h, -pb.w / 2 - 0.04, 0], [0.08, pb.h, pb.w / 2 + 0.04, 0]]) {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.05), frameMat); bar.position.set(cx + 0.4 + x, 2.35 + y, room.z0 + 0.03); g.add(bar);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.05), frameMat); bar.position.set(pbX + x, pbY + y, room.z0 + 0.03); g.add(bar);
+  }
+  // the test board, on an easel at the front left, only while the project has test runs
+  let tb = null;
+  if (room.tests) {
+    tb = { project: room.id, W: 1024, H: 820, w: 1.7, h: 1.7 * 820 / 1024, sig: '' };
+    tb.canvas = makeCanvas(tb.W, tb.H); tb.tex = texFrom(tb.canvas);
+    const eg = new THREE.Group(); eg.position.set(room.x0 + 1.15, 0, room.z1 - 0.9); eg.rotation.y = 0.55; g.add(eg);
+    tb.mesh = new THREE.Mesh(new THREE.PlaneGeometry(tb.w, tb.h), new THREE.MeshBasicMaterial({ map: tb.tex, toneMapped: false }));
+    tb.mesh.position.set(0, 0.95 + tb.h / 2, 0.06); eg.add(tb.mesh);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(tb.w + 0.12, tb.h + 0.12, 0.06), frameMat); back.position.set(0, 0.95 + tb.h / 2, 0.02); eg.add(back);
+    for (const sx of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.15 + tb.h, 8), frameMat);
+      leg.position.set(sx * (tb.w / 2 - 0.15), (1.15 + tb.h) / 2, -0.06); leg.rotation.x = 0.06; eg.add(leg);
+    }
   }
   // task cork board on the left wall
   const kw = Math.min(d - 1.4, 2.6), kb = { project: room.id, W: 1024, H: 842, w: kw, h: kw * 842 / 1024, sig: '' };
@@ -589,7 +613,7 @@ function liveBuildRoom(room) {
   tagsEl.append(tag);
   const rt = { el: tag, id: room.id, p: new THREE.Vector3(room.x0 + 0.2, 0.02, room.z1 - 0.1) };
   roomTags.push(rt);
-  return { geo: room.geo, group: g, pb, kb, rt, mats };
+  return { geo: room.geo, group: g, pb, kb, tb, rt, mats };
 }
 function liveDropRoom(id) {
   const R = LIVE3D.rooms[id];
@@ -687,6 +711,7 @@ function liveWalk(R, dt, nowMs) {
 }
 function liveUpdateRobots(nowSec, dt) {
   if (SOURCE.layoutRev !== LIVE3D.rev) liveSync();
+  liveLinks(latestModel, nowSec);
   const nowMs = performance.now();
   // Walking uses the real time between frames (up to 1 s), not the animation's capped step: a slow frame rate
   // must not slow the walk down.
@@ -705,7 +730,7 @@ function liveUpdateRobots(nowSec, dt) {
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
    part and the cork board the task board, a robot its card. */
 function liveHit(ray) {
-  const targets = [...Object.values(LIVE3D.rooms).flatMap((R) => [R.pb.mesh, R.kb.mesh]), ...robots.map((R) => R.robot.root)];
+  const targets = [...Object.values(LIVE3D.rooms).flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.map((R) => R.robot.root)];
   const hit = ray.intersectObjects(targets, true)[0];
   if (!hit) return null;
   let o = hit.object;
@@ -713,9 +738,12 @@ function liveHit(ray) {
   if (o && o.userData.robotId !== undefined) return { kind: 'robot', id: o.userData.robotId };
   for (const [id, R] of Object.entries(LIVE3D.rooms)) {
     if (hit.object === R.kb.mesh) return { kind: 'tasks', project: id };
+    if (R.tb && hit.object === R.tb.mesh) return { kind: 'board', project: id };
     if (hit.object === R.pb.mesh) {
-      const py = (1 - hit.uv.y) * R.pb.H;
-      return py >= R.pb.splitY ? { kind: 'tasks', project: id } : { kind: 'board', project: id };
+      const px = hit.uv.x * R.pb.W, py = (1 - hit.uv.y) * R.pb.H;
+      if (py >= R.pb.splitY) return { kind: 'tasks', project: id };
+      const t = R.pb.tiles.find((q) => px >= q.x && px <= q.x + q.w && py >= q.y && py <= q.y + q.h);
+      return t ? { kind: 'spec', i: t.i } : { kind: 'board', project: id };
     }
   }
   return null;
@@ -725,13 +753,24 @@ function liveRedrawBoards(model, now, force) {
   const theme = isDark() ? 'd' : 'l';
   for (const [id, R] of Object.entries(LIVE3D.rooms)) {
     if (!PROJECT[id]) continue;
+    // the room's label: its name, and its mock server when one runs (P7 §A3)
+    const mk = PROJECT[id].mock, label = `${PROJECT[id].name}${mk && mk.running ? ` · モック :${mk.port}` : mk && mk.other ? ` · :${mk.port} は別のモック` : ''}`;
+    if (R.rt.el.textContent !== label) { R.rt.el.textContent = label; R.rt.el.classList.toggle('mock-on', !!(mk && mk.running)); }
     const tasks = model.tasks.filter((x) => PROJECT_OF[x.list] === id);
     const pend = model.pending.filter((p) => projectOfRobot(p.who) === id).map((p) => p.id).join();
     const robotsIn = ROBOT_DEFS.filter((d) => d.room === id).length;
     R.pb.specs = model.specs.map((s, i) => [s, i]).filter(([s]) => s.project === id).map(([, i]) => i);
-    const sig = theme + robotsIn + SESSIONS.filter((s) => s.project === id).length + pend + tasks.map((x) => x.key + x.col).join() + R.pb.specs.join();
-    if (force || sig !== R.pb.sig) { drawProjectBoard(R.pb, model, now); R.pb.sig = sig; }
-    if (force || sig !== R.kb.sig) { drawTaskBoard(model, id, R.kb); R.kb.sig = sig; }
+    const blink = R.pb.specs.some((i) => model.specs[i].writingIdx >= 0 && model.specs[i].by) ? Math.floor(now * 2.5) % 2 : 0;
+    const specSig = R.pb.specs.map((i) => { const x = model.specs[i]; return [x.bucket, x.status.text, x.by, x.written.map((v) => Math.round(v * 50)).join(), x.implN.join(), activeSec(x)].join('|'); }).join(';');
+    const sig = theme + blink + robotsIn + SESSIONS.filter((s) => s.project === id).length + pend + tasks.map((x) => x.key + x.col).join() + specSig;
+    if (force || sig !== R.pb.sig) { if (R.pb.big) drawBigSpecBoard(R.pb, model, now); else drawProjectBoard(R.pb, model, now); R.pb.sig = sig; }
+    const taskSig = theme + pend + tasks.map((x) => x.key + x.col + (x.perm ? '!' : '')).join();
+    if (force || taskSig !== R.kb.sig) { drawTaskBoard(model, id, R.kb); R.kb.sig = taskSig; }
+    if (R.tb) {
+      const run = liveTestsFor(id);
+      const testSig = theme + JSON.stringify([run.statusText, run.rows.map((r) => r.status), run.command]);
+      if (force || testSig !== R.tb.sig) { drawTestBoard(model, R.tb, run); R.tb.sig = testSig; }
+    }
   }
 }
 /* Where the camera goes for a room or for everything: the same direction as the prototype's view, far enough
@@ -743,6 +782,51 @@ function liveBounds(ids) {
   const z0 = Math.min(...rs.map((r) => r.z0)), z1 = Math.max(...rs.map((r) => r.z1));
   return { c: new THREE.Vector3((x0 + x1) / 2, 0.4, (z0 + z1) / 2), size: Math.max(x1 - x0, (z1 - z0) * 1.3) };
 }
+/* The big spec board for a room with many specs (plan 09 §7): the prototype's drawSpecBoard, tile size from the
+   count. Each tile is the prototype's drawSpecTile, scaled. */
+function drawBigSpecBoard(pb, model, now) {
+  const dark = isDark(), P = BOARD[dark ? 'dark' : 'light'], ST = ST_STYLE[dark ? 'dark' : 'light'];
+  const ctx = pb.canvas.getContext('2d'), { W, H } = pb, proj = PROJECT[pb.project];
+  ctx.fillStyle = P.bg; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = P.grid;
+  for (let x = 0; x < W; x += 32) ctx.fillRect(x, 0, 1, H);
+  for (let y = 0; y < H; y += 32) ctx.fillRect(0, y, W, 1);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  const specs = pb.specs.map((i) => model.specs[i]), c = bucketCounts(specs);
+  ctx.fillStyle = P.title; ctx.font = `36px ${FONT_DISPLAY}`; ctx.fillText('spec ボード', 26, 52);
+  ctx.fillStyle = P.sub; ctx.font = `700 24px ${FONT_BODY}`;
+  fitText(ctx, `${proj.name} · 全 ${specs.length} 画面 · 作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, 276, 50, W - 300);
+  const pad = 22, top = 76, n = Math.max(1, specs.length), aspect = 2.6;
+  // columns so that the tiles keep roughly the prototype's shape
+  let cols = Math.max(1, Math.round(Math.sqrt((n * (W - pad * 2)) / ((H - top - pad) * aspect))));
+  while (Math.ceil(n / cols) * ((W - pad * 2) / cols / aspect) > H - top - pad && cols < n) cols += 1;
+  const rows = Math.ceil(n / cols), gap = Math.max(4, Math.round(14 * Math.min(1, 8 / cols)));
+  const tw = (W - pad * 2 - gap * (cols - 1)) / cols, th = Math.min(tw / aspect * 1.25, (H - top - pad - gap * (rows - 1)) / rows);
+  const k = Math.min(1, th / 104), g = Object.fromEntries(Object.entries(PBG).map(([key, v]) => [key, v * k]));
+  pb.tiles = [];
+  pb.specs.forEach((i, pos) => {
+    const x = pad + (pos % cols) * (tw + gap), y = top + Math.floor(pos / cols) * (th + gap);
+    drawSpecTile(ctx, P, ST, model.specs[i], x, y, tw, th, now, g);
+    pb.tiles.push({ i, x, y, w: tw, h: th, g });
+  });
+  pb.tex.needsUpdate = true;
+}
+/* A line from a robot to the part of the board it works on (the prototype's links), live. */
+function liveLinks(model, nowSec) {
+  const used = new Set();
+  if (!zoom.zoomed) {
+    model.specs.forEach((s, i) => {
+      if (!s.by || !robots.some((R) => R.def.id === s.by)) return;
+      const R = LIVE3D.rooms[s.project];
+      const t = R && R.pb.tiles.find((q) => q.i === i);
+      if (!t) return;
+      const [px, py] = tileFocus(t.x, t.y, t.w, t.h, t.g || PBG, activeSec(s));
+      linkFor(s.by).set(robotPoint(s.by, HEAD_UP), pbPoint(R.pb, px, py), true, nowSec);
+      used.add(s.by);
+    });
+  }
+  for (const [id, L] of Object.entries(links)) if (!used.has(id)) L.set(null, null, false, nowSec);
+}
 function liveRoomPose(id) {
   if (id !== 'all' && PROJECT[id] && !PROJECT[id].shown) liveShowRoom(id);
   const b = liveBounds(id === 'all' ? null : [id]) || { c: new THREE.Vector3(0, 0.4, 0), size: 12 };
@@ -753,13 +837,17 @@ function liveBoardPose(project, which, i) {
   const R = LIVE3D.rooms[project] || Object.values(LIVE3D.rooms)[0];
   if (!R) return { p: camera.position.clone(), t: controls.target.clone() };
   const b = which === 'tasks' ? R.kb : R.pb;
-  void i;
+  const t = which !== 'tasks' && i >= 0 ? b.tiles.find((q) => q.i === i) : null;
+  if (t) return meshPose(b.mesh, b.w, b.h, (t.x + t.w / 2) / b.W, (t.y + t.h / 2) / b.H, Math.max(1.2, (t.w / b.W) * b.w * 2.2));
   return meshPose(b.mesh, b.w, b.h, undefined, undefined, b.w * 1.15 + 0.6);
 }
 /* The live phone screen: the command a robot runs on a device (the device itself comes in P7). */
 function drawLivePhone(r, t) {
   const c = r.phoneCanvas, ctx = c.getContext('2d'), W = c.width;
   const act = (robotState[r.label] && robotState[r.label].act) || '';
+  const run = (Array.isArray(LIVE.slices.tests) ? LIVE.slices.tests : []).find((x) => x && x.status === 'running' && labelOf(x.agentId) === r.label);
+  const cases = run && Array.isArray(run.cases) ? run.cases : [];
+  const done = cases.filter((c) => c.status === 'passed').length, now = cases.find((c) => c.status === 'running');
   ctx.clearRect(0, 0, c.width, c.height);
   ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1d2330'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
   rr(ctx, 6, 6, W - 12, 360, 28); ctx.fill(); ctx.stroke();
@@ -769,7 +857,11 @@ function drawLivePhone(r, t) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#ffffff'; ctx.font = `700 15px ${FONT_BODY}`; ctx.fillText('テスト実行', 36, 54);
   ctx.fillStyle = '#9fc3ff'; ctx.font = `600 12px ${FONT_MONO}`;
-  wrapText(ctx, act || '待機中', 36, 96, 168, 18, 12);
+  wrapText(ctx, act || '待機中', 36, 96, 168, 18, cases.length ? 6 : 12);
+  if (cases.length) {
+    ctx.fillStyle = '#4fd48a'; ctx.font = `700 14px ${FONT_BODY}`; ctx.fillText(`${done}/${cases.length} 通過`, 36, 222);
+    if (now) { ctx.fillStyle = '#ffffff'; ctx.font = `500 12px ${FONT_BODY}`; wrapText(ctx, `▶ ${now.name}`, 36, 244, 168, 16, 3); }
+  }
   const ph = (t * 0.9) % 1;
   ctx.beginPath(); ctx.arc(120, 300, 6 + ph * 18, 0, Math.PI * 2); ctx.strokeStyle = `rgba(122, 180, 255, ${(0.9 * (1 - ph)).toFixed(2)})`; ctx.lineWidth = 3; ctx.stroke();
   ctx.restore();

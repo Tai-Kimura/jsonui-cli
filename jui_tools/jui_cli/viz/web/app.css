@@ -776,3 +776,13 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .live-empty code { font: 500 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
 .live-error { position: absolute; top: 8px; right: 8px; z-index: 5; max-width: min(420px, calc(100% - 16px)); margin: 0; padding: 4px 10px; border-radius: 6px; background: var(--bad-bg); color: var(--bad); font: 700 12px/1.5 var(--font-body); overflow-wrap: anywhere; }
 .fps-meter { position: fixed; left: 8px; bottom: 8px; z-index: 99; margin: 0; padding: 2px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.6); color: #ffffff; font: 700 12px/1.5 var(--font-mono); pointer-events: none; }
+
+/* live permission cards (plan 08 §4) and test cases that failed or were skipped */
+.perm-sent, .perm-relay { margin: 4px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--chip); color: var(--ink); font: 700 12.5px/1.5 var(--font-body); }
+.perm-relay { background: var(--warn-bg); color: var(--warn); }
+.perm-relay small { display: block; margin-top: 2px; color: var(--ink-soft); font-weight: 500; overflow-wrap: anywhere; }
+.perm-relay code, .perm-relay small code { font: 500 11.5px/1.5 var(--font-mono); }
+.prog .x { background: var(--bad); }
+.cases .c-failed .ic { color: var(--bad); }
+.cases .c-skipped { color: var(--ink-soft); }
+.tag.room.mock-on { box-shadow: inset 0 0 0 2px var(--ok); }

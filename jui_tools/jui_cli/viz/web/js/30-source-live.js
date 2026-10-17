@@ -41,7 +41,7 @@ function updateRobotStates() { /* the server decides the states (plan 04 §3) */
 
 const EMPTY_TESTS = { rows: [], passed: 0, runningIdx: -1, retrying: false, active: false, statusText: 'まだ無い', file: '', device: '' };
 const LIVE = {
-  slices: {}, model: null, labelOfReal: {}, seenSeq: 0,
+  slices: {}, model: null, modelAt: 0, labelOfReal: {}, seenSeq: 0, specRows: {}, sheetAsked: {}, sheetFailed: {},
   seats: {}, seatOf: {}, leaving: {}, shown: [], connectedOnce: false, serverError: '',
 };
 const ROOM_MAX = 6;
@@ -75,12 +75,199 @@ const SOURCE = {
   },
 };
 
-/* The model has the demo's shape (computeModel(t, loop) there); live it is rebuilt only when a slice changed.
-   It reads the wall clock itself: 40-scene.js asks for it before 70-main.js has declared its clock. */
+/* The model has the demo's shape (computeModel(t, loop) there): tests, specs, tasks, perms, pending. Live it is
+   built from the slices, again when a slice changed and at most every half second otherwise (a task's "new"
+   mark and the waiting clocks move with time). It reads the wall clock itself: 40-scene.js asks for it before
+   70-main.js has declared its clock. */
 function computeModel() {
-  if (!LIVE.model) LIVE.model = { t: 0, loop: 0, tests: EMPTY_TESTS, specs: SPECS, tasks: [], perms: [], pending: [] };
-  LIVE.model.t = secOfDay(Date.now());
+  const now = Date.now();
+  if (LIVE.model && now - LIVE.modelAt < 500) { LIVE.model.t = secOfDay(now); return LIVE.model; }
+  LIVE.modelAt = now;
+  const t = secOfDay(now);
+  const tests = liveTests();
+  const perms = PERMS_LIVE.map((p) => ({ ...p, since: t - p.at }));
+  const tasks = liveTasks(now);
+  for (const x of tasks) x.perm = perms.find((p) => p.task === x.key && (p.status === 'pending' || p.status === 'sent')) || null;
+  LIVE.model = { t, loop: 0, tests, specs: SPECS, tasks, perms, pending: perms.filter((p) => p.status === 'pending' || p.status === 'sent') };
   return LIVE.model;
+}
+
+/* ---------- specs (plan 04 Spec → the demo's spec rows) ---------- */
+const SPEC_KEYS = ['metadata', 'structure', 'stateManagement', 'dataFlow', 'userActions', 'transitions', 'branchContracts'];
+const labelOf = (realId) => (realId ? LIVE.labelOfReal[realId] || null : null);
+function liveSpecRow(x) {
+  const secs = Object.fromEntries((Array.isArray(x.sections) ? x.sections : []).map((q) => [q.key, q]));
+  const written = SPEC_KEYS.map((k) => { const q = secs[k]; return !q ? 0 : q.state === 'writing' ? (q.items ? 0.6 : 0.3) : q.state === 'written' ? 1 : 0; });
+  const totals = SPEC_KEYS.map((k) => Math.max(0, Number((secs[k] || {}).items) || 0));
+  const impl = x.impl || { total: 0, done: 0 }, tests = x.tests || { total: 0, passed: 0, failed: 0, running: false };
+  const share = impl.total > 0 ? Math.min(1, impl.done / impl.total) : 0;
+  let left = Math.round(sumImpl(totals) * share);
+  const implN = totals.map((n, k) => { if (k < 1 || k > 5) return 0; const v = Math.min(n, left); left -= v; return v; });
+  implN[6] = Math.min(totals[6] || tests.total, tests.passed);
+  if (!totals[6] && tests.total) totals[6] = tests.total;
+  const implPhase = impl.done > 0 || tests.total > 0;
+  const writingIdx = SPEC_KEYS.findIndex((k) => (secs[k] || {}).state === 'writing');
+  const by = labelOf(x.by);
+  const pctImpl = impl.total ? pct(share) : 0;
+  const status = tests.running ? { kind: 'test', text: `テスト中 ${tests.passed}/${tests.total}` }
+    : writingIdx >= 0 ? { kind: 'write', text: `書き込み中 ${pct(written.reduce((a, b) => a + b, 0) / 7)}%` }
+      : x.bucket === 'done' ? { kind: 'done', text: '実装・テスト完了' }
+        : x.bucket === 'todo' ? { kind: 'idle', text: '未着手' }
+          : impl.total && impl.done >= impl.total ? { kind: 'impl-done', text: tests.total ? `実装完了・テスト ${tests.passed}/${tests.total}` : '実装完了・テスト待ち' }
+            : impl.done > 0 ? { kind: by ? 'impl' : 'paused', text: `実装 ${pctImpl}%` }
+              : written.every((w) => w >= 1) ? { kind: 'written', text: '記述完了・実装待ち' } : { kind: 'paused', text: `記述 ${pct(written.reduce((a, b) => a + b, 0) / 7)}%` };
+  const note = `実装 ${impl.done}/${impl.total}${tests.total ? ` · テスト ${tests.passed}/${tests.total}${tests.failed ? `（失敗 ${tests.failed}）` : ''}` : ' · テストの定義なし'}`;
+  const prev = LIVE.specRows[x.id];
+  const row = {
+    id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
+    doc: prev && prev.docAt === x.updatedAt ? prev.doc : (prev ? prev.doc : null), docAt: prev ? prev.docAt : null, updatedAt: x.updatedAt,
+    totals, related: prev && prev.doc ? (prev.doc.related || []) : [], written, implN, implPhase, writingIdx,
+    implIdx: by && writingIdx < 0 && x.bucket === 'live' && !tests.running ? Math.max(1, implN.findIndex((n, k) => k >= 1 && k <= 5 && n < totals[k])) : -1,
+    testIdx: tests.running ? 6 : -1, by, relatedNow: -1, status, note, bucket: ['live', 'partial', 'todo', 'done'].includes(x.bucket) ? x.bucket : 'partial',
+  };
+  if (row.implIdx === 0) row.implIdx = -1;
+  LIVE.specRows[x.id] = row;
+  return row;
+}
+function rebuildSpecs() {
+  const list = Array.isArray(LIVE.slices.specs) ? LIVE.slices.specs : [];
+  const rows = list.filter((x) => x && x.id && PROJECT[x.projectId]).map(liveSpecRow);
+  rows.sort((a, b) => (PROJECT[a.project].order - PROJECT[b.project].order) || a.file.localeCompare(b.file));
+  SPECS.splice(0, SPECS.length, ...rows);
+  for (const k of Object.keys(SPEC_INDEX)) delete SPEC_INDEX[k];
+  SPECS.forEach((x, i) => { SPEC_INDEX[x.id] = i; });
+  for (const k of Object.keys(SCREEN_JA)) delete SCREEN_JA[k];
+  for (const x of SPECS) if (x.doc && x.doc.metadata) SCREEN_JA[x.doc.metadata.name] = x.doc.metadata.displayName || x.name;
+}
+/* The sheet (plan 09 §6): asked for when a spec opens on the whiteboard, again when the spec changes. */
+function liveWantSheet(row) {
+  if (!row || SOURCE.mode !== 'live') return;
+  const asked = LIVE.sheetAsked[row.id];
+  if (row.doc && row.docAt === row.updatedAt) return;
+  if (asked && asked.at === row.updatedAt && Date.now() - asked.t < 15000) return;
+  LIVE.sheetAsked[row.id] = { at: row.updatedAt, t: Date.now() };
+  netRequest('spec.sheet', { specId: row.id }).then((ack) => { if (!ack.ok) LIVE.sheetFailed[row.id] = ack.error || '不明'; });
+}
+function liveSheet(msg) {
+  const row = LIVE.specRows[msg.specId];
+  if (!row || !msg.cards || typeof msg.cards !== 'object') return;
+  const d = msg.cards;
+  const arr = (v) => (Array.isArray(v) ? v : []);
+  const meta = d.metadata && typeof d.metadata === 'object' ? d.metadata : {};
+  row.doc = {
+    metadata: { name: String(meta.name || ''), displayName: String(meta.displayName || row.name), description: String(meta.description || ''), platforms: arr(meta.platforms).map(String), layoutFile: String(meta.layoutFile || ''), createdAt: String(meta.createdAt || '') },
+    components: arr(d.components), layoutChildren: arr(d.layoutChildren), uiVariables: arr(d.uiVariables), eventHandlers: arr(d.eventHandlers),
+    vmMethods: arr(d.vmMethods), vmVars: arr(d.vmVars), repositories: arr(d.repositories), apis: arr(d.apis),
+    userActions: arr(d.userActions), transitions: arr(d.transitions), branches: arr(d.branches), related: arr(d.related),
+  };
+  row.related = row.doc.related; row.docAt = LIVE.sheetAsked[row.id] ? LIVE.sheetAsked[row.id].at : row.updatedAt;
+  delete LIVE.sheetFailed[row.id];
+  if (row.doc.metadata.name) SCREEN_JA[row.doc.metadata.name] = row.doc.metadata.displayName || row.name;
+}
+
+/* ---------- tasks (plan 04 Task → the demo's task rows; plan 09 §5) ---------- */
+function rebuildTasks() {
+  const list = Array.isArray(LIVE.slices.tasks) ? LIVE.slices.tasks : [];
+  const rows = [];
+  for (const x of list) {
+    if (!x || !x.key || !x.sessionId) continue;
+    const listLabel = LIVE.labelOfReal[x.sessionId];
+    if (!listLabel) continue;
+    const blockedBy = Array.isArray(x.blockedBy) ? x.blockedBy.map(String) : [];
+    rows.push({
+      list: listLabel, id: String(x.id), realKey: x.key, subject: String(x.subject || ''), description: String(x.description || ''),
+      activeForm: x.activeForm ? String(x.activeForm) : '', owner: labelOf(x.owner) || null, spec: x.specId && SPEC_INDEX[x.specId] !== undefined ? x.specId : null,
+      status: x.status, blockedByAll: blockedBy, blocksAll: Array.isArray(x.blocks) ? x.blocks.map(String) : [],
+      created: x.createdAt ? secOfDay(x.createdAt) : -1, createdMs: x.createdAt || 0,
+      start: x.startedAt ? secOfDay(x.startedAt) : null, end: x.completedAt ? secOfDay(x.completedAt) : null,
+    });
+  }
+  TASKS.splice(0, TASKS.length, ...rows);
+  for (const k of Object.keys(TASK_BY_KEY)) delete TASK_BY_KEY[k];
+  for (const x of TASKS) TASK_BY_KEY[`${x.list}#${x.id}`] = x;
+  for (const x of TASKS) {
+    // The demo keeps one blocker per task: the first one not done yet (else the first).
+    const open = x.blockedByAll.find((b) => (TASK_BY_KEY[`${x.list}#${b}`] || {}).status !== 'completed');
+    x.blockedBy = open || x.blockedByAll[0] || null;
+    if (x.blockedBy && !TASK_BY_KEY[`${x.list}#${x.blockedBy}`]) x.blockedBy = null;
+  }
+}
+function liveTasks(now) {
+  const t = secOfDay(now);
+  return TASKS.map((x) => {
+    const dep = x.blockedBy ? TASK_BY_KEY[`${x.list}#${x.blockedBy}`] : null;
+    const status = x.status === 'completed' ? 'completed' : x.status === 'in_progress' ? 'in_progress' : 'pending';
+    const blocked = status === 'pending' && x.blockedByAll.some((b) => (TASK_BY_KEY[`${x.list}#${b}`] || {}).status !== 'completed');
+    const col = status === 'completed' ? 'done' : status === 'in_progress' ? 'doing' : blocked ? 'wait' : 'todo';
+    void t;
+    return { ...x, key: `${x.list}#${x.id}`, status, blocked, dep, col, fresh: x.createdMs > 0 && now - x.createdMs < 1500 };
+  });
+}
+
+/* ---------- test runs (plan 04 TestRun → the demo's one test panel: the run that matters now) ---------- */
+const CASE_STATUS = { running: 'running', passed: 'passed', failed: 'failed', skipped: 'skipped', pending: 'pending' };
+/* A room's board, a big spec board past ROOM_BIG specs, and a test easel while it has runs. */
+const ROOM_BIG = 9;
+function roomFlags() {
+  const counts = {};
+  for (const x of SPECS) counts[x.project] = (counts[x.project] || 0) + 1;
+  const runs = Array.isArray(LIVE.slices.tests) ? LIVE.slices.tests : [];
+  for (const r of ROOMS) { r.big = (counts[r.id] || 0) > ROOM_BIG; r.tests = runs.some((x) => x && x.projectId === r.id); }
+}
+function liveTests() {
+  const t = liveTestsFor(null);
+  if (t !== EMPTY_TESTS) CASES.splice(0, CASES.length, ...t.rows); else CASES.length = 0;
+  return t;
+}
+/* The run that matters for a project (or for what the view shows): the one running, else the latest. */
+function liveTestsFor(projectId) {
+  const runs = (Array.isArray(LIVE.slices.tests) ? LIVE.slices.tests : []).filter((r) => r && r.id);
+  const mine = projectId ? runs.filter((r) => r.projectId === projectId) : runs.filter((r) => !LIVE.uiReady || inScope(r.projectId));   // UI exists once 70-main.js ran
+  const pickFrom = projectId || LIVE.uiReady ? mine : runs;   // narrowed to a project: only its runs
+  if (!pickFrom.length) return EMPTY_TESTS;
+  const run = pickFrom.find((r) => r.status === 'running') || [...pickFrom].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+  const cases = Array.isArray(run.cases) ? run.cases : [];
+  const rows = cases.map((c) => ({ name: String(c.name || ''), branch: '', status: CASE_STATUS[c.status] || 'pending', attempt: 1, step: c.status === 'running' ? 'このケースを実行中' : '' }));
+  const passed = rows.filter((r) => r.status === 'passed').length;
+  const failed = rows.filter((r) => r.status === 'failed').length;
+  const runningIdx = rows.findIndex((r) => r.status === 'running');
+  const dev = (Array.isArray(LIVE.slices.devices) ? LIVE.slices.devices : []).find((d) => d && d.id === run.deviceId);
+  const statusText = run.status === 'running' ? `実行中${rows.length ? ` ${passed}/${rows.length} 通過` : ''}`
+    : run.summary ? `${run.status === 'passed' ? '通過' : '失敗'} · ${run.summary}` : run.status === 'passed' ? '通過' : '失敗';
+  return {
+    rows, passed, failed, runningIdx, retrying: false, active: run.status === 'running', statusText,
+    file: String(run.file || run.command || ''), device: dev ? String(dev.name) : ({ ios: 'iOS', android: 'Android', web: 'Web' }[run.platform] || ''),
+    who: labelOf(run.agentId), project: run.projectId, runStatus: run.status, command: String(run.command || ''),
+  };
+}
+
+/* ---------- permission prompts (plan 04 Permission, plan 08 §4 → the demo's perm rows) ---------- */
+const PERMS_LIVE = [];
+const PERM_STATUS = { pending: 'pending', sent: 'sent', allow: 'allow', deny: 'deny', answered_in_terminal: 'terminal', expired: 'expired' };
+function rebuildPerms() {
+  const list = Array.isArray(LIVE.slices.perms) ? LIVE.slices.perms : [];
+  const rows = [];
+  for (const x of list) {
+    if (!x || !x.id) continue;
+    const who = labelOf(x.agentId) || labelOf(x.sessionId);
+    if (!who || !DEF[who]) continue;
+    // A prompt belongs to the task its robot owns and is doing; otherwise it stands alone (no guessing).
+    const doing = TASKS.find((q) => q.owner === who && q.status === 'in_progress');
+    const can = x.can && typeof x.can === 'object' ? x.can : {};
+    rows.push({
+      id: String(x.id), realId: String(x.id), who, task: doing ? `${doing.list}#${doing.id}` : null, tool: String(x.toolName || ''),
+      input: { command: String(x.summary || '') }, preview: String(x.preview || ''), suggestions: x.suggestions, rule: '',
+      at: secOfDay(x.createdAt || Date.now()), end: x.decidedAt ? secOfDay(x.decidedAt) : null,
+      status: PERM_STATUS[x.status] || 'pending', decidedBy: x.decidedBy || null, sentBehavior: x.sentBehavior || null,
+      terminalBehavior: x.terminalBehavior || null, relayOnly: !!x.relayOnly,
+      decided: x.decidedAt ? { at: secOfDay(x.decidedAt), behavior: x.status === 'deny' || x.terminalBehavior === 'deny' ? 'deny' : 'allow' } : null,
+      can: { allowDeny: !!can.allowDeny, always: !!can.always, reason: !!can.reason },
+      raw: { id: x.id, toolName: x.toolName, summary: x.summary, preview: x.preview, suggestions: x.suggestions, status: x.status, relayOnly: !!x.relayOnly },
+    });
+  }
+  PERMS_LIVE.splice(0, PERMS_LIVE.length, ...rows);
+  for (const k of Object.keys(PERM_BY_ID)) delete PERM_BY_ID[k];
+  for (const p of PERMS_LIVE) PERM_BY_ID[p.id] = p;
 }
 
 /* ---------- rooms: size by robot count, left to right by order, a new row past 24 (plan 07 §4) ---------- */
@@ -119,7 +306,7 @@ function layoutRooms() {
   placed.forEach(([r, px, pz, w, d], k) => {
     r.x0 = +(px + ox).toFixed(3); r.x1 = +(r.x0 + w).toFixed(3); r.z0 = +(pz + oz).toFixed(3); r.z1 = +(r.z0 + d).toFixed(3);
     r.floor = FLOORS[r.order % FLOORS.length]; r.back = 3.9; r.left = 3.9;
-    r.geo = `${r.x0},${r.x1},${r.z0},${r.z1}`;
+    r.geo = `${r.x0},${r.x1},${r.z0},${r.z1},${r.big ? 'big' : ''},${r.tests ? 'tests' : ''}`;
     void k;
   });
 }
@@ -181,6 +368,7 @@ function rebuildRooms() {
   const next = list.filter((p) => p && typeof p.id === 'string').map((p, k) => {
     const r = old[p.id] || { id: p.id };
     r.name = String(p.name || p.id); r.path = home(p.displayRoot); r.jsonui = !!p.jsonui;
+    r.mock = p.mock && typeof p.mock === 'object' ? { running: !!p.mock.running, port: Number(p.mock.port) || 0, other: !!p.mock.other } : null;
     r.order = Number.isFinite(p.order) ? p.order : k;
     return r;
   });
@@ -258,9 +446,13 @@ function liveApply(changed, replace) {
   const before = layoutSignature();
   rebuildRooms();
   rebuildRobots(replace);
+  rebuildSpecs();
+  roomFlags();
   layoutRooms();
   placeRobots();
   rebuildSessions();
+  rebuildTasks();
+  rebuildPerms();
   const server = LIVE.slices.server || {};
   const errs = Object.entries(server.sources || {}).filter(([, s]) => s && (s.error || s.state === 'error')).map(([k, s]) => `${k}: ${s.error || 'エラー'}`);
   LIVE.serverError = errs.join(' / ');
@@ -315,5 +507,6 @@ NET.handlers = {
   },
   slices(changed) { liveApply(changed, false); },
   events(items, older) { liveEvents(items, older); },
+  sheet(msg) { liveSheet(msg); },
   notice(level, text) { if (text) showToast(text); void level; },
 };

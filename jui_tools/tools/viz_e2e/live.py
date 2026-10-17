@@ -228,6 +228,83 @@ async def scenario_themes(browser, srv, out, failures, res):
         failures.append(f"live/themes: request outside the server: {u}")
 
 
+async def scenario_work(browser, srv, out, failures, res):
+    """P4 / P5: tasks, the big spec board and its links, the sheet, the test run, the permission cards."""
+    watch = Watch(origin=srv.url)
+    step(srv, "start")
+    page = await new_page(browser, watch, "work", **DESKTOP)
+    await page.goto(srv.url + "/")
+    await ready(page)
+    await wait(page, "() => window.__dbg.model().specs.length === 10 && window.__dbg.model().tasks.length === 3", label="specs and tasks")
+    await page.wait_for_timeout(1500)
+    await page.screenshot(path=f"{out}/work-main.png")
+    # the big spec board, its tiles, and the line from the writing robot
+    res["board"] = await page.evaluate("""() => { const L = window.__dbg.live3d(); const R = L && L.rooms['p-shop'];
+      const ln = window.__dbg.links().a3; return { big: !!(R && R.pb.big), tiles: R ? R.pb.tiles.length : 0, easel: !!(R && R.tb), cli: !!(L && L.rooms['p-cli'] && !L.rooms['p-cli'].pb.big) }; }""")
+    check(failures, res["board"] == {"big": True, "tiles": 10, "easel": True, "cli": True}, f"work: boards {res['board']}")
+    # side panel: the test run (escaped case names) and the tasks
+    res["tests"] = await page.evaluate("() => ({ text: document.getElementById('tests').textContent.replace(/\\s+/g, ' '), rows: document.querySelectorAll('#tests .cases li').length, injected: !!document.querySelector('#tests script') })")
+    check(failures, res["tests"]["rows"] == 3 and "<script>x</script>" in res["tests"]["text"] and not res["tests"]["injected"], f"work: tests panel {res['tests']}")
+    check(failures, "iPhone 16（iOS 26.2）" in res["tests"]["text"], "work: the run's device is named")
+    # the task board: columns, the waiting task, the permission strip
+    await page.click("#btn-taskboard")
+    await page.wait_for_function("() => { const el = document.getElementById('tb'); return !el.hidden && el.classList.contains('show'); }")
+    await page.wait_for_timeout(600)
+    res["kanban"] = await page.evaluate("""() => Object.fromEntries([...document.querySelectorAll('#kanban .kcol')].map((c) => [c.className.split(' ').find((x) => x.startsWith('k-')),
+      [...c.querySelectorAll('.n-subj')].map((n) => n.textContent)]))""")
+    check(failures, res["kanban"].get("k-todo") == ["文言を strings.json に登録"] and res["kanban"].get("k-doing") == ["Login 画面の spec を書く"]
+          and res["kanban"].get("k-wait") == ["Login 画面を実装"], f"work: kanban columns {res['kanban']}")
+    res["strip"] = await page.evaluate("""() => [...document.querySelectorAll('#perm-strip .pcard')].map((c) => ({ text: c.textContent.replace(/\\s+/g, ' '),
+      buttons: [...c.querySelectorAll('[data-do]')].map((b) => b.dataset.do), relay: !!c.querySelector('.perm-relay') }))""")
+    await page.screenshot(path=f"{out}/work-taskboard.png")
+    s1 = next((x for x in res["strip"] if "login.spec.json" in x["text"]), None)
+    s2 = next((x for x in res["strip"] if "xcodebuild" in x["text"]), None)
+    check(failures, s1 and s1["buttons"] == ["allow", "deny"] and not s1["relay"], f"work: relay prompt has 許可 / 拒否 only: {s1}")
+    check(failures, s2 and s2["buttons"] == [] and s2["relay"] and "jui viz relay install" in s2["text"], f"work: no-relay prompt guides instead: {s2}")
+    check(failures, s1 and "#2" in s1["text"] and s2 and "タスクなし" in s2["text"], "work: the prompt is on its owner's task only")
+    # allow from the view: perm.decide goes out, the card turns "sent"
+    await page.click('#perm-strip [data-do="allow"][data-perm="perm-1"]')
+    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('送信済み'))", label="perm-1 sent")
+    res["decisions"] = fake_state(srv)["decisions"]
+    check(failures, res["decisions"] == [{"permId": "perm-1", "behavior": "allow", "always": False, "reason": None}], f"work: perm.decide sent {res['decisions']}")
+    await page.screenshot(path=f"{out}/work-sent.png")
+    await page.keyboard.press("Escape")
+    await page.wait_for_function("() => document.getElementById('tb').hidden")
+    await page.wait_for_timeout(2600)
+    # the sheet of the spec being written
+    await page.click("#btn-specboard")
+    await page.wait_for_function("() => { const el = document.getElementById('wb'); return !el.hidden && el.classList.contains('show'); }")
+    login = await page.evaluate("() => window.__dbg.model().specs.findIndex((x) => x.name === 'Login')")
+    await page.click(f'.ov-card[data-idx="{login}"]')
+    await wait(page, "() => document.querySelectorAll('#wb-code section.sc').length === 8", label="the sheet")
+    res["sheet"] = await page.evaluate("""() => ({ title: document.getElementById('wb-title').textContent, writing: [...document.querySelectorAll('#wb-code .sc-writing h3')].map((h) => h.textContent),
+      components: document.querySelectorAll('#wb-sec-1 .rows li').length, wf: document.querySelectorAll('#wb-sec-1 .wf').length,
+      escaped: document.getElementById('wb-sec-1').textContent.includes('<b>escaped</b>'), injected: !!document.querySelector('#wb-sec-1 .rows b, #wb-sec-1 .wf-id b'),
+      related: document.getElementById('wb-sec-7').textContent.replace(/\\s+/g, ' ') })""")
+    await page.screenshot(path=f"{out}/work-sheet.png")
+    check(failures, res["sheet"]["writing"] == ["状態"] and res["sheet"]["components"] == 5 and res["sheet"]["escaped"] and not res["sheet"]["injected"], f"work: sheet {res['sheet']}")
+    await page.keyboard.press("Escape")
+    await page.wait_for_function("() => document.getElementById('wb').hidden")
+    # progress: task 2 done, task 3 free; the run ends failed
+    step(srv, "progress")
+    await wait(page, "() => window.__dbg.model().tasks.find((t) => t.id === '3').col === 'todo' && window.__dbg.model().tasks.find((t) => t.id === '2').col === 'done'", label="task 2 done, 3 to do")
+    await wait(page, "() => document.getElementById('tests').textContent.includes('2 passed, 1 failed')", label="the run's summary")
+    res["afterProgress"] = await page.evaluate("() => ({ tests: document.getElementById('tests').textContent.replace(/\\s+/g, ' ').slice(0, 120), links: !!(window.__dbg.links().a3 && window.__dbg.model().specs[0].by) })")
+    step(srv, "terminal")
+    await wait(page, "() => document.getElementById('chip-perm').textContent === '許可待ち 1'", label="one prompt left (the sent one)")
+    # a project that is not JsonUI: no spec, no test
+    await page.click('.tag.room[data-set-project="p-cli"]')
+    await page.wait_for_timeout(2500)
+    res["cli"] = await page.evaluate("() => ({ specs: document.getElementById('spec-list').textContent, tests: document.getElementById('tests').textContent })")
+    check(failures, "spec がない" in res["cli"]["specs"] and "まだ無い" in res["cli"]["tests"], f"work: non-JsonUI room {res['cli']}")
+    await page.screenshot(path=f"{out}/work-cli.png")
+    await page.close()
+    for line in watch.console:
+        failures.append(f"live/work: console: {line}")
+    for u in watch.foreign:
+        failures.append(f"live/work: request outside the server: {u}")
+
+
 async def run(pw, out, failures, Server):
     out = pathlib.Path(out) / "live"
     out.mkdir(parents=True, exist_ok=True)
@@ -236,7 +313,8 @@ async def run(pw, out, failures, Server):
     try:
         for name, build, fn in (("two-projects", scenarios.two_projects, scenario_two_projects),
                                 ("themes", scenarios.two_projects, scenario_themes),
-                                ("empty", scenarios.empty, scenario_empty)):
+                                ("empty", scenarios.empty, scenario_empty),
+                                ("work", scenarios.work, scenario_work)):
             path = scenarios.write(build(), out / f"{name}.jsonl")
             srv = Server(scenario=path)
             t0 = time.monotonic()
