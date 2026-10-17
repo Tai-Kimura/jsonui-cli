@@ -59,6 +59,7 @@ from .baseline import (
     chrome_crop,
     dhash_file,
     hamming,
+    hasher_mismatch,
     load_baseline,
 )
 
@@ -269,6 +270,23 @@ def measure(
         )
         return result
 
+    # 🔻 BOTH SIDES ARE HASHED HERE, AND THE STOP STILL APPLIES. The same-run
+    # path never reads a committed hash, but the threshold it judges by was
+    # calibrated on, and the deviation ledger it is checked against was
+    # measured with, the baseline's hasher. Measured 2026-10-17 on run
+    # 39012627109's own ios / ios-codegen renders: Pillow 12.3.0 matched all
+    # 946 pairs, 13.0.0 put Button_fontWeight__binding at distance 9 — one
+    # unrecorded deviation the gate would fail on, made by the library.
+    try:
+        stop = hasher_mismatch(
+            baseline, f"baselines/{env}/{platform}.hashes.json", platform, env
+        )
+    except BaselineError as exc:
+        result.error = str(exc)
+        return result
+    if stop:
+        result.error = stop
+        return result
     result.threshold = int(baseline.get("threshold", 0))
     hashes: dict = baseline.get("hashes", {})
     # Both sides are hashed with this lane's chrome crop; mixing crops would

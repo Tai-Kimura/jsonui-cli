@@ -10,6 +10,7 @@
   "platform": "android",
   "environment": "ci",
   "algorithm": "dhash-64",
+  "hashed_with": "pillow-12",
   "threshold": 8,
   "rendered_by": {
     "android.toolchain": "api_level=34;emulator_target=default;agp=9.2.0;gradle=9.4.1",

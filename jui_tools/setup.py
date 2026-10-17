@@ -32,13 +32,22 @@ setup(
         #
         # 🔻 Capped below 13: every committed hash (baselines/ci, baselines/
         # local, codegen parity) was computed with Pillow 12, and 13 resamples
-        # the 9x8 LANCZOS reduction differently. conformance-mobile run
+        # the 65x64 LANCZOS reduction differently. conformance-mobile run
         # 39012627109 installed 13.0.0 and its gate read 99 iOS screenshots
         # as visual regressions whose bytes were identical (md5) to run
         # 38958247680's, which 12.3.0 judged with 0. Same inputs replayed
-        # locally: 12.x 0, 13.0.0 99. Raising the cap means re-baking every
-        # baseline with the new version in the same commit.
-        "conformance": ["Pillow>=10.0.0,<13"],
+        # locally: 12.x 0, 13.0.0 99.
+        #
+        # 🔑 THE RANGE IS EXACTLY THE MAJOR THE BASELINES RECORD. Each manifest
+        # names its hasher (`hashed_with: pillow-12`) and every reader stops
+        # with "cannot measure" on another major — so the floor is 12 as well:
+        # under 10/11 the hashes happen to be bit-identical (measured on 2738
+        # CI pictures), but the gate cannot know that and would stop, so an
+        # install this extra admits must be one the gate accepts.
+        # Raising the cap means re-baking every baseline with the new version
+        # in the same commit, and moving the floor with it, per baseline:
+        #   jui conformance baseline update --platform <p> --env <env> --rehash --fail-on-moved
+        "conformance": ["Pillow>=12.0.0,<13"],
     },
     entry_points={
         "console_scripts": [

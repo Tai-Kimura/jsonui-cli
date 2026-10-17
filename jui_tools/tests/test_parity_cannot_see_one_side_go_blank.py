@@ -36,7 +36,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jui_cli.conformance import parity
+from jui_cli.conformance import baseline, parity
 
 try:
     from PIL import Image
@@ -77,7 +77,10 @@ class ParitySeesOneSideGoBlankTests(unittest.TestCase):
         self.dynamic.mkdir(parents=True)
         (self.conf / "baselines" / "ci").mkdir(parents=True)
         (self.conf / "baselines" / "ci" / "ios.hashes.json").write_text(
+            # `hashed_with` is this run's own hasher: parity stops on any
+            # other (test_a_baseline_is_judged_only_by_the_pillow_that_hashed_it).
             json.dumps({"platform": "ios", "environment": "ci", "algorithm": "dhash-64",
+                        baseline.HASHER_FIELD: baseline.hasher_identity(),
                         "threshold": 8, "hashes": {}})
         )
 

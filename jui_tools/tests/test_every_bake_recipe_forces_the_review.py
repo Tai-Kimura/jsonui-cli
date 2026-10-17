@@ -214,6 +214,9 @@ class EveryBakeRecipeForcesTheReview(unittest.TestCase):
             # tests that name the command in their own prose, this file included
             "jui_tools/tests/test_conformance_baseline.py": 1,
             "jui_tools/tests/test_conformance_coverage.py": 1,
+            # the CLI arm's docstring names `--rehash` (the migration path,
+            # not a bake of moved hashes)
+            "jui_tools/tests/test_a_baseline_is_judged_only_by_the_pillow_that_hashed_it.py": 1,
             # ⚪ THIS FILE IS THE LARGEST BLOCK, AND THAT IS EXPECTED, NOT A
             # SMELL. Every paragraph here names the command it guards, so
             # adding prose to this file raises its own number and the failure

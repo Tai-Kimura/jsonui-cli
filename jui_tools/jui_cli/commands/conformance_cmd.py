@@ -331,6 +331,20 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     baseline_update.add_argument(
+        "--rehash",
+        dest="rehash",
+        action="store_true",
+        help=(
+            "Re-bake a baseline whose hashes another hashing library made "
+            "(its `hashed_with` names a different Pillow major, or none). Its "
+            "entries are listed as REHASHED instead of same/moved — a distance "
+            "across two hashers is not a measurement — so judge the same "
+            "artifacts with the OLD major's gate first, and re-bake every "
+            "baseline in the commit that raises the Pillow cap. Refused when "
+            "the hasher did not change."
+        ),
+    )
+    baseline_update.add_argument(
         "--rendered-by",
         dest="rendered_by",
         action="append",
@@ -1420,6 +1434,7 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             # flag down is the whole fix: checking it out here, on the summary,
             # meant checking it after the file had already been replaced.
             refuse_if_moved=fail_on_moved and not only_new,
+            rehash=bool(getattr(args, "rehash", False)),
         )
     except BaselineMoved as e:
         # Every MOVED line, because reading them is what the flag is for — and
@@ -1444,6 +1459,14 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
         f"  new {len(summary.new)}  same {len(summary.same)}  "
         f"moved {len(summary.moved)}  dropped {len(summary.dropped)}"
     )
+    if summary.rehashed_from is not None:
+        print(
+            f"  rehashed {len(summary.rehashed)} from {summary.rehashed_from or '(no recorded hasher)'} "
+            f"to {summary.hashed_with} — not classified: a distance across two hashers "
+            f"is not a measurement"
+        )
+        for key in summary.dropped_os_buckets:
+            print(f"    DROPPED  hashes_by_os.{key}  -> not in this run's artifacts, cannot be rehashed")
     for name in summary.new:
         print(f"    NEW      {name}")
     for name, dist in summary.moved:
@@ -1477,7 +1500,7 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     print(f"baseline written to {summary.out_path}")
     print(
         f"  platform: {summary.platform}, env: {summary.env}, "
-        f"screenshots hashed: {summary.hashed}"
+        f"screenshots hashed: {summary.hashed}, hashed with: {summary.hashed_with}"
     )
     return 0
 

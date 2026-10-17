@@ -269,6 +269,41 @@ Hamming distance. Implementation:
 `jui_tools/jui_cli/conformance/baseline.py` (Pillow required — optional
 extra `jui-tools[conformance]`).
 
+### The hasher is part of the measurement (`hashed_with`)
+
+The 65x64 grid is drawn by Pillow's LANCZOS resampler, so a hash is a
+function of the screenshot **and** of Pillow. Pillow 13.0.0 resamples
+differently: conformance-mobile run 39012627109 read 99 byte-identical iOS
+screenshots as regressions (Pillow 12.3.0 on the same bytes: 0). Every
+manifest therefore records `hashed_with: "pillow-<major>"`, and every reader
+(the visual gate, `jui conformance parity`) **stops with "cannot measure"**
+when the running Pillow's major differs — or when the field is absent —
+instead of comparing. The gate fails on that as "screenshots were not
+compared".
+
+Why the major: measured 2026-10-17 on that run's ci artifacts (2738
+pictures), Pillow 10.4.0, 11.3.0, 12.0.0, 12.1.0, 12.1.1, 12.2.0 and 12.3.0
+give bit-identical dHash and vdHash on every picture; 13.0.0 moves 843 of 946
+iOS horizontal hashes (max 46 bits; android and web 0). The committed
+manifests were all baked before 13.0.0 was published (2026-10-16 22:15 UTC)
+and recompute exactly under 12.x (ci ios 937/946, android 898/898, web
+894/894 exact on run 39012627109's artifacts — the iOS remainder within the
+threshold), so `pillow-12` was written into them with no re-bake.
+
+The `jui-tools[conformance]` extra admits exactly that major
+(`Pillow>=12.0.0,<13`). Moving to a new major is one commit: raise the cap
+and the floor, judge the newest CI artifacts with the OLD major's gate, then
+re-bake every manifest from those artifacts with the new one:
+
+```
+jui conformance baseline update --platform <p> --env <env> --artifacts <dir> --rehash --fail-on-moved
+```
+
+`--rehash` lists the committed entries as REHASHED rather than same/moved (a
+distance across two hashers is not a measurement), drops per-OS buckets of
+OSes not in the run's artifacts (named), and is refused when the hasher did
+not change.
+
 ### Why a 64x64 grid (and not the classic 8x8/16x16)
 
 Conformance screenshots are full-page 1024x768 captures where the component
@@ -585,6 +620,7 @@ the reader knows it was already moving on 2026-09-04.
   "platform": "web",
   "environment": "local",
   "algorithm": "dhash-64",
+  "hashed_with": "pillow-12",
   "threshold": 8,
   "hashes": { "<Screenshot name>.png": "<1024 hex chars>" },
   "vhashes": { "<Screenshot name>.png": "<1024 hex chars, transposed>" }

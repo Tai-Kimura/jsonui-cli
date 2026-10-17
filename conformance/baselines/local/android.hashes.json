@@ -10,6 +10,7 @@
   "platform": "android",
   "environment": "local",
   "algorithm": "dhash-64",
+  "hashed_with": "pillow-12",
   "threshold": 8,
   "rendered_by": {
     "android.toolchain": "api_level=35;emulator_target=google_apis_playstore;avd=conf_ci;profile=pixel_tablet;abi=arm64-v8a;agp=9.2.0;gradle=9.4.1",
