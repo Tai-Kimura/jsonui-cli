@@ -338,3 +338,28 @@ def test_a_command_card_shows_the_command_not_only_the_models_description():
     plain = book.from_hook("s1", "s1", "Bash", {"command": "ls"}, "v", None, 0)
     assert plain["summary"] == "ls" and "description" not in plain
 
+
+
+def test_a_card_carries_the_command_verbatim_and_a_too_long_one_gets_no_buttons():
+    """A 2,528-character command's tail was nowhere on the card, and 'a     b'
+    read 'a b' (independent review, 10-18)."""
+    from jui_cli.viz.permissions import EXACT_MAX
+
+    world, _ = _world()
+    world.apply_hook(_hook("SessionStart"), 0)
+    channel_id = world.channel_hello(None, None, "s1", 0)
+    spaced = "printf '%s' 'a     b'"
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b1", tool_input={"command": spaced}), 1)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Bash", tool_input={"command": spaced}), 2)
+    card = next(iter(world.perms.perms.values()))
+    assert card["exact"]["command"] == spaced  # not folded
+    long = "echo " + "x" * EXACT_MAX + " ; rm -rf ~/tail-hidden"
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b2", tool_input={"command": long}), 3)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Bash", tool_input={"command": long}), 4)
+    world.channel_request(channel_id, {"request_id": "rL", "tool_name": "Bash", "input_preview": long}, 4)
+    big = next(c for c in world.perms.perms.values() if c.get("_useId") == "b2")
+    assert big.get("_requestId") == "rL" and big["can"]["allowDeny"] is False
+    assert world.decide(big["id"], "allow", 5) == "the command is too long to show in full: answer in the terminal"
+    content = "y" * 3000
+    w = world.perms.from_hook("s1", "s1", "Write", {"file_path": "/work/app/out.txt", "content": content}, "w", None, 6)
+    assert w["exact"]["file_path"] == "/work/app/out.txt" and w["exact"]["contentTruncated"] == 3000

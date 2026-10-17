@@ -215,3 +215,21 @@ def test_two_equal_waiting_hooks_are_two_cards(tmp_path):
     # The async forward of the first still joins the first's card.
     world.apply_hook(_payload(), 3)
     assert len([c for c in world.perms.perms.values()]) == 2
+
+
+def test_closing_the_page_mid_wait_releases_the_hook(tmp_path):
+    """The hook waited the full decideWaitSec after the page closed (review, 10-18)."""
+    async def main():
+        port, world, ctx, client = await _setup(tmp_path, wait_sec=20)
+        try:
+            ws = await _page(client, port)
+            start = time.monotonic()
+            proc = _start_hook(tmp_path, _payload())
+            await _wait_card(world, lambda c: "_future" in c)
+            await ws.close()
+            out = await asyncio.get_running_loop().run_in_executor(None, _finish, proc)
+            assert out is None and time.monotonic() - start < 5
+        finally:
+            await client.close()
+
+    asyncio.run(main())

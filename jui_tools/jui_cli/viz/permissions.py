@@ -23,6 +23,10 @@ LINK_WINDOW_MS = 15_000
 HOOK_WAIT_MS = 2_000
 CHANNEL_DEAD_MS = 60_000
 PREVIEW_MAX = 2_000
+#: The command / path a card shows in full. Longer than this, the browser is
+#: given no buttons: a decision cannot be made on what it was not shown.
+EXACT_MAX = 20_000
+CONTENT_EXCERPT = 2_000
 DEDUPE_MS = 3_000
 SUMMARY_MAX = 160
 
@@ -32,6 +36,34 @@ def _clip(text, n: int) -> str:
         text = json.dumps(text, ensure_ascii=False) if text is not None else ""
     text = " ".join(text.split())
     return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def exact_fields(tool_input: dict) -> tuple[dict, bool]:
+    """What will run or be written, verbatim (no whitespace folding, no cut).
+
+    The card once showed a 160-character summary when the 2,000-character JSON
+    preview could not be parsed back: the tail of a 2,528-character command
+    ("; rm -rf ~/…") was nowhere on it, and runs of spaces were folded, so
+    'a     b' read 'a b' (independent review, 10-18). Returns the fields and
+    whether all of them fit; a card that does not fit cannot be answered from
+    the browser.
+    """
+    out: dict = {}
+    fits = True
+    for key in ("command", "file_path", "notebook_path", "url", "pattern", "old_string", "new_string"):
+        value = tool_input.get(key)
+        if isinstance(value, str):
+            if len(value) > EXACT_MAX:
+                fits = False
+                out[key] = value[:EXACT_MAX]
+            else:
+                out[key] = value
+    content = tool_input.get("content")
+    if isinstance(content, str):
+        out["content"] = content[:CONTENT_EXCERPT]
+        if len(content) > CONTENT_EXCERPT:
+            out["contentTruncated"] = len(content)
+    return out, fits
 
 
 def summary_for(tool: str, tool_input: dict) -> str:
@@ -91,6 +123,7 @@ class PermissionBook:
             **({"description": _clip(tool_input["description"], SUMMARY_MAX)}
                if isinstance(tool_input.get("description"), str) and tool_input["description"].strip() else {}),
             "preview": _clip(json.dumps(tool_input, ensure_ascii=False), PREVIEW_MAX),
+            "exact": exact_fields(tool_input)[0],
             "status": "pending",
             "can": {"allowDeny": False, "always": False, "reason": False},
             "createdAt": at,
@@ -208,16 +241,25 @@ class PermissionBook:
         card = candidates[0]
         card["_requestId"] = request["request_id"]
         card["_channel"] = channel.id
-        card["can"]["allowDeny"] = True
+        card["can"]["allowDeny"] = self._showable(card)
         return True
 
     # ---------------------------------------------------------------- the synchronous hook (P6)
 
+    @staticmethod
+    def _showable(card: dict) -> bool:
+        """Can the page show everything the decision is about? (exact_fields fits)"""
+        return "_input" not in card or exact_fields(card["_input"])[1]
+
     def hook_waiting(self, card: dict, future) -> None:
         """A --decide hook is waiting on this card: it can take allow / deny,
-        "from now on" (only the request's own suggestions) and a reason."""
+        "from now on" (only the request's own suggestions) and a reason —
+        unless the card cannot show the whole command / path."""
         card["_future"] = future
-        card["can"] = {"allowDeny": True, "always": bool(card.get("suggestions")), "reason": True}
+        ok = self._showable(card)
+        card["can"] = {"allowDeny": ok, "always": ok and bool(card.get("suggestions")), "reason": ok}
+        if not ok:
+            card["tooLongToShow"] = True
 
     def hook_gave_up(self, card: dict) -> None:
         card.pop("_future", None)
@@ -246,6 +288,8 @@ class PermissionBook:
             return "behavior must be allow or deny"
         if card["status"] != "pending":
             return f"already {card['status']}"
+        if not self._showable(card):
+            return "the command is too long to show in full: answer in the terminal"
         future = card.get("_future")
         if future is not None and not future.done():
             rules = None

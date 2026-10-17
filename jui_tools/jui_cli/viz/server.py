@@ -32,6 +32,7 @@ MAX_HOOK_BODY = 2_000_000
 AUTH_TIMEOUT_SEC = 2.0
 POLL_SEC = 25.0
 PRESENCE_MS = 12_000
+PRESENCE_POLL_SEC = 0.5
 PROTOCOL = 1
 TOKEN_PLACEHOLDER = "__JUI_VIZ_TOKEN__"
 _PUSH_TASK = web.AppKey("push_task", asyncio.Task)
@@ -247,6 +248,8 @@ def make_app(ctx: ServerContext) -> web.Application:
                 await _handle_browser_message(ctx, sock, request_message)
         finally:
             ctx.sockets.pop(sock, None)
+            if not ctx.sockets:
+                ctx.present_until = 0  # the last page went away: nobody answers in the browser
         return sock
 
     async def _json_body(request: web.Request) -> dict | None:
@@ -275,10 +278,21 @@ def make_app(ctx: ServerContext) -> web.Application:
         ctx.world.hook_waiting(card, future)  # through World: it marks the perms slice to send
         if ctx.publish:
             ctx.publish()
+        # Wait for the answer, but give up as soon as no page is visible any
+        # more: a page closed mid-wait left the hook (and the terminal's
+        # answer) waiting the full decideWaitSec (independent review, 10-18).
+        answer = {}
+        deadline = asyncio.get_running_loop().time() + ctx.config.decideWaitSec
         try:
-            answer = await asyncio.wait_for(asyncio.shield(future), ctx.config.decideWaitSec)
-        except asyncio.TimeoutError:
-            answer = {}
+            while True:
+                left = deadline - asyncio.get_running_loop().time()
+                if left <= 0 or not ctx.browser_present():
+                    break
+                try:
+                    answer = await asyncio.wait_for(asyncio.shield(future), min(left, PRESENCE_POLL_SEC))
+                    break
+                except asyncio.TimeoutError:
+                    continue
         finally:
             if card.get("_future") is future:
                 ctx.world.hook_gave_up(card)
