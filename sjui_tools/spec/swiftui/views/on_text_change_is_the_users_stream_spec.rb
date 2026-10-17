@@ -125,7 +125,10 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
       '$data.code.wrappedValue = newValue; ',
       'let start = edit.start; edit.start = nil; let newValue = String(newValue.prefix(6)); ' \
       'guard String($data.code.wrappedValue.prefix(6)) == newValue, newValue != start.map({ String($0.prefix(6)) }) ' \
-      'else { return }; data.h?(newValue) } } })'
+      'else { return }; data.h?(newValue) } }; if before != newValue { edit.last = newValue }; })',
+      # The over-the-limit write is the field's own (S18b): `last` records
+      # every write that moved the storage, not only the edits.
+      'if changed { if edit.start == nil || before != edit.last { edit.start = before }; edit.number += 1; '
     )
     generation_declared(@declarations)
     # The value's own clamp (a programmatic write longer than the limit)
@@ -335,6 +338,94 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
         'RESULT vmMid final=string calls=["string"] stale=0',
         'RESULT twoA final=string1 calls=["string1"] stale=0',
         'RESULT twoB final=string2 calls=["string2"] stale=0'
+      ])
+    end
+  end
+
+  # maxLength 6, run (swiftc). The field's setter is driven as the review
+  # drove it: the over-the-limit keystroke is stored as typed, the field then
+  # writes the cut value back over it, and the value's own clamp
+  # (`.onChange(of:)`, not runnable here) would find nothing left to cut.
+  #
+  # S18a — "1234" -> "12345" -> "1234" in one turn: back where it began, no call.
+  # S18b — "1234" -> "123456" -> "1234567" -> (field) "123456" in one turn:
+  #   one call with "123456". 46cca930 called nothing: "1234567" was not an
+  #   edit, so it was not recorded as the field's write, and the field's
+  #   "123456" over it restarted the burst from "1234567".
+  # S17m — "1234" -> "12345", the view model writes "123", the field echoes
+  #   "123" (a write of the value already stored), then "1234": a change from
+  #   the view model's "123", one call — even though it is where the burst
+  #   began. Counting the echo as the field's own write would hide the view
+  #   model's value and call nothing.
+  it 'maxLength: the field\'s own over-the-limit write is not someone else\'s', :swift_compile do
+    declare('h' => '(String) -> Void')
+    out = emit('type' => 'TextField', 'id' => 'code', 'text' => '@{code}', 'onTextChange' => '@{h}', 'maxLength' => 6)
+    line = out.lines.first.strip
+    expr = line[/\ATextField\("", text: (.*)\)\z/, 1]
+    expect(expr).not_to be_nil
+    program = <<~SWIFT
+      import SwiftUI
+      #{SjuiTools::SwiftUI::Views::UserEditBindingHelper::GENERATION_CLASS}
+      struct TestData {
+          var code = ""
+          var h: ((String) -> Void)?
+      }
+      final class Store { var data = TestData() }
+      struct EmittedHost {
+          @SwiftUI.Binding var data: TestData
+          private let textEdit_0 = UserEditGeneration()
+          var field: SwiftUI.Binding<String> { #{expr} }
+      }
+      func settle() {
+          for _ in 0..<3 {
+              var done = false
+              DispatchQueue.main.async { done = true }
+              while !done { _ = RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
+          }
+      }
+      func scenario(_ name: String, _ edits: (SwiftUI.Binding<String>, Store) -> Void) {
+          let store = Store()
+          store.data.code = "1234"
+          var calls: [String] = []
+          store.data.h = { calls.append($0) }
+          let host = EmittedHost(data: SwiftUI.Binding(get: { store.data }, set: { store.data = $0 }))
+          edits(host.field, store)
+          settle()
+          print("RESULT \\(name) final=\\(store.data.code) calls=\\(calls)")
+      }
+      scenario("S18a") { f, _ in
+          f.wrappedValue = "12345"
+          f.wrappedValue = "1234"
+      }
+      scenario("S18b") { f, store in
+          f.wrappedValue = "123456"
+          f.wrappedValue = "1234567"
+          f.wrappedValue = "123456"
+          if store.data.code.count > 6 { store.data.code = String(store.data.code.prefix(6)) }
+      }
+      scenario("S17m") { f, store in
+          f.wrappedValue = "12345"
+          store.data.code = "123"
+          f.wrappedValue = "123"
+          f.wrappedValue = "1234"
+      }
+    SWIFT
+    if (reason = SwiftCompiler.unavailable_reason)
+      skip "#{reason}; this example runs where the SwiftUI SDK is present"
+    end
+    Dir.mktmpdir('sjui_otc_max') do |dir|
+      src = File.join(dir, 'main.swift')
+      bin = File.join(dir, 'main')
+      File.write(src, program)
+      sdk = `xcrun --show-sdk-path 2>/dev/null`.strip
+      built, status = Open3.capture2e('swiftc', *(sdk.empty? ? [] : ['-sdk', sdk]), src, '-o', bin)
+      expect(status).to be_success, built
+      ran, status = Open3.capture2e(bin)
+      expect(status).to be_success, ran
+      expect(ran.lines.grep(/^RESULT /).map(&:strip)).to eq([
+        'RESULT S18a final=1234 calls=[]',
+        'RESULT S18b final=123456 calls=["123456"]',
+        'RESULT S17m final=1234 calls=["1234"]'
       ])
     end
   end

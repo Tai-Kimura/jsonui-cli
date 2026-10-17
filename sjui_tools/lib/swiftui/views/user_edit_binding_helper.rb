@@ -125,21 +125,36 @@ module SjuiTools
             # Compared cut, too: maxLength's clamp may have run first.
             current = "String(#{binding}.wrappedValue.prefix(#{max_length}))"
             start = "start.map({ String($0.prefix(#{max_length})) })"
+            # `last` is every value the field wrote that moved the storage,
+            # the over-the-limit edit included: "123456" -> "1234567" is not
+            # an edit (`changed` compares cut) but it IS the field's write,
+            # and when the field next writes "123456" over it, that
+            # "1234567" must not read as someone else's — it restarted the
+            # burst from "1234567" and the call for "1234" -> "123456" was
+            # lost (independent review, S18b). A write of the value already
+            # stored (an echo) is not counted, so a view model's value the
+            # field merely echoes still restarts the burst (S17).
+            remember = ''
+            remember_after = 'if before != newValue { edit.last = newValue }; '
           else
             changed = 'before != newValue'
             narrow = ''
             current = "#{binding}.wrappedValue"
             start = 'start'
+            # Here `changed` is exactly "the write moved the storage".
+            remember = 'edit.last = newValue; '
+            remember_after = ''
           end
           "SwiftUI.Binding(get: { #{binding}.wrappedValue }, set: { newValue in " \
             "let edit = #{generation}; let before = #{binding}.wrappedValue; " \
             "let changed = #{changed}; " \
             "#{binding}.wrappedValue = newValue; " \
-            'if changed { if edit.start == nil || before != edit.last { edit.start = before }; edit.last = newValue; ' \
+            "if changed { if edit.start == nil || before != edit.last { edit.start = before }; #{remember}" \
             'edit.number += 1; let number = edit.number; ' \
             'DispatchQueue.main.async { guard edit.number == number else { return }; ' \
             "let start = edit.start; edit.start = nil; #{narrow}" \
-            "guard #{current} == newValue, newValue != #{start} else { return }; #{handler_call} } } })"
+            "guard #{current} == newValue, newValue != #{start} else { return }; #{handler_call} } }" \
+            "#{remember_after.empty? ? ' })' : "; #{remember_after}})"}"
         end
       end
     end
