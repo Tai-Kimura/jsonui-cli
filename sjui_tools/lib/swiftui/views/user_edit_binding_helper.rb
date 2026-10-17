@@ -43,30 +43,65 @@ module SjuiTools
       # sjui-ontextchange-deferred-handler-replays-stale-value). Now a burst
       # is one call with the latest value — intermediate values coalesce, as
       # under `.onChange` and LaunchedEffect.
+      #
+      # Comparing values alone left two holes (ticket sjui-ontextchange-
+      # deferred-guard-can-double-call-or-call-without-net-change): within one
+      # turn "" -> "a" -> "" -> "a" called the handler twice (the first
+      # call's value matched the current one by chance), and "x" -> "xy" ->
+      # "x" called it with no net change (Android compares with the data and
+      # does not). So each field keeps a generation in its view
+      # (GENERATION_CLASS, one `@State` per field): every edit takes a new
+      # number and only the last number's call runs, and the value held
+      # before the burst's first edit is kept, so a burst that ends where it
+      # began calls nothing — Android's `newValue != data`.
+      #
+      # The class is declared in the generated view itself, not taken from
+      # SwiftJsonUI, so the generated code needs nothing newer from the
+      # library than it did (the same reason the setter is spelled inline).
       module UserEditBindingHelper
+        # Nested in the generated view; one line, so the state collector
+        # folds the copies every field adds into one declaration.
+        GENERATION_CLASS = 'private final class UserEditGeneration { var number = 0; var start: String? }'
+
+        # Declares the field's generation (`@State private var <name>`) and
+        # returns its name.
+        def user_edit_generation(base)
+          name = "#{base}TextEdit"
+          @state_variables ||= []
+          @state_variables << GENERATION_CLASS
+          @state_variables << "@State private var #{name} = UserEditGeneration()"
+          name
+        end
+
         # `binding` is a `$`-prefixed Binding<String> expression (`$data.x`
-        # or a local `$<id>Text`). `handler_call` reads the value as
+        # or a local `$<id>Text`). `generation`: the field's
+        # user_edit_generation name. `handler_call` reads the value as
         # `newValue`. `max_length` (an Integer): the handler is handed the
         # edit cut to it — what the field keeps once maxLength's own clamp
         # (apply_max_length) has run, whichever of the two runs first.
-        def user_edit_binding(binding, handler_call, max_length: nil)
+        def user_edit_binding(binding, handler_call, generation:, max_length: nil)
           if max_length.is_a?(Integer) && max_length.positive?
             kept = "String(newValue.prefix(#{max_length}))"
             # An edit past the limit that the clamp takes back is no edit.
-            changed = "#{binding}.wrappedValue != #{kept}"
+            changed = "before != #{kept}"
             narrow = "let newValue = #{kept}; "
             # Compared cut, too: maxLength's clamp may have run first.
             current = "String(#{binding}.wrappedValue.prefix(#{max_length}))"
+            start = "start.map({ String($0.prefix(#{max_length})) })"
           else
-            changed = "#{binding}.wrappedValue != newValue"
+            changed = 'before != newValue'
             narrow = ''
             current = "#{binding}.wrappedValue"
+            start = 'start'
           end
           "SwiftUI.Binding(get: { #{binding}.wrappedValue }, set: { newValue in " \
+            "let edit = #{generation}; let before = #{binding}.wrappedValue; " \
             "let changed = #{changed}; " \
             "#{binding}.wrappedValue = newValue; " \
-            "if changed { DispatchQueue.main.async { #{narrow}" \
-            "guard #{current} == newValue else { return }; #{handler_call} } } })"
+            'if changed { if edit.start == nil { edit.start = before }; edit.number += 1; let number = edit.number; ' \
+            'DispatchQueue.main.async { guard edit.number == number else { return }; ' \
+            "let start = edit.start; edit.start = nil; #{narrow}" \
+            "guard #{current} == newValue, newValue != #{start} else { return }; #{handler_call} } } })"
         end
       end
     end

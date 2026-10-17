@@ -93,7 +93,8 @@ module SjuiTools
             # apply_max_length enforces it (a literal maxLength over a data
             # binding), so it sees what the field keeps.
             narrow = @component['maxLength'] if text_binding.start_with?('$data.')
-            text_binding = user_edit_binding(text_binding, handler_call, max_length: narrow)
+            generation = user_edit_generation(@component['id'] ? to_camel_case(@component['id']) : position_name('textField'))
+            text_binding = user_edit_binding(text_binding, handler_call, generation: generation, max_length: narrow)
           end
 
           # Check if it should be a SecureField

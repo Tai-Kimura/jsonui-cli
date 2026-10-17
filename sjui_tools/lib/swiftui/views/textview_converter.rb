@@ -56,7 +56,8 @@ module SjuiTools
             editor_binding = "$#{binding_path}"
             if handler_reference?(@component['onTextChange'])
               handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
-              editor_binding = user_edit_binding(editor_binding, handler_call)
+              generation = user_edit_generation(@component['id'] ? to_camel_case(@component['id']) : position_name('textEditor'))
+              editor_binding = user_edit_binding(editor_binding, handler_call, generation: generation)
             end
             add_line "text: #{editor_binding},"
 
