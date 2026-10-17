@@ -68,13 +68,34 @@ def our_handler(python: str | None = None, forward: Path | None = None) -> dict:
     }
 
 
+def _is_forward(arg: str) -> bool:
+    return arg == MARKER or arg.endswith("/" + MARKER)
+
+
+def _is_python(exe: str) -> bool:
+    return os.path.basename(exe).startswith("python")
+
+
 def is_ours(handler) -> bool:
+    """A python running forward.py — not merely a command that mentions its path.
+
+    A substring match once removed a user's ``audit --watch …/jui_cli/viz/forward.py``
+    (independent review, 10-18).
+    """
     if not isinstance(handler, dict):
         return False
-    if MARKER in str(handler.get("command", "")):
-        return True
+    command = handler.get("command")
+    if not isinstance(command, str):
+        return False
     args = handler.get("args")
-    return isinstance(args, list) and any(MARKER in str(a) for a in args)
+    if isinstance(args, list):
+        argv = [command, *[str(a) for a in args]]
+    else:
+        try:
+            argv = shlex.split(command)
+        except ValueError:
+            return False
+    return bool(argv) and _is_python(argv[0]) and any(_is_forward(a) for a in argv[1:])
 
 
 # ---------------------------------------------------------------- pure transforms
@@ -166,15 +187,24 @@ def _target() -> Path:
 def _read(path: Path) -> tuple[bytes | None, dict, tuple | None]:
     if not path.exists():
         return None, {}, None
-    raw = path.read_bytes()
+    # Stat before AND after reading: a write landing between the read and a
+    # single stat would be taken as what we read, and lost (review, 10-18).
+    for _ in range(3):
+        st = path.stat()
+        before = (st.st_mtime_ns, st.st_size)
+        raw = path.read_bytes()
+        st = path.stat()
+        if (st.st_mtime_ns, st.st_size) == before:
+            break
+    else:
+        raise SettingsError("settings.json が読んでいる間に変わり続けたため中止しました。少し待って再実行してください")
     try:
         data = json.loads(raw.decode("utf-8")) if raw.strip() else {}
     except (UnicodeDecodeError, ValueError):
         raise SettingsError("settings.json が JSON として読めません。直してから再実行してください")
     if not isinstance(data, dict):
         raise SettingsError("settings.json の中身がオブジェクトではありません。直してから再実行してください")
-    st = path.stat()
-    return raw, data, (st.st_mtime_ns, st.st_size)
+    return raw, data, before
 
 
 def _dump(data: dict) -> str:

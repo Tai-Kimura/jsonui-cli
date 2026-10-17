@@ -154,3 +154,61 @@ def test_rooms_prefer_jui_config_then_git_then_the_cwd(tmp_path):
     p2 = rooms.project_for(str(app))
     assert p1["id"] == p2["id"] and p1["jsonui"] is True and p1["name"] == "shop/"
     assert str(tmp_path) not in json.dumps({k: v for k, v in p1.items() if k != "displayRoot"})
+
+
+def _states(state):
+    return {a["id"]: a["state"] for a in state.slices["agents"]}
+
+
+def test_permission_for_one_of_two_parallel_tools_settles_the_right_one():
+    """F1: PermissionRequest has no tool_use_id; "the newest open id" picked
+    the wrong one when two calls were open (review, 10-18)."""
+    world, state = _world()
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="A", tool_input={"command": "rm x"}), 1)
+    world.apply_hook(_hook("PreToolUse", tool_name="Read", tool_use_id="B", tool_input={"file_path": "/work/shop-app/a"}), 2)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Bash", tool_input={"command": "rm x"}), 3)
+    world.apply_hook(_hook("PostToolUse", tool_name="Read", tool_use_id="B", tool_input={}), 4)  # A refused: no Post
+    world.apply_hook(_hook("PreToolUse", tool_name="Grep", tool_use_id="C", tool_input={"pattern": "x"}), 5)
+    world.apply_hook(_hook("PostToolUse", tool_name="Grep", tool_use_id="C", tool_input={}), 6)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "idle"
+
+
+def test_a_new_prompt_clears_what_an_interrupted_turn_left_open():
+    """F2: Esc — no Post, no Stop — then the next prompt."""
+    world, state = _world()
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="A", tool_input={"command": "sleep 99"}), 1)
+    world.apply_hook(_hook("UserPromptSubmit", prompt="next"), 2)
+    world.apply_hook(_hook("PreToolUse", tool_name="Read", tool_use_id="B", tool_input={}), 3)
+    world.apply_hook(_hook("PostToolUse", tool_name="Read", tool_use_id="B", tool_input={}), 4)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "idle"
+
+
+def test_a_subagent_that_never_sends_subagentstop_leaves_after_a_quiet_stop():
+    """F3: an interrupted subagent; the main Stop has nothing in the background."""
+    world, state = _world()
+    world.apply_hook(_hook("SubagentStart", agent_id="sub1", agent_type="Explore"), 1)
+    world.apply_hook(_hook("PreToolUse", agent_id="sub1", agent_type="Explore", tool_name="Read", tool_use_id="X", tool_input={}), 2)
+    world.apply_hook(_hook("Stop", background_tasks=[]), 3)
+    world.tick(3 + 5_000)
+    world.publish()
+    assert "sub1" not in _states(state)
+    # ...but not while background work is running.
+    world.apply_hook(_hook("SubagentStart", agent_id="sub2", agent_type="Explore"), 10_000)
+    world.apply_hook(_hook("Stop", background_tasks=[{"id": "sub2"}]), 10_001)
+    world.tick(20_000)
+    world.publish()
+    assert "sub2" in _states(state)
+
+
+def test_idle_prompt_after_a_permission_prompt_idles_the_robot():
+    """F4"""
+    world, state = _world()
+    world.apply_hook(_hook("PreToolUse", tool_name="Write", tool_use_id="w", tool_input={}), 1)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Write", tool_input={}), 2)
+    world.apply_hook(_hook("Notification", notification_type="idle_prompt", message="waiting"), 3)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "idle"
+    assert state.slices["sessions"][0]["status"] == "idle"
+

@@ -197,3 +197,38 @@ def test_only_handlers_naming_forward_py_count_as_ours():
     assert not hi.is_ours({"command": "python3 /x/forward.py"})
     assert not hi.is_ours({"command": "echo jui viz"})
     assert not hi.is_ours("jui_cli/viz/forward.py")
+
+
+def test_a_user_command_that_merely_mentions_forward_py_is_not_ours(home):
+    """Substring matching removed this handler (review, 10-18)."""
+    theirs = {"type": "command", "command": "/usr/local/bin/audit --watch /src/jui_cli/viz/forward.py"}
+    before = {"hooks": {"Stop": [{"hooks": [theirs]}]}}
+    _write(before)
+    hi.install(python=PY)
+    hi.uninstall()
+    assert _read() == before
+    assert not hi.is_ours(theirs)
+    assert hi.is_ours({"command": "'/opt/py/bin/python3.14' -I -S '/x y/jui_cli/viz/forward.py'"})
+
+
+def test_a_write_between_our_read_and_our_stat_is_not_lost(home, monkeypatch):
+    """The stamp was taken after read_bytes: a write in that gap was kept
+    neither by us nor by the re-read check (review, 10-18)."""
+    _write({"model": "x"})
+    real_read_bytes = Path.read_bytes
+    calls = {"n": 0}
+
+    def racing_read_bytes(self):
+        out = real_read_bytes(self)
+        if self == hi._target() and calls["n"] == 0:
+            calls["n"] += 1
+            _write({"model": "x", "permissions": {"allow": ["Bash(ls)"]}})
+            st = self.stat()
+            os.utime(self, ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000))
+        return out
+
+    monkeypatch.setattr(Path, "read_bytes", racing_read_bytes)
+    hi.install(python=PY)
+    data = _read()
+    assert data["permissions"] == {"allow": ["Bash(ls)"]} and "hooks" in data
+

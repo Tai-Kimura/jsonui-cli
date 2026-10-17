@@ -8,11 +8,13 @@ unread too.
 from __future__ import annotations
 
 import json
+import os
 import re
+import stat
 from pathlib import Path
 from typing import Callable
 
-SESSION_FILE = re.compile(r"^\d+\.json$")
+SESSION_FILE = re.compile(r"^[0-9]+\.json$")  # ASCII digits only (\d matches other scripts)
 MAX_BYTES = 256_000
 
 
@@ -23,11 +25,24 @@ def is_session_file(name: str) -> bool:
 def read_session_file(path: Path) -> dict | None:
     if not is_session_file(path.name):
         return None  # never open anything else in this folder
+    # O_NOFOLLOW + a regular-file check: a "<n>.json" that is a symlink (to a
+    # .key, say) is never followed.
     try:
-        if path.stat().st_size > MAX_BYTES:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_BYTES:
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        raw = os.read(fd, MAX_BYTES + 1)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
         return None
     return data if isinstance(data, dict) else None
 
