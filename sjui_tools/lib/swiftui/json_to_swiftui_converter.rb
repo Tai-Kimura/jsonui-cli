@@ -9,6 +9,7 @@ require_relative 'collection_cell_index'
 require_relative 'interaction_stop_index'
 require_relative 'views/base_view_converter'
 require_relative 'views/responsive_helper'
+require_relative 'views/user_edit_binding_helper'
 require_relative 'action_manager'
 require_relative 'binding/binding_handler_registry'
 require_relative 'style_loader'
@@ -209,7 +210,11 @@ module SjuiTools
 
         @last_root_converter = converter  # Save for weighted_children_info access
 
-        result = converter.convert
+        result = nil
+        # onTextChange's per-field state: declared straight into this view,
+        # whatever the containers on the way do (UserEditBindingHelper).
+        user_edit = Views::UserEditBindingHelper.collect { result = converter.convert }
+        @state_variables.concat(user_edit)
 
         # Collect state variables from converter
         if converter.respond_to?(:state_variables) && converter.state_variables
@@ -409,7 +414,9 @@ module SjuiTools
 
         # JSONコンポーネントをSwiftUIに変換（状態変数を収集）
         converter = @converter_factory.create_converter(json_data, 2, @action_manager)
-        body_code = converter.convert
+        body_code = nil
+        user_edit = Views::UserEditBindingHelper.collect { body_code = converter.convert }
+        @state_variables.concat(user_edit)
 
         # Collect state variables from converter
         if converter.respond_to?(:state_variables) && converter.state_variables

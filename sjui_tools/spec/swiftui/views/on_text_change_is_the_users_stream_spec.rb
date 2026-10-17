@@ -48,28 +48,27 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
 
   # The setter the control writes through: it stores the edit, then calls
   # the handler on the main queue's next turn — only the last edit of a
-  # burst (the field's generation, kept in the main thread's dictionary under
-  # the view's type and the field), only if the value is still the one it
-  # wrote, and only if the burst did not end where it began
+  # burst (the node's generation, a `@State` of the view), only if the
+  # value is still the one it wrote, and only if the burst did not end where
+  # it began; a value the field did not write restarts the burst
   # (UserEditBindingHelper).
-  def setter_calling(binding, handler, field)
+  def setter_calling(binding, handler, generation = 'textEdit_0')
     "SwiftUI.Binding(get: { #{binding}.wrappedValue }, set: { newValue in " \
-      "let key = \"sjui.userEdit.\\(Self.self).#{field}\"; " \
-      'let edit = (Thread.main.threadDictionary[key] as? NSMutableDictionary) ?? NSMutableDictionary(); ' \
-      'Thread.main.threadDictionary[key] = edit; ' \
-      "let before = #{binding}.wrappedValue; let changed = before != newValue; " \
+      "let edit = #{generation}; let before = #{binding}.wrappedValue; let changed = before != newValue; " \
       "#{binding}.wrappedValue = newValue; " \
-      'if changed { if edit["start"] == nil { edit["start"] = before }; ' \
-      'let number = (edit["number"] as? Int ?? 0) + 1; edit["number"] = number; ' \
-      'DispatchQueue.main.async { guard edit["number"] as? Int == number else { return }; ' \
-      'let start = edit["start"] as? String; edit["start"] = nil; ' \
+      'if changed { if edit.start == nil || before != edit.last { edit.start = before }; edit.last = newValue; ' \
+      'edit.number += 1; let number = edit.number; ' \
+      'DispatchQueue.main.async { guard edit.number == number else { return }; let start = edit.start; edit.start = nil; ' \
       "guard #{binding}.wrappedValue == newValue, newValue != start else { return }; #{handler} } } })"
   end
 
-  # Nothing is declared in the view for it: a declaration depends on every
-  # container on the way propagating its children's state.
-  def nothing_declared(declarations)
-    expect(declarations.grep(/userEdit|UserEdit|TextEdit/)).to eq([])
+  # The node's generation, declared in the view (named by position — a
+  # component that was not stamped is at "0").
+  def generation_declared(declarations, name = 'textEdit_0')
+    expect(declarations).to include(
+      SjuiTools::SwiftUI::Views::UserEditBindingHelper::GENERATION_CLASS,
+      "@State private var #{name} = UserEditGeneration()"
+    )
   end
 
   let(:handler) { 'data.onEmailChange?("email_field", newValue)' }
@@ -81,8 +80,8 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     end
 
     it 'hands the field a binding whose setter calls the handler' do
-      expect(out).to include("TextField(\"\", text: #{setter_calling('$data.email', handler, 'emailField')})")
-      nothing_declared(@declarations)
+      expect(out).to include("TextField(\"\", text: #{setter_calling('$data.email', handler)})")
+      generation_declared(@declarations)
     end
 
     it 'does not observe the value' do
@@ -96,14 +95,14 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
   it 'a TextField with no text binding: the same, over its own @State' do
     declare('h' => '(String) -> Void')
     out = emit('type' => 'TextField', 'id' => 'target', 'onTextChange' => '@{h}')
-    expect(out).to include("TextField(\"\", text: #{setter_calling('$targetText', 'data.h?(newValue)', 'target')})")
+    expect(out).to include("TextField(\"\", text: #{setter_calling('$targetText', 'data.h?(newValue)')})")
     expect(out).not_to include('.onChange(of: targetText)')
   end
 
   it 'a bound `secure`: both arms of the run-time pick get the setter' do
     declare('h' => '(String) -> Void')
     out = emit('type' => 'TextField', 'id' => 'p', 'text' => '@{pw}', 'secure' => '@{masked}', 'onTextChange' => '@{h}')
-    setter = setter_calling('$data.pw', 'data.h?(newValue)', 'p')
+    setter = setter_calling('$data.pw', 'data.h?(newValue)')
     expect(out).to include("SecureField(\"\", text: #{setter})", "TextField(\"\", text: #{setter})")
     expect(out).not_to include('.onChange(of: data.pw)')
   end
@@ -112,7 +111,7 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     declare('h' => '(String) -> Void')
     out = emit('type' => 'TextField', 'id' => 'q', 'text' => '@{query}', 'onTextChange' => '@{h}',
                'clearButtonMode' => 'always', 'hintColor' => '#FF0000', 'hint' => 'Search')
-    expect(out).to include(".textFieldClearButton(mode: .always, text: #{setter_calling('$data.query', 'data.h?(newValue)', 'q')})")
+    expect(out).to include(".textFieldClearButton(mode: .always, text: #{setter_calling('$data.query', 'data.h?(newValue)')})")
     expect(out).to include('.styledPlaceholder("Search", text: $data.query, ')
   end
 
@@ -124,11 +123,11 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     expect(out).to include(
       'let before = $data.code.wrappedValue; let changed = before != String(newValue.prefix(6)); ' \
       '$data.code.wrappedValue = newValue; ',
-      'let start = edit["start"] as? String; edit["start"] = nil; let newValue = String(newValue.prefix(6)); ' \
+      'let start = edit.start; edit.start = nil; let newValue = String(newValue.prefix(6)); ' \
       'guard String($data.code.wrappedValue.prefix(6)) == newValue, newValue != start.map({ String($0.prefix(6)) }) ' \
       'else { return }; data.h?(newValue) } } })'
     )
-    nothing_declared(@declarations)
+    generation_declared(@declarations)
     # The value's own clamp (a programmatic write longer than the limit)
     # stays, and calls no handler.
     expect(out).to match(/\.onChange\(of: data\.code\) \{ _, newValue in\n\s*if newValue\.count > 6 \{\n\s*data\.code = String\(newValue\.prefix\(6\)\)\n\s*\}\n\s*\}/)
@@ -144,14 +143,14 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     it 'over a data binding: the editor\'s text: is the setter, and nothing observes the value' do
       declare('h' => '(String, String) -> Void')
       out = emit('type' => 'TextView', 'id' => 'memo', 'text' => '@{memo}', 'onTextChange' => '@{h}')
-      expect(out).to include("text: #{setter_calling('$data.memo', 'data.h?("memo", newValue)', 'memo')},")
+      expect(out).to include("text: #{setter_calling('$data.memo', 'data.h?("memo", newValue)')},")
       expect(out).not_to include('.onChange(of: data.memo)')
     end
 
     it 'over its own @State: the same' do
       declare('h' => '(String) -> Void')
       out = emit('type' => 'TextView', 'id' => 'note', 'onTextChange' => '@{h}')
-      expect(out).to include("text: #{setter_calling('$noteText', 'data.h?(newValue)', 'note')},")
+      expect(out).to include("text: #{setter_calling('$noteText', 'data.h?(newValue)')},")
       expect(out).not_to include('.onChange(of: noteText)')
     end
 
@@ -169,7 +168,8 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     declare('onEmailChange' => '(String, String) -> Void', 'h' => '(String) -> Void')
     bound = emit('type' => 'TextField', 'id' => 'email_field', 'text' => '@{email}',
                  'onTextChange' => '@{onEmailChange}', 'maxLength' => 6)
-    local = emit('type' => 'TextField', 'id' => 'target', 'onTextChange' => '@{h}')
+    # Two nodes: in a layout their positions differ; these were not stamped.
+    local = emit('type' => 'TextField', 'id' => 'target', 'onTextChange' => '@{h}').gsub('textEdit_0', 'textEdit_1')
     field = ->(code) { code.lines.first.strip }
     source = <<~SWIFT
       struct TestData {
@@ -180,6 +180,9 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
       struct EmittedHost: View {
           @SwiftUI.Binding var data: TestData
           @State private var targetText: String = ""
+          #{SjuiTools::SwiftUI::Views::UserEditBindingHelper::GENERATION_CLASS}
+          @State private var textEdit_0 = UserEditGeneration()
+          @State private var textEdit_1 = UserEditGeneration()
           var body: some View {
               VStack {
                   #{field.call(bound)}
@@ -206,6 +209,11 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
   #   called with "x"; Android compares with the data and does not).
   # twice — "" -> "a" -> "" -> "a" in one turn: one call (1.9.36 called
   #   twice: the first call's "a" matched the current value by chance).
+  # vmMid — "string" -> "stringd", the view model writes "strin", then
+  #   "string": a change from "strin", one call (review S17: 0 when the
+  #   start stayed at the burst's first value).
+  # twoA / twoB — two instances of the view, one edit each in one turn:
+  #   one call each (review S13: a state shared by view type dropped A's).
   it 'a burst calls once, with the latest value, and only if it changed the value', :swift_compile do
     declare('onNoteTextChange' => '(String, String) -> Void')
     out = emit('type' => 'TextView', 'id' => 'note_text_field', 'text' => '@{noteText}',
@@ -213,16 +221,20 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
     expr = out.lines.map(&:strip).find { |l| l.start_with?('text: SwiftUI.Binding(') }
     expect(expr).not_to be_nil
     expr = expr.delete_prefix('text: ').delete_suffix(',')
-    nothing_declared(@declarations)
+    generation_declared(@declarations)
     program = <<~SWIFT
       import SwiftUI
+      #{SjuiTools::SwiftUI::Views::UserEditBindingHelper::GENERATION_CLASS}
       struct TestData {
           var noteText = ""
           var onNoteTextChange: ((String, String) -> Void)?
       }
       final class Store { var data = TestData() }
+      /// One instance of the generated view: its data, and its generation
+      /// (a `@State` in the view; a stored instance here, outside SwiftUI).
       struct EmittedHost {
           @SwiftUI.Binding var data: TestData
+          private let textEdit_0 = UserEditGeneration()
           var field: SwiftUI.Binding<String> { #{expr} }
       }
       /// Runs the main queue until it is empty: a marker queued behind
@@ -234,20 +246,30 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
               while !done { _ = RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
           }
       }
-      func scenario(_ name: String, seed: String, _ edits: (SwiftUI.Binding<String>, Store) -> Void) {
+      /// A store with the write-back handler, recording its calls.
+      final class Recorder {
           let store = Store()
-          store.data.noteText = seed
           var calls: [String] = []
           var staleWrites = 0
-          store.data.onNoteTextChange = { _, value in
-              calls.append(value)
-              if value != store.data.noteText { staleWrites += 1 }
-              store.data.noteText = value
+          init(seed: String) {
+              store.data.noteText = seed
+              store.data.onNoteTextChange = { [unowned self] _, value in
+                  self.calls.append(value)
+                  if value != self.store.data.noteText { self.staleWrites += 1 }
+                  self.store.data.noteText = value
+              }
           }
-          let host = EmittedHost(data: SwiftUI.Binding(get: { store.data }, set: { store.data = $0 }))
-          edits(host.field, store)
+          func host() -> EmittedHost {
+              EmittedHost(data: SwiftUI.Binding(get: { self.store.data }, set: { self.store.data = $0 }))
+          }
+          var line: String { "final=\\(store.data.noteText) calls=\\(calls) stale=\\(staleWrites)" }
+      }
+      func scenario(_ name: String, seed: String, _ edits: (SwiftUI.Binding<String>, Store) -> Void) {
+          let r = Recorder(seed: seed)
+          let host = r.host()
+          edits(host.field, r.store)
           settle()
-          print("RESULT \\(name) final=\\(store.data.noteText) calls=\\(calls) stale=\\(staleWrites)")
+          print("RESULT \\(name) \\(r.line)")
       }
       func delete(_ f: SwiftUI.Binding<String>) { f.wrappedValue = String(f.wrappedValue.dropLast()) }
       scenario("race", seed: "string") { f, _ in
@@ -273,6 +295,24 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
           settle()
           f.wrappedValue = "ab"
       }
+      // S17 — the view model writes between two edits of one burst; the
+      // last edit is a change from what the view model wrote, and calls.
+      scenario("vmMid", seed: "string") { f, store in
+          f.wrappedValue = "stringd"
+          store.data.noteText = "strin"
+          f.wrappedValue = "string"
+      }
+      // S13 — two instances of one view (two cells of one template, each
+      // with its own data), each edited in the same turn: each calls.
+      do {
+          let a = Recorder(seed: "string"), b = Recorder(seed: "string")
+          let hostA = a.host(), hostB = b.host()
+          hostA.field.wrappedValue = "string1"
+          hostB.field.wrappedValue = "string2"
+          settle()
+          print("RESULT twoA \\(a.line)")
+          print("RESULT twoB \\(b.line)")
+      }
     SWIFT
     if (reason = SwiftCompiler.unavailable_reason)
       skip "#{reason}; this example runs where the SwiftUI SDK is present"
@@ -291,7 +331,10 @@ RSpec.describe 'sjui: onTextChange is called for the user\'s edit, not for a cha
         'RESULT vm final=from the view model calls=[] stale=0',
         'RESULT back final=x calls=[] stale=0',
         'RESULT twice final=a calls=["a"] stale=0',
-        'RESULT typed final=ab calls=["a", "ab"] stale=0'
+        'RESULT typed final=ab calls=["a", "ab"] stale=0',
+        'RESULT vmMid final=string calls=["string"] stale=0',
+        'RESULT twoA final=string1 calls=["string1"] stale=0',
+        'RESULT twoB final=string2 calls=["string2"] stale=0'
       ])
     end
   end
