@@ -405,6 +405,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
     pid = os.getpid()
     tasks: list[asyncio.Task] = []
+    reader_cleanup: list = []
     observer = None
     try:
         _write_private_json(paths.server_json(), {
@@ -450,13 +451,76 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             else:
                 set_source("agents", "stopped", None)
 
+            from ..viz.sources import devices as devices_src
+            from ..viz.sources import test_progress
+
+            tasks.append(asyncio.create_task(devices_src.run(
+                lambda found: (world.apply_devices(found), world.publish()),
+                lambda st, err: set_source("devices", st, err))))
+
+            tail = test_progress.FolderTail(hooks_installer.progress_dir())
+            tail.prune()
+            readers: dict[tuple[str, str], asyncio.Task] = {}
+            reader_idle: dict[tuple[str, str], int] = {}
+            adb = devices_src.find_adb()
+            xcrun = shutil.which("xcrun")
+
+            def on_record(source: str, device_id: str | None):
+                def handle(rec) -> None:
+                    if world.apply_progress(rec, source, device_id, now_ms()):
+                        world.publish()
+                return handle
+
+            def manage_readers(at: int) -> None:
+                """Follow the device logs only while a test of that platform runs."""
+                wanted: set[tuple[str, str]] = set()
+                for platform in ("android", "ios"):
+                    if not world.running_tests(platform):
+                        continue
+                    for dev in world.devices:
+                        if dev["platform"] == platform and dev["state"] in ("device", "booted"):
+                            wanted.add((platform, dev["id"]))
+                for key in wanted - readers.keys():
+                    platform, dev_id = key
+                    if platform == "android" and adb:
+                        argv = test_progress.logcat_argv(adb, dev_id)
+                        parse = test_progress.parse_logcat_line
+                    elif platform == "ios" and xcrun:
+                        argv = test_progress.simctl_log_argv(xcrun, dev_id)
+                        parse = test_progress.parse_ndjson_line
+                    else:
+                        continue
+                    readers[key] = asyncio.create_task(test_progress.follow(argv, parse, on_record(platform, dev_id)))
+                for key in list(readers):
+                    if key in wanted:
+                        reader_idle.pop(key, None)
+                        continue
+                    reader_idle.setdefault(key, at)
+                    if at - reader_idle[key] >= 30_000 or readers[key].done():
+                        readers.pop(key).cancel()
+                        reader_idle.pop(key, None)
+
             async def tick_loop() -> None:
                 while True:
                     await asyncio.sleep(0.5)
-                    world.tick(now_ms())
+                    at = now_ms()
+                    for rec in tail.read_new():
+                        world.apply_progress(rec, "web", None, at)
+                    manage_readers(at)
+                    world.tick(at)
                     world.publish()
 
+            async def stop_readers() -> None:
+                for task in readers.values():
+                    task.cancel()
+                for task in readers.values():
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                        pass
+
             tasks.append(asyncio.create_task(tick_loop()))
+            reader_cleanup.append(stop_readers)
 
         stop = asyncio.Event()
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -479,6 +543,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         await stop.wait()
         log("停止します")
     finally:
+        for cleanup in reader_cleanup:
+            await cleanup()
         for task in tasks:
             task.cancel()
         for task in tasks:

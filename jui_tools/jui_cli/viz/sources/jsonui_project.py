@@ -159,6 +159,7 @@ class JsonUIProject:
         self.specs: dict[str, SpecEntry] = {}
         self._layout_cache: dict[Path, tuple[int, list[dict]]] = {}
         self.test_cases: dict[str, int] = {}  # spec file stem / layout name -> case count
+        self.test_file_keys: dict[str, list[str]] = {}
         self.test_results: dict[str, dict] = {}  # spec id -> {passed, failed, running}
 
     # ---------------------------------------------------------------- loading
@@ -209,6 +210,7 @@ class JsonUIProject:
 
     def load_tests(self) -> None:
         self.test_cases = {}
+        self.test_file_keys: dict[str, list[str]] = {}  # "screens/login.test.json" -> spec keys
         for sub in ("screens", "flows"):
             folder = self.tests_dir / sub
             if not folder.is_dir():
@@ -222,7 +224,9 @@ class JsonUIProject:
                     continue
                 cases = data.get("cases") if isinstance(data.get("cases"), list) else []
                 n = sum(1 for c in cases if isinstance(c, dict) and c.get("name"))
-                for key in self._test_keys(data):
+                keys = self._test_keys(data)
+                self.test_file_keys[f"{sub}/{path.name}"] = keys
+                for key in keys:
                     self.test_cases[key] = self.test_cases.get(key, 0) + n
 
     @staticmethod
@@ -301,6 +305,21 @@ class JsonUIProject:
             total += len(ids)
             done += sum(1 for i in ids if i in present)
         return {"total": total, "done": done}
+
+    def specs_for_test_file(self, rel: str) -> list[str]:
+        """Spec ids a test file (as the runner names it, e.g. screens/login.test.json) belongs to."""
+        keys = set(self.test_file_keys.get(rel, []))
+        if not keys:
+            keys = {Path(rel).name.replace(".test.json", "")}
+        hits = []
+        for sid, entry in self.specs.items():
+            meta = (entry.data or {}).get("metadata") or {}
+            names = {entry.path.name.replace(".spec.json", "")}
+            if isinstance(meta.get("layoutFile"), str):
+                names.add(Path(meta["layoutFile"]).name)
+            if names & keys:
+                hits.append(sid)
+        return hits
 
     # ---------------------------------------------------------------- slice
 

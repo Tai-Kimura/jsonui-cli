@@ -16,7 +16,9 @@ from . import robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject
 from .permissions import PermissionBook
+from .sources import devices as devices_mod
 from .sources.tasks import TaskBook
+from .sources.test_progress import ProgressBook
 from .state import VizState
 
 #: The 18 events the hooks are installed for; anything else is dropped.
@@ -80,6 +82,8 @@ class World:
         self.pid_to_session: dict[int, str] = {}
         self.tasks = TaskBook()
         self.perms = PermissionBook()
+        self.devices: list[dict] = []
+        self.progress = ProgressBook()
         self.tests: dict[str, dict] = {}
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
@@ -298,6 +302,12 @@ class World:
                     "platform": robots.test_platform(command), "command": robots._clip(command, 200),
                     "status": "running", "startedAt": at,
                 }
+                device_id = devices_mod.device_for_command(command, self.devices)
+                if device_id:
+                    self.tests[use_id]["deviceId"] = device_id
+                    name = next((d["name"] for d in self.devices if d["id"] == device_id), device_id)
+                    self._set(agent, at, act=robots._clip(f"{act}（{name}）"))
+                    self._dirty.add("devices")
                 for old in sorted(self.tests, key=lambda k: self.tests[k]["startedAt"])[:-TEST_RUNS_KEPT]:
                     del self.tests[old]
                 self._dirty.add("tests")
@@ -329,7 +339,7 @@ class World:
                 if summary:
                     run["summary"] = summary
                 run["endedAt"] = at
-                self._dirty.add("tests")
+                self._dirty |= {"tests", "devices", "specs"}
             text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
         elif kind == "PermissionRequest":
             # No tool_use_id here: take the newest open call of the same tool
@@ -493,6 +503,47 @@ class World:
             self._dirty.add("perms")
         return error
 
+    # ---------------------------------------------------------------- devices and test progress (P7)
+
+    def apply_devices(self, devices: list[dict]) -> None:
+        if devices != self.devices:
+            self.devices = devices
+            self._dirty.add("devices")
+
+    def running_tests(self, platform: str | None = None) -> list[dict]:
+        return [r for r in self.tests.values() if r["status"] == "running" and (platform is None or r["platform"] == platform)]
+
+    def apply_progress(self, rec, source: str, device_id: str | None, at: int) -> bool:
+        run = self.progress.add(rec, source, device_id)
+        if run is None:
+            return False
+        # Tie the runner's run to the test command that started it: same
+        # platform, running, started before the record (and on that device when known).
+        target = next((t for t in self.tests.values() if t.get("progressRun") == run["run"]), None)
+        if target is None:
+            candidates = [t for t in self.running_tests(run["platform"]) if t["startedAt"] <= run["startedAt"] + 5_000
+                          and "progressRun" not in t and (not run.get("deviceId") or t.get("deviceId") in (None, run.get("deviceId")))]
+            if len(candidates) == 1:
+                target = candidates[0]
+                target["progressRun"] = run["run"]
+        if target is not None:
+            target["cases"] = [{"name": c["name"], "status": c["status"]} for c in run["cases"].values()]
+            done = [c for c in run["cases"].values() if c["status"] in ("passed", "failed")]
+            target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
+            project = self.jsonui.get(target["projectId"])
+            if project is not None:
+                for case in run["cases"].values():
+                    for spec_id in project.specs_for_test_file(case["file"]):
+                        result = project.test_results.setdefault(spec_id, {"passed": 0, "failed": 0, "running": False, "_cases": {}})
+                        result["_cases"][(case["test"], case["name"])] = case["status"]
+                        statuses = list(result["_cases"].values())
+                        result["passed"] = statuses.count("passed")
+                        result["failed"] = statuses.count("failed")
+                        result["running"] = "running" in statuses
+                self._dirty.add("specs")
+        self._dirty.add("tests")
+        return True
+
     # ---------------------------------------------------------------- time
 
     def tick(self, at: int) -> None:
@@ -569,5 +620,9 @@ class World:
         if "tasks" in self._dirty:
             self.state.set_slice("tasks", self.tasks.items())
         if "tests" in self._dirty:
-            self.state.set_slice("tests", sorted((dict(t) for t in self.tests.values()), key=lambda t: t["startedAt"]))
+            self.state.set_slice("tests", sorted(({k: v for k, v in t.items() if k != "progressRun"} for t in self.tests.values()),
+                                                 key=lambda t: t["startedAt"]))
+        if "devices" in self._dirty:
+            busy = {t["deviceId"]: t["agentId"] for t in self.running_tests() if t.get("deviceId")}
+            self.state.set_slice("devices", [dict(d, **({"busyBy": busy[d["id"]]} if d["id"] in busy else {})) for d in self.devices])
         self._dirty.clear()
