@@ -1,0 +1,10 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "hook_event_name": "UserPromptSubmit",
+ "prompt": "次を順にやって: 1) sample.txt を Read で読む 2) new.txt を Write ツールで作る（中身 hi） 3) Bash で ls を実行 4) タスクを 2 つ作り、1 つを完了にする 5) Explore サブエージェントを 1 回使い、このフォルダのファイル一覧を報告させる。各段で失敗しても次へ進む。最後に各段の成否を 1 行ずつ。\n"
+}

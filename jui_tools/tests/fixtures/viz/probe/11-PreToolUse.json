@@ -1,0 +1,38 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PreToolUse",
+ "tool_name": "TodoWrite",
+ "tool_input": {
+  "todos": [
+   {
+    "content": "sample.txt を Read で読む",
+    "status": "completed",
+    "activeForm": "sample.txt を読んでいる"
+   },
+   {
+    "content": "new.txt を Write で作る（中身 hi）",
+    "status": "pending",
+    "activeForm": "new.txt を作成している"
+   },
+   {
+    "content": "Bash で ls を実行",
+    "status": "completed",
+    "activeForm": "ls を実行している"
+   },
+   {
+    "content": "Explore サブエージェントでファイル一覧を報告させる",
+    "status": "pending",
+    "activeForm": "Explore サブエージェントを実行している"
+   }
+  ]
+ },
+ "tool_use_id": "toolu_017d9cauKXHTtaUdP9vTsvaV"
+}

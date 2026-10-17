@@ -1,0 +1,28 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "agent_id": "a6c469945290964a4",
+ "agent_type": "Explore",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "tool_name": "Bash",
+ "tool_input": {
+  "command": "ls -laF /work/probe-app",
+  "description": "List directory entries including hidden with type markers"
+ },
+ "tool_response": {
+  "stdout": "total 24\ndrwxr-xr-x@  8 user  wheel   256 Oct 18 03:15 ./\ndrwx------@ 37 user  wheel  1184 Oct 18 03:14 ../\ndrwxr-xr-x@  3 user  wheel    96 Oct 18 03:14 .claude/\ndrwxr-xr-x@  9 user  wheel   288 Oct 18 03:14 .git/\ndrwxr-xr-x@ 21 user  wheel   672 Oct 18 03:15 hooks/\n-rw-r--r--@  1 user  wheel   309 Oct 18 03:14 probe.py\n-rw-r--r--@  1 user  wheel     6 Oct 18 03:14 sample.txt\n-rw-r--r--@  1 user  wheel    20 Oct 18 03:15 t0",
+  "stderr": "",
+  "interrupted": false,
+  "isImage": false,
+  "noOutputExpected": false
+ },
+ "tool_use_id": "toolu_019a3b2h2AqzuqcdG5b3Vr8A",
+ "duration_ms": 12
+}

@@ -1,0 +1,20 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "agent_id": "a6c469945290964a4",
+ "agent_type": "Explore",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PermissionRequest",
+ "tool_name": "Bash",
+ "tool_input": {
+  "command": "ls -la -- /work/probe-app && echo \"---\" && find /work/probe-app -mindepth 1 -maxdepth 1 -exec sh -c 'if [ -d \"$1\" ]; then echo \"DIR  $1\"; elif [ -L \"$1\" ]; then echo \"LINK $1\"; else echo \"FILE $1\"; fi' _ {} \\;",
+  "description": "List directory entries including hidden with types"
+ },
+ "permission_suggestions": []
+}
