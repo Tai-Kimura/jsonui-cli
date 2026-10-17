@@ -49,33 +49,35 @@ module SjuiTools
       # turn "" -> "a" -> "" -> "a" called the handler twice (the first
       # call's value matched the current one by chance), and "x" -> "xy" ->
       # "x" called it with no net change (Android compares with the data and
-      # does not). So each field keeps a generation in its view
-      # (GENERATION_CLASS, one `@State` per field): every edit takes a new
+      # does not). So each field keeps a generation: every edit takes a new
       # number and only the last number's call runs, and the value held
       # before the burst's first edit is kept, so a burst that ends where it
       # began calls nothing — Android's `newValue != data`.
       #
-      # The class is declared in the generated view itself, not taken from
-      # SwiftJsonUI, so the generated code needs nothing newer from the
-      # library than it did (the same reason the setter is spelled inline).
+      # Where the generation lives. Not in a declaration in the generated
+      # view: a declaration reaches the view only through every container on
+      # the way propagating its children's state, and a project's own
+      # container converters (lib/swiftui/views/extensions, written from
+      # older scaffolding) do not always — a TextView inside such a container
+      # was emitted with a reference to a `@State` that never got declared,
+      # and the consumer's build failed (measured on a consumer's chat
+      # screen). Not in SwiftJsonUI either, so the generated code needs
+      # nothing newer from the library than it did. It is kept in the main
+      # thread's dictionary under "sjui.userEdit.<the generated view's
+      # type>.<field>", an NSMutableDictionary with the number and the start.
+      # Every instance of one view type shares the entry (cells of one
+      # template); only edits in the same turn interact, and one turn's edits
+      # come from the one focused field.
       module UserEditBindingHelper
-        # Nested in the generated view; one line, so the state collector
-        # folds the copies every field adds into one declaration.
-        GENERATION_CLASS = 'private final class UserEditGeneration { var number = 0; var start: String? }'
-
-        # Declares the field's generation (`@State private var <name>`) and
-        # returns its name.
+        # The field's key in the main thread's dictionary (Swift string
+        # literal with the view's type interpolated at run time).
         def user_edit_generation(base)
-          name = "#{base}TextEdit"
-          @state_variables ||= []
-          @state_variables << GENERATION_CLASS
-          @state_variables << "@State private var #{name} = UserEditGeneration()"
-          name
+          "\"sjui.userEdit.\\(Self.self).#{base}\""
         end
 
         # `binding` is a `$`-prefixed Binding<String> expression (`$data.x`
         # or a local `$<id>Text`). `generation`: the field's
-        # user_edit_generation name. `handler_call` reads the value as
+        # user_edit_generation key. `handler_call` reads the value as
         # `newValue`. `max_length` (an Integer): the handler is handed the
         # edit cut to it — what the field keeps once maxLength's own clamp
         # (apply_max_length) has run, whichever of the two runs first.
@@ -95,12 +97,16 @@ module SjuiTools
             start = 'start'
           end
           "SwiftUI.Binding(get: { #{binding}.wrappedValue }, set: { newValue in " \
-            "let edit = #{generation}; let before = #{binding}.wrappedValue; " \
+            "let key = #{generation}; " \
+            'let edit = (Thread.main.threadDictionary[key] as? NSMutableDictionary) ?? NSMutableDictionary(); ' \
+            'Thread.main.threadDictionary[key] = edit; ' \
+            "let before = #{binding}.wrappedValue; " \
             "let changed = #{changed}; " \
             "#{binding}.wrappedValue = newValue; " \
-            'if changed { if edit.start == nil { edit.start = before }; edit.number += 1; let number = edit.number; ' \
-            'DispatchQueue.main.async { guard edit.number == number else { return }; ' \
-            "let start = edit.start; edit.start = nil; #{narrow}" \
+            'if changed { if edit["start"] == nil { edit["start"] = before }; ' \
+            'let number = (edit["number"] as? Int ?? 0) + 1; edit["number"] = number; ' \
+            'DispatchQueue.main.async { guard edit["number"] as? Int == number else { return }; ' \
+            "let start = edit[\"start\"] as? String; edit[\"start\"] = nil; #{narrow}" \
             "guard #{current} == newValue, newValue != #{start} else { return }; #{handler_call} } } })"
         end
       end
