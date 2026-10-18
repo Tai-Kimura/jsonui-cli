@@ -639,6 +639,26 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             from ..viz.sources import devices as devices_src
             from ..viz.sources import processes
             from ..viz.sources import test_progress
+            from ..viz.sources import test_results
+
+            shelf = test_results.ResultShelf(test_results.results_base())
+            for folder in test_results.app_folders(shelf.base):
+                test_results.prune(folder)
+            world.apply_saved_results(shelf.scan())
+            pulls: dict[str, asyncio.Task] = {}
+
+            def pull_results(serial: str) -> None:
+                """adb pull one device's saved results, then read the shelf again. Two moments only (10-18):
+                once per device at start, and when a run_end comes from it. One pull per device at a time."""
+                if not adb or (serial in pulls and not pulls[serial].done()):
+                    return
+
+                async def go() -> None:
+                    await test_results.pull(adb, serial, shelf.base)
+                    world.apply_saved_results(shelf.scan())
+                    world.publish()
+
+                pulls[serial] = asyncio.create_task(go())
 
             async def background_loop() -> None:
                 # Sessions waiting on background work: is a background shell still under their process? (10-18)
@@ -652,9 +672,18 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
             tasks.append(asyncio.create_task(background_loop()))
 
-            tasks.append(asyncio.create_task(devices_src.run(
-                lambda found: (world.apply_devices(found), world.publish()),
-                lambda st, err: set_source("devices", st, err))))
+            first_scan = {"done": False}
+
+            def on_devices(found: list[dict]) -> None:
+                world.apply_devices(found)
+                world.publish()
+                if not first_scan["done"]:  # the start-up pull rides the first device scan; no watcher of its own
+                    first_scan["done"] = True
+                    for dev in found:
+                        if dev["platform"] == "android" and dev["state"] == "device":
+                            pull_results(dev["id"])
+
+            tasks.append(asyncio.create_task(devices_src.run(on_devices, lambda st, err: set_source("devices", st, err))))
 
             # The progress folder, and while a session still has the old one (a plugin or a settings.json
             # env written before the move: the web runner recreates it), that one too.
@@ -671,6 +700,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                 def handle(rec) -> None:
                     if world.apply_progress(rec, source, device_id, now_ms()):
                         world.publish()
+                        if source == "android" and device_id and rec.get("event") == "run_end":
+                            pull_results(device_id)
                 return handle
 
             def manage_readers(at: int) -> None:
@@ -724,14 +755,17 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     usage_ticks["n"] += 1
                     if usage_ticks["n"] % 4 == 0:
                         poll_usage(at)
+                    if usage_ticks["n"] % 10 == 0:  # every 5 s: new files from iOS / Web runs
+                        rows = await loop.run_in_executor(None, shelf.scan)
+                        world.apply_saved_results(rows)
                     manage_readers(at)
                     world.tick(at)
                     world.publish()
 
             async def stop_readers() -> None:
-                for task in readers.values():
+                for task in [*readers.values(), *pulls.values()]:
                     task.cancel()
-                for task in readers.values():
+                for task in [*readers.values(), *pulls.values()]:
                     try:
                         await task
                     except (asyncio.CancelledError, Exception):  # noqa: BLE001
@@ -1238,6 +1272,15 @@ def _doctor_checks() -> list[dict]:
     add("state", not in_use, f"{paths.viz_home()}" + ("" if not in_use else
         f"（古い場所 {legacy} がまだ使われています: {', '.join(in_use)}。プラグインなら /plugin で jui-viz を更新し、"
         "settings.json のフックなら jui viz hooks install を撃ち直してください。どちらも Claude Code のセッションの再起動が要ります）"))
+
+    from ..viz.sources import devices as devices_src
+    from ..viz.sources import test_results
+
+    base = test_results.results_base()
+    override = os.environ.get(test_results.BASE_ENV, "")
+    add("results", True, f"テストの結果を読む場所: {base}"
+        + (f"（{test_results.BASE_ENV} で指定。driver 側にも同じ値が要ります）" if os.path.isabs(override) else "")
+        + ("" if devices_src.find_adb() else "。adb が無いので Android の結果は取りません"))
 
     if claude is not None:
         registered = _relay_registered(claude)

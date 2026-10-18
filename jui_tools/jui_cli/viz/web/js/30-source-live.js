@@ -136,7 +136,8 @@ function liveSpecRow(x) {
           : impl.total && impl.done >= impl.total ? { kind: 'impl-done', text: tests.total ? `実装完了・テスト ${tests.passed}/${tests.total}` : '実装完了・テスト待ち' }
             : impl.done > 0 ? { kind: by ? 'impl' : 'paused', text: `実装 ${pctImpl}%` }
               : written.every((w) => w >= 1) ? { kind: 'written', text: '記述完了・実装待ち' } : { kind: 'paused', text: `記述 ${pct(written.reduce((a, b) => a + b, 0) / 7)}%` };
-  const note = `実装 ${impl.done}/${impl.total}${tests.total ? ` · テスト ${tests.passed}/${tests.total}${tests.failed ? `（失敗 ${tests.failed}）` : ''}` : ' · テストの定義なし'}`;
+  // maybeStale: the spec or its layout changed after the newest result (mtime, which a git checkout also moves).
+  const note = `実装 ${impl.done}/${impl.total}${tests.total ? ` · テスト ${tests.passed}/${tests.total}${tests.failed ? `（失敗 ${tests.failed}）` : ''}${tests.maybeStale ? '（結果は古い可能性）' : ''}` : ' · テストの定義なし'}`;
   const prev = LIVE.specRows[x.id];
   const row = {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),

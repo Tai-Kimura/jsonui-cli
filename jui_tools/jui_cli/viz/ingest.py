@@ -121,6 +121,12 @@ class World:
         self.devices: list[dict] = []
         self.progress = ProgressBook()
         self.tests: dict[str, dict] = {}
+        # Per case, the newest outcome a source reported, merged into each project's test_results:
+        # live progress (project id -> spec id -> (test, case) -> (t, status)) and the saved
+        # result files' rows (sources/test_results.py). Newest wins, so a case that ran live
+        # and was then written to a file is counted once.
+        self.live_cases: dict[str, dict[str, dict[tuple[str, str], tuple[int, str]]]] = {}
+        self.saved_rows: list[dict] = []
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
         self._dirty: set[str] = set()
@@ -262,6 +268,7 @@ class World:
             self.jsonui_errors[project_id] = f"{type(exc).__name__}: {exc}"[:200]
             return None
         self.jsonui[project_id] = loaded
+        self._merge_results(loaded)
         self._dirty |= {"specs", "tasks"}
         if self.on_project_loaded is not None:
             self.on_project_loaded(loaded)
@@ -277,6 +284,7 @@ class World:
             project.reload_spec(target, at, by)
         elif target.name.endswith(".test.json"):
             project.load_tests()
+            self._merge_results(project)  # which app has a test file decides where a saved row goes
         for sid in project.specs_touching(path):
             if by:
                 entry = project.specs[sid]
@@ -774,17 +782,67 @@ class World:
             target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
             project = self.jsonui.get(target["projectId"])
             if project is not None:
+                live = self.live_cases.setdefault(project.project_id, {})
                 for case in run["cases"].values():
                     for spec_id in project.specs_for_test_file(case["file"]):
-                        result = project.test_results.setdefault(spec_id, {"passed": 0, "failed": 0, "running": False, "_cases": {}})
-                        result["_cases"][(case["test"], case["name"])] = case["status"]
-                        statuses = list(result["_cases"].values())
-                        result["passed"] = statuses.count("passed")
-                        result["failed"] = statuses.count("failed")
-                        result["running"] = "running" in statuses
+                        live.setdefault(spec_id, {})[(case["test"], case["name"])] = (run["updatedAt"], case["status"])
+                self._merge_results(project)
                 self._dirty.add("specs")
         self._dirty.add("tests")
         return True
+
+    def apply_saved_results(self, rows: list[dict]) -> None:
+        """The rows of every saved result file (sources/test_results.py), replacing the previous scan."""
+        self.saved_rows = rows
+        for project in self.jsonui.values():
+            self._merge_results(project)
+        self._dirty.add("specs")
+
+    def _saved_specs(self, project: JsonUIProject, row: dict) -> list[str]:
+        """The specs of *project* a saved row belongs to, tied without guessing (design memo ②, 10-18):
+        1. its run is one this server saw start from a test command: that command's room;
+        2. Android: the app whose config names the row's package as test.artifacts.android.appId;
+        3. the one app, among every loaded room, that has the row's test file.
+        Anything else is left unattached. iOS has no counterpart of 2 (its app is the runner's id)."""
+        file = row.get("file")
+        if not file:
+            return []
+        if row.get("run") and any(t.get("progressRun") == row["run"] for t in self.tests.values()):
+            mine = any(t.get("progressRun") == row["run"] and t["projectId"] == project.project_id for t in self.tests.values())
+            return project.specs_for_test_file(file) if mine else []
+        if row["platform"] == "android" and row.get("app"):
+            by_app = [(p, s) for p in self.jsonui.values() for s in p.sources if s.android_app_id == row["app"]]
+            if by_app:
+                return project.specs_for_test_file(file, only=[s for p, s in by_app if p is project]) \
+                    if any(p is project for p, _ in by_app) else []
+        owners = [(p, s) for p in self.jsonui.values() for s in p.sources if file in s.test_file_keys]
+        if len(owners) == 1 and owners[0][0] is project:
+            return project.specs_for_test_file(file, only=[owners[0][1]])
+        return []
+
+    def _merge_results(self, project: JsonUIProject) -> None:
+        merged: dict[str, dict[tuple[str, str], tuple[int, str, bool]]] = {}
+
+        def put(spec_id: str, key: tuple[str, str], t: int, status: str, saved: bool) -> None:
+            cases = merged.setdefault(spec_id, {})
+            if key not in cases or cases[key][0] <= t:
+                cases[key] = (t, status, saved)
+
+        for row in self.saved_rows:
+            for spec_id in self._saved_specs(project, row):
+                put(spec_id, (row["test"], row["case"]), row["t"], row["status"], True)
+        for spec_id, cases in self.live_cases.get(project.project_id, {}).items():
+            for key, (t, status) in cases.items():
+                put(spec_id, key, t, status, False)
+        results = {}
+        for spec_id, cases in merged.items():
+            statuses = [status for _, status, _ in cases.values()]
+            results[spec_id] = {"passed": statuses.count("passed"), "failed": statuses.count("failed"),
+                                "running": "running" in statuses}
+            saved_at = [t for t, _, saved in cases.values() if saved]
+            if saved_at:  # a case shown from a file, not from this server's own run: how old it may be
+                results[spec_id]["latest"] = max(saved_at)
+        project.test_results = results
 
     # ---------------------------------------------------------------- time
 
