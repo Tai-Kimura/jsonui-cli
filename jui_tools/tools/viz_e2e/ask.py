@@ -49,9 +49,11 @@ async def run_ask(pw, out, failures):
     forward = jt / "jui_cli" / "viz" / "forward.py"
     port = free_port()
     # a short wait so "nobody answers" ends quickly here; holds from the card keep it open while the suite clicks
-    (home / ".jsonui-cli" / "viz").mkdir(parents=True, exist_ok=True)
-    (home / ".jsonui-cli" / "viz" / "config.json").write_text(json.dumps({"askWaitSec": 8, "askMaxSec": 60}))
-    env = dict(os.environ, HOME=str(home), JUI_VIZ_E2E="1")
+    # (paths.viz_home() under the fake HOME; nothing in the environment may point it at the real server's files)
+    (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
+    (home / ".local" / "state" / "jui-viz" / "config.json").write_text(json.dumps({"askWaitSec": 8, "askMaxSec": 60}))
+    base_env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME")}
+    env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
     url = f"http://127.0.0.1:{port}"
@@ -61,7 +63,7 @@ async def run_ask(pw, out, failures):
 
     def hook(payload, ask=False):
         args = [sys.executable, "-I", "-S", str(forward)] + (["--ask"] if ask else [])
-        p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(os.environ, HOME=str(home)))
+        p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(base_env, HOME=str(home)))
         p.stdin.write(json.dumps(payload).encode())
         p.stdin.close()
         p.stdin = None

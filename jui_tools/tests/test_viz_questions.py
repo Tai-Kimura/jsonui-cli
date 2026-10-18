@@ -154,7 +154,7 @@ def _free_port() -> int:
 
 async def _setup(tmp_path, wait_sec: float = 5, max_sec: float = 30):
     port = _free_port()
-    viz = tmp_path / ".jsonui-cli" / "viz"
+    viz = tmp_path / ".local" / "state" / "jui-viz"   # paths.viz_home() under the fake HOME
     viz.mkdir(parents=True, exist_ok=True)
     (viz / "server.json").write_text(json.dumps({"pid": 1, "port": port, "token": TOKEN, "askMaxSec": max_sec}))
     world = World(VizState())
@@ -176,9 +176,15 @@ async def _page(client, port, visible=True):
     return ws
 
 
+def _env(home) -> dict:
+    """The fake HOME, and nothing that would point viz_home() elsewhere (the real server's files)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME")}
+    return dict(env, HOME=str(home))
+
+
 def _hook(tmp_path, payload):
     proc = subprocess.Popen([sys.executable, "-I", "-S", str(FORWARD), "--ask"], stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(os.environ, HOME=str(tmp_path)))
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=_env(tmp_path))
     proc.stdin.write(json.dumps(payload).encode())
     proc.stdin.close()
     proc.stdin = None
