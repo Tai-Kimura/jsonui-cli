@@ -249,16 +249,22 @@ function liveTestsFor(projectId) {
 /* ---------- permission prompts (plan 04 Permission, plan 08 §4 → the demo's perm rows) ---------- */
 const PERMS_LIVE = [];
 const PERM_STATUS = { pending: 'pending', sent: 'sent', allow: 'allow', deny: 'deny', answered_in_terminal: 'terminal', expired: 'expired' };
-/* What the card shows as the thing being allowed: the command or the path itself, read from the tool input the
-   server forwards (preview). The server's summary prefers a Bash call's description ("run"), which says nothing
-   about what runs; it is the fallback when the preview was clipped or is not JSON. */
-function permWhat(x) {
-  try {
-    const input = JSON.parse(String(x.preview || ''));
-    for (const k of ['command', 'file_path', 'notebook_path', 'url', 'pattern']) {
-      if (input && typeof input[k] === 'string' && input[k].trim()) return input[k];
-    }
-  } catch (err) { /* clipped or not JSON */ }
+/* The fields the decision is about, exactly as the server got them (card.exact: command, file_path, old_string,
+   new_string … uncut up to 20,000 characters, whitespace kept; Write's content as its first 2,000). The card shows
+   these and nothing else: a summary or the 2,000-character preview once hid the tail of a long command
+   ("…; rm -rf ~/tail-hidden") and folded runs of spaces (dd's review, 10-18). */
+const EXACT_KEYS = ['command', 'file_path', 'notebook_path', 'url', 'pattern', 'old_string', 'new_string', 'content'];
+function exactOf(x) {
+  const e = x.exact && typeof x.exact === 'object' ? x.exact : null;
+  if (!e) return null;
+  const out = {};
+  for (const k of EXACT_KEYS) if (typeof e[k] === 'string') out[k] = e[k];
+  if (Number.isFinite(e.contentTruncated)) out.contentTruncated = e.contentTruncated;
+  return Object.keys(out).length ? out : null;
+}
+/* One line naming what is asked, for the log and the history (never the place a decision is made). */
+function permWhat(x, exact) {
+  if (exact) for (const k of EXACT_KEYS) if (exact[k]) return exact[k];
   return String(x.summary || '');
 }
 function rebuildPerms() {
@@ -271,16 +277,18 @@ function rebuildPerms() {
     // A prompt belongs to the task its robot owns and is doing; otherwise it stands alone (no guessing).
     const doing = TASKS.find((q) => q.owner === who && q.status === 'in_progress');
     const can = x.can && typeof x.can === 'object' ? x.can : {};
+    const exact = exactOf(x);
     rows.push({
       id: String(x.id), realId: String(x.id), who, task: doing ? `${doing.list}#${doing.id}` : null, tool: String(x.toolName || ''),
-      input: { command: permWhat(x) }, preview: String(x.preview || ''), suggestions: x.suggestions, rule: '',
+      input: { command: permWhat(x, exact) }, exact, tooLongToShow: !!x.tooLongToShow,
+      preview: String(x.preview || ''), suggestions: x.suggestions, rule: '',
       at: secOfDay(x.createdAt || Date.now()), end: x.decidedAt ? secOfDay(x.decidedAt) : null,
       status: PERM_STATUS[x.status] || 'pending', decidedBy: x.decidedBy || null, sentBehavior: x.sentBehavior || null,
       sentBy: x.sentBy || null, sentRules: Array.isArray(x.sentRules) ? x.sentRules : null, sentReason: x.sentReason ? String(x.sentReason) : '',
       terminalBehavior: x.terminalBehavior || null, relayOnly: !!x.relayOnly,
       decided: x.decidedAt ? { at: secOfDay(x.decidedAt), behavior: x.status === 'deny' || x.terminalBehavior === 'deny' ? 'deny' : 'allow' } : null,
       can: { allowDeny: !!can.allowDeny, always: !!can.always, reason: !!can.reason },
-      raw: { id: x.id, toolName: x.toolName, summary: x.summary, preview: x.preview, suggestions: x.suggestions, status: x.status, relayOnly: !!x.relayOnly },
+      raw: { id: x.id, toolName: x.toolName, summary: x.summary, exact: x.exact, tooLongToShow: !!x.tooLongToShow, preview: x.preview, suggestions: x.suggestions, status: x.status, relayOnly: !!x.relayOnly },
     });
   }
   PERMS_LIVE.splice(0, PERMS_LIVE.length, ...rows);

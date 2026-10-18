@@ -646,6 +646,12 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .tbd-perm h4 { margin: 0; color: var(--wb-ink); font: 700 13.5px/1.4 var(--font-body); }
 .tbd-perm p { margin: 0; font-size: 13px; }
 .tbd-wait { margin-left: 8px; color: var(--wb-soft); font: 500 11.5px/1.4 var(--font-mono); }
+.perm-exact { display: block; margin: 4px 0 0; padding: 6px 8px; max-height: 16em; overflow: auto; border-radius: 6px; background: var(--wb-card); font: 500 12px/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.perm-exact .pe-k { display: block; margin-top: 4px; font: 700 11px/1.4 var(--font-body); color: var(--ink-2, var(--ink)); }
+.perm-exact .pe-k:first-child { margin-top: 0; }
+.perm-exact .pe-v { display: block; }
+.perm-exact .pe-note { display: block; margin-top: 4px; font: 700 11.5px/1.4 var(--font-body); color: var(--warn); }
+.tbd-cmd .perm-exact { max-height: 24em; margin: 0; padding: 0; background: none; }
 .tbd-cmd { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--wb-card); font: 500 12px/1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .tbd-reason { display: grid; gap: 4px; color: var(--wb-soft); font-size: 12px; }
 .tbd-reason input { width: 100%; padding: 4px 8px; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-card); color: var(--wb-ink); font: 500 13px/1.5 var(--font-body); }
