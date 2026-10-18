@@ -73,6 +73,10 @@ GEOM_JS = """() => {
       const names = Object.keys(props);
       // the customer's spot and the point in front of it are one walk, by design: every other pair must be apart
       for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (`${names[i]},${names[j]}` !== 'customer,vendWay' && hit(props[names[i]], props[names[j]])) out.bad.push(`${tag}: ${names[i]} x ${names[j]}`);
+      // the requester's ruling (10-19): the booth in the back-left corner, the machine beside the server on its back line
+      if (Math.abs(P.booth.x0 - r.x0) > 0.01 || Math.abs(P.booth.z0 - r.z0) > 0.01) out.bad.push(`${tag}: the booth is not in the back-left corner`);
+      const gap = props.server[0] - props.vend[1];
+      if (!(gap >= 0 && gap <= 0.2) || Math.abs(props.vend[2] - props.server[2]) > 0.2) out.bad.push(`${tag}: the machine is not beside the server (gap ${gap.toFixed(2)}, back ${props.vend[2].toFixed(2)} / ${props.server[2].toFixed(2)})`);
       // the booth's spots inside the booth, the customer in front of the machine
       for (const s of P.booth.spots) if (!(s[0] > P.booth.x0 && s[0] < P.booth.x1 && s[1] > P.booth.z0 && s[1] < P.booth.z1)) out.bad.push(`${tag}: a booth spot outside the booth`);
     }
@@ -86,6 +90,10 @@ REAL_JS = """() => {
   const hit = (a, c) => a && c && a[0] < c[1] && c[0] < a[1] && a[2] < c[3] && c[2] < a[3];
   for (const [n, m] of Object.entries(M)) { if (!m) out.bad.push(`${n} not built`); for (const [id, d] of b.deskBoxes) if (hit(m, d)) out.bad.push(`${n} x desk of ${id}`); }
   if (hit(M.booth, M.vend) || hit(M.booth, M.server) || hit(M.vend, M.server)) out.bad.push('props overlap each other');
+  // the ruling on the built meshes: the booth at the room's back-left corner, the machine beside the server, same back line
+  const r = window.__dbg.room(window.__dbg.props().room);
+  if (M.booth && (Math.abs(M.booth[0] - r.x0) > 0.01 || Math.abs(M.booth[2] - r.z0) > 0.01)) out.bad.push(`the booth is not in the back-left corner: ${M.booth} room ${r.x0},${r.z0}`);
+  if (M.vend && M.server) { const gap = M.server[0] - M.vend[1]; if (!(gap >= 0 && gap <= 0.2) || Math.abs(M.vend[2] - M.server[2]) > 0.2) out.bad.push(`the machine is not beside the server: gap ${gap.toFixed(3)} back ${M.vend[2]} / ${M.server[2]}`); }
   return out;
 }"""
 
