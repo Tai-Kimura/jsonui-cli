@@ -102,6 +102,22 @@ def our_decide_handler(python: str | None = None, forward: Path | None = None) -
     }
 
 
+#: The synchronous PreToolUse hook of AskUserQuestion (10-18): the server waits at most askMaxSec (300 by default)
+#: while someone answers on the page; Claude Code cuts the hook off after this, so it stays above it.
+ASK_TIMEOUT_SEC = 600
+
+
+def our_ask_handler(python: str | None = None, forward: Path | None = None) -> dict:
+    """Not async, and only for AskUserQuestion: the page's answer to a question comes back as this hook's output."""
+    python = python or sys.executable
+    forward = forward or forward_path()
+    return {
+        "type": "command",
+        "command": f"{shlex.quote(python)} -I -S {shlex.quote(str(forward))} --ask",
+        "timeout": ASK_TIMEOUT_SEC,
+    }
+
+
 def is_ours(handler) -> bool:
     """A python running forward.py — not merely a command that mentions its path.
 
@@ -161,7 +177,7 @@ def strip_ours(settings: dict) -> tuple[dict, bool]:
     return out, removed_any
 
 
-def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None) -> dict:
+def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None, ask_handler: dict | None = None) -> dict:
     out, _ = strip_ours(settings)
     hooks = out.get("hooks")
     if hooks is None:
@@ -178,6 +194,8 @@ def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None) 
         groups.append(group)
         if event == "PermissionRequest" and decide_handler is not None:
             groups.append({"matcher": "*", "hooks": [decide_handler]})
+        if event == "PreToolUse" and ask_handler is not None:
+            groups.append({"matcher": "AskUserQuestion", "hooks": [ask_handler]})
     return out
 
 
@@ -318,6 +336,7 @@ def plugin_enabled(data: dict | None = None) -> str | None:
 def install(dry_run: bool = False, python: str | None = None) -> Result:
     handler = our_handler(python)
     decide_handler = our_decide_handler(python)
+    ask_handler = our_ask_handler(python)
     value = str(progress_dir())
 
     def transform(data: dict):
@@ -325,7 +344,7 @@ def install(dry_run: bool = False, python: str | None = None) -> Result:
         if plugin:
             raise SettingsError(f"プラグイン {plugin} が有効なので、フックは入れません（二重に転送されます）。"
                                 "プラグインを使わない場合は /plugin で無効にしてから再実行してください")
-        new = add_ours(data, handler, decide_handler)
+        new = add_ours(data, handler, decide_handler, ask_handler)
         new, warning = add_env(new, value)
         return new, [w for w in (warning,) if w] + _disabled_warning(new)
 
@@ -382,10 +401,14 @@ def status() -> dict:
     decide = any(is_ours(h) and "--decide" in str(h.get("command", ""))
                  for g in (hooks.get("PermissionRequest") or []) if isinstance(g, dict)
                  for h in (g.get("hooks") or []))
+    ask = any(is_ours(h) and "--ask" in str(h.get("command", ""))
+              for g in (hooks.get("PreToolUse") or []) if isinstance(g, dict) and g.get("matcher") == "AskUserQuestion"
+              for h in (g.get("hooks") or []))
     env = data.get("env") if isinstance(data.get("env"), dict) else {}
     return {
         "plugin": plugin_enabled(data),
         "decide": decide,
+        "ask": ask,
         "readable": True,
         "path": str(path),
         "events": events,

@@ -303,6 +303,48 @@ def make_app(ctx: ServerContext) -> web.Application:
 
     app.router.add_post("/hook/decide", hook_decide)
 
+    async def hook_ask(request: web.Request) -> web.Response:
+        """The synchronous PreToolUse hook of AskUserQuestion (forward.py --ask), as /hook/decide: wait up to
+        askWaitSec for the browser's answer while a page is visible; no visible page, or a question that cannot
+        be shown in full: answer at once with nothing, so the terminal's question is never held for no one.
+        While this waits the terminal shows no question (measured 10-18): the wait is askWaitSec, renewed by the
+        page's question.hold while someone answers, up to askMaxSec (questions.py)."""
+        refused = _check_token(request)
+        if refused is not None:
+            return refused
+        body = await _json_body(request)
+        if body is None or ctx.world is None:
+            return web.Response(status=400, text="bad request\n")
+        card = ctx.world.hook_ask(body, now_ms())
+        if ctx.publish:
+            ctx.publish()
+        if card is None or card["status"] != "pending" or card["tooLongToShow"] or not ctx.browser_present():
+            return web.json_response({})
+        future = asyncio.get_running_loop().create_future()
+        start = now_ms()
+        ctx.world.question_waiting(card, future, start + int(ctx.config.askWaitSec * 1000), start + int(ctx.config.askMaxSec * 1000))
+        if ctx.publish:
+            ctx.publish()
+        answer = {}
+        try:
+            while True:
+                left = (card.get("waitUntil", 0) - now_ms()) / 1000   # holds from the page move it
+                if left <= 0 or not ctx.browser_present():
+                    break
+                try:
+                    answer = await asyncio.wait_for(asyncio.shield(future), min(left, PRESENCE_POLL_SEC))
+                    break
+                except asyncio.TimeoutError:
+                    continue
+        finally:
+            if card.get("_future") is future:
+                ctx.world.question_gave_up(card)
+                if ctx.publish:
+                    ctx.publish()
+        return web.json_response(answer)
+
+    app.router.add_post("/hook/ask", hook_ask)
+
     async def channel_hello(request: web.Request) -> web.Response:
         refused = _check_token(request)
         if refused is not None:
@@ -423,6 +465,31 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "permId and behavior are required"})
             return
         error = ctx.world.decide(perm_id, behavior, now_ms(), message.get("always"), message.get("reason"))
+        if ctx.publish:
+            ctx.publish()
+        reply = {"type": "ack", "reqId": req_id, "ok": error is None}
+        if error:
+            reply["error"] = error
+        await sock.send_json(reply)
+    elif kind == "question.answer":
+        card_id, picks = message.get("questionId"), message.get("answers")
+        if ctx.world is None or not isinstance(card_id, str) or not isinstance(picks, dict):
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "questionId and answers are required"})
+            return
+        error = ctx.world.answer_question(card_id, picks, now_ms())
+        if ctx.publish:
+            ctx.publish()
+        reply = {"type": "ack", "reqId": req_id, "ok": error is None}
+        if error:
+            reply["error"] = error
+        await sock.send_json(reply)
+    elif kind in ("question.hold", "question.release"):
+        card_id = message.get("questionId")
+        if ctx.world is None or not isinstance(card_id, str):
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "questionId is required"})
+            return
+        error = (ctx.world.hold_question(card_id, now_ms(), int(ctx.config.askWaitSec * 1000)) if kind == "question.hold"
+                 else ctx.world.release_question(card_id, now_ms()))
         if ctx.publish:
             ctx.publish()
         reply = {"type": "ack", "reqId": req_id, "ok": error is None}

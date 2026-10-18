@@ -12,7 +12,7 @@ import sys
 MAX_BODY = 2_000_000
 
 
-def decide(body: bytes, info: dict) -> None:
+def decide(body: bytes, info: dict, path: str = "/hook/decide", wait_key: str = "decideWaitSec") -> None:
     """--decide: the synchronous PermissionRequest hook (P6).
 
     Posts the request to /hook/decide and prints the server's answer — a
@@ -26,9 +26,9 @@ def decide(body: bytes, info: dict) -> None:
     import socket
 
     port = int(info["port"])
-    wait = float(info.get("decideWaitSec", 30))
+    wait = float(info.get(wait_key, 300 if wait_key == "askMaxSec" else 30))
     head = (
-        f"POST /hook/decide HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+        f"POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
         f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
         f"X-Jui-Viz-Token: {info['token']}\r\nConnection: close\r\n\r\n"
     )
@@ -79,6 +79,9 @@ def main() -> int:
             info = json.load(f)
         if "--decide" in sys.argv[1:]:
             decide(body, info)
+            return 0
+        if "--ask" in sys.argv[1:]:   # PreToolUse of AskUserQuestion: the page's answer, the same way (10-18)
+            decide(body, info, "/hook/ask", "askMaxSec")   # holds can keep it waiting up to the max
             return 0
         port = int(info["port"])
         head = (

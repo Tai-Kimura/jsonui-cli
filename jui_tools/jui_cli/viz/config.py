@@ -18,6 +18,11 @@ class VizConfig:
     toolInputMaxChars: int = 2000
     openBrowser: bool = False
     decideWaitSec: float = 30
+    # --ask (AskUserQuestion): while it waits, the terminal shows no question at all (measured 10-18), so it waits
+    # askWaitSec for someone to start answering on the page — about a glance and a first click; every input on the
+    # card renews it — and never more than askMaxSec in all (four questions read and answered).
+    askWaitSec: float = 20
+    askMaxSec: float = 300
 
 
 def load_config() -> VizConfig:

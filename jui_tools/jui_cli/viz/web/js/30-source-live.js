@@ -68,6 +68,16 @@ const SOURCE = {
       : `送れなかった（${ack.error || '不明'}）`));
   },
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
+  /* question.answer (10-18): picks are question text -> { labels, other }; the card says "sent" when the slice does. */
+  /* question.hold while someone answers (the hook waits a little longer); question.release: answer in the terminal */
+  holdQuestion(id) { netRequest('question.hold', { questionId: id }); },
+  releaseQuestion(id) {
+    netRequest('question.release', { questionId: id }).then((ack) => showToast(ack.ok ? 'ターミナルに質問を返した（ターミナルで答えてください）' : `返せなかった（${ack.error || '不明'}）`));
+  },
+  answerQuestion(id, picks) {
+    netRequest('question.answer', { questionId: id, answers: picks }).then((ack) => showToast(ack.ok
+      ? '質問の答えを Claude Code へ送った' : `送れなかった（${ack.error || '不明'}）`));
+  },
   /* 40-scene.js calls this when a leaving robot has walked out of the door. */
   robotGone(label) {
     if (rbState.id === label) closeRobot();   // its card closes when it has walked out
@@ -678,6 +688,18 @@ function rebuildSessions() {
 function layoutSignature() {
   return JSON.stringify([ROOMS.map((r) => [r.id, r.geo || '', r.shown]), ROBOT_DEFS.map((d) => [d.id, d.role, d.room, (d.pos || []).join()])]);
 }
+/* ---------- questions (AskUserQuestion, 10-18): the server's cards with the asking robot's label ---------- */
+const QUESTIONS = [];
+function rebuildQuestions() {
+  const list = Array.isArray(LIVE.slices.questions) ? LIVE.slices.questions : [];
+  const rows = [];
+  for (const x of list) {
+    const who = x && (labelOf(x.agentId) || labelOf(x.sessionId));
+    if (!who || !DEF[who] || !Array.isArray(x.questions)) continue;
+    rows.push({ ...x, who, at: secOfDay(x.createdAt || Date.now()) });
+  }
+  QUESTIONS.splice(0, QUESTIONS.length, ...rows);
+}
 function liveApply(changed, replace) {
   if (replace) LIVE.slices = {};
   for (const [k, v] of Object.entries(changed || {})) LIVE.slices[k] = v;
@@ -689,6 +711,7 @@ function liveApply(changed, replace) {
   rebuildSessions();
   rebuildTasks();
   rebuildPerms();
+  rebuildQuestions();
   layoutRooms();   // after the permissions: a room's rank comes from this round's requests
   placeRobots();
   const server = LIVE.slices.server || {};

@@ -174,6 +174,7 @@ function renderPanel(model) {
   const chip = $('chip-perm');
   chip.hidden = model.pending.length === 0;
   setText(chip, `許可待ち ${model.pending.length}`);
+  renderQuestions();
   const sIn = SESSIONS.filter((x) => inScope(x.project)).length, rIn = ROBOT_DEFS.filter((d) => inScope(projectOfRobot(d.id))).length;
   setText($('chip-robots'), UI.project === 'all' ? `ロボット ${ROBOT_DEFS.length}` : `ロボット ${rIn} / ${ROBOT_DEFS.length}`);
   setText($('chip-sessions'), UI.project === 'all' ? `セッション ${SESSIONS.length}` : `セッション ${sIn} / ${SESSIONS.length}`);
@@ -294,6 +295,92 @@ function setProject(id, { camera: moveCamera = true } = {}) {
   if (has3D && zoom.zoomed && !camTween && (wb.open || tb.open)) { const pose = wb.open ? specPose(wb.idx) : taskPose(); camera.position.copy(pose.p); viewTarget.copy(pose.t); }
   showToast(id === 'all' ? 'すべてのプロジェクトを表示' : `${PROJECT[id].name} だけを表示`);
 }
+
+/* ---------- questions (AskUserQuestion, requester 10-18): single and multiple choice, a free answer per question ----------
+   A card shows every question, header, option, description and preview as text (escaped). It can be answered only
+   while a hook waits for it (forward.py --ask) and only when everything fits on it; every question needs an answer
+   before it can be sent. Options are named by their index, never by their label, in the markup. */
+const Q_SHOW_MS = 30_000;   // an answered card stays a moment, saying who answered and what
+const qState = (q) => (q.status === 'sent' ? '送信済み · Claude Code の確定を待っている'
+  : q.status === 'answered' ? 'ブラウザの答えが届いた' : q.status === 'answered_in_terminal' ? 'ターミナルで答えた'
+    : q.status === 'expired' ? '答えないまま終わった' : '');
+function questionHTML(q) {
+  const open = q.status === 'pending' && q.hookWaiting && !q.tooLongToShow;
+  const got = q.sentAnswers || q.gotAnswers || null;
+  const itemsHTML = q.questions.map((x, i) => {
+    const type = x.multiSelect ? 'checkbox' : 'radio', name = `qa-${q.id}-${i}`;
+    const optsHTML = x.options.map((o, k) => `<label class="qopt"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="${k}"${open ? '' : ' disabled'}><span class="qlabel">${esc(o.label)}</span>${o.description ? `<span class="qdesc">${esc(o.description)}</span>` : ''}${o.preview ? `<pre class="qprev">${esc(o.preview)}</pre>` : ''}</label>`).join('');
+    const otherHTML = `<label class="qopt qother"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="other"${open ? '' : ' disabled'}><span class="qlabel">その他（自由記述）</span><input type="text" class="qother-text" data-qi="${i}" aria-label="${esc(x.question)} への自由記述" maxlength="2000"${open ? '' : ' disabled'}></label>`;
+    const answeredHTML = got && got[x.question] !== undefined ? `<p class="qgot">答え: <b>${esc(got[x.question])}</b></p>` : '';
+    // answered or over: the question and its answer only
+    const choicesHTML = q.status === 'pending' ? `${optsHTML}${otherHTML}` : '';
+    return `<fieldset class="qq"><legend>${x.header ? `<span class="qhead">${esc(x.header)}</span>` : ''}<span class="qtext">${esc(x.question)}</span>${x.multiSelect ? '<span class="qmulti">複数選べる</span>' : ''}</legend>${choicesHTML}${answeredHTML}</fieldset>`;
+  }).join('');
+  // While the hook waits the terminal shows no question (measured 10-18): the time left, and the way to the terminal.
+  const footHTML = open ? `<div class="qfoot"><button type="button" class="pa pa-allow" data-qsend="${esc(q.id)}" data-fk="qs-${esc(q.id)}" disabled>答えを送る</button><button type="button" class="pa pa-deny" data-qrelease="${esc(q.id)}" data-fk="qr-${esc(q.id)}">ターミナルで答える</button></div><p class="qnote">待っている間はターミナルに質問が出ない · <span data-quntil="${esc(q.id)}"></span>（操作すると延びる）</p>`
+    : q.status === 'pending' ? `<p class="qnote">${q.tooLongToShow ? '質問の全部をここに表示できないため、ターミナルで答えてください' : 'このセッションは答えの中継を待っていない。ターミナルで答えてください'}</p>`
+      : `<p class="qnote qdone">${esc(qState(q))}</p>`;
+  return `<article class="qcard${open ? ' q-open' : ''}" data-qcard="${esc(q.id)}"><header class="qwho">${pill(q.who, DEF[q.who].role)}<span>${esc(DEF[q.who].agent)}</span><span class="pc-wait" data-since="${q.at}"></span></header>${itemsHTML}${footHTML}</article>`;
+}
+function renderQuestions() {
+  const now = Date.now();
+  const shown = QUESTIONS.filter((q) => inScope(projectOfRobot(q.who)) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS));
+  const waiting = QUESTIONS.filter((q) => q.status === 'pending').length;
+  const chip = $('chip-ask');
+  chip.hidden = waiting === 0;
+  setText(chip, `質問 ${waiting}`);
+  $('questions-sec').hidden = shown.length === 0;
+  keyed($('questions'), JSON.stringify(shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.sentAnswers, q.gotAnswers])), () => shown.map((q) => questionHTML(q)).join(''));
+  for (const el of $('questions').querySelectorAll('[data-quntil]')) {   // the countdown, in place (inputs keep their state)
+    const q = QUESTIONS.find((x) => x.id === el.dataset.quntil);
+    setText(el, q && q.waitUntil ? `あと ${Math.max(0, Math.ceil((q.waitUntil - now) / 1000))} 秒でターミナルに戻す` : '');
+  }
+}
+const qHeld = {};   // question id -> when the page last asked the hook to wait longer
+function holdQuestion(id) {
+  const t = Date.now();
+  if (t - (qHeld[id] || 0) < 3000) return;
+  qHeld[id] = t;
+  SOURCE.holdQuestion(id);
+}
+/* What the card's inputs say: question text -> { labels, other }, and whether every question has an answer. */
+function questionPicks(card, q) {
+  const picks = {};
+  let complete = true;
+  q.questions.forEach((x, i) => {
+    const boxes = [...card.querySelectorAll(`input[data-qi="${i}"][data-qk]`)].filter((b) => b.checked);
+    const labels = boxes.filter((b) => b.dataset.qk !== 'other').map((b) => x.options[Number(b.dataset.qk)].label);
+    const otherOn = boxes.some((b) => b.dataset.qk === 'other');
+    const other = otherOn ? card.querySelector(`.qother-text[data-qi="${i}"]`).value.trim() : '';
+    if (otherOn && !other) complete = false;
+    if (!labels.length && !other) complete = false;
+    picks[x.question] = { labels, other };
+  });
+  return { picks, complete };
+}
+$('questions').addEventListener('input', (e) => {
+  const card = e.target.closest('[data-qcard]');
+  const q = card && QUESTIONS.find((x) => x.id === card.dataset.qcard);
+  if (!q) return;
+  // typing a free answer picks その他
+  if (e.target.classList.contains('qother-text') && e.target.value) { const box = e.target.parentElement.querySelector('input[data-qk="other"]'); if (box) box.checked = true; }
+  const send = card.querySelector('[data-qsend]');
+  if (send) send.disabled = !questionPicks(card, q).complete;
+  if (send) holdQuestion(q.id);   // someone is answering: the hook waits a little longer
+});
+$('questions').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-qrelease]');
+  if (r) { r.disabled = true; SOURCE.releaseQuestion(r.dataset.qrelease); return; }
+  const b = e.target.closest('[data-qsend]');
+  if (!b) return;
+  const card = b.closest('[data-qcard]'), q = QUESTIONS.find((x) => x.id === b.dataset.qsend);
+  if (!q) return;
+  const { picks, complete } = questionPicks(card, q);
+  if (!complete) return;
+  b.disabled = true;
+  SOURCE.answerQuestion(q.id, picks);
+});
+$('chip-ask').addEventListener('click', () => { const sec = $('questions-sec'); sec.scrollIntoView({ block: 'start' }); const first = sec.querySelector('input:not([disabled])'); if (first) first.focus({ preventScroll: true }); });
 
 /* ---------- popovers: project switcher, session picker, robot picker ---------- */
 const popEl = $('pop');
