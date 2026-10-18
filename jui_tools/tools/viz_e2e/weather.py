@@ -50,13 +50,14 @@ async def wait(page, js, timeout=20000, label=""):
 class Meteo:
     def __init__(self):
         self.queries: list[str] = []
+        self.status = 200
         outer = self
 
         class H(BaseHTTPRequestHandler):
             def do_GET(self):  # noqa: N802
                 outer.queries.append(self.path)
                 body = json.dumps({"current": {"weather_code": 61, "temperature_2m": 14.2, "is_day": 1, "precipitation": 0.6, "cloud_cover": 96}}).encode()
-                self.send_response(200)
+                self.send_response(outer.status)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(body)
@@ -229,3 +230,88 @@ async def run_weather(pw, out, failures):
         meteo.close()
     print(f"  weather/seasons-switch: {time.monotonic() - t0:.0f}s", flush=True)
     (out / "weather-results.json").write_text(dump(res) + "\n")
+
+
+async def run_weather_few(pw, out, failures):
+    """Fewer than seven rooms: no building view, so the switch is the side panel's 設定 (cd's ruling, 10-18). It turns
+    the weather on, the position is asked only inside that click, and the state shows: when it was last read, and
+    why it failed (the stand-in answers 500 after an off and on)."""
+    from run import free_port
+    out = pathlib.Path(out) / "weather-few"
+    out.mkdir(parents=True, exist_ok=True)
+    home = out / "home"
+    home.mkdir(exist_ok=True)
+    jt = pathlib.Path(__file__).resolve().parents[2]
+    port, meteo = free_port(), Meteo()
+    base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
+    env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1", JUI_VIZ_WEATHER_URL=f"http://127.0.0.1:{meteo.port}/v1/forecast")
+    srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port), "--no-agents-poll"],
+                           stdout=open(out / "serve.log", "w"), stderr=subprocess.STDOUT, env=env)
+    url = f"http://127.0.0.1:{port}"
+    res: dict = {}
+    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+    t0 = time.monotonic()
+    note = "() => document.getElementById('weather-note-panel').textContent"
+    try:
+        import urllib.request
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"{url}/health", timeout=1).read()
+                break
+            except OSError:
+                time.sleep(0.1)
+        forward = jt / "jui_cli" / "viz" / "forward.py"
+        body = {"session_id": "e2e00000-0000-4000-8000-0000000000f1", "cwd": "/work/one-room", "permission_mode": "default",
+                "hook_event_name": "SessionStart", "source": "startup"}
+        subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(), capture_output=True,
+                       env=dict(base_env, HOME=str(home)), timeout=10)
+        watch = Watch(origin=url)
+        page = await new_page(browser, watch, "weather-few", **DESKTOP)
+        await page.add_init_script(GEO_COUNT)
+        await page.goto(url + "/")
+        await ready(page)
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await page.wait_for_timeout(1500)
+        r = res["opened"] = await page.evaluate("""() => ({ floors: window.__dbg.floors().floors.length, geo: window.__geoCalls,
+          tower: !document.getElementById('tower-weather').hidden, panel: !document.getElementById('sec-settings').hidden,
+          checked: document.getElementById('weather-switch-panel').getAttribute('aria-checked'), note: document.getElementById('weather-note-panel').textContent })""")
+        check(failures, r["floors"] < 2 and not r["tower"], f"few rooms: no building view: {r}")
+        check(failures, r["panel"] and r["checked"] == "false" and "外への通信はしません" in r["note"] and r["geo"] == 0, f"the panel's switch, off, nothing asked: {r}")
+        check(failures, meteo.queries == [] and watch.foreign == [], f"nothing outside while off: {meteo.queries} {watch.foreign}")
+        await page.locator("#sec-settings").screenshot(path=str(out / "panel-off.png"))
+        ctx = page.context
+        await ctx.grant_permissions(["geolocation"], origin=url)
+        await ctx.set_geolocation({"latitude": LAT, "longitude": LON})
+        await page.click("#weather-switch-panel")
+        await wait(page, "() => document.getElementById('weather-switch-panel').getAttribute('aria-checked') === 'true' && /最後に取れた時刻/.test(document.getElementById('weather-note-panel').textContent)",
+                   label="on, with the time it was read")
+        r = res["on"] = await page.evaluate(f"() => ({{ geo: window.__geoCalls, note: ({note})() }})")
+        check(failures, r["geo"] == 1 and "雨" in r["note"], f"on from the panel, one position asked: {r}")
+        check(failures, len(meteo.queries) == 1 and "latitude=35.68&" in meteo.queries[0], f"one query, rounded: {meteo.queries}")
+        await page.locator("#sec-settings").screenshot(path=str(out / "panel-on.png"))
+        # a failure shows its reason: off, the stand-in breaks, on again
+        await page.click("#weather-switch-panel")
+        await wait(page, "() => document.getElementById('weather-switch-panel').getAttribute('aria-checked') === 'false'", label="off")
+        meteo.status = 500
+        await page.click("#weather-switch-panel")
+        await wait(page, "() => /失敗/.test(document.getElementById('weather-note-panel').textContent)", label="the failure's reason")
+        r = res["failed"] = await page.evaluate(f"() => ({{ note: ({note})(), checked: document.getElementById('weather-switch-panel').getAttribute('aria-checked') }})")
+        check(failures, r["checked"] == "true" and "HTTPError" in r["note"] and "500" in r["note"], f"the failure's reason shows: {r}")
+        await page.locator("#sec-settings").screenshot(path=str(out / "panel-failed.png"))
+        check(failures, watch.foreign == [], f"the page asked nobody outside: {watch.foreign}")
+        await page.close()
+        for line in watch.console:
+            failures.append(f"weather-few: console: {line}")
+        res["queries"] = meteo.queries
+    except Exception as e:
+        failures.append(f"weather-few: {type(e).__name__}: {str(e).splitlines()[0]}")
+    finally:
+        srv.terminate()  # our own child
+        try:
+            srv.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            srv.kill()
+        await browser.close()
+        meteo.close()
+    print(f"  weather/few-rooms-panel: {time.monotonic() - t0:.0f}s", flush=True)
+    (out / "weather-few-results.json").write_text(dump(res) + "\n")

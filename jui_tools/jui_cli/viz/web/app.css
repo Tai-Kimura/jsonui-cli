@@ -916,6 +916,9 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .tw-switch[aria-busy="true"] { opacity: 0.6; cursor: progress; }
 .tw-note { margin: 6px 0 0; font: 600 12px/1.5 var(--font-body); color: var(--ink-soft); }
 .tw-note[data-error] { color: var(--warn); }
+#sec-settings[hidden] { display: none; }
+.set-weather { margin-top: 6px; }
+.set-hint { margin: 6px 0 0; font: 500 11.5px/1.5 var(--font-body); color: var(--ink-soft); }
 
 /* a robot's tag with nothing to say shows just its name (an empty bubble read as a missing message) */
 .tag > span:empty { display: none; }

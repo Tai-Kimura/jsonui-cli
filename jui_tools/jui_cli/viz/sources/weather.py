@@ -193,9 +193,15 @@ class WeatherBook:
         at = self.now()
         self.tried, self.next_at = at, at + QUERY_EVERY_MS
         try:
-            got = self.fetcher(lat, lon)
+            got, error = self.fetcher(lat, lon), None
         except Exception as exc:  # noqa: BLE001 - any failure is the source's error, never the server's
-            self.error = f"天気を取れません（{type(exc).__name__}: {str(exc)[:120]}）"
+            got, error = None, f"天気を取れません（{type(exc).__name__}: {str(exc)[:120]}）"
+        # The answer comes back on an executor thread: turned off (or moved) meanwhile, it answers nothing (e1 10-18:
+        # otherwise an off setting kept a lastOkAt in the status file).
+        if not self.on or (self.setting["lat"], self.setting["lon"]) != (lat, lon):
+            return False
+        if error:
+            self.error = error
         else:
             self.last, self.error = {**got, "at": at}, None
         self._write_status()

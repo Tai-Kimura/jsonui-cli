@@ -262,6 +262,7 @@ def main(argv=None) -> int:
             if a.only in (None, "live", "weather"):
                 import weather
                 await weather.run_weather(pw, out, failures)
+                await weather.run_weather_few(pw, out, failures)
             if a.only in (None, "live", "rooms"):
                 import rooms
                 await rooms.run_rooms(pw, out, failures, RealServer)

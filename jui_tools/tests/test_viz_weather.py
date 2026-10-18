@@ -165,6 +165,39 @@ def test_a_failure_keeps_the_last_answer_for_three_hours_then_the_season_alone(t
     assert status["lastOkAt"] == first and "OSError" in status["lastError"]
 
 
+def test_an_answer_that_comes_back_after_off_or_a_move_is_dropped(tmp_path):
+    """e1 10-18: the query runs on an executor thread; turned off meanwhile, its answer used to land in last and the
+    status file's lastOkAt."""
+    clock = _Clock()
+    book = None
+    answer = {"kind": "clear", "isDay": True, "tempC": 20.0, "precipitation": 0.0, "cloud": 0.0}
+    status = tmp_path / "weather-status.json"
+
+    def turned_off_meanwhile(lat, lon):
+        book.set(False)
+        return answer
+    book = _book(tmp_path, turned_off_meanwhile, clock)
+    book.set(True, LAT, LON)
+    assert book.ask() is False
+    assert book.last is None and json.loads(status.read_text())["lastOkAt"] is None and book.view() == {"on": False}
+
+    def failed_after_off(lat, lon):
+        book.set(False)
+        raise OSError("late")
+    book.fetcher = failed_after_off
+    book.set(True, LAT, LON)
+    assert book.ask() is False and book.error is None and json.loads(status.read_text())["lastError"] is None
+
+    def moved_meanwhile(lat, lon):
+        book.set(True, 34.69, 135.5)
+        return answer
+    book.fetcher = moved_meanwhile
+    book.set(True, LAT, LON)
+    assert book.ask() is False and book.last is None and book.due()            # the new place is asked next
+    book.fetcher = lambda lat, lon: answer
+    assert book.ask() is True and book.last["kind"] == "clear" and json.loads(status.read_text())["lastOkAt"] == clock.t
+
+
 # ---------------------------------------------------------------- the real server
 
 SITECUSTOMIZE = '''
@@ -184,6 +217,16 @@ def getaddrinfo(host, *a, **k):
     _w(f"resolve {host!r}")
     return _gai(host, *a, **k)
 socket.getaddrinfo = getaddrinfo
+# This file shadows the interpreter's own sitecustomize (Homebrew's adds its site-packages: without it the server
+# cannot import aiohttp, e1 10-18). Find the one it hid, later on sys.path, and run it as it would have run.
+import importlib.util, sys
+_here = os.path.dirname(os.path.abspath(__file__))
+for _d in sys.path:
+    _p = os.path.join(os.path.abspath(_d or "."), "sitecustomize.py")
+    if os.path.dirname(_p) != _here and os.path.isfile(_p):
+        _spec = importlib.util.spec_from_file_location("_hidden_sitecustomize", _p)
+        _spec.loader.exec_module(importlib.util.module_from_spec(_spec))
+        break
 '''
 LOOPBACK = ("127.0.0.1", "::1", "localhost")
 

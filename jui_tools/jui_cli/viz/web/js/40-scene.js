@@ -1057,20 +1057,27 @@ function liveRoomPose(id) {
 const WEATHER_JA = { clear: '晴れ', cloudy: '曇り', fog: '霧', rain: '雨', snow: '雪', thunder: '雷雨' };
 const WEATHER_UI = { busy: false, note: '' };
 const roundCoord = (v) => Math.round(v * 100) / 100;
-function weatherPaint(hidden) {
-  const box = document.getElementById('tower-weather');
+/* Two places show the same switch (10-18): the building view's corner, and the side panel's 設定 — the latter for every
+   live page, so the weather can be turned on and its state read with fewer than seven rooms (no building view). */
+function weatherPaint(towerHidden) {
+  const box = document.getElementById('tower-weather'), sec = document.getElementById('sec-settings');
   if (!box) return;
-  box.hidden = hidden;
-  if (hidden) return;
-  const w = LIVE.slices.weather || { on: false }, btn = document.getElementById('weather-switch'), note = document.getElementById('weather-note');
-  btn.setAttribute('aria-checked', w.on ? 'true' : 'false');
-  btn.setAttribute('aria-busy', WEATHER_UI.busy ? 'true' : 'false');
+  box.hidden = towerHidden;
+  if (sec) sec.hidden = SOURCE.mode !== 'live';
+  if (SOURCE.mode !== 'live') return;   // the demo has no server to ask, and no LIVE.slices
+  const w = LIVE.slices.weather || { on: false };
   const at = typeof w.at === 'number' ? new Date(w.at).toTimeString().slice(0, 5) : '';
   const text = WEATHER_UI.note || (!w.on ? 'オフ — 外への通信はしません'
-    : w.kind ? `${WEATHER_JA[w.kind] || w.kind}${typeof w.tempC === 'number' ? ` ${Math.round(w.tempC)}℃` : ''}（${at} 取得${w.stale ? '・古い値' : ''}）${w.error ? ` — ${w.error}` : ''}`
-      : w.error ? `取れていません — ${w.error}` : '取得中…');
-  setText(note, text);
-  note.toggleAttribute('data-error', !!(WEATHER_UI.note || w.error));
+    : w.kind ? `${WEATHER_JA[w.kind] || w.kind}${typeof w.tempC === 'number' ? ` ${Math.round(w.tempC)}℃` : ''}（最後に取れた時刻 ${at}${w.stale ? '・古い値' : ''}）${w.error ? ` — 失敗: ${w.error}` : ''}`
+      : w.error ? `取れていません — 失敗: ${w.error}` : '取得中…');
+  for (const [b, n, hidden] of [['weather-switch', 'weather-note', towerHidden], ['weather-switch-panel', 'weather-note-panel', !sec || sec.hidden]]) {
+    if (hidden) continue;
+    const btn = document.getElementById(b), note = document.getElementById(n);
+    btn.setAttribute('aria-checked', w.on ? 'true' : 'false');
+    btn.setAttribute('aria-busy', WEATHER_UI.busy ? 'true' : 'false');
+    setText(note, text);
+    note.toggleAttribute('data-error', !!(WEATHER_UI.note || w.error));
+  }
 }
 async function weatherSwitch() {
   if (WEATHER_UI.busy) return;
@@ -1097,6 +1104,8 @@ async function weatherSwitch() {
     floorNavSync();
   }
 }
+// The panel's switch works without 3D too (no WebGL: no building, but the setting and its state are still here).
+{ const btn = document.getElementById('weather-switch-panel'); if (btn) btn.addEventListener('click', () => { weatherSwitch(); }); }
 /* The floor buttons (both views). Hidden while a board, the log, a zoom or a robot card covers the 3D (10-18). The
    demo has one office: its buttons show in the building only, and look at the floors there. */
 function floorNavSync() {
