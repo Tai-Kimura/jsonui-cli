@@ -229,6 +229,8 @@ class World:
         if state is not None:
             agent["state"] = state
             self._until.pop(agent["id"], None)
+            if "waitingOn" not in extra:
+                agent.pop("waitingOn", None)   # what it waits on belongs to the state it was set with
         if act is not None:
             agent["act"] = act
         for k, v in extra.items():
@@ -247,7 +249,7 @@ class World:
             else:
                 session.pop("waitingFor", None)
             self._dirty.add("sessions")
-        if self.tasks.turn_waiting(session["id"], status == "waiting"):
+        if self.tasks.turn_waiting(session["id"], status == "waiting", waiting_for):
             self._dirty.add("tasks")
         session["updatedAt"] = at
 
@@ -387,7 +389,12 @@ class World:
                 self._open_tool[use_id] = tool
                 self._tool_started[use_id] = at
             target = {"file": robots._rel(str(tool_input["file_path"]), root)} if _s(tool_input.get("file_path")) else None
-            self._set(agent, at, state, act, target=target)
+            # A question waits for the person as a permission does, but it is not one: the page says 質問に回答待ち,
+            # not 許可待ち, and does not count it with the permissions (requester, 10-18).
+            asking = tool == QUESTION_TOOL
+            if asking:
+                self._status(session, "waiting", at, "question")
+            self._set(agent, at, state, act, target=target, waitingOn="question" if asking else None)
             if state == "carry":
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
             if tool in EDIT_TOOLS:

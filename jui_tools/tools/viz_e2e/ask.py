@@ -105,6 +105,12 @@ async def run_ask(pw, out, failures):
         check(failures, res["card"]["legends"][0].startswith("果物好きな果物は？ <b>太字</b>") and not res["card"]["bold"] and not res["card"]["script"]
               and "<script>x</script>" in res["card"]["preview"], f"the question shows as text, not markup: {res['card']}")
         check(failures, res["card"]["chip"] == "質問 1" and res["card"]["robot"] == "waiting", f"the chip counts it and the robot waits: {res['card']}")
+        # a robot waiting on a question is not waiting for a permission: its own badge and filter (requester, 10-18)
+        res["asking"] = await page.evaluate("""() => { const n = (k) => document.querySelector(`#sess-filter [data-sf="${k}"] b`).textContent;
+          const badge = document.querySelector('#sessions [data-sst]'); return { waiting: n('waiting'), asking: n('asking'), badge: badge && badge.textContent,
+          sum: (document.querySelector('#sessions [data-pgsum]') || {}).textContent || '' }; }""")
+        check(failures, res["asking"]["waiting"] == "0" and res["asking"]["asking"] == "1" and res["asking"]["badge"] == "質問に回答待ち"
+              and "許可待ち" not in res["asking"]["sum"] and "質問待ち 1" in res["asking"]["sum"], f"a question is not counted as a permission wait: {res['asking']}")
         res["countdown"] = await page.evaluate("() => (document.querySelector('.qcard.q-open [data-quntil]') || {}).textContent || ''")
         check(failures, res["countdown"].startswith("あと ") and res["countdown"].endswith("秒でターミナルに戻す"), f"the time left shows: {res['countdown']!r}")
         send = ".qcard.q-open [data-qsend]"

@@ -305,6 +305,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .state { padding: 0 8px; border-radius: 999px; font: 700 11px/1.75 var(--font-body); white-space: nowrap; }
 .st-busy { background: var(--ok-bg); color: var(--ok); }
 .st-waiting { background: var(--warn-bg); color: var(--warn); }
+.st-asking { background: var(--info-bg); color: var(--info); }
 .st-idle { background: var(--chip); color: var(--ink-soft); }
 .st-bg { background: rgba(76, 195, 217, 0.18); color: #137a8c; }
 :root[data-theme="dark"] .st-bg { color: #7fdcec; }

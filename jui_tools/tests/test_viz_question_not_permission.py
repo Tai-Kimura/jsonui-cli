@@ -180,3 +180,23 @@ def test_a_wait_that_ran_out_is_on_the_card_and_a_release_or_an_answer_is_not_th
     world.question_waiting(released, _Future(), now_ms() + 20_000, now_ms() + 300_000)
     assert world.release_question(released["id"], now_ms()) is None
     assert "waitEnded" not in released and released["released"] is True
+
+
+# ---------------------------------------------------------------- waiting on a question is not waiting for a permission
+
+
+def test_a_robot_and_its_turn_waiting_on_a_question_say_so_and_a_permission_after_it_does_not():
+    world = World(VizState())
+    world.apply_hook(_hook("UserPromptSubmit", prompt="どこに入れる？"), 1)
+    world.apply_hook(_hook("PreToolUse", tool_name="AskUserQuestion", tool_use_id="q1", tool_input=QUESTION), 2)
+    agent = world.agents["s1"]
+    turn = next(t for t in world.tasks.tasks.values() if t.get("source") == "turn")
+    assert agent["state"] == "waiting" and agent["waitingOn"] == "question"
+    assert turn["waiting"] is True and turn["waitingFor"] == "question"
+    world.apply_hook(_hook("PostToolUse", tool_name="AskUserQuestion", tool_use_id="q1", tool_input=QUESTION, tool_response={}), 3)
+    assert "waitingOn" not in agent and turn["waiting"] is False and "waitingFor" not in turn
+    # the same robot asking for a permission next: a permission wait, nothing of the question left
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b1", tool_input=BASH), 4)
+    world.apply_hook(_bash_permission(), 5)
+    assert agent["state"] == "waiting" and "waitingOn" not in agent
+    assert turn["waiting"] is True and "waitingFor" not in turn

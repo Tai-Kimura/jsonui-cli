@@ -202,7 +202,7 @@ function rebuildTasks() {
       status: x.status, blockedByAll: blockedBy, blocksAll: Array.isArray(x.blocks) ? x.blocks.map(String) : [],
       created: x.createdAt ? secOfDay(x.createdAt) : -1, createdMs: x.createdAt || 0,
       start: x.startedAt ? secOfDay(x.startedAt) : null, end: x.completedAt ? secOfDay(x.completedAt) : null,
-      source: String(x.source || 'task'), turn: Number(x.turn) || 0, waiting: !!x.waiting, background: !!x.background, failed: !!x.failed,
+      source: String(x.source || 'task'), turn: Number(x.turn) || 0, waiting: !!x.waiting, waitingFor: x.waitingFor === 'question' ? 'question' : '', background: !!x.background, failed: !!x.failed,
     });
   }
   TASKS.splice(0, TASKS.length, ...rows);
@@ -658,7 +658,7 @@ function rebuildRobots(initial) {
     if (gone && !isNew) { if (!LIVE.leaving[label]) LIVE.leaving[label] = { since: now }; }
     else if (!gone && isNew) { ROBOT_DEFS.push(def); def.enter = !initial; }   // robots already there sit down at once
     else if (!gone) delete LIVE.leaving[label];
-    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || '') };
+    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), asking: a.state === 'waiting' && a.waitingOn === 'question' };
     if (LIVE.leaving[label]) st.state = 'done';
     robotState[label] = st;
     seen.add(label);
