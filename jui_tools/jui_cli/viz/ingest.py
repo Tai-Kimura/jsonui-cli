@@ -352,6 +352,8 @@ class World:
             text = f"退勤 {payload.get('reason') or ''}".strip()
         elif kind == "UserPromptSubmit":
             session["lastPrompt"] = _head(payload.get("prompt"), PROMPT_MAX)
+            if self.questions.session_stopped(sid, at):   # a question left open: the person moved on
+                self._dirty.add("questions")
             if agent["kind"] == "main":
                 self.tasks.turn_started(sid, agent["id"], payload.get("prompt"), at)
                 self._dirty.add("tasks")

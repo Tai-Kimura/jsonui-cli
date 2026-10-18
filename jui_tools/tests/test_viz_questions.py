@@ -338,3 +338,24 @@ def test_the_terminal_button_ends_the_hooks_wait_with_nothing(tmp_path):
             await client.close()
     out, took = asyncio.run(run())
     assert out == "" and took < 5
+
+
+# The person declined in the terminal ("User declined to answer questions", measured 10-18): no PostToolUse and no
+# PostToolUseFailure follows that PreToolUse, so what comes next in the session closes the card.
+
+
+def test_a_question_declined_in_the_terminal_is_closed_by_the_sessions_next_question():
+    world = World(VizState())
+    old, fut = _waiting_card(world)
+    new = world.hook_ask(_pre(use_id="u2"), now_ms())
+    assert old["status"] == "expired" and fut.result == {} and new["status"] == "pending"
+    other = world.hook_ask(_pre(use_id="u3", sid="s2"), now_ms())           # another session's question stays
+    assert new["status"] == "pending" and other["status"] == "pending"
+    assert world.hook_ask(_pre(use_id="u2"), now_ms()) is new and new["status"] == "pending"   # the same ask again
+
+
+def test_a_question_declined_in_the_terminal_is_closed_by_the_sessions_next_prompt():
+    world = World(VizState())
+    card, fut = _waiting_card(world)
+    world.apply_hook({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "cwd": "/work/app", "prompt": "次"}, now_ms())
+    assert card["status"] == "expired" and fut.result == {}

@@ -10,7 +10,10 @@ text, valued by the chosen option's label; multiple choices are labels joined wi
 Life of a card:
   pending --browser answer--> sent --PostToolUse--> answered (browser)
      |--PostToolUse first (the terminal answered)--> answered_in_terminal
-     \\--Stop, SessionEnd, the hook gave up and the tool ran / 10 min--> expired
+     \\--Stop, SessionEnd, the session's next question or prompt / 10 min--> expired
+
+A question declined in the terminal ("User declined to answer questions", measured 10-18) sends neither
+PostToolUse nor PostToolUseFailure, so the session's next question, its next prompt and Stop close a card left open.
 
 A card can be answered from the browser only while a synchronous hook (forward.py --ask) waits on it, and only
 when everything it asks fits on the card (every question, header, label, description and preview in full).
@@ -34,8 +37,9 @@ TEXT_MAX = 4_000
 QUESTIONS_MAX = 4
 OPTIONS_MAX = 8
 
-# How a multiple choice and a free answer go into ``answers``. The docs say "join labels with commas" and say
-# nothing of free text; ask-check.sh (b) and (c) measure both on a real session before these are relied on.
+# How a multiple choice and a free answer go into ``answers``: the terminal's own way, measured on the requester's
+# interactive session (Claude Code 2.1.302, ask-check.sh, 10-18). Choosing 赤 and 青 by hand gave "赤, 青" — a comma
+# and a space; a free answer (その他) goes in as typed, not as a label ("バナナ"). annotations stayed {} throughout.
 MULTI_SEP = ", "
 
 
@@ -127,6 +131,7 @@ class QuestionBook:
         """PreToolUse of AskUserQuestion (the async forward and --ask both bring it): one card per tool use."""
         if use_id and use_id in self._by_use and self._by_use[use_id] in self.cards:
             return self.cards[self._by_use[use_id]]
+        self.session_stopped(sid, at)   # a question this session left open never finished (the same ask returned above)
         questions, fits = read_questions(tool_input)
         card = {"id": self._new_id(), "sessionId": sid, "agentId": aid, "useId": use_id, "createdAt": at,
                 "status": "pending", "questions": questions, "tooLongToShow": not fits, "hookWaiting": False,
@@ -208,6 +213,7 @@ class QuestionBook:
         return card
 
     def session_stopped(self, sid: str, at: int) -> bool:
+        """The session's open cards are over (Stop, SessionEnd, its next prompt, its next question)."""
         changed = False
         for card in self.cards.values():
             if card["sessionId"] == sid and card["status"] in ("pending", "sent"):
