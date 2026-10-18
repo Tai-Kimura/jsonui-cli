@@ -110,6 +110,9 @@ class ServerContext:
     # what to call after changing it.
     world: object | None = None
     publish: Callable[[], None] | None = None
+    # The near weather (sources/weather.py: off by default, no connection then) and what republishes it.
+    weather: object | None = None
+    on_weather: Callable[[], None] | None = None
     # Until when a page reported itself visible (presence), epoch ms.
     present_until: int = 0
 
@@ -506,6 +509,20 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         if error:
             reply["error"] = error
         await sock.send_json(reply)
+    elif kind == "weather.set":
+        # The page's switch (10-18): on with the position it got from the browser (rounded there; rounded again in
+        # sources/weather.py, so an unrounded one is never stored), or off (the position removed).
+        if ctx.weather is None:
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "天気はこのサーバーでは使えません"})
+            return
+        try:
+            ctx.weather.set(message.get("on") is True, message.get("lat"), message.get("lon"))
+        except (ValueError, OSError) as exc:
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": str(exc)})
+            return
+        if ctx.on_weather:
+            ctx.on_weather()
+        await sock.send_json({"type": "ack", "reqId": req_id, "ok": True})
     elif kind == "presence":
         # A visible page answers for 12 s (it reports every 5 s); hidden: at once not.
         ctx.present_until = now_ms() + PRESENCE_MS if message.get("visible") is True else 0

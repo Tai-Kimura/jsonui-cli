@@ -4,6 +4,20 @@
 window.__dbg = {
   camera, sbTile, sbPoint, SB, KB, THREE, robots,
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
+  // the outside (10-18): the arms force a season ('spring' …) or a weather ({ kind, isDay }); null gives it back
+  outside: (opts) => {
+    if (opts && 'season' in opts) OUTSIDE.force = opts.season;
+    if (opts && 'weather' in opts) OUTSIDE.weatherForce = opts.weather;
+    const g = TOWER.group;
+    const find = (name) => (g ? g.children.find((o) => o.userData.outside === name) : null);
+    const crowns = find('crowns'), c = new THREE.Color();
+    return { season: season(), weather: weatherNow(), built: TOWER.outside || null, sky: sceneEl.dataset.sky || '',
+      fall: TOWER.fall ? { kind: TOWER.fall.kind, n: TOWER.fall.n } : null, fog: !!scene.fog,
+      crown: crowns && crowns.instanceColor ? '#' + (crowns.getColorAt(0, c), c.getHexString()) : null,
+      branches: !!find('branches'), cicadas: find('cicadas') ? find('cicadas').count : 0, roofSnow: !!find('roofSnow'),
+      ground: find('plaza') ? '#' + find('plaza').material.color.getHexString() : null,
+      fallY: TOWER.fall ? Array.from({ length: Math.min(5, TOWER.fall.n) }, (_, i) => +TOWER.fall.pos[i * 3 + 1].toFixed(3)) : [] };
+  },
   // play (10-18): the arms shorten the times; the real defaults stay in 40-scene.js
   play: (opts) => { if (opts) { Object.assign(PLAY, opts, { next: 0 }); if ('restMaxSec' in opts) robots.forEach((R) => { R.restUntil = 0; }); if (opts.endAll) [...PLAY.list].forEach(playEnd); } return { list: PLAY.list.map((G) => ({ room: G.room, kind: G.kind, players: G.players.map((R) => R.def.id), started: !!G.t0,
     ball: G.ball ? [+G.ball.position.x.toFixed(2), +G.ball.position.y.toFixed(2)] : null })),

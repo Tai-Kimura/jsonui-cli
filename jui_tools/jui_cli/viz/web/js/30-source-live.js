@@ -70,6 +70,8 @@ const SOURCE = {
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
+  /* The near weather's switch (10-18): { on, lat, lon } with the position already rounded (40-scene.js). */
+  setWeather(body) { return netRequest('weather.set', body); },
   /* question.answer (10-18): picks are question text -> { labels, other }; the card says "sent" when the slice does. */
   /* question.hold while someone answers (the hook waits a little longer); question.release: answer in the terminal */
   holdQuestion(id) { netRequest('question.hold', { questionId: id }); },

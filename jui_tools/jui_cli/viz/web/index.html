@@ -57,6 +57,10 @@
         <li><span class="tl-win tl-idle" aria-hidden="true"></span>待機 — 電気が消え、影だけ</li>
         <li><span class="tl-win tl-empty" aria-hidden="true"></span>空き — 部屋が無い（真っ暗）</li>
       </ul>
+      <div class="tower-weather" id="tower-weather" hidden>
+        <button type="button" class="tw-switch" id="weather-switch" role="switch" aria-checked="false">近所の天気</button>
+        <p class="tw-note" id="weather-note">オフ — 外への通信はしません</p>
+      </div>
       <div class="live-empty" id="live-empty" hidden>
         <p class="le-title">Claude Code のセッションがまだ見えません</p>
         <p>確かめること</p>

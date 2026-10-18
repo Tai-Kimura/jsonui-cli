@@ -554,6 +554,7 @@ function build3D() {
     document.getElementById('floor-up').addEventListener('click', () => step(1));
     document.getElementById('floor-down').addEventListener('click', () => step(-1));
     document.getElementById('floor-building').addEventListener('click', () => (TOWER.on ? towerLeave(LIVE.floor) : towerEnter()));
+    document.getElementById('weather-switch').addEventListener('click', () => { weatherSwitch(); });
     document.getElementById('room-back').addEventListener('click', () => setProject('all'));
   }
   const applyTheme = () => { for (const [mat, token, fallback] of roomMats) mat.color.set(readToken(token, fallback)); };
@@ -1049,6 +1050,53 @@ function liveRoomPose(id) {
   const dist = id === 'all' ? Math.max(22, fit(b.size, 0.92)) : Math.max(9, fit(b.size, (camera.aspect || 1) < 1 ? 0.7 : 0.86));   // one room: most of the view (less on a tall screen, where its corners reach out)
   return { p: b.c.clone().add(new THREE.Vector3(6.5, 15.5, 22.5).normalize().multiplyScalar(dist)), t: b.c };
 }
+/* The near weather's switch (10-18), in the building view of a live page. Off by default. Turning it on is the only
+   place that asks the browser for the position — the permission dialog shows inside this click, never on opening the
+   page — and the position is rounded to two decimals (about 1 km) before it leaves the page; the server rounds again
+   and asks Open-Meteo itself (the page never talks to anyone but this server). Turning it off removes the position. */
+const WEATHER_JA = { clear: '晴れ', cloudy: '曇り', fog: '霧', rain: '雨', snow: '雪', thunder: '雷雨' };
+const WEATHER_UI = { busy: false, note: '' };
+const roundCoord = (v) => Math.round(v * 100) / 100;
+function weatherPaint(hidden) {
+  const box = document.getElementById('tower-weather');
+  if (!box) return;
+  box.hidden = hidden;
+  if (hidden) return;
+  const w = LIVE.slices.weather || { on: false }, btn = document.getElementById('weather-switch'), note = document.getElementById('weather-note');
+  btn.setAttribute('aria-checked', w.on ? 'true' : 'false');
+  btn.setAttribute('aria-busy', WEATHER_UI.busy ? 'true' : 'false');
+  const at = typeof w.at === 'number' ? new Date(w.at).toTimeString().slice(0, 5) : '';
+  const text = WEATHER_UI.note || (!w.on ? 'オフ — 外への通信はしません'
+    : w.kind ? `${WEATHER_JA[w.kind] || w.kind}${typeof w.tempC === 'number' ? ` ${Math.round(w.tempC)}℃` : ''}（${at} 取得${w.stale ? '・古い値' : ''}）${w.error ? ` — ${w.error}` : ''}`
+      : w.error ? `取れていません — ${w.error}` : '取得中…');
+  setText(note, text);
+  note.toggleAttribute('data-error', !!(WEATHER_UI.note || w.error));
+}
+async function weatherSwitch() {
+  if (WEATHER_UI.busy) return;
+  const on = !(LIVE.slices.weather && LIVE.slices.weather.on);
+  WEATHER_UI.busy = true; WEATHER_UI.note = on ? '位置の許可を待っています…' : '';
+  floorNavSync();
+  try {
+    if (!on) {
+      const ack = await SOURCE.setWeather({ on: false });
+      WEATHER_UI.note = ack.ok ? '' : `オフにできませんでした — ${ack.error || ''}`;
+      return;
+    }
+    if (!navigator.geolocation) { WEATHER_UI.note = 'このブラウザでは位置を取れないため、オフのままです'; return; }
+    const pos = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject,
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 600000 }));
+    const lat = roundCoord(pos.coords.latitude), lon = roundCoord(pos.coords.longitude);   // about 1 km, before it leaves the page
+    const ack = await SOURCE.setWeather({ on: true, lat, lon });
+    WEATHER_UI.note = ack.ok ? '' : `オンにできませんでした — ${ack.error || ''}`;
+  } catch (err) {
+    const why = err && err.code === 1 ? '位置の利用が許可されませんでした' : err && err.code === 3 ? '位置を取るのに時間がかかりすぎました' : '位置を取れませんでした';
+    WEATHER_UI.note = `${why}。オフのままです`;
+  } finally {
+    WEATHER_UI.busy = false;
+    floorNavSync();
+  }
+}
 /* The floor buttons (both views). Hidden while a board, the log, a zoom or a robot card covers the 3D (10-18). The
    demo has one office: its buttons show in the building only, and look at the floors there. */
 function floorNavSync() {
@@ -1058,6 +1106,7 @@ function floorNavSync() {
   const covered = wb.open || tb.open || logState.open || zoom.zoomed || !!rbState.id;
   nav.hidden = !has3D || n < 2 || covered || (SOURCE.mode === 'demo' && !TOWER.on);
   legend.hidden = nav.hidden || !TOWER.on;
+  weatherPaint(!has3D || covered || !TOWER.on || SOURCE.mode !== 'live');
   if (nav.hidden) return;
   setText(document.getElementById('floor-label'), TOWER.on && SOURCE.mode === 'live' ? `全 ${n} 階` : `${k + 1}F / ${n}F`);
   const waits = LIVE.floors.map((f) => f.some((id) => LIVE.rank[id] === 0));
@@ -1114,12 +1163,48 @@ function skyPhase(date) {
   const h = date.getHours() + date.getMinutes() / 60;
   return h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 16.5 ? 'day' : h >= 16.5 && h < 19 ? 'dusk' : 'night';
 }
-function skySync() {
-  const phase = TOWER.on || SOURCE.mode === 'demo' ? skyPhase(new Date(vizNow())) : '';   // the demo's office has its clock's sky too
-  if ((sceneEl.dataset.sky || '') === phase) return;
-  sceneEl.dataset.sky = phase;
-  sceneEl.style.background = phase ? `linear-gradient(180deg, ${SKY[phase][0]}, ${SKY[phase][1]})` : '';
+/* The outside of the building: the season and, when turned on, the weather near this machine (requester, 10-18).
+   The season comes from the viewer's date (northern hemisphere): spring cherry blossom with a few petals in the air,
+   summer deep green with cicadas on the trunks (no sound), autumn red and orange leaves with a few falling, winter
+   bare branches and a thin snow on the plaza and the roof. Only the trees, the plaza and the roof change; the rooms
+   and the robots do not. The weather (the server's weather slice: off by default, and then nothing is asked of
+   anyone) greys the sky, rains, snows, flashes or fogs over the season. Falling things are capped at OUTSIDE.max and
+   stand still under reduced motion. */
+const OUTSIDE = { max: 160, force: null, weatherForce: null };
+function seasonOf(date) {
+  const m = date.getMonth() + 1;
+  return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'autumn' : 'winter';
 }
+const season = () => OUTSIDE.force || seasonOf(new Date(vizNow()));
+/* The weather to draw: { kind, isDay } or null (off, not read yet, too old, or the demo). */
+function weatherNow() {
+  if (OUTSIDE.weatherForce) return OUTSIDE.weatherForce;
+  const w = SOURCE.mode === 'live' ? LIVE.slices.weather : null;
+  return w && w.on && typeof w.kind === 'string' ? { kind: w.kind, isDay: w.isDay !== false } : null;
+}
+// How far each weather pulls the sky toward its grey (light rain under a dark cloud, a pale fog).
+const SKY_GREY = { cloudy: ['#8d99a8', 0.55], rain: ['#6f7b8a', 0.7], thunder: ['#4c5563', 0.8], fog: ['#c3cad3', 0.7], snow: ['#c9d1dc', 0.55] };
+function skyColors(phase, w) {
+  const base = SKY[phase];
+  const g = w && SKY_GREY[w.kind];
+  if (!g) return base;
+  const mix = (hex) => '#' + new THREE.Color(hex).lerp(new THREE.Color(g[0]), phase === 'night' ? g[1] * 0.4 : g[1]).getHexString();
+  return [mix(base[0]), mix(base[1])];
+}
+function skySync() {
+  if (!TOWER.on && TOWER.flash) { TOWER.flash = false; sceneEl.style.filter = ''; }   // left the building mid-flash
+  const w = weatherNow();
+  let phase = TOWER.on || SOURCE.mode === 'demo' ? skyPhase(new Date(vizNow())) : '';   // the demo's office has its clock's sky too
+  if (phase && w) phase = !w.isDay ? 'night' : phase === 'night' ? 'day' : phase;   // the place's own day and night
+  const key = phase ? `${phase}:${w ? w.kind : ''}` : '';
+  const fog = TOWER.on && w && w.kind === 'fog';
+  if (!!scene.fog !== !!fog) scene.fog = fog ? new THREE.Fog(new THREE.Color(SKY_GREY.fog[0]), 18, 70) : null;
+  if ((sceneEl.dataset.sky || '') === key) return;
+  sceneEl.dataset.sky = key;
+  const c = phase ? skyColors(phase, w) : null;
+  sceneEl.style.background = c ? `linear-gradient(180deg, ${c[0]}, ${c[1]})` : '';
+}
+const outsideKey = () => { const w = weatherNow(); return `${season()}:${w ? w.kind : ''}`; };
 const TOWER = { on: false, look: 0, sign: null, group: null, floors: [], sig: '', theme: null, W: 16, D: 9, H: 3, SLAB: 0.28, LOBBY: 1.1, LAYER: 1, pulse: 1,
   lights: null, actors: null, bayColor: [] };
 const towerBase = (k) => TOWER.LOBBY + k * (TOWER.H + TOWER.SLAB);          // the slab under floor k
@@ -1278,10 +1363,11 @@ function towerSprite(pose, P) {
 const TOWER_POSES = ['type', 'walkA', 'walkB', 'point', 'raise', 'think', 'shadow'];
 function towerBuild() {
   const n = LIVE.floors.length, dark = isDark();
-  if (TOWER.group && TOWER.floors.length === n && TOWER.theme === dark) return;
+  const outside = outsideKey();
+  if (TOWER.group && TOWER.floors.length === n && TOWER.theme === dark && TOWER.outside === outside) return;
   if (TOWER.group) { scene.remove(TOWER.group); disposeTree(TOWER.group); }
   const P = towerPalette(), L = TOWER.LAYER, { W, D, H, SLAB, LOBBY } = TOWER;
-  TOWER.group = new THREE.Group(); TOWER.floors = []; TOWER.sig = ''; TOWER.theme = dark; TOWER.bayColor = [];
+  TOWER.group = new THREE.Group(); TOWER.floors = []; TOWER.sig = ''; TOWER.theme = dark; TOWER.bayColor = []; TOWER.outside = outside;
   const put = (mesh) => { mesh.layers.set(L); TOWER.group.add(mesh); return mesh; };
   for (const o of scene.children) if (o.isLight) o.layers.enable(L);
   const top = towerBase(n), front = D / 2;
@@ -1339,15 +1425,76 @@ function towerBuild() {
   const sign = put(new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.3), new THREE.MeshBasicMaterial({ map: texFrom(signC), toneMapped: false, side: THREE.DoubleSide })));
   sign.position.set(1.6, top + SLAB + 1.4, front - 0.4);
   TOWER.sign = sign.material;
-  const plaza = put(new THREE.Mesh(new THREE.BoxGeometry(W + 9, 0.2, D + 9), toon(dark ? '#1c2636' : '#cfd8e4')));
-  plaza.position.set(0, -0.1, 0);
+  // the outside: the season, with the weather over it (OUTSIDE above)
+  const sea = season(), w = weatherNow(), snowy = sea === 'winter' || (w && w.kind === 'snow'), wet = w && (w.kind === 'rain' || w.kind === 'thunder');
+  const ground = snowy ? (dark ? '#c3ccd8' : '#f1f5fa') : wet ? (dark ? '#151d2a' : '#b4bfcd') : (dark ? '#1c2636' : '#cfd8e4');
+  const plaza = put(new THREE.Mesh(new THREE.BoxGeometry(W + 9, 0.2, D + 9), toon(ground)));
+  plaza.position.set(0, -0.1, 0); plaza.userData.outside = 'plaza';
   const shadow = put(new THREE.Mesh(new THREE.PlaneGeometry(W + 3, D + 3), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: dark ? 0.35 : 0.14, depthWrite: false })));
   shadow.rotation.x = -Math.PI / 2; shadow.position.set(0.8, 0.01, 0.6);
+  if (snowy) {                                        // a thin snow on the roof, inside the parapet
+    const roofSnow = put(new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 0.06, D + 0.4), toon(dark ? '#d6dde8' : '#ffffff')));
+    roofSnow.position.set(0, top + SLAB + 0.53, 0); roofSnow.userData.outside = 'roofSnow';
+  }
   const spots = [[-W / 2 - 2.2, front + 2.2], [W / 2 + 2.2, front + 2.2], [-W / 2 - 2.6, -D / 2 + 0.5], [W / 2 + 2.6, -D / 2 + 0.5], [-5.2, front + 3.4], [5.2, front + 3.4]];
   const trunks = put(new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.16, 0.9, 6), toon('#7a5a3c'), spots.length));
-  const crowns = put(new THREE.InstancedMesh(new THREE.ConeGeometry(0.85, 1.9, 8), toon(dark ? '#3f7a58' : '#5fae7e'), spots.length));
-  spots.forEach(([x, z], i) => { m.makeTranslation(x, 0.45, z); trunks.setMatrixAt(i, m); m.makeTranslation(x, 1.7, z); crowns.setMatrixAt(i, m); });
+  spots.forEach(([x, z], i) => { m.makeTranslation(x, 0.45, z); trunks.setMatrixAt(i, m); });
+  const CROWN = { spring: ['#f6bfd0', '#b98597'], summer: ['#2f8a4e', '#2a6643'], autumn: ['#de7a2e', '#a95a2a'] };
+  if (sea === 'winter') {                             // bare: three branches each, a little snow on top
+    const branches = put(new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.06, 1.0, 5), toon('#6b4e33'), spots.length * 3));
+    branches.userData.outside = 'branches';
+    const q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1);
+    spots.forEach(([x, z], i) => [-0.5, 0, 0.55].forEach((tilt, j) => {
+      e.set(0, j * 2.1 + i, tilt); q.setFromEuler(e); m.compose(new THREE.Vector3(x + tilt * 0.4, 1.3, z), q, one); branches.setMatrixAt(i * 3 + j, m);
+    }));
+  } else {
+    const crowns = put(new THREE.InstancedMesh(new THREE.ConeGeometry(0.85, 1.9, 8), toon('#ffffff'), spots.length));
+    crowns.userData.outside = 'crowns';
+    const autumn2 = new THREE.Color(dark ? '#8c3424' : '#c8452f');
+    spots.forEach(([x, z], i) => {
+      m.makeTranslation(x, 1.7, z); crowns.setMatrixAt(i, m);
+      crowns.setColorAt(i, sea === 'autumn' && i % 2 ? autumn2 : new THREE.Color(CROWN[sea][dark ? 1 : 0]));
+    });
+    if (sea === 'summer') {                           // a cicada on each trunk, facing out
+      const cicadas = put(new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.15, 0.06), toon('#3d2f1c'), spots.length));
+      cicadas.userData.outside = 'cicadas';
+      spots.forEach(([x, z], i) => { m.makeTranslation(x, 0.62 + (i % 3) * 0.08, z + 0.16); cicadas.setMatrixAt(i, m); });
+    }
+  }
+  // falling things: the weather's (rain, snow) over the season's (petals, leaves); none in a summer or winter calm
+  const fall = wet ? 'rain' : w && w.kind === 'snow' ? 'snow' : sea === 'spring' ? 'petal' : sea === 'autumn' ? 'leaf' : null;
+  TOWER.fall = null;
+  if (fall) {
+    const N = Math.min(OUTSIDE.max, { rain: 160, snow: 120, petal: 50, leaf: 40 }[fall]);
+    const geo = fall === 'rain' ? new THREE.PlaneGeometry(0.025, 0.42) : new THREE.PlaneGeometry(0.13, 0.1);
+    const color = { rain: dark ? '#7f93ad' : '#7d8fa6', snow: '#ffffff', petal: '#ffc2d3', leaf: '#d96a2a' }[fall];
+    const mesh = put(new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: fall === 'rain' ? 0.7 : 0.95, depthWrite: false }), N));
+    mesh.userData.outside = fall;
+    const rnd = snackRandom(20261020), span = [W / 2 + 6, top + 4, D / 2 + 6];
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { pos[i * 3] = (rnd() * 2 - 1) * span[0]; pos[i * 3 + 1] = rnd() * span[1]; pos[i * 3 + 2] = (rnd() * 2 - 1) * span[2]; }
+    TOWER.fall = { kind: fall, mesh, pos, span, speed: { rain: 9, snow: 0.9, petal: 0.7, leaf: 1.1 }[fall], n: N };
+    fallPlace(0);
+  }
   scene.add(TOWER.group);
+}
+/* The falling things, placed for time t (still under reduced motion: where they were made). */
+function fallPlace(dt, t = 0) {
+  const F = TOWER.fall;
+  if (!F) return;
+  const { m, q, p, s } = towerTmp, e = new THREE.Euler();
+  for (let i = 0; i < F.n; i++) {
+    const k = i * 3;
+    if (dt > 0) {
+      F.pos[k + 1] -= F.speed * dt * (0.8 + (i % 5) * 0.1);
+      if (F.kind !== 'rain') F.pos[k] += Math.sin(t * 0.9 + i) * 0.4 * dt;
+      if (F.pos[k + 1] < 0) F.pos[k + 1] += F.span[1];
+    }
+    e.set(F.kind === 'rain' ? 0 : t * 1.3 + i, F.kind === 'rain' ? 0 : i, F.kind === 'rain' ? 0.15 : t + i * 0.7);
+    q.setFromEuler(e); p.set(F.pos[k], F.pos[k + 1], F.pos[k + 2]); s.set(1, 1, 1);
+    m.compose(p, q, s); F.mesh.setMatrixAt(i, m);
+  }
+  F.mesh.instanceMatrix.needsUpdate = true;
 }
 function towerSync(now = performance.now()) {
   towerBuild();
@@ -1403,6 +1550,10 @@ function towerAnimate(t, dt) {
     TOWER.sign.color.set(night ? c.set('#ffffff').lerp(new THREE.Color('#ffd76a'), glow) : c.set('#ffffff'));
   }
   for (const pose of TOWER_POSES) { const mesh = TOWER.actors[pose]; mesh.count = counts[pose]; mesh.instanceMatrix.needsUpdate = true; }
+  if (!reduceMotion) fallPlace(Math.min(dt, 0.1), t);   // petals, leaves, rain or snow (still under reduced motion)
+  const w = weatherNow();                               // thunder: a short white flash now and then (none under reduced motion)
+  const flash = w && w.kind === 'thunder' && !reduceMotion && (t % 7.3) < 0.12;
+  if (flash !== !!TOWER.flash) { TOWER.flash = flash; sceneEl.style.filter = flash ? 'brightness(1.8)' : ''; }
 }
 /* The room under the pointer in the building: its full name and state, as the canvas's title. */
 const TOWER_STATE_JA = { working: '作業中', thinking: '考え中', waiting: '許可待ち', idle: '待機（消灯）', empty: '空き' };
