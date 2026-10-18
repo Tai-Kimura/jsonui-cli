@@ -63,6 +63,35 @@ def two_projects():
     return out
 
 
+LATE = "0ad0000a-0000-4000-8000-00000000000a"
+
+
+def rooms_doors():
+    """(seconds, body): four rooms on one floor (three across, two deep), robots coming in, one moving from the back
+    row to the front row and back, one leaving and one coming in late in the back row, prompts and Stops for the turn cards, a
+    permission request."""
+    folders = ["shop-app", "jsonui-cli", "JsonUIDocument", "admin-web"]
+    sids = [f"{k:02x}d0{k:04x}-0000-4000-8000-{k:012x}" for k in range(10)]
+    room = [f"/work/{folders[k % 4]}" for k in range(10)]
+    out = []
+    for k, sid in enumerate(sids):
+        out.append((0.1 * k, base(sid, room[k], "SessionStart", source="startup")))
+        out.append((0.1 * k + 0.05, base(sid, room[k], "UserPromptSubmit", prompt=f"<cross-session-message from=\"x\">\n画面 {k} を仕上げて\n詳細…")))
+    out += [
+        (1.0, pre(sids[0], room[0], "Read", {"file_path": f"{room[0]}/README.md"}, 1)),
+        (2.0, base(sids[1], room[1], "Stop")),
+        (3.0, pre(sids[2], room[2], "Write", {"file_path": f"{room[2]}/a.txt", "content": "x"}, 2)),
+        (3.2, base(sids[2], room[2], "PermissionRequest", tool_name="Write", tool_input={"file_path": f"{room[2]}/a.txt"})),
+        (3.5, base(sids[7], room[3], "Stop", background_tasks=[{"id": "bash_1", "type": "bash"}])),   # waits on background work
+        (4.0, base(sids[5], room[0], "CwdChanged")),     # jsonui-cli/ to shop-app/: the room next door
+        (12.0, base(sids[4], room[3], "CwdChanged")),    # shop-app/ (back row) to admin-web/ in front of it
+        (14.0, base(sids[8], room[0], "SessionEnd", reason="exit")),   # out of a back-row room: through the room in front
+        (15.0, base(LATE, room[0], "SessionStart", source="startup")),   # and one comes in there late
+        (20.0, base(sids[5], room[1], "CwdChanged")),    # and back
+    ]
+    return out
+
+
 def write(items, path: pathlib.Path) -> pathlib.Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:

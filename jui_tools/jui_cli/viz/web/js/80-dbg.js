@@ -7,7 +7,10 @@ window.__dbg = {
   model: () => latestModel,       // what the panels and boards draw from
   live3d: () => (SOURCE.mode === 'live' ? LIVE3D : null),   // the live rooms' boards
   links: () => links,             // the robot → board lines
-  room: (id) => { const r = PROJECT[id]; return r ? { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, shown: !!r.shown } : null; },
+  room: (id) => { const r = PROJECT[id]; return r ? { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, shown: !!r.shown, doors: r.doors || null } : null; },
+  walls: () => (SOURCE.mode === 'live' ? liveWalls() : null),   // the wall pieces, door gaps cut out (the e2e checks no robot is in one)
+  seats: () => (SOURCE.mode === 'live' ? JSON.parse(JSON.stringify(LIVE.seatOf)) : null),
+  solo: () => (SOURCE.mode === 'live' ? liveSolo() : null),
   floors: () => ({ floors: LIVE.floors, floor: LIVE.floor, rank: LIVE.rank, tower: TOWER.on, look: TOWER.look }),
   beats: () => (SOURCE.mode === 'demo' ? DEMO_BEATS : null),
   director: () => ({ userAt: DIRECTOR.userAt }),

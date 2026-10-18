@@ -6,7 +6,8 @@
 
 Demo: every suite in demo.py, whose results must equal expect_demo.json (recorded from the prototype page, so a
 difference means the port stopped behaving like the prototype). Live: live.py against fake_server.py and its
-scenarios (scenarios/*.jsonl). Both: no console errors, no request to anywhere but the server, no CSP violation.
+scenarios (scenarios/*.jsonl). Rooms (rooms.py): doors, desks and the one-room view on the real server (`--only rooms` runs it alone).
+Both: no console errors, no request to anywhere but the server, no CSP violation.
 
 Exit status 0 only when every check passed; each failed check is printed on its own line with FAIL.
 """
@@ -194,7 +195,7 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live"], help="run one half")
+    ap.add_argument("--only", choices=["demo", "live", "rooms"], help="run one half (rooms: only the rooms/doors suite)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
     ap.add_argument("--record-demo", metavar="URL",
                     help="run the demo suites against URL (the prototype's agent-test.html) and write expect_demo.json")
@@ -237,6 +238,9 @@ def main(argv=None) -> int:
                 await live.run(pw, out, failures, Server)
                 await live.run_real(pw, out, failures, RealServer)
                 await live.run_real_decide(pw, out, failures)
+            if a.only in (None, "live", "rooms"):
+                import rooms
+                await rooms.run_rooms(pw, out, failures, RealServer)
 
     asyncio.run(go())
     if a.record_demo:

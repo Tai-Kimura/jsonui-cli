@@ -17,6 +17,7 @@ from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject
 from .permissions import PermissionBook
 from .sources import devices as devices_mod
+from .sources import processes
 from .sources.tasks import TaskBook
 from .sources.test_progress import ProgressBook
 from .state import VizState
@@ -42,6 +43,12 @@ HEAVY_WINDOW_MS = 120_000
 HEAVY_TOOL_MS = 60_000                # one tool call running this long (hooks)
 HEAVY_SUBAGENTS = 3                   # subagents at work at once (hooks)
 ENDED_LINGER_MS = 60_000
+# Waiting on background work (requester, 10-18): a session whose Stop listed background_tasks keeps its light on
+# until the work ends — the next Stop without any, SessionEnd, or no background shell left under its process
+# (check_background). Only when its process cannot be watched (no pid, or ps has not answered for
+# BACKGROUND_UNWATCHED_MS) does it go dark after BACKGROUND_CAP_MS.
+BACKGROUND_CAP_MS = 30 * 60_000
+BACKGROUND_UNWATCHED_MS = 60_000
 TEST_RUNS_KEPT = 50
 EDIT_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
@@ -129,7 +136,7 @@ class World:
             session = {
                 "id": sid, "label": self._label(sid), "projectId": project["id"],
                 "cwd": tilde(cwd) if cwd else "?", "status": "idle", "relay": False,
-                "startedAt": at, "updatedAt": at,
+                "startedAt": at, "updatedAt": at, "roomSince": at,
             }
             self.sessions[sid] = session
             self._dirty |= {"sessions", "projects"}
@@ -137,7 +144,7 @@ class World:
             if project["jsonui"]:
                 self.jsonui_project(project["id"], at)
         elif cwd and session["cwd"] == "?":
-            self._move(session, cwd)
+            self._move(session, cwd, at)
         return session
 
     SINCE_TRIES = 20
@@ -165,9 +172,11 @@ class World:
         session["since"], session["sinceFrom"] = started, "agents"
         self._dirty.add("sessions")
 
-    def _move(self, session: dict, cwd: str) -> None:
+    def _move(self, session: dict, cwd: str, at: int) -> None:
         project = self.rooms.project_for(cwd)
         if session["projectId"] != project["id"] or session["cwd"] != tilde(cwd):
+            if session["projectId"] != project["id"]:
+                session["roomSince"] = at   # the view seats robots in the order they came into a room
             session["projectId"] = project["id"]
             session["cwd"] = tilde(cwd)
             self._dirty |= {"sessions", "projects"}
@@ -220,6 +229,8 @@ class World:
             else:
                 session.pop("waitingFor", None)
             self._dirty.add("sessions")
+        if self.tasks.turn_waiting(session["id"], status == "waiting"):
+            self._dirty.add("tasks")
         session["updatedAt"] = at
 
     # ---------------------------------------------------------------- JsonUI projects
@@ -319,6 +330,7 @@ class World:
             self._set(agent, at, "idle", "待機")
             text = f"出勤 {payload.get('source') or ''}".strip()
         elif kind == "SessionEnd":
+            self._background_off(session, at)
             self.perms.session_stopped(sid, at)
             self._dirty.add("perms")
             self._status(session, "ended", at)
@@ -326,6 +338,9 @@ class World:
             text = f"退勤 {payload.get('reason') or ''}".strip()
         elif kind == "UserPromptSubmit":
             session["lastPrompt"] = _head(payload.get("prompt"), PROMPT_MAX)
+            if agent["kind"] == "main":
+                self.tasks.turn_started(sid, agent["id"], payload.get("prompt"), at)
+                self._dirty.add("tasks")
             self._status(session, "busy", at)
             # A new prompt: whatever the last turn left open was interrupted (Esc).
             self._clear_open(agent["id"])
@@ -462,6 +477,9 @@ class World:
                 self._dirty.add("perms")
             background = payload.get("background_tasks")
             busy = isinstance(background, list) and len(background) > 0
+            if agent["kind"] == "main":
+                self.tasks.turn_ended(sid, at, background=busy, failed=kind == "StopFailure")
+                self._dirty.add("tasks")
             self._status(session, "busy" if busy else "idle", at)
             message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
             self._clear_open(agent["id"])
@@ -472,11 +490,19 @@ class World:
                     self._clear_open(sub["id"])
                     self._set(sub, at, "done", "完了", leftAt=at)
                     self._until[sub["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
-            self._set(agent, at, "done", "バックグラウンド作業中" if busy else "完了", lastMessage=message)
-            self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
+            if busy and agent["kind"] == "main":
+                # waiting on background work: lit, at its desk watching the screen, until the work ends
+                session["background"] = {"since": at}
+                self._dirty.add("sessions")
+                self._set(agent, at, "background", "バックグラウンド作業中", lastMessage=message)
+            else:
+                if agent["kind"] == "main":
+                    self._background_off(session, at, touch_agent=False)
+                self._set(agent, at, "done", "バックグラウンド作業中" if busy else "完了", lastMessage=message)
+                self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
             text = "停止（失敗）" if kind == "StopFailure" else "停止"
         elif kind == "CwdChanged" and cwd:
-            self._move(session, cwd)
+            self._move(session, cwd, at)
             self._set(agent, at, "carry", f"移動 {tilde(cwd)}")
             self._until[agent["id"]] = (at + CARRY_MS, "idle")
             text = f"移動 {tilde(cwd)}"
@@ -527,6 +553,48 @@ class World:
             if _s(row.get("name")) and not session.get("title"):
                 session["title"] = _head(row["name"], 120)
                 self._dirty.add("sessions")
+
+    # ---------------------------------------------------------------- waiting on background work (10-18)
+
+    def _background_off(self, session: dict, at: int, touch_agent: bool = True) -> None:
+        if session.pop("background", None) is None:
+            return
+        self._dirty.add("sessions")
+        # the turn that was waiting on the work is done with it (the card and the lamp agree; 4d's review, 10-18)
+        self.tasks.turn_ended(session["id"], at, background=False, failed=False)
+        self._dirty.add("tasks")
+        agent = self.agents.get(session["id"])
+        if touch_agent and agent and agent["state"] == "background":
+            self._set(agent, at, "idle", "待機")
+
+    def background_pids(self) -> dict[str, int]:
+        """Sessions waiting on background work whose process is known: session id -> pid (the newest)."""
+        want = {sid for sid, s in self.sessions.items() if s.get("background")}
+        return {sid: pid for pid, sid in self.pid_to_session.items() if sid in want}
+
+    def check_background(self, rows: list | None, at: int) -> None:
+        """A ps snapshot (sources/processes.py): a session with no background shell left under its process, and no
+        subagent still at work, is done waiting."""
+        if rows is None:
+            return
+        for sid, pid in self.background_pids().items():
+            session = self.sessions[sid]
+            session["background"]["checkedAt"] = at
+            shells = processes.background_shells(rows, pid)
+            subs = any(a["sessionId"] == sid and a["kind"] == "sub" and "leftAt" not in a for a in self.agents.values())
+            if not shells and not subs:
+                self._background_off(session, at)
+
+    def _background_cap(self, at: int) -> None:
+        watched = self.background_pids()
+        for sid, session in self.sessions.items():
+            bg = session.get("background")
+            if not bg:
+                continue
+            seen = bg.get("checkedAt")
+            unwatched = sid not in watched or seen is None or at - seen > BACKGROUND_UNWATCHED_MS
+            if unwatched and at - bg["since"] >= BACKGROUND_CAP_MS:
+                self._background_off(session, at)
 
     def apply_session_file(self, data: dict, at: int) -> None:
         """~/.claude/sessions/<pid>.json (never a .key file)."""
@@ -685,6 +753,7 @@ class World:
                 agent = self.agents.get(sid)
                 if agent and agent["state"] == "thinking":
                     self._set(agent, at, "idle", "待機")
+        self._background_cap(at)
         self._heavy(at)
 
     # ---------------------------------------------------------------- heavy work (10-18)

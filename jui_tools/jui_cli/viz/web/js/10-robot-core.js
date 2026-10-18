@@ -24,10 +24,11 @@ const COL = {
   band: '#fffdf7', bandInk: '#d62839', wood: '#c99f73', woodDark: '#9e7752',
   laptop: '#c9d0db', phone: '#1f2532',
 };
-const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', waiting: '#ffb020', done: '#35d07f', off: '#2a3a30' };
+const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', bg: '#4cc3d9', waiting: '#ffb020', done: '#35d07f', off: '#2a3a30' };
 const STATES = {
   idle: { name: '待機', lamp: 'idle', face: 'normal' },
   thinking: { name: '考え中', lamp: 'think', face: 'normal' },
+  background: { name: '裏で作業中', lamp: 'bg', face: 'normal' },   // waiting on background work: lit, watching its screen (10-18)
   typing: { name: '入力', lamp: 'busy', face: 'focus' },
   reading: { name: '読む', lamp: 'busy', face: 'normal' },
   command: { name: 'コマンド', lamp: 'busy', face: 'focus' },
@@ -36,7 +37,7 @@ const STATES = {
   carry: { name: '運ぶ', lamp: 'busy', face: 'normal' },
   done: { name: '完了', lamp: 'done', face: 'happy' },
 };
-const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', think: '淡い緑のゆっくり点滅（考え中）', waiting: '黄（許可待ち）', done: '緑の点滅（完了）' };
+const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', think: '淡い緑のゆっくり点滅（考え中）', waiting: '黄（許可待ち）', done: '緑の点滅（完了）', bg: '水色（裏で作業中）' };
 
 const HIPS_Y = 0.36;
 const HEAD = { w: 1.1, h: 0.9, d: 0.92, r: 0.17 };
@@ -744,6 +745,12 @@ function poseFor(state, s) {
       p.aRx = -2.05; p.aRz = -0.95;           // a hand to the chin
       p.aLx = -1.0; p.aLz = -0.55;            // the other arm folded
       p.torsoY = sway * 0.04; p.hipsY = reduceMotion ? 0 : Math.sin(s * 1.8) * 0.006;
+      break;
+    }
+    case 'background': {   // at its desk, watching the screen while the work runs in the background
+      const look = reduceMotion ? 0 : Math.sin(s * 0.35);
+      p.torsoX = 0.04; p.headX = 0.22 + look * 0.02; p.headY = look * 0.06; p.hipsY = reduceMotion ? 0 : Math.sin(s * 1.4) * 0.006;
+      p.aLx = -0.85; p.aLz = -0.28; p.aRx = -0.85; p.aRz = 0.28;   // hands resting on the desk
       break;
     }
     case 'typing':

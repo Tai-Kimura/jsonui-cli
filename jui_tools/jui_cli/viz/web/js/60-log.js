@@ -83,5 +83,6 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (narrowWb() && wbSideOpen) { wbSideOpen = false; applyWbSide(); } else closeWhiteboard();
   } else if (tb.open) { e.preventDefault(); if (tb.detail) closeTaskDetail(); else closeTaskBoard(); }
+  else if (has3D && liveSolo() && !TOWER.on && !e.target.closest('input, textarea, select')) { e.preventDefault(); setProject('all'); }   // one room → the floor
 });
 

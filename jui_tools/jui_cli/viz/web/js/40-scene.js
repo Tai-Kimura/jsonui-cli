@@ -184,7 +184,7 @@ function drawProjectBoard(pb, model, now) {
     open.slice(0, 3).forEach((t, k) => {
       const ly = by + bh + 26 + k * 40;
       ctx.fillStyle = K.head[t.col]; ctx.beginPath(); ctx.arc(40, ly - 7, 7, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = P.title; ctx.font = `700 20px ${FONT_BODY}`; fitText(ctx, `${t.list} #${t.id} ${t.subject}${t.perm ? '（許可待ち）' : ''}`, 58, ly, W - 90);
+      ctx.fillStyle = P.title; ctx.font = `700 20px ${FONT_BODY}`; fitText(ctx, `${t.list} ${taskRef(t)} ${t.subject}${t.perm ? '（許可待ち）' : ''}`, 58, ly, W - 90);
     });
     const note = SOURCE.mode === 'demo' ? '画面の spec はない（CLI ツール）' : proj.jsonui ? 'spec はまだ無い' : 'JsonUI のプロジェクトではない（spec なし）';
     ctx.fillStyle = P.sub; ctx.font = `600 18px ${FONT_BODY}`; ctx.fillText(note, 30, H - 22);
@@ -224,9 +224,10 @@ function drawTaskBoard(full, project = 'shop', board = null) {
       ctx.translate(nx + nw / 2, ny + noteH / 2); ctx.rotate((((task.id * 37 + c * 11) % 5) - 2) * 0.007); ctx.translate(-(nx + nw / 2), -(ny + noteH / 2));
       ctx.fillStyle = 'rgba(0, 0, 0, 0.16)'; ctx.fillRect(nx + 2, ny + 3, nw, noteH);
       ctx.fillStyle = P.note[col]; ctx.fillRect(nx, ny, nw, noteH);
+      if (isTurn(task)) { ctx.fillStyle = task.failed ? P.warn : P.head[col]; ctx.fillRect(nx, ny, 7, noteH); }   // a turn: a stripe down its left edge
       if (task.perm) { ctx.lineWidth = 6; ctx.strokeStyle = P.warn; ctx.strokeRect(nx - 2, ny - 2, nw + 4, noteH + 4); }
       ctx.fillStyle = P.pin; ctx.beginPath(); ctx.arc(nx + nw / 2, ny + 7, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = P.soft; ctx.font = `700 15px ${FONT_MONO}`; ctx.fillText(`${task.list} #${task.id}`, nx + 10, ny + 25);
+      ctx.fillStyle = P.soft; ctx.font = `700 15px ${FONT_MONO}`; ctx.fillText(`${task.list} ${taskRef(task)}`, nx + (isTurn(task) ? 14 : 10), ny + 25);
       if (task.perm) {
         rr(ctx, nx + nw - 76, ny + 9, 66, 24, 12); ctx.fillStyle = P.warn; ctx.fill();
         ctx.fillStyle = P.warnInk; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('許可待ち', nx + nw - 43, ny + 26); ctx.textAlign = 'left';
@@ -526,6 +527,7 @@ function build3D() {
     // A board belongs to one project room, so opening it narrows the view to that project (unless it already shows everything).
     const fit = (proj) => { if (proj && UI.project !== 'all' && UI.project !== proj) setProject(proj, { camera: false }); };
     if (h.kind === 'floor') towerLeave(SOURCE.mode === 'live' ? h.k : 0);   // the demo has one office
+    else if (h.kind === 'room') setProject(h.project);
     else if (h.kind === 'robot') openRobot(h.id, canvas);
     else if (h.kind === 'tasks') { fit(h.project); openTaskBoard(canvas, undefined, h.project); }
     else if (h.kind === 'spec') { fit(SPECS[h.i].project); openWhiteboard(h.i, canvas); }
@@ -535,7 +537,7 @@ function build3D() {
     if (ev.buttons || (zoom.zoomed && !rbState.id)) return;
     const h = hitAt(ev);
     canvas.style.cursor = h ? 'pointer' : '';
-    canvas.title = h && h.kind === 'floor' ? h.title : '';
+    canvas.title = h && (h.kind === 'floor' || h.kind === 'room') ? h.title : '';
   });
 
   sceneEl.addEventListener('pointerdown', () => { DIRECTOR.userAt = performance.now(); });
@@ -552,6 +554,7 @@ function build3D() {
     document.getElementById('floor-up').addEventListener('click', () => step(1));
     document.getElementById('floor-down').addEventListener('click', () => step(-1));
     document.getElementById('floor-building').addEventListener('click', () => (TOWER.on ? towerLeave(LIVE.floor) : towerEnter()));
+    document.getElementById('room-back').addEventListener('click', () => setProject('all'));
   }
   const applyTheme = () => { for (const [mat, token, fallback] of roomMats) mat.color.set(readToken(token, fallback)); };
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
@@ -590,19 +593,39 @@ function liveBuildRoom(room) {
   const mats = [[wallMat, '--wall', '#f7f9fc'], [floorMat, room.floor, '#e9eef6']];
   roomMats.push(...mats);
   const floor = new THREE.Mesh(new RoundedBoxGeometry(w, 0.16, d, 2, 0.05), floorMat); floor.position.set(cx, -0.08, cz); g.add(floor);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, room.back, 0.16), wallMat); back.position.set(cx - 0.08, room.back / 2, room.z0 - 0.08); g.add(back);
-  const left = new THREE.Mesh(new THREE.BoxGeometry(0.16, room.left, d), wallMat); left.position.set(room.x0 - 0.08, room.left / 2, cz); g.add(left);
-  // the doorway: a mat at the front right, where robots come in and go out
-  const mat = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.02, 0.6), toon('#c9d0db')); mat.position.set(room.x1 - 0.7, 0.01, room.z1 - 0.3); g.add(mat);
   const frameMat = toon('#7a5a3c');
-  // project board on the back wall; a room with many specs gets the big spec board instead (plan 09 §7)
-  const pbW = room.big ? w - 1.2 : Math.min(w - 2.2, 4.2);
+  // the back and left walls, with a door where a room is behind or to the left (requester, 10-18)
+  const doors = room.doors || {}, da = doorAt(room), half = DOOR_W / 2;
+  for (const wall of liveWalls().filter((q) => q.room === room.id)) {
+    const ww = wall.x1 - wall.x0, wd = wall.z1 - wall.z0, hgt = wall.side === 'back' ? room.back : room.left;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(ww, hgt, wd), wallMat); m.position.set((wall.x0 + wall.x1) / 2, hgt / 2, (wall.z0 + wall.z1) / 2); g.add(m);
+  }
+  const doorway = (x, z, along) => {   // a lintel over the gap, a frame round it, a sill across the gap between the rooms
+    const hgt = along === 'x' ? room.back : room.left, top = hgt - DOOR_H;
+    const lin = new THREE.Mesh(along === 'x' ? new THREE.BoxGeometry(DOOR_W, top, WALL_T) : new THREE.BoxGeometry(WALL_T, top, DOOR_W), wallMat);
+    lin.position.set(x, DOOR_H + top / 2, z); g.add(lin);
+    for (const [bw, bh, bd, ox, oy, oz] of along === 'x'
+      ? [[0.08, DOOR_H, WALL_T + 0.04, -half, DOOR_H / 2, 0], [0.08, DOOR_H, WALL_T + 0.04, half, DOOR_H / 2, 0], [DOOR_W + 0.08, 0.08, WALL_T + 0.04, 0, DOOR_H, 0]]
+      : [[WALL_T + 0.04, DOOR_H, 0.08, 0, DOOR_H / 2, -half], [WALL_T + 0.04, DOOR_H, 0.08, 0, DOOR_H / 2, half], [WALL_T + 0.04, 0.08, DOOR_W + 0.08, 0, DOOR_H, 0]]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), frameMat); bar.position.set(x + ox, oy, z + oz); g.add(bar);
+    }
+    const gap = ROOM_GAP + WALL_T;
+    const sill = new THREE.Mesh(along === 'x' ? new THREE.BoxGeometry(DOOR_W, 0.16, gap) : new THREE.BoxGeometry(gap, 0.16, DOOR_W), floorMat);
+    sill.position.set(along === 'x' ? x : x - gap / 2 + WALL_T / 2, -0.08, along === 'x' ? z - gap / 2 + WALL_T / 2 : z); g.add(sill);
+  };
+  if (doors.back) doorway(da.backX, room.z0 - WALL_T / 2, 'x');
+  if (doors.left) doorway(room.x0 - WALL_T / 2, da.leftZ, 'z');
+  // the entrance from the corridor: a mat at the front, where robots come in and go out
+  if (doors.front) { const mat = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, 0.02, 0.6), toon('#c9d0db')); mat.position.set(da.frontX, 0.01, room.z1 - 0.3); g.add(mat); }
+  // project board on the back wall; a room with many specs gets the big spec board instead (plan 09 §7), kept
+  // clear of the back door
+  const pbW = room.big ? w - (doors.back ? 3.2 : 1.2) : Math.min(w - 2.2, 4.2);
   const pb = room.big ? { project: room.id, big: true, W: 2048, H: 1024, w: pbW, h: Math.min(room.back - 0.9, pbW * 1024 / 2048), specs: [], tiles: [], splitY: 1e9, sig: '' }
     : { project: room.id, W: 1024, H: 560, w: pbW, h: pbW * 560 / 1024, specs: [], tiles: [], splitY: 0, sig: '' };
   if (room.big) pb.W = Math.round(pb.H * pb.w / pb.h);
   pb.canvas = makeCanvas(pb.W, pb.H); pb.tex = texFrom(pb.canvas);
   pb.mesh = new THREE.Mesh(new THREE.PlaneGeometry(pb.w, pb.h), new THREE.MeshBasicMaterial({ map: pb.tex, toneMapped: false }));
-  const pbX = room.big ? cx : cx + 0.4, pbY = room.big ? Math.max(2.35, pb.h / 2 + 0.75) : 2.35;
+  const pbX = room.big ? cx - (doors.back ? 1.0 : 0) : cx + 0.4, pbY = room.big ? Math.max(2.35, pb.h / 2 + 0.75) : 2.35;
   pb.mesh.position.set(pbX, pbY, room.z0 + 0.02); g.add(pb.mesh);
   for (const [bw, bh, x, y] of [[pb.w + 0.16, 0.08, 0, pb.h / 2 + 0.04], [pb.w + 0.16, 0.08, 0, -pb.h / 2 - 0.04], [0.08, pb.h, -pb.w / 2 - 0.04, 0], [0.08, pb.h, pb.w / 2 + 0.04, 0]]) {
     const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.05), frameMat); bar.position.set(pbX + x, pbY + y, room.z0 + 0.03); g.add(bar);
@@ -625,7 +648,7 @@ function liveBuildRoom(room) {
   const kw = Math.min(d - 1.4, 2.6), kb = { project: room.id, W: 1024, H: 842, w: kw, h: kw * 842 / 1024, sig: '' };
   kb.canvas = makeCanvas(kb.W, kb.H); kb.tex = texFrom(kb.canvas);
   kb.mesh = new THREE.Mesh(new THREE.PlaneGeometry(kb.w, kb.h), new THREE.MeshBasicMaterial({ map: kb.tex, toneMapped: false }));
-  kb.mesh.rotation.y = Math.PI / 2; kb.mesh.position.set(room.x0 + 0.02, 2.1, cz); g.add(kb.mesh);
+  kb.mesh.rotation.y = Math.PI / 2; kb.mesh.position.set(room.x0 + 0.02, 2.1, doors.left ? Math.min(cz, da.leftZ - half - 0.25 - kw / 2) : cz); g.add(kb.mesh);
   scene.add(g);
   const tag = document.createElement('button');
   tag.type = 'button'; tag.className = 'tag room'; tag.dataset.setProject = room.id; tag.title = `${room.name} だけを表示する`; tag.textContent = room.name;
@@ -633,7 +656,7 @@ function liveBuildRoom(room) {
   // over its own back wall's left end: at the front corner it sat on the back edge of the room in front (3×2 floors)
   const rt = { el: tag, id: room.id, p: new THREE.Vector3(room.x0 + 0.6, room.back + 0.35, room.z0 - 0.05) };
   roomTags.push(rt);
-  return { geo: room.geo, group: g, pb, kb, tb, rt, mats };
+  return { geo: room.geo, group: g, floor, pb, kb, tb, rt, mats };
 }
 function liveDropRoom(id) {
   const R = LIVE3D.rooms[id];
@@ -647,13 +670,15 @@ function liveDropRoom(id) {
 function liveAddRobot(d, i) {
   const robot = createRobot({ label: d.id, role: d.role, state: 'idle', seed: i * 1.7, furnished: true });
   robot.drawPhone = drawLivePhone;
-  const start = d.enter && d.door ? d.door.outside : d.pos || [0, 0];
+  // a robot that comes in walks from the corridor through the doors (requester, 10-18)
+  const route = d.enter ? liveRoute(null, d.room) : [];
+  const start = route.length ? route[0] : d.pos || [0, 0];
   robot.root.position.set(start[0], 0, start[1]); robot.root.rotation.y = d.ry || 0;
   robot.root.userData.robotId = d.id;
   scene.add(robot.root);
   const tag = addTag('', `${pill(d.id, d.role)}<span></span>`);
   const R = { def: d, robot, tag, text: tag.lastElementChild, act: '', path: [], room: d.room, seatKey: '', exitAt: 0 };
-  if (d.enter && d.door) R.path = [d.door.inside];
+  if (route.length) R.path = route.slice(1);
   d.enter = false;
   robots.push(R);
   return R;
@@ -698,12 +723,19 @@ function livePlan(R) {
   if (!d.pos) return;
   const key = `${d.room}:${d.pos.join()}`;
   if (key === R.seatKey) return;
-  const fromRoom = PROJECT[R.room];
-  if (R.seatKey && R.room !== d.room && fromRoom && fromRoom.shown && d.door) {
-    const out = doorOf(fromRoom);
-    R.path = [out.inside, out.outside, d.door.outside, d.door.inside, d.pos];
-  } else if (R.seatKey) R.path = [d.pos];   // another seat in the same room
-  else R.path.push(d.pos);                    // first seat: after the doorway when it just came in
+  const root = R.robot.root, here = [root.position.x, root.position.z];
+  const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
+  const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
+  R.rect = rect;
+  if (moved) { root.position.x = d.pos[0]; root.position.z = d.pos[1]; R.path = []; R.jumps = (R.jumps || 0) + 1; }
+  else if (R.seatKey && R.room !== d.room) {
+    // to another room: finish the step it is on, then through the doors (never a straight line through a wall)
+    const next = R.path.length ? R.path[0] : here;
+    R.path = [...(R.path.length ? [next] : []), ...liveRoute(roomAtPoint(next), d.room), d.pos];
+  } else if (R.seatKey && R.path.length > 1) R.path[R.path.length - 1] = d.pos;   // still on its way: a new seat at the end
+  else if (R.seatKey && roomAtPoint(here) !== d.room) { root.position.x = d.pos[0]; root.position.z = d.pos[1]; R.path = []; R.jumps = (R.jumps || 0) + 1; }   // its room moved under it (counted: the e2e wall check skips a jump)
+  else if (R.seatKey) R.path = [d.pos];   // another seat in the same room
+  else R.path.push(d.pos);                // first seat: after the doors when it just came in
   R.room = d.room; R.seatKey = key;
 }
 function liveWalk(R, dt, nowMs) {
@@ -712,9 +744,7 @@ function liveWalk(R, dt, nowMs) {
   if (LIVE.leaving[d.id]) { if (!R.exitAt && !R.out) R.exitAt = nowMs + 2500; }
   else if (R.exitAt && !R.out) R.exitAt = 0;   // it came back before walking out
   if (R.exitAt && nowMs >= R.exitAt && !R.path.length && !R.out) {
-    const room = PROJECT[d.room];
-    const door = room && room.shown ? doorOf(room) : null;
-    R.path = door ? [door.inside, door.outside] : [];
+    R.path = liveRoute(roomAtPoint([root.position.x, root.position.z]), null);   // out to the corridor
     R.out = true;
   }
   if (R.out && !R.path.length) { SOURCE.robotGone(d.id); return 'gone'; }
@@ -774,6 +804,22 @@ function liveUpdateRobots(nowSec, dt) {
     updateRobot(R.robot, nowSec, dt);
   }
 }
+/* One room at a time (requester, 10-18): a project picked (its room's tag, its floor in 3D, the menu) lays out only
+   that room, wider (layoutRooms, SOLO_GROW), with the way back at the top left. The other rooms' robots keep their
+   desks for when the floor comes back. */
+const liveSolo = () => (SOURCE.mode === 'live' ? soloRoomId() : null);
+function liveSoloSync() {
+  const solo = liveSolo();
+  for (const [id, R] of Object.entries(LIVE3D.rooms)) { const on = !solo || id === solo; R.group.visible = on; R.rt.el.hidden = !!solo; }   // alone, its name is in the box
+  for (const R of robots) {
+    const p = R.robot.root.position, on = !solo || R.def.room === solo || roomAtPoint([p.x, p.z]) === solo;
+    R.robot.root.visible = on; R.tag.hidden = !on;
+  }
+  const box = document.getElementById('room-solo');
+  if (!box) return;
+  box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed;
+  if (solo) setText(document.getElementById('room-solo-name'), PROJECT[solo].name);
+}
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
    part and the cork board the task board, a robot its card. */
 function towerHit(ray) {
@@ -783,9 +829,15 @@ function towerHit(ray) {
   return h ? { kind: 'floor', k: h.object.userData.floor, title: towerHover(h) } : null;
 }
 function liveHit(ray) {
-  const targets = [...Object.values(LIVE3D.rooms).flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.map((R) => R.robot.root)];
+  const solo = liveSolo(), rooms = Object.entries(LIVE3D.rooms).filter(([id]) => !solo || id === solo).map(([, R]) => R);
+  const targets = [...rooms.flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.filter((R) => R.robot.root.visible).map((R) => R.robot.root)];
   const hit = ray.intersectObjects(targets, true)[0];
-  if (!hit) return null;
+  if (!hit) {
+    // a room's floor picks the room (the floor view only)
+    const f = solo ? null : ray.intersectObjects(rooms.map((R) => R.floor), false)[0];
+    const id = f && Object.keys(LIVE3D.rooms).find((k) => LIVE3D.rooms[k].floor === f.object);
+    return id ? { kind: 'room', project: id, title: `${PROJECT[id].name} を選ぶ` } : null;
+  }
   let o = hit.object;
   while (o && o.userData.robotId === undefined && o.parent) o = o.parent;
   if (o && o.userData.robotId !== undefined) return { kind: 'robot', id: o.userData.robotId };
@@ -869,7 +921,7 @@ function liveLinks(model, nowSec) {
   const used = new Set();
   if (!zoom.zoomed) {
     model.specs.forEach((s, i) => {
-      if (!s.by || !robots.some((R) => R.def.id === s.by)) return;
+      if (!s.by || !robots.some((R) => R.def.id === s.by && R.robot.root.visible)) return;
       const R = LIVE3D.rooms[s.project];
       const t = R && R.pb.tiles.find((q) => q.i === i);
       if (!t) return;
@@ -886,7 +938,7 @@ function liveRoomPose(id) {
   const b = liveBounds(id === 'all' ? null : [id]) || { c: new THREE.Vector3(0, 0.4, 0), size: 12 };
   const half = THREE.MathUtils.degToRad(camera.fov) / 2, tanH = Math.tan(half) * Math.min(1, camera.aspect || 1);
   const fit = (size, share) => (size / 2) / (tanH * share);
-  const dist = id === 'all' ? Math.max(22, fit(b.size, 0.92)) : Math.max(9, fit(b.size, 0.8));
+  const dist = id === 'all' ? Math.max(22, fit(b.size, 0.92)) : Math.max(9, fit(b.size, (camera.aspect || 1) < 1 ? 0.7 : 0.86));   // one room: most of the view (less on a tall screen, where its corners reach out)
   return { p: b.c.clone().add(new THREE.Vector3(6.5, 15.5, 22.5).normalize().multiplyScalar(dist)), t: b.c };
 }
 /* The floor buttons (both views). Hidden while a board, the log, a zoom or a robot card covers the 3D (10-18). The
@@ -1359,7 +1411,7 @@ const TAG_UP = new THREE.Vector3(0, 2.62, 0);
 function robotPoint(id, up) { const R = robots.find((x) => x.def.id === id); return R.robot.root.position.clone().add(up); }
 
 function update3D(model, nowSec, dt) {
-  if (SOURCE.mode === 'live') liveUpdateRobots(nowSec, dt);
+  if (SOURCE.mode === 'live') { liveUpdateRobots(nowSec, dt); liveSoloSync(); }
   else {
     demoDirector(model, nowSec);
     for (const R of robots) {
