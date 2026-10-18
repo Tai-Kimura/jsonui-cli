@@ -226,6 +226,7 @@ def drives_a_device(command: str) -> bool:
 # removed with -r is one target, how many files were in it is not known). Not seen: a script that deletes from inside
 # (Python's os.remove, a Makefile), and anything the user deletes by hand.
 _DELETERS = {"rm", "rmdir", "unlink", "trash", "trash-put"}
+STDIN_TARGETS = "（標準入力）"   # what xargs hands a deleter: named nowhere in the command
 _RECURSIVE = re.compile(r"^-[A-Za-z]*[rR]")
 
 
@@ -285,6 +286,15 @@ def _deletes(words: list[str]) -> dict | None:
             targets = _operands(rest[1:])
             return {"targets": targets[:1], "folder": True, "how": "git worktree remove"} if targets else None
         return None
+    if exe == "xargs":   # `find … | xargs rm`, `xargs rm < list`: the targets come on stdin, so they have no name here
+        i = 0
+        while i < len(args) and args[i].startswith("-"):
+            i += 2 if args[i] in ("-n", "-L", "-I", "-P", "-s", "-E", "-d", "-a") else 1
+        # judged with a stand-in operand for what stdin brings (rm and git rm want one); find is no xargs target
+        inner = _deletes([*args[i:], STDIN_TARGETS]) if i < len(args) and os.path.basename(args[i]) != "find" else None
+        if inner is None:
+            return None
+        return {"targets": [STDIN_TARGETS], "folder": inner["folder"], "how": f"xargs {inner['how']}"}
     if exe == "find":
         k = next((j for j, a in enumerate(args) if a.startswith("-") or a in ("(", "!")), len(args))
         roots, expr = args[:k] or ["."], args[k:]

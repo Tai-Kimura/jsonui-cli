@@ -33,6 +33,10 @@ DELETES = [
     ("find build -type f -exec rm {} +", ["build"], False, "find -exec rm"),
     ("find tmp -delete", ["tmp"], True, "find -delete"),
     ("ls; rm a && rm b", ["a", "b"], False, "rm"),
+    ("find . -name '*.tmp' | xargs rm", ["（標準入力）"], False, "xargs rm"),       # the targets come on stdin
+    ("xargs -0 -n 10 rm -f < list.txt", ["（標準入力）"], False, "xargs rm"),
+    ("git ls-files -d | xargs git rm", ["（標準入力）"], False, "xargs git rm"),
+    ("find build -print0 | xargs -0 rm -rf", ["（標準入力）"], True, "xargs rm"),
 ]
 
 NOT_DELETES = [
@@ -49,6 +53,8 @@ NOT_DELETES = [
     "rsync -a --delete src/ dst/",
     "printf 'rm -rf /'",
     "echo 'unbalanced",
+    "find . -name '*.py' | xargs grep -l rm",     # xargs runs grep, not rm
+    "xargs echo rm < list.txt",
 ]
 
 
