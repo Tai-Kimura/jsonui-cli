@@ -192,7 +192,10 @@ def test_no_token_or_a_wrong_one_is_refused(viz):
 
 def test_an_origin_that_is_not_the_page_is_refused(viz):
     for origin in ("http://evil.example", f"http://localhost:{viz.port}", f"http://127.0.0.1:{viz.port + 1}",
-                   f"https://127.0.0.1:{viz.port}", "null", None):
+                   f"https://127.0.0.1:{viz.port}", "null", None,
+                   # shapes that start with the page's origin: equal, not a prefix (dd's attack script, 10-19)
+                   f"http://127.0.0.1:{viz.port}/", f"http://127.0.0.1:{viz.port}1", f"http://127.0.0.1:{viz.port}.evil.example",
+                   f"HTTP://127.0.0.1:{viz.port}"):
         assert viz.prompt(Origin=origin)[0] == 403, origin
 
 
@@ -203,6 +206,10 @@ def test_a_host_that_is_not_the_pages_own_is_refused(viz):
     assert viz.prompt(Host=f"127.0.0.1:{viz.port + 1}")[0] == 421
     assert viz.prompt(Host=f"localhost:{viz.port}", Origin=f"http://localhost:{viz.port}")[0] == 403
     assert viz.prompt(Host=f"localhost:{viz.port}")[0] == 403
+    # shapes that start with the page's own host: equal, not a prefix
+    for host in (f"127.0.0.1:{viz.port}0", f"127.0.0.1:{viz.port}.evil.example"):
+        assert viz.prompt(Host=host, Origin=f"http://{host}")[0] in (403, 421), host
+        assert viz.prompt(Host=host)[0] in (403, 421), host
 
 
 def test_only_post_is_taken(viz):
