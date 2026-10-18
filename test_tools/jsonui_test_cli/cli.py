@@ -16,6 +16,7 @@ from . import __version__
 from .validator import TestValidator
 from .report import load_results_file, generate_junit, generate_html
 from .validation.toolchain import unstamped_platforms
+from .test_dirs import TEST_DIR_DEFAULT, TEST_DIR_KEY, declared_test_files
 
 
 def cmd_validate(args):
@@ -1396,9 +1397,8 @@ def _resolve_media_files(test_config, project_root):
 
 #: Where a project's `.test.json` sources live, for deciding whether a run
 #: saw all of them. `tests` matches `mediaDir`'s default (`tests/media`) and
-#: the layout `generate test screen` writes into.
-TEST_DIR_KEY = "testDir"
-TEST_DIR_DEFAULT = "tests"
+#: the layout `generate test screen` writes into. The rule itself is in
+#: test_dirs.py, which `jui viz` loads too.
 
 
 def _declared_test_files(test_config, project_root):
@@ -1414,12 +1414,7 @@ def _declared_test_files(test_config, project_root):
     command line is not that — one file passed to `validate` is a complete
     answer about one file and no answer at all about the rest.
     """
-    root = Path(test_config.get(TEST_DIR_KEY) or TEST_DIR_DEFAULT)
-    if not root.is_absolute():
-        root = project_root / root
-    if not root.is_dir():
-        return None
-    return {p.resolve() for p in root.rglob("*.test.json")}
+    return declared_test_files(test_config, project_root)
 
 
 def _install_validated_tests(valid_test_files, config_path):

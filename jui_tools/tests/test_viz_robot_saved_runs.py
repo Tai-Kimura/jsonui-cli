@@ -73,7 +73,7 @@ def test_a_saved_run_from_before_the_server_started_is_no_robots_run():
     assert "old" not in names and names == ["c1", "c2"]
     world.publish()
     slice_tests = world.state.slices["tests"]
-    assert all("progressRun" not in t for t in slice_tests)
+    assert all("progressRun" not in t and "progressRuns" not in t for t in slice_tests)
 
 
 def test_a_row_without_a_run_id_joins_no_run():

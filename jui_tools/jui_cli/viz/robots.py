@@ -8,16 +8,13 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 
 TYPING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 READING_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "ToolSearch"}
 COMMAND_TOOLS = {"Bash", "BashOutput"}
 READING_MCP = re.compile(r"^mcp__jui-tools__(read_|lookup_|list_|search_|get_)")
 COMMAND_MCP = re.compile(r"^mcp__jui-tools__(jui_build|jui_verify|doc_|test_)")
-PHONE_COMMAND = re.compile(
-    r"xcodebuild\s+test|connectedAndroidTest|connected\w*AndroidTest|playwright\s+test|jsonui-test|xcrun\s+simctl|(^|[\s;&|(])adb(\s|$)"
-)
-
 ROLE_BY_TYPE = (
     ("jsonui-define", "define"), ("jsonui-ground", "ground"), ("jsonui-implement", "implement"),
     ("jsonui-navigation-", "navigation"), ("jsonui-test", "test"), ("jsonui-debug", "debug"),
@@ -53,7 +50,7 @@ def state_for_tool(tool: str, tool_input: dict) -> str:
         return "typing"
     if tool in COMMAND_TOOLS:
         command = str(tool_input.get("command", ""))
-        return "phone" if PHONE_COMMAND.search(command) else "command"
+        return "phone" if test_platform(command) is not None or drives_a_device(command) else "command"
     if tool in READING_TOOLS or READING_MCP.match(tool):
         return "reading"
     if COMMAND_MCP.match(tool):
@@ -94,14 +91,131 @@ _PLAYWRIGHT_FAILED = re.compile(r"(\d+) failed")
 _GRADLE_OK = re.compile(r"BUILD SUCCESSFUL")
 
 
-def test_platform(command: str) -> str:
-    if "xcodebuild" in command or "simctl" in command:
-        return "ios"
-    if "gradlew" in command or re.search(r"(^|[\s;&|(])adb(\s|$)", command):
-        return "android"
-    if "playwright" in command or "jest" in command:
+# ---------------------------------------------------------------- which Bash commands run tests
+
+# A command runs tests when one of its simple commands is a test runner — judged by the executable and
+# its subcommand, never by a word anywhere in the text: `find ~/.local/state/jsonui-test`, `git grep
+# connectedAndroidTest` and a python heredoc that edits tests/… were shown as passing test runs (10-18).
+# Anything unsure is not a test: a false "passed" misleads more than a missing one.
+_HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+_WRAPPERS = {"time", "nohup", "command", "exec", "caffeinate", "stdbuf", "nice"}
+_RUNNERS = {"npx", "bunx", "pnpx"}
+_GRADLE_TASK = re.compile(r"^(connected\w*AndroidTest|test\w*UnitTest|test)$")
+
+
+def _without_heredocs(command: str) -> str:
+    """The command with every here-document body removed (its lines are data, not commands)."""
+    lines, out, end = command.split("\n"), [], None
+    for line in lines:
+        if end is not None:
+            if line.strip() == end:
+                end = None
+            continue
+        out.append(line)
+        m = _HEREDOC.search(line)
+        if m:
+            end = m.group(2)
+    return "\n".join(out)
+
+
+def simple_commands(command: str) -> list[list[str]]:
+    """The command's simple commands as word lists (split at ; & | && || and newlines; heredoc bodies dropped).
+    [] when the text cannot be split like a shell would (unbalanced quotes): then it runs nothing we can name."""
+    lexer = shlex.shlex(_without_heredocs(command).replace("\n", " ; "), posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return []
+    out, current = [], []
+    for token in tokens:
+        if token and set(token) <= set(";&|()<>"):
+            if current:
+                out.append(current)
+            current = []
+        else:
+            current.append(token)
+    if current:
+        out.append(current)
+    return out
+
+
+def _head(words: list[str]) -> list[str]:
+    """The words from the program on: leading VAR=value, `env [-u X] [VAR=value]`, timeout N and the like dropped."""
+    i = 0
+    while i < len(words):
+        word = words[i]
+        base = os.path.basename(word)
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", word):
+            i += 1
+        elif base == "env":
+            i += 1
+            while i < len(words) and (words[i].startswith("-") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[i])):
+                i += 2 if words[i] in ("-u", "--unset") else 1
+        elif base == "timeout":
+            i += 1
+            while i < len(words) and words[i].startswith("-"):
+                i += 1
+            i += 1  # the duration
+        elif base in _WRAPPERS:
+            i += 1
+        else:
+            break
+    return words[i:]
+
+
+def _runs_tests(words: list[str]) -> str | None:
+    """The platform a simple command runs tests on ('ios', 'android', 'web', 'unknown'), or None."""
+    words = _head(words)
+    if not words:
+        return None
+    exe, args = os.path.basename(words[0]), words[1:]
+    if exe in _RUNNERS and args:
+        exe, args = os.path.basename(args[0]), args[1:]
+    if exe == "xcrun" and args:
+        exe, args = os.path.basename(args[0]), args[1:]
+    if exe in ("bundle", "pnpm", "yarn") and args[:1] == ["exec"]:
+        exe, args = os.path.basename(args[1]) if len(args) > 1 else "", args[2:]
+    if exe == "xcodebuild":
+        return "ios" if {"test", "test-without-building"} & set(args) else None
+    if exe in ("gradlew", "gradle"):
+        return "android" if any(_GRADLE_TASK.match(a.rsplit(":", 1)[-1]) for a in args if not a.startswith("-")) else None
+    if exe == "playwright":
+        return "web" if args[:1] == ["test"] else None
+    if exe in ("jest", "vitest"):
         return "web"
-    return "unknown"
+    if exe in ("npm", "pnpm", "yarn", "bun"):
+        if args[:1] in (["test"], ["t"]) or (args[:1] in (["run"], ["run-script"]) and len(args) > 1 and re.match(r"^test(\b|:)", args[1])):
+            return "web"
+        return None
+    if exe == "pytest" or (re.match(r"^python[0-9.]*$", exe) and args[:2] in (["-m", "pytest"], ["-m", "unittest"])):
+        return "unknown"
+    if exe in ("swift", "flutter", "go", "cargo", "dotnet") and args[:1] == ["test"]:
+        return "unknown"
+    if exe in ("rspec",) or (exe in ("rake",) and args[:1] == ["test"]):
+        return "unknown"
+    return None
+
+
+def test_platform(command: str) -> str | None:
+    """The platform the command runs tests on, or None when it runs no tests (the one rule for the test pane)."""
+    for words in simple_commands(command):
+        platform = _runs_tests(words)
+        if platform is not None:
+            return platform
+    return None
+
+
+def drives_a_device(command: str) -> bool:
+    """A simple command of adb, or of xcrun simctl (the robot holds a phone; not a test run by itself)."""
+    for words in simple_commands(command):
+        words = _head(words)
+        if not words:
+            continue
+        exe = os.path.basename(words[0])
+        if exe == "adb" or (exe == "xcrun" and words[1:2] == ["simctl"]):
+            return True
+    return False
 
 
 def test_summary(output: str) -> tuple[str, int | None, int | None]:
