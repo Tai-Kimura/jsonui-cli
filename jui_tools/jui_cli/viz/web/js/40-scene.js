@@ -1260,6 +1260,9 @@ function towerSetView(on) {
   TOWER.on = on;
   camera.layers.set(on ? TOWER.LAYER : 0);
   controls.minDistance = on ? 14 : 8; controls.maxDistance = on ? 150 : 80;
+  // The building is looked at from its middle, so it can turn almost to face-on (just above the horizon);
+  // a floor keeps the office's limit, which never shows the underside of the floor.
+  controls.maxPolarAngle = on ? 1.52 : 1.25;
 }
 function towerEnter() {
   if (TOWER.on || LIVE.floors.length < 2 || zoom.zoomed) return;
