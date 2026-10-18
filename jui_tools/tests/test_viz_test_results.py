@@ -3,7 +3,8 @@ folder, jui viz reads them, so a run's pass / fail survives a server restart and
 show up (10-18, requester: "the drivers write, viz reads").
 
 HOME is a temporary folder in every test that starts a server, with a config.json naming a free port, and
-JUI_VIZ_HOME / XDG_STATE_HOME / JSONUI_TEST_RESULTS_DIR are removed from the child's environment: nothing
+JUI_VIZ_HOME / XDG_STATE_HOME / JSONUI_TEST_RESULTS_DIR / JSONUI_TEST_PROGRESS_DIR (a plugin session carries it) are
+removed from the child's environment: nothing
 here reads the real results folder or reaches the server on the default port.
 """
 from __future__ import annotations
@@ -267,7 +268,7 @@ def _free_port() -> int:
 
 
 def _env(home: Path) -> dict:
-    env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME", tr.BASE_ENV)}
+    env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME", tr.BASE_ENV, "JSONUI_TEST_PROGRESS_DIR")}
     env.update(HOME=str(home), PYTHONUNBUFFERED="1")
     return env
 
