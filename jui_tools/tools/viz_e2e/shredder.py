@@ -197,6 +197,44 @@ async def run_shredder(pw, out, failures, jt=None, shots_only=False):
         res["stopSec"] = round(time.monotonic() - t1, 1)
         await wait(page, f"() => {{ const x = window.__dbg.shred().robots.find((y) => y.id === '{a}'); return x.path === 0 && Math.abs(x.x - x.seat[0]) < 0.01 && Math.abs(x.z - x.seat[1]) < 0.01; }}", timeout=20000, label="back after the stop")
 
+        # breaks (2.3.3) and the shredder never take each other's path
+        await page.evaluate("() => window.__dbg.play({ p: 0, solo: { p: 0 }, idleMs: 0, restMinSec: 0, restMaxSec: 0 })")
+        await page.evaluate("() => window.__dbg.brk({ p: { smoke: 1, vend: 0 }, joinP: 0, smokeMinSec: 60, smokeMaxSec: 60, restMinSec: 0, restMaxSec: 0 })")
+        await wait(page, f"() => window.__dbg.brk().robots.some((x) => x.id === '{b}' && x.kind === 'smoke' && x.at)", timeout=40000, label="b on a break")
+        await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 } })")   # no new break from here
+        # deleting while on a break: the Bash is work, which ends the break (2.3.3's rule); from there it takes the papers
+        # to the shredder — never both at once
+        seen = []
+        bash(sids[b], "rm on-break.txt")
+        for _ in range(40):
+            k = next(x for x in (await page.evaluate("() => window.__dbg.brk()"))["robots"] if x["id"] == b)
+            r = next(x for x in (await page.evaluate(shred))["robots"] if x["id"] == b)
+            seen.append([k["kind"], r["phase"]])
+            if r["phase"] == "feeding":
+                break
+            await page.wait_for_timeout(250)
+        res["onBreak"] = seen
+        check(failures, not any(kind and phase for kind, phase in seen), f"a break and the errand never at once: {seen}")
+        check(failures, seen[-1][1] == "feeding", f"after the break it takes the papers to the shredder: {seen}")
+        await page.evaluate("() => window.__dbg.brk({ endAll: true })")
+        await wait(page, f"() => {{ const x = window.__dbg.shred().robots.find((y) => y.id === '{b}'); return x.phase === null && x.path === 0 && Math.abs(x.x - x.seat[0]) < 0.01; }}", timeout=30000, label="b back from the shredder")
+        bash(sids[a], "rm -f errand.txt")   # on the way to the shredder: a break may not start, even at p = 1
+        await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').phase === 'going'", label="a goes")
+        await page.evaluate("() => window.__dbg.brk({ p: { smoke: 1, vend: 1 }, joinP: 1, smokeMinSec: 60, smokeMaxSec: 60, restMinSec: 0, restMaxSec: 0 })")
+        took = []
+        for _ in range(60):   # to the end of the errand: on the way (a path) and feeding (no path), where a break could start
+            k = next(x for x in (await page.evaluate("() => window.__dbg.brk()"))["robots"] if x["id"] == a)
+            r = next(x for x in (await page.evaluate(shred))["robots"] if x["id"] == a)
+            took.append([r["phase"], k["kind"]])
+            if took[-1][0] is None and any(t[0] == "feeding" for t in took):
+                break
+            await page.wait_for_timeout(250)
+        res["errandThenBreak"] = took
+        check(failures, any(t[0] == "feeding" for t in took) and all(not kind for phase, kind in took if phase),
+              f"no break starts on the way to the shredder or while feeding it: {took}")
+        await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true })")
+        await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').phase === null", timeout=20000, label="a done")
+
         await page.click("#room-back")
         await wait(page, "() => window.__dbg.solo() === null && window.__dbg.shred().shredder === null", label="gone with the props")
         await page.emulate_media(color_scheme="dark")

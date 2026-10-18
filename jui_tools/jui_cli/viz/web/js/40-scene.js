@@ -1451,7 +1451,7 @@ function brkSmoke(nowSec) {
    fall into the bin, and it goes back to its desk; a new instruction, a call or a question ends it at once. A deletion
    that found nothing: no errand, a puzzled tilt of the head. The name of what went is the robot's act (over its head,
    in its card and in the log). Not seen: a script that deletes from inside, or the user by hand. */
-const SHRED = { w: 0.8, d: 0.55, h: 1.1, bitsMax: 24, feedSec: 1.2, bitsSec: 2.0, doneSec: 3.6, tiltSec: 1.6, labelMs: 8000, every: 0.07, scale: 1.35 };   // built at 1, shown at the robots' size (as the other props)
+const SHRED = { w: 0.8, d: 0.55, h: 1.1, bitsMax: 24, feedSec: 1.2, bitsSec: 2.0, doneSec: 3.6, tiltSec: 1.6, labelMs: 8000, every: 0.07, scale: 1.35, waitSec: 15 };   // built at 1, shown at the robots' size (as the other props)
 function shredderBuild(r, g) {
   const k = SHRED.scale, W = SHRED.w * k, D = SHRED.d * k;
   const cx = (r.x0 + r.x1) / 2, x = Math.min(cx + 1.6, r.x1 - SEAT.aisleR - W), z = r.z0 + 0.12 + D / 2;
@@ -1483,12 +1483,22 @@ function shredTick(R, st, nowSec) {
     R.shredAt = sh.at;
     if (first && vizNow() - sh.at > 30_000) return;   // a deletion from before the page opened: not acted out now
     if (!sh.ok) { R.tiltUntil = nowSec + SHRED.tiltSec; return; }
-    const P = PROPS.shredder;
-    if (P && PROPS.room === R.def.room && R.robot.root.visible && !R.play && !R.playBack && !R.shred && !R.brk && !R.solo && !LIVE.leaving[R.def.id] && !R.robot.call) {   // not from a break, a nap or a bento
-      R.shred = { phase: 'going', at: sh.at, t0: 0, held: shredHeld(sh.folder, sh.count), count: sh.count };
-      R.robot.root.add(R.shred.held);
-      R.path = [P.spot];
-    }
+    // only with a shredder in its room now: a deletion seen on the floor view is not acted out on coming up close
+    if (PROPS.shredder && PROPS.room === R.def.room) R.shredPending = { sh, until: nowSec + SHRED.waitSec };
+  }
+  const want = R.shredPending;
+  if (want && nowSec > want.until) R.shredPending = null;
+  const P = PROPS.shredder;
+  // It goes when nothing else holds it: never from a break, a game, a nap or a bento still under way (it waits for them,
+  // up to SHRED.waitSec), but straight from the walk back from one — a deletion is work, and work ends a break first.
+  if (R.shredPending && P && PROPS.room === R.def.room && R.robot.root.visible && !R.play && !R.brk && !R.solo && !R.shred
+      && !LIVE.leaving[R.def.id] && !R.robot.call && (st.promptAt || 0) <= want.sh.at) {
+    const s0 = R.shredPending.sh;
+    R.shredPending = null; R.playBack = false;
+    R.shred = { phase: 'going', at: s0.at, t0: 0, held: shredHeld(s0.folder, s0.count), count: s0.count };
+    R.robot.root.add(R.shred.held);
+    const p = R.robot.root.position, from = roomAtPoint([p.x, p.z]);
+    R.path = from && from !== R.def.room ? [...liveRoute(from, R.def.room), P.spot] : [P.spot];
   }
   // stop at once: a new instruction (promptAt after the deletion), a tool, a wait or a question (any state but idle and
   // done), a call, leaving. The turn ending (done, and back to idle 3 s later) is not one: a deletion is often the last
