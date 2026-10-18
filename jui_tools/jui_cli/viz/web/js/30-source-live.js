@@ -852,7 +852,7 @@ function usageLeft(ms) {
 }
 function usageAgo(ms) {
   const m = Math.floor(ms / 60000);
-  return m < 60 ? `${m}分前の値` : m < 1440 ? `${Math.floor(m / 60)}時間前の値` : `${Math.floor(m / 1440)}日前の値`;
+  return m < 60 ? `${m}分前` : m < 1440 ? `${Math.floor(m / 60)}時間前` : `${Math.floor(m / 1440)}日前`;   // 「◯分前の値」 until 10-19 (the requester: shorter)
 }
 function renderUsage(now) {
   const el = document.getElementById('usage');

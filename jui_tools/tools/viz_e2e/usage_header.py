@@ -4,7 +4,7 @@ The real `jui viz serve` in a throwaway HOME on a free port, fed by the real sta
 (Claude Code 2.1.302's shape). Before any value: 上限の値なし. Then 0 / 50 / 99 %: the hue of the number falls as the
 share grows (interpolated, not steps), and the number and the % have one colour. 100 % (and 120, capped): no number and
 no %, 上限到達 in the inactive colour, the time to the reset still there. The time counts down; a value 20 minutes old
-says 20分前の値. Light and dark. No console error, nothing requested outside the server.
+says 20分前. Light and dark. No console error, nothing requested outside the server.
 """
 
 from __future__ import annotations
@@ -92,6 +92,19 @@ async def run_usage(pw, out, failures):
         stale = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 20 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.chipBoxes()), 1500)); }")
         res[f"chips-{tag}"] = {"fresh": fresh, "stale": stale}
         await page.screenshot(path=str(out / f"header-stale-{tag}.png"), clip={"x": 0, "y": 0, "width": width, "height": 120})
+        # A longer row may wrap the header to two lines (fine, the requester, 10-19); it must hide nothing: everything in
+        # it ends above the view below, and パネルを閉じる is still the element under its own middle.
+        lay = res[f"layout-{tag}"] = await page.evaluate("""() => {
+          const top = Math.max(...[...document.querySelectorAll('.topbar *')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().bottom));
+          const below = ['.main', '#scene', '#side', '#floor-nav', '#room-solo'].map((s) => document.querySelector(s))
+            .filter((e) => e && e.offsetParent !== null).map((e) => ({ name: e.id || e.className, top: e.getBoundingClientRect().top }));
+          const b = document.getElementById('btn-side'), r = b.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { headerBottom: top, below, button: hit === b || b.contains(hit), buttonAt: [r.top, r.bottom] };
+        }""")
+        check(failures, lay["below"] and all(lay["headerBottom"] <= e["top"] + 0.5 for e in lay["below"]),
+              f"{tag}: the header ends above what is below it: {lay}")
+        check(failures, lay["button"], f"{tag}: パネルを閉じる can be pressed: {lay}")
         await page.evaluate("() => window.__dbg.setClock(null)")
         await wait(page, "() => window.__dbg.usage()[0].note === ''", label=f"{tag}: fresh again")
         h = max(c["h"] for c in fresh)
@@ -173,7 +186,7 @@ async def run_usage(pw, out, failures):
         await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42%")
         later = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 20 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.usage()), 1500)); }")
         res["later"] = later
-        check(failures, "あと 1:5" in later[0]["text"] and later[0]["note"] == " · 20分前の値" and later[1]["note"] == " · 20分前の値",
+        check(failures, "あと 1:5" in later[0]["text"] and later[0]["note"] == " · 20分前" and later[1]["note"] == " · 20分前",
               f"20 minutes on: the time counts down and the value says its age: {later}")
         await page.evaluate("() => window.__dbg.setClock(null)")
         await wait(page, "() => window.__dbg.usage()[0].note === ''", label="fresh again")

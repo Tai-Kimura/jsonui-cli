@@ -174,7 +174,7 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   POST /usage に送り（forward.py と同じ生ソケット・短い timeout・失敗は黙る）、`viz/usage.py` が検証して
   viz_home/usage.json に残す（再起動しても最後の値）。`jui viz statusline install` が settings.json に書き、既存の
   statusLine は `--wrap <base64>` で包む（出力はそのまま、uninstall で元の値に戻す）。⚠️ statusLine を走らせるのは
-  ターミナルの claude だけで、VS Code 拡張（2.1.301 で確認）とデスクトップアプリ（10-19 に確認）は走らせないので、ヘッダは 15 分を超えると「◯分前の値」。
+  ターミナルの claude だけで、VS Code 拡張（2.1.301 で確認）とデスクトップアプリ（10-19 に確認）は走らせないので、ヘッダは 15 分を超えると「◯分前」（10-19 まで「◯分前の値」）。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 
