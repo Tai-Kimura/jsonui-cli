@@ -68,6 +68,8 @@ const SOURCE = {
       : `送れなかった（${ack.error || '不明'}）`));
   },
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
+  /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
+  history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
   /* question.answer (10-18): picks are question text -> { labels, other }; the card says "sent" when the slice does. */
   /* question.hold while someone answers (the hook waits a little longer); question.release: answer in the terminal */
   holdQuestion(id) { netRequest('question.hold', { questionId: id }); },
@@ -136,7 +138,8 @@ function liveSpecRow(x) {
           : impl.total && impl.done >= impl.total ? { kind: 'impl-done', text: tests.total ? `実装完了・テスト ${tests.passed}/${tests.total}` : '実装完了・テスト待ち' }
             : impl.done > 0 ? { kind: by ? 'impl' : 'paused', text: `実装 ${pctImpl}%` }
               : written.every((w) => w >= 1) ? { kind: 'written', text: '記述完了・実装待ち' } : { kind: 'paused', text: `記述 ${pct(written.reduce((a, b) => a + b, 0) / 7)}%` };
-  const note = `実装 ${impl.done}/${impl.total}${tests.total ? ` · テスト ${tests.passed}/${tests.total}${tests.failed ? `（失敗 ${tests.failed}）` : ''}` : ' · テストの定義なし'}`;
+  // maybeStale: the spec or its layout changed after the newest result (mtime, which a git checkout also moves).
+  const note = `実装 ${impl.done}/${impl.total}${tests.total ? ` · テスト ${tests.passed}/${tests.total}${tests.failed ? `（失敗 ${tests.failed}）` : ''}${tests.maybeStale ? '（結果は古い可能性）' : ''}` : ' · テストの定義なし'}`;
   const prev = LIVE.specRows[x.id];
   const row = {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
@@ -201,7 +204,7 @@ function rebuildTasks() {
       status: x.status, blockedByAll: blockedBy, blocksAll: Array.isArray(x.blocks) ? x.blocks.map(String) : [],
       created: x.createdAt ? secOfDay(x.createdAt) : -1, createdMs: x.createdAt || 0,
       start: x.startedAt ? secOfDay(x.startedAt) : null, end: x.completedAt ? secOfDay(x.completedAt) : null,
-      source: String(x.source || 'task'), turn: Number(x.turn) || 0, waiting: !!x.waiting, background: !!x.background, failed: !!x.failed,
+      source: String(x.source || 'task'), turn: Number(x.turn) || 0, harness: typeof x.harness === 'string' ? x.harness : '', waiting: !!x.waiting, waitingFor: x.waitingFor === 'question' ? 'question' : '', background: !!x.background, failed: !!x.failed,
     });
   }
   TASKS.splice(0, TASKS.length, ...rows);
@@ -248,7 +251,10 @@ function liveTestsFor(projectId) {
   const mine = projectId ? runs.filter((r) => r.projectId === projectId) : runs.filter((r) => !LIVE.uiReady || inScope(r.projectId));   // UI exists once 70-main.js ran
   const pickFrom = projectId || LIVE.uiReady ? mine : runs;   // narrowed to a project: only its runs
   if (!pickFrom.length) return EMPTY_TESTS;
-  const run = pickFrom.find((r) => r.status === 'running') || [...pickFrom].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+  return liveRunView(pickFrom.find((r) => r.status === 'running') || [...pickFrom].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0]);
+}
+/* One run as the panels show it (the test pane, and a robot's card). */
+function liveRunView(run) {
   const cases = Array.isArray(run.cases) ? run.cases : [];
   const rows = cases.map((c) => ({ name: String(c.name || ''), branch: '', status: CASE_STATUS[c.status] || 'pending', attempt: 1, step: c.status === 'running' ? 'このケースを実行中' : '' }));
   const passed = rows.filter((r) => r.status === 'passed').length;
@@ -261,7 +267,16 @@ function liveTestsFor(projectId) {
     rows, passed, failed, runningIdx, retrying: false, active: run.status === 'running', statusText,
     file: String(run.file || run.command || ''), device: dev ? String(dev.name) : ({ ios: 'iOS', android: 'Android', web: 'Web' }[run.platform] || ''),
     who: labelOf(run.agentId), project: run.projectId, runStatus: run.status, command: String(run.command || ''),
+    id: String(run.id), startedAt: Number(run.startedAt) || 0, savedAt: Number(run.savedAt) || 0,
   };
+}
+/* A robot's own runs for its card (requester, 10-18: "ロボットのパネルにもテストの経過表示できない？"): only runs
+   that robot started — the one running first, then the latest — at most ROBOT_RUNS_MAX. */
+const ROBOT_RUNS_MAX = 3;
+function robotRuns(label) {
+  const runs = (Array.isArray(LIVE.slices.tests) ? LIVE.slices.tests : []).filter((r) => r && r.id && labelOf(r.agentId) === label);
+  runs.sort((a, b) => (b.status === 'running') - (a.status === 'running') || (b.startedAt || 0) - (a.startedAt || 0));
+  return runs.slice(0, ROBOT_RUNS_MAX).map(liveRunView);
 }
 
 /* ---------- permission prompts (plan 04 Permission, plan 08 §4 → the demo's perm rows) ---------- */
@@ -657,7 +672,7 @@ function rebuildRobots(initial) {
     if (gone && !isNew) { if (!LIVE.leaving[label]) LIVE.leaving[label] = { since: now }; }
     else if (!gone && isNew) { ROBOT_DEFS.push(def); def.enter = !initial; }   // robots already there sit down at once
     else if (!gone) delete LIVE.leaving[label];
-    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || '') };
+    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), asking: a.state === 'waiting' && a.waitingOn === 'question' };
     if (LIVE.leaving[label]) st.state = 'done';
     robotState[label] = st;
     seen.add(label);

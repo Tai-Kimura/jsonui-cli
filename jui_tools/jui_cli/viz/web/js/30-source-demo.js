@@ -707,7 +707,9 @@ const SOURCE = {
     tickerItems.unshift(item); logItems.unshift(item);
     showToast(`${p.who} の ${p.tool} を${behavior === 'deny' ? '拒否' : behavior === 'always' ? '許可し、ルールを追加' : '許可'}した（デモ。実際は Claude Code へ答えを返す）`);
   },
+  history() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no transcripts
 };
+const robotRuns = () => [];   // the demo's one test run is shown by the card's own a2 row
 
 /* ---------- robot states (kept even without WebGL so the panels still run) ---------- */
 const robotState = Object.fromEntries(ROBOT_DEFS.map((d) => [d.id, { state: 'idle', act: '' }]));

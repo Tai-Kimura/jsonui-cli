@@ -2,10 +2,15 @@
 
 "vizの許可の機能が許可じゃなくて選択肢の選択のパターンに対応してない。複数選択しあるパターンあるし自由記述もあるから全部対応させて"
 
-AskUserQuestion needs no permission, so no PermissionRequest comes; its hook is PreToolUse. The documented
-answer (code.claude.com hooks.md, "Tools that require user interaction"): permissionDecision "allow" with an
-updatedInput that is the whole input — the questions as they came — plus ``answers``, keyed by the question's
-text, valued by the chosen option's label; multiple choices are labels joined with commas.
+Its hook is PreToolUse. This card was written assuming no PermissionRequest comes for it (not measured in the
+terminal either); in the VS Code extension (Claude Code 2.1.301, the requester's orchestrator, 10-18) one came
+20.0 s after the card — when the --ask hook had waited askWaitSec and given up — and it went on the permission
+board, where an allow answered nothing. It is no permission: permissions.NOT_PERMISSIONS keeps it off the board,
+out of the count and out of the relay.
+
+The documented answer (code.claude.com hooks.md, "Tools that require user interaction"): permissionDecision
+"allow" with an updatedInput that is the whole input — the questions as they came — plus ``answers``, keyed by the
+question's text, valued by the chosen option's label; multiple choices are labels joined with commas.
 
 Life of a card:
   pending --browser answer--> sent --PostToolUse--> answered (browser)
@@ -167,6 +172,12 @@ class QuestionBook:
         return None
 
     def hook_gave_up(self, card: dict) -> None:
+        future = card.get("_future")
+        if future is not None and not future.done() and card["status"] == "pending":
+            # The wait ran out (askWaitSec with nobody answering, or no page visible any more): the card must say so
+            # before its choices — the requester came to it 47 s after the hook had gone, and the choices looked
+            # pickable (10-18).
+            card["waitEnded"] = True
         card.pop("_future", None)
         card["hookWaiting"] = False
         card.pop("waitUntil", None)
@@ -239,5 +250,5 @@ class QuestionBook:
 
     def items(self) -> list[dict]:
         keep = ("id", "sessionId", "agentId", "createdAt", "status", "questions", "tooLongToShow", "hookWaiting",
-                "waitUntil", "released", "sentAt", "sentAnswers", "doneAt", "gotAnswers")
+                "waitUntil", "waitEnded", "released", "sentAt", "sentAnswers", "doneAt", "gotAnswers")
         return [{k: c[k] for k in keep if k in c} for c in sorted(self.cards.values(), key=lambda c: c["createdAt"])]

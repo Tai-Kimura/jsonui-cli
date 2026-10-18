@@ -77,6 +77,7 @@ function netConnect() {
         const w = NET.waits.get(msg.reqId); if (w) { NET.waits.delete(msg.reqId); w({ ok: true }); }
         break;
       }
+      case 'history': { const w = NET.waits.get(msg.reqId); if (w) { NET.waits.delete(msg.reqId); w({ ok: true, data: msg }); } break; }   // history.get's answer
       case 'ack': { const w = NET.waits.get(msg.reqId); if (w) { NET.waits.delete(msg.reqId); w({ ok: !!msg.ok, error: msg.error }); } break; }
       default: break;
     }

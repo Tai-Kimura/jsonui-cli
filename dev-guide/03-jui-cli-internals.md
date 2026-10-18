@@ -155,6 +155,14 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   `test_tools/tests/schema_fixtures/`）の 1 行を出す。Web はフォルダの .jsonl、Android は logcat、
   iOS は unified logging。jui_tools に JSON Schema のライブラリが無いので検証は手書きで、
   テストがスキーマのファイルと機械で突き合わせる。
+- **テストの結果（保存分）**: `sources/test_results.py`。driver は resultsPath が無いとき、run ごとに
+  `<base>/<platform>/<app>/<UTC>-<run>.json` を書く（base = `JSONUI_TEST_RESULTS_DIR` か
+  `~/.local/state/jsonui-test/results`。XDG_STATE_HOME には従わない＝シミュレータから見えない）。
+  Android は端末の `/data/local/tmp/jsonui-test-results/<package>/` を、起動時に 1 回と run_end のときだけ
+  `adb pull`（timeout 20 秒）。spec への結び付けは推測しない: ① サーバーが見た run id → ② Android の
+  `test.artifacts.android.appId` → ③ そのテストファイルを持つ app が 1 つだけ、のどれにも当たらなければ付けない
+  （iOS に ② は無い）。進捗と保存分はケースごとに新しいほうを採る。spec / layout の mtime が新しければ
+  「結果は古い可能性」（checkout でも mtime は動くので断定しない）。`jui viz doctor` が読む場所を印字する。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 

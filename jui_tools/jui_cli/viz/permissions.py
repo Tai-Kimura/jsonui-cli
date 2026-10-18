@@ -30,6 +30,11 @@ EXACT_MAX = 20_000
 CONTENT_EXCERPT = 2_000
 DEDUPE_MS = 3_000
 SUMMARY_MAX = 160
+#: Tools whose prompt is a question, not a permission (requester, 10-18: "選択肢なのに許可のボードが出る"). In the
+#: VS Code extension (Claude Code 2.1.301) AskUserQuestion comes as a PermissionRequest once the --ask hook has given
+#: up: an allow from the board answered nothing and read as "answered". No card, no relay: Claude Code asks as usual,
+#: and the question card (questions.py) says where to answer.
+NOT_PERMISSIONS = frozenset({"AskUserQuestion"})
 
 
 def _clip(text, n: int) -> str:
@@ -167,7 +172,9 @@ class PermissionBook:
     # ---------------------------------------------------------------- from hooks
 
     def from_hook(self, sid: str, aid: str, tool: str, tool_input: dict, use_id: str | None,
-                  suggestions, at: int, source: str = "forward") -> dict:
+                  suggestions, at: int, source: str = "forward") -> dict | None:
+        if tool in NOT_PERMISSIONS:
+            return None
         # The async forward and the synchronous --decide hook both report the
         # same PermissionRequest: one card for the pair. Only for the pair — a
         # second report from the SAME source is a second request (two equal
@@ -256,6 +263,8 @@ class PermissionBook:
         if not isinstance(rid, str) or not rid:
             return False
         channel.last_seen = at
+        if request.get("tool_name") in NOT_PERMISSIONS:
+            return True   # taken and never answered: no card, not even the relay-only one tick() would make
         channel.open[rid] = at
         if not self._try_link(channel, request, at):
             self._waiting.append({"channel": channel, "request": request, "at": at})

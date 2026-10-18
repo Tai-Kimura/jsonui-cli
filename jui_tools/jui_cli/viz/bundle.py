@@ -21,9 +21,9 @@ MODES = ("live", "demo")
 # The order is the module's order: a part may use a name only an earlier part declares at its top level.
 ORDER = {
     "live": ("10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
-             "40-scene.js", "50-panel.js", "60-log.js", "70-main.js"),
+             "40-scene.js", "50-panel.js", "55-history.js", "60-log.js", "70-main.js"),
     "demo": ("10-robot-core.js", "20-core.js", "30-source-demo.js",
-             "40-scene.js", "50-panel.js", "60-log.js", "70-main.js"),
+             "40-scene.js", "50-panel.js", "55-history.js", "60-log.js", "70-main.js"),
 }
 E2E_PART = "80-dbg.js"
 

@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
 
 FRUIT = {"question": "好きな果物は？ <b>太字</b>", "header": "果物", "multiSelect": False,
          "options": [{"label": "りんご", "description": "赤くて丸い"},
@@ -52,7 +52,7 @@ async def run_ask(pw, out, failures):
     # (paths.viz_home() under the fake HOME; nothing in the environment may point it at the real server's files)
     (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
     (home / ".local" / "state" / "jui-viz" / "config.json").write_text(json.dumps({"askWaitSec": 8, "askMaxSec": 60}))
-    base_env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME")}
+    base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
@@ -105,6 +105,12 @@ async def run_ask(pw, out, failures):
         check(failures, res["card"]["legends"][0].startswith("果物好きな果物は？ <b>太字</b>") and not res["card"]["bold"] and not res["card"]["script"]
               and "<script>x</script>" in res["card"]["preview"], f"the question shows as text, not markup: {res['card']}")
         check(failures, res["card"]["chip"] == "質問 1" and res["card"]["robot"] == "waiting", f"the chip counts it and the robot waits: {res['card']}")
+        # a robot waiting on a question is not waiting for a permission: its own badge and filter (requester, 10-18)
+        res["asking"] = await page.evaluate("""() => { const n = (k) => document.querySelector(`#sess-filter [data-sf="${k}"] b`).textContent;
+          const badge = document.querySelector('#sessions [data-sst]'); return { waiting: n('waiting'), asking: n('asking'), badge: badge && badge.textContent,
+          sum: (document.querySelector('#sessions [data-pgsum]') || {}).textContent || '' }; }""")
+        check(failures, res["asking"]["waiting"] == "0" and res["asking"]["asking"] == "1" and res["asking"]["badge"] == "質問に回答待ち"
+              and "許可待ち" not in res["asking"]["sum"] and "質問待ち 1" in res["asking"]["sum"], f"a question is not counted as a permission wait: {res['asking']}")
         res["countdown"] = await page.evaluate("() => (document.querySelector('.qcard.q-open [data-quntil]') || {}).textContent || ''")
         check(failures, res["countdown"].startswith("あと ") and res["countdown"].endswith("秒でターミナルに戻す"), f"the time left shows: {res['countdown']!r}")
         send = ".qcard.q-open [data-qsend]"
@@ -163,6 +169,31 @@ async def run_ask(pw, out, failures):
         outp, _ = hook(pre("ask-2c"), ask=True).communicate(timeout=40)
         res["nobody"] = {"printed": outp.decode(), "sec": round(time.monotonic() - t1, 1)}
         check(failures, res["nobody"]["printed"] == "" and 7 <= res["nobody"]["sec"] < 14, f"nobody answers: back after the short wait: {res['nobody']}")
+
+        # 2d. the card left behind cannot be answered here and says so first (requester, 10-18: the choices looked
+        # pickable and the reason was one line at the bottom)
+        await wait(page, "() => [...document.querySelectorAll('.qcard.q-closed .qwhy')].some((p) => p.textContent.includes('時間が過ぎました'))", label="the closed card's reason")
+        res["closed"] = await page.evaluate("""() => { const c = [...document.querySelectorAll('.qcard.q-closed')].find((x) => x.querySelector('.qwhy').textContent.includes('時間が過ぎました'));
+          const opt = c.querySelector('.qopt'), st = getComputedStyle(opt);
+          return { afterHeader: c.children[1].classList.contains('qwhy'), live: c.querySelectorAll('input:not([disabled])').length,
+                   inputs: c.querySelectorAll('input').length, cursor: st.cursor, opacity: Number(st.opacity), open: c.classList.contains('q-open') }; }""")
+        check(failures, res["closed"]["afterHeader"] and res["closed"]["live"] == 0 and res["closed"]["inputs"] > 0 and res["closed"]["cursor"] == "not-allowed"
+              and res["closed"]["opacity"] < 1 and not res["closed"]["open"], f"a card nobody waits on: the reason on top, choices not pickable: {res['closed']}")
+        await page.screenshot(path=str(out / "question-closed.png"))
+
+        # 2e. what the VS Code extension sent next (Claude Code 2.1.301, 10-18): a PermissionRequest for the question.
+        # The waiting hook lets it through at once, and nothing goes on the permission board or into its count.
+        ask_perm = dict(base, hook_event_name="PermissionRequest", tool_name="AskUserQuestion", tool_input=INPUT)
+        hook(ask_perm)
+        t1 = time.monotonic()
+        dp = subprocess.run([sys.executable, "-I", "-S", str(forward), "--decide"], input=json.dumps(ask_perm).encode(),
+                            capture_output=True, env=dict(base_env, HOME=str(home)), timeout=40)
+        await page.wait_for_timeout(1500)
+        res["askPerm"] = {"printed": dp.stdout.decode(), "sec": round(time.monotonic() - t1, 1),
+                          **(await page.evaluate("""() => ({ chip: document.getElementById('chip-perm').hidden,
+                             boxes: [...document.querySelectorAll('.perm-q b')].filter((b) => b.textContent === 'AskUserQuestion').length })"""))}
+        check(failures, res["askPerm"]["printed"] == "" and res["askPerm"]["sec"] < 5 and res["askPerm"]["chip"] is True and res["askPerm"]["boxes"] == 0,
+              f"a question's permission request is not a permission: {res['askPerm']}")
 
         # 3. a question that does not fit: no inputs, answer in the terminal (the hook lets it through at once)
         long = {"questions": [{**FRUIT, "options": [{"label": "りんご", "description": "x" * 5000}, FRUIT["options"][1]]}]}

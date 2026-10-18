@@ -264,6 +264,7 @@ class Source:
     tests_dir: Path
     test_cases: dict = field(default_factory=dict)       # spec file stem / layout name -> case count
     test_file_keys: dict = field(default_factory=dict)   # "screens/login.test.json" -> spec keys
+    android_app_id: str | None = None                    # test.artifacts.android.appId: ties a saved Android result
 
     @classmethod
     def from_config(cls, key: str, config_path: Path) -> "Source":
@@ -275,7 +276,10 @@ class Source:
             return path if path.is_absolute() else root / path
 
         test_cfg = config.get("test") if isinstance(config.get("test"), dict) else {}
-        return cls(key=key, root=root,
+        artifacts = test_cfg.get("artifacts") if isinstance(test_cfg.get("artifacts"), dict) else {}
+        android = artifacts.get("android") if isinstance(artifacts.get("android"), dict) else {}
+        app_id = android.get("appId")
+        return cls(key=key, root=root, android_app_id=app_id if isinstance(app_id, str) and app_id else None,
                    spec_dir=folder(config.get("spec_directory"), DEFAULT_SPEC_DIR),
                    layouts_dir=folder(config.get("layouts_directory"), "docs/screens/layouts"),
                    tests_dir=folder(test_cfg.get("testDir"), "tests"))
@@ -448,6 +452,16 @@ class JsonUIProject:
 
     # ---------------------------------------------------------------- lookups
 
+    @staticmethod
+    def _changed_after(at_ms: int, *paths: Path | None) -> bool:
+        for path in paths:
+            try:
+                if path is not None and path.stat().st_mtime * 1000 > at_ms:
+                    return True
+            except OSError:
+                pass
+        return False
+
     def layout_nodes_cached(self, path: Path | None) -> list[dict]:
         if path is None:
             return []
@@ -532,10 +546,13 @@ class JsonUIProject:
         return {"total": total, "done": done, "related": {"total": len(related), "done": sum(related)},
                 "layout": layout, "components": components}
 
-    def specs_for_test_file(self, rel: str) -> list[str]:
-        """Spec ids a test file (as the runner names it, e.g. screens/login.test.json) belongs to."""
+    def specs_for_test_file(self, rel: str, only: list[Source] | None = None) -> list[str]:
+        """Spec ids a test file (as the runner names it, e.g. screens/login.test.json) belongs to.
+        *only*: the apps a saved result was tied to (none of the others is a candidate)."""
         # The apps that have this test file; when none does, every app (by name).
-        owners = [s for s in self.sources if rel in s.test_file_keys]
+        owners = [s for s in self.sources if rel in s.test_file_keys and (only is None or s in only)]
+        if only is not None and not owners:
+            return []
         keys = {k for s in owners for k in s.test_file_keys[rel]}
         if not keys:
             keys = {Path(rel).name.replace(".test.json", "")}
@@ -573,6 +590,11 @@ class JsonUIProject:
             result = self.test_results.get(sid, {})
             tests = {"total": cases, "passed": result.get("passed", 0), "failed": result.get("failed", 0),
                      "running": bool(result.get("running"))}
+            if result.get("latest"):
+                tests["at"] = result["latest"]
+                # mtime moves on a git checkout too, so this can only say "may be stale" (10-18).
+                if self._changed_after(result["latest"], entry.path, self.layout_path(data, entry.source, entry.path)):
+                    tests["maybeStale"] = True
             by = entry.by if entry.by_until > at else None
             written_any = any(s["items"] for s in sections)
             impl_done = impl["total"] > 0 and impl["done"] == impl["total"]

@@ -96,6 +96,9 @@ class World:
         self._since_tries: dict[str, int] = {}
         # session id -> (cwd, transcript path from a hook); the transcript's usage tail; tokens per message id
         self.transcript_path = None
+        # session id, cwd, transcript path, agent id, agent transcript path -> the 応答の履歴 tab (sources/history.py)
+        self.history_reader = None
+        self._agent_paths: dict[str, str] = {}   # subagent id -> the hook's agent_transcript_path
         self._paths: dict[str, tuple[str | None, str | None]] = {}
         self._tails: dict = {}
         self._usage_seen: dict[str, dict[str, int]] = {}
@@ -121,6 +124,12 @@ class World:
         self.devices: list[dict] = []
         self.progress = ProgressBook()
         self.tests: dict[str, dict] = {}
+        # Per case, the newest outcome a source reported, merged into each project's test_results:
+        # live progress (project id -> spec id -> (test, case) -> (t, status)) and the saved
+        # result files' rows (sources/test_results.py). Newest wins, so a case that ran live
+        # and was then written to a file is counted once.
+        self.live_cases: dict[str, dict[str, dict[tuple[str, str], tuple[int, str]]]] = {}
+        self.saved_rows: list[dict] = []
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
         self._dirty: set[str] = set()
@@ -223,6 +232,8 @@ class World:
         if state is not None:
             agent["state"] = state
             self._until.pop(agent["id"], None)
+            if "waitingOn" not in extra:
+                agent.pop("waitingOn", None)   # what it waits on belongs to the state it was set with
         if act is not None:
             agent["act"] = act
         for k, v in extra.items():
@@ -241,7 +252,7 @@ class World:
             else:
                 session.pop("waitingFor", None)
             self._dirty.add("sessions")
-        if self.tasks.turn_waiting(session["id"], status == "waiting"):
+        if self.tasks.turn_waiting(session["id"], status == "waiting", waiting_for):
             self._dirty.add("tasks")
         session["updatedAt"] = at
 
@@ -262,6 +273,7 @@ class World:
             self.jsonui_errors[project_id] = f"{type(exc).__name__}: {exc}"[:200]
             return None
         self.jsonui[project_id] = loaded
+        self._merge_results(loaded)
         self._dirty |= {"specs", "tasks"}
         if self.on_project_loaded is not None:
             self.on_project_loaded(loaded)
@@ -277,6 +289,7 @@ class World:
             project.reload_spec(target, at, by)
         elif target.name.endswith(".test.json"):
             project.load_tests()
+            self._merge_results(project)  # which app has a test file decides where a saved row goes
         for sid in project.specs_touching(path):
             if by:
                 entry = project.specs[sid]
@@ -326,6 +339,8 @@ class World:
         aid = _s(payload.get("agent_id"))
         agent_type = _s(payload.get("agent_type"))
         agent = self._sub(sid, aid, agent_type, at) if aid else self._main(sid, at)
+        if aid and _s(payload.get("agent_transcript_path")):
+            self._agent_paths[aid] = payload["agent_transcript_path"]
         tool = _s(payload.get("tool_name"))
         tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
         use_id = _s(payload.get("tool_use_id"))
@@ -379,7 +394,12 @@ class World:
                 self._open_tool[use_id] = tool
                 self._tool_started[use_id] = at
             target = {"file": robots._rel(str(tool_input["file_path"]), root)} if _s(tool_input.get("file_path")) else None
-            self._set(agent, at, state, act, target=target)
+            # A question waits for the person as a permission does, but it is not one: the page says 質問に回答待ち,
+            # not 許可待ち, and does not count it with the permissions (requester, 10-18).
+            asking = tool == QUESTION_TOOL
+            if asking:
+                self._status(session, "waiting", at, "question")
+            self._set(agent, at, state, act, target=target, waitingOn="question" if asking else None)
             if state == "carry":
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
             if tool in EDIT_TOOLS:
@@ -445,6 +465,11 @@ class World:
                 run["endedAt"] = at
                 self._dirty |= {"tests", "devices", "specs"}
             text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
+        elif kind == "PermissionRequest" and tool == QUESTION_TOOL:
+            # A question, not a permission (permissions.NOT_PERMISSIONS): the robot stays "質問に回答待ち" from its
+            # PreToolUse, and nothing goes on the permission board.
+            cat = "perm"
+            text = "質問の許可の要求（許可の板には出さない。答えはターミナル）"
         elif kind == "PermissionRequest":
             # No tool_use_id here: take the newest open call of the same tool
             # (parallel calls are real: Bash and ToolSearch overlapped in P0).
@@ -769,22 +794,99 @@ class World:
                 target = candidates[0]
                 target["progressRun"] = run["run"]
         if target is not None:
-            target["cases"] = [{"name": c["name"], "status": c["status"]} for c in run["cases"].values()]
-            done = [c for c in run["cases"].values() if c["status"] in ("passed", "failed")]
-            target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
+            self._run_cases(target)
             project = self.jsonui.get(target["projectId"])
             if project is not None:
+                live = self.live_cases.setdefault(project.project_id, {})
                 for case in run["cases"].values():
                     for spec_id in project.specs_for_test_file(case["file"]):
-                        result = project.test_results.setdefault(spec_id, {"passed": 0, "failed": 0, "running": False, "_cases": {}})
-                        result["_cases"][(case["test"], case["name"])] = case["status"]
-                        statuses = list(result["_cases"].values())
-                        result["passed"] = statuses.count("passed")
-                        result["failed"] = statuses.count("failed")
-                        result["running"] = "running" in statuses
+                        live.setdefault(spec_id, {})[(case["test"], case["name"])] = (run["updatedAt"], case["status"])
+                self._merge_results(project)
                 self._dirty.add("specs")
         self._dirty.add("tests")
         return True
+
+    def _run_cases(self, target: dict) -> None:
+        """A test command's cases (a robot's card and the test pane): its live progress, and the saved result file
+        of the same run (B's rows, sources/test_results.py) — tied by the run id only, so only a run this server saw
+        start. Per case the newer outcome wins, so a case seen live and then saved counts once."""
+        rid = target.get("progressRun")
+        run = self.progress.runs.get(rid) if rid else None
+        live = list(run["cases"].values()) if run else []
+        saved = [r for r in self.saved_rows if rid and r.get("run") == rid]
+        if not saved:
+            target["cases"] = [{"name": c["name"], "status": c["status"]} for c in live]
+            target.pop("savedAt", None)
+        else:
+            merged: dict[tuple, tuple[int, str, str]] = {}
+            for c in live:
+                merged[(c["file"], c["test"], c["name"])] = (run["updatedAt"], c["status"], c["name"])
+            for r in saved:
+                key = (r["file"], r["test"], r["case"])
+                if key not in merged or merged[key][0] <= r["t"]:
+                    merged[key] = (r["t"], r["status"], r["case"])
+            target["cases"] = [{"name": name, "status": status} for _, status, name in merged.values()]
+            target["savedAt"] = max(r["t"] for r in saved)
+        done = [c for c in target["cases"] if c["status"] in ("passed", "failed")]
+        if run is not None or saved:
+            target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
+
+    def apply_saved_results(self, rows: list[dict]) -> None:
+        """The rows of every saved result file (sources/test_results.py), replacing the previous scan."""
+        self.saved_rows = rows
+        for target in self.tests.values():
+            if target.get("progressRun"):
+                self._run_cases(target)
+                self._dirty.add("tests")
+        for project in self.jsonui.values():
+            self._merge_results(project)
+        self._dirty.add("specs")
+
+    def _saved_specs(self, project: JsonUIProject, row: dict) -> list[str]:
+        """The specs of *project* a saved row belongs to, tied without guessing (design memo ②, 10-18):
+        1. its run is one this server saw start from a test command: that command's room;
+        2. Android: the app whose config names the row's package as test.artifacts.android.appId;
+        3. the one app, among every loaded room, that has the row's test file.
+        Anything else is left unattached. iOS has no counterpart of 2 (its app is the runner's id)."""
+        file = row.get("file")
+        if not file:
+            return []
+        if row.get("run") and any(t.get("progressRun") == row["run"] for t in self.tests.values()):
+            mine = any(t.get("progressRun") == row["run"] and t["projectId"] == project.project_id for t in self.tests.values())
+            return project.specs_for_test_file(file) if mine else []
+        if row["platform"] == "android" and row.get("app"):
+            by_app = [(p, s) for p in self.jsonui.values() for s in p.sources if s.android_app_id == row["app"]]
+            if by_app:
+                return project.specs_for_test_file(file, only=[s for p, s in by_app if p is project]) \
+                    if any(p is project for p, _ in by_app) else []
+        owners = [(p, s) for p in self.jsonui.values() for s in p.sources if file in s.test_file_keys]
+        if len(owners) == 1 and owners[0][0] is project:
+            return project.specs_for_test_file(file, only=[owners[0][1]])
+        return []
+
+    def _merge_results(self, project: JsonUIProject) -> None:
+        merged: dict[str, dict[tuple[str, str], tuple[int, str, bool]]] = {}
+
+        def put(spec_id: str, key: tuple[str, str], t: int, status: str, saved: bool) -> None:
+            cases = merged.setdefault(spec_id, {})
+            if key not in cases or cases[key][0] <= t:
+                cases[key] = (t, status, saved)
+
+        for row in self.saved_rows:
+            for spec_id in self._saved_specs(project, row):
+                put(spec_id, (row["test"], row["case"]), row["t"], row["status"], True)
+        for spec_id, cases in self.live_cases.get(project.project_id, {}).items():
+            for key, (t, status) in cases.items():
+                put(spec_id, key, t, status, False)
+        results = {}
+        for spec_id, cases in merged.items():
+            statuses = [status for _, status, _ in cases.values()]
+            results[spec_id] = {"passed": statuses.count("passed"), "failed": statuses.count("failed"),
+                                "running": "running" in statuses}
+            saved_at = [t for t, _, saved in cases.values() if saved]
+            if saved_at:  # a case shown from a file, not from this server's own run: how old it may be
+                results[spec_id]["latest"] = max(saved_at)
+        project.test_results = results
 
     # ---------------------------------------------------------------- time
 
@@ -836,6 +938,19 @@ class World:
                     self._set(agent, at, "idle", "待機")
         self._background_cap(at)
         self._heavy(at)
+
+    # ---------------------------------------------------------------- the 応答の履歴 tab (10-18)
+
+    def history(self, agent_id: str) -> dict | None:
+        """The last turns of one robot's transcript, read now (never kept in a slice), or None."""
+        agent = self.agents.get(agent_id)
+        if agent is None or self.history_reader is None:
+            return None
+        sid = agent["sessionId"]
+        cwd, given = self._paths.get(sid, (None, None))
+        if agent["kind"] == "sub":
+            return self.history_reader(sid, cwd, given, agent_id, self._agent_paths.get(agent_id))
+        return self.history_reader(sid, cwd, given)
 
     # ---------------------------------------------------------------- heavy work (10-18)
 

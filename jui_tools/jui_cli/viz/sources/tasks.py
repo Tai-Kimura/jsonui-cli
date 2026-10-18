@@ -126,8 +126,9 @@ class TaskBook:
         """A prompt arrived: the turn before it (if it was still open) is done, and a new card starts working."""
         self.turn_ended(sid, at, background=False, failed=False)
         n = 1 + max((t.get("turn", 0) for t in self.tasks.values() if t["sessionId"] == sid and t.get("source") == "turn"), default=0)
+        from .history import harness_label   # the one place harness text is told from the requester's words
         self._put(sid, f"turn-{n}", at, subject=self.turn_title(prompt) or "（題のない指示）", status="in_progress",
-                  owner=owner, source="turn", turn=n, waiting=False)
+                  owner=owner, source="turn", turn=n, waiting=False, harness=harness_label(prompt))
 
     def turn_ended(self, sid: str, at: int, background: bool, failed: bool) -> None:
         task = self._open_turn(sid)
@@ -147,12 +148,18 @@ class TaskBook:
         for old in done[:-TURNS_DONE_KEPT]:
             del self.tasks[old["key"]]
 
-    def turn_waiting(self, sid: str, waiting: bool) -> bool:
-        """The session waits for a permission (or no longer). Returns whether a card changed."""
+    def turn_waiting(self, sid: str, waiting: bool, waiting_for: str | None = None) -> bool:
+        """The session waits for a permission or an answer to a question (or no longer). Returns whether a card
+        changed. ``waitingFor`` "question" makes the card read 質問に回答待ち, not 許可の返事待ち."""
         task = self._open_turn(sid)
-        if task is None or bool(task.get("waiting")) == waiting:
+        why = "question" if waiting and waiting_for == "question" else None
+        if task is None or (bool(task.get("waiting")) == waiting and task.get("waitingFor") == why):
             return False
         task["waiting"] = waiting
+        if why:
+            task["waitingFor"] = why
+        else:
+            task.pop("waitingFor", None)
         return True
 
     def drop_session(self, sid: str) -> None:

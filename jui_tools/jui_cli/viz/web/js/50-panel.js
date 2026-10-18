@@ -6,7 +6,8 @@ const setText = (el, text) => { if (el && el.textContent !== text) el.textConten
 const STATUS_CLASS = { idle: 'st-idle', write: 'st-write', written: 'st-idle', impl: 'st-impl', verify: 'st-verify', 'impl-done': 'st-idle', paused: 'st-paused', test: 'st-test', done: 'st-complete' };
 function robotBadge(id) {
   const s = robotState[id].state;
-  if (s === 'waiting') return ['st-waiting', '許可待ち'];
+  // a question waits for the person too, but it is no permission: its own badge and filter (requester, 10-18)
+  if (s === 'waiting') return robotState[id].asking ? ['st-asking', '質問に回答待ち'] : ['st-waiting', '許可待ち'];
   if (s === 'done') return ['st-done', '完了'];
   if (s === 'idle') return ['st-idle', '待機'];
   if (s === 'thinking') return ['st-busy', '考え中'];
@@ -22,13 +23,13 @@ const UI = {
   sessFilter: readPref('sessFilter', 'all'),
   collapsed: new Set(prefJSON('collapsed', [])),
 };
-if (!['all', 'active', 'waiting', 'background', 'idle'].includes(UI.sessFilter)) UI.sessFilter = 'all';
+if (!['all', 'active', 'waiting', 'asking', 'background', 'idle'].includes(UI.sessFilter)) UI.sessFilter = 'all';
 const inScope = (project) => UI.project === 'all' || UI.project === project;
 const scopeLabel = () => (UI.project === 'all' ? 'すべて' : PROJECT[UI.project].name);
 function sessionBadge(s) {
   const b = s.robots.map(robotBadge);
   // A session whose busy robots only think says 考え中, as its robot row does (they disagreed — 10-18 review).
-  return b.some((x) => x[0] === 'st-waiting') ? ['st-waiting', '許可待ち'] : b.some((x) => x[1] === '作業中') ? ['st-busy', '作業中']
+  return b.some((x) => x[0] === 'st-waiting') ? ['st-waiting', '許可待ち'] : b.some((x) => x[0] === 'st-asking') ? ['st-asking', '質問に回答待ち'] : b.some((x) => x[1] === '作業中') ? ['st-busy', '作業中']
     : b.some((x) => x[1] === '考え中') ? ['st-busy', '考え中'] : b.some((x) => x[0] === 'st-bg') ? ['st-bg', '裏で作業中'] : ['st-idle', '待機'];
 }
 const roleVar = (s) => (s.by ? ` style="--c:${ROLES[DEF[s.by].role].color}"` : '');
@@ -83,7 +84,7 @@ $('btn-taskboard').addEventListener('click', (e) => openTaskBoard(e.currentTarge
 
 const COL_STATE = { doing: ['st-busy', '作業中'], wait: ['st-waiting', '待ち'], todo: ['st-idle', '未着手'], done: ['st-done', '完了'] };
 const paintState = (node, [cls, label]) => { if (!node) return; const c = `state ${cls}`; if (node.className !== c) node.className = c; setText(node, label); };
-const SESS_FILTERS = [['all', 'すべて'], ['active', '動いている'], ['waiting', '許可待ち'], ['background', '裏で作業中'], ['idle', '待機']];
+const SESS_FILTERS = [['all', 'すべて'], ['active', '動いている'], ['waiting', '許可待ち'], ['asking', '質問待ち'], ['background', '裏で作業中'], ['idle', '待機']];
 const sessFilterEl = $('sess-filter');
 sessFilterEl.innerHTML = SESS_FILTERS.map(([k, label]) => `<button type="button" data-sf="${esc(k)}" aria-pressed="${k === UI.sessFilter}">${esc(label)}<b></b></button>`).join('');
 sessFilterEl.addEventListener('click', (e) => {
@@ -93,7 +94,7 @@ sessFilterEl.addEventListener('click', (e) => {
   [...sessFilterEl.children].forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
   renderSessions();
 });
-const sessMatch = (s, f) => { const [c] = sessionBadge(s); return f === 'all' || (f === 'active' && c !== 'st-idle') || (f === 'waiting' && c === 'st-waiting') || (f === 'background' && c === 'st-bg') || (f === 'idle' && c === 'st-idle'); };
+const sessMatch = (s, f) => { const [c] = sessionBadge(s); return f === 'all' || (f === 'active' && c !== 'st-idle') || (f === 'waiting' && c === 'st-waiting') || (f === 'asking' && c === 'st-asking') || (f === 'background' && c === 'st-bg') || (f === 'idle' && c === 'st-idle'); };
 $('sessions').addEventListener('click', (e) => {
   const b = e.target.closest('[data-fold]');
   if (!b) return;
@@ -101,7 +102,7 @@ $('sessions').addEventListener('click', (e) => {
   writePref('collapsed', JSON.stringify([...UI.collapsed]));
   renderSessions();
 });
-const SB_ORDER = { 'st-waiting': 0, 'st-busy': 1, 'st-bg': 2, 'st-idle': 3 };
+const SB_ORDER = { 'st-waiting': 0, 'st-asking': 1, 'st-busy': 2, 'st-bg': 3, 'st-idle': 4 };
 function renderSessions() {
   const el = $('sessions'), scoped = SESSIONS.filter((s) => inScope(s.project));
   [...sessFilterEl.children].forEach((b) => setText(b.lastElementChild, String(scoped.filter((s) => sessMatch(s, b.dataset.sf)).length)));
@@ -117,8 +118,8 @@ function renderSessions() {
   }).join(''));
   for (const [r] of groups) {
     const all = scoped.filter((x) => x.project === r.id), badges = all.map(sessionBadge);
-    const w = badges.filter((b) => b[0] === 'st-waiting').length, busy = badges.filter((b) => b[0] === 'st-busy').length;
-    setText(el.querySelector(`[data-pgsum="${CSS.escape(r.id)}"]`), `${all.length} セッション${w ? ` · 許可待ち ${w}` : ''}${busy ? ` · 作業中 ${busy}` : ''}`);
+    const w = badges.filter((b) => b[0] === 'st-waiting').length, ask = badges.filter((b) => b[0] === 'st-asking').length, busy = badges.filter((b) => b[0] === 'st-busy').length;
+    setText(el.querySelector(`[data-pgsum="${CSS.escape(r.id)}"]`), `${all.length} セッション${w ? ` · 許可待ち ${w}` : ''}${ask ? ` · 質問待ち ${ask}` : ''}${busy ? ` · 作業中 ${busy}` : ''}`);
   }
   for (const x of scoped) {
     paintState(el.querySelector(`[data-sst="${CSS.escape(x.id)}"]`), sessionBadge(x));
@@ -166,8 +167,8 @@ function renderPanel(model) {
   keyed($('tasks'), JSON.stringify([UI.project, loose.map(permSig), tasks.map((x) => `${x.key}:${x.col}:${permSig(x.perm)}:${x.subject}:${x.owner || ''}`)]), () => [
     ...loose.map((p) => `<li class="task has-perm perm-only"><button type="button" class="task-open" data-open="perm:${esc(p.id)}" data-fk="to-${esc(p.id)}"><span class="tid">${esc(SESSION_OF[p.who])} セッション</span><span class="subject">タスクの外で許可を求めている</span></button><span class="state st-waiting">許可待ち</span><span class="meta">${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)}${projectTag(SESSION_OF[p.who])}</span>${permBox(p)}</li>`),
     ...tasks.map((x) => {
-      const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? ['st-waiting', waitLabel(x)] : COL_STATE[x.col];
-      return `<li class="task t-${esc(x.status)}${x.perm ? ' has-perm' : ''}${x.fresh ? ' t-new' : ''}${isTurn(x) ? ' t-turn' : ''}${x.failed ? ' t-failed' : ''}"><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="to-${esc(x.key)}"><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${esc(x.subject)}</span></button><span class="state ${esc(c)}">${esc(l)}</span><span class="meta">${x.owner ? `${pill(x.owner, DEF[x.owner].role)} ${esc(DEF[x.owner].agent)}` : '担当なし'}${projectTag(x.list)}</span>${x.perm ? permBox(x.perm) : ''}</li>`;
+      const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
+      return `<li class="task t-${esc(x.status)}${x.perm ? ' has-perm' : ''}${x.fresh ? ' t-new' : ''}${isTurn(x) ? ' t-turn' : ''}${x.failed ? ' t-failed' : ''}"><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="to-${esc(x.key)}"><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span></button><span class="state ${esc(c)}">${esc(l)}</span><span class="meta">${x.owner ? `${pill(x.owner, DEF[x.owner].role)} ${esc(DEF[x.owner].agent)}` : '担当なし'}${projectTag(x.list)}</span>${x.perm ? permBox(x.perm) : ''}</li>`;
     }),
   ].join('') || `<li class="empty-note">${esc(scopeLabel())} にタスクはない</li>`);
 
@@ -304,8 +305,14 @@ const Q_SHOW_MS = 30_000;   // an answered card stays a moment, saying who answe
 const qState = (q) => (q.status === 'sent' ? '送信済み · Claude Code の確定を待っている'
   : q.status === 'answered' ? 'ブラウザの答えが届いた' : q.status === 'answered_in_terminal' ? 'ターミナルで答えた'
     : q.status === 'expired' ? '答えないまま終わった' : '');
+/* Why a pending card cannot be answered here. It goes at the top, above choices drawn as not pickable: at the
+   bottom, under radios that looked live, the requester clicked them and nothing happened (10-18). */
+const qWhy = (q) => (q.tooLongToShow ? '質問の全部をここに表示できないため、ここでは答えられません'
+  : q.released ? 'ターミナルに返しました' : q.waitEnded ? 'ブラウザで答えられる時間が過ぎました（だれも操作しないまま待ちが終わった）'
+    : 'このセッションは答えの中継を待っていません');
 function questionHTML(q) {
   const open = q.status === 'pending' && q.hookWaiting && !q.tooLongToShow;
+  const closed = q.status === 'pending' && !open;
   const got = q.sentAnswers || q.gotAnswers || null;
   const itemsHTML = q.questions.map((x, i) => {
     const type = x.multiSelect ? 'checkbox' : 'radio', name = `qa-${q.id}-${i}`;
@@ -318,9 +325,9 @@ function questionHTML(q) {
   }).join('');
   // While the hook waits the terminal shows no question (measured 10-18): the time left, and the way to the terminal.
   const footHTML = open ? `<div class="qfoot"><button type="button" class="pa pa-allow" data-qsend="${esc(q.id)}" data-fk="qs-${esc(q.id)}" disabled>答えを送る</button><button type="button" class="pa pa-deny" data-qrelease="${esc(q.id)}" data-fk="qr-${esc(q.id)}">ターミナルで答える</button></div><p class="qnote">待っている間はターミナルに質問が出ない · <span data-quntil="${esc(q.id)}"></span>（操作すると延びる）</p>`
-    : q.status === 'pending' ? `<p class="qnote">${q.tooLongToShow ? '質問の全部をここに表示できないため、ターミナルで答えてください' : 'このセッションは答えの中継を待っていない。ターミナルで答えてください'}</p>`
-      : `<p class="qnote qdone">${esc(qState(q))}</p>`;
-  return `<article class="qcard${open ? ' q-open' : ''}" data-qcard="${esc(q.id)}"><header class="qwho">${pill(q.who, DEF[q.who].role)}<span>${esc(DEF[q.who].agent)}</span><span class="pc-wait" data-since="${q.at}"></span></header>${itemsHTML}${footHTML}</article>`;
+    : closed ? '' : `<p class="qnote qdone">${esc(qState(q))}</p>`;
+  const whyHTML = closed ? `<p class="qnote qwhy" role="note">${esc(qWhy(q))}。ターミナルで答えてください（ここでは選べません）</p>` : '';
+  return `<article class="qcard${open ? ' q-open' : ''}${closed ? ' q-closed' : ''}" data-qcard="${esc(q.id)}"><header class="qwho">${pill(q.who, DEF[q.who].role)}<span>${esc(DEF[q.who].agent)}</span><span class="pc-wait" data-since="${q.at}"></span></header>${whyHTML}${itemsHTML}${footHTML}</article>`;
 }
 function renderQuestions() {
   const now = Date.now();
@@ -330,7 +337,7 @@ function renderQuestions() {
   chip.hidden = waiting === 0;
   setText(chip, `質問 ${waiting}`);
   $('questions-sec').hidden = shown.length === 0;
-  keyed($('questions'), JSON.stringify(shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.sentAnswers, q.gotAnswers])), () => shown.map((q) => questionHTML(q)).join(''));
+  keyed($('questions'), JSON.stringify(shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])), () => shown.map((q) => questionHTML(q)).join(''));
   for (const el of $('questions').querySelectorAll('[data-quntil]')) {   // the countdown, in place (inputs keep their state)
     const q = QUESTIONS.find((x) => x.id === el.dataset.quntil);
     setText(el, q && q.waitUntil ? `あと ${Math.max(0, Math.ceil((q.waitUntil - now) / 1000))} 秒でターミナルに戻す` : '');
@@ -936,7 +943,7 @@ function renderTaskBoard(model) {
   const noteHTML = (x, col) => {
       const ownerHTML = x.owner ? `${pill(x.owner, DEF[x.owner].role)}<span>${esc(DEF[x.owner].agent)}</span>` : '<span>担当なし</span>';
       const extraHTML = col === 'doing' ? `<span class="n-doing">▶ ${esc(isTurn(x) ? (x.background ? 'バックグラウンドで作業中' : '指示を処理中') : x.activeForm || x.subject)}<span data-since="${x.start}"></span></span>`
-        : col === 'wait' ? (x.dep ? `<span class="n-wait">#${esc(x.dep.id)}「${esc(x.dep.subject)}」の完了待ち</span>` : `<span class="n-wait">${isTurn(x) ? '許可の返事待ち' : '待ち'}</span>`)
+        : col === 'wait' ? (x.dep ? `<span class="n-wait">#${esc(x.dep.id)}「${esc(x.dep.subject)}」の完了待ち</span>` : `<span class="n-wait">${isTurn(x) ? (x.waitingFor === 'question' ? '質問に回答待ち' : '許可の返事待ち') : '待ち'}</span>`)
           : col === 'done' ? `<span class="n-time">${fmtClock(BASE_CLOCK + loopStart + x.end)} に${x.failed ? '失敗で終了' : '完了'}</span>` : '';
       const permHTML = x.perm ? `<div class="n-permbox"><p class="n-permq"><b>許可待ち</b> ${esc(x.perm.tool)} ${permSubject(x.perm)}</p><div class="perm-acts">${permButtons(x.perm, 'k')}</div></div>` : '';
       return `<li class="note${x.perm ? ' n-perm' : ''}${x.fresh ? ' n-new' : ''}${isTurn(x) ? ' n-turn' : ''}"><button type="button" class="note-open" data-open="${esc(x.key)}" data-fk="nb-${esc(x.key)}"><span class="n-top"><span>${esc(taskRef(x))}</span><span>${UI.lanes ? '' : `${esc(x.list)} の一覧${UI.project === 'all' ? ` · ${esc(PROJECT[PROJECT_OF[x.list]].name)}` : ''}`}</span></span><span class="n-subj">${esc(x.subject)}</span>${extraHTML}<span class="n-owner">${ownerHTML}</span></button>${permHTML}</li>`;
@@ -1062,6 +1069,7 @@ function closeRobot(keepZoom) {
   if (!rbState.id) return;
   rbState.id = null;
   hideOverlay(rbEl);
+  histSync();
   if (!keepZoom) zoomBack();
 }
 function renderRobot(model) {
@@ -1076,21 +1084,24 @@ function renderRobot(model) {
   keyed(rbEl, JSON.stringify([id, permSig(pending), specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}:${x.subject}`)]), () => {
     const room = (SESSIONS.find((s) => s.id === sess) || { room: (PROJECT[projectOfRobot(id)] || {}).name || '' }).room;
     const tasksHTML = owned.length ? `<ul class="rb-tasks">${owned.map((x) => {
-      const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? ['st-waiting', waitLabel(x)] : COL_STATE[x.col];
-      return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
+      const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
+      return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
     }).join('')}</ul>` : `<p class="rb-none">${isMain ? 'このセッションのタスク一覧は空' : '担当しているタスクはない'}</p>`;
     return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div>
+<div class="rb-tabs" role="tablist" aria-label="表示"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">今の様子</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">応答の履歴</button></div>
+<div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴"></div>
 <div class="rb-body">
 <section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">今やっていること</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">ランプ: <span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p><p class="rb-cond" data-rb-cond></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(spec.name)}（${esc(spec.screen)}）の spec</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>
 ${pending ? `<section class="rb-sec" aria-label="許可">${permDetail(pending, 'rb')}</section>` : ''}
+${SOURCE.mode === 'live' ? '<section class="rb-sec" aria-labelledby="rb-h-tests"><h3 id="rb-h-tests">テスト実行</h3><div data-rb-tests></div></section>' : ''}
 <section class="rb-sec" aria-labelledby="rb-h-tasks"><h3 id="rb-h-tasks">${isMain ? 'このセッションのタスク' : '担当しているタスク'}<small>${owned.length} 件</small></h3>${tasksHTML}</section>
 ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-h-subs">サブエージェント</h3><ul class="rb-subs">${subs.map((r) => `<li><button type="button" class="who-btn" data-robot-open="${esc(r)}" data-fk="rs-${esc(r)}">${pill(r, DEF[r].role)}<span>${esc(DEF[r].agent)}</span></button><span class="state" data-rb-sub="${esc(r)}"></span><p class="act" data-rb-subact="${esc(r)}"></p></li>`).join('')}</ul></section>` : ''}
 <section class="rb-sec" aria-labelledby="rb-h-log"><h3 id="rb-h-log">最近の動き</h3><ul class="tbd-list" data-recent="${esc(id)}"></ul><button type="button" class="link-btn" data-log-robot="${esc(id)}" data-fk="rb-log">ログで ${esc(id)} だけを見る</button></section>
 </div>`;
   });
   const S = STATES[st.state] || STATES.idle;
-  setText(rbEl.querySelector('[data-rb-state]'), S.name);
-  setText(rbEl.querySelector('[data-rb-lampname]'), LAMP_TEXT[S.lamp] || '');
+  setText(rbEl.querySelector('[data-rb-state]'), st.asking ? '質問に回答待ち' : S.name);
+  setText(rbEl.querySelector('[data-rb-lampname]'), st.asking ? '黄（質問に回答待ち）' : LAMP_TEXT[S.lamp] || '');
   const lamp = rbEl.querySelector('[data-rb-lamp]'); if (lamp) lamp.style.background = LAMP[S.lamp];
   setText(rbEl.querySelector('[data-rb-act]'), st.act);
   // Tiredness and heavy work in words too (the 3D showed them, the card did not — 10-18 review)
@@ -1121,16 +1132,34 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   rbEl.querySelectorAll('[data-rb-subact]').forEach((el) => setText(el, robotState[el.dataset.rbSubact].act));
   paintSince(rbEl, model.t, '待ち');
   rbEl.querySelectorAll('[data-recent]').forEach((el) => setHTML(el, recentHTML(el.dataset.recent)));
+  const testsEl = rbEl.querySelector('[data-rb-tests]');
+  if (testsEl) setHTML(testsEl, robotTestsHTML(robotRuns(id)));   // rewritten on every refresh while a run moves
+  histSync();   // 55-history.js: the tab shown, and the history kept fresh while it is
 }
 
 /* ---------- live: the test run in the side panel (plan 09 §4) ---------- */
 const CASE_ICON = { pending: '○', running: '▶', passed: '✓', flaky: '⚠', failed: '✗', skipped: '–' };
+/* A robot's runs on its card: platform, state, counts, the bar, and the failed cases by name (FAILED_SHOWN at most). */
+const FAILED_SHOWN = 5;
+function robotTestsHTML(runs) {
+  if (!runs.length) return '<p class="rb-none">このロボットが走らせたテストはまだ無い</p>';
+  return `<ul class="rb-runs">${runs.map((T) => robotRunHTML(T)).join('')}</ul>`;
+}
+function robotRunHTML(T) {
+  const n = T.rows.length, pPct = n ? (T.passed / n) * 100 : T.runStatus === 'passed' ? 100 : 0, rPct = n && T.runningIdx >= 0 ? 100 / n : 0;
+  const fPct = n ? (T.failed / n) * 100 : T.runStatus === 'failed' ? 100 : 0;
+  const failedRows = T.rows.filter((c) => c.status === 'failed');
+  const namesHTML = failedRows.slice(0, FAILED_SHOWN).map((c) => `<li>${esc(c.name)}</li>`).join('');
+  const moreHTML = failedRows.length > FAILED_SHOWN ? `<li class="rb-fail-more">ほか ${Math.max(0, failedRows.length - FAILED_SHOWN)} 件</li>` : '';
+  return `<li class="rb-run r-${esc(T.runStatus)}" data-rb-run="${esc(T.id)}"><p class="rb-run-head"><b>${esc(T.device || 'テスト')}</b> <span>${esc(T.statusText)}</span>${T.savedAt ? '<small class="rb-saved">保存された結果</small>' : ''}</p><code class="rb-run-file">${esc(T.file)}</code>
+<div class="prog" role="img" aria-label="通過 ${Number(T.passed)} 件 / 失敗 ${Number(T.failed)} 件 / 全 ${Number(n)} 件"><span class="p" style="width:${Number(pPct)}%"></span><span class="r" style="width:${Number(rPct)}%"></span><span class="x" style="width:${Number(fPct)}%"></span></div>${namesHTML ? `<ul class="rb-fails" aria-label="失敗したケース">${namesHTML}${moreHTML}</ul>` : ''}</li>`;
+}
 function liveTestsHTML(T) {
   const n = T.rows.length, pPct = n ? (T.passed / n) * 100 : T.runStatus === 'passed' ? 100 : 0, rPct = n && T.runningIdx >= 0 ? 100 / n : 0;
   const fPct = n ? (T.failed / n) * 100 : T.runStatus === 'failed' ? 100 : 0;
   const whoPillHTML = T.who && DEF[T.who] ? pill(T.who, DEF[T.who].role) : '';
   return `<div class="test-head"><div>${whoPillHTML} <code>${esc(T.file)}</code></div><code>${esc(T.device)}${T.device ? ' · ' : ''}${esc(T.statusText)}</code>
-<div class="prog" role="img" aria-label="通過 ${T.passed} 件 / 全 ${n} 件"><span class="p" style="width:${pPct}%"></span><span class="r" style="width:${rPct}%"></span><span class="x" style="width:${fPct}%"></span></div></div>
+<div class="prog" role="img" aria-label="通過 ${Number(T.passed)} 件 / 全 ${Number(n)} 件"><span class="p" style="width:${Number(pPct)}%"></span><span class="r" style="width:${Number(rPct)}%"></span><span class="x" style="width:${Number(fPct)}%"></span></div></div>
 <ul class="cases">${T.rows.map((c, i) => `<li class="c-${esc(c.status)}"><span class="ic">${CASE_ICON[c.status] || '○'}</span><span>${i + 1}. ${esc(c.name)}</span>${c.status === 'running' ? `<span class="step">${esc(c.step)}</span>` : ''}</li>`).join('')}</ul>`;
 }
 

@@ -46,6 +46,6 @@ const KCOLS = [['todo', '未着手'], ['wait', '待ち'], ['doing', '作業中']
    (TodoWrite, the task hooks, ~/.claude/tasks/). A turn reads 指示 n where a task reads #n. */
 const isTurn = (x) => !!x && x.source === 'turn';
 const taskRef = (x) => (isTurn(x) ? `指示 ${x.turn}` : `#${x.id}`);
-const waitLabel = (x) => (isTurn(x) ? '許可待ち' : x.blockedBy ? `#${x.blockedBy} 待ち` : '待ち');
+const waitLabel = (x) => (isTurn(x) ? (x.waitingFor === 'question' ? '質問に回答待ち' : '許可待ち') : x.blockedBy ? `#${x.blockedBy} 待ち` : '待ち');
 const permSummary = (p) => p.input.command || p.input.file_path || '';
 const ruleCovers = (p, abs) => alwaysRules.has(p.rule) && alwaysRules.get(p.rule) < abs;

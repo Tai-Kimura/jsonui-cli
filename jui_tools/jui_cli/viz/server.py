@@ -459,6 +459,16 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "unknown spec"})
             return
         await sock.send_json({"type": "sheet", "reqId": req_id, "specId": spec_id, "cards": cards})
+    elif kind == "history.get":
+        # Only the robot whose 応答の履歴 tab is open, only when asked: never a slice, so never in a snapshot,
+        # the event log or an export (sources/history.py).
+        agent_id = message.get("agentId")
+        got = ctx.world.history(agent_id) if ctx.world is not None and isinstance(agent_id, str) else None
+        if got is None:
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "no transcript for this robot"})
+            return
+        await sock.send_json({"type": "history", "reqId": req_id, "agentId": agent_id, "items": got["items"],
+                              "bytes": got["bytes"], "more": got["more"]})
     elif kind == "perm.decide":
         perm_id, behavior = message.get("permId"), message.get("behavior")
         if ctx.world is None or not isinstance(perm_id, str) or not isinstance(behavior, str):
