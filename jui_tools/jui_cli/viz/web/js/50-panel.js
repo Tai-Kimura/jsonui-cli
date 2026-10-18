@@ -1100,6 +1100,14 @@ document.addEventListener('keydown', (e) => {
   const t = e.target;
   if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select')))) return;   // typing keeps its keys
   e.preventDefault();
+  const tab = t && t.closest && t.closest('[role="tablist"] [role="tab"]');
+  if (tab) {   // a tab has the focus: ← → move between the tabs (the ARIA tabs pattern), the robot stays
+    const tabs = [...tab.closest('[role="tablist"]').querySelectorAll('[role="tab"]')];
+    const next = tabs[(tabs.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+    next.focus();
+    next.click();
+    return;
+  }
   stepRobot(e.key === 'ArrowRight' ? 1 : -1);
 });
 function renderRobot(model) {

@@ -113,9 +113,28 @@ async def run_rb_arrows(pw, out, failures):
         check(failures, back_seen == [want[(i - k) % 3] for k in (1, 2, 3)], f"← goes the other way: {back_seen}")
         check(failures, not set(beta) & set(forward_seen + back_seen), f"never a robot outside the project picked: beta {beta}")
 
+        # a tab with the focus: ← → move between the tabs, the robot stays; off the tabs, → switches robots again
+        here = await page.evaluate(BADGE)
+        await page.focus('#rb [data-rb-tab="now"]')
+        await page.keyboard.press("ArrowRight")
+        await page.wait_for_timeout(300)
+        on_tab = await page.evaluate("() => ({ badge: document.querySelector('#rb .rb-badge').textContent, focused: document.activeElement.dataset.rbTab || '', tab: document.querySelector('#rb [data-rb-tab][aria-selected=\"true\"]').dataset.rbTab })")
+        await page.keyboard.press("ArrowLeft")
+        await page.wait_for_timeout(300)
+        back_tab = await page.evaluate("() => ({ badge: document.querySelector('#rb .rb-badge').textContent, focused: document.activeElement.dataset.rbTab || '', tab: document.querySelector('#rb [data-rb-tab][aria-selected=\"true\"]').dataset.rbTab })")
+        await page.evaluate("() => document.activeElement.blur()")
+        await page.keyboard.press("ArrowRight")
+        await page.wait_for_timeout(300)
+        off_tab = await page.evaluate(BADGE)
+        res["tabKeys"] = {"here": here, "onTab": on_tab, "back": back_tab, "offTab": off_tab}
+        check(failures, on_tab == {"badge": here, "focused": "history", "tab": "history"} and back_tab == {"badge": here, "focused": "now", "tab": "now"},
+              f"on a tab, ← → move between the tabs and the robot stays: {res['tabKeys']}")
+        check(failures, off_tab == want[(want.index(here) + 1) % 3], f"off the tabs, → switches robots: {here} -> {off_tab}")
+
         # the tab stays across a switch
         await page.click('#rb [data-rb-tab="history"]')
         await page.wait_for_timeout(300)
+        await page.evaluate("() => document.activeElement.blur()")   # on the tab, → would move to the next tab
         await page.keyboard.press("ArrowRight")
         await page.wait_for_timeout(400)
         res["tabKept"] = st = await page.evaluate(STATE)
