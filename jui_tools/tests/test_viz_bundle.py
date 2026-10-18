@@ -8,6 +8,7 @@ still being the ones VENDOR.md records.
 
 from __future__ import annotations
 
+import collections
 import hashlib
 import re
 from importlib import resources
@@ -123,29 +124,61 @@ def test_the_vendored_files_are_the_ones_vendor_md_records():
     assert WEB.joinpath("fonts", "OFL.txt").is_file()
 
 
-# ---- every server string goes through esc() (plan 07 §6) --------------------------------------------------------
-# The page builds HTML with template literals. A value the server sent (an id, a key, a file name, a status …)
-# that lands in that HTML must go through esc() — text and attribute values alike — or a crafted session id
-# breaks the markup (dd's P3 review: `"><img …` in session_id). This arm reads every ${…} inside an HTML template
-# (a template with "<" or `="`, and every template nested in one) and fails on a bare reference to a field the
-# server supplies. Declared here, so a new field is one line:
-SERVER_FIELDS = {
-    "id", "key", "list", "file", "device", "text", "status", "bucket", "name", "subject", "summary", "tool",
-    "agent", "act", "room", "path", "who", "owner", "by", "realId", "label", "command", "statusText", "title",
-    "cwd", "kind", "what", "screen", "project", "dep", "detail", "preview", "sentReason", "mode", "destination",
-    "blockedBy", "task",
-}
-# Not listed on purpose — numbers the page or the server computes: at, start, seq, passed, length, rev.
-# Bare identifiers that hold server strings where they are used — destructured names too (`([op, method, path]) =>`
-# over a sheet's API rows). Found by printing every bare name that reaches the HTML and reading each by hand.
-SERVER_NAMES = {"id", "who", "key", "where_id", "method", "op", "path", "r"}
+# ---- nothing reaches the HTML unescaped (plan 07 §6) -----------------------------------------------------------
+# The page builds HTML from template literals. A value the server sent that lands in that HTML must go through esc(),
+# or a crafted id / name / command breaks the markup (dd's P3 review). This arm is an allow-list: every ${…} in HTML is
+# caught unless it is one of the forms below, so a new field, a .slice(), a String(x), a DEF[…] lookup or a bare local
+# is red until it is escaped or reviewed here (dd's P4–P6 review found ten shapes a deny-list of field names missed).
+#
+# What is HTML: a template whose own text has "<" or `="` (markup, an attribute selector) and every template inside
+# it; the right-hand side of every assignment to a name ending in HTML (`rowsHTML = …`, `xHTML.push(…)`), of
+# `.innerHTML = …` and of `setHTML(el, …)`; and the whole body of a declared builder. A name ending in HTML is
+# therefore safe wherever it is used: everything ever put in it was checked as HTML.
 # Parts that never take server data (the demo script, the robot model's canvases).
 NOT_SERVER_PARTS = {"10-robot-core.js", "30-source-demo.js"}
-# Reviewed exceptions: (file, expression) — each safe for the reason given.
-SAFE_EXCEPTIONS = {
-    ("50-panel.js", "where"): "the data-fk prefix argument ('s', 'p', 'k', 'tbd', 'rb'), never server data",
+ESCAPING_CALLS = {"esc", "CSS.escape"}
+SAFE_CALLS = {
+    "pct": "Math.round of a number",
+    "fmtClock": "HH:MM:SS from a number of seconds", "clock": "fmtClock of a number",
+    "Number": "a number", "Math.round": "a number", "Math.min": "a number", "Math.max": "a number",
 }
-
+# Functions returning HTML, per file; their bodies are checked as HTML.
+BUILDERS = {
+    "20-core.js": {"pill"},
+    "50-panel.js": {
+        "roleVar", "actAttr", "chipCls", "wfElement", "li", "tr", "projectTag", "rowHTML", "noteHTML",
+        "permButtons", "permButtonsLive", "permButtonsDemo", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
+        "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
+        "liveTestsHTML",
+    },
+}
+# Builders a part may call that another part defines (each checked where it is defined).
+SHARED_BUILDERS = {"pill"}
+BUILDER_TABLES = {"bodies": "the sheet's section renderers, each a template checked here"}
+# Lookups into tables the page defines as literals (class names, labels, colours, icons).
+CONST_TABLES = {"ROLES", "ROLE_INK", "CASE_ICON", "COL_HINT", "COL_STATE", "EXACT_LABEL", "PLATFORM_JA",
+                "STATUS_CLASS", "CHIP", "titles"}
+# Literal markup the page defines once; each declaration is checked as HTML, like an …HTML name.
+CONST_HTML = {"SEGS", "SWATCHES", "RELAY_HOW", "PERM_NOTE", "OV_LEGEND", "SHEET_LEGEND", "SHEET_LEGEND_LIVE"}
+# Numbers: names that only ever hold one, and fields the page itself computes as numbers.
+NUMERIC_NAMES = {"i", "k", "n", "specIdx", "pPct", "rPct", "fPct", "elsewhere", "compAll", "COMP_MAX"}
+NUMERIC_FIELDS = {"at", "start", "end", "abs", "seq", "passed", "failed", "busy", "live", "pend", "sessions"}
+# Reviewed exceptions: (file, expression) -> (how many times it appears, why it is safe). The count is exact, so a new
+# use of the same expression is red until it is reviewed too.
+# Reviewed exceptions: (file, name) -> (how many times the name appears in the file as a word, why it is safe). The
+# count is exact, so a new use is red until it is reviewed too.
+SAFE_EXCEPTIONS = {
+    ("50-panel.js", "innerHTML"): (2, "li's third parameter: every call passes a template literal (checked as HTML)"),
+    ("50-panel.js", "cellsHTML"): (2, "tr's third parameter: every call passes a template literal (checked as HTML)"),
+    ("50-panel.js", "bHTML"): (2, "the second element of the overview rows, each built with esc() one line above"),
+    ("50-panel.js", "whoHTML"): (2, "setHead's last parameter: every call passes pill(…) or ''"),
+}
+_ID = r"[A-Za-z_$][\w$]*"
+_HTML_NAME = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*HTML)\s*(?:\+?=(?!=)|\.push\()")
+# Calls that put an argument into the DOM as HTML: name -> which argument (0-based). Their own definitions are not
+# checked (what they are given is).
+SINK_CALLS = {"setHTML": 1, "addTag": 1, "keyed": 2}
+_SINK = re.compile(r"\.innerHTML\s*=(?!=)")
 
 _ESCAPES = re.compile(r"(?:esc|CSS\.escape)\((?s:.*)\)$")
 
@@ -262,36 +295,321 @@ def _outputs(expr: str) -> list[str]:
     return [expr]
 
 
-def _is_ref(expr: str) -> bool:
-    if not re.fullmatch(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[\d+\])*", expr):
+def _match(e: str, i: int) -> int:
+    """Index of the bracket closing the one at e[i] (strings and templates skipped), or -1."""
+    depth, j, n = 0, i, len(e)
+    while j < n:
+        c = e[j]
+        if c in "\"'":
+            j = _skip_string(e, j)
+            continue
+        if c == "`":
+            j = _scan_template(e, j, [], False)
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                return j
+        j += 1
+    return -1
+
+
+def _top_opens(e: str) -> list[int]:
+    """Indexes of the brackets that open at depth 0."""
+    out, i, n = [], 0, len(e)
+    while i < n:
+        c = e[i]
+        if c in "\"'":
+            i = _skip_string(e, i)
+            continue
+        if c == "`":
+            i = _scan_template(e, i, [], False)
+            continue
+        if c in "([{":
+            out.append(i)
+            j = _match(e, i)
+            if j < 0:
+                return out
+            i = j + 1
+            continue
+        i += 1
+    return out
+
+
+def _strip_parens(e: str) -> str:
+    e = e.strip()
+    while e.startswith("(") and _match(e, 0) == len(e) - 1:
+        e = e[1:-1].strip()
+    return e
+
+
+def _split_top(e: str, sep: str) -> list[str]:
+    cuts = [i for i, c in _top_level(e) if c == sep]
+    if not cuts:
+        return [e]
+    out, last = [], 0
+    for i in cuts:
+        out.append(e[last:i])
+        last = i + 1
+    return out + [e[last:]]
+
+
+def _returns(body: str) -> list[str]:
+    """The expressions a block returns at its own level (not inside nested functions' braces)."""
+    top = list(_top_level(body))
+    out = []
+    for n, (i, c) in enumerate(top):
+        if body.startswith("return", i) and not re.match(r"[\w$]", body[i - 1:i] or " ") and not re.match(r"[\w$]", body[i + 6:i + 7] or " "):
+            end = next((j for j, cj in top[n:] if cj == ";" and j > i), len(body))
+            out.append(body[i + 6:end].strip())
+    return out
+
+
+def _arrow_safe(arrow: str, ctx) -> bool:
+    """`(a, b) => expr`, `(a) => { … return expr; }`, or a builder's name: every value it returns is safe."""
+    arrow = arrow.strip()
+    if arrow in ctx["builders"]:
+        return True
+    head = _split_top(arrow, "=")
+    parts = arrow.split("=>", 1)
+    if len(parts) != 2:
         return False
-    last = re.split(r"[.\[]", expr)[-1].rstrip("]")
-    return last in SERVER_FIELDS if "." in expr else expr in SERVER_NAMES
+    body = parts[1].strip()
+    if body.startswith("{") and _match(body, 0) == len(body) - 1:
+        rets = _returns(body[1:-1])
+        return bool(rets) and all(_safe(r, ctx) for r in rets)
+    return _safe(body, ctx)
 
 
-def _bare_server_ref(expr: str) -> bool:
-    """A field the server supplies reaches the HTML as it is: the whole expression, or one of its outputs."""
-    return any(_is_ref(o) for o in _outputs(expr))
+def _call(e: str):
+    """(callee, args, rest) when e is `callee(args)rest` with callee a dotted name, else None."""
+    m = re.match(rf"({_ID}(?:\.{_ID})*)\(", e)
+    if not m:
+        return None
+    close = _match(e, m.end() - 1)
+    return (m.group(1), e[m.end():close], e[close + 1:]) if close > 0 else None
 
 
-def test_server_strings_in_html_go_through_esc():
+def _safe(expr: str, ctx) -> bool:
+    e = _strip_parens(expr)
+    if not e or (ctx.get("file"), " ".join(e.split())) in SAFE_EXCEPTIONS:
+        return True                                   # a reviewed exception (its count is checked on its own)
+    commas = _split_top(e, ",")
+    if len(commas) > 1:
+        return _safe(commas[-1], ctx)                 # a comma expression's value is its last
+    outs = _outputs(e)
+    if outs != [e]:
+        return all(_safe(o, ctx) for o in outs)
+    plus = [i for i, c in _top_level(e) if c == "+" and e[i - 1:i] != "+" and e[i + 1:i + 2] not in ("+", "=")]
+    if plus and not re.fullmatch(r"[\w$.\s+\-*/%()]+", e):
+        bounds = [0] + [i + 1 for i in plus] + [len(e) + 1]
+        return all(_safe(e[a:b - 1], ctx) for a, b in zip(bounds, bounds[1:]))
+    if re.fullmatch(r"'[^'\\]*'|\"[^\"\\]*\"|-?\d+(\.\d+)?", e):
+        return True
+    if e.startswith("`") and _scan_template(e, 0, [], False) == len(e):
+        inner: list = []
+        _scan_template(e, 0, inner, True)             # a template bound for the DOM: what goes into it
+        return all(_safe(x, ctx) for x, h in inner if h)
+    if re.fullmatch(r"'[^']*'\.repeat\(\d+\)", e):
+        return True
+    top = "".join(c for _, c in _top_level(e))
+    if top.endswith(".length") or re.search(r"===|!==|<=|>=|(?<![=>-])[<>](?!=)", top) or e.startswith("!"):
+        return True                                   # a count, or true / false
+    num = rf"(?:{'|'.join(sorted(NUMERIC_NAMES))})(?![\w$])|[\w$.]*\.(?:{'|'.join(sorted(NUMERIC_FIELDS))})(?![\w$(])|\d+(?:\.\d+)?"
+    if re.fullmatch(rf"(?:\s*\(?\s*(?:{num})\s*\)?\s*[-+*/%]?)+", e):
+        return True
+    call = _call(e)
+    if call:
+        callee, args, rest = call
+        if not rest and callee in ESCAPING_CALLS | set(SAFE_CALLS) | ctx["builders"]:
+            return True
+        # xs.map(arrow) / xs.map(arrow).join('…'): the outermost map only; every value it maps to is safe
+        m = re.fullmatch(r"\.join\((?:'[^']*'|\"[^\"]*\")?\)|", rest)
+        if m is not None and callee.endswith(".map") and _arrow_safe(args, ctx):
+            return True
+    m = re.match(rf"({_ID})\[", e)
+    if m:
+        close = _match(e, m.end() - 1)
+        rest = e[close + 1:] if close > 0 else "?"
+        if m.group(1) in CONST_TABLES and re.fullmatch(rf"(?:\.{_ID}|\[\d+\])*", rest):
+            return True
+        if m.group(1) in BUILDER_TABLES and rest.startswith("(") and _match(rest, 0) == len(rest) - 1:
+            return True
+    # e.g. `xs.filter(f).map(arrow).join('')`: find the outermost .map( at the top level
+    for i in _top_opens(e):
+        if e[i] != "(":
+            continue
+        if e[:i].endswith(".map") and _match(e, i) > 0:
+            close = _match(e, i)
+            rest = e[close + 1:]
+            if re.fullmatch(r"\.join\((?:'[^']*'|\"[^\"]*\")?\)|", rest) and _arrow_safe(e[i + 1:close], ctx):
+                return True
+    if e.startswith("["):
+        close = _match(e, 0)
+        rest = e[close + 1:] if close > 0 else "?"
+        if re.fullmatch(r"\.join\((?:'[^']*'|\"[^\"]*\")?\)|", rest):
+            items = [x.strip() for x in _split_top(e[1:close], ",") if x.strip()]
+            return all(_safe(x[3:] if x.startswith("...") else x, ctx) for x in items)
+    if e in CONST_HTML:
+        return True
+    if re.fullmatch(rf"{_ID}HTML(?:\.join\((?:'[^']*'|\"[^\"]*\")?\))?", e):
+        return e.split(".")[0] in ctx["assigned"]     # only a name whose every assignment was checked
+    return False
+
+
+def _extent(src: str, i: int) -> int:
+    """End of the expression starting at i: the first `;` or `,`, a closing bracket, or a line end not continued
+    by an operator — at depth 0."""
+    depth, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c in "\"'":
+            i = _skip_string(src, i)
+            continue
+        if c == "`":
+            i = _scan_template(src, i, [], False)
+            continue
+        if src.startswith("//", i):
+            i = src.find("\n", i)
+            if i < 0:
+                return n
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth == 0:
+                return i
+            depth -= 1
+        elif depth == 0 and c in ";,":
+            return i
+        elif depth == 0 and c == "\n":
+            rest = src[i + 1:].lstrip()
+            if rest[:1] not in ("?", ":", ".", "+", "|", "&") and not rest.startswith("=>"):
+                return i
+        i += 1
+    return n
+
+
+def _is_function(rhs: str) -> bool:
+    return bool(re.match(rf"\s*(?:async\s+)?(?:function\b|\([^()]*\)\s*=>|{_ID}\s*=>)", rhs))
+
+
+def _builder_bodies(src: str, names) -> dict[str, str]:
+    out = {}
+    for m in re.finditer(rf"(?:^|\n)\s*(?:const ({_ID}) = |function ({_ID})\()", src):
+        name = m.group(1) or m.group(2)
+        if name not in names:
+            continue
+        if m.group(2):
+            start = src.index("{", m.end())
+            out[name] = src[start:_match(src, start) + 1]
+        else:
+            rhs = src[m.end():_extent(src, m.end())]
+            arrow = rhs.split("=>", 1)
+            out[name] = arrow[1].strip() if len(arrow) == 2 else rhs
+    return out
+
+
+def html_checks(name: str, src: str) -> list[str]:
+    """Everything in one part file that is checked as HTML and is not safe, as `file: ${expr}` lines."""
+    builders = BUILDERS.get(name, set()) | SHARED_BUILDERS
+    problems, rhs, assigned = [], [], set()
+    for m in _HTML_NAME.finditer(src):
+        value = src[m.end():_extent(src, m.end())]
+        if m.group(1) in SINK_CALLS:
+            continue
+        if _is_function(value):
+            if m.group(1) not in builders:
+                problems.append(f"{name}: {m.group(1)} is a function returning HTML; declare it in BUILDERS")
+            continue
+        assigned.add(m.group(1))
+        rhs.append(value)
+    defs = []                                          # spans of the sink helpers' own definitions
+    for m in re.finditer(rf"(?:const ({'|'.join(SINK_CALLS)}) = |function ({'|'.join(SINK_CALLS)})\()", src):
+        end = _match(src, src.index("{", m.end())) if m.group(2) else _extent(src, m.end())
+        defs.append((m.start(), end))
+    inside = lambda i: any(a <= i <= b for a, b in defs)
+    for m in _SINK.finditer(src):
+        if not inside(m.start()):
+            rhs.append(src[m.end():_extent(src, m.end())])
+    for m in re.finditer(rf"(?<![\w$.])({'|'.join(SINK_CALLS)})\(", src):
+        if inside(m.start()):
+            continue
+        args, i = [], m.end()
+        for _ in range(SINK_CALLS[m.group(1)] + 1):
+            j = _extent(src, i)
+            args.append(src[i:j])
+            i = j + 1
+        value = args[-1].strip()
+        if m.group(1) == "keyed":
+            value = value.split("=>", 1)[1] if "=>" in value else value
+        rhs.append(value)
+    for decl in re.finditer(rf"const ({'|'.join(sorted(CONST_HTML))}) = ", src):
+        rhs.append(src[decl.end():_extent(src, decl.end())])
+    rhs += list(_builder_bodies(src, builders).values())
+    ctx = {"builders": builders, "assigned": assigned, "file": name}
+    exprs = list(_templates(src))
+    values = []
+    for r in rhs:
+        r = r.strip()
+        if r.startswith("{") and _match(r, 0) == len(r) - 1:
+            values += _returns(r[1:-1])              # a block: what it returns
+        else:
+            values.append(r)
+    exprs += [(v, True) for v in values]              # _safe follows a value into its templates and returns
+    bad = collections.Counter(" ".join(e.split()) for e, h in exprs if h and not _safe(e, ctx))
+    for e, count in bad.items():
+        problems.append(f"{name}: ${{{e[:140]}}}")
+    for (file, word), (declared, _why) in SAFE_EXCEPTIONS.items():
+        if file == name:
+            seen = len(re.findall(rf"(?<![\w$.]){re.escape(word)}(?![\w$])", src))
+            if seen != declared:
+                problems.append(f"{name}: {word} appears {seen} times (declared {declared})")
+    return sorted(set(problems))
+
+
+def test_nothing_reaches_the_html_unescaped():
     bad = []
     for name in sorted(set(bundle.ORDER["live"]) | {"80-dbg.js"}):
         if name in NOT_SERVER_PARTS:
             continue
-        for expr, html in _templates(web_text("js", name)):
-            if html and _bare_server_ref(expr) and (name, expr) not in SAFE_EXCEPTIONS:
-                bad.append(f"{name}: ${{{expr}}}")
-    assert bad == [], "server strings into HTML without esc():\n" + "\n".join(sorted(set(bad)))
+        bad += html_checks(name, web_text("js", name))
+    assert bad == [], "into HTML without esc() or a reviewed reason:\n" + "\n".join(sorted(bad))
 
 
-def test_the_esc_arm_sees_a_bare_id_and_passes_an_escaped_one():
-    """The arm's own control: the shape dd reported is caught; esc() and numbers pass."""
-    caught = [e for e, h in _templates('const a = `<button data-robot-open="${x.id}">${esc(x.name)}</button>`;') if h and _bare_server_ref(e)]
-    assert caught == ["x.id"]
-    nested = [e for e, h in _templates("const b = `<li>${ok ? `perm:${p.id}` : ''}</li>`;") if h and _bare_server_ref(e)]
-    assert nested == ["p.id"]
-    assert [e for e, h in _templates("const c = `<b>${esc(T.file)} ${n}</b>`; const d = `${x.list}#${x.id}`;") if h and _bare_server_ref(e)] == []
-    # A branch of a ternary or a logical expression is an output too; the condition is not.
-    branch = [e for e, h in _templates("const e = `<a data-open=\"${x ? p.task : 'none'}\">${who ? 'yes' : ''}${p.label || esc(p.name)}</a>`;") if h and _bare_server_ref(e)]
-    assert branch == ["x ? p.task : 'none'", "p.label || esc(p.name)"]
+# dd's ten shapes the field-name deny-list could not see, and the shapes that must pass.
+CAUGHT = [
+    "`<b>${DEF[x.id].agent}</b>`", "`<b>${x.name.slice(0, 4)}</b>`", "`<b>${String(x.name)}</b>`",
+    "`<b>${[x.name].join()}</b>`", "`<b>${x.message}</b>`", "`<b>${p.toolName}</b>`", "`<b>${x.name.toUpperCase()}</b>`",
+    "`<b>${JSON.stringify(x)}</b>`", "`<b>${x ? x.name : ''}</b>`", "`<b>${x.name || '-'}</b>`",
+    "`<i data-k=\"${x.key}\"></i>`", "`<b>${label}</b>`", "`<b>${xs.map((x) => x.name).join('')}</b>`",
+    "`<b>${xs.map((x) => { return x.name; }).join('')}</b>`", "`<b>${x.at.name}</b>`",
+    "const fooHTML = x.name;", "el.innerHTML = x.name;", "setHTML($('a'), x.name);", "const lHTML = `#${x.id}`;",
+    "`<b>${'a' + x.name}</b>`", "`<b>${barHTML}</b>`",
+]
+PASSED = [
+    "`<b>${esc(x.name)}</b>`", "`<b>${esc(DEF[x.id].agent)}</b>`", "`<b>${x.items.length} 件</b>`", "`<b>${i + 1}</b>`",
+    "`<b>${ROLES[r].color}</b>`", "`<b>${ok ? esc(a) : ''}</b>`", "`<b>${xs.map((x) => `<i>${esc(x)}</i>`).join('')}</b>`",
+    "`<b>${a === b}</b>`", "const fooHTML = `<i></i>`; const z = `<b>${fooHTML}</b>`;", "`<b>${pill(id, 'main')}</b>`", "`<b>${'<i></i>'.repeat(7)}</b>`",
+    "const fooHTML = `<i>${esc(x.name)}</i>`;", "el.innerHTML = `<i>${esc(a)}</i>`;",
+]
+
+
+@pytest.mark.parametrize("snippet", CAUGHT)
+def test_the_arm_catches(snippet):
+    assert html_checks("probe.js", snippet), snippet
+
+
+@pytest.mark.parametrize("snippet", PASSED)
+def test_the_arm_passes(snippet):
+    assert html_checks("probe.js", snippet) == [], snippet
+
+
+def test_a_declared_exception_is_exact():
+    """One more use of a reviewed expression is red until the count is reviewed too."""
+    two = "const li = (m, key, innerHTML) => `<li>${innerHTML}</li>`; const z = `<p>${innerHTML}</p>`;"
+    assert "50-panel.js: innerHTML appears 3 times (declared 2)" in html_checks("50-panel.js", two)
+    one = "const li = (m, key, innerHTML) => `<li>${innerHTML}</li>`;"
+    assert not any("innerHTML" in line for line in html_checks("50-panel.js", one))

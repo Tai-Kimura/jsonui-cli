@@ -498,6 +498,43 @@ async def run_real_decide(pw, out, failures):
             res[answer] = _json.loads(outp) if outp else None
             if answer == "deny":
                 await page.keyboard.press("Escape"); await page.keyboard.press("Escape")
+        # dd's shapes (P4–P6 review): a 2,500-character command whose tail is the part that matters, runs of spaces
+        # and a line break — the card shows it verbatim (whitespace kept, the box scrolls); past 20,000 characters the
+        # browser gets no buttons; a long Write says how much of its content is shown.
+        long_cmd = "echo start" + "   x  y" * 350 + "\n  && echo two  spaces; rm -rf ~/tail-hidden"
+        req = dict(base, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": long_cmd, "description": "run"},
+                   permission_suggestions=sugg)
+        hook(req)
+        waiting = hook(req, decide=True)
+        exact_js = "(cmd) => [...document.querySelectorAll('#tasks .perm-exact .pe-v')].find((el) => el.textContent === cmd)"
+        await wait(page, f"(cmd) => {{ const el = ({exact_js})(cmd); return !!el && !!el.closest('li').querySelector('[data-do=\"deny\"]'); }}",
+                   arg=long_cmd, timeout=15000, label="the long command, verbatim, with buttons")
+        res["verbatim"] = await page.evaluate(f"""(cmd) => {{ const el = ({exact_js})(cmd), box = el.closest('.perm-exact');
+            return {{ whiteSpace: getComputedStyle(box).whiteSpace, scrolls: box.scrollHeight > box.clientHeight, length: el.textContent.length }}; }}""", long_cmd)
+        await page.evaluate(f"(cmd) => ({exact_js})(cmd).closest('li').querySelector('[data-do=\"deny\"]').click()", long_cmd)
+        outp, err = waiting.communicate(timeout=40)
+        res["longDeny"] = _json.loads(outp) if outp else None
+        check(failures, res["verbatim"] == {"whiteSpace": "pre-wrap", "scrolls": True, "length": len(long_cmd)},
+              f"real-decide: the long command is shown verbatim: {res['verbatim']}")
+        check(failures, (res["longDeny"] or {}).get("hookSpecificOutput", {}).get("decision", {}).get("behavior") == "deny",
+              f"real-decide: the long command's deny reached the hook: {res['longDeny']}")
+        huge = "echo " + "z" * 20_001
+        req = dict(base, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": huge}, permission_suggestions=sugg)
+        hook(req)
+        waiting = hook(req, decide=True)
+        try:
+            await wait(page, "() => [...document.querySelectorAll('#tasks li')].some((li) => li.textContent.includes('長すぎて全部を表示できないので、ターミナルで答えてください'))",
+                       timeout=15000, label="the too-long card")
+            res["tooLong"] = await page.evaluate("""() => { const li = [...document.querySelectorAll('#tasks li')].find((x) => x.textContent.includes('長すぎて全部を表示できない'));
+                return { buttons: li.querySelectorAll('[data-do]').length }; }""")
+        finally:
+            if waiting.poll() is None:
+                waiting.terminate()   # our own child: the browser cannot answer it, the terminal would
+                waiting.wait(timeout=10)
+        check(failures, res["tooLong"] == {"buttons": 0}, f"real-decide: a command past 20,000 characters has no buttons: {res['tooLong']}")
+        hook(dict(base, hook_event_name="PermissionRequest", tool_name="Write", tool_input={"file_path": "/work/notes.txt", "content": "c" * 3000}))
+        await wait(page, "() => [...document.querySelectorAll('#tasks .pe-note')].some((el) => el.textContent === '中身は先頭 2000 字だけ表示（全体 3000 字）')",
+                   timeout=15000, label="the Write card's content note")
         await page.screenshot(path=f"{out}/real-decide.png")
         want_always = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow", "updatedPermissions": [sugg[0]]}}}
         want_deny = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "deny", "message": "成果物は残して"}}}

@@ -26,7 +26,7 @@ function payloadFor(e) {
 }
 const logState = { open: false, cats: new Set(Object.keys(CAT_LABEL)), hiddenRobots: new Set(), q: '', expanded: new Set(), shownTop: null, opener: null };
 const logOverlay = $('log-overlay'), logRows = $('log-rows'), logBody = $('log-body');
-$('log-cats').innerHTML = Object.entries(CAT_LABEL).map(([k, v]) => `<button type="button" class="fbtn" data-cat="${k}" aria-pressed="true">${v}</button>`).join('');
+$('log-cats').innerHTML = Object.entries(CAT_LABEL).map(([k, v]) => `<button type="button" class="fbtn" data-cat="${esc(k)}" aria-pressed="true">${esc(v)}</button>`).join('');
 function toggleIn(set, key, btn) { if (set.has(key)) set.delete(key); else set.add(key); btn.setAttribute('aria-pressed', String(set.has(key))); }
 $('log-cats').addEventListener('click', (e) => { const b = e.target.closest('[data-cat]'); if (b) { toggleIn(logState.cats, b.dataset.cat, b); renderLog(true); } });
 $('log-search').addEventListener('input', (e) => { logState.q = e.target.value.trim().toLowerCase(); renderLog(true); });
@@ -65,13 +65,13 @@ function renderLog(force) {
   }
   more.hidden = true;
   logState.shownTop = list.length ? list[0].seq : 0;
-  const rows = list.slice(0, 400).map((e) => {
+  const rowsHTML = list.slice(0, 400).map((e) => {
     const cat = catOf(e), d = DEF[e.who], open = logState.expanded.has(String(e.seq));
-    const row = `<tr class="ev" tabindex="0" data-key="${e.seq}" aria-expanded="${open}"><td class="time">${fmtClock(BASE_CLOCK + e.abs)}</td><td class="who">${pill(e.who, d.role)} ${esc(d.agent)}</td><td><span class="cat cat-${cat}">${esc(e.kind)}</span></td><td class="what">${esc(e.what)}</td></tr>`;
+    const rowHTML = `<tr class="ev" tabindex="0" data-key="${e.seq}" aria-expanded="${open ? 'true' : 'false'}"><td class="time">${fmtClock(BASE_CLOCK + e.abs)}</td><td class="who">${pill(e.who, d.role)} ${esc(d.agent)}</td><td><span class="cat cat-${esc(cat)}">${esc(e.kind)}</span></td><td class="what">${esc(e.what)}</td></tr>`;
     const note = SOURCE.mode === 'live' ? 'サーバーが受けた入力（長いものは切り詰め）' : e.decision ? 'ビューで押した答えを Claude Code へ返す内容の例' : cat === 'spec' || cat === 'test' ? '可視化サーバーが作るイベントの例' : 'フック入力の例（項目名は実際と同じ。値はデモ）';
-    return open ? `${row}<tr class="payload"><td colspan="4"><p>${note}</p><pre>${esc(JSON.stringify(payloadFor(e), null, 2))}</pre></td></tr>` : row;
+    return open ? `${rowHTML}<tr class="payload"><td colspan="4"><p>${esc(note)}</p><pre>${esc(JSON.stringify(payloadFor(e), null, 2))}</pre></td></tr>` : rowHTML;
   }).join('');
-  setHTML(logRows, rows || '<tr><td colspan="4" class="log-empty">条件に合うイベントがありません</td></tr>');
+  setHTML(logRows, rowsHTML || '<tr><td colspan="4" class="log-empty">条件に合うイベントがありません</td></tr>');
   if (follow) logBody.scrollTop = 0;
 }
 document.addEventListener('keydown', (e) => {
