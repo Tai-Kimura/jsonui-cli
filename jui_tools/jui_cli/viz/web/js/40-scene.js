@@ -496,6 +496,7 @@ function build3D() {
     const r = canvas.getBoundingClientRect();
     ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
+    if (TOWER.on) return towerHit(ray);
     if (SOURCE.mode === 'live') return liveHit(ray);
     const hit = ray.intersectObjects([boardMesh, kbMesh, trayGroup, ...PBOARDS.map((pb) => pb.mesh), ...robots.map((R) => R.robot.root)], true)[0];
     if (!hit) return null;
@@ -524,7 +525,7 @@ function build3D() {
     if (!h) return;
     // A board belongs to one project room, so opening it narrows the view to that project (unless it already shows everything).
     const fit = (proj) => { if (proj && UI.project !== 'all' && UI.project !== proj) setProject(proj, { camera: false }); };
-    if (h.kind === 'floor') towerLeave(h.k);
+    if (h.kind === 'floor') towerLeave(SOURCE.mode === 'live' ? h.k : 0);   // the demo has one office
     else if (h.kind === 'robot') openRobot(h.id, canvas);
     else if (h.kind === 'tasks') { fit(h.project); openTaskBoard(canvas, undefined, h.project); }
     else if (h.kind === 'spec') { fit(SPECS[h.i].project); openWhiteboard(h.i, canvas); }
@@ -537,7 +538,9 @@ function build3D() {
     canvas.title = h && h.kind === 'floor' ? h.title : '';
   });
 
-  if (SOURCE.mode === 'live') {
+  sceneEl.addEventListener('pointerdown', () => { DIRECTOR.userAt = performance.now(); });
+  sceneEl.addEventListener('wheel', () => { DIRECTOR.userAt = performance.now(); }, { passive: true });
+  {
     // The wheel past the farthest distance shows the building; past the nearest in the building, the floor.
     // On the whole scene, not the canvas: a room's or a robot's tag can be under the pointer.
     sceneEl.addEventListener('wheel', (ev) => {
@@ -545,8 +548,9 @@ function build3D() {
       if (!TOWER.on && ev.deltaY > 0 && d >= controls.maxDistance - 0.5) towerEnter();
       else if (TOWER.on && ev.deltaY < 0 && d <= controls.minDistance + 0.5) towerLeave(LIVE.floor);
     }, { passive: true });
-    document.getElementById('floor-up').addEventListener('click', () => liveFloorStep(1));
-    document.getElementById('floor-down').addEventListener('click', () => liveFloorStep(-1));
+    const step = (d) => (SOURCE.mode === 'demo' ? towerLookAt(TOWER.look + d) : liveFloorStep(d));
+    document.getElementById('floor-up').addEventListener('click', () => step(1));
+    document.getElementById('floor-down').addEventListener('click', () => step(-1));
     document.getElementById('floor-building').addEventListener('click', () => (TOWER.on ? towerLeave(LIVE.floor) : towerEnter()));
   }
   const applyTheme = () => { for (const [mat, token, fallback] of roomMats) mat.color.set(readToken(token, fallback)); };
@@ -772,13 +776,13 @@ function liveUpdateRobots(nowSec, dt) {
 }
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
    part and the cork board the task board, a robot its card. */
+function towerHit(ray) {
+  ray.layers.set(TOWER.LAYER);
+  const h = ray.intersectObjects(TOWER.floors.map((F) => F.box), false)[0];
+  ray.layers.set(0);
+  return h ? { kind: 'floor', k: h.object.userData.floor, title: towerHover(h) } : null;
+}
 function liveHit(ray) {
-  if (TOWER.on) {
-    ray.layers.set(TOWER.LAYER);
-    const h = ray.intersectObjects(TOWER.floors.map((F) => F.box), false)[0];
-    ray.layers.set(0);
-    return h ? { kind: 'floor', k: h.object.userData.floor, title: towerHover(h) } : null;
-  }
   const targets = [...Object.values(LIVE3D.rooms).flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.map((R) => R.robot.root)];
   const hit = ray.intersectObjects(targets, true)[0];
   if (!hit) return null;
@@ -885,6 +889,58 @@ function liveRoomPose(id) {
   const dist = id === 'all' ? Math.max(22, fit(b.size, 0.92)) : Math.max(9, fit(b.size, 0.8));
   return { p: b.c.clone().add(new THREE.Vector3(6.5, 15.5, 22.5).normalize().multiplyScalar(dist)), t: b.c };
 }
+/* The floor buttons (both views). Hidden while a board, the log, a zoom or a robot card covers the 3D (10-18). The
+   demo has one office: its buttons show in the building only, and look at the floors there. */
+function floorNavSync() {
+  const nav = document.getElementById('floor-nav'), legend = document.getElementById('tower-legend');
+  if (!nav) return;
+  const n = LIVE.floors.length, k = SOURCE.mode === 'demo' || TOWER.on ? TOWER.look : LIVE.floor;
+  const covered = wb.open || tb.open || logState.open || zoom.zoomed || !!rbState.id;
+  nav.hidden = !has3D || n < 2 || covered || (SOURCE.mode === 'demo' && !TOWER.on);
+  legend.hidden = nav.hidden || !TOWER.on;
+  if (nav.hidden) return;
+  setText(document.getElementById('floor-label'), TOWER.on && SOURCE.mode === 'live' ? `全 ${n} 階` : `${k + 1}F / ${n}F`);
+  const waits = LIVE.floors.map((f) => f.some((id) => LIVE.rank[id] === 0));
+  const up = document.getElementById('floor-up'), down = document.getElementById('floor-down'), bld = document.getElementById('floor-building');
+  const free = TOWER.on && SOURCE.mode === 'live';
+  up.disabled = !free && k >= n - 1; down.disabled = !free && k <= 0;
+  const above = waits.some((w, j) => w && j > k), below = waits.some((w, j) => w && j < k);
+  up.toggleAttribute('data-alert', above && !free); down.toggleAttribute('data-alert', below && !free);
+  bld.toggleAttribute('data-alert', (above || below) && !TOWER.on);
+  up.setAttribute('aria-label', above ? '上の階へ（上の階に許可待ち）' : '上の階へ');
+  down.setAttribute('aria-label', below ? '下の階へ（下の階に許可待ち）' : '下の階へ');
+  bld.setAttribute('aria-pressed', TOWER.on ? 'true' : 'false');
+}
+/* The demo's director: once a loop, the camera beats (out to the building, up to 2F, back, down; the building at
+   night), scripted coffee and meals, and a small fist pump when a permission is granted. The camera beats skip
+   while someone uses the 3D view (a touch in the last 8 s) or a board / card covers it. */
+const DIRECTOR = { userAt: -1e9, prevT: null, perm: {} };
+function demoDirector(model, nowSec) {
+  const t = model.t, prev = DIRECTOR.prevT;
+  DIRECTOR.prevT = t;
+  demoBuilding(t);
+  if (prev === null) return;
+  // a beat between the last frame and this one; across the loop's end only when time wrapped (not a jump back)
+  const wrapped = prev - t > LOOP / 2;
+  const crossed = (beat) => (prev <= t ? prev < beat && beat <= t : wrapped && (prev < beat || beat <= t));
+  const robot = (id) => { const R = robots.find((x) => x.def.id === id); return R && R.robot; };
+  const B = DEMO_BEATS, quiet = performance.now() - DIRECTOR.userAt > 8000 && !wb.open && !tb.open && !logState.open && !zoom.zoomed && !rbState.id;
+  if (quiet && has3D && playing) {
+    if (crossed(B.towerOut) || crossed(B.nightOut)) towerEnter();
+    if (crossed(B.look2F)) towerLookAt(1);
+    if (crossed(B.look1F)) towerLookAt(0);
+    if (crossed(B.towerIn) || crossed(B.nightIn)) towerLeave(0);
+  }
+  for (const [at, id, kind] of B.snacks) if (crossed(at) && robot(id)) startGesture(robot(id), kind, nowSec);
+  for (const p of model.perms) {                     // granted (in the view, by a rule or in the terminal): a fist pump
+    const was = DIRECTOR.perm[p.id];
+    if (was === 'pending' && p.status !== 'pending' && p.status !== 'deny' && robot(p.who)) {
+      setRobotState(robot(p.who), robotState[p.who].state);   // the 3D robot still shows last frame's 許可待ち
+      startGesture(robot(p.who), 'cheer', nowSec);
+    }
+    DIRECTOR.perm[p.id] = p.status;
+  }
+}
 /* ---------- the building: every floor of six rooms, stacked (requester's ruling, 10-18) ----------
    Looking at a floor, the 3D is that floor's rooms in full, as before; the other floors are not drawn. Zoomed out
    (the ビル全体 button, or the wheel past the farthest distance) the building replaces them: one plain box per floor
@@ -899,12 +955,12 @@ function skyPhase(date) {
   return h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 16.5 ? 'day' : h >= 16.5 && h < 19 ? 'dusk' : 'night';
 }
 function skySync() {
-  const phase = TOWER.on ? skyPhase(new Date(vizNow())) : '';
+  const phase = TOWER.on || SOURCE.mode === 'demo' ? skyPhase(new Date(vizNow())) : '';   // the demo's office has its clock's sky too
   if ((sceneEl.dataset.sky || '') === phase) return;
   sceneEl.dataset.sky = phase;
   sceneEl.style.background = phase ? `linear-gradient(180deg, ${SKY[phase][0]}, ${SKY[phase][1]})` : '';
 }
-const TOWER = { on: false, group: null, floors: [], sig: '', theme: null, W: 16, D: 9, H: 3, SLAB: 0.28, LOBBY: 1.1, LAYER: 1, pulse: 1,
+const TOWER = { on: false, look: 0, sign: null, group: null, floors: [], sig: '', theme: null, W: 16, D: 9, H: 3, SLAB: 0.28, LOBBY: 1.1, LAYER: 1, pulse: 1,
   lights: null, actors: null, bayColor: [] };
 const towerBase = (k) => TOWER.LOBBY + k * (TOWER.H + TOWER.SLAB);          // the slab under floor k
 const towerY = (k) => towerBase(k) + TOWER.SLAB + TOWER.H / 2;              // the middle of floor k
@@ -924,7 +980,7 @@ function towerFloorText(k) {
   const ids = LIVE.floors[k] || [];
   let working = 0, waiting = 0, idle = 0;
   for (const d of ROBOT_DEFS) {
-    if (!ids.includes(d.room) || LIVE.leaving[d.id]) continue;
+    if (!ids.includes(roomOfDef(d)) || LIVE.leaving[d.id]) continue;
     const st = (robotState[d.id] || {}).state;
     if (st === 'waiting') waiting += 1; else if (st && st !== 'idle' && st !== 'done') working += 1; else idle += 1;
   }
@@ -933,10 +989,11 @@ function towerFloorText(k) {
 }
 const TOWER_STATE = ['waiting', 'working', 'idle', 'idle'];   // rank 0..3 → what a window shows
 // A working room where nobody does more than think shows "thinking" (lit, its own badge and pose).
-const roomThinks = (id) => { const st = ROBOT_DEFS.filter((d) => d.room === id && !LIVE.leaving[d.id]).map((d) => (robotState[d.id] || {}).state);
+const roomThinks = (id) => { const st = ROBOT_DEFS.filter((d) => roomOfDef(d) === id && !LIVE.leaving[d.id]).map((d) => (robotState[d.id] || {}).state);
   return st.includes('thinking') && !st.some((x) => x && !['idle', 'done', 'thinking', 'waiting'].includes(x)); };
 const towerState = (id) => { if (!id) return 'empty'; const t = TOWER_STATE[LIVE.rank[id]] || 'idle'; return t === 'working' && roomThinks(id) ? 'thinking' : t; };
-const towerName = (id) => String((PROJECT[id] && PROJECT[id].name) || id || '').replace(/\/+$/, '');
+const towerName = (id) => String(TOWER_NAMES[id] || (PROJECT[id] && PROJECT[id].name) || id || '').replace(/\/+$/, '');
+const roomOfDef = (d) => d.room || projectOfRobot(d.id);   // the live defs carry a room; the demo's come from their session
 /* A name in up to two lines that fit maxW, broken after '-', '_' or a space when it can be (not "tea-finder-ag / ent");
    a part longer than a line breaks where it must; a name longer than two lines ends with '…'. */
 function towerLines(ctx, text, maxW) {
@@ -1121,6 +1178,7 @@ function towerBuild() {
   sctx.fillStyle = P.panel; sctx.font = `150px ${FONT_DISPLAY}`; sctx.textAlign = 'center'; sctx.textBaseline = 'middle'; sctx.fillText('JsonUI', 512, 136);
   const sign = put(new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.3), new THREE.MeshBasicMaterial({ map: texFrom(signC), toneMapped: false, side: THREE.DoubleSide })));
   sign.position.set(1.6, top + SLAB + 1.4, front - 0.4);
+  TOWER.sign = sign.material;
   const plaza = put(new THREE.Mesh(new THREE.BoxGeometry(W + 9, 0.2, D + 9), toon(dark ? '#1c2636' : '#cfd8e4')));
   plaza.position.set(0, -0.1, 0);
   const shadow = put(new THREE.Mesh(new THREE.PlaneGeometry(W + 3, D + 3), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: dark ? 0.35 : 0.14, depthWrite: false })));
@@ -1180,6 +1238,10 @@ function towerAnimate(t, dt) {
     }
   }));
   TOWER.lights.instanceColor.needsUpdate = true;
+  if (TOWER.sign) {                                  // the roof's sign lights up at night, a slow glow (steady under reduced motion)
+    const night = skyPhase(new Date(vizNow())) === 'night', glow = reduceMotion ? 1 : 0.6 + 0.4 * Math.abs(Math.sin(t * 1.4));
+    TOWER.sign.color.set(night ? c.set('#ffffff').lerp(new THREE.Color('#ffd76a'), glow) : c.set('#ffffff'));
+  }
   for (const pose of TOWER_POSES) { const mesh = TOWER.actors[pose]; mesh.count = counts[pose]; mesh.instanceMatrix.needsUpdate = true; }
 }
 /* The room under the pointer in the building: its full name and state, as the canvas's title. */
@@ -1201,6 +1263,7 @@ function towerSetView(on) {
 }
 function towerEnter() {
   if (TOWER.on || LIVE.floors.length < 2 || zoom.zoomed) return;
+  TOWER.look = LIVE.floor;
   towerSync();
   towerSetView(true);
   const pose = towerPose();
@@ -1212,9 +1275,17 @@ function towerLeave(k) {
   if (!TOWER.on) return;
   towerSetView(false);
   if (liveGoToFloor(k)) LIVE3D.floorMove = true;
-  const pose = liveRoomPose(UI.project !== 'all' && PROJECT[UI.project] && PROJECT[UI.project].shown ? UI.project : 'all');
+  const pose = SOURCE.mode === 'live' ? liveRoomPose(UI.project !== 'all' && PROJECT[UI.project] && PROJECT[UI.project].shown ? UI.project : 'all') : roomPose(UI.project);
   controls.enabled = false;
   flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.8, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });
+}
+/* In the building, look at floor k's front (the demo's floor change; the floor buttons in the demo's building). */
+function towerLookAt(k) {
+  if (!TOWER.on) return;
+  TOWER.look = Math.max(0, Math.min(LIVE.floors.length - 1, k));
+  const y = towerY(TOWER.look), t = new THREE.Vector3(0, y, TOWER.D / 2), p = t.clone().add(new THREE.Vector3(5, 3, 30));
+  controls.enabled = false;
+  flyTo(p, t, controls.target, reduceMotion ? 0 : 0.9, () => { controls.target.copy(t); controls.enabled = true; controls.update(); });
 }
 /* One floor up (+1) or down (-1): the camera comes in from above or below. */
 function liveFloorStep(dir) {
@@ -1287,8 +1358,11 @@ function robotPoint(id, up) { const R = robots.find((x) => x.def.id === id); ret
 function update3D(model, nowSec, dt) {
   if (SOURCE.mode === 'live') liveUpdateRobots(nowSec, dt);
   else {
+    demoDirector(model, nowSec);
     for (const R of robots) {
       const st = robotState[R.def.id];
+      setRobotTired(R.robot, demoTired(R.def.id));
+      R.robot.heavy = demoHeavy(R.def.id, model.t);
       if (st.walk) { R.robot.root.position.x = st.walk.x; R.robot.root.position.z = st.walk.z; R.robot.root.rotation.y = st.walk.ry; }
       if (st.state !== R.robot.state) setRobotState(R.robot, st.state);
       if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
@@ -1342,7 +1416,7 @@ function update3D(model, nowSec, dt) {
   if (camTween || zoom.zoomed) camera.lookAt(viewTarget); else controls.update();
   renderer.render(scene, camera);
   if (TOWER.on) { towerSync(); towerAnimate(nowSec, dt); }
-  if (SOURCE.mode === 'live') skySync();
+  skySync();
   tagsEl.hidden = zoom.zoomed || TOWER.on;
   for (const R of robots) placeTag(R.tag, tmpV.copy(R.robot.root.position).add(TAG_UP).clone());
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }

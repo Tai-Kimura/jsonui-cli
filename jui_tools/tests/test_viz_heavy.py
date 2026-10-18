@@ -52,6 +52,7 @@ def test_tokens_heavy_from_2000_a_minute_over_two_minutes(tmp_path):
     assert _heavy(world, T + 1_000) == []                  # 3,999 in two minutes: 1,999.5 a minute
     _append(f, _assistant("m3", 1))
     assert _heavy(world, T + 2_000) == ["tokens"]          # 4,000: 2,000 a minute
+    assert world.sessions[SID]["heavyInfo"] == {"tokensPerMin": 2000, "toolSec": 0, "subagents": 0}   # what the card says
     assert _heavy(world, T + 120_001) == []                # they left the window
 
 
@@ -89,6 +90,7 @@ def test_a_tool_running_for_60_s(tmp_path):
     world.apply_hook(hook, T)
     assert _heavy(world, T + HEAVY_TOOL_MS - 1) == []
     assert _heavy(world, T + HEAVY_TOOL_MS) == ["tool"]
+    assert world.sessions[SID]["heavyInfo"]["toolSec"] == 60
     world.apply_hook(dict(hook, hook_event_name="PostToolUse"), T + HEAVY_TOOL_MS + 1)
     assert _heavy(world, T + HEAVY_TOOL_MS + 2) == []
 

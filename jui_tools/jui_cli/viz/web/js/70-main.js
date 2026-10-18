@@ -17,13 +17,14 @@ function frame(ms) {
     const t = ((simT % LOOP) + LOOP) % LOOP;
     emitEvents(prevSim, simT); prevSim = simT;
     latestModel = computeModel(t, Math.floor(simT / LOOP));
+    VIZ_CLOCK.at = demoClockMs(t);   // the demo clock (5:00 → 23:00 a loop): the sky and b4's hours
     updateRobotStates(simT, t, latestModel.perms);
   } else {
     simT = secOfDay(Date.now());
     latestModel = computeModel();
   }
   if (has3D) {
-    if (ms - lastBoard > 200 && !(SOURCE.mode === 'live' && TOWER.on)) { redrawBoards(latestModel, ms / 1000); lastBoard = ms; }   // the building hides the boards
+    if (ms - lastBoard > 200 && !TOWER.on) { redrawBoards(latestModel, ms / 1000); lastBoard = ms; }   // the building hides the boards
     update3D(latestModel, ms / 1000, dt);
   }
   if (ms - lastPanel > 250) {
@@ -35,6 +36,8 @@ function frame(ms) {
     renderLog(false);
     $('chip-clock').textContent = fmtClock(BASE_CLOCK + simT);
     if (SOURCE.mode === 'live') liveChrome();
+    floorNavSync();
+    if (SOURCE.mode === 'demo') { const el = $('demo-clock'); el.hidden = false; setText(el, `デモの時計 ${fmtClock(Math.floor(demoHour(latestModel.t) * 3600)).slice(0, 5)}（早回し）`); }
     lastPanel = ms;
   }
   if (fpsMeter) {
@@ -55,28 +58,6 @@ function liveChrome() {
   }
   const empty = $('live-empty');
   if (empty) empty.hidden = !SOURCE.connected || SESSIONS.length > 0;
-  const nav = $('floor-nav');
-  if (nav) {
-    const n = LIVE.floors.length, k = LIVE.floor;
-    // The floors steer the 3D office: hidden while a board, the log or a zoomed view covers it (they sat on the
-    // spec board's header and its checkbox — 10-18 live check).
-    const covered = wb.open || tb.open || logState.open || zoom.zoomed || !!rbState.id;
-    nav.hidden = !has3D || n < 2 || covered;
-    if (nav.hidden) $('tower-legend').hidden = true;
-    if (!nav.hidden) {
-      setText($('floor-label'), TOWER.on ? `全 ${n} 階` : `${k + 1}F / ${n}F`);
-      const waits = LIVE.floors.map((f) => f.some((id) => LIVE.rank[id] === 0));
-      const up = $('floor-up'), down = $('floor-down'), bld = $('floor-building');
-      up.disabled = !TOWER.on && k >= n - 1; down.disabled = !TOWER.on && k <= 0;
-      const above = waits.some((w, j) => w && j > k), below = waits.some((w, j) => w && j < k);
-      up.toggleAttribute('data-alert', above && !TOWER.on); down.toggleAttribute('data-alert', below && !TOWER.on);
-      bld.toggleAttribute('data-alert', (above || below) && !TOWER.on);
-      up.setAttribute('aria-label', above ? '上の階へ（上の階に許可待ち）' : '上の階へ');
-      down.setAttribute('aria-label', below ? '下の階へ（下の階に許可待ち）' : '下の階へ');
-      bld.setAttribute('aria-pressed', TOWER.on ? 'true' : 'false');
-      $('tower-legend').hidden = !TOWER.on;
-    }
-  }
   const err = $('live-error');
   if (err) { err.hidden = !LIVE.serverError; setText(err, LIVE.serverError ? `取得元の故障: ${LIVE.serverError}` : ''); }
 }

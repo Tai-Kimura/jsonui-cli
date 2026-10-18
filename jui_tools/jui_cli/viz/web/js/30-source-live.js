@@ -44,7 +44,6 @@ const LIVE = {
   slices: {}, model: null, modelAt: 0, labelOfReal: {}, seenSeq: 0, specRows: {}, sheetAsked: {}, sheetFailed: {},
   seats: {}, seatOf: {}, leaving: {}, shown: [], floors: [], floor: 0, rank: {}, connectedOnce: false, serverError: '',
 };
-const ROOM_MAX = 6;
 /* A floor is three rooms across, two deep (requester, 10-18: the rooms looked cramped at 6×5 in rows of three). */
 const FLOOR_COLS = 3, ROOM_GAP = 0.6;
 const FLOORS = ['--floor-a', '--floor-b', '--floor-c'];
@@ -383,9 +382,15 @@ function layoutRooms() {
 /* Eight hours into its session a main robot gets tired (requester, 10-18). The start is the session's own
    (sessions[].since, from its transcript); a session without one is never tired — startedAt is when the server
    first saw it, not when it began. */
-const TIRED_MS = 8 * 3600 * 1000;
-const isTired = (since, now) => Number.isFinite(since) && since > 0 && now - since >= TIRED_MS;
 const heavyOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return !!(s && s.heavy && s.heavy.length); };
+/* What the robot card says under 今やっていること: hours of a tired session, the reasons of heavy work. */
+function robotCondition(label) {
+  const s = SESSIONS.find((x) => x.id === SESSION_OF[label]);
+  if (!s) return { tired: false, hours: null, heavy: null };
+  const main = DEF[label] && DEF[label].kind === 'main';
+  const hours = s.since ? (vizNow() - s.since) / 3600000 : null;
+  return { tired: main && isTired(s.since, vizNow()), hours, heavy: s.heavy && s.heavy.length ? { reasons: s.heavy, ...(s.heavyInfo || {}) } : null };
+}
 const sinceOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return s ? s.since : null; };
 
 /* Another floor, from the floor buttons, the building view or a project picked in the menu. */
@@ -524,7 +529,8 @@ function rebuildSessions() {
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
-      heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [] });   // tokens / tool / subagents   // the transcript's first record; none: not guessed
+      heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [],   // tokens / tool / subagents
+      heavyInfo: s.heavyInfo && typeof s.heavyInfo === 'object' ? { tokensPerMin: Number(s.heavyInfo.tokensPerMin) || 0, toolSec: Number(s.heavyInfo.toolSec) || 0, subagents: Number(s.heavyInfo.subagents) || 0 } : null });   // the transcript's first record; none: not guessed
   }
   SESSIONS.splice(0, SESSIONS.length, ...next);
 }

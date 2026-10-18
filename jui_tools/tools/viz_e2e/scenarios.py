@@ -291,7 +291,7 @@ def building():
     mixed[9] = dict(mixed[9], state="thinking", act="考え中")              # busy and quiet: thinking (lit, its own pose)
     p6 = perm("perm-b6", S[6]["id"], "Bash", "npm test", sessionId=S[6]["id"])
     heavy = [dict(x) for x in S]
-    heavy[1] = dict(heavy[1], heavy=["tokens"])          # working hard: fast typing and sweat
+    heavy[1] = dict(heavy[1], heavy=["tokens"], heavyInfo={"tokensPerMin": 3200, "toolSec": 0, "subagents": 0})   # fast typing and sweat
     heavy[6] = dict(heavy[6], heavy=["tool"])            # heavy, but waiting for permission: no sweat
     return [{"mark": "idle"}, slices(0, projects=P, sessions=S, agents=A, server=server_slice()),
             {"mark": "mixed"}, slices(1, agents=mixed, perms=[p6], sessions=heavy)]
