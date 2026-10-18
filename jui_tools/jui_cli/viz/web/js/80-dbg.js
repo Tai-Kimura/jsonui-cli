@@ -61,7 +61,7 @@ window.__dbg = {
   propsPlace: (r) => propsPlace(r),
   seatGeom: () => ({ SEAT: JSON.parse(JSON.stringify(SEAT)), SEAT_SOLO: { ...SEAT_SOLO }, SOLO_GROW, DOOR_W, roomSize: [1, 7, 11].map(roomSize), doorAt: doorAt({ x0: 0, x1: 0, z0: 0, z1: 0 }) }),
   // the usage chips as drawn (10-18): per window its text, the number's and the %'s colours, 上限到達, the note
-  usage: () => [...document.querySelectorAll('#usage .uw')].map((e) => ({ window: e.dataset.window || null, text: e.textContent,
+  usage: () => [...document.querySelectorAll('#usage .uw')].map((e) => ({ window: e.dataset.window || null, text: e.textContent, title: e.title,
     num: e.querySelector('.num') ? getComputedStyle(e.querySelector('.num')).color : null,
     pc: e.querySelector('.pc') ? getComputedStyle(e.querySelector('.pc')).color : null,
     limit: !!e.querySelector('.limit'), limitColor: e.querySelector('.limit') ? getComputedStyle(e.querySelector('.limit')).color : null,

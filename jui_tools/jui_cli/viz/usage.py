@@ -7,7 +7,8 @@ a window whose reset has passed left out. statusline.py posts it here; this modu
 last value in <viz_home>/usage.json (a restart still shows it, with when it came) and makes the slice.
 
 ⚠️ Only a terminal claude runs a statusLine: the VS Code extension shows its own usage and never runs
-the command (read in extension 2.1.301, 10-18). With no terminal claude running the value goes stale;
+the command (read in extension 2.1.301, 10-18), and neither does the desktop app (it runs Claude Code as
+stream-json too; one turn ran statusline.py 0 times, measured 10-19). With no terminal claude running the value goes stale;
 the header says how old it is, and doctor says why.
 """
 from __future__ import annotations

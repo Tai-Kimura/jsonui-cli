@@ -976,7 +976,7 @@ def _cmd_relay(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------- hooks
 
 
-STATUSLINE_NOTE = ("上限の値は、ターミナルの claude（の statusLine）からだけ届きます。VS Code 拡張のセッションからは更新されません。"
+STATUSLINE_NOTE = ("上限の値は、ターミナルの claude（の statusLine）からだけ届きます。VS Code 拡張とデスクトップアプリのセッションからは更新されません。"
                    "ターミナルの claude が 1 つ動いていれば更新されます")
 
 

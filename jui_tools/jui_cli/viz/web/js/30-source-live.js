@@ -817,7 +817,7 @@ NET.handlers = {
 
 /* ---------- the plan's usage limits (requester, 10-18) ----------
    From the statusLine (statusline.py → POST /usage → the usage slice): the 5-hour and the weekly window, their
-   used share and when they reset. Only a terminal claude runs a statusLine (the VS Code extension does not), so
+   used share and when they reset. Only a terminal claude runs a statusLine (the VS Code extension and the desktop app do not), so
    the value may be old: past USAGE_STALE_MS it says how old. The number and its % share one colour, from green at
    0 to red just below 100 (the hue, not steps); at 100 — Claude Code caps the share there — the number gives way
    to 上限到達 in the inactive colour, and the time to the reset stays. */
@@ -884,7 +884,7 @@ function renderUsage(now) {
   });
   if (!out.length) {
     const none = span('uw none', '上限の値なし');
-    none.title = 'jui viz statusline install で入ります。値はターミナルの claude から届きます（VS Code 拡張からは届きません）';
+    none.title = 'jui viz statusline install で入ります。値はターミナルの claude から届きます（VS Code 拡張とデスクトップアプリからは届きません）';
     out.push(none);
   }
   el.replaceChildren(...out);

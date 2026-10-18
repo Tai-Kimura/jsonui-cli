@@ -9,7 +9,7 @@ status line:
   * on its own: one short line, e.g. ``5h 42% · 週 18%``.
 Installed only by `jui viz statusline install`, which also takes it out again.
 
-⚠️ Only a terminal claude runs a statusLine; the VS Code extension does not (10-18).
+⚠️ Only a terminal claude runs a statusLine; the VS Code extension (10-18) and the desktop app (10-19) do not.
 """
 import os
 import sys

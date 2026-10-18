@@ -103,6 +103,7 @@ async def run_usage(pw, out, failures):
         await wait(page, "() => window.__dbg.usage().length === 1", label="the chip")
         r = res["none"] = await page.evaluate(usage)
         check(failures, r[0]["text"] == "上限の値なし" and r[0]["window"] is None, f"no value yet: {r}")
+        check(failures, "VS Code 拡張とデスクトップアプリからは届きません" in r[0]["title"], f"where the value comes from: {r[0]['title']}")
         ink = await page.evaluate("() => window.__dbg.inkSoft()")
 
         hues = {}

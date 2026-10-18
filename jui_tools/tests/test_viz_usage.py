@@ -141,9 +141,17 @@ def test_an_existing_status_line_is_wrapped_and_put_back_exactly(home):
     assert _settings(home) == {"statusLine": original, "theme": "dark"}
 
 
+def test_install_and_status_say_the_vs_code_extension_and_the_desktop_app_never_update_it(home):
+    """Neither runs a statusLine (the desktop app measured 10-19: one turn, statusline.py ran 0 times)."""
+    for action in ("install", "status"):
+        out = subprocess.run([sys.executable, str(JUI), "viz", "statusline", action], env=_env(home), capture_output=True,
+                             text=True, timeout=60).stdout
+        assert "VS Code 拡張とデスクトップアプリのセッションからは更新されません" in out, (action, out)
+
+
 def test_doctor_says_where_the_value_comes_from(home):
     out = subprocess.run([sys.executable, str(JUI), "viz", "doctor"], env=_env(home), capture_output=True, text=True, timeout=60).stdout
-    assert "usage: statusLine: 入っていません" in out and "VS Code 拡張のセッションからは更新されません" in out
+    assert "usage: statusLine: 入っていません" in out and "VS Code 拡張とデスクトップアプリのセッションからは更新されません" in out
 
 
 # ---------------------------------------------------------------- a real server
