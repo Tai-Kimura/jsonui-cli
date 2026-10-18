@@ -129,7 +129,7 @@ class World:
             session = {
                 "id": sid, "label": self._label(sid), "projectId": project["id"],
                 "cwd": tilde(cwd) if cwd else "?", "status": "idle", "relay": False,
-                "startedAt": at, "updatedAt": at,
+                "startedAt": at, "updatedAt": at, "roomSince": at,
             }
             self.sessions[sid] = session
             self._dirty |= {"sessions", "projects"}
@@ -137,7 +137,7 @@ class World:
             if project["jsonui"]:
                 self.jsonui_project(project["id"], at)
         elif cwd and session["cwd"] == "?":
-            self._move(session, cwd)
+            self._move(session, cwd, at)
         return session
 
     SINCE_TRIES = 20
@@ -165,9 +165,11 @@ class World:
         session["since"], session["sinceFrom"] = started, "agents"
         self._dirty.add("sessions")
 
-    def _move(self, session: dict, cwd: str) -> None:
+    def _move(self, session: dict, cwd: str, at: int) -> None:
         project = self.rooms.project_for(cwd)
         if session["projectId"] != project["id"] or session["cwd"] != tilde(cwd):
+            if session["projectId"] != project["id"]:
+                session["roomSince"] = at   # the view seats robots in the order they came into a room
             session["projectId"] = project["id"]
             session["cwd"] = tilde(cwd)
             self._dirty |= {"sessions", "projects"}
@@ -220,6 +222,8 @@ class World:
             else:
                 session.pop("waitingFor", None)
             self._dirty.add("sessions")
+        if self.tasks.turn_waiting(session["id"], status == "waiting"):
+            self._dirty.add("tasks")
         session["updatedAt"] = at
 
     # ---------------------------------------------------------------- JsonUI projects
@@ -326,6 +330,9 @@ class World:
             text = f"退勤 {payload.get('reason') or ''}".strip()
         elif kind == "UserPromptSubmit":
             session["lastPrompt"] = _head(payload.get("prompt"), PROMPT_MAX)
+            if agent["kind"] == "main":
+                self.tasks.turn_started(sid, agent["id"], payload.get("prompt"), at)
+                self._dirty.add("tasks")
             self._status(session, "busy", at)
             # A new prompt: whatever the last turn left open was interrupted (Esc).
             self._clear_open(agent["id"])
@@ -462,6 +469,9 @@ class World:
                 self._dirty.add("perms")
             background = payload.get("background_tasks")
             busy = isinstance(background, list) and len(background) > 0
+            if agent["kind"] == "main":
+                self.tasks.turn_ended(sid, at, background=busy, failed=kind == "StopFailure")
+                self._dirty.add("tasks")
             self._status(session, "busy" if busy else "idle", at)
             message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
             self._clear_open(agent["id"])
@@ -476,7 +486,7 @@ class World:
             self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
             text = "停止（失敗）" if kind == "StopFailure" else "停止"
         elif kind == "CwdChanged" and cwd:
-            self._move(session, cwd)
+            self._move(session, cwd, at)
             self._set(agent, at, "carry", f"移動 {tilde(cwd)}")
             self._until[agent["id"]] = (at + CARRY_MS, "idle")
             text = f"移動 {tilde(cwd)}"

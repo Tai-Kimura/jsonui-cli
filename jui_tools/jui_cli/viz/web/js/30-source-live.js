@@ -42,7 +42,7 @@ function updateRobotStates() { /* the server decides the states (plan 04 §3) */
 const EMPTY_TESTS = { rows: [], passed: 0, runningIdx: -1, retrying: false, active: false, statusText: 'まだ無い', file: '', device: '' };
 const LIVE = {
   slices: {}, model: null, modelAt: 0, labelOfReal: {}, seenSeq: 0, specRows: {}, sheetAsked: {}, sheetFailed: {},
-  seats: {}, seatOf: {}, leaving: {}, shown: [], floors: [], floor: 0, rank: {}, connectedOnce: false, serverError: '',
+  seatOf: {}, leaving: {}, shown: [], floors: [], floor: 0, rank: {}, connectedOnce: false, serverError: '',
 };
 /* A floor is three rooms across, two deep (requester, 10-18: the rooms looked cramped at 6×5 in rows of three). */
 const FLOOR_COLS = 3, ROOM_GAP = 0.6;
@@ -185,6 +185,7 @@ function rebuildTasks() {
       status: x.status, blockedByAll: blockedBy, blocksAll: Array.isArray(x.blocks) ? x.blocks.map(String) : [],
       created: x.createdAt ? secOfDay(x.createdAt) : -1, createdMs: x.createdAt || 0,
       start: x.startedAt ? secOfDay(x.startedAt) : null, end: x.completedAt ? secOfDay(x.completedAt) : null,
+      source: String(x.source || 'task'), turn: Number(x.turn) || 0, waiting: !!x.waiting, background: !!x.background, failed: !!x.failed,
     });
   }
   TASKS.splice(0, TASKS.length, ...rows);
@@ -203,7 +204,8 @@ function liveTasks(now) {
     const dep = x.blockedBy ? TASK_BY_KEY[`${x.list}#${x.blockedBy}`] : null;
     const status = x.status === 'completed' ? 'completed' : x.status === 'in_progress' ? 'in_progress' : 'pending';
     const blocked = status === 'pending' && x.blockedByAll.some((b) => (TASK_BY_KEY[`${x.list}#${b}`] || {}).status !== 'completed');
-    const col = status === 'completed' ? 'done' : status === 'in_progress' ? 'doing' : blocked ? 'wait' : 'todo';
+    // a turn waits while its session waits for a permission
+    const col = status === 'completed' ? 'done' : status === 'in_progress' ? (x.waiting ? 'wait' : 'doing') : blocked ? 'wait' : 'todo';
     void t;
     return { ...x, key: `${x.list}#${x.id}`, status, blocked, dep, col, fresh: x.createdMs > 0 && now - x.createdMs < 1500 };
   });
@@ -298,16 +300,73 @@ function rebuildPerms() {
 
 /* ---------- rooms: size by robot count, left to right by order, a new row past 24 (plan 07 §4) ---------- */
 // Floor and walls only: the boards, desks and robots keep their scale, so a bigger room is more space around them.
-function roomSize(n) { return n <= 8 ? [10, 8] : n <= 12 ? [12, 9] : [14, 10]; }
-function seatGrid(room) {
-  const xs = [], zs = [];
-  for (let x = room.x0 + 1.15; x <= room.x1 - 0.85 + 1e-6; x += 1.75) xs.push(x);
-  for (let z = room.z0 + 1.35; z <= room.z1 - 1.05 + 1e-6; z += 1.85) zs.push(z);
-  const seats = [];
-  for (const z of zs) for (const x of xs) seats.push([x, z]);
-  return seats;
+// The desks stand where a seeded draw puts them (requester, 10-18), which needs more floor than a grid did.
+function roomSize(n) { return n <= 6 ? [11, 8.5] : n <= 10 ? [13, 9.5] : [15, 10.5]; }
+
+/* ---------- doors (requester, 10-18): robots walk through doors, never through a wall ----------
+   A room has walls at its back and on its left (the front and the right are cut away so the view can see in).
+   - left door: in the left wall, between the cork board and the test easel, to the room on its left;
+   - back door: in the back wall, near the right, to the room behind it;
+   - entrance: at the front, near the right, when no room is in front of it (the corridor runs along the front).
+   A door is DOOR_W wide; robots pass through its middle. */
+const DOOR_W = 1.2, DOOR_H = 2.3, WALL_T = 0.16;
+const doorAt = (r) => ({ leftZ: r.z1 - 2.4, backX: r.x1 - 1.4, frontX: r.x1 - 1.4 });
+const roomById = (id) => (id && PROJECT[id] && PROJECT[id].shown ? PROJECT[id] : null);
+/* The wall pieces of the shown rooms as rectangles on the floor (x0, x1, z0, z1), door gaps cut out. */
+function liveWalls() {
+  const out = [];
+  for (const r of ROOMS) {
+    if (!r.shown) continue;
+    const d = doorAt(r), half = DOOR_W / 2;
+    const back = [r.x0 - WALL_T, r.x1], left = [r.z0, r.z1];
+    const cut = (span, gap) => (gap === null ? [span] : [[span[0], gap - half], [gap + half, span[1]]]);
+    for (const [a, b] of cut(back, r.doors && r.doors.back ? d.backX : null)) out.push({ room: r.id, side: 'back', x0: a, x1: b, z0: r.z0 - WALL_T, z1: r.z0 });
+    for (const [a, b] of cut(left, r.doors && r.doors.left ? d.leftZ : null)) out.push({ room: r.id, side: 'left', x0: r.x0 - WALL_T, x1: r.x0, z0: a, z1: b });
+  }
+  return out;
 }
-const doorOf = (room) => ({ inside: [room.x1 - 0.7, room.z1 - 0.5], outside: [room.x1 - 0.7, room.z1 + 1.6] });
+const corridorZ = () => Math.max(...ROOMS.filter((r) => r.shown).map((r) => r.z1), 0) + 1.2;
+/* The rooms a robot can walk to from a room in one step, with the points it walks through (inside the first room
+   → inside the next, through the door's middle). 'OUT' is the corridor. */
+function doorHops(id) {
+  const hops = [];
+  if (id === 'OUT') {
+    const c = corridorZ();
+    for (const r of ROOMS) if (r.shown && r.doors && r.doors.front) { const x = doorAt(r).frontX; hops.push([r.id, [[x, c], [x, r.z1 + 0.9], [x, r.z1 - 0.7]]]); }
+    return hops;
+  }
+  const r = roomById(id);
+  if (!r || !r.doors) return hops;
+  const d = doorAt(r);
+  const L = roomById(r.doors.left), B = roomById(r.doors.back);
+  if (L) hops.push([L.id, [[r.x0 + 0.7, d.leftZ], [L.x1 - 0.7, d.leftZ]]]);
+  if (B) hops.push([B.id, [[d.backX, r.z0 + 0.7], [d.backX, B.z1 - 0.7]]]);
+  for (const o of ROOMS) {
+    if (!o.shown || !o.doors) continue;
+    const od = doorAt(o);
+    if (o.doors.left === r.id) hops.push([o.id, [[r.x1 - 0.7, od.leftZ], [o.x0 + 0.7, od.leftZ]]]);
+    if (o.doors.back === r.id) hops.push([o.id, [[od.backX, r.z1 - 0.7], [od.backX, o.z0 + 0.7]]]);
+  }
+  if (r.doors.front) { const c = corridorZ(); hops.push(['OUT', [[d.frontX, r.z1 - 0.7], [d.frontX, r.z1 + 0.9], [d.frontX, c]]]); }
+  return hops;
+}
+/* The points from one room to another (null: the corridor), the fewest doors first. */
+function liveRoute(fromId, toId) {
+  const from = roomById(fromId) ? fromId : 'OUT', to = roomById(toId) ? toId : 'OUT';
+  if (from === to) return [];
+  const prev = { [from]: null }, queue = [from];
+  while (queue.length) {
+    const id = queue.shift();
+    if (id === to) break;
+    for (const [next, pts] of doorHops(id)) if (!(next in prev)) { prev[next] = [id, pts]; queue.push(next); }
+  }
+  if (!(to in prev)) return [];
+  const legs = [];
+  for (let id = to; prev[id]; id = prev[id][0]) legs.unshift(prev[id][1]);
+  return legs.flat();
+}
+/* The room a point is in (null: the corridor or a gap). */
+const roomAtPoint = (p) => (ROOMS.find((r) => r.shown && p[0] > r.x0 && p[0] < r.x1 && p[1] > r.z0 && p[1] < r.z1) || {}).id || null;
 
 /* ---------- floors: six rooms to a floor, the rooms where something happens on 1F (requester's ruling, 10-18) ----------
    A machine with 28 sessions in 11 projects showed the first six rooms by order and kept them: a project that started
@@ -371,12 +430,40 @@ function layoutRooms() {
   const cols = Math.min(FLOOR_COLS, byOrder.length), rows = Math.ceil(byOrder.length / FLOOR_COLS);
   const ox = -(cols * w + (cols - 1) * ROOM_GAP) / 2, oz = -(rows * d + (rows - 1) * ROOM_GAP) / 2;
   const placed = byOrder.map((r, i) => [r, (i % FLOOR_COLS) * (w + ROOM_GAP), Math.floor(i / FLOOR_COLS) * (d + ROOM_GAP), w, d]);
+  const slot = {};
   placed.forEach(([r, px, pz, w, d], k) => {
     r.x0 = +(px + ox).toFixed(3); r.x1 = +(r.x0 + w).toFixed(3); r.z0 = +(pz + oz).toFixed(3); r.z1 = +(r.z0 + d).toFixed(3);
     r.floor = FLOORS[r.order % FLOORS.length]; r.back = 3.9; r.left = 3.9;
-    r.geo = `${r.x0},${r.x1},${r.z0},${r.z1},${r.big ? 'big' : ''},${r.tests ? 'tests' : ''}`;
-    void k;
+    r.col = k % FLOOR_COLS; r.row = Math.floor(k / FLOOR_COLS);
+    slot[`${r.row},${r.col}`] = r.id;
   });
+  const solo = soloRoomId();
+  for (const [r] of placed) {
+    r.baseW = w; r.baseD = d;
+    r.doors = { left: slot[`${r.row},${r.col - 1}`] || null, back: slot[`${r.row - 1},${r.col}`] || null, front: !slot[`${r.row + 1},${r.col}`] };
+    if (solo && r.id !== solo) { r.shown = false; r.x0 = r.x1 = r.z0 = r.z1 = undefined; continue; }
+    if (solo) {
+      // the room picked, alone and SOLO_GROW times as wide and deep: more floor, the same desks spread over it
+      // (requester, 10-18: "広くしてあげてほしい — ただの拡大だと窮屈に見える"); in from the corridor at its front
+      const sw = +(w * SOLO_GROW).toFixed(3), sd = +(d * SOLO_GROW).toFixed(3);
+      r.x0 = -sw / 2; r.x1 = sw / 2; r.z0 = -sd / 2; r.z1 = sd / 2;
+      r.doors.front = true;
+    }
+    r.geo = `${r.x0},${r.x1},${r.z0},${r.z1},${r.big ? 'big' : ''},${r.tests ? 'tests' : ''},${r.doors.left ? 'L' : ''}${r.doors.back ? 'B' : ''}${r.doors.front ? 'F' : ''}${solo ? ',solo' : ''}`;
+  }
+}
+
+/* One room at a time (requester, 10-18): the project picked in the view, when its room is on the floor shown. */
+const SOLO_GROW = 1.6;
+function soloRoomId() {
+  const id = typeof UI !== 'undefined' ? UI.project : 'all';
+  return id !== 'all' && LIVE.shown.includes(id) ? id : null;
+}
+function liveRelayout() {
+  layoutRooms();
+  placeRobots();
+  SOURCE.layoutRev += 1;
+  LIVE.model = null;
 }
 
 /* Eight hours into its session a main robot gets tired (requester, 10-18). The start is the session's own
@@ -405,52 +492,103 @@ function liveGoToFloor(k) {
   return true;
 }
 
-/* ---------- seats: a robot keeps its seat; a subagent sits near its parent; no seat → stand by the wall ---------- */
-function freeSeat(label) {
-  const s = LIVE.seatOf[label];
-  if (!s) return;
-  const m = LIVE.seats[s.room];
-  if (m && m.get(s.idx) === label) m.delete(s.idx);
-  delete LIVE.seatOf[label];
+/* ---------- seats: a robot keeps its desk; desks stand where a seeded draw puts them (requester, 10-18) ----------
+   - The draw is seeded by the robot's server id (its session's or its agent's) and the room: the same robot in the
+     same room draws the same spots, so a reload puts the desks back where they were.
+   - A desk takes the first drawn spot that keeps clear of the other desks and of the aisles
+     (the front, where the doors are, and the right, where the back door and the entrance are) — SEAT.gaps[0]
+     between desks while there is room, the last of SEAT.gaps when the room fills up. A subagent takes,
+     of the spots that are clear, the one nearest its parent's desk.
+   - Taken desks never move while the page is open: a desk is kept in room coordinates (from the back-left corner),
+     so a room that grows or moves to another slot keeps its desks; robots that come and go do not move the others.
+   - The page also remembers each desk in this browser (DESK_MEM): after a reload a robot takes its remembered desk
+     when it is still clear, so robots that have left since (and drew earlier) do not shift the others.
+   - No clear spot: the robot stands along the front. */
+const SEAT = { tries: 600, field: [16, 12], gaps: [1.1, 0.3], foot: { l: 0.6, r: 0.6, b: 0.45, f: 0.95 }, left: 0.9, back: 1.1, aisleR: 2.4, aisleF: 1.7 };
+function hash32(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
 }
-function seatPos(room, idx) {
-  const grid = seatGrid(room);
-  if (idx < grid.length) return { pos: grid[idx], ry: 0, standing: false };
-  const k = idx - grid.length;   // standing along the front, then the right wall
-  const along = room.x0 + 0.9 + k * 0.95;
-  return along < room.x1 - 0.6 ? { pos: [along, room.z1 - 0.45], ry: Math.PI, standing: true }
-    : { pos: [room.x1 - 0.45, room.z1 - 0.9 - (k - Math.floor((room.x1 - room.x0 - 1.5) / 0.95)) * 0.95], ry: -Math.PI / 2, standing: true };
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-function takeSeat(def, near) {
-  const room = PROJECT[def.room];
-  if (!room || !room.shown) return null;
-  const m = LIVE.seats[room.id] || (LIVE.seats[room.id] = new Map());
-  const grid = seatGrid(room);
-  let best = -1, bestD = Infinity;
-  for (let i = 0; i < grid.length; i++) {
-    if (m.has(i)) continue;
-    const d = near ? Math.hypot(grid[i][0] - near[0], grid[i][1] - near[1]) : i;
-    if (d < bestD) { best = i; bestD = d; }
+/* Where a desk may stand in a room, in room coordinates: the robot's spot, with its desk in front of it. */
+// Desks are drawn in the room's floor-view size (baseW × baseD); the wider room of the one-room view spreads them
+// over its own area (seatPos), so a desk is the same desk in both views.
+function seatArea(w, d) {
+  const F = SEAT.foot;
+  return { x0: SEAT.left + F.l, x1: w - SEAT.aisleR - F.r, z0: SEAT.back + F.b, z1: d - SEAT.aisleF - F.f };
+}
+const seatsClear = (a, b, gap = SEAT.gaps[SEAT.gaps.length - 1]) => Math.abs(a[0] - b[0]) >= SEAT.foot.l + SEAT.foot.r + gap || Math.abs(a[1] - b[1]) >= SEAT.foot.b + SEAT.foot.f + gap;
+function freeSeat(label) { delete LIVE.seatOf[label]; }
+const DESK_MEM = { map: null, max: 400 };
+function deskMemory() {
+  if (!DESK_MEM.map) { try { DESK_MEM.map = new Map(Object.entries(JSON.parse(readPref('desks', '{}')) || {})); } catch (err) { DESK_MEM.map = new Map(); } }
+  return DESK_MEM.map;
+}
+function rememberDesk(key, p) {
+  const m = deskMemory();
+  m.delete(key); m.set(key, p);   // newest last; the oldest go past DESK_MEM.max
+  while (m.size > DESK_MEM.max) m.delete(m.keys().next().value);
+  writePref('desks', JSON.stringify(Object.fromEntries(m)));
+}
+function drawSeat(def, room, nearLocal) {
+  const area = seatArea(room.baseW, room.baseD);
+  const taken = Object.entries(LIVE.seatOf).filter(([id, s]) => id !== def.id && s.room === room.id && !s.standing).map(([, s]) => [s.dx, s.dz]);
+  for (const gap of SEAT.gaps) {   // roomy while the room has space, closer when it fills up
+    const rnd = seededRandom(hash32(`${def.realId || def.id}|${room.id}`));
+    let best = null, bestD = Infinity;
+    for (let i = 0; i < SEAT.tries; i++) {
+      // spots over a fixed field, not over the room: the same spot whatever the room's size (rooms grow with robots)
+      const p = [+(rnd() * SEAT.field[0]).toFixed(2), +(rnd() * SEAT.field[1]).toFixed(2)];
+      if (p[0] < area.x0 || p[0] > area.x1 || p[1] < area.z0 || p[1] > area.z1 || !taken.every((q) => seatsClear(p, q, gap))) continue;
+      if (!nearLocal) return p;
+      const dd = Math.hypot(p[0] - nearLocal[0], p[1] - nearLocal[1]);
+      if (dd < bestD) { best = p; bestD = dd; }
+    }
+    if (best) return best;
   }
-  if (best < 0) { best = grid.length; while (m.has(best)) best += 1; }
-  m.set(best, def.id);
-  LIVE.seatOf[def.id] = { room: room.id, idx: best };
-  return best;
+  return null;
+}
+function takeSeat(def, room) {
+  const parent = def.kind === 'sub' && LIVE.seatOf[def.mainLabel];
+  const near = parent && parent.room === room.id && !parent.standing ? [parent.dx, parent.dz] : null;
+  const key = `${room.id}|${def.realId || def.id}`, area = seatArea(room.baseW, room.baseD);
+  const taken = Object.entries(LIVE.seatOf).filter(([id, s]) => id !== def.id && s.room === room.id && !s.standing).map(([, s]) => [s.dx, s.dz]);
+  const mem = deskMemory().get(key);
+  const kept = Array.isArray(mem) && mem[0] >= area.x0 && mem[0] <= area.x1 && mem[1] >= area.z0 && mem[1] <= area.z1 && taken.every((q) => seatsClear(mem, q)) ? mem : null;
+  const p = kept || drawSeat(def, room, near);
+  if (p) { LIVE.seatOf[def.id] = { room: room.id, dx: p[0], dz: p[1], standing: false }; if (!kept) rememberDesk(key, p); return; }
+  const used = new Set(Object.values(LIVE.seatOf).filter((s) => s.room === room.id && s.standing).map((s) => s.k));
+  let k = 0; while (used.has(k)) k += 1;
+  LIVE.seatOf[def.id] = { room: room.id, standing: true, k };
+}
+function seatPos(room, s) {
+  if (!s.standing) {
+    const a = seatArea(room.baseW, room.baseD), b = seatArea(room.x1 - room.x0, room.z1 - room.z0);
+    const map = (v, a0, a1, b0, b1) => (a1 > a0 ? b0 + ((v - a0) * (b1 - b0)) / (a1 - a0) : v);
+    return { pos: [+(room.x0 + map(s.dx, a.x0, a.x1, b.x0, b.x1)).toFixed(3), +(room.z0 + map(s.dz, a.z0, a.z1, b.z0, b.z1)).toFixed(3)], ry: 0, standing: false };
+  }
+  const along = room.x0 + 0.9 + s.k * 0.95;   // standing along the front, then down the right
+  return along < room.x1 - SEAT.aisleR ? { pos: [along, room.z1 - 0.45], ry: Math.PI, standing: true }
+    : { pos: [room.x1 - 0.45, room.z1 - 2.2 - (s.k - Math.floor((room.x1 - room.x0 - SEAT.aisleR - 0.9) / 0.95)) * 0.95], ry: -Math.PI / 2, standing: true };
 }
 function placeRobots() {
-  // Seats follow rooms that moved (a room grew) by index; a robot in another room than its seat moves seats.
-  for (const def of ROBOT_DEFS) {
+  // A robot in another room than its desk gets a new one there. Robots draw in the order they came into their
+  // room (then the server's order), the same order live and after a reload.
+  const order = ROBOT_DEFS.map((d, i) => [d, i]).sort((a, b) => (a[0].inRoomAt || 0) - (b[0].inRoomAt || 0) || a[1] - b[1]).map(([d]) => d);
+  for (const def of order) {
     if (LIVE.leaving[def.id]) continue;
     const room = PROJECT[def.room];
     const s = LIVE.seatOf[def.id];
-    if (!room || !room.shown) { freeSeat(def.id); def.pos = null; continue; }
+    if (!room) { freeSeat(def.id); def.pos = null; continue; }
+    if (!room.shown) { def.pos = null; continue; }   // on another floor or out of the one-room view: it keeps its desk
     if (s && s.room !== room.id) freeSeat(def.id);
-    if (!LIVE.seatOf[def.id]) {
-      const parent = def.kind === 'sub' && LIVE.seatOf[def.mainLabel] && DEF[def.mainLabel] && DEF[def.mainLabel].pos;
-      takeSeat(def, parent || null);
-    }
-    const p = seatPos(room, LIVE.seatOf[def.id].idx);
-    def.pos = p.pos; def.ry = p.ry; def.standing = p.standing; def.door = doorOf(room);
+    if (!LIVE.seatOf[def.id]) takeSeat(def, room);
+    const p = seatPos(room, LIVE.seatOf[def.id]);
+    def.pos = p.pos; def.ry = p.ry; def.standing = p.standing;
   }
 }
 
@@ -493,6 +631,8 @@ function rebuildRobots(initial) {
       realId: String(a.id || label), sessionId: String(a.sessionId || ''), kind: a.kind === 'sub' ? 'sub' : 'main',
       role: ROLE_OF(a), agent: displayName(a, sess), furnished: true, mainLabel,
       room: sess && sess.projectId ? sess.projectId : (def.room || ''),
+      // when it came into its room: desks are drawn in this order, so a reload draws them the same way
+      inRoomAt: Math.max(Number(a.startedAt) || 0, Number(sess && sess.roomSince) || 0),
     });
     LIVE.labelOfReal[def.realId] = label;
     if (def.kind === 'main' && sess) LIVE.labelOfReal[sess.id] = label;

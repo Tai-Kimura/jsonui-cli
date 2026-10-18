@@ -628,6 +628,9 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .ktab b { min-width: 2em; padding: 0 8px; border-radius: 999px; background: var(--kc); color: var(--wb-card); font: 700 13px/1.6 var(--font-mono); text-align: center; }
 .knotes { display: grid; align-content: start; gap: 10px; min-height: 0; margin: 0; padding: 10px; overflow-y: auto; list-style: none; }
 .note { position: relative; display: grid; gap: 8px; padding: 13px 11px 10px; border-radius: 3px; background: var(--note); color: var(--wb-ink); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08), 0 6px 12px -6px var(--shadow); }
+/* a turn (a prompt the session received) reads apart from a task: a stripe down its left edge (10-18) */
+.note.n-turn { border-left: 6px solid var(--ink-soft); padding-left: 9px; }
+.task.t-turn .tid::before { content: '▸ '; }
 .note-open { display: grid; gap: 5px; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .note-open > span { display: block; }
 .note-open > .n-top, .note-open > .n-doing, .note-open > .n-owner { display: flex; }
@@ -811,6 +814,11 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .fn-btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .fn-btn[data-alert]::after { content: ''; position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border-radius: 50%; background: #f2c230; box-shadow: 0 0 0 2px var(--panel); }
 .fn-label { min-width: 52px; text-align: center; font: 700 14px/1 var(--font-mono); }
+/* one room at a time (requester, 10-18): the room picked fills the view, the way back sits at the top left */
+.room-solo { position: absolute; left: 12px; top: 12px; z-index: 6; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 4px 10px 4px 4px; border-radius: 10px; background: var(--panel); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
+.room-solo[hidden] { display: none; }
+.rs-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); font: 700 13px/1 var(--font-mono); }
+.tags .tag[hidden] { display: none; }
 .tower-legend { position: absolute; right: 12px; top: 56px; z-index: 6; margin: 0; padding: 8px 12px; list-style: none; border-radius: 10px; background: var(--panel); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); font: 600 12.5px/1.5 var(--font-body); color: var(--ink); }
 .tower-legend[hidden] { display: none; }
 .tower-legend li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }

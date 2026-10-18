@@ -635,7 +635,10 @@ JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "t
 # Calls in the demo bundle to functions only the live source defines: each sits behind SOURCE.mode === 'live' (or in
 # a live-only path such as the building) and never runs in the demo.
 LIVE_ONLY = {
-    "doorOf", "labelOf", "liveTestsFor",          # 40-scene: liveUpdateRobots / drawLivePhone / liveSync
+    "labelOf", "liveTestsFor",                    # 40-scene: liveUpdateRobots / drawLivePhone / liveSync
+    "doorAt", "liveWalls", "liveRoute",           # 40-scene: liveBuildRoom / livePlan / liveWalk (doors, 10-18)
+    "roomAtPoint", "roomById", "soloRoomId",      # 40-scene: livePlan / liveSolo (behind SOURCE.mode === 'live')
+    "liveRelayout",                               # 50-panel: setProject's live branch (one room at a time)
     "liveWantSheet",                              # 50-panel: the live branch of the sheet
     "netConnect", "secOfDay",                     # 70-main: the live branches
     "liveGoToFloor", "liveFloorOf",               # 40-scene: the building and the floor steps (live only)

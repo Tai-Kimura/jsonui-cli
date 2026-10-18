@@ -34,7 +34,7 @@
      "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…JsonUIDocument/Bash jsonui-doc generate html -",
      "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…jsonui-cli/"
     ],
-    "sum": "未着手 5待ち 8作業中 8完了 3許可待ち 2"
+    "sum": "未着手 5待ち 8作業中 11完了 4許可待ち 2"
    }
   },
   "light": {
@@ -96,7 +96,7 @@
      "e6jsonui-define作業中Write docs/screens/json/signup.spec.json",
      "f2jsonui-implement作業中Bash jui build（ビューで許可）"
     ],
-    "tasks": 5
+    "tasks": 6
    },
    "side": {
     "chip": "許可待ち 2",
@@ -105,7 +105,7 @@
      "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…JsonUIDocument/Bash jsonui-doc generate html -",
      "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…jsonui-cli/"
     ],
-    "sum": "未着手 5待ち 8作業中 8完了 3許可待ち 2"
+    "sum": "未着手 5待ち 8作業中 11完了 4許可待ち 2"
    }
   },
   "phone": {
@@ -177,7 +177,7 @@
  "scope": {
   "afterUncheck": {
    "count": "1 / 2 を表示",
-   "notes": 3,
+   "notes": 4,
    "sess": "セッションc9"
   },
   "all": {
@@ -215,6 +215,7 @@
    ],
    "tasks": [
     "c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…Bash jsonui-doc ",
+    "c9 指示 1spec の構造ページを生成して作業中c9 セッション c91e…",
     "e1 #1属性リファレンスの spec を書く作業中e1 セッション e1d4…",
     "e1 #2属性リファレンスを実装#1 待ち担当なし",
     "c9 #2コンポーネント一覧に新しい属性を反映未着手担当なし",
@@ -233,7 +234,7 @@
    "title": "spec ボード · JsonUIDocument/"
   },
   "docTasks": {
-   "notes": 5,
+   "notes": 6,
    "sess": "セッションすべて（2）",
    "strip": "許可を求めています1ターミナルでも答えられ、先に答えた方が使われるc9セッション c91e…待ち 0:15Bash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.jsonc9 #1 spec の構造ページの HTML を生成 › 詳細許可今後も許可拒否ほかのプロジェクトでも 1 件が許可を待っている すべての",
    "title": "タスクボード · JsonUIDocument/"
@@ -245,10 +246,10 @@
   "lanes": {
    "lanes": [
     "7cjsonui-cli/許可待ち2 件",
-    "c9JsonUIDocument/許可待ち3 件",
-    "a0shop-app/作業中8 件",
-    "b4shop-app/作業中5 件",
-    "4fjsonui-cli/待機3 件",
+    "c9JsonUIDocument/許可待ち4 件",
+    "a0shop-app/作業中9 件",
+    "b4shop-app/作業中6 件",
+    "4fjsonui-cli/待機4 件",
     "d8shop-app/待機1 件"
    ],
    "sess": "セッション6 / 7",
@@ -276,7 +277,7 @@
    "tbOpen": true
   },
   "sessPop": [
-   "c9セッション c91e…3 タスク許可待ち",
+   "c9セッション c91e…4 タスク許可待ち",
    "e1セッション e1d4…2 タスク作業中"
   ],
   "waitingOnly": [
@@ -343,7 +344,7 @@
     "カートテスト中 1/8a2",
     "属性リファレンス書き込み中 12%e1"
    ],
-   "taskSum": "未着手 5待ち 8作業中 8完了 3許可待ち 2"
+   "taskSum": "未着手 5待ち 8作業中 11完了 4許可待ち 2"
   },
   "phone": {
    "sw": 390

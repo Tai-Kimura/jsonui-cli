@@ -369,6 +369,15 @@ const TASKS = [
   { list: 'e1', id: 1, subject: '属性リファレンスの spec を書く', activeForm: '属性リファレンスの spec を書いています', owner: 'e1', spec: 'attrs', created: -1, start: 18, end: 78 },
   { list: 'e1', id: 2, subject: '属性リファレンスを実装', owner: null, spec: 'attrs', created: -1, start: null, end: null, blockedBy: 1 },
 ];
+/* The turns (requester, 10-18): one card per prompt a session received, done at Stop; 4f waits for its pip install
+   (p6) while its second turn works. */
+TASKS.push(
+  { list: 'a0', id: 'turn-1', source: 'turn', turn: 1, subject: 'ホームからカートまでの画面を仕上げて', owner: 'a0', spec: null, created: -1, start: -1, end: null },
+  { list: 'b4', id: 'turn-1', source: 'turn', turn: 1, subject: '会員登録と商品詳細を進めて', owner: 'b4', spec: null, created: -1, start: -1, end: null },
+  { list: '4f', id: 'turn-1', source: 'turn', turn: 1, subject: 'jui build の iOS 出力を直して', owner: '4f', spec: null, created: -1, start: -1, end: 24 },
+  { list: '4f', id: 'turn-2', source: 'turn', turn: 2, subject: 'jui viz の雛形を作って', owner: '4f', spec: null, created: 40, start: 40, end: null, waitFrom: 42, waitTo: 44 },
+  { list: 'c9', id: 'turn-1', source: 'turn', turn: 1, subject: 'spec の構造ページを生成して', owner: 'c9', spec: null, created: -1, start: -1, end: 60 },
+);
 const TASK_BY_KEY = Object.fromEntries(TASKS.map((x) => [`${x.list}#${x.id}`, x]));
 const EVENTS = [
   [0.2, 'a5', 'Read', 'docs/screens/json/home.spec.json'],
@@ -628,8 +637,9 @@ function computeTasks(t) {
     const status = statusOf(task);
     const dep = task.blockedBy ? byKey[`${task.list}#${task.blockedBy}`] : null;
     const blocked = status === 'pending' && !!dep && statusOf(dep) !== 'completed';
-    const col = status === 'completed' ? 'done' : status === 'in_progress' ? 'doing' : blocked ? 'wait' : 'todo';
-    return { ...task, key: `${task.list}#${task.id}`, status, blocked, dep, col, fresh: task.created >= 0 && t - task.created < 1.5 };
+    const waiting = status === 'in_progress' && task.waitFrom !== undefined && t >= task.waitFrom && t < task.waitTo;
+    const col = status === 'completed' ? 'done' : status === 'in_progress' ? (waiting ? 'wait' : 'doing') : blocked ? 'wait' : 'todo';
+    return { ...task, key: `${task.list}#${task.id}`, status, blocked, dep, col, waiting, fresh: task.created >= 0 && t - task.created < 1.5 };
   }).filter((task) => task.status);
 }
 
