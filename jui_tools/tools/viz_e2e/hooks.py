@@ -92,6 +92,15 @@ def rooms_doors():
     return out
 
 
+TOWER_SIDS = [f"{i:x}{i:x}7c09fe-2f17-530c-add4-737ff77c39{i:02d}" for i in range(1, 8)]
+
+
+def tower_rooms():
+    """(seconds, body): seven sessions in seven folders — more than a floor holds (6), so the building has 2 floors."""
+    return [(0.1 * i, base(sid, f"/work/tower/room{i + 1}", "SessionStart", source="startup"))
+            for i, sid in enumerate(TOWER_SIDS)]
+
+
 def write(items, path: pathlib.Path) -> pathlib.Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:

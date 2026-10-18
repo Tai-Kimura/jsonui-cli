@@ -76,7 +76,8 @@ def test_the_usual_spec_reads_its_structure_from_the_layout_file(tmp_path):
     assert login["name"] == "Login 画面" and login["file"] == "docs/screens/json/auth/login.spec.json"
     assert login["tests"]["total"] == 2  # cases with a name, joined through source.layout
     # impl: related ViewModel missing, Layout present -> 1 of 2
-    assert login["impl"] == {"total": 2, "done": 1}
+    assert {k: login["impl"][k] for k in ("total", "done", "related", "layout")} == {
+        "total": 2, "done": 1, "related": {"total": 1, "done": 0}, "layout": True}
     assert login["bucket"] == "partial"
     empty = _summary(project, "empty.spec.json")
     assert empty["bucket"] == "todo" and all(s["state"] == "empty" for s in empty["sections"])
@@ -148,7 +149,7 @@ def test_the_world_links_edits_tasks_and_test_runs(tmp_path):
     world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Write", "tool_use_id": "w", "tool_input": {"file_path": vm}}, 200)
     world.publish()
     login = next(s for s in state.slices["specs"] if s["file"].endswith("login.spec.json"))
-    assert login["by"] == "s1" and login["bucket"] == "live" and login["impl"] == {"total": 2, "done": 2}
+    assert login["by"] == "s1" and login["bucket"] == "live" and (login["impl"]["total"], login["impl"]["done"]) == (2, 2)
 
     world.apply_hook({**base, "hook_event_name": "PreToolUse", "tool_name": "TodoWrite", "tool_use_id": "t",
                       "tool_input": {"todos": [{"content": "Login 画面のテストを書く", "status": "in_progress", "activeForm": "書いている"},

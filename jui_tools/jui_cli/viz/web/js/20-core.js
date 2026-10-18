@@ -34,7 +34,10 @@ function secState(s, k) {
   if (w <= 0) return { kind: 'empty', f: 0, text: '未記入' };
   if (w < 1) return { kind: 'writing', f: w, text: `${s.by ? '書き込み中' : '記入'} ${pct(w)}%` };
   if (k === 6 && s.implPhase) { const c = s.implN[6]; return { kind: c >= n ? 'tested' : 'test', f: n ? c / n : 1, text: `テスト ${c}/${n}` }; }
-  if (k === 0 || k === 6 || !s.implPhase) return { kind: 'written', f: 1, text: '記入済み' };
+  if (k === 0 || k === 6 || !s.implPhase || (s.unmeasured && s.unmeasured[k])) return { kind: 'written', f: 1, text: '記入済み' };
+  if (k === 1 && s.measure && !s.measure.components) {
+    return s.measure.layout ? { kind: 'done', f: 1, text: '実装済み（layout あり）' } : { kind: 'impl', f: 0, text: s.measure.layout === false ? 'layout がまだ無い' : 'layout の指定なし' };
+  }
   const c = s.implN[k];
   return { kind: c >= n ? 'done' : 'impl', f: n ? c / n : 1, text: c >= n ? '実装済み' : `実装 ${c}/${n}` };
 }

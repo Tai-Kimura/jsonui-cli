@@ -3866,6 +3866,11 @@ class SpecValidator:
         Generous by design. A finding needs the path to be under NONE of
         these, because one visibly wrong finding is what stops people acting
         on the rest — and this one shipped as 35 of them.
+
+        ⚠️ jui viz copies this rule (and steps 2-3 of `_declared_path_roots`)
+        in jui_tools/jui_cli/viz/sources/jsonui_project.py `boundary_roots`,
+        to tell which relatedFiles exist; it cannot import this module.
+        Change one and change the other.
         """
         roots = []
         # Bounded, and the bound is the project. Collecting every marker

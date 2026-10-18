@@ -685,7 +685,7 @@ function renderWbSide(model) {
 
 const SWATCHES = '<span><i class="sw sw-writing"></i>書き込み中</span><span><i class="sw sw-written"></i>記入済み</span><span><i class="sw sw-impl"></i>実装済み</span><span><i class="sw sw-tested"></i>テスト済み</span><span><i class="sw sw-empty"></i>未記入</span>';
 const OV_LEGEND = `${SWATCHES}<span>バーは左から 概要・構造・状態・データ・操作・遷移・分岐</span><span>カードを押すとその spec を開く</span>`;
-const SHEET_LEGEND_LIVE = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 実装済み・テスト済み</span><span><b class="m-doing">●</b> 実装中</span><span><b class="m-todo">○</b> 未実装・未テスト</span><span><b class="m-test">▶</b> テスト中</span>';
+const SHEET_LEGEND_LIVE = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 構造: layout に在る ／ 分岐: テスト通過</span><span><b class="m-todo">○</b> 構造: layout が無い ／ 分岐: 未テスト</span><span><b class="m-test">▶</b> テスト中</span><span>状態・データ・操作・遷移は項目ごとの実装を測れないので印なし（関連ファイルの節に、在るファイルの数）</span>';
 const SHEET_LEGEND = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 実装済み・テスト済み</span><span><b class="m-doing">●</b> 実装中</span><span><b class="m-todo">○</b> 未実装・未テスト</span><span><b class="m-test">▶</b> テスト中</span><span><b class="m-flaky">⚠</b> 再実行で通過</span><span>中身はデモの例</span>';
 function setHead(title, file, stCls, stText, whoHTML) {
   setText($('wb-title'), title);
@@ -698,6 +698,10 @@ function setHead(title, file, stCls, stText, whoHTML) {
 function specSummary(s) {
   if (s.bucket === 'todo') return 'spec ファイルなし';
   const w = s.written.reduce((a, b) => a + b, 0) / 7;
+  if (s.measure) {
+    const m = s.measure, layout = m.layout === null ? 'layout —' : m.layout ? 'layout あり' : 'layout なし';
+    return `記述 ${pct(w)}% · ${layout} · 関連ファイル ${m.related.done}/${m.related.total} · テスト ${s.implN[6]}/${s.totals[6]}`;
+  }
   return `記述 ${pct(w)}% · 実装 ${s.implPhase ? `${sumImpl(s.implN)}/${sumImpl(s.totals)}` : '—'} · テスト ${s.implPhase ? `${s.implN[6]}/${s.totals[6]}` : '—'}`;
 }
 function renderOverview(model) {
@@ -743,7 +747,7 @@ function markOf(s, model, k, i) {
     if (st === 'running') return ['▶', 'm-test', 'is-testing'];
     return ['○', 'm-todo', ''];
   }
-  if (!s.implPhase) return ['', '', ''];
+  if (!s.implPhase || (s.unmeasured && s.unmeasured[k])) return ['', '', ''];
   const n = s.implN[k];
   if (i < n) return ['✓', 'm-done', ''];
   if (i === n && s.implIdx === k) return ['●', 'm-doing', 'is-doing'];
@@ -842,8 +846,11 @@ function renderSheet(model, force) {
     }).join('')}</ul>`,
   ];
   const sheetHTML = SHEET.map(([k, title, key, wide]) => {
-    const w = k === 7 ? (s.written[6] >= 1 ? 1 : 0) : s.written[k];
-    const g = k === 7 ? (w ? { kind: 'written', text: '記入済み' } : { kind: 'empty', text: '未記入' }) : secState(s, k);
+    // 関連ファイル: live, written when the spec lists any (the demo ties it to 分岐, as its script does).
+    const w = k === 7 ? (s.measure ? (s.measure.related.total ? 1 : 0) : (s.written[6] >= 1 ? 1 : 0)) : s.written[k];
+    const rel = s.measure && s.measure.related;
+    const g = k !== 7 ? secState(s, k) : !w ? { kind: 'empty', text: '未記入' }
+      : rel && rel.total ? { kind: rel.done >= rel.total ? 'done' : 'impl', f: rel.done / rel.total, text: `在る ${rel.done}/${rel.total}` } : { kind: 'written', text: '記入済み' };
     const writing = w > 0 && w < 1, live = !!s.by && k === activeSec(s);
     const cls = ['sc', wide && 'wide', w <= 0 && 'sc-empty', live && (k === s.writingIdx ? 'sc-writing' : k === s.testIdx ? 'sc-testing' : 'sc-active')].filter(Boolean).join(' ');
     const headHTML = `<header><h3>${esc(title)}</h3><code>${esc(key)}</code>${live ? pill(s.by, DEF[s.by].role) : ''}<span class="sc-chip ${chipCls(g)}">${esc(g.text)}</span></header>`;

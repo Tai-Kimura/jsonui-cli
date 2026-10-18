@@ -18,6 +18,15 @@ window.__dbg = {
   assignFloors: SOURCE.mode === 'live' ? assignFloors : null,
   goFloor: SOURCE.mode === 'live' ? liveFloorStep : null,
   tower: (on) => (on ? towerEnter() : towerLeave(LIVE.floor)),
+  // What a press at (x, y) on the canvas hits in the building — the same ray and towerHit the pointer uses.
+  towerAt: (x, y) => {
+    if (!TOWER.on) return null;
+    const r = document.getElementById('scene-canvas').getBoundingClientRect(), ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+    const h = towerHit(ray);
+    return h ? { k: h.k, project: h.project } : null;
+  },
+  project: () => UI.project,
   towerDistance: () => { const want = towerPose(); return { at: +camera.position.distanceTo(want.t).toFixed(1), want: +want.p.distanceTo(want.t).toFixed(1) }; },
   towerActors: () => (TOWER.actors ? Object.fromEntries(Object.entries(TOWER.actors).map(([k, m]) => [k, m.count])) : null),
   towerLook: (k) => { const y = towerY(k), t = new THREE.Vector3(0, y, TOWER.D / 2); flyTo(t.clone().add(new THREE.Vector3(2, 1.5, 30)), t, controls.target, 0, () => { controls.target.copy(t); controls.update(); }); },

@@ -82,7 +82,7 @@ def test_each_app_reads_its_own_layouts_and_tests(tmp_path):
 
     item = _loaded(tmp_path).summaries(0)[0]
 
-    assert item["impl"] == {"total": 1, "done": 1}  # the Layout under app/ui exists
+    assert (item["impl"]["total"], item["impl"]["done"], item["impl"]["layout"]) == (1, 1, True)  # the Layout under app/ui exists
     assert item["tests"]["total"] == 2
     assert next(s for s in item["sections"] if s["key"] == "structure")["items"] == 2
 
