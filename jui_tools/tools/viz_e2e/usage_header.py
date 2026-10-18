@@ -35,6 +35,22 @@ async def wait(page, js, timeout=20000, label=""):
         raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
 
 
+def _lum(rgb):
+    def c(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (c(v) for v in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(css: str, bg_hex: str) -> float:
+    """WCAG contrast of an rgb() colour against a #rrggbb background, computed here (not by the page)."""
+    fg = [int(x) for x in re.findall(r"\d+", css)[:3]]
+    bg = [int(bg_hex.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    a, b = _lum(fg), _lum(bg)
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+
 def hue(css: str) -> float:
     r, g, b = (int(x) / 255 for x in re.findall(r"\d+", css)[:3])
     return colorsys.rgb_to_hls(r, g, b)[0] * 360
@@ -101,6 +117,24 @@ async def run_usage(pw, out, failures):
         res["hues"] = hues
         check(failures, hues[0] > hues[50] > hues[99] and 100 < hues[0] <= 125 and hues[99] < 8 and 45 < hues[50] < 75,
               f"the hue falls with the share, green to red, in between not a step: {hues}")
+        # contrast (reviewed 10-18): every share 0-99, light and dark, at least 4.5 against the chip (12 px bold: AA)
+        async def contrast_sweep(scheme):
+            await page.emulate_media(color_scheme=scheme)
+            await page.wait_for_timeout(300)
+            bg = await page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--chip').trim()")
+            cols = await page.evaluate("() => Array.from({ length: 100 }, (_, p) => window.__dbg.usageColor(p))")
+            ratios = [contrast(c, bg) for c in cols]
+            hs = [hue(c) for c in cols]
+            return {"bg": bg, "min": round(min(ratios), 2), "at": ratios.index(min(ratios)), "hues": [round(h) for h in hs[::11]],
+                    "falls": all(hs[i] >= hs[i + 1] - 0.5 for i in range(99))}
+        for scheme in ("light", "dark"):
+            c = res[f"contrast-{scheme}"] = await contrast_sweep(scheme)
+            check(failures, c["min"] >= 4.5, f"{scheme}: every share 0-99 at 4.5:1 or more: lowest {c['min']} at {c['at']}%")
+            check(failures, c["falls"] and c["hues"][0] > 100 and c["hues"][-1] < 10, f"{scheme}: still green to red, continuously: {c['hues']}")
+        await page.emulate_media(color_scheme="light")
+        await wait(page, "() => window.__dbg.usage()[0].num === window.__dbg.usageColor(99)", label="the chip repainted for light")
+        shown = await page.evaluate("() => [window.__dbg.usage()[0].num, window.__dbg.usageColor(99)]")
+        check(failures, shown[0] == shown[1], f"the chip shows the colour the sweep measured: {shown}")
         r = res["week"] = await page.evaluate(usage)
         check(failures, r[1]["window"] == "sevenDay" and r[1]["text"].startswith("週 18%") and "あと 4日 6時間" in r[1]["text"], f"the week: {r}")
         await page.screenshot(path=str(out / "header-light.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
@@ -113,6 +147,11 @@ async def run_usage(pw, out, failures):
                   f"{pct}%: 上限到達 in place of the number: {five}")
             check(failures, five["limitColor"] == ink and "（あと 2:1" in five["text"], f"{pct}%: inactive colour, the reset still shown: {five} vs {ink}")
         await page.screenshot(path=str(out / "header-limit-light.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
+        # 99.7 right after the limit (so the wait cannot pass on an older 99): floored, a number, not the limit
+        feed(99.7, 18)
+        await wait(page, "() => !window.__dbg.usage()[0].limit", label="99.7% arrived")
+        five = res["99.7"] = (await page.evaluate(usage))[0]
+        check(failures, five["text"].startswith("5時間 99%") and five["num"], f"99.7%: 99%, not 100 and not the limit: {five}")
         # the time counts down; an old value says how old
         feed(42, 18)
         await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42%")
@@ -122,6 +161,15 @@ async def run_usage(pw, out, failures):
               f"20 minutes on: the time counts down and the value says its age: {later}")
         await page.evaluate("() => window.__dbg.setClock(null)")
         await wait(page, "() => window.__dbg.usage()[0].note === ''", label="fresh again")
+        # past a window's reset with no newer value: no share (it is not this window's any more)
+        feed(42, 18, five_reset=int(time.time()) + 60)
+        await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42%, resets in a minute")
+        gone = res["reset"] = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 3 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.usage()), 1500)); }")
+        check(failures, gone[0]["text"].startswith("5時間 リセット済み") and gone[0]["num"] is None and "あと" not in gone[0]["text"] and "42" not in gone[0]["text"],
+              f"past the reset: リセット済み, no old share: {gone[0]}")
+        await page.evaluate("() => window.__dbg.setClock(null)")
+        feed(42, 18)
+        await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42% again")
         await page.emulate_media(color_scheme="dark")
         await page.wait_for_timeout(1500)
         dark = res["dark"] = await page.evaluate(usage)

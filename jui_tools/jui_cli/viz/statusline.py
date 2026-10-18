@@ -48,15 +48,15 @@ def own_line(status: dict) -> str:
         w = limits.get(key)
         if isinstance(w, dict) and isinstance(w.get("used_percentage"), (int, float)):
             pct = float(w["used_percentage"])
-            parts.append(f"{label} 上限到達" if pct >= 100 else f"{label} {pct:.0f}%")
+            parts.append(f"{label} 上限到達" if pct >= 100 else f"{label} {int(pct)}%")   # floored: 99.5 is not 100
     if parts:
         return " · ".join(parts)
     model = status.get("model") if isinstance(status.get("model"), dict) else {}
     return str(model.get("display_name") or "")
 
 
-def wrapped(arg: str, body: bytes) -> bytes:
-    """What the statusLine this one wraps prints for the same input."""
+def wrapped(arg: str, body: bytes) -> tuple[bytes, int]:
+    """What the statusLine this one wraps prints for the same input, and its exit status."""
     import base64
     import json
     import subprocess
@@ -64,18 +64,18 @@ def wrapped(arg: str, body: bytes) -> bytes:
     original = json.loads(base64.b64decode(arg.encode("ascii")).decode("utf-8"))
     command = original.get("command") if isinstance(original, dict) else None
     if not isinstance(command, str) or not command:
-        return b""
+        return b"", 0
     done = subprocess.run(command, shell=True, input=body, capture_output=True, timeout=30)
-    return done.stdout
+    return done.stdout, done.returncode
 
 
 def main() -> int:
     body = sys.stdin.buffer.read()
-    out = b""
+    out, rc = b"", 0
     argv = sys.argv[1:]
     try:
         if "--wrap" in argv and argv.index("--wrap") + 1 < len(argv):
-            out = wrapped(argv[argv.index("--wrap") + 1], body)
+            out, rc = wrapped(argv[argv.index("--wrap") + 1], body)
     except Exception:  # noqa: BLE001 - the user's own line failing must not take this one down
         out = b""
     status = {}
@@ -91,7 +91,7 @@ def main() -> int:
         out = own_line(status if isinstance(status, dict) else {}).encode("utf-8")
     sys.stdout.buffer.write(out)
     sys.stdout.flush()
-    return 0
+    return rc   # wrapped: the user's command's own exit status, as Claude Code would have seen it
 
 
 if __name__ == "__main__":
