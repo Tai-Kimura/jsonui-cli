@@ -195,7 +195,7 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "tower", "calls", "play"],
+    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play"],
                     help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
@@ -253,6 +253,11 @@ def main(argv=None) -> int:
                 before = progress_count()
                 await rb_layout.run_rb_layout(pw, out, failures)
                 failures.extend(m for m in [progress_grew("rb-layout", before)] if m)
+            if a.only in (None, "live", "focus-cam"):
+                import focus_cam
+                before = progress_count()
+                await focus_cam.run_focus_cam(pw, out, failures)
+                failures.extend(m for m in [progress_grew("focus-cam", before)] if m)
             if a.only in (None, "live", "rb-arrows"):
                 import rb_arrows
                 before = progress_count()

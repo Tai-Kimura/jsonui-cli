@@ -1036,17 +1036,115 @@ const rawDetails = (p) => {
 const rbEl = $('rb');
 const rbState = { id: null };
 const CAM_DIR = new THREE.Vector3(0.25, 0.42, 0.87).normalize();
-function robotPose(id) {
-  const R = robots.find((x) => x.def.id === id);
-  const dist = 8, wide = sceneEl.clientWidth > 900;
-  const right = new THREE.Vector3().crossVectors(CAM_DIR.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
+/* ---------- the camera on a robot (requester, 10-18: "ズーム中も回転とか拡大縮小とかできるようにしたい",
+   "ロボットの場所によってはこんな感じになって見えない") ----------
+   While the card is open the camera orbits the robot: azimuth, elevation and distance (FOCUS), changed by a drag, the
+   wheel or a pinch. Its first direction is chosen when a robot is focused (opened, ← →, another robot clicked): of 12
+   azimuths × 2 elevations, the one whose lines from the robot (chest, head, knees) to the camera cross the fewest
+   walls, boards and furniture, nearest the usual direction on a tie. What still stands between them is drawn faint
+   until the camera leaves (focusFadeSync, with the card's refresh). */
+const FOCUS = { id: null, az: 0, el: 0, dist: 8, chosen: null, faded: new Map(), drag: null, pinch: null, touches: new Map() };
+const FOCUS_DIST = [4, 18], FOCUS_EL = [0.12, 1.3], FOCUS_FADE = 0.22;
+const FOCUS_BASE = { az: Math.atan2(CAM_DIR.x, CAM_DIR.z), el: Math.asin(CAM_DIR.y) };
+const FOCUS_SAMPLES = [0.55, 1.15, 1.65];   // heights on the robot the camera must see
+const focusRay = new THREE.Raycaster();
+const focusDir = (az, el) => new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
+function focusPose(R, az, el, dist) {
+  const dir = focusDir(az, el), wide = sceneEl.clientWidth > 900;
+  const right = new THREE.Vector3().crossVectors(dir.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
   const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), viewW = viewH * camera.aspect;
   const t = R.robot.root.position.clone().add(new THREE.Vector3(0, 1.15, 0));
   // Wide: the card covers the right of the scene, so the robot sits left of centre. Narrow: the card is a
   // bottom sheet, so the robot sits high.
   if (wide) t.add(right.multiplyScalar((Math.min(420, sceneEl.clientWidth - 28) / 2 / sceneEl.clientWidth) * viewW));
   else t.y -= viewH * 0.2;
-  return { p: t.clone().add(CAM_DIR.clone().multiplyScalar(dist)), t };
+  return { p: t.clone().add(dir.multiplyScalar(dist)), t };
+}
+const shownChain = (o) => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
+const ofRobot = (o) => { for (let x = o; x; x = x.parent) if (x.userData && x.userData.robotId !== undefined) return true; return false; };
+/* The meshes (walls, boards, furniture — not robots, not the selection ring) between the robot's sample points and p. */
+function focusBlockers(R, p) {
+  const out = new Set();
+  for (const y of FOCUS_SAMPLES) {
+    const from = R.robot.root.position.clone().add(new THREE.Vector3(0, y, 0)), dir = p.clone().sub(from), len = dir.length();
+    focusRay.set(from, dir.normalize());
+    focusRay.far = len;
+    focusRay.camera = camera;   // a sprite (a tag, a label) cannot be raycast without it: three.js throws
+    for (const h of focusRay.intersectObject(scene, true)) {
+      const o = h.object;
+      if (o.isMesh && o !== selRing && !ofRobot(o) && shownChain(o)) out.add(o);
+    }
+  }
+  return out;
+}
+function focusChoose(id) {
+  const R = robots.find((x) => x.def.id === id);
+  FOCUS.id = id; FOCUS.dist = 8; FOCUS.az = FOCUS_BASE.az; FOCUS.el = FOCUS_BASE.el; FOCUS.chosen = null;
+  if (!R) return;
+  let best = null;
+  for (const el of [FOCUS_BASE.el, FOCUS_BASE.el + 0.3]) {
+    for (const k of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6]) {
+      const az = FOCUS_BASE.az + (k * Math.PI) / 6, n = focusBlockers(R, focusPose(R, az, el, FOCUS.dist).p).size;
+      if (!best || n < best.n) best = { az, el, n, k };
+      if (n === 0) break;
+    }
+    if (best.n === 0) break;
+  }
+  FOCUS.az = best.az; FOCUS.el = best.el;
+  FOCUS.chosen = { step: best.k, raised: best.el !== FOCUS_BASE.el, blockers: best.n,
+    usual: focusBlockers(R, focusPose(R, FOCUS_BASE.az, FOCUS_BASE.el, FOCUS.dist).p).size };
+}
+function robotPose(id) {
+  if (FOCUS.id !== id) focusChoose(id);
+  const R = robots.find((x) => x.def.id === id);
+  return focusPose(R, FOCUS.az, FOCUS.el, FOCUS.dist);
+}
+/* Faint what stands between the camera and the focused robot now; give the rest its own material back. */
+function focusFadeSync() {
+  const R = has3D && rbState.id && zoom.zoomed && !rbEl.hidden ? robots.find((x) => x.def.id === rbState.id) : null;
+  const now = R ? focusBlockers(R, camera.position) : new Set();
+  for (const [o, mat] of FOCUS.faded) {
+    if (now.has(o)) continue;
+    const faint = o.material;
+    o.material = mat;
+    for (const m of [].concat(faint)) m.dispose();
+    FOCUS.faded.delete(o);
+  }
+  for (const o of now) {
+    if (FOCUS.faded.has(o)) continue;
+    FOCUS.faded.set(o, o.material);
+    o.material = [].concat(o.material).map((m) => { const c = m.clone(); c.transparent = true; c.opacity = FOCUS_FADE; c.depthWrite = false; return c; });
+    if (!Array.isArray(FOCUS.faded.get(o))) o.material = o.material[0];
+  }
+}
+const focusing = () => has3D && !!rbState.id && zoom.zoomed && !camTween;
+{
+  // drag: around the robot; wheel and pinch: nearer or farther. Only while a robot's card has the camera.
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!focusing()) return;
+    FOCUS.touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (FOCUS.touches.size === 2) { const [a, b] = [...FOCUS.touches.values()]; FOCUS.pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), dist: FOCUS.dist }; FOCUS.drag = null; }
+    else FOCUS.drag = { x: e.clientX, y: e.clientY, az: FOCUS.az, el: FOCUS.el };
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!focusing() || !FOCUS.touches.has(e.pointerId)) return;
+    FOCUS.touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (FOCUS.pinch && FOCUS.touches.size === 2) {
+      const [a, b] = [...FOCUS.touches.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      FOCUS.dist = Math.min(FOCUS_DIST[1], Math.max(FOCUS_DIST[0], FOCUS.pinch.dist * (FOCUS.pinch.d / Math.max(1, d))));
+    } else if (FOCUS.drag) {
+      FOCUS.az = FOCUS.drag.az - (e.clientX - FOCUS.drag.x) * 0.008;
+      FOCUS.el = Math.min(FOCUS_EL[1], Math.max(FOCUS_EL[0], FOCUS.drag.el + (e.clientY - FOCUS.drag.y) * 0.006));
+    }
+  });
+  const up = (e) => { FOCUS.touches.delete(e.pointerId); if (FOCUS.touches.size < 2) FOCUS.pinch = null; if (!FOCUS.touches.size) FOCUS.drag = null; };
+  canvas.addEventListener('pointerup', up);
+  canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('wheel', (e) => {
+    if (!focusing()) return;
+    e.preventDefault();
+    FOCUS.dist = Math.min(FOCUS_DIST[1], Math.max(FOCUS_DIST[0], FOCUS.dist * Math.exp(e.deltaY * 0.0015)));
+  }, { passive: false });
 }
 function openRobot(id, opener) {
   if (wb.open) { wb.open = false; hideOverlay(wbEl); }
@@ -1070,6 +1168,8 @@ function closeRobot(keepZoom) {
   rbState.id = null;
   hideOverlay(rbEl);
   histSync();
+  FOCUS.id = null;      // the next robot opened chooses its view afresh
+  focusFadeSync();      // everything faint gets its own material back
   if (!keepZoom) zoomBack();
 }
 /* ← → on the robot card (requester, 10-18: "この画面の時に左右キーとかでロボットを切り替えれるようにできる？"): the
@@ -1173,6 +1273,7 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   const testsEl = rbEl.querySelector('[data-rb-tests]');
   if (testsEl) setHTML(testsEl, robotTestsHTML(robotRuns(id)));   // rewritten on every refresh while a run moves
   histSync();   // 55-history.js: the tab shown, and the history kept fresh while it is
+  focusFadeSync();   // what stands between the camera and this robot, faint
 }
 
 /* ---------- live: the test run in the side panel (plan 09 §4) ---------- */
