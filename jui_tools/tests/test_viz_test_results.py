@@ -10,6 +10,7 @@ here reads the real results folder or reaches the server on the default port.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import signal
@@ -336,3 +337,47 @@ def _alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+# ---------------------------------------------------------------- the drivers' rule: the latest of every test file stays (2.3.1)
+# tests/fixtures/viz/results-prune.json is a byte copy of jsonui-test-runner specs/vectors/results-prune.json.
+
+VECTOR = Path(__file__).resolve().parent / "fixtures" / "viz" / "results-prune.json"
+
+
+def _keyed(at: float, i: int, file: str) -> str:
+    key = hashlib.sha256(file.encode("utf-8")).hexdigest()[:8]
+    return _name(at, f"{i:08x}-0000-4000-8000-{i:012x}").replace(".json", f"-{key}.json")
+
+
+def test_the_shared_vector_every_prune_case():
+    vector = json.loads(VECTOR.read_text())
+    for k in vector["fileKeys"]:
+        assert hashlib.sha256(k["key"].encode("utf-8")).hexdigest()[:8] == k["fileKey8"]
+    assert len(vector["prune"]) == 5
+    for c in vector["prune"]:
+        got = tr.to_prune(c["names"], c["now"] / 1000, c["maxFiles"], c["maxAgeDays"])
+        assert (c["name"], got) == (c["name"], c["pruned"])
+
+
+def test_a_rerun_file_does_not_take_the_others_latest_and_a_long_round_prunes_none_of_itself():
+    now = time.time()
+    names = [_keyed(now - 86400 + i / 1000, i, f"s{i}.test.json") for i in range(122)]
+    names += [_keyed(now - 43200 + n, 1000 + n, "s0.test.json") for n in range(500)]
+    left = set(names) - set(tr.to_prune(names, now))
+    assert len(left) == tr.KEEP_FILES and len({tr.NAME.match(n).group(1) for n in left}) == 122
+    one_round = [_keyed(now - 60 + i / 1000, i, f"s{i}.test.json") for i in range(600)]
+    assert tr.to_prune(one_round, now) == []
+    only = _keyed(now - 20 * 86400, 1, "a.test.json")
+    replaced, latest = _keyed(now - 20 * 86400, 2, "b.test.json"), _keyed(now - 1, 3, "b.test.json")
+    assert tr.to_prune([only, replaced, latest], now) == [replaced]
+
+
+def test_the_vector_is_a_byte_copy_of_jsonui_test_runners():
+    """Compared when the source is at hand: $JSONUI_TEST_RUNNER_DIR or a sibling checkout. CI checks out this repo
+    alone, so there it is skipped, and says so."""
+    roots = [os.environ.get("JSONUI_TEST_RUNNER_DIR"), str(Path(__file__).resolve().parents[2].parent / "jsonui-test-runner")]
+    source = next((Path(r) / "specs/vectors/results-prune.json" for r in roots if r and (Path(r) / "specs/vectors/results-prune.json").is_file()), None)
+    if source is None:
+        pytest.skip("jsonui-test-runner specs/vectors not found: the copy is not compared here")
+    assert source.read_bytes() == VECTOR.read_bytes()

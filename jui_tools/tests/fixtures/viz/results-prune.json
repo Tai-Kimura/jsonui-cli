@@ -1,0 +1,112 @@
+{
+  "_comment": [
+    "The default results folder of the three drivers (and jui viz's copy of the Android folder): how a file is named and which files pruning deletes.",
+    "name = <UTC yyyyMMdd'T'HHmmss.SSS'Z'>-<run>-<fileKey8>.json; fileKey8 = the first 8 hex digits of SHA-256 over the UTF-8 of the run's test-file key.",
+    "fileKey = the run's test file (suites[].file); a run with several, their distinct values sorted and joined with a newline.",
+    "Pruning, per app folder, among names of either shape (with or without fileKey8): the newest name of each fileKey8 is always kept. The rest (older names of the same fileKey8, and every name of the earlier shape) are deleted when their name time is more than maxAgeDays before now, then the oldest of them until at most maxFiles names remain. A kept name is never deleted, so a folder may hold more than maxFiles names. Anything else in the folder is never touched.",
+    "Defaults: maxFiles 500, maxAgeDays 14. pruned lists names in name order."
+  ],
+  "fileKeys": [
+    {
+      "key": "tests/screens/a.test.json",
+      "fileKey8": "47792b4b"
+    },
+    {
+      "key": "tests/screens/ログイン.test.json",
+      "fileKey8": "48dcb084"
+    },
+    {
+      "key": "tests/a.test.json\ntests/b.test.json",
+      "fileKey8": "bafae09f"
+    }
+  ],
+  "prune": [
+    {
+      "name": "rerunning one file keeps the latest of the others",
+      "now": 1792314000000,
+      "maxFiles": 3,
+      "maxAgeDays": 14,
+      "names": [
+        "20261018T085000.000Z-00000001-0000-4000-8000-000000000001-47792b4b.json",
+        "20261018T085000.001Z-00000002-0000-4000-8000-000000000002-2bbd0847.json",
+        "20261018T085000.002Z-00000003-0000-4000-8000-000000000003-5630e23d.json",
+        "20261018T085500.000Z-00000004-0000-4000-8000-000000000004-47792b4b.json",
+        "20261018T085500.001Z-00000005-0000-4000-8000-000000000005-47792b4b.json",
+        "20261018T085500.002Z-00000006-0000-4000-8000-000000000006-47792b4b.json",
+        "20261018T085500.003Z-00000007-0000-4000-8000-000000000007-47792b4b.json",
+        "20261018T085500.004Z-00000008-0000-4000-8000-000000000008-47792b4b.json"
+      ],
+      "pruned": [
+        "20261018T085000.000Z-00000001-0000-4000-8000-000000000001-47792b4b.json",
+        "20261018T085500.000Z-00000004-0000-4000-8000-000000000004-47792b4b.json",
+        "20261018T085500.001Z-00000005-0000-4000-8000-000000000005-47792b4b.json",
+        "20261018T085500.002Z-00000006-0000-4000-8000-000000000006-47792b4b.json",
+        "20261018T085500.003Z-00000007-0000-4000-8000-000000000007-47792b4b.json"
+      ]
+    },
+    {
+      "name": "one round over the cap prunes none of its own files",
+      "now": 1792314000000,
+      "maxFiles": 3,
+      "maxAgeDays": 14,
+      "names": [
+        "20261018T085959.000Z-00000009-0000-4000-8000-000000000009-47792b4b.json",
+        "20261018T085959.001Z-0000000a-0000-4000-8000-00000000000a-2bbd0847.json",
+        "20261018T085959.002Z-0000000b-0000-4000-8000-00000000000b-5630e23d.json",
+        "20261018T085959.003Z-0000000c-0000-4000-8000-00000000000c-9e5e8e37.json",
+        "20261018T085959.004Z-0000000d-0000-4000-8000-00000000000d-1979a077.json"
+      ],
+      "pruned": []
+    },
+    {
+      "name": "a file not rerun for 20 days keeps its latest; a replaced one that old goes",
+      "now": 1792314000000,
+      "maxFiles": 500,
+      "maxAgeDays": 14,
+      "names": [
+        "20260928T090000.000Z-0000000e-0000-4000-8000-00000000000e-2bbd0847.json",
+        "20260928T090000.001Z-0000000f-0000-4000-8000-00000000000f-47792b4b.json",
+        "20261018T085900.000Z-00000010-0000-4000-8000-000000000010-47792b4b.json"
+      ],
+      "pruned": [
+        "20260928T090000.001Z-0000000f-0000-4000-8000-00000000000f-47792b4b.json"
+      ]
+    },
+    {
+      "name": "over the cap, the oldest replaced results go first",
+      "now": 1792314000000,
+      "maxFiles": 5,
+      "maxAgeDays": 14,
+      "names": [
+        "20261018T085100.000Z-00000011-0000-4000-8000-000000000011-47792b4b.json",
+        "20261018T085200.000Z-00000012-0000-4000-8000-000000000012-47792b4b.json",
+        "20261018T085300.000Z-00000013-0000-4000-8000-000000000013-2bbd0847.json",
+        "20261018T085400.000Z-00000014-0000-4000-8000-000000000014-5630e23d.json",
+        "20261018T085500.000Z-00000015-0000-4000-8000-000000000015-9e5e8e37.json",
+        "20261018T085600.000Z-00000016-0000-4000-8000-000000000016-47792b4b.json"
+      ],
+      "pruned": [
+        "20261018T085100.000Z-00000011-0000-4000-8000-000000000011-47792b4b.json"
+      ]
+    },
+    {
+      "name": "earlier names without a file key are only aged and capped; other names are never touched",
+      "now": 1792314000000,
+      "maxFiles": 2,
+      "maxAgeDays": 14,
+      "names": [
+        "20260928T090000.000Z-00000017-0000-4000-8000-000000000017.json",
+        "20261018T085700.000Z-00000018-0000-4000-8000-000000000018.json",
+        "20261018T085800.000Z-00000019-0000-4000-8000-000000000019.json",
+        "20261018T085900.000Z-0000001a-0000-4000-8000-00000000001a-47792b4b.json",
+        ".20261018T085900.000Z-0000001a-0000-4000-8000-00000000001a-47792b4b.json.tmp",
+        "notes.txt",
+        "20261018T085900.000Z-0000001a-0000-4000-8000-00000000001a-47792b4b.json.bak"
+      ],
+      "pruned": [
+        "20260928T090000.000Z-00000017-0000-4000-8000-000000000017.json",
+        "20261018T085700.000Z-00000018-0000-4000-8000-000000000018.json"
+      ]
+    }
+  ]
+}

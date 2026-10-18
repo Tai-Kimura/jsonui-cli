@@ -23,9 +23,10 @@ Where the files are:
     server copies it with ``adb pull`` into <base>/android/<serial>/<package>/ at two
     moments only: once at start for every attached device, and when a run's
     run_end arrives from that device. There is no watcher of its own.
-Pruning (the drivers do the same in their own folder): only files whose name
-has the driver's shape, older than 14 days, then all but the newest 500, per
-app folder.
+Pruning, per app folder, by the drivers' own rule (to_prune; 2.3.1): the latest result of every test file always
+stays; 14 days and 500 files apply only to results a newer one of the same test file replaced, and to names of the
+earlier shape. Only names of the driver's shape are ever deleted. This server prunes every app folder at start, so a
+different rule here would undo the drivers'.
 """
 from __future__ import annotations
 
@@ -38,7 +39,9 @@ from datetime import datetime
 from pathlib import Path
 
 BASE_ENV = "JSONUI_TEST_RESULTS_DIR"
-NAME = re.compile(r"^\d{8}T\d{6}\.\d{3}Z-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$")
+#: A results file's name; group 1 is the run's file key (the drivers since ios 2.1.1 / android 1.19.1 / web 1.17.1),
+#: absent on a name of the earlier shape.
+NAME = re.compile(r"^\d{8}T\d{6}\.\d{3}Z-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-([0-9a-f]{8}))?\.json$")
 KEEP_FILES = 500
 KEEP_DAYS = 14
 PULL_TIMEOUT_SEC = 20.0
@@ -83,17 +86,40 @@ def app_folders(base: Path) -> list[Path]:
     return out
 
 
+def to_prune(names, now: float, keep_files: int = KEEP_FILES, keep_days: int = KEEP_DAYS) -> list[str]:
+    """The names pruning deletes from one app folder, in name order — the drivers' rule (jsonui-test-runner
+    specs/vectors/results-prune.json, copied in tests/fixtures/viz/): the newest name of each file key always stays,
+    so a test file not rerun keeps its latest result however old and however many others ran since; older names of
+    the same key, and names of the earlier shape, go when older than keep_days, then oldest first until at most
+    keep_files names remain. A name not of the driver's shape is never chosen. *now* is in seconds."""
+    matching = sorted({n for n in names if NAME.match(n)})
+    latest: dict[str, str] = {}
+    for name in matching:
+        key = NAME.match(name).group(1)
+        if key:
+            latest[key] = name          # sorted: the last one seen is the newest
+    kept = set(latest.values())
+    replaced = [n for n in matching if n not in kept]
+    doomed = {n for n in replaced if (name_time(n) or now) < now - keep_days * 86400}
+    remaining = len(matching) - len(doomed)
+    for name in replaced:
+        if remaining <= keep_files:
+            break
+        if name not in doomed:
+            doomed.add(name)
+            remaining -= 1
+    return [n for n in matching if n in doomed]
+
+
 def prune(folder: Path, now: float | None = None) -> int:
-    """Remove result files older than KEEP_DAYS, then all but the newest KEEP_FILES. Only names of the
-    driver's shape are ever touched; nothing is removed outside *folder* (no recursion)."""
+    """Remove what to_prune chooses in *folder*. Only names of the driver's shape are ever touched; nothing is
+    removed outside *folder* (no recursion)."""
     now = time.time() if now is None else now
     try:
-        names = sorted(e.name for e in os.scandir(folder) if e.is_file(follow_symlinks=False) and NAME.match(e.name))
+        names = [e.name for e in os.scandir(folder) if e.is_file(follow_symlinks=False) and NAME.match(e.name)]
     except OSError:
         return 0
-    doomed = [n for n in names if (name_time(n) or now) < now - KEEP_DAYS * 86400]
-    kept = [n for n in names if n not in set(doomed)]
-    doomed += kept[:-KEEP_FILES] if len(kept) > KEEP_FILES else []
+    doomed = to_prune(names, now)
     removed = 0
     for name in doomed:
         try:
