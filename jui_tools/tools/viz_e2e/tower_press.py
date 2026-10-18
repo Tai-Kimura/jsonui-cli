@@ -130,6 +130,8 @@ async def run_tower_press(pw, out, failures, RealServer):
                 check(failures, got == [b, b, 1], f"slow frames: pressing room B's window on 2F opened {got}, not [{b}, {b}, 1]")
         finally:
             await page.evaluate("() => { window.__slowFrameMs = 0; }")
+    except Exception as e:   # a wait that ran out is a FAIL line like any other suite's, and the results are still written
+        failures.append(f"tower: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
         if srv is not None:
             srv.stop()
