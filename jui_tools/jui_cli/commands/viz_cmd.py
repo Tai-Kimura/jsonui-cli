@@ -952,7 +952,7 @@ def _cmd_open(args: argparse.Namespace) -> int:
     running = _running()
     port = (running[1] or {}).get("port") if running else None
     if not isinstance(port, int):
-        _err("起動していません（jui viz serve で起動）")
+        _err("起動していません（jui viz start で裏で起動、または jui viz serve で前面で起動）")
         return 1
     webbrowser.open(_url(port))
     print(f"jui viz: {_url(port)} を開きました")
