@@ -250,13 +250,18 @@ def discover_sources(root: Path) -> list[Source]:
     else the default folder. A config below it counts when it, or a config it
     extends, declares ``spec_directory``. The app is named after the folder of
     the config that declares (so a signpost and its target are one app).
+    A config that declares outside the room (``extends`` into another repo)
+    is that repo's app, read in that repo's room, not here.
     """
     root = Path(root)
+    room = root.resolve()
     sources: list[Source] = []
     seen: set[str] = set()
     for config in find_configs(root):
         is_root = config.parent == root
         declared = follow_extends(config)
+        if declared is not None and not declared.resolve().parent.is_relative_to(room):
+            declared = None
         if declared is None and not is_root:
             continue
         owner = declared or config

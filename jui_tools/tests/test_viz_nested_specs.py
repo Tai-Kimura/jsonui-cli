@@ -111,6 +111,53 @@ def test_a_signpost_reaches_an_app_beyond_the_search_depth(tmp_path):
     assert len(_loaded(tmp_path).specs) == len(names)
 
 
+def test_an_app_at_the_search_depth_is_found_and_one_below_it_is_not(tmp_path):
+    _write(tmp_path / "jui.config.json", {})
+    at = tmp_path.joinpath(*[f"d{k}" for k in range(1, jp.SOURCE_DEPTH + 1)])
+    below = tmp_path.joinpath(*[f"e{k}" for k in range(1, jp.SOURCE_DEPTH + 2)])
+    for app in (at, below):
+        _specs(app / "s", ["screen"])
+        _write(app / "jui.config.json", {"spec_directory": "s"})
+    assert len(at.relative_to(tmp_path).parts) == jp.SOURCE_DEPTH
+    assert len(below.relative_to(tmp_path).parts) == jp.SOURCE_DEPTH + 1
+
+    keys = [s.key for s in discover_sources(tmp_path) if s.key]
+
+    assert keys == [at.relative_to(tmp_path).as_posix()]
+
+
+def test_two_configs_spelling_one_folder_differently_count_once(tmp_path):
+    _write(tmp_path / "jui.config.json", {})
+    names = _specs(tmp_path / "shared/s", ["one", "two"])
+    (tmp_path / "shared/x").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "shared", target_is_directory=True)
+    _write(tmp_path / "a/jui.config.json", {"spec_directory": "../shared/s"})
+    _write(tmp_path / "b/jui.config.json", {"spec_directory": "../shared/x/../s"})   # pathlib keeps the ..
+    _write(tmp_path / "c/jui.config.json", {"spec_directory": "../link/s"})          # through a symlink
+    sources = discover_sources(tmp_path)
+    spellings = {str(s.spec_dir) for s in sources if s.key}
+
+    assert len(spellings) == 1, "only one of the three spellings survives"
+    assert [s.key for s in sources if s.key] == ["a"]
+    assert len(_loaded(tmp_path).specs) == len(names)
+
+
+def test_a_config_that_declares_outside_the_room_is_not_counted(tmp_path):
+    room = tmp_path / "room"
+    _write(room / "jui.config.json", {})
+    _specs(tmp_path / "other/s", ["theirs"])
+    _write(tmp_path / "other/jui.config.json", {"spec_directory": "s"})
+    _write(room / "a/jui.config.json", {"extends": "../../other/jui.config.json"})
+    mine = _specs(room / "b/s", ["mine"])
+    _write(room / "b/jui.config.json", {"spec_directory": "s"})
+
+    sources = discover_sources(room)
+
+    assert [s.key for s in sources if s.key] == ["b"]
+    assert not any(s.key.startswith("..") for s in sources)
+    assert len(_loaded(room).specs) == len(mine)
+
+
 def test_configs_under_node_modules_are_not_apps(tmp_path):
     _write(tmp_path / "jui.config.json", {})
     real = _specs(tmp_path / "web/docs/screens/json", ["page"])
