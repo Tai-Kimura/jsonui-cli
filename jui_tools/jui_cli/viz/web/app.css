@@ -232,9 +232,11 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
   box-shadow: 0 1px 4px var(--shadow);
 }
 .tag > span:last-child { overflow: hidden; text-overflow: ellipsis; }
-.tag.room { padding: 2px 8px; border: 1px solid transparent; border-radius: 4px; color: var(--ink-soft); font: 700 12px/1.5 var(--font-mono); box-shadow: none; pointer-events: auto; cursor: pointer; }
-.tag.room:hover { border-color: var(--ink-soft); }
-.tag.room.on { background: var(--ink); color: var(--panel); }
+/* A room's name is a sign, not a robot's name tag (requester 10-18: the two blended in a crowded room): square corners,
+   a frame and the info hue always on, an opaque ground, and in front of the tags (a later sibling would paint over it). */
+.tag.room { z-index: 1; padding: 2px 8px; border: 1.5px solid var(--info); border-radius: 3px; background: var(--panel); color: var(--info); font: 700 12px/1.5 var(--font-mono); box-shadow: 0 1px 4px var(--shadow); pointer-events: auto; cursor: pointer; }
+.tag.room:hover { background: var(--info-bg); }
+.tag.room.on { border-color: var(--ink); background: var(--ink); color: var(--panel); }
 .tag.tray { padding: 2px 8px; border-radius: 4px; font: 700 11px/1.5 var(--font-body); }
 .pill { display: inline-block; min-width: 2.5em; padding: 0 7px; border-radius: 999px; background: var(--c, #8a9bb0); color: var(--t, #ffffff); font: 700 11px/1.75 var(--font-mono); text-align: center; }
 .scene-hint { position: absolute; right: 12px; bottom: 10px; margin: 0; padding: 1px 8px; border-radius: 4px; background: var(--tag-bg); color: var(--ink-soft); font: 500 11px/1.6 var(--font-mono); }
