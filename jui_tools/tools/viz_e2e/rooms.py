@@ -183,6 +183,13 @@ async def run_rooms(pw, out, failures, RealServer):
         check(failures, len(cards) >= 9 and by.get("03", [None, ""])[1] == "画面 3 を仕上げて", f"one card per prompt, the wrapper stripped: {cards[:3]}")
         check(failures, by.get("01", [0, 0, ""])[2] == "done" and by.get("02", [0, 0, ""])[2] == "wait" and by.get("00", [0, 0, ""])[2] == "doing",
               f"Stop → done, a permission → 待ち, working → 作業中: {[by.get(k) for k in ('00', '01', '02')]}")
+        # waiting on background work: lit (the robot at its desk), counted apart in the session filter
+        bgw = await page.evaluate("""() => ({ state: (window.__dbg.robotState()['07'] || {}).state,
+          chip: [...document.querySelectorAll('#sess-filter button')].map((b) => b.textContent).find((t) => t.startsWith('裏で作業中')),
+          rank: window.__dbg.floors().rank[window.__dbg.robots.find((x) => x.def.id === '07').def.room] })""")
+        res["background"] = bgw
+        check(failures, bgw == {"state": "background", "chip": "裏で作業中1", "rank": 1} and by.get("07", [0, 0, ""])[2] == "doing",
+              f"a session waiting on background work stays lit (rank 1) and its card working: {bgw} {by.get('07')}")
         await page.click("#btn-taskboard")
         await page.wait_for_selector("#tb:not([hidden])")
         await page.wait_for_timeout(800)
@@ -203,6 +210,14 @@ async def run_rooms(pw, out, failures, RealServer):
         await wait(page, SETTLED_JS, label="seated in the wide room")
         res["soloOverlap"] = desks_clear(await page.evaluate("() => window.__dbg.seats()"))
         await page.screenshot(path=str(out / "room.png"))
+        # a robot of another room (not in the scene now): its card opens without the camera (it used to throw)
+        other = next(k for k, v in again.items() if v and v[0] != room_id)
+        await page.evaluate("(id) => window.__dbg.openRobot(id)", other)
+        await wait(page, "() => document.getElementById('rb').classList.contains('show') && !!document.getElementById('rb-title')", label="the other room's robot card")
+        res["otherCard"] = await page.evaluate("() => document.getElementById('rb-title').textContent")
+        await page.keyboard.press("Escape")
+        await wait(page, "() => document.getElementById('rb').hidden", label="the card closed")
+        check(failures, other in res["otherCard"] or bool(res["otherCard"]), f"the card of a robot out of the scene opens: {res['otherCard']}")
         await page.click("#room-back")
         await wait(page, "() => window.__dbg.solo() === null && Object.keys(window.__dbg.live3d().rooms).length === 4", label="back to the floor")
         await wait(page, SETTLED_JS, label="seated on the floor again")

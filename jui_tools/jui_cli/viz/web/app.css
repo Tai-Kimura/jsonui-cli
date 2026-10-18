@@ -306,6 +306,9 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .st-busy { background: var(--ok-bg); color: var(--ok); }
 .st-waiting { background: var(--warn-bg); color: var(--warn); }
 .st-idle { background: var(--chip); color: var(--ink-soft); }
+.st-bg { background: rgba(76, 195, 217, 0.18); color: #137a8c; }
+:root[data-theme="dark"] .st-bg { color: #7fdcec; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .st-bg { color: #7fdcec; } }
 .st-done { background: var(--info-bg); color: var(--info); }
 .st-write { background: var(--violet-bg); color: var(--violet); }
 .st-impl { background: var(--info-bg); color: var(--info); }

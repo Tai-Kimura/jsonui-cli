@@ -468,7 +468,20 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                 set_source("agents", "stopped", None)
 
             from ..viz.sources import devices as devices_src
+            from ..viz.sources import processes
             from ..viz.sources import test_progress
+
+            async def background_loop() -> None:
+                # Sessions waiting on background work: is a background shell still under their process? (10-18)
+                while True:
+                    await asyncio.sleep(5)
+                    if not world.background_pids():
+                        continue
+                    rows = await loop.run_in_executor(None, processes.snapshot)
+                    world.check_background(rows, now_ms())
+                    world.publish()
+
+            tasks.append(asyncio.create_task(background_loop()))
 
             tasks.append(asyncio.create_task(devices_src.run(
                 lambda found: (world.apply_devices(found), world.publish()),

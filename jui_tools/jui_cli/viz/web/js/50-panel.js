@@ -10,6 +10,7 @@ function robotBadge(id) {
   if (s === 'done') return ['st-done', '完了'];
   if (s === 'idle') return ['st-idle', '待機'];
   if (s === 'thinking') return ['st-busy', '考え中'];
+  if (s === 'background') return ['st-bg', '裏で作業中'];
   return ['st-busy', '作業中'];
 }
 /* What the view is narrowed to: one project (or all), which sessions, how the session list is shown. */
@@ -21,14 +22,14 @@ const UI = {
   sessFilter: readPref('sessFilter', 'all'),
   collapsed: new Set(prefJSON('collapsed', [])),
 };
-if (!['all', 'active', 'waiting', 'idle'].includes(UI.sessFilter)) UI.sessFilter = 'all';
+if (!['all', 'active', 'waiting', 'background', 'idle'].includes(UI.sessFilter)) UI.sessFilter = 'all';
 const inScope = (project) => UI.project === 'all' || UI.project === project;
 const scopeLabel = () => (UI.project === 'all' ? 'すべて' : PROJECT[UI.project].name);
 function sessionBadge(s) {
   const b = s.robots.map(robotBadge);
   // A session whose busy robots only think says 考え中, as its robot row does (they disagreed — 10-18 review).
   return b.some((x) => x[0] === 'st-waiting') ? ['st-waiting', '許可待ち'] : b.some((x) => x[1] === '作業中') ? ['st-busy', '作業中']
-    : b.some((x) => x[1] === '考え中') ? ['st-busy', '考え中'] : ['st-idle', '待機'];
+    : b.some((x) => x[1] === '考え中') ? ['st-busy', '考え中'] : b.some((x) => x[0] === 'st-bg') ? ['st-bg', '裏で作業中'] : ['st-idle', '待機'];
 }
 const roleVar = (s) => (s.by ? ` style="--c:${ROLES[DEF[s.by].role].color}"` : '');
 /* Lists of buttons are rebuilt only when their membership changes, so keyboard focus survives the
@@ -82,7 +83,7 @@ $('btn-taskboard').addEventListener('click', (e) => openTaskBoard(e.currentTarge
 
 const COL_STATE = { doing: ['st-busy', '作業中'], wait: ['st-waiting', '待ち'], todo: ['st-idle', '未着手'], done: ['st-done', '完了'] };
 const paintState = (node, [cls, label]) => { if (!node) return; const c = `state ${cls}`; if (node.className !== c) node.className = c; setText(node, label); };
-const SESS_FILTERS = [['all', 'すべて'], ['active', '動いている'], ['waiting', '許可待ち'], ['idle', '待機']];
+const SESS_FILTERS = [['all', 'すべて'], ['active', '動いている'], ['waiting', '許可待ち'], ['background', '裏で作業中'], ['idle', '待機']];
 const sessFilterEl = $('sess-filter');
 sessFilterEl.innerHTML = SESS_FILTERS.map(([k, label]) => `<button type="button" data-sf="${esc(k)}" aria-pressed="${k === UI.sessFilter}">${esc(label)}<b></b></button>`).join('');
 sessFilterEl.addEventListener('click', (e) => {
@@ -92,7 +93,7 @@ sessFilterEl.addEventListener('click', (e) => {
   [...sessFilterEl.children].forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
   renderSessions();
 });
-const sessMatch = (s, f) => { const [c] = sessionBadge(s); return f === 'all' || (f === 'active' && c !== 'st-idle') || (f === 'waiting' && c === 'st-waiting') || (f === 'idle' && c === 'st-idle'); };
+const sessMatch = (s, f) => { const [c] = sessionBadge(s); return f === 'all' || (f === 'active' && c !== 'st-idle') || (f === 'waiting' && c === 'st-waiting') || (f === 'background' && c === 'st-bg') || (f === 'idle' && c === 'st-idle'); };
 $('sessions').addEventListener('click', (e) => {
   const b = e.target.closest('[data-fold]');
   if (!b) return;
@@ -100,7 +101,7 @@ $('sessions').addEventListener('click', (e) => {
   writePref('collapsed', JSON.stringify([...UI.collapsed]));
   renderSessions();
 });
-const SB_ORDER = { 'st-waiting': 0, 'st-busy': 1, 'st-idle': 2 };
+const SB_ORDER = { 'st-waiting': 0, 'st-busy': 1, 'st-bg': 2, 'st-idle': 3 };
 function renderSessions() {
   const el = $('sessions'), scoped = SESSIONS.filter((s) => inScope(s.project));
   [...sessFilterEl.children].forEach((b) => setText(b.lastElementChild, String(scoped.filter((s) => sessMatch(s, b.dataset.sf)).length)));
@@ -932,7 +933,10 @@ function openRobot(id, opener) {
   const showing = !!rbState.id;
   rbState.id = id;
   if (showing) { renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
-  if (!has3D) { showOverlay(rbEl); renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
+  // no 3D, or the robot is not in the scene (another floor, another room of the one-room view): the card alone
+  if (!has3D || !robots.some((x) => x.def.id === id)) {
+    if (!zoom.zoomed) zoom.returnPose = null;   // nothing to fly back from when the card closes
+    showOverlay(rbEl); renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
   zoomTo(robotPose(id), opener, () => {
     if (rbState.id !== id) return;
     showOverlay(rbEl);

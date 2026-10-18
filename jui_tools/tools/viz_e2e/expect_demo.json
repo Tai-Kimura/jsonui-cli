@@ -191,7 +191,7 @@
     "JsonUIDocument/2 セッション · 許可待ち 1 · 作業中 1"
    ],
    "scope": "プロジェクトすべて",
-   "sessFilter": "すべて7動いている5許可待ち2待機2",
+   "sessFilter": "すべて7動いている5許可待ち2裏で作業中0待機2",
    "specGroups": [
     "shop-app/5",
     "JsonUIDocument/1"
@@ -365,6 +365,7 @@
    "すべて7",
    "動いている5",
    "許可待ち2",
+   "裏で作業中0",
    "待機2"
   ],
   "groupNotes": [

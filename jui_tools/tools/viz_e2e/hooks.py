@@ -82,6 +82,7 @@ def rooms_doors():
         (2.0, base(sids[1], room[1], "Stop")),
         (3.0, pre(sids[2], room[2], "Write", {"file_path": f"{room[2]}/a.txt", "content": "x"}, 2)),
         (3.2, base(sids[2], room[2], "PermissionRequest", tool_name="Write", tool_input={"file_path": f"{room[2]}/a.txt"})),
+        (3.5, base(sids[7], room[3], "Stop", background_tasks=[{"id": "bash_1", "type": "bash"}])),   # waits on background work
         (4.0, base(sids[5], room[0], "CwdChanged")),     # jsonui-cli/ to shop-app/: the room next door
         (12.0, base(sids[4], room[3], "CwdChanged")),    # shop-app/ (back row) to admin-web/ in front of it
         (14.0, base(sids[8], room[0], "SessionEnd", reason="exit")),   # out of a back-row room: through the room in front

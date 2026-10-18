@@ -161,7 +161,9 @@ async def scenario_two_projects(browser, srv, out, failures, res):
     await page.wait_for_function("() => document.getElementById('tb').hidden")
     res["panelEmpty"] = await page.evaluate("() => ({ specs: document.getElementById('spec-list').textContent, tests: document.getElementById('tests').textContent, tasks: document.getElementById('tasks').textContent })")
 
-    # The server goes away and comes back with a new token: "reconnecting", then back, same page.
+    # Back to the floor (a project picked shows its room alone, 10-18), then: the server goes away and comes back with
+    # a new token: "reconnecting", then back, same page.
+    await page.click("#room-back")
     srv.stop()
     await wait(page, "() => document.querySelector('.chip.demo').textContent === '再接続中…'", timeout=15000)
     res["reconnecting"] = True

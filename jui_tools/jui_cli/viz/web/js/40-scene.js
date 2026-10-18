@@ -724,7 +724,11 @@ function livePlan(R) {
   const key = `${d.room}:${d.pos.join()}`;
   if (key === R.seatKey) return;
   const root = R.robot.root, here = [root.position.x, root.position.z];
-  if (R.seatKey && R.room !== d.room) {
+  const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
+  const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
+  R.rect = rect;
+  if (moved) { root.position.x = d.pos[0]; root.position.z = d.pos[1]; R.path = []; R.jumps = (R.jumps || 0) + 1; }
+  else if (R.seatKey && R.room !== d.room) {
     // to another room: finish the step it is on, then through the doors (never a straight line through a wall)
     const next = R.path.length ? R.path[0] : here;
     R.path = [...(R.path.length ? [next] : []), ...liveRoute(roomAtPoint(next), d.room), d.pos];
@@ -934,7 +938,7 @@ function liveRoomPose(id) {
   const b = liveBounds(id === 'all' ? null : [id]) || { c: new THREE.Vector3(0, 0.4, 0), size: 12 };
   const half = THREE.MathUtils.degToRad(camera.fov) / 2, tanH = Math.tan(half) * Math.min(1, camera.aspect || 1);
   const fit = (size, share) => (size / 2) / (tanH * share);
-  const dist = id === 'all' ? Math.max(22, fit(b.size, 0.92)) : Math.max(9, fit(b.size, 0.86));   // one room: most of the view
+  const dist = id === 'all' ? Math.max(22, fit(b.size, 0.92)) : Math.max(9, fit(b.size, (camera.aspect || 1) < 1 ? 0.7 : 0.86));   // one room: most of the view (less on a tall screen, where its corners reach out)
   return { p: b.c.clone().add(new THREE.Vector3(6.5, 15.5, 22.5).normalize().multiplyScalar(dist)), t: b.c };
 }
 /* The floor buttons (both views). Hidden while a board, the log, a zoom or a robot card covers the 3D (10-18). The
