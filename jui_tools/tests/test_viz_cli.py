@@ -81,7 +81,11 @@ def test_status_when_nothing_runs(home, capsys):
     assert main(["viz", "status"]) == 0
     assert "停止中" in capsys.readouterr().out
     assert main(["viz", "status", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"running": False}
+    info = json.loads(capsys.readouterr().out)
+    # hooks: the installer's state, so `status --json` alone tells a caller (the MCP viz_status) what is missing.
+    assert info.pop("hooks") == {"readable": True, "installed": 0, "total": 18, "broken": 0, "plugin": None,
+                                 "disableAllHooks": False}
+    assert info == {"running": False}
 
 
 def test_status_and_stop_clear_files_left_by_a_dead_server(home, capsys):
@@ -246,7 +250,9 @@ def test_serve_end_to_end(home):
             [sys.executable, str(JUI), "viz", "status", "--json"],
             env=dict(os.environ, HOME=str(home)), capture_output=True, text=True, timeout=30,
         )
-        assert json.loads(status.stdout) == {"running": True, "pid": proc.pid, "url": base + "/"}
+        info = json.loads(status.stdout)
+        assert info.pop("hooks")["total"] == 18
+        assert info == {"running": True, "pid": proc.pid, "url": base + "/"}
 
         # serve is this test's child: until we reap it, it lingers as a zombie
         # that `stop` would still see as alive. A shell reaps it at once, so
