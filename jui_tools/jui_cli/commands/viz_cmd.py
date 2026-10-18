@@ -450,6 +450,18 @@ def _write_private_json(path, data: dict) -> None:
 # ---------------------------------------------------------------- serve
 
 
+def _leave_the_launch_folder() -> None:
+    """The server lives in its own folder, not where it was launched: the folder it was started from can be
+    deleted (a git worktree removed, 10-18), and every child it starts inherits the cwd — `claude agents --json`
+    exits 1 in a deleted folder, so the agents source stayed broken until a restart."""
+    for target in (paths.viz_home(), Path.home()):
+        try:
+            os.chdir(target)
+            return
+        except OSError:
+            continue
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     from ..viz.config import load_config
 
@@ -468,6 +480,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     if not _take_lock():
         _err("起動中です（jui viz stop で止める）")
         return 1
+    _leave_the_launch_folder()
     try:
         return asyncio.run(_serve(
             config,
@@ -1113,7 +1126,7 @@ def _cmd_start(args: argparse.Namespace) -> int:
     try:
         os.fchmod(fd, 0o600)
         child = subprocess.Popen(_serve_child_argv(port), stdin=subprocess.DEVNULL, stdout=fd, stderr=fd,
-                                 start_new_session=True, close_fds=True)
+                                 start_new_session=True, close_fds=True, cwd=str(paths.viz_home()))
     finally:
         os.close(fd)
 
@@ -1158,27 +1171,63 @@ def _cmd_stop(args: argparse.Namespace) -> int:
     if state == "starting":
         _err("起動の途中です。少し待ってから jui viz stop を再実行してください")
         return 1
-    if state == "unresponsive":
-        _err(f"pid {pid} が /health に応答しないため止めません（viz か確かめられません）。少し待って再実行してください")
+    if state == "unresponsive" and not _our_viz_serve(pid):
+        # No /health answer, and the pid is not our `viz serve` (its command line or its HOME): not ours to signal.
+        _err(f"pid {pid} が /health に応答しないうえ、この HOME の viz サーバーとも確かめられないため止めません")
         return 1
-    try:
-        os.kill(pid, signal.SIGTERM)  # the pid this tool wrote to its own pid file
-    except ProcessLookupError:
+    # the pid this tool wrote to its own pid file; when it does not answer /health, also its command line and HOME
+    how = _terminate(pid)
+    if how is None:
         _clear_runtime_files(pid)
         print("jui viz: 起動していません")
         return 0
-    except PermissionError as exc:
-        _err(f"pid {pid} を止められません: {exc}")
-        return 1
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline and _pid_alive(pid):
-        time.sleep(0.05)
-    if _pid_alive(pid):
-        _err(f"pid {pid} が 5 秒で止まりませんでした")
+    if how == "alive":
+        _err(f"pid {pid} を止められませんでした（TERM の {STOP_TERM_SEC} 秒後に KILL しても残っています）")
         return 1
     _clear_runtime_files(pid)
-    print(f"jui viz: 停止しました（pid {pid}）")
+    note = "（/health に応答しないため、pid とコマンド行で確かめて止めました）" if state == "unresponsive" else ""
+    note += f"（TERM の {STOP_TERM_SEC} 秒後に KILL しました）" if how == "killed" else ""
+    print(f"jui viz: 停止しました（pid {pid}）{note}")
     return 0
+
+
+#: `stop` sends TERM, waits this long, then KILL to a pid it verified as ours (10-18: an old server held on past 5 s
+#: three times and was killed by hand; the cause did not reproduce on 2.3.0, so stop no longer depends on it).
+STOP_TERM_SEC = 5
+STOP_KILL_SEC = 3
+
+
+def _our_viz_serve(pid: int) -> bool:
+    """The pid runs `… viz serve …` with this HOME (the same rule as an orphan from before /health named its home)."""
+    argv = _command_line(pid).split()
+    if not any(a == "viz" and b == "serve" for a, b in zip(argv, argv[1:])):
+        return False
+    return _process_home(pid) == str(Path.home())
+
+
+def _terminate(pid: int):
+    """TERM, then KILL after STOP_TERM_SEC. None: it was already gone; "stopped" / "killed"; "alive": still there."""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return None
+    except PermissionError:
+        return "alive"
+    deadline = time.monotonic() + STOP_TERM_SEC
+    while time.monotonic() < deadline and _pid_alive(pid):
+        time.sleep(0.05)
+    if not _pid_alive(pid):
+        return "stopped"
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return "stopped"
+    except PermissionError:
+        return "alive"
+    deadline = time.monotonic() + STOP_KILL_SEC
+    while time.monotonic() < deadline and _pid_alive(pid):
+        time.sleep(0.05)
+    return "alive" if _pid_alive(pid) else "killed"
 
 
 def _stop_orphan(args: argparse.Namespace) -> int:
@@ -1190,21 +1239,15 @@ def _stop_orphan(args: argparse.Namespace) -> int:
     if pid is None:
         print("jui viz: 起動していません")
         return 0
-    try:
-        os.kill(pid, signal.SIGTERM)  # /health on the port named it AND its command line is `viz serve`
-    except ProcessLookupError:
+    how = _terminate(pid)   # /health on the port named it AND its command line is `viz serve` AND it is ours
+    if how is None:
         print("jui viz: 起動していません")
         return 0
-    except PermissionError as exc:
-        _err(f"pid {pid} を止められません: {exc}")
+    if how == "alive":
+        _err(f"pid {pid} を止められませんでした（TERM の {STOP_TERM_SEC} 秒後に KILL しても残っています）")
         return 1
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline and _pid_alive(pid):
-        time.sleep(0.05)
-    if _pid_alive(pid):
-        _err(f"pid {pid} が 5 秒で止まりませんでした")
-        return 1
-    print(f"jui viz: 状態ファイルの無い viz サーバーを停止しました（pid {pid}、ポート {port}）")
+    note = f"（TERM の {STOP_TERM_SEC} 秒後に KILL しました）" if how == "killed" else ""
+    print(f"jui viz: 状態ファイルの無い viz サーバーを停止しました（pid {pid}、ポート {port}）{note}")
     return 0
 
 
