@@ -10,6 +10,9 @@ import json
 import re
 from dataclasses import dataclass, field
 
+# Taken out of every environment a suite gives its server and its hooks: each would point the throwaway server at the
+# real one's state (its folder, the progress a runner writes, the saved results) — 10-18.
+ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 LAUNCH_ARGS = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
 DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
 PHONE = {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 2, "is_mobile": True, "has_touch": True}

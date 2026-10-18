@@ -251,7 +251,10 @@ function liveTestsFor(projectId) {
   const mine = projectId ? runs.filter((r) => r.projectId === projectId) : runs.filter((r) => !LIVE.uiReady || inScope(r.projectId));   // UI exists once 70-main.js ran
   const pickFrom = projectId || LIVE.uiReady ? mine : runs;   // narrowed to a project: only its runs
   if (!pickFrom.length) return EMPTY_TESTS;
-  const run = pickFrom.find((r) => r.status === 'running') || [...pickFrom].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+  return liveRunView(pickFrom.find((r) => r.status === 'running') || [...pickFrom].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0]);
+}
+/* One run as the panels show it (the test pane, and a robot's card). */
+function liveRunView(run) {
   const cases = Array.isArray(run.cases) ? run.cases : [];
   const rows = cases.map((c) => ({ name: String(c.name || ''), branch: '', status: CASE_STATUS[c.status] || 'pending', attempt: 1, step: c.status === 'running' ? 'このケースを実行中' : '' }));
   const passed = rows.filter((r) => r.status === 'passed').length;
@@ -264,7 +267,16 @@ function liveTestsFor(projectId) {
     rows, passed, failed, runningIdx, retrying: false, active: run.status === 'running', statusText,
     file: String(run.file || run.command || ''), device: dev ? String(dev.name) : ({ ios: 'iOS', android: 'Android', web: 'Web' }[run.platform] || ''),
     who: labelOf(run.agentId), project: run.projectId, runStatus: run.status, command: String(run.command || ''),
+    id: String(run.id), startedAt: Number(run.startedAt) || 0,
   };
+}
+/* A robot's own runs for its card (requester, 10-18: "ロボットのパネルにもテストの経過表示できない？"): only runs
+   that robot started — the one running first, then the latest — at most ROBOT_RUNS_MAX. */
+const ROBOT_RUNS_MAX = 3;
+function robotRuns(label) {
+  const runs = (Array.isArray(LIVE.slices.tests) ? LIVE.slices.tests : []).filter((r) => r && r.id && labelOf(r.agentId) === label);
+  runs.sort((a, b) => (b.status === 'running') - (a.status === 'running') || (b.startedAt || 0) - (a.startedAt || 0));
+  return runs.slice(0, ROBOT_RUNS_MAX).map(liveRunView);
 }
 
 /* ---------- permission prompts (plan 04 Permission, plan 08 §4 → the demo's perm rows) ---------- */

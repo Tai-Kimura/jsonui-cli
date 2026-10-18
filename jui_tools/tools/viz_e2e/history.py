@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
 
 SID = "e2e00000-0000-4000-8000-0000000000b7"
 CWD = "/work/hist-app"
@@ -126,7 +126,7 @@ async def run_history(pw, out, failures):
     transcript = home / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", CWD) / f"{SID}.jsonl"
     transcript.parent.mkdir(parents=True, exist_ok=True)
     transcript.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records()))
-    base_env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME")}
+    base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)

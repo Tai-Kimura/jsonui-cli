@@ -709,6 +709,7 @@ const SOURCE = {
   },
   history() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no transcripts
 };
+const robotRuns = () => [];   // the demo's one test run is shown by the card's own a2 row
 
 /* ---------- robot states (kept even without WebGL so the panels still run) ---------- */
 const robotState = Object.fromEntries(ROBOT_DEFS.map((d) => [d.id, { state: 'idle', act: '' }]));

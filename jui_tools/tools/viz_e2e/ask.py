@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
 
 FRUIT = {"question": "好きな果物は？ <b>太字</b>", "header": "果物", "multiSelect": False,
          "options": [{"label": "りんご", "description": "赤くて丸い"},
@@ -52,7 +52,7 @@ async def run_ask(pw, out, failures):
     # (paths.viz_home() under the fake HOME; nothing in the environment may point it at the real server's files)
     (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
     (home / ".local" / "state" / "jui-viz" / "config.json").write_text(json.dumps({"askWaitSec": 8, "askMaxSec": 60}))
-    base_env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME")}
+    base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)

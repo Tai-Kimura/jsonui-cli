@@ -30,9 +30,18 @@ sys.path.insert(0, str(HERE))
 from playwright.async_api import async_playwright  # noqa: E402
 
 import demo  # noqa: E402
-from common import LAUNCH_ARGS, Watch, dump  # noqa: E402
+from common import ISOLATE, LAUNCH_ARGS, Watch, dump  # noqa: E402
 
 EXPECT_DEMO = HERE / "expect_demo.json"
+
+
+# The real server's progress folder (cd's gate, 10-18: driver web's jest once wrote 480 files there from a test).
+# Every suite runs in a throwaway HOME; after each, this folder must not have grown.
+REAL_PROGRESS = pathlib.Path(os.path.expanduser("~")) / ".local" / "state" / "jui-viz" / "test-progress"
+
+
+def real_progress_count() -> int:
+    return len(list(REAL_PROGRESS.glob("*.jsonl"))) if REAL_PROGRESS.is_dir() else 0
 
 
 def free_port() -> int:
@@ -93,7 +102,7 @@ class RealServer:
 
     def _start(self):
         base = os.environ.get("JUI_VIZ_E2E_SERVE", "").split() or [sys.executable, str(HERE.parents[1] / "bin" / "jui")]
-        env = dict(os.environ, HOME=str(self.home), JUI_VIZ_E2E="1")
+        env = dict({k: v for k, v in os.environ.items() if k not in ISOLATE}, HOME=str(self.home), JUI_VIZ_E2E="1")
         self.proc = subprocess.Popen(base + ["viz", "serve", "--port", str(self.port), "--replay", str(self.replay), "--speed", str(self.speed)],
                                      stdout=self.log, stderr=subprocess.STDOUT, env=env)
         import urllib.request
@@ -195,8 +204,8 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "tower"],
-                    help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; "
+    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "tower"],
+                    help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
     ap.add_argument("--record-demo", metavar="URL",
@@ -245,7 +254,16 @@ def main(argv=None) -> int:
                 await ask.run_ask(pw, out, failures)
             if a.only in (None, "live", "history"):
                 import history
+                before = real_progress_count()
                 await history.run_history(pw, out, failures)
+                if real_progress_count() > before:
+                    failures.append(f"history: the real test-progress folder grew ({before} -> {real_progress_count()})")
+            if a.only in (None, "live", "robot-tests"):
+                import robot_tests
+                before = real_progress_count()
+                await robot_tests.run_robot_tests(pw, out, failures)
+                if real_progress_count() > before:
+                    failures.append(f"robot-tests: the real test-progress folder grew ({before} -> {real_progress_count()})")
             if a.only in (None, "live", "rooms"):
                 import rooms
                 await rooms.run_rooms(pw, out, failures, RealServer)
