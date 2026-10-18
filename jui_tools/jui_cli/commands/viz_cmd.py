@@ -568,6 +568,20 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     ctx.on_hook = None if replay else on_hook
     set_source("hooks", "replay" if replay else "running")
 
+    # The near weather (10-18): off by default, and then no connection is made at all. A replay never asks.
+    from ..viz.sources import weather as weather_src
+
+    weather = None if replay else weather_src.WeatherBook()
+
+    def publish_weather() -> None:
+        ctx.state.set_slice("weather", weather.view() if weather else {"on": False})
+        status, error = weather.source() if weather else ("off", None)
+        if sources.get("weather") != {"status": status, **({"error": error} if error else {})}:
+            set_source("weather", status, error)
+
+    ctx.weather, ctx.on_weather = weather, publish_weather
+    publish_weather()
+
     in_use = f"ポート {port} は使用中です。--port で変えるか、使っているプロセスを止めてください"
     # SO_REUSEADDR stays on so a restart is not refused for a minute by the
     # last run's TIME_WAIT connections. On macOS it would also let us bind
@@ -795,8 +809,22 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     world.publish()
                     await asyncio.sleep(mock_status.INTERVAL_SEC)
 
+            async def weather_loop() -> None:
+                """While on: one query when due (at once when turned on, then every 30 min), in an executor so a
+                slow answer never holds the server; once a minute the slice again, since an answer goes stale."""
+                n = 0
+                while True:
+                    if weather.due():
+                        await loop.run_in_executor(None, weather.ask)
+                        publish_weather()
+                    elif n % 60 == 0:
+                        publish_weather()
+                    n += 1
+                    await asyncio.sleep(1)
+
             tasks.append(asyncio.create_task(tick_loop()))
             tasks.append(asyncio.create_task(mock_loop()))
+            tasks.append(asyncio.create_task(weather_loop()))
             reader_cleanup.append(stop_readers)
 
         stop = asyncio.Event()
@@ -1325,6 +1353,16 @@ def _doctor_checks() -> list[dict]:
     add("results", True, f"テストの結果を読む場所: {base}"
         + (f"（{test_results.BASE_ENV} で指定。driver 側にも同じ値が要ります）" if os.path.isabs(override) else "")
         + ("" if devices_src.find_adb() else "。adb が無いので Android の結果は取りません"))
+
+    from ..viz.sources import weather as weather_src
+
+    w_on, w_status = weather_src.load_setting()["on"], weather_src.read_status()
+    if not w_on:
+        add("weather", True, "近所の天気: オフ（外への通信はしません。ビルの全景のスイッチでオンにできます）")
+    else:
+        ok_at, err = w_status.get("lastOkAt"), w_status.get("lastError")
+        when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "まだ取れていない"
+        add("weather", not err, f"近所の天気: オン（最後に取れた時刻 {when}）" + (f"。失敗: {err}" if err else ""))
 
     if claude is not None:
         registered = _relay_registered(claude)

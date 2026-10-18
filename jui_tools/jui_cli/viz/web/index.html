@@ -57,6 +57,10 @@
         <li><span class="tl-win tl-idle" aria-hidden="true"></span>待機 — 電気が消え、影だけ</li>
         <li><span class="tl-win tl-empty" aria-hidden="true"></span>空き — 部屋が無い（真っ暗）</li>
       </ul>
+      <div class="tower-weather" id="tower-weather" hidden>
+        <button type="button" class="tw-switch" id="weather-switch" role="switch" aria-checked="false">近所の天気</button>
+        <p class="tw-note" id="weather-note">オフ — 外への通信はしません</p>
+      </div>
       <div class="live-empty" id="live-empty" hidden>
         <p class="le-title">Claude Code のセッションがまだ見えません</p>
         <p>確かめること</p>
@@ -140,6 +144,14 @@
         <div class="sec-head"><h2 id="h-tasks">タスク</h2><button type="button" class="mini-btn" id="btn-taskboard" aria-haspopup="dialog">ボードで見る</button></div>
         <p class="task-sum" id="task-sum"></p>
         <ul class="tasks" id="tasks"></ul>
+      </section>
+      <section aria-labelledby="h-settings" id="sec-settings" hidden>
+        <h2 id="h-settings">設定</h2>
+        <div class="set-weather">
+          <button type="button" class="tw-switch" id="weather-switch-panel" role="switch" aria-checked="false">近所の天気</button>
+          <p class="tw-note" id="weather-note-panel">オフ — 外への通信はしません</p>
+          <p class="set-hint">オンにすると位置の許可を求め、約 1 km に丸めた位置でサーバーが 30 分に 1 回天気を問い合わせます。見た目に出るのは、ビルの全景（部屋が 7 つ以上）です。</p>
+        </div>
       </section>
     </aside>
   </div>
