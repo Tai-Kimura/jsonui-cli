@@ -114,6 +114,16 @@ window.__dbg = {
     heavy: !!R.robot.heavy, sweat: !!(R.robot.sweat && R.robot.sweat.visible), act: R.text ? R.text.textContent : '', actShown: R.text ? getComputedStyle(R.text).display !== 'none' : false })),
   towerLines: (text) => { const f = towerNameFit(makeCanvas(8, 8).getContext('2d'), text, towerBays()[0].w - 8); return [f.size, ...f.lines]; },
   openRobot: (id) => openRobot(id, document.getElementById('scene-canvas')),
+  // the box (2.3.4): its desk, what it overlaps, the papers in it, each robot's trip and the trips' ends
+  gitBox: () => ({ room: PROPS.room, desk: !!PROPS.gitDesk, fill: PROPS.gitFill, spot: PROPS.place ? PROPS.place.git : null,
+    overlaps: gitDeskOverlaps(), ends: GITBOX.ends.slice(),
+    trips: Object.fromEntries(robots.filter((R) => R.git).map((R) => [R.def.id, { phase: R.git.phase, kind: R.git.trip.kind, sheets: R.robot.carrySheets,
+      look: R.robot.state, at: R.robot.root.position.toArray().map((v) => +v.toFixed(2)) }])),
+    said: Object.fromEntries(robots.map((R) => [R.def.id, R.text.textContent])),
+    why: Object.fromEntries(robots.map((R) => { const st = robotState[R.def.id] || {}; return [R.def.id, { trip: st.git ? { id: st.git.id, pending: st.git.pending, at: st.git.at, kind: st.git.kind } : null,
+      seen: R.gitSeen || null, git: R.git ? R.git.phase : null, path: R.path.length, pos: R.robot.root.position.toArray().map((v) => +v.toFixed(2)), desk: R.def.pos, play: !!(R.play || R.playBack || R.solo), standing: !!R.def.standing, room: R.def.room, propsRoom: PROPS.room, state: st.state }]; })) }),
+  gitLog: () => logItems.filter((e) => e.kind === 'GitPush' || e.kind === 'GitPull').map((e) => `${e.kind} ${e.what}`),
+  gitSet: (o) => { Object.assign(GITBOX, o || {}); return { ...GITBOX, ends: undefined }; },
   // the camera on a robot (10-18): its orbit, how its view was chosen, and what stands in the way now
   focus: () => {
     const R = rbState.id ? robots.find((x) => x.def.id === rbState.id) : null;

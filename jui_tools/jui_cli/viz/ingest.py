@@ -12,7 +12,7 @@ from typing import Any
 
 from pathlib import Path
 
-from . import robots
+from . import gitbox, robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .calls import CallBook, peer_name
@@ -142,6 +142,7 @@ class World:
         self.tasks = TaskBook()
         self.perms = PermissionBook()
         self.questions = QuestionBook()
+        self.git_jobs: list = []                 # (agent id, trip id, what to count) for the box (2.3.4)
         # SendMessage between two sessions here (calls.py): a session's messaging name and socket -> its id
         self.calls = CallBook()
         self._peer_names: dict[str, str] = {}
@@ -420,7 +421,8 @@ class World:
             # A new prompt: whatever the last turn left open was interrupted (Esc).
             self._clear_open(agent["id"])
             agent["promptAt"] = at   # the page ends an errand (the shredder, 10-19) that a new instruction overtakes
-            self._set(agent, at, "idle", "指示を受けた")
+            # an instruction: no trip to the box any more — the trip stays, marked stopped, for the card's 最近の git
+            self._set(agent, at, "idle", "指示を受けた", git={**agent["git"], "stopped": True} if agent.get("git") else None)
             text = f"指示 {session['lastPrompt'] or ''}".strip()
         elif kind == "PreToolUse" and tool:
             if tool == QUESTION_TOOL:   # a question for the person (both the async forward and --ask bring it)
@@ -479,6 +481,8 @@ class World:
                 self._dirty.add("tests")
             text = act
         elif kind in ("PostToolUse", "PostToolUseFailure") and tool:
+            if tool == "Bash":
+                self._git_trip(agent, sid, cwd, tool_input, payload.get("tool_response"), use_id, at)   # the box (2.3.4)
             if tool == QUESTION_TOOL:
                 card = self.questions.tool_finished(sid, use_id, tool_input, at)
                 if card is not None:
@@ -1147,6 +1151,47 @@ class World:
                     self._set(agent, at, "idle", "待機")
         self._background_cap(at)
         self._heavy(at)
+
+    # ---------------------------------------------------------------- the cardboard box: git push / pull (2.3.4)
+
+    def _git_trip(self, agent: dict, sid: str, cwd: str | None, tool_input: dict, response, use_id: str | None, at: int) -> None:
+        """A finished Bash call that pushed or pulled: the robot's trip to the box (agent["git"]), and the amount to
+        count afterwards, off the event loop (take_git_jobs / git_counted; gitbox.count_range reads only)."""
+        command = tool_input.get("command") if isinstance(tool_input.get("command"), str) else ""
+        trip = gitbox.trip_of(command, cwd, response) if command else None
+        if trip is None:
+            return
+        job = trip.pop("_count", None)
+        trip.update(id=str(use_id or at), at=at, pending=job is not None)
+        trip["label"] = gitbox.label(trip)
+        agent["git"] = trip
+        self._dirty.add("agents")
+        if job is not None:
+            self.git_jobs.append((agent["id"], trip["id"], job))
+        else:
+            self._git_event(agent, sid, trip, at)
+
+    def _git_event(self, agent: dict, sid: str, trip: dict, at: int) -> None:
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": agent["id"],
+                              "kind": "GitPush" if trip["kind"] == "push" else "GitPull", "cat": "tool", "text": gitbox.label(trip)})
+
+    def take_git_jobs(self) -> list:
+        jobs, self.git_jobs = self.git_jobs, []
+        return jobs
+
+    def git_counted(self, agent_id: str, trip_id: str, counted: dict | None, at: int) -> None:
+        """The amount of a trip, counted in an executor; dropped when the trip was replaced or cleared meanwhile."""
+        agent = self.agents.get(agent_id)
+        trip = agent.get("git") if agent else None
+        if not trip or trip.get("id") != trip_id:
+            return
+        # a new dict, never the old one changed: the published agents slice copies each agent shallowly, so a trip
+        # changed in place was the same object in the slice already sent, compared equal, and was never sent again
+        trip = {**trip, "pending": False, **({"counted": counted} if counted else {})}
+        trip["label"] = gitbox.label(trip)
+        agent["git"] = trip
+        self._dirty.add("agents")
+        self._git_event(agent, agent["sessionId"], trip, at)
 
     # ---------------------------------------------------------------- the 応答の履歴 tab (10-18)
 

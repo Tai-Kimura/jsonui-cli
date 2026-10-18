@@ -955,11 +955,17 @@ const BUILDERS = {
     const bubble = new THREE.Sprite(S.mat.alert); bubble.position.set(0.6, 1.95, 0.1); bubble.scale.set(0.42, 0.462, 1); group.add(bubble);
     return { group, update(s) { bubble.position.y = 1.95 + Math.sin(s * 4) * 0.035; } };
   },
-  carry() {
+  carry(r) {
+    // up to CARRY_MAX sheets; r.carrySheets (the box, 2.3.4: the amount of a push or a pull) shows that many, 4 otherwise
     const g = S.geo, m = S.mat, group = new THREE.Group();
     const stack = new THREE.Group(); stack.position.set(0, 0.64, 0.4); group.add(stack);
-    for (let i = 0; i < 4; i++) { const sheet = new THREE.Mesh(g.sheet, m.sheets[i]); sheet.position.y = i * 0.034; sheet.rotation.y = (i % 2 ? 1 : -1) * 0.05 * i; stack.add(sheet); }
-    return { group, update(s) { stack.position.y = 0.64 + Math.abs(Math.cos(s * 7)) * 0.03; } };
+    const sheets = [];
+    for (let i = 0; i < CARRY_MAX; i++) { const sheet = new THREE.Mesh(g.sheet, m.sheets[i % 4]); sheet.position.y = i * 0.034; sheet.rotation.y = (i % 2 ? 1 : -1) * 0.05 * (i % 5); stack.add(sheet); sheets.push(sheet); }
+    return { group, update(s) {
+      const n = Math.max(1, Math.min(CARRY_MAX, r && Number.isFinite(r.carrySheets) ? r.carrySheets : 4));
+      sheets.forEach((sh, i) => { sh.visible = i < n; });
+      stack.position.y = 0.64 + Math.abs(Math.cos(s * 7)) * 0.03;
+    } };
   },
   done() {
     const group = new THREE.Group();
@@ -981,6 +987,7 @@ const BUILDERS = {
     };
   },
 };
+const CARRY_MAX = 12;
 function ensureProps(r, state) {
   if (r.props[state] || !BUILDERS[state]) return;
   const pr = BUILDERS[state](r);

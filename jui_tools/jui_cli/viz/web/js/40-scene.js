@@ -731,7 +731,7 @@ function livePlan(R) {
   const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
   const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
   R.rect = rect;
-  if (R.shred || R.play || R.brk) {   // the shredder's errand and a break (10-19) keep their path as play does: shredStop / brkStop walk it to this seat
+  if (R.shred || R.play || R.brk || R.git) {   // the shredder's errand, a break (10-19) and a git trip (2.3.4) keep their path as play does: shredStop / brkStop / gitStop walk it to this seat
     // At play (2.3.1): the path is the game's. Taking it sent a player to its new desk, and there liveWalk read the
     // empty path as "at the spot" and it played from its desk (e2e, 1 run in 3). The game ends on its own reasons;
     // playStop then walks it to this seat (through the doors when the room changed).
@@ -773,6 +773,12 @@ function liveWalk(R, dt, nowMs) {
     const P = PROPS.shredder, ry = P ? Math.atan2(P.x - root.position.x, P.z - root.position.z) : Math.PI;
     root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * 6);
     return 'shredding';
+  }
+  if (!next && R.git && R.git.phase === 'at') {                  // at the box (2.3.4): no desk of its own, facing the box
+    if (R.robot.desk) R.robot.desk.visible = false;
+    const q = R.git.desk, ry = Math.atan2(q[0] - root.position.x, q[1] - root.position.z);
+    root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * 6);
+    return 'gitbox';
   }
   if (!next && R.playBack) R.playBack = false;                    // back at its desk
   if (!next) {
@@ -900,7 +906,7 @@ function playMove(G, left, nowSec) {
   }
 }
 const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
-  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo && !R.brk && !R.shred;   // nothing starts on the way to the shredder
+  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo && !R.brk && !R.shred && !R.git;   // nothing starts on the way to the shredder or the git box (2.3.4)
 /* Why a robot stops (null: it does not): the reasons the requester's "walked up and went back" can be told by. Only a
    desk in another room stops it now; a desk that moves within the room (another session came or went and the room
    was laid out again — common with many sessions) no longer does: it walks back to the new desk afterwards. */
@@ -1043,6 +1049,7 @@ function liveUpdateRobots(nowSec, dt) {
   const now = vizNow();
   playTick(nowSec, now);
   brkTick(nowSec, now);
+  gitTick(nowSec);   // the box (2.3.4): trips to the box and back
   const calls = callsByLabel();
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
@@ -1054,11 +1061,15 @@ function liveUpdateRobots(nowSec, dt) {
     if (how === 'gone') continue;
     if (how === 'shredding') shredAt(R, nowSec);
     const playing = !!(R.play || R.playBack || R.brk || R.shred);
-    R.robot.lampState = playing ? st.state : null;   // to, at and back from play: the real state's lamp
-    const vis = how === 'walking' ? (playing ? 'stroll' : 'carry') : how === 'playing' || how === 'shredding' ? 'idle' : st.state;
+    R.robot.lampState = playing || R.git ? st.state : null;   // to, at and back from play, a break, the shredder or the box: the real state's lamp
+    const vis = R.git ? gitLook(R) : how === 'walking' ? (playing ? 'stroll' : 'carry') : how === 'playing' || how === 'shredding' ? 'idle' : st.state;
     if (vis !== R.robot.state) setRobotState(R.robot, vis);
-    // what it deleted stays over its head through the errand and SHRED.labelMs after (the turn's end replaces the act)
-    const act = st.shred && (R.shred || vizNow() - st.shred.at < SHRED.labelMs) ? `${st.shred.ok ? 'シュレッダー' : '削除できず'} ${st.shred.label}` : st.act;
+    // over its head: the errand under way says its own line (one robot never runs both, gitTick / shredTick); else, of
+    // what it deleted (SHRED.labelMs after) and the box's line (GITBOX.showMs after), the newer one; else what it does
+    const shredLine = st.shred && (R.shred || vizNow() - st.shred.at < SHRED.labelMs) ? `${st.shred.ok ? 'シュレッダー' : '削除できず'} ${st.shred.label}` : '';
+    const gitLine = gitSaid(R, st);
+    const act = R.shred ? shredLine : R.git ? gitLine || st.act
+      : shredLine && gitLine ? (st.shred.at >= (st.git.at || 0) ? shredLine : gitLine) : shredLine || gitLine || st.act;
     if (act !== R.act) { R.act = act; R.text.textContent = act; }
     updateRobot(R.robot, nowSec, dt);
     if (R.tiltUntil && R.robot.head) {   // a deletion that found nothing: a puzzled tilt of the head
@@ -1094,9 +1105,9 @@ function liveSoloSync() {
    view, PROPS.max robots or fewer); robots on a break walk to them (BRK below). Where the three stand: propsPlace. */
 const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
   boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9,   // the robots' scale (they stand about 1 m)
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [] };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null };
 const PROPS_EMPTY = { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0,
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [] };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null };
 function woodTexture(dark) {
   const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
   const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
@@ -1163,6 +1174,7 @@ function propsBuild(id) {
   vac.userData.heading = PROPS.rng() * Math.PI * 2;
   g.add(vac); PROPS.vac = vac;
   PROPS.shredder = shredderBuild(r, g);
+  gitDeskBuild(id, g);   // the cardboard box on its desk (2.3.4)
   propsBoxes(0, true);
   const start = propsSpot();
   vac.position.set(start[0], 0, start[1]);
@@ -1184,8 +1196,8 @@ function propsBoxes(nowSec, force) {
   const s = PROPS.server.position;
   const half = 0.42 * PROPS.serverScale;
   PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
-  const P = PROPS.place;   // the booth and the machine with the spot in front of it (10-19)
-  PROPS.boxes.push([P.booth.x0, P.booth.x1, P.booth.z0, P.booth.z1], [P.vend.x0, P.vend.x1, P.vend.z0, P.vend.spot[1] + 0.3]);
+  const P = PROPS.place;   // the booth and the machine with the spot in front of it (10-19), the box's desk (2.3.4)
+  PROPS.boxes.push([P.booth.x0, P.booth.x1, P.booth.z0, P.booth.z1], [P.vend.x0, P.vend.x1, P.vend.z0, P.vend.spot[1] + 0.3], P.git.rect);
 }
 function propsClearAt(x, z) {
   const a = propsArea(), m = PROPS.radius + 0.06;
@@ -1199,6 +1211,159 @@ function propsSpot() {
     if (propsClearAt(x, z)) return [x, z];
   }
   return [a.x1, a.z1];
+}
+/* ---------- the cardboard box: git push / pull (2.3.4, requester 10-19) ----------
+   "部屋拡大の時に…机おいてその上にダンボール箱を設置 Gitのプッシュとかの場合はダンボールにコミットしたコード量に応じて書類をロボットが
+   入れに行く(表示でコミットしたブランチ名とか情報を出す) 逆にプルした時は箱から書類を持って机に帰る", "場所は真ん中じゃなくてもいいよ
+   他のアイテムと被らないように気をつけてくれればはしっこでも良い".
+   Where: one desk with a box, only in the one-room view (it is one of PROPS), against the left wall, its middle
+   GITBOX.fromBack from the back wall: past the back-left corner (the smoking booth, BOOTH 2.6 x 2.0, and the point in
+   front of its door, booth.way[0] = z1 + 0.7, kept clear by 0.5 as the breaks arm draws it), short of the cork board,
+   the left door and the easel at the front left. The left strip is kept clear of desks (SEAT.left, SEAT_SOLO.left); no
+   door, aisle or play spot is on it. It is one row of propsPlace (PROPS.place.git: desk, stand, rect), so the breaks
+   arm's 12 room configs and gitDeskOverlaps both see it, and the vacuum keeps off it (propsBoxes).
+   A trip, a break (or play) and the shredder's errand never share a robot: playIdle is false on a trip or an errand;
+   the one that comes second waits for the first to end — a trip while it is fresh (GITBOX.freshMs), a deletion up to
+   SHRED.waitSec (then it is dropped, as it is for a break). gitTick runs before shredTick in a frame, so both cannot
+   start in one frame.
+   What: the server's agent.git (gitbox.py: a push or a pull a session's Bash ran, its branch, commits and lines).
+   A robot in the room up close walks to the box with a stack as thick as the push (1 to CARRY_MAX sheets), puts it in
+   and walks back empty; for a pull it walks there empty and comes back with the stack. Nothing to pull (up to date):
+   back empty. Rejected: it walks back with its stack. Its line over its head shows the trip's label for GITBOX.showMs.
+   It stops at once — walking back — on a call, a question or a permission (waiting), an instruction (the server marks
+   agent.git stopped, and keeps it for the card), leaving, or another trip, or the props going away; no trip starts while it plays, takes a break or feeds the shredder. */
+const GITBOX = { fromBack: 4.0, half: [0.33, 0.66], stand: 0.95, atSec: 1.4, freshMs: 60_000, showMs: 20_000, ends: [] };
+function gitDeskSpot(rm) {
+  const x = rm.x0 + 0.48, z = rm.z0 + GITBOX.fromBack, [hx, hz] = GITBOX.half;
+  return { desk: [x, z], stand: [x + GITBOX.stand, z], rect: [x - hx, x + hx, z - hz, z + hz] };
+}
+function gitDeskBuild(id, g) {
+  const sp = PROPS.place.git, desk = new THREE.Group(), wood = toon('#b98a5e'), card = toon('#c99a62'), cardDark = toon('#a97c48');
+  const [hx, hz] = GITBOX.half;
+  const top = new THREE.Mesh(new RoundedBoxGeometry(hx * 2, 0.06, hz * 2, 1, 0.02), wood); top.position.y = 0.7; desk.add(top);
+  for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.68, 0.06), wood); leg.position.set(lx * (hx - 0.06), 0.34, lz * (hz - 0.06)); desk.add(leg);
+  }
+  // the box: open at the top, four flaps out, the papers inside (their height is PROPS.gitFill)
+  const box = new THREE.Group(); box.position.y = 0.73; desk.add(box);
+  const bw = 0.5, bh = 0.32, bd = 0.62, t = 0.02;
+  for (const [w, d, x, z] of [[bw, t, 0, -bd / 2], [bw, t, 0, bd / 2], [t, bd, -bw / 2, 0], [t, bd, bw / 2, 0]]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(w, bh, d), card); side.position.set(x, bh / 2, z); box.add(side);
+  }
+  const bottom = new THREE.Mesh(new THREE.BoxGeometry(bw, t, bd), cardDark); bottom.position.y = t / 2; box.add(bottom);
+  for (const [w, d, x, z, rx, rz] of [[bw, 0.16, 0, -bd / 2 - 0.07, -0.7, 0], [bw, 0.16, 0, bd / 2 + 0.07, 0.7, 0], [0.16, bd, -bw / 2 - 0.07, 0, 0, 0.7], [0.16, bd, bw / 2 + 0.07, 0, 0, -0.7]]) {
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(w, t, d), cardDark); flap.position.set(x, bh, z); flap.rotation.set(rx, 0, rz); box.add(flap);
+  }
+  const papers = new THREE.Mesh(new THREE.BoxGeometry(bw - 0.08, 1, bd - 0.1), toon('#f4efe3')); papers.position.y = t; box.add(papers);
+  desk.position.set(sp.desk[0], 0, sp.desk[1]);
+  desk.userData.gitDesk = true;
+  g.add(desk);
+  PROPS.gitDesk = { group: desk, papers };
+  if (PROPS.gitFill === null) PROPS.gitFill = 0.35;
+  gitFillShow();
+}
+function gitFillShow() {
+  if (!PROPS.gitDesk) return;
+  const h = Math.max(0.02, Math.min(1, PROPS.gitFill)) * 0.26, p = PROPS.gitDesk.papers;
+  p.scale.y = h; p.position.y = 0.02 + h / 2;
+}
+/* How many sheets a trip carries: 1 to CARRY_MAX, by the lines it changed (added + removed), 0 for nothing. */
+function gitSheets(trip) {
+  if (!trip || ['uptodate', 'failed', 'deleted', 'unknown'].includes(trip.status)) return 0;
+  if (trip.status === 'tag') return 1;
+  const c = trip.counted || {}, lines = (c.ins || 0) + (c.dels || 0);
+  if (!c.ins && !c.dels) return 3;   // not counted: a modest stack
+  return Math.max(1, Math.min(CARRY_MAX, 1 + Math.round(Math.log2(1 + lines / 10))));
+}
+function gitEnd(entry) {
+  GITBOX.ends.push(entry);
+  if (GITBOX.ends.length > 30) GITBOX.ends.shift();
+}
+function gitStop(R, why, nowSec) {
+  if (!R.git || R.git.phase === 'back') return;
+  gitEnd({ id: R.def.id, kind: R.git.trip.kind, phase: R.git.phase, why, at: +nowSec.toFixed(1) });
+  R.git.phase = 'back'; R.git.stopped = why;
+  const p = R.robot.root.position, from = roomAtPoint([p.x, p.z]);
+  R.path = from && from !== R.def.room ? [...liveRoute(from, R.def.room), R.def.pos] : [R.def.pos];
+}
+function gitTick(nowSec) {
+  for (const R of robots) {
+    const st = robotState[R.def.id] || { state: 'idle' }, trip = st.git;
+    if (R.git) {
+      // stop at once: a call, waiting (a question or a permission), an instruction or another trip, leaving
+      const why = R.robot.call ? 'call' : st.state === 'waiting' ? 'waiting' : !trip || trip.stopped ? 'cleared' : trip.id !== R.git.trip.id ? 'replaced'
+        : LIVE.leaving[R.def.id] ? 'leaving' : PROPS.room !== R.def.room ? 'props' : null;   // props: the box went away (the floor, a bigger room)
+      if (why) gitStop(R, why, nowSec);
+      if (R.git.phase === 'going' && !R.path.length) { R.git.phase = 'at'; R.git.until = nowSec + GITBOX.atSec; }
+      if (R.git.phase === 'at' && nowSec >= R.git.until) {
+        const k = R.git.trip.kind, rejected = R.git.trip.status === 'rejected';
+        if (k === 'push' && !rejected) { PROPS.gitFill = Math.min(1, (PROPS.gitFill || 0) + R.git.sheets / 30); R.git.sheets = 0; }
+        if (k === 'pull') { R.git.sheets = gitSheets(R.git.trip); PROPS.gitFill = Math.max(0.05, (PROPS.gitFill || 0) - R.git.sheets / 30); }
+        gitFillShow();
+        gitEnd({ id: R.def.id, kind: k, phase: 'at', why: rejected ? 'rejected' : 'done', at: +nowSec.toFixed(1) });
+        R.git.phase = 'back'; R.path = [R.def.pos];
+      }
+      if (R.git.phase === 'back' && !R.path.length) R.git = null;   // home
+      continue;
+    }
+    if (!trip || trip.id === R.gitSeen || trip.pending) continue;
+    if (trip.stopped) { R.gitSeen = trip.id; continue; }               // an instruction came before it could start
+    const deskHere = PROPS.gitDesk && PROPS.room === R.def.room && !R.def.standing;
+    // an old one (a reload) or no box in sight: its line only, never later; busy now (walking to a new desk, playing,
+    // a call, a question, a break, the shredder): it waits — still fresh, the trip starts once the robot is free
+    if (vizNow() - (trip.at || 0) > GITBOX.freshMs || !deskHere) { R.gitSeen = trip.id; continue; }
+    if (R.play || R.playBack || R.brk || R.shred || R.solo || R.path.length || LIVE.leaving[R.def.id] || R.robot.call || st.state === 'waiting') continue;
+    R.gitSeen = trip.id;
+    const sp = PROPS.place.git;
+    R.git = { trip, phase: 'going', desk: sp.desk, sheets: trip.kind === 'push' ? gitSheets(trip) : 0, t0: nowSec };
+    R.path = [sp.stand];
+  }
+}
+/* The robot's look on a trip: a stack while it carries (to the box for a push; back for a pull, or a rejected push). */
+function gitLook(R) {
+  const g = R.git, push = g.trip.kind === 'push', rejected = g.trip.status === 'rejected';
+  R.robot.carrySheets = g.phase === 'back' ? (push ? (rejected ? gitSheets(g.trip) : 0) : g.sheets) : push ? gitSheets(g.trip) : 0;
+  if (g.phase === 'at') return push ? 'carry' : 'idle';
+  return R.robot.carrySheets > 0 ? 'carry' : 'stroll';
+}
+/* The line over the robot: the trip's label while it is on its way, and for GITBOX.showMs after the push / pull. */
+function gitSaid(R, st) {
+  const trip = st.git;
+  if (!trip || !trip.label || (trip.stopped && !R.git)) return '';
+  return R.git || vizNow() - (trip.at || 0) < GITBOX.showMs ? trip.label : '';
+}
+/* What the box's desk overlaps in its room (the arm, and dd's check against the smoking room when it lands). */
+function gitDeskOverlaps() {
+  if (!PROPS.gitDesk || !PROPS.room) return null;
+  const rm = PROJECT[PROPS.room], P = PROPS.place, G = P.git, out = [];
+  const box = (q, r) => [q[0] - r, q[0] + r, q[1] - r, q[1] + r], stand = box(G.stand, 0.5);
+  const hit = (name, a) => {
+    for (const [who, b] of [['desk', G.rect], ['stand', stand]]) if (b[0] < a[1] && b[1] > a[0] && b[2] < a[3] && b[3] > a[2]) out.push(`${who} x ${name}`);
+  };
+  hit('server', box([P.server.x, P.server.z], P.server.half));
+  for (const R of robots) if (R.def.room === PROPS.room && R.def.pos && !R.def.standing) {
+    const [px, pz] = R.def.pos, F = SEAT.foot;
+    hit(`desk ${R.def.id}`, [px - F.l, px + F.r, pz - F.b, pz + F.f]);
+  }
+  const da = doorAt(rm), dh = DOOR_W / 2 + 0.3;
+  if (rm.doors && rm.doors.left) hit('left door', [rm.x0 - 0.2, rm.x0 + 1.2, da.leftZ - dh, da.leftZ + dh]);
+  if (rm.doors && rm.doors.back) hit('back door', [da.backX - dh, da.backX + dh, rm.z0 - 0.2, rm.z0 + 1.2]);
+  if (rm.doors && rm.doors.front) hit('entrance', [da.frontX - dh, da.frontX + dh, rm.z1 - 1.2, rm.z1 + 0.2]);
+  for (const side of [0, 1]) { const p = playSpotOf(rm, side); hit(`play ${side}`, [p[0] - 0.6, p[0] + 0.6, p[1] - 0.6, p[1] + 0.6]); }
+  if (rm.tests) hit('easel', [rm.x0 + 0.15, rm.x0 + 2.15, rm.z1 - 1.5, rm.z1 - 0.3]);
+  const kw = Math.min(rm.z1 - rm.z0 - 1.4, 2.6), cz = (rm.z0 + rm.z1) / 2;
+  const kz = rm.doors && rm.doors.left ? Math.min(cz, da.leftZ - DOOR_W / 2 - 0.25 - kw / 2) : cz;
+  hit('cork board', [rm.x0 - 0.1, rm.x0 + 0.9, kz - kw / 2, kz + kw / 2]);
+  // the smoking booth and the vending machine (2.3.3, propsPlace) with the walks to them, drawn as the breaks arm draws them
+  hit('smoking booth', [P.booth.x0, P.booth.x1, P.booth.z0, P.booth.z1]);
+  hit('booth way', box(P.booth.way[0], 0.5));
+  hit('vending machine', [P.vend.x0, P.vend.x1, P.vend.z0, P.vend.z1]);
+  hit('vend customer', box(P.vend.spot, 0.5));
+  hit('vend way', box(P.vend.way[0], 0.5));
+  hit('shredder', P.shredder.box);
+  hit('shredder spot', box(P.shredder.spot, 0.5));
+  const [x0, x1, z0, z1] = G.rect;
+  return { rect: G.rect, stand: G.stand, room: [rm.x0, rm.x1, rm.z0, rm.z1], inRoom: x0 >= rm.x0 && x1 <= rm.x1 && z0 >= rm.z0 && z1 <= rm.z1, overlaps: out };
 }
 function propsTick(nowSec, dt) {
   const want = propsWanted();
@@ -1251,7 +1416,7 @@ function propsPlace(r) {
   vend.cx = (vend.x0 + vend.x1) / 2;
   vend.spot = [vend.cx, vend.z1 + 0.55, Math.PI];   // in front of it, facing it
   vend.way = [[vend.cx, vend.z1 + 1.3]];              // from the front: never round its corner
-  return { booth, server, vend, backDoor };
+  return { booth, server, vend, backDoor, git: gitDeskSpot(r), shredder: shredderSpot(r) };   // the git box's desk (2.3.4, GITBOX) and the shredder (10-19)   // the git box's desk (2.3.4, GITBOX)
 }
 function signTexture(text, bg, ink, w = 256, h = 96) {
   const cv = makeCanvas(w, h), ctx = cv.getContext('2d');
@@ -1452,9 +1617,16 @@ function brkSmoke(nowSec) {
    that found nothing: no errand, a puzzled tilt of the head. The name of what went is the robot's act (over its head,
    in its card and in the log). Not seen: a script that deletes from inside, or the user by hand. */
 const SHRED = { w: 0.8, d: 0.55, h: 1.1, bitsMax: 24, feedSec: 1.2, bitsSec: 2.0, doneSec: 3.6, tiltSec: 1.6, labelMs: 8000, every: 0.07, scale: 1.35, waitSec: 15 };   // built at 1, shown at the robots' size (as the other props)
-function shredderBuild(r, g) {
+// where it stands (pure: propsPlace's row, so the breaks arm's 12 room configs see it next to the booth, the machine
+// and the git box's desk; 2.3.4)
+function shredderSpot(r) {
   const k = SHRED.scale, W = SHRED.w * k, D = SHRED.d * k;
   const cx = (r.x0 + r.x1) / 2, x = Math.min(cx + 1.6, r.x1 - SEAT.aisleR - W), z = r.z0 + 0.12 + D / 2;
+  return { x, z, k, spot: [x - W / 2 - 0.45, z + 0.2], box: [x - W / 2, x + W / 2, z - D / 2, z + D / 2] };
+}
+function shredderBuild(r, g) {
+  const k = SHRED.scale, W = SHRED.w * k, D = SHRED.d * k;
+  const { x, z } = shredderSpot(r);
   const sg = new THREE.Group(), body = toon('#4a515c'), lid = toon('#6b7480'), bin = toon('#c7cdd6');
   const box = new THREE.Mesh(new RoundedBoxGeometry(SHRED.w, SHRED.h - 0.08, SHRED.d, 2, 0.03), body); box.position.y = (SHRED.h - 0.08) / 2; sg.add(box);
   const top = new THREE.Mesh(new RoundedBoxGeometry(SHRED.w + 0.02, 0.08, SHRED.d + 0.02, 2, 0.02), lid); top.position.y = SHRED.h - 0.04; sg.add(top);
@@ -1491,7 +1663,7 @@ function shredTick(R, st, nowSec) {
   const P = PROPS.shredder;
   // It goes when nothing else holds it: never from a break, a game, a nap or a bento still under way (it waits for them,
   // up to SHRED.waitSec), but straight from the walk back from one — a deletion is work, and work ends a break first.
-  if (R.shredPending && P && PROPS.room === R.def.room && R.robot.root.visible && !R.play && !R.brk && !R.solo && !R.shred
+  if (R.shredPending && P && PROPS.room === R.def.room && R.robot.root.visible && !R.play && !R.brk && !R.solo && !R.shred && !R.git   // a git trip (2.3.4): it waits too
       && !LIVE.leaving[R.def.id] && !R.robot.call && (st.promptAt || 0) <= want.sh.at) {
     const s0 = R.shredPending.sh;
     R.shredPending = null; R.playBack = false;

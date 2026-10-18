@@ -838,8 +838,21 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     n += 1
                     await asyncio.sleep(1)
 
+            async def git_loop() -> None:
+                """The box (2.3.4): count each push / pull's range in an executor (git, read-only, a short timeout), so
+                a slow repository never holds the server; the trip's amount follows a moment after the trip."""
+                from ..viz import gitbox
+
+                while True:
+                    for agent_id, trip_id, job in world.take_git_jobs():
+                        counted = await loop.run_in_executor(None, gitbox.count_range, job["folder"], job["old"], job["new"])
+                        world.git_counted(agent_id, trip_id, counted, now_ms())
+                        world.publish()
+                    await asyncio.sleep(0.3)
+
             tasks.append(asyncio.create_task(tick_loop()))
             tasks.append(asyncio.create_task(mock_loop()))
+            tasks.append(asyncio.create_task(git_loop()))
             tasks.append(asyncio.create_task(weather_loop()))
             reader_cleanup.append(stop_readers)
 
@@ -1424,6 +1437,10 @@ def _doctor_checks() -> list[dict]:
         ok_at, err = w_status.get("lastOkAt"), w_status.get("lastError")
         when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "まだ取れていない"
         add("weather", not err, f"近所の天気: オン（最後に取れた時刻 {when}）" + (f"。失敗: {err}" if err else ""))
+
+    # the box (2.3.4): what it can see — nothing to check, so always ok; it says where the line is
+    add("git-box", True, "git の箱: Claude のセッションが Bash で撃った git push / pull だけが見えます"
+                         "（自分のターミナル、エディタの git、GitHub での merge は見えません）")
     from ..viz import statusline_installer as sl
     from ..viz import usage as usage_mod
 
