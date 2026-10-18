@@ -24,6 +24,7 @@ from rooms import SEG_JS
 A = "e2e00000-0000-4000-8000-0000000000da"
 B = "e2e00000-0000-4000-8000-0000000000db"
 CWD = "/work/play-app"
+THIRD = "e2e00000-0000-4000-8000-0000000000dc"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 
 
@@ -63,6 +64,13 @@ async def run_play(pw, out, failures):
                        capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
 
     play = "() => window.__dbg.play()"
+
+    async def settle(page):
+        """No game in the way of the next step: end every game, nobody starts one, everyone back at a desk."""
+        await page.evaluate("() => window.__dbg.play({ p: 0, endAll: true, solo: { p: 0 } })")
+        await wait(page, "() => window.__dbg.play().list.length === 0 && window.__dbg.play().robots.every((x) => !x.back && x.path === 0 && !x.solo)",
+                   timeout=60000, label="everyone back at a desk")
+        return len((await page.evaluate(play))["ends"])
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     t0 = time.monotonic()
     try:
@@ -147,9 +155,59 @@ async def run_play(pw, out, failures):
             await wait(page, "() => window.__dbg.play().list.length === 0 && window.__dbg.play().robots.every((x) => !x.back)", timeout=40000, label=f"the {kind} game ends")
             await page.evaluate("() => window.__dbg.play({ restMinSec: 0, restMaxSec: 0 })")
         await page.screenshot(path=str(out / "after.png"))
+        # a game plays its whole length once both are there (requester, 10-18: "歩いて二人近づいただけで終わった"): the clock
+        # starts when they meet, so a game shorter than the walk still plays (with the clock from the walk's start it
+        # ended before they met)
+        n0 = await settle(page)                                         # only the ends after this point
+        await page.evaluate("() => window.__dbg.play({ p: 1, kinds: ['highfive'], restMinSec: 0, restMaxSec: 0, minSec: 2, maxSec: 2 })")
+        await wait(page, f"() => window.__dbg.play().ends.length > {n0} && window.__dbg.play().list.length === 0",
+                   timeout=40000, label="a short game that ends")
+        e = res["shortGame"] = (await page.evaluate(play))["ends"][n0]
+        check(failures, e["playedSec"] >= 1.9, f"it played its whole length after they met: {e}")
+        # another session opens a new room in the middle of a game: the rooms are laid out again and the desks in this
+        # one move, and the game goes on (before 2.3.1 a moved desk stopped it). A third robot in the same room does
+        # not move the others' desks (measured): it takes a new one.
+        await settle(page)
+        await page.evaluate("() => window.__dbg.play({ p: 1, kinds: ['highfive'], restMinSec: 0, restMaxSec: 0, minSec: 12, maxSec: 12 })")
+        await wait(page, "() => window.__dbg.play().list.some((g) => g.started)", timeout=20000, label="a game before the third robot")
+        before = {x["id"]: x["seatKey"] for x in (await page.evaluate(play))["robots"]}
+        n_ends = len((await page.evaluate(play))["ends"])
+        hook(THIRD, hook_event_name="SessionStart", source="startup", cwd="/work/play-third")
+        await wait(page, "() => window.__dbg.play().robots.length >= 3", label="the third robot")
+        await page.wait_for_timeout(2500)
+        r = await page.evaluate(play)
+        moved = [x["id"] for x in r["robots"] if x["id"] in before and x["seatKey"] != before[x["id"]]]
+        check(failures, bool(moved), f"the room was laid out again and a desk moved (else this says nothing): {before} -> {[(x['id'], x['seatKey']) for x in r['robots']]}")
+        check(failures, any(g["started"] for g in r["list"]), f"the game goes on after the desks moved: {r['list']} ends {r['ends'][n_ends:]}")
+        await wait(page, "() => window.__dbg.play().list.length === 0", timeout=30000, label="that game ends")
+        e = (await page.evaluate(play))["ends"][n_ends:]
+        res["relaidGame"] = e
+        check(failures, any(x["reason"] == "done" for x in e), f"it ended by itself, not by the move: {e}")
+        hook(THIRD, hook_event_name="SessionEnd", reason="exit", cwd="/work/play-third")
+        await wait(page, "() => window.__dbg.play().robots.length === 2 && window.__dbg.play().robots.every((x) => !x.back && x.path === 0)",
+                   timeout=60000, label="the third robot gone, both at their desks")
+        # the same, while they are still walking to the spot: they still arrive there and play (the desks' move must
+        # not take their path: in one run in three they walked to their new desks and "played" from there)
+        await settle(page)
+        n1 = len((await page.evaluate(play))["ends"])
+        await page.evaluate("() => window.__dbg.play({ p: 1, kinds: ['highfive'], restMinSec: 0, restMaxSec: 0, minSec: 6, maxSec: 6 })")
+        await wait(page, "() => window.__dbg.play().robots.filter((x) => x.play === 'going').length === 2", timeout=20000, label="both on their way")
+        hook(THIRD, hook_event_name="SessionStart", source="startup", cwd="/work/play-third")
+        await wait(page, "() => window.__dbg.play().list.some((g) => g.started) || window.__dbg.play().ends.length > " + str(n1), timeout=30000, label="they meet")
+        r = await page.evaluate(play)
+        res["goingMove"] = {"list": r["list"], "ends": r["ends"][n1:], "robots": [{k: x[k] for k in ("id", "x", "z", "seat", "play")} for x in r["robots"]]}
+        players = [x for x in r["robots"] if x["play"] == "playing"]
+        check(failures, len(players) == 2 and all(abs(x["z"] - players[0]["z"]) < 0.05 and [x["x"], x["z"]] != x["seat"] for x in players),
+              f"they met at the spot, not at their desks: {res['goingMove']}")
+        await wait(page, "() => window.__dbg.play().list.length === 0", timeout=30000, label="that game ends")
+        hook(THIRD, hook_event_name="SessionEnd", reason="exit", cwd="/work/play-third")
+        await wait(page, "() => window.__dbg.play().robots.length === 2 && window.__dbg.play().robots.every((x) => !x.back && x.path === 0)",
+                   timeout=60000, label="the third robot gone again, both at their desks")
         # its desk moves to another room in the middle of a game (cd): it walks back through the doors, never a wall
-        await page.evaluate("() => window.__dbg.play({ kinds: ['highfive'], restMinSec: 0, restMaxSec: 0, minSec: 30, maxSec: 30 })")
+        await settle(page)
+        await page.evaluate("() => window.__dbg.play({ p: 1, kinds: ['highfive'], restMinSec: 0, restMaxSec: 0, minSec: 30, maxSec: 30 })")
         await wait(page, "() => window.__dbg.play().list.some((g) => g.started)", timeout=20000, label="a game before the move")
+        res["moveStart"] = await page.evaluate(play)
         r = await page.evaluate(play)
         a_room = r["robots"][0]["room"]
         # seven robots already in the other room put A's new desk where a straight line would cross a wall
@@ -163,9 +221,26 @@ async def run_play(pw, out, failures):
         hook(A, hook_event_name="CwdChanged", cwd="/work/play-other")
         await wait(page, "() => window.__dbg.play().robots.filter((x) => x.room === '" + a_room + "').length === 1", timeout=10000, label="A's desk in another room")
         await wait(page, "() => window.__dbg.play().robots.every((x) => !x.back && x.path === 0)", timeout=30000, label="both at their desks again")
-        walk = res["move"] = await page.evaluate("() => ({ hits: window.__walk.hits.length, rooms: window.__walk.rooms })")
+        walk = res["move"] = await page.evaluate("() => ({ hits: window.__walk.hits.length, rooms: window.__walk.rooms, steps: window.__walk.steps })")
+        res["moveRobots"] = (await page.evaluate(play))["robots"]
+        res["moveEnds"] = (await page.evaluate(play))["ends"][-3:]
+        res["moveList"] = (await page.evaluate(play))["list"]
         check(failures, walk["hits"] == 0, f"no step through a wall: {walk}")
         check(failures, any(len(v) >= 2 for v in walk["rooms"].values()), f"one robot did go to another room (else the check above says nothing): {walk}")
+        # B is alone in the old room now: it naps or eats a bento at its desk, and an instruction stops that at once
+        await page.evaluate("() => window.__dbg.play({ restMinSec: 0, restMaxSec: 0, solo: { p: 1, minSec: 30, maxSec: 30 } })")
+        await wait(page, "() => window.__dbg.play().robots.some((x) => x.room === '" + a_room + "' && x.solo)", timeout=20000, label="the one alone naps or eats")
+        r = await page.evaluate(play)
+        lone = next(x for x in r["robots"] if x["room"] == a_room and x["solo"])
+        res["solo"] = lone
+        check(failures, (lone["zzz"] if lone["solo"] == "nap" else lone["bento"]) and lone["desk"] and lone["path"] == 0 and lone["lamp"] == "idle",
+              f"at its desk, the zzz or the bento shows, the lamp is idle: {lone}")
+        await page.screenshot(path=str(out / f"solo-{lone['solo']}.png"))
+        hook(B, hook_event_name="UserPromptSubmit", prompt="起きて")
+        t3 = time.monotonic()
+        await wait(page, "() => !window.__dbg.play().robots.some((x) => x.room === '" + a_room + "' && (x.solo || x.zzz || x.bento))", timeout=5000, label="it stops on the instruction")
+        res["soloStopSec"] = round(time.monotonic() - t3, 1)
+        hook(B, hook_event_name="Stop")
         # the one change the server makes without moving updatedAt: a busy session quiet for THINKING_AFTER_MS (30 s)
         # turns 考え中. Every robot in the other room gets an instruction (busy, still idle), a pair plays, and the
         # state alone must stop it when they turn 考え中.

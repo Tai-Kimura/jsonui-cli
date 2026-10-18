@@ -727,6 +727,13 @@ function livePlan(R) {
   const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
   const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
   R.rect = rect;
+  if (R.play) {
+    // At play (2.3.1): the path is the game's. Taking it sent a player to its new desk, and there liveWalk read the
+    // empty path as "at the spot" and it played from its desk (e2e, 1 run in 3). The game ends on its own reasons;
+    // playStop then walks it to this seat (through the doors when the room changed).
+    R.room = d.room; R.seatKey = key;
+    return;
+  }
   if (moved) { root.position.x = d.pos[0]; root.position.z = d.pos[1]; R.path = []; R.jumps = (R.jumps || 0) + 1; }
   else if (R.seatKey && R.room !== d.room) {
     // to another room: finish the step it is on, then through the doors (never a straight line through a wall)
@@ -815,13 +822,36 @@ function liveCallTag(R, call) {
    and none in a room with standing robots (a full room: they stand along the front wall, where the game would be).
    None under reduced motion. The e2e build can shorten the times (80-dbg.js). */
 const PLAY_KINDS = ['ball', 'highfive', 'rps'];
-const PLAY = { seed: 20261019, kinds: PLAY_KINDS, idleMs: 180_000, p: 1 / 30, games: 2, minSec: 15, maxSec: 35, restMinSec: 60, restMaxSec: 180,
-  next: 0, rng: null, list: [] };
+/* 2.3.1 (requester, 10-18: "完了とか待機でもあんまり遊ばない"): idle for a minute, about 15 s to start once two are there,
+   shorter rests, three games at a time. A robot that finished (完了) is idle again three seconds later and counts from
+   then. Robots alone in their room nap or eat a bento at their desks (SOLO). Every end is kept with its reason in
+   PLAY.ends (80-dbg.js shows them): the requester saw two walk up and go back without playing. */
+const PLAY = { seed: 20261019, kinds: PLAY_KINDS, idleMs: 60_000, p: 1 / 15, games: 3, minSec: 15, maxSec: 35, restMinSec: 45, restMaxSec: 120,
+  walkSec: 30, next: 0, rng: null, list: [], ends: [] };
+const SOLO_KINDS = ['nap', 'bento'];
+const SOLO = { p: 1 / 20, minSec: 20, maxSec: 60, kinds: SOLO_KINDS };
 const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
-  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play;
+  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo;
+/* Why a robot stops (null: it does not): the reasons the requester's "walked up and went back" can be told by. Only a
+   desk in another room stops it now; a desk that moves within the room (another session came or went and the room
+   was laid out again — common with many sessions) no longer does: it walks back to the new desk afterwards. */
+function playStopReason(R, st, room, since) {
+  if (!robots.includes(R)) return 'gone';
+  if (LIVE.leaving[R.def.id]) return 'leaving';
+  if (R.robot.call) return 'call';
+  if (st.state !== 'idle') return `state:${st.state}`;
+  if (st.since !== since) return 'updated';
+  if (R.def.room !== room) return 'room';
+  return null;
+}
+function playLog(G, reason, nowSec) {
+  PLAY.ends.push({ room: G.room, kind: G.kind, players: G.players.map((R) => R.def.id), reason, playedSec: G.t0 ? +(nowSec - G.t0).toFixed(1) : 0 });
+  if (PLAY.ends.length > 30) PLAY.ends.shift();
+}
 function playStop(R) {
   if (!R.play) return;
   R.play = null; R.robot.play = null; R.playBack = true;
+  if (R.robot.desk) R.robot.desk.visible = false;
   const p = R.robot.root.position, from = roomAtPoint([p.x, p.z]);
   R.path = from && from !== R.def.room ? [...liveRoute(from, R.def.room), R.def.pos] : [R.def.pos];   // never through a wall
 }
@@ -830,22 +860,45 @@ function playEnd(G) {
   if (G.ball) { scene.remove(G.ball); G.ball.geometry.dispose(); G.ball.material.dispose(); }
   PLAY.list.splice(PLAY.list.indexOf(G), 1);
 }
+/* The game's room laid out again (another room came or went, its robot count changed its size): the spot and the
+   players move with it, as a jump (the e2e wall check skips jumps, as it does for livePlan's), and the game goes on.
+   Without it the spot and the players stayed where the room had been — inside a wall of the new layout. */
+const playSpotOf = (rm, side) => [(rm.x0 + rm.x1) / 2 + (side ? 0.8 : -0.8), rm.z1 - 0.9];
+function playFollowRoom(G) {
+  const rm = PROJECT[G.room];
+  if (!rm) return;
+  const rect = `${rm.x0},${rm.z0},${rm.x1},${rm.z1}`;
+  if (rect === G.rect) return;
+  G.rect = rect;
+  G.players.forEach((R, i) => {
+    if (!R.play) return;
+    const to = playSpotOf(rm, i), dx = to[0] - R.play.spot[0], dz = to[1] - R.play.spot[1];
+    const root = R.robot.root;
+    root.position.x += dx; root.position.z += dz;
+    R.path = R.path.map((p) => [p[0] + dx, p[1] + dz]);
+    R.play.spot = to;
+    R.jumps = (R.jumps || 0) + 1;
+  });
+}
 function playTick(nowSec, now) {
   // stop at once: every frame
   for (const G of [...PLAY.list]) {
+    playFollowRoom(G);
+    let why = null;
     for (const R of G.players) {
-      const st = robotState[R.def.id] || { state: 'idle' };
       if (!R.play) continue;
-      if (st.state !== 'idle' || st.since !== R.play.since || R.robot.call || LIVE.leaving[R.def.id] || R.seatKey !== R.play.seatKey
-        || !robots.includes(R)) playStop(R);
+      const reason = playStopReason(R, robotState[R.def.id] || { state: 'idle' }, G.room, R.play.since);
+      if (reason) { playStop(R); why = why || `${R.def.id} ${reason}`; }
     }
     const left = G.players.filter((R) => R.play);
-    if (left.length < 2 || nowSec >= G.until) { G.players = left; playEnd(G); continue; }
     const at = left.filter((R) => R.play.phase === 'playing');
-    if (at.length === left.length && !G.t0) {                      // both there: face each other and start
-      G.t0 = nowSec;
+    if (at.length === left.length && left.length >= 2 && !G.t0) {   // all there: the game's clock starts now
+      G.t0 = nowSec; G.until = nowSec + G.len;
       left.forEach((R, i) => { R.robot.play = { kind: G.kind, t0: nowSec, side: i }; });
     }
+    const end = left.length < 2 ? `alone (${why || 'partner stopped'})` : G.t0 && nowSec >= G.until ? 'done'
+      : !G.t0 && nowSec >= G.walkUntil ? 'walk too long' : null;
+    if (end) { playLog(G, end, nowSec); G.players = left; playEnd(G); continue; }
     if (G.t0 && G.kind === 'ball') {
       if (!G.ball) { G.ball = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), toon('#ff7a3d')); scene.add(G.ball); }
       const [a, b] = left.map((R) => R.robot.root.position), u = ((nowSec - G.t0) / 1.6) % 1;
@@ -868,17 +921,47 @@ function playTick(nowSec, now) {
     if (robots.some((R) => R.def.room === room && R.def.standing)) continue;   // a full room: no aisle to play in
     if (PLAY.rng() >= PLAY.p) continue;
     const a = idle.splice(Math.floor(PLAY.rng() * idle.length), 1)[0], b = idle[Math.floor(PLAY.rng() * idle.length)];
-    const rm = PROJECT[room], cx = (rm.x0 + rm.x1) / 2, cz = rm.z1 - 0.9;
+    const rm = PROJECT[room];
     const kind = PLAY.kinds[Math.floor(PLAY.rng() * PLAY.kinds.length)];
     const len = PLAY.minSec + PLAY.rng() * (PLAY.maxSec - PLAY.minSec);
-    const G = { room, kind, players: [a, b], t0: 0, until: nowSec + len + 20, ball: null };   // +20: the walk there
+    const G = { room, kind, players: [a, b], t0: 0, len, until: 0, walkUntil: nowSec + PLAY.walkSec, ball: null, rect: `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` };
     [a, b].forEach((R, i) => {
-      const spot = [cx + (i ? 0.8 : -0.8), cz];
-      R.play = { phase: 'going', spot, partner: i ? a : b, seatKey: R.seatKey, since: robotState[R.def.id].since, len };
+      const spot = playSpotOf(rm, i);
+      R.play = { phase: 'going', spot, partner: i ? a : b, since: robotState[R.def.id].since, len };
       R.path = [spot];
-      R.restUntil = nowSec + len + 20 + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
+      R.restUntil = nowSec + PLAY.walkSec + len + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
     });
     PLAY.list.push(G);
+  }
+  soloTick(nowSec, now);
+}
+/* Alone (requester, 10-18: "一人の部屋のやつはzzzで居眠りしたり弁当食べたりさせてほしい"): a robot idle for long that has
+   no one to play with in its room naps (its head nods, zzz) or eats a bento at its desk, for a while. It stops on the
+   same reasons as a game. The state, its lamp and its label stay as they are; it never leaves its desk. */
+function soloStop(R) { R.solo = null; R.robot.solo = null; }
+function soloTick(nowSec, now) {
+  for (const R of robots) {
+    if (!R.solo) continue;
+    const st = robotState[R.def.id] || { state: 'idle' };
+    const reason = playStopReason(R, st, R.solo.room, R.solo.since) || (nowSec >= R.solo.until ? 'done' : null) || (R.path.length ? 'walking' : null);
+    if (reason) { PLAY.ends.push({ room: R.solo.room, kind: R.solo.kind, players: [R.def.id], reason, playedSec: +(nowSec - R.solo.t0).toFixed(1) }); soloStop(R); }
+  }
+  if (reduceMotion || nowSec < (SOLO.next || 0)) return;
+  SOLO.next = nowSec + 1;
+  const byRoom = {};
+  for (const R of robots) {
+    const st = robotState[R.def.id];
+    if (st && playIdle(R, st, now)) (byRoom[R.def.room] = byRoom[R.def.room] || []).push(R);
+  }
+  for (const [room, idle] of Object.entries(byRoom)) {
+    // with two or more a game comes first; one left over (or alone) may nap or eat
+    if (idle.length !== 1) continue;
+    const R = idle[0];
+    if ((R.restUntil || 0) > nowSec || PLAY.rng() >= SOLO.p) continue;
+    const kind = SOLO.kinds[Math.floor(PLAY.rng() * SOLO.kinds.length)], len = SOLO.minSec + PLAY.rng() * (SOLO.maxSec - SOLO.minSec);
+    R.solo = { kind, room, t0: nowSec, until: nowSec + len, since: robotState[R.def.id].since };
+    R.robot.solo = { kind, t0: nowSec };
+    R.restUntil = nowSec + len + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
   }
 }
 function liveUpdateRobots(nowSec, dt) {
