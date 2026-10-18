@@ -62,3 +62,18 @@ def _viz_home_follows_home(monkeypatch):
     HOME at a temporary folder must not reach the real one through a variable the machine happens to set."""
     monkeypatch.delenv("JUI_VIZ_HOME", raising=False)
     monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _cwd_is_put_back():
+    """jui viz serve leaves the folder it was launched from (2.3.1: a deleted launch folder broke its children).
+    A test that runs serve in-process takes the whole test process into a temporary viz home, which pytest
+    removes later; every test after it then starts its subprocesses in a deleted folder and fails with
+    FileNotFoundError (7 in test_web_viewmodel_base_ownership.py on the 2.3.1 release branch). Put it back."""
+    import os
+
+    before = os.getcwd()
+    try:
+        yield
+    finally:
+        os.chdir(before)
