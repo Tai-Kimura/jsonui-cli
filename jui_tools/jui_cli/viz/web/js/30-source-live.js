@@ -750,6 +750,7 @@ function liveApply(changed, replace) {
   rebuildQuestions();
   layoutRooms();   // after the permissions: a room's rank comes from this round's requests
   placeRobots();
+  renderUsage(vizNow());
   const server = LIVE.slices.server || {};
   const errs = Object.entries(server.sources || {}).filter(([, s]) => s && (s.error || s.state === 'error')).map(([k, s]) => `${k}: ${s.error || 'エラー'}`);
   LIVE.serverError = errs.join(' / ');
@@ -807,3 +808,78 @@ NET.handlers = {
   sheet(msg) { liveSheet(msg); },
   notice(level, text) { if (text) showToast(text); void level; },
 };
+
+/* ---------- the plan's usage limits (requester, 10-18) ----------
+   From the statusLine (statusline.py → POST /usage → the usage slice): the 5-hour and the weekly window, their
+   used share and when they reset. Only a terminal claude runs a statusLine (the VS Code extension does not), so
+   the value may be old: past USAGE_STALE_MS it says how old. The number and its % share one colour, from green at
+   0 to red just below 100 (the hue, not steps); at 100 — Claude Code caps the share there — the number gives way
+   to 上限到達 in the inactive colour, and the time to the reset stays. */
+const USAGE_STALE_MS = 15 * 60 * 1000;
+const USAGE_LABEL = { fiveHour: '5時間', sevenDay: '週' };
+function usageHue(pct) { return Math.round(120 * (1 - Math.max(0, Math.min(100, pct)) / 100)); }
+// The hue carries the share; the lightness is whatever keeps the text at 4.6:1 or more against the chip (12 px bold
+// needs WCAG AA 4.5): darker in light (yellow especially), lighter in dark (red especially). Reviewed 10-18.
+const USAGE_CONTRAST = 4.6;
+function usageRgb(h, s, l) {
+  const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return [f(0), f(8), f(4)].map((v) => Math.round(v * 255));
+}
+function usageLum(rgb) {
+  const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function usageContrast(a, b) { const x = usageLum(a), y = usageLum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function usageColor(pct, dark = isDark()) {
+  const fallback = dark ? '#182c47' : '#e3eaf4';   // app.css --chip; the live token when asked for the theme on screen
+  const hex = ((dark === isDark() ? readToken('--chip', fallback) : fallback).match(/^#?([0-9a-f]{6})$/i) || [0, fallback.slice(1)])[1];
+  const bg = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const h = usageHue(pct), sat = dark ? 0.7 : 0.62;
+  let l = dark ? 0.64 : 0.34, rgb = usageRgb(h, sat, l);
+  while (usageContrast(rgb, bg) < USAGE_CONTRAST && l > 0.02 && l < 0.98) { l += dark ? 0.01 : -0.01; rgb = usageRgb(h, sat, l); }
+  return `rgb(${rgb.join(', ')})`;
+}
+function usageLeft(ms) {
+  const m = Math.ceil(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return d > 0 ? `あと ${d}日 ${h}時間` : `あと ${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+}
+function usageAgo(ms) {
+  const m = Math.floor(ms / 60000);
+  return m < 60 ? `${m}分前の値` : m < 1440 ? `${Math.floor(m / 60)}時間前の値` : `${Math.floor(m / 1440)}日前の値`;
+}
+function renderUsage(now) {
+  const el = document.getElementById('usage');
+  if (!el) return;
+  const u = LIVE.slices.usage, windows = u && typeof u === 'object' && u.windows && typeof u.windows === 'object' ? u.windows : null;
+  el.hidden = SOURCE.mode !== 'live';
+  const stale = windows && Number(u.receivedAt) > 0 && now - u.receivedAt > USAGE_STALE_MS ? usageAgo(now - u.receivedAt) : '';
+  const rows = [];
+  for (const key of ['fiveHour', 'sevenDay']) {
+    const w = windows && windows[key];
+    if (!w || !Number.isFinite(Number(w.pct))) continue;
+    const pct = Number(w.pct), over = Number(w.resetsAt) <= now;   // past its reset the share is not this window's any more
+    rows.push({ key, pct, over, limit: !over && pct >= 100, left: over ? '' : usageLeft(Number(w.resetsAt) - now) });
+  }
+  const sig = JSON.stringify([rows, stale, isDark()]);
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  const span = (cls, text, color) => { const s = document.createElement(cls === 'num' || cls === 'pc' ? 'b' : 'span'); s.className = cls; s.textContent = text; if (color) s.style.color = color; return s; };
+  const out = rows.map((r) => {
+    const box = span('uw', `${USAGE_LABEL[r.key]} `);
+    box.dataset.window = r.key;
+    if (r.over) box.append(span('limit', 'リセット済み'));
+    else if (r.limit) box.append(span('limit', '上限到達'));
+    // floored: 99.5 is not 100, and 100 only ever means the limit
+    else box.append(span('num', String(Math.floor(r.pct)), usageColor(r.pct)), span('pc', '%', usageColor(r.pct)));
+    if (!r.over) box.append(`（${r.left}）`);
+    if (stale) { box.append(span('note', ` · ${stale}`)); box.title = `${stale}（ターミナルの claude が動いていると更新されます）`; }
+    return box;
+  });
+  if (!out.length) {
+    const none = span('uw none', '上限の値なし');
+    none.title = 'jui viz statusline install で入ります。値はターミナルの claude から届きます（VS Code 拡張からは届きません）';
+    out.push(none);
+  }
+  el.replaceChildren(...out);
+}

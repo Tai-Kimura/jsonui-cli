@@ -42,6 +42,15 @@ window.__dbg = {
       floorMap: Object.values(LIVE3D.rooms).some((x) => !!x.floor.material.map), sceneChildren: scene.children.length - robots.length,   // less the robots, which come and go
       memory: { ...renderer.info.memory } };
   },
+  // the usage chips as drawn (10-18): per window its text, the number's and the %'s colours, 上限到達, the note
+  usage: () => [...document.querySelectorAll('#usage .uw')].map((e) => ({ window: e.dataset.window || null, text: e.textContent,
+    num: e.querySelector('.num') ? getComputedStyle(e.querySelector('.num')).color : null,
+    pc: e.querySelector('.pc') ? getComputedStyle(e.querySelector('.pc')).color : null,
+    limit: !!e.querySelector('.limit'), limitColor: e.querySelector('.limit') ? getComputedStyle(e.querySelector('.limit')).color : null,
+    note: e.querySelector('.note') ? e.querySelector('.note').textContent : '' })),
+  usageHue: SOURCE.mode === 'live' ? usageHue : null,
+  usageColor: SOURCE.mode === 'live' ? usageColor : null,   // (pct, dark) → the colour the header would use
+  inkSoft: () => { const e = document.createElement('span'); e.style.color = 'var(--ink-soft)'; document.body.append(e); const c = getComputedStyle(e).color; e.remove(); return c; },
   floors: () => ({ floors: LIVE.floors, floor: LIVE.floor, rank: LIVE.rank, tower: TOWER.on, look: TOWER.look }),
   beats: () => (SOURCE.mode === 'demo' ? DEMO_BEATS : null),
   director: () => ({ userAt: DIRECTOR.userAt }),

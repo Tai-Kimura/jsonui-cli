@@ -70,6 +70,9 @@ NOT_A_TOOL = {
         "adb logcat / xcrun simctl spawn log stream, built by logcat_argv and simctl_log_argv",
     ("jui_tools/jui_cli/viz/sources/test_results.py", "pull", "*pull_argv(adb, serial, dest)"):
         "adb pull of the device's results folder, built by pull_argv",
+    ("jui_tools/jui_cli/viz/statusline.py", "wrapped", "command"):
+        "the user's own statusLine command, read verbatim from the --wrap argument `jui viz statusline install` wrote "
+        "from their settings.json — run as Claude Code would run it (a shell command line)",
     ("jui_tools/jui_cli/viz/sources/agents_cli.py", "poll_once", "claude"):
         "the Claude Code CLI, located by shutil.which('claude') — `claude agents --json` for the session list",
 }
