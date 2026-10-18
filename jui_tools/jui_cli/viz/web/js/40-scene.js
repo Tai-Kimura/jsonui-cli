@@ -2187,6 +2187,47 @@ function placeTag(el, p) {
   const x = ((tmpV.x + 1) / 2) * canvas.clientWidth, y = ((1 - tmpV.y) / 2) * canvas.clientHeight;
   el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
 }
+/* Robots' name tags kept apart on screen (10-19): two robots close by (at play, in the smoking booth, at desks side
+   by side) put their tags on each other and the one behind could not be read. Each frame, nearest first, a tag that
+   would cross one already placed moves up just above it; the move eases (no flicker when the order swaps). Sizes
+   are read again only when the text changes or every TAGS.measureMs, all reads before all writes (one layout). A
+   robot showing じゃんけん lifts its tag clear of the hand. Cost per frame: TAGS.stats (the e2e reads it). */
+const TAGS = { gap: 3, ease: 0.35, measureMs: 500, maxPasses: 12, rpsLift: 0.55, stats: { n: 0, sumMs: 0, maxMs: 0, frames: 0 } };
+const tagNdc = new THREE.Vector3();
+function placeRobotTags() {
+  const t0 = performance.now(), W = canvas.clientWidth, H = canvas.clientHeight, list = [];
+  for (const R of robots) {
+    tagNdc.copy(R.robot.root.position).add(TAG_UP);
+    if (R.robot.rps && R.robot.rps.visible) tagNdc.y += TAGS.rpsLift;
+    tagNdc.project(camera);
+    const hidden = tagNdc.z > 1 || tagNdc.z < -1 || !R.robot.root.visible || R.tag.hidden;
+    const text = R.tag.textContent;
+    if (!hidden && (!R.tagSize || R.tagSize.text !== text || t0 - R.tagSize.at > TAGS.measureMs)) R.tagSize = { text, at: t0, w: R.tag.offsetWidth, h: R.tag.offsetHeight };
+    list.push({ R, hidden, x: ((tagNdc.x + 1) / 2) * W, y: ((1 - tagNdc.y) / 2) * H, z: tagNdc.z });
+  }
+  const placed = [];
+  for (const it of list.filter((q) => !q.hidden).sort((a, b) => a.z - b.z)) {   // nearest first: it keeps its spot
+    const { w, h } = it.R.tagSize, x0 = it.x - w / 2, x1 = it.x + w / 2;
+    let bottom = it.y;
+    for (let pass = 0; pass < TAGS.maxPasses; pass++) {
+      const hit = placed.find((p) => x0 < p.x1 && p.x0 < x1 && bottom - h < p.y1 && p.y0 < bottom);
+      if (!hit) break;
+      bottom = hit.y0 - TAGS.gap;   // just above the one it crossed
+    }
+    placed.push({ x0, x1, y0: bottom - h, y1: bottom });
+    it.target = it.y - bottom;
+  }
+  for (const it of list) {   // the writes
+    const el = it.R.tag;
+    if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; continue; }
+    el.style.visibility = 'visible';
+    const dy = it.R.tagDy === undefined ? it.target : it.R.tagDy + (it.target - it.R.tagDy) * TAGS.ease;
+    it.R.tagDy = Math.abs(dy - it.target) < 0.5 ? it.target : dy;
+    el.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy).toFixed(1)}px) translate(-50%, -100%)`;
+  }
+  const ms = performance.now() - t0, S0 = TAGS.stats;
+  S0.n = list.length; S0.frames++; S0.sumMs += ms; S0.maxMs = Math.max(S0.maxMs, ms);
+}
 const HEAD_UP = new THREE.Vector3(0, 2.2, 0);
 const TAG_UP = new THREE.Vector3(0, 2.62, 0);
 function robotPoint(id, up) { const R = robots.find((x) => x.def.id === id); return R.robot.root.position.clone().add(up); }
@@ -2254,7 +2295,7 @@ function update3D(model, nowSec, dt) {
   if (TOWER.on) { towerSync(); towerAnimate(nowSec, dt); }
   skySync();
   tagsEl.hidden = zoom.zoomed || TOWER.on;
-  for (const R of robots) placeTag(R.tag, tmpV.copy(R.robot.root.position).add(TAG_UP).clone());
+  placeRobotTags();
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }
   if (trayTag) placeTag(trayTag.el, trayTag.p);   // the demo's document tray
 }

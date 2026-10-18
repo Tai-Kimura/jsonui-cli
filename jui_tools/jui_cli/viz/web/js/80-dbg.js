@@ -35,6 +35,11 @@ window.__dbg = {
   walls: () => (SOURCE.mode === 'live' ? liveWalls() : null),   // the wall pieces, door gaps cut out (the e2e checks no robot is in one)
   seats: () => (SOURCE.mode === 'live' ? JSON.parse(JSON.stringify(LIVE.seatOf)) : null),
   solo: () => (SOURCE.mode === 'live' ? liveSolo() : null),
+  // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
+  tags: () => robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !tagsEl.hidden).map((R) => {
+    const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; }),
+  tagStats: (reset) => { const S0 = TAGS.stats, out = { n: S0.n, frames: S0.frames, meanMs: S0.frames ? S0.sumMs / S0.frames : 0, maxMs: S0.maxMs };
+    if (reset) Object.assign(S0, { sumMs: 0, maxMs: 0, frames: 0 }); return out; },
   // the room up close (10-18): what is placed, where the vacuum is, the boxes it keeps clear of, and three's counts
   props: () => {
     const R = PROPS.room ? LIVE3D.rooms[PROPS.room] : null, v = PROPS.vac, sv = PROPS.server;
