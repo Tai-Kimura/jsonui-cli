@@ -550,6 +550,9 @@ function liveGoToFloor(k) {
    - The page also remembers each desk in this browser (DESK_MEM): after a reload a robot takes its remembered desk
      when it is still clear, so robots that have left since (and drew earlier) do not shift the others.
    - No clear spot: the robot stands along the front. */
+/* The one-room view's desks keep clear of the room's own corners (requester, 10-19: the smoking booth top left, the
+   vending machine beside the water server): SEAT_SOLO.left more on the left, SEAT_SOLO.right more on the right. */
+const SEAT_SOLO = { left: 2.1, right: 0.8 };
 const SEAT = { tries: 600, field: [16, 12], gaps: [1.1, 0.3], foot: { l: 0.6, r: 0.6, b: 0.45, f: 0.95 }, left: 0.9, back: 1.1, aisleR: 2.4, aisleF: 1.7 };
 function hash32(str) {
   let h = 0x811c9dc5;
@@ -614,6 +617,9 @@ function takeSeat(def, room) {
 function seatPos(room, s) {
   if (!s.standing) {
     const a = seatArea(room.baseW, room.baseD), b = seatArea(room.x1 - room.x0, room.z1 - room.z0);
+    // the one-room view keeps the back-left corner for the smoking booth and a little more of the right aisle for the
+    // vending machine's customer (SEAT_SOLO, 40-scene.js propsPlace): the desks spread over the rest
+    if (room.id === soloRoomId()) { b.x0 += SEAT_SOLO.left; b.x1 -= SEAT_SOLO.right; }
     const map = (v, a0, a1, b0, b1) => (a1 > a0 ? b0 + ((v - a0) * (b1 - b0)) / (a1 - a0) : v);
     return { pos: [+(room.x0 + map(s.dx, a.x0, a.x1, b.x0, b.x1)).toFixed(3), +(room.z0 + map(s.dz, a.z0, a.z1, b.z0, b.z1)).toFixed(3)], ry: 0, standing: false };
   }

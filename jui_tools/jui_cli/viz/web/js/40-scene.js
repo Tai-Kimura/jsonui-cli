@@ -731,7 +731,7 @@ function livePlan(R) {
   const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
   const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
   R.rect = rect;
-  if (R.play) {
+  if (R.play || R.brk) {   // a break (10-19) keeps its path the same way: brkStop walks it to this seat
     // At play (2.3.1): the path is the game's. Taking it sent a player to its new desk, and there liveWalk read the
     // empty path as "at the spot" and it played from its desk (e2e, 1 run in 3). The game ends on its own reasons;
     // playStop then walks it to this seat (through the doors when the room changed).
@@ -767,6 +767,7 @@ function liveWalk(R, dt, nowMs) {
     root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * (R.play.turn !== undefined ? 12 : 6));   // highfive: turns to slap
     return 'playing';
   }
+  if (!next && R.brk) return brkAt(R, dt);                        // at the smoking booth or the vending machine (10-19)
   if (!next && R.playBack) R.playBack = false;                    // back at its desk
   if (!next) {
     if (R.robot.desk) R.robot.desk.visible = !d.standing;
@@ -810,7 +811,7 @@ function liveCallTag(R, call) {
   R.robot.call = call && CALL_ON_LINE.has(call.state) ? call : null;
   const c = R.robot.call;
   const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}`
-    : R.solo ? SOLO_TAG_TEXT[R.solo.kind] || '' : playText(R);
+    : R.solo ? SOLO_TAG_TEXT[R.solo.kind] || '' : playText(R) || brkTagText(R);   // a game and a break never overlap
   if (text === (R.callText || '')) return;
   R.callText = text;
   if (!R.callEl) { R.callEl = document.createElement('span'); R.callEl.className = 'call-mark'; R.tag.insertBefore(R.callEl, R.text); }
@@ -893,7 +894,7 @@ function playMove(G, left, nowSec) {
   }
 }
 const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
-  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo;
+  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo && !R.brk;
 /* Why a robot stops (null: it does not): the reasons the requester's "walked up and went back" can be told by. Only a
    desk in another room stops it now; a desk that moves within the room (another session came or went and the room
    was laid out again — common with many sessions) no longer does: it walks back to the new desk afterwards. */
@@ -1035,6 +1036,7 @@ function liveUpdateRobots(nowSec, dt) {
   snackTick(nowSec);
   const now = vizNow();
   playTick(nowSec, now);
+  brkTick(nowSec, now);
   const calls = callsByLabel();
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
@@ -1043,7 +1045,7 @@ function liveUpdateRobots(nowSec, dt) {
     R.robot.heavy = heavyOf(R.def.id);   // fast typing and sweat while it works (the robot decides when)
     const how = liveWalk(R, walkDt, nowMs);
     if (how === 'gone') continue;
-    const playing = !!(R.play || R.playBack);
+    const playing = !!(R.play || R.playBack || R.brk);
     R.robot.lampState = playing ? st.state : null;   // to, at and back from play: the real state's lamp
     const vis = how === 'walking' ? (playing ? 'stroll' : 'carry') : how === 'playing' ? 'idle' : st.state;
     if (vis !== R.robot.state) setRobotState(R.robot, vis);
@@ -1071,9 +1073,14 @@ function liveSoloSync() {
 /* ---------- the room up close: a water server, a robot vacuum and a wooden floor (requester, 10-18) ----------
    Only in the one-room view (room-solo) and only while that room has 10 robots or fewer; built when it is wanted and
    disposed as soon as it is not (back to the floor, the building, an 11th robot). The floor's own material is swapped
-   for a toon material with a canvas plank texture (512 px, repeated; no image, no light, no shadow) and put back. */
+   for a toon material with a canvas plank texture (512 px, repeated; no image, no light, no shadow) and put back.
+   2.3.3 (requester, 10-19): a glass smoking booth and a vending machine come with them, on the same rule (the one-room
+   view, PROPS.max robots or fewer); robots on a break walk to them (BRK below). Where the three stand: propsPlace. */
 const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
-  boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9 };   // the robots' scale (they stand about 1 m)
+  boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9,   // the robots' scale (they stand about 1 m)
+  place: null, booth: null, vend: null, fan: null, smoke: [] };
+const PROPS_EMPTY = { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0,
+  place: null, booth: null, vend: null, fan: null, smoke: [] };
 function woodTexture(dark) {
   const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
   const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
@@ -1107,7 +1114,7 @@ function propsClear() {
   if (PROPS.group) { scene.remove(PROPS.group); disposeTree(PROPS.group); }
   if (PROPS.woodMat) PROPS.woodMat.dispose();
   if (PROPS.woodTex) PROPS.woodTex.dispose();
-  Object.assign(PROPS, { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0 });
+  Object.assign(PROPS, PROPS_EMPTY, { boxes: [], smoke: [] });
 }
 function propsBuild(id) {
   const r = PROJECT[id], R = LIVE3D.rooms[id], g = new THREE.Group();
@@ -1115,8 +1122,8 @@ function propsBuild(id) {
   // the floor: the same mesh, a wooden material while the room is up close
   PROPS.woodTex = woodTexture(PROPS.dark); PROPS.woodTex.repeat.set((r.x1 - r.x0) / 2.4, (r.z1 - r.z0) / 2.4);
   PROPS.woodMat = toon('#ffffff', { map: PROPS.woodTex }); PROPS.floorMat = R.floor.material; R.floor.material = PROPS.woodMat;
-  // the water server: the back-right corner, in sight from the usual view; the back-left one when a back door opens
-  // near the right (doorAt). No desk takes either corner (SEAT.left / SEAT.back / SEAT.aisleR).
+  // the water server: the back-right corner (propsPlace), in sight from the usual view
+  const P = PROPS.place = propsPlace(r);
   const sv = new THREE.Group(), body = toon('#eef1f4'), dark = toon('#5b6573');
   const cab = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.95, 0.38, 2, 0.04), body); cab.position.y = 0.475; sv.add(cab);
   const panel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.02), dark); panel.position.set(0, 0.72, 0.2); sv.add(panel);
@@ -1125,10 +1132,10 @@ function propsBuild(id) {
   const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.42, 20), toon('#8fd0f2', { transparent: true, opacity: 0.82 }));
   tank.position.y = 0.95 + 0.21; sv.add(tank);
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 12), toon('#2f7fd1')); cap.position.y = 1.39; sv.add(cap);
-  const right = !(r.doors && r.doors.back);
-  const k = PROPS.serverScale, off = 0.42 * k;   // built at 1, shown bigger (requester, 10-18: the robots' size)
-  sv.scale.setScalar(k);
-  sv.position.set(right ? r.x1 - off : r.x0 + off, 0, r.z0 + 0.38 * k); sv.rotation.y = right ? -Math.PI / 4 : Math.PI / 4; g.add(sv); PROPS.server = sv;
+  sv.scale.setScalar(PROPS.serverScale);   // built at 1, shown bigger (requester, 10-18: the robots' size)
+  sv.position.set(P.server.x, 0, P.server.z); sv.rotation.y = P.server.ry; g.add(sv); PROPS.server = sv;
+  PROPS.booth = boothBuild(P.booth); g.add(PROPS.booth);
+  PROPS.vend = vendBuild(P.vend); g.add(PROPS.vend);
   // the robot vacuum: a flat disc with a bumper and a light, on the floor clear of desks, robots and the front aisle
   const vac = new THREE.Group();
   const shell = new THREE.Mesh(new THREE.CylinderGeometry(PROPS.radius, PROPS.radius, 0.11, 32), toon('#3a3f47')); shell.position.y = 0.065; vac.add(shell);
@@ -1157,6 +1164,8 @@ function propsBoxes(nowSec, force) {
   const s = PROPS.server.position;
   const half = 0.42 * PROPS.serverScale;
   PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
+  const P = PROPS.place;   // the booth and the machine with the spot in front of it (10-19)
+  PROPS.boxes.push([P.booth.x0, P.booth.x1, P.booth.z0, P.booth.z1], [P.vend.x0, P.vend.x1, P.vend.z0, P.vend.spot[1] + 0.3]);
 }
 function propsClearAt(x, z) {
   const a = propsArea(), m = PROPS.radius + 0.06;
@@ -1184,6 +1193,236 @@ function propsTick(nowSec, dt) {
   const nx = p.x + Math.sin(h) * step, nz = p.z + Math.cos(h) * step;
   if (propsClearAt(nx, nz)) { p.x = nx; p.z = nz; v.rotation.y = h; }
   else v.userData.heading = h + Math.PI * (0.5 + PROPS.rng());   // a bump: turn away and try again next frame
+}
+/* ---------- breaks: a cigarette in the smoking booth, a drink from the vending machine (requester, 10-19) ----------
+   「セッションが少ない時には部屋の隅っこに喫煙室作って待機中の時にたまにタバコ吸うようにして。これはbot１対でもやるし複数でもやる」,
+   「部屋のbotが少ない時は自販機も設置して。たまにそこに行って飲み物を飲むパターンも追加で」, placement (10-19):
+   「喫煙所は左上端、自販機はウォーターサーバーの横がいいかな」.
+   Where (propsPlace; built with the room's other props, so only in the one-room view of a room with PROPS.max robots or
+   fewer, and never on the floor or in the building):
+   - the booth: the back-left corner (the top left of the usual view), BOOTH.w by BOOTH.d, its door in the front glass.
+     The one-room view keeps that corner free of desks (SEAT_SOLO.left, 30-source-live.js).
+   - the water server: the back-right corner, as before; the vending machine beside it on its left, facing the front.
+     A room with a back door (near the right, doorAt) keeps the door's apron clear: the two stand BACK_DOOR_APRON in
+     front of the back wall, still on the right. (The server's old place in such a room, the back-left corner, is the
+     booth's now.) SEAT_SOLO.right keeps the machine's customer clear of the desks.
+   Looks only, like play: the server, the panel's state and the lamp still say 待機. Once a second a main robot in that
+   room, idle for PLAY.idleMs or more and not at play, a nap or a bento, may go (BRK.p per kind; a second smoker joins
+   one already in the booth with BRK.joinP). At most BOOTH.seats in the booth and one at the machine; none in a room
+   with standing robots (as play). Anything that stops a game stops a break at once (playStopReason: an instruction,
+   a call, another state, leaving, another room), and so do the props going away or the room laid out again; it walks
+   back with its real lamp (playBack), or jumps to its desk when the room was laid out again. None under reduced motion
+   (as play). The e2e build can shorten the times (80-dbg.js). */
+const BOOTH = { w: 2.6, d: 2.0, h: 2.3, door: 1.0, seats: 2 };
+// taller than a robot, as a real one is than a person (requester, 10-19: 「自販機が小さい 人よりは背が高いのが普通でしょ」);
+// the robots stand about 2.1 with the antenna (the e2e measures both)
+const VEND = { w: 1.2, d: 0.9, h: 2.5 };
+const BACK_DOOR_APRON = 1.3;
+function propsPlace(r) {
+  const backDoor = !!(r.doors && r.doors.back), zb = r.z0 + (backDoor ? BACK_DOOR_APRON : 0);
+  const booth = { x0: r.x0, x1: r.x0 + BOOTH.w, z0: r.z0, z1: r.z0 + BOOTH.d };
+  const bx = (booth.x0 + booth.x1) / 2;
+  booth.ashtray = [bx, r.z0 + 0.6];
+  booth.spots = [[booth.x0 + 0.6, r.z0 + 0.95, Math.PI / 2], [booth.x1 - 0.6, r.z0 + 0.95, -Math.PI / 2]];   // facing each other over the ashtray
+  booth.way = [[bx, booth.z1 + 0.7], [bx, booth.z1 - 0.4]];   // in front of the door, then just inside it
+  const server = { x: r.x1 - 0.42 * PROPS.serverScale, z: zb + 0.38 * PROPS.serverScale, ry: -Math.PI / 4, half: 0.55 };   // its footprint, turned
+  const vx1 = server.x - server.half - 0.1;
+  const vend = { x0: vx1 - VEND.w, x1: vx1, z0: zb + 0.05, z1: zb + 0.05 + VEND.d };
+  vend.cx = (vend.x0 + vend.x1) / 2;
+  vend.spot = [vend.cx, vend.z1 + 0.55, Math.PI];   // in front of it, facing it
+  vend.way = [[vend.cx, vend.z1 + 1.3]];              // from the front: never round its corner
+  return { booth, server, vend, backDoor };
+}
+function signTexture(text, bg, ink, w = 256, h = 96) {
+  const cv = makeCanvas(w, h), ctx = cv.getContext('2d');
+  ctx.fillStyle = bg; rr(ctx, 0, 0, w, h, 14); ctx.fill();
+  ctx.fillStyle = ink; ctx.font = `${Math.round(h * 0.5)}px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, w / 2, h / 2 + 2);
+  return texFrom(cv);
+}
+function boothBuild(B) {
+  const g = new THREE.Group(), w = B.x1 - B.x0, d = B.z1 - B.z0, h = BOOTH.h, t = 0.06, fz = B.z1, rx = B.x1, dx = (B.x0 + B.x1) / 2, half = BOOTH.door / 2;
+  const metal = toon('#4a515c');
+  const glass = new THREE.MeshBasicMaterial({ color: 0xbfe6f5, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), toon('#9aa1ab')); base.position.set(dx, 0.02, B.z0 + d / 2); g.add(base);
+  const bar = (bw, bh, bd, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), metal); m.position.set(x, y, z); g.add(m); };
+  const pane = (pw, ph, x, y, z, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), glass); m.position.set(x, y, z); m.rotation.y = ry; g.add(m); };
+  for (const [x, z] of [[B.x0 + t / 2, fz - t / 2], [rx - t / 2, fz - t / 2], [rx - t / 2, B.z0 + t / 2], [dx - half, fz - t / 2], [dx + half, fz - t / 2]]) bar(t, h, t, x, h / 2, z);
+  bar(w, t, t, dx, h, fz - t / 2); bar(w, t, t, dx, h, B.z0 + t / 2); bar(t, t, d, rx - t / 2, h, B.z0 + d / 2); bar(t, t, d, B.x0 + t / 2, h, B.z0 + d / 2);
+  bar(BOOTH.door, t, t, dx, 1.95, fz - t / 2);   // over the door
+  const lw = dx - half - B.x0, rw = rx - dx - half;
+  pane(lw, h, B.x0 + lw / 2, h / 2, fz - 0.03, 0); pane(rw, h, dx + half + rw / 2, h / 2, fz - 0.03, 0); pane(BOOTH.door, h - 1.95, dx, (h + 1.95) / 2, fz - 0.03, 0);
+  pane(d, h, rx - 0.03, h / 2, B.z0 + d / 2, Math.PI / 2);
+  const roof = new THREE.Mesh(new THREE.PlaneGeometry(w, d), glass); roof.rotation.x = -Math.PI / 2; roof.position.set(dx, h, B.z0 + d / 2); g.add(roof);   // glass: the view from above sees in
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.34), new THREE.MeshBasicMaterial({ map: signTexture('喫煙室', '#2b3340', '#ffffff'), toneMapped: false }));
+  sign.position.set(dx, (h + 1.95) / 2, fz + 0.01); g.add(sign);
+  // the ventilation fan on the back wall inside, turning (BRK's tick turns it)
+  const fan = new THREE.Group(); fan.position.set(dx, 1.85, B.z0 + 0.06); g.add(fan);
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.07, 24, 1, true), toon('#d7dce3', { side: THREE.DoubleSide })); ring.rotation.x = Math.PI / 2; fan.add(ring);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 12), toon('#3a3f47')); hub.rotation.x = Math.PI / 2; fan.add(hub);
+  const blades = new THREE.Group(); fan.add(blades);
+  for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.012), toon('#7d8794')); b.position.set(Math.cos(k * 2.094) * 0.13, Math.sin(k * 2.094) * 0.13, 0); b.rotation.z = k * 2.094; blades.add(b); }
+  PROPS.fan = blades;
+  // the ashtray stand between the two spots
+  const [ax, az] = B.ashtray;
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.03, 20), metal); foot.position.set(ax, 0.055, az); g.add(foot);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 10), metal); pole.position.set(ax, 0.45, az); g.add(pole);
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.13, 0.08, 20), toon('#aab3bd')); bowl.position.set(ax, 0.88, az); g.add(bowl);
+  const sand = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.01, 20), toon('#d8cfb8')); sand.position.set(ax, 0.92, az); g.add(sand);
+  // the smoke: a fixed pool of soft sprites (BRK.puffs), nothing made while it runs; grey on the light wall, pale on the dark one
+  const cv = makeCanvas(64, 64), ctx = cv.getContext('2d'), grd = ctx.createRadialGradient(32, 32, 2, 32, 32, 31);
+  grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.55, 'rgba(255,255,255,0.8)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, 64, 64);
+  const puffTex = texFrom(cv);
+  PROPS.smoke = [];
+  for (let k = 0; k < BRK.puffs; k++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, color: PROPS.dark ? 0xd9dee5 : 0x8f98a3, transparent: true, opacity: 0, depthWrite: false }));
+    s.visible = false; s.renderOrder = 4; g.add(s);
+    PROPS.smoke.push({ s, age: 0, life: 1, size: 0.1, alpha: 0, vx: 0, vy: 0, vz: 0 });
+  }
+  return g;
+}
+function vendTexture() {
+  const W = 256, H = 576, cv = makeCanvas(W, H), ctx = cv.getContext('2d');
+  ctx.fillStyle = '#f6f8fb'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#d8343c'; ctx.fillRect(0, 0, W, 64);
+  ctx.fillStyle = '#ffffff'; ctx.font = `34px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('のみもの', W / 2, 34);
+  const colors = [['#1c2440', '#b6f03c'], ['#2f7fd1', '#ffffff'], ['#e8554e', '#fff3bf'], ['#2e9e5b', '#e1f1ef'], ['#7a4a2a', '#f3e6d4'], ['#f2b632', '#3b2410']];
+  for (let row = 0; row < 3; row++) {
+    const y = 84 + row * 128;
+    ctx.fillStyle = '#e3eaf4'; ctx.fillRect(14, y, W - 28, 92);
+    for (let k = 0; k < 4; k++) {
+      const [body, band] = colors[(row * 4 + k) % colors.length], x = 24 + k * 56;
+      rr(ctx, x, y + 10, 40, 74, 8); ctx.fillStyle = body; ctx.fill();
+      ctx.fillStyle = band; ctx.fillRect(x, y + 36, 40, 16);
+      ctx.fillStyle = '#41505f'; ctx.fillRect(x + 4, y + 98, 32, 12);   // the price
+      ctx.fillStyle = '#ff5a4f'; ctx.beginPath(); ctx.arc(x + 20, y + 120, 5, 0, Math.PI * 2); ctx.fill();   // the button
+    }
+  }
+  ctx.fillStyle = '#2b3340'; ctx.fillRect(W - 62, 470, 30, 44);   // the coin slot
+  ctx.fillStyle = '#cfd6df'; ctx.fillRect(W - 54, 478, 14, 28);
+  return texFrom(cv);
+}
+function vendBuild(V) {
+  const g = new THREE.Group(), cz = (V.z0 + V.z1) / 2;
+  const body = new THREE.Mesh(new RoundedBoxGeometry(VEND.w, VEND.h, VEND.d, 2, 0.04), toon('#d8343c')); body.position.set(V.cx, VEND.h / 2, cz); g.add(body);
+  const ph = VEND.h - 0.55, pw = Math.min(VEND.w - 0.12, ph * 256 / 576);   // the texture's shape, a red frame round it
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: vendTexture(), toneMapped: false }));
+  panel.position.set(V.cx, 0.42 + ph / 2, V.z1 + 0.006); g.add(panel);   // lit: no light needed
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(VEND.w - 0.3, 0.2, 0.04), toon('#1f242c')); slot.position.set(V.cx, 0.22, V.z1 + 0.01); g.add(slot);
+  return g;
+}
+const BRK_TAG_TEXT = { smoke: 'タバコ休憩', vend: '飲み物を買いに' };
+const BRK = { seed: 20261021, kinds: ['smoke', 'vend'], p: { smoke: 1 / 40, vend: 1 / 40 }, joinP: 1 / 6, smokeMinSec: 20, smokeMaxSec: 40,
+  buySec: 2.4, drinkMinSec: 8, drinkMaxSec: 16, restMinSec: 60, restMaxSec: 180, walkSec: 30, puffs: 10, next: 0, last: 0, rng: null, ends: [] };
+const brkTagText = (R) => (R.brk ? BRK_TAG_TEXT[R.brk.kind] || '' : '');
+function brkPanelText(id) { const R = robots.find((x) => x.def.id === id); return R ? brkTagText(R) : ''; }   // the robot card (50-panel.js)
+const brkCap = (kind) => (kind === 'smoke' ? BOOTH.seats : 1);
+const rectOf = (rm) => `${rm.x0},${rm.z0},${rm.x1},${rm.z1}`;
+function brkStart(R, kind, slot, nowSec) {
+  const P = PROPS.place, st = robotState[R.def.id];
+  const len = kind === 'smoke' ? BRK.smokeMinSec + BRK.rng() * (BRK.smokeMaxSec - BRK.smokeMinSec)
+    : BRK.buySec + BRK.drinkMinSec + BRK.rng() * (BRK.drinkMaxSec - BRK.drinkMinSec);
+  const spot = kind === 'smoke' ? P.booth.spots[slot] : P.vend.spot, way = kind === 'smoke' ? P.booth.way : P.vend.way;
+  R.brk = { kind, slot, room: R.def.room, rect: rectOf(PROJECT[R.def.room]), since: st.since, phase: 'going', spot, way, len, t0: 0, until: 0, walkUntil: nowSec + BRK.walkSec };
+  if (R.robot.gesture) endGesture(R.robot);
+  R.path = [...way.map((q) => [q[0], q[1]]), [spot[0], spot[1]]];
+  R.restUntil = nowSec + BRK.walkSec + len + BRK.restMinSec + BRK.rng() * (BRK.restMaxSec - BRK.restMinSec);
+}
+function brkStop(R, reason, nowSec) {
+  const B = R.brk;
+  BRK.ends.push({ room: B.room, kind: B.kind, who: R.def.id, reason, atSec: B.t0 ? +(nowSec - B.t0).toFixed(1) : 0 });
+  if (BRK.ends.length > 30) BRK.ends.shift();
+  // the way points it has passed, back out the same way (out of the booth's door, round the front of the machine)
+  const reached = Math.min(B.way.length, B.way.length + 1 - R.path.length);
+  R.brk = null; R.robot.brk = null;
+  if (!robots.includes(R) || !R.def.pos) return;
+  const root = R.robot.root;
+  if (reason === 'relaid') {   // its room was laid out again (back to the floor, a bigger room): a jump to its desk, as livePlan's
+    root.position.x = R.def.pos[0]; root.position.z = R.def.pos[1]; R.path = []; R.jumps = (R.jumps || 0) + 1;
+    return;
+  }
+  const out = B.way.slice(0, Math.max(0, reached)).reverse().map((q) => [q[0], q[1]]);
+  const from = roomAtPoint([root.position.x, root.position.z]);
+  R.playBack = true;   // walking back: the real state's lamp, no papers (as from play)
+  if (R.robot.desk) R.robot.desk.visible = false;
+  R.path = from && from !== R.def.room ? [...out, ...liveRoute(from, R.def.room), R.def.pos] : [...out, R.def.pos];   // never through a wall
+}
+function brkAt(R, dt) {
+  const B = R.brk, root = R.robot.root;
+  if (R.robot.desk) R.robot.desk.visible = false;
+  if (B.phase === 'going') B.phase = 'at';
+  // bought: it turns round to the room with the can (its back hid the can and the machine's panel from the usual view)
+  const ry = B.kind === 'vend' && R.robot.brkHandKind === 'vend' ? 0 : B.spot[2];
+  const turn = ((ry - root.rotation.y) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;   // the short way round
+  root.rotation.y += turn * Math.min(1, dt * 6);
+  return 'playing';
+}
+function brkTick(nowSec, now) {
+  if (!BRK.rng) BRK.rng = snackRandom(BRK.seed);
+  // stop at once: every frame
+  for (const R of robots) {
+    const B = R.brk;
+    if (!B) continue;
+    const st = robotState[R.def.id] || { state: 'idle' }, rm = PROJECT[B.room];
+    const reason = playStopReason(R, st, B.room, B.since) || (!rm || !rm.shown || rectOf(rm) !== B.rect ? 'relaid' : null) || (PROPS.room !== B.room ? 'props' : null)
+      || (B.phase === 'going' && nowSec >= B.walkUntil ? 'walk too long' : null) || (B.t0 && nowSec >= B.until ? 'done' : null);
+    if (reason) { brkStop(R, reason, nowSec); continue; }
+    if (B.phase === 'at' && !B.t0) { B.t0 = nowSec; B.until = nowSec + B.len; R.robot.brk = { kind: B.kind, t0: nowSec, buySec: BRK.buySec }; }
+  }
+  brkSmoke(nowSec);
+  if (reduceMotion || nowSec < BRK.next) return;
+  BRK.next = nowSec + 1;
+  const room = PROPS.room;
+  if (!room || !PROPS.place || robots.some((R) => R.def.room === room && R.def.standing)) return;
+  const here = robots.filter((R) => R.def.room === room);
+  for (const R of here) {
+    const st = robotState[R.def.id];
+    if (!st || !playIdle(R, st, now) || (R.restUntil || 0) > nowSec) continue;
+    for (const kind of BRK.kinds) {
+      const on = here.filter((x) => x.brk && x.brk.kind === kind);
+      if (on.length >= brkCap(kind)) continue;
+      if (BRK.rng() >= (kind === 'smoke' && on.length ? BRK.joinP : BRK.p[kind])) continue;
+      const used = new Set(on.map((x) => x.brk.slot));
+      brkStart(R, kind, kind === 'smoke' ? [0, 1].find((k) => !used.has(k)) : 0, nowSec);
+      break;
+    }
+  }
+}
+/* The smoke: from the cigarette's tip now and then, and out of the mouth after each puff (brkPuff); each sprite rises,
+   grows and fades. Never more than BRK.puffs at once (a free sprite or none). */
+const brkV = new THREE.Vector3();
+function brkSmoke(nowSec) {
+  const dt = Math.max(0, Math.min(0.1, nowSec - (BRK.last || nowSec)));
+  BRK.last = nowSec;
+  if (PROPS.fan && !reduceMotion) PROPS.fan.rotation.z += dt * 7;
+  const pool = PROPS.smoke;
+  if (!pool.length) return;
+  for (const q of pool) {
+    if (!q.s.visible) continue;
+    q.age += dt;
+    if (q.age >= q.life) { q.s.visible = false; continue; }
+    const k = q.age / q.life;
+    q.s.position.x += q.vx * dt; q.s.position.y += q.vy * dt; q.s.position.z += q.vz * dt;
+    q.s.scale.setScalar(q.size * (1 + k * 1.2));
+    q.s.material.opacity = q.alpha * (1 - k);
+  }
+  if (reduceMotion) return;
+  for (const R of robots) {
+    const B = R.robot.brk, hand = R.robot.brkHand;
+    if (!B || B.kind !== 'smoke' || !hand || R.robot.call) continue;
+    const c = (nowSec - B.t0) % BRK_PUFF_SEC, exhale = c >= 2.3 && c < 3.3;
+    if (nowSec - (R.puffAt || 0) < (exhale ? 0.22 : 0.6)) continue;
+    const q = pool.find((x) => !x.s.visible);
+    if (!q) continue;
+    R.puffAt = nowSec;
+    const ry = R.robot.root.rotation.y, fw = exhale ? 0.25 : 0.03;
+    if (exhale) { R.robot.head.getWorldPosition(brkV); brkV.x += Math.sin(ry) * 0.7; brkV.z += Math.cos(ry) * 0.7; brkV.y += 0.3; }   // in front of the face (HEAD.d)
+    else hand.userData.tip.getWorldPosition(brkV);
+    Object.assign(q, { age: 0, life: exhale ? 2.8 : 2.2, size: exhale ? 0.8 : 0.4, alpha: exhale ? 0.95 : 0.8,
+      vx: Math.sin(ry) * fw + (BRK.rng() - 0.5) * 0.08, vy: 0.35, vz: Math.cos(ry) * fw + (BRK.rng() - 0.5) * 0.08 });
+    q.s.position.copy(brkV); q.s.scale.setScalar(q.size); q.s.material.opacity = q.alpha; q.s.visible = true;
+  }
 }
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
    part and the cork board the task board, a robot its card. */

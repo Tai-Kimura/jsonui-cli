@@ -44,6 +44,22 @@ window.__dbg = {
       floorMap: Object.values(LIVE3D.rooms).some((x) => !!x.floor.material.map), sceneChildren: scene.children.length - robots.length,   // less the robots, which come and go
       memory: { ...renderer.info.memory } };
   },
+  // breaks (10-19): the arms shorten the times (the real defaults stay in 40-scene.js); where the props stand, for a room
+  // as it is or for any rectangle and doors (the arms try every size the layout makes); who is on a break
+  brk: (opts) => {
+    if (opts) { Object.assign(BRK, opts, { next: 0 }); if (opts.p) BRK.p = { ...opts.p }; if ('restMaxSec' in opts) robots.forEach((R) => { R.restUntil = 0; }); if (opts.endAll) robots.forEach((R) => { if (R.brk) brkStop(R, 'e2e', performance.now() / 1000); }); }
+    const P = PROPS.place;
+    const top = (o) => { if (!o) return null; const b = new THREE.Box3(); o.updateMatrixWorld(true); o.traverseVisible((m) => { if (m.isMesh) b.expandByObject(m, true); }); return [+b.min.y.toFixed(3), +b.max.y.toFixed(3)]; };
+    const xz = (o) => { if (!o) return null; const b = new THREE.Box3(); o.updateMatrixWorld(true); o.traverseVisible((m) => { if (m.isMesh) b.expandByObject(m, true); }); return [b.min.x, b.max.x, b.min.z, b.max.z].map((v) => +v.toFixed(3)); };
+    return { ends: BRK.ends.slice(), place: P ? JSON.parse(JSON.stringify(P)) : null, meshBoxes: { booth: xz(PROPS.booth), vend: xz(PROPS.vend), server: xz(PROPS.server) }, heights: { vend: top(PROPS.vend), robots: robots.filter((R) => R.robot.root.visible).map((R) => [R.def.id, top(R.robot.root), !!(R.robot.desk && R.robot.desk.visible)]) },
+      deskBoxes: robots.filter((R) => R.def.room === PROPS.room && !R.brk && !R.playBack && !R.path.length && R.robot.root.visible).map((R) => [R.def.id, xz(R.robot.root)]), built: { booth: !!PROPS.booth, vend: !!PROPS.vend, fan: PROPS.fan ? +PROPS.fan.rotation.z.toFixed(2) : null },
+      smoke: PROPS.smoke.filter((q) => q.s.visible).length, puffs: PROPS.smoke.filter((q) => q.s.visible).map((q) => [...q.s.position.toArray().map((v) => +v.toFixed(2)), +q.s.scale.x.toFixed(2), +q.s.material.opacity.toFixed(2)]), smokeMax: PROPS.smoke.length,
+      robots: robots.map((R) => ({ id: R.def.id, kind: R.brk ? R.brk.kind : null, phase: R.brk ? R.brk.phase : null, at: !!R.robot.brk, back: !!R.playBack,
+        hand: R.robot.brkHandKind || null, tag: R.callText || '', vis: R.robot.state, lamp: R.robot.lampState || R.robot.state, desk: !!(R.robot.desk && R.robot.desk.visible),
+        play: !!R.play, solo: R.solo ? R.solo.kind : null, x: +R.robot.root.position.x.toFixed(3), z: +R.robot.root.position.z.toFixed(3), seat: R.def.pos, room: R.def.room, path: R.path.length })) };
+  },
+  propsPlace: (r) => propsPlace(r),
+  seatGeom: () => ({ SEAT: JSON.parse(JSON.stringify(SEAT)), SEAT_SOLO: { ...SEAT_SOLO }, SOLO_GROW, DOOR_W, roomSize: [1, 7, 11].map(roomSize), doorAt: doorAt({ x0: 0, x1: 0, z0: 0, z1: 0 }) }),
   // the usage chips as drawn (10-18): per window its text, the number's and the %'s colours, 上限到達, the note
   usage: () => [...document.querySelectorAll('#usage .uw')].map((e) => ({ window: e.dataset.window || null, text: e.textContent,
     num: e.querySelector('.num') ? getComputedStyle(e.querySelector('.num')).color : null,

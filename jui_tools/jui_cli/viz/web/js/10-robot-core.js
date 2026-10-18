@@ -537,7 +537,7 @@ function handThing(kind) {
   return g;
 }
 function startGesture(r, kind, t) {
-  if (reduceMotion || !GESTURE_OK.has(r.state) || r.play || r.solo || (r.call && CALL_ON_LINE.has(r.call.state))) return false;
+  if (reduceMotion || !GESTURE_OK.has(r.state) || r.play || r.solo || r.brk || (r.call && CALL_ON_LINE.has(r.call.state))) return false;
   endGesture(r);
   if (kind !== 'cheer') { r.hand = handThing(kind); (kind === 'meal' ? r.armL : r.armR).add(r.hand); }
   r.gesture = { kind, t0: t, t1: t + GESTURE_LEN[kind] };
@@ -797,6 +797,46 @@ function soloProps(r, S, t) {
   if (bento && !r.bento) { r.bento = bentoBox(); r.root.add(r.bento); }
   if (r.bento) r.bento.visible = bento;
 }
+/* A break (requester, 10-19: a cigarette in the smoking booth, a drink from the vending machine). r.brk is
+   { kind: 'smoke' | 'vend', t0, buySec } while the robot is at the booth or the machine; the scene walks it there and back.
+   smoke: the hand with the cigarette goes to the mouth every BRK_PUFF_SEC, then down (the scene lets the smoke out);
+   vend: a button pressed, a bend to the slot, then a can sipped now and then. */
+const BRK_PUFF_SEC = 5;
+function brkPuff(u) {   // 0: the hand down, 1: at the mouth (a smooth lift, a hold, a smooth drop)
+  const c = u % BRK_PUFF_SEC, e = (x) => x * x * (3 - 2 * x);
+  return c < 0.5 ? e(c / 0.5) : c < 1.8 ? 1 : c < 2.3 ? 1 - e((c - 1.8) / 0.5) : 0;
+}
+function brkPose(r, p, t) {
+  const B = r.brk, u = t - B.t0;
+  if (B.kind === 'smoke') {
+    const k = reduceMotion ? 0 : brkPuff(u);
+    p.aRx = -0.55 - k * 1.0; p.aRz = 0.15 + k * 0.35; p.aLx = -0.15; p.aLz = 0.12; p.headX = 0.02 - k * 0.08;
+  } else if (u < B.buySec * 0.5) {                          // a finger on a button
+    p.aRx = -1.45; p.aRz = 0.08; p.torsoX = 0.05; p.headX = 0.05;
+  } else if (u < B.buySec) {                                // a bend to the slot below
+    p.aRx = -0.9; p.aRz = 0.1; p.torsoX = 0.35; p.headX = 0.25;
+  } else {                                                  // the can to the mouth, head back, now and then
+    const c = (u - B.buySec) % 4, sip = c < 1.6 ? Math.sin((c / 1.6) * Math.PI) : 0;
+    p.aRx = -1.0 - sip * 0.8; p.aRz = 0.3 + sip * 0.15; p.headX = -sip * 0.3;
+  }
+}
+function cigarette() {
+  const g = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8), toon('#f4f1ea'));
+  const filter = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.05, 8), toon('#d9913a')); filter.position.y = -0.08;
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff6a2a })); tip.position.y = 0.085;
+  g.add(stick, filter, tip); g.userData.tip = tip;
+  g.rotation.x = Math.PI / 2; g.position.set(0, -0.43, 0.1); g.scale.setScalar(1.5);
+  return g;
+}
+function brkProps(r, B, t) {
+  const want = !B ? null : B.kind === 'smoke' ? 'smoke' : t - B.t0 >= B.buySec ? 'vend' : null;   // the can once it is taken out
+  if (want === (r.brkHandKind || null)) return;
+  if (r.brkHand) { r.brkHand.parent.remove(r.brkHand); r.brkHand.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  r.brkHand = want === 'smoke' ? cigarette() : want === 'vend' ? handThing('drink') : null;
+  r.brkHandKind = want;
+  if (r.brkHand) r.armR.add(r.brkHand);
+}
 function gesturePose(r, p, t) {
   const G = r.gesture, k = Math.min(1, (t - G.t0) / 0.35, (G.t1 - t) / 0.35);   // ease in and out
   const sip = 0.5 + 0.5 * Math.sin((t - G.t0) * (G.kind === 'meal' ? 5 : 2.6));
@@ -1037,8 +1077,10 @@ function updateRobot(r, t, dt) {
   if (onCall) callPose(p, t);
   else if (r.play) playPose(r, p, t);
   else if (r.solo) soloPose(r, p, t);
+  else if (r.brk) brkPose(r, p, t);
   else if (r.gesture) gesturePose(r, p, t);
   soloProps(r, onCall ? null : r.solo, t);
+  brkProps(r, onCall ? null : r.brk, t);
   playBubble(r, onCall ? null : r.play, t);
   r.antenna.rotation.x += ((r.tired ? 1.0 : 0) - r.antenna.rotation.x) * Math.min(1, dt * 3);
   r.root.position.y = p.rootY;

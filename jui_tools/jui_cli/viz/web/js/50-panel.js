@@ -1268,6 +1268,8 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
     if (H.reasons.includes('subagents')) why.push(`サブエージェント ${H.subagents || 0} 体`);
     parts.push(`重い作業: ${why.join(' · ')}`);
   }
+  const brk = SOURCE.mode === 'live' ? brkPanelText(id) : '';   // on a break (10-19): the name tag's words
+  if (brk) parts.push(brk);
   const condEl = rbEl.querySelector('[data-rb-cond]');
   if (condEl) { setText(condEl, parts.join(' / ')); condEl.hidden = !parts.length; }
   if (spec) {
