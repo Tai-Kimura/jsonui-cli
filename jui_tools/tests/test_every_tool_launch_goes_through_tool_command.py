@@ -68,6 +68,8 @@ NOT_A_TOOL = {
         "xcrun simctl list / adb devices -l, built in devices.run from shutil.which and find_adb",
     ("jui_tools/jui_cli/viz/sources/test_progress.py", "follow", "*argv"):
         "adb logcat / xcrun simctl spawn log stream, built by logcat_argv and simctl_log_argv",
+    ("jui_tools/jui_cli/viz/sources/test_results.py", "pull", "*pull_argv(adb, serial, dest)"):
+        "adb pull of the device's results folder, built by pull_argv",
     ("jui_tools/jui_cli/viz/sources/agents_cli.py", "poll_once", "claude"):
         "the Claude Code CLI, located by shutil.which('claude') — `claude agents --json` for the session list",
 }
