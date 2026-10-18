@@ -624,43 +624,130 @@ function callPose(p, t) {   // the right hand at the ear, the head toward it
   if (!reduceMotion) p.headY = Math.sin(t * 1.3) * 0.12;
 }
 /* Play (requester, 10-18: robots idle for long in one room play together; the scene decides who, where and how
-   long). r.play is { kind: 'ball' | 'highfive' | 'rps', t0, side: 0 | 1 } while at the spot; the state stays idle.
-   ball: a throw from the right hand, the two in turn (the ball itself is the scene's); highfive: both hands up,
-   meeting now and then; rps (じゃんけん): three pumps, then a hand over the head. */
+   long). r.play is { kind: 'ball' | 'highfive' | 'rps', t0, side: 0 | 1, seed } while at the spot; the state stays idle.
+   2.3.3 (requester, 10-19: "ずっと二人で向き合ってるだけで何やってるかわからない"): every game moves big enough to read
+   from the usual view. ball: the thrower winds up over its shoulder and swings through, the catcher holds both hands
+   out (the ball itself is the scene's); highfive: the two walk toward each other, turn a little to the front and slap
+   the inner hands (the walk and the パチン mark are the scene's); rps (じゃんけん): three pumps, then the hand drawn in a
+   bubble that stays up until the next pump, the winner raises both arms, the loser hangs its head, あいこ plays again
+   at once. The timing helpers are shared with the scene (40-scene.js), so the arms, the ball and the walk agree. */
 const RPS_HANDS = ['グー', 'チョキ', 'パー'];
+const playEase = (v) => { const k = Math.max(0, Math.min(1, v)); return k * k * (3 - 2 * k); };
+const playMix = (a, b, k) => a + (b - a) * k;
+// ball: one throw per half; the thrower winds up until windup, the ball leaves the hand at release
+const BALL_T = { half: 1.5, windup: 0.3, release: 0.42 };
+function ballPhase(u) { const n = Math.floor(u / BALL_T.half); return { n, thrower: n % 2, w: u / BALL_T.half - n }; }
+// highfive: walk in until inEnd, the hands up and the slap at touch, walk back from outStart until back
+const HIGHFIVE_T = { period: 2.8, inEnd: 0.34, touch: 0.46, outStart: 0.6, back: 0.92, turn: 1.15 };
+function highfivePhase(u) {
+  const T = HIGHFIVE_T, w = (u / T.period) % 1;
+  const near = w < T.inEnd ? playEase(w / T.inEnd) : w < T.outStart ? 1 : w < T.back ? 1 - playEase((w - T.outStart) / (T.back - T.outStart)) : 0;
+  const up = w < T.touch ? playEase((w - (T.inEnd - 0.1)) / (T.touch - T.inEnd + 0.06)) : 1 - playEase((w - T.touch - 0.06) / (T.outStart - T.touch));
+  const walking = (w < T.inEnd) || (w >= T.outStart && w < T.back);
+  return { w, near, up, walking, slap: Math.abs(w - T.touch) < 0.09 };
+}
+// rps: the pumps until shake; a decided round lasts len, a tie (あいこ) only tie: it plays again at once
+const RPS_T = { shake: 1.5, result: 2.1, len: 4.4, tie: 3.2 };
+function rpsHand(seed, k, side) {
+  let h = Math.imul((seed | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(k + 1, 0xc2b2ae35) ^ Math.imul(side + 7, 0x27d4eb2f);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h ^= h >>> 13;
+  return (h >>> 0) % 3;
+}
+// a beats b when (b - a + 3) % 3 === 1 (グー > チョキ > パー > グー)
+function rpsRound(seed, u) {
+  let start = 0;
+  for (let k = 0; k < 500; k++) {
+    const hands = [rpsHand(seed, k, 0), rpsHand(seed, k, 1)], tie = hands[0] === hands[1];
+    const len = tie ? RPS_T.tie : RPS_T.len;
+    if (u < start + len) {
+      const res = tie ? ['tie', 'tie'] : (hands[1] - hands[0] + 3) % 3 === 1 ? ['win', 'lose'] : ['lose', 'win'];
+      return { k, w: u - start, len, hands, res };
+    }
+    start += len;
+  }
+  return { k: 0, w: 0, len: RPS_T.len, hands: [0, 0], res: ['tie', 'tie'] };
+}
 function playPose(r, p, t) {
-  const P = r.play, u = t - P.t0;
+  const P = r.play, u = Math.max(0, t - P.t0);
   if (P.kind === 'ball') {
-    const turn = ((u / 1.6) + P.side * 0.5) % 1;           // the two throw half a period apart
-    const throwing = turn < 0.25;
-    p.aRx = throwing ? -2.4 + turn * 6 : -0.9; p.aRz = -0.25; p.aLx = -0.7; p.aLz = 0.3; p.headX = -0.18;
+    const { thrower, w } = ballPhase(u);
+    if (P.side === thrower) {
+      p.aLx = -1.1; p.aLz = 0.25; p.headX = -0.12;
+      if (w < BALL_T.windup) {                               // wind up: the arm up and back over the shoulder, the body turned away
+        const k = playEase(w / BALL_T.windup);
+        p.aRx = playMix(-0.6, 0.75, k); p.aRz = playMix(-0.3, -2.35, k); p.torsoY = -0.4 * k; p.torsoX = -0.12 * k;
+      } else if (w < BALL_T.release) {                       // the throw: a big swing forward and down, the body leaning in
+        const k = playEase((w - BALL_T.windup) / (BALL_T.release - BALL_T.windup));
+        p.aRx = playMix(0.75, -2.0, k); p.aRz = playMix(-2.35, -0.5, k); p.torsoY = playMix(-0.4, 0.3, k); p.torsoX = playMix(-0.12, 0.2, k);
+      } else {                                               // follow through, then rest while the ball flies
+        const k = playEase((w - BALL_T.release) / 0.35);
+        p.aRx = playMix(-2.0, -0.5, k); p.aRz = playMix(-0.5, -0.2, k); p.torsoY = playMix(0.3, 0, k); p.torsoX = playMix(0.2, 0, k);
+      }
+    } else {                                                 // the catcher: both hands out in front, together
+      const k = playEase((w - 0.08) / 0.25);
+      p.aRx = -1.45 * k; p.aLx = -1.45 * k; p.aRz = playMix(-0.12, 0.38, k); p.aLz = playMix(0.12, -0.38, k);
+      p.headX = -0.1; p.torsoX = w > 0.94 ? -0.08 : 0.04 * k;
+    }
   } else if (P.kind === 'highfive') {
-    const meet = Math.max(0, Math.sin(u * 2.6));
-    p.aRz = -2.4 - meet * 0.3; p.aRx = -0.2 - meet * 0.4; p.aLz = 0.4; p.rootY = meet * 0.08; p.headX = -0.12;
+    const H = highfivePhase(u), inner = P.side === 0 ? 'L' : 'R', sgn = P.side === 0 ? 1 : -1;   // the hand toward the partner
+    if (H.walking) { const sw = Math.sin(u * 11) * 0.55; p.lLx = sw; p.lRx = -sw; p.aLx = -sw * 0.5; p.aRx = sw * 0.5; }
+    p[`a${inner}z`] = sgn * playMix(0.12, 2.0, H.up); p[`a${inner}x`] = playMix(p[`a${inner}x`] || 0, 0, H.up);
+    p.rootY = H.slap ? 0.08 * (1 - Math.abs(H.w - HIGHFIVE_T.touch) / 0.09) : 0; p.headX = -0.12 * H.up;
   } else {
-    const round = u % 3, pump = round < 1.8 ? Math.abs(Math.sin(round * Math.PI * 1.67)) : 0;
-    p.aRx = -1.2 - pump * 0.5; p.aRz = -0.3; p.aLx = -0.4; p.headX = 0.05;
+    const R = rpsRound(P.seed | 0, u), w = R.w;
+    if (w < RPS_T.shake) {                                   // じゃん・けん・ぽん: three big pumps
+      const pump = Math.abs(Math.sin((w / RPS_T.shake) * Math.PI * 3));
+      p.aRx = -0.6 - pump * 1.5; p.aRz = -0.3; p.aLx = -0.4; p.aLz = 0.3; p.headX = 0.05; p.torsoX = pump * 0.06;
+    } else if (w < RPS_T.result) {                           // the hand out in front
+      p.aRx = -1.45; p.aRz = -0.15; p.aLx = -0.3; p.headX = 0.08;
+    } else if (R.res[P.side] === 'win') {                    // both arms up, a hop
+      const hop = Math.abs(Math.sin((w - RPS_T.result) * 6));
+      p.aRx = 0; p.aRz = -2.35; p.aLx = 0; p.aLz = 2.35; p.rootY = hop * 0.12; p.headX = -0.2;
+    } else if (R.res[P.side] === 'lose') {                   // head down, arms hanging
+      p.aRx = 0.15; p.aRz = -0.05; p.aLx = 0.15; p.aLz = 0.05; p.headX = 0.4; p.torsoX = 0.14; p.hipsY = -0.02;
+    } else {                                                 // あいこ: the hand still out, the head tilted
+      p.aRx = -1.3; p.aRz = -0.15; p.headZ = 0.22; p.headX = -0.05;
+    }
+  }
+}
+// the hand as a picture (a fist, two fingers, an open hand) and its name; the result under it once it is known
+function rpsDraw(ctx, W, H, hand, res) {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f2532'; ctx.lineWidth = 7;
+  rr(ctx, 6, 6, W - 12, H - 12, 34); ctx.fill(); ctx.stroke();
+  const cx = 82, cy = 104, skin = '#ffcf9e';
+  ctx.fillStyle = skin; ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const finger = (ang, len) => {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+    rr(ctx, -10, -len - 18, 20, len + 10, 10); ctx.fill(); ctx.stroke(); ctx.restore();
+  };
+  if (hand === 1) { finger(-0.32, 58); finger(0.18, 62); }
+  if (hand === 2) { finger(-0.95, 34); finger(-0.42, 54); finger(-0.08, 60); finger(0.26, 56); finger(0.6, 46); }
+  rr(ctx, cx - 36, cy - 32, 72, 70, 24); ctx.fill(); ctx.stroke();
+  if (hand === 0) for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(cx - 34, cy - 12 + i * 16); ctx.lineTo(cx + 6, cy - 12 + i * 16); ctx.stroke(); }
+  ctx.fillStyle = '#1f2532'; ctx.font = `700 50px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(RPS_HANDS[hand], 200, res ? 74 : 104);
+  if (res) {
+    const [text, color] = { win: ['かち！', '#d0352b'], lose: ['まけ…', '#5b6577'], tie: ['あいこ', '#d88a00'] }[res];
+    ctx.fillStyle = color; ctx.font = `700 46px ${FONT_DISPLAY}`; ctx.fillText(text, 200, 150);
   }
 }
 function playBubble(r, P, t) {
-  const show = !!P && P.kind === 'rps' && (t - P.t0) % 3 >= 1.8;
+  const R = P && P.kind === 'rps' ? rpsRound(P.seed | 0, Math.max(0, t - P.t0)) : null;
+  const show = !!R && R.w >= RPS_T.shake;                    // from the reveal until the next pump
+  r.rpsState = R ? { k: R.k, hand: show ? RPS_HANDS[R.hands[P.side]] : null, res: show && R.w >= RPS_T.result ? R.res[P.side] : null, shaking: !show } : null;
   if (show && !r.rps) {
-    r.rpsCanvas = makeCanvas(200, 120);
-    r.rps = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(r.rpsCanvas), transparent: true }));
-    r.rps.position.set(0, 2.25, 0.1); r.rps.scale.set(0.6, 0.36, 1); r.root.add(r.rps); r.rpsShown = '';
+    r.rpsCanvas = makeCanvas(300, 210);
+    r.rps = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(r.rpsCanvas), transparent: true, depthTest: false }));
+    r.rps.renderOrder = 5; r.rps.position.set(0, 2.3, 0.1); r.rps.scale.set(0.86, 0.6, 1); r.root.add(r.rps); r.rpsShown = '';
   }
   if (!r.rps) return;
   r.rps.visible = show;
   if (!show) return;
-  const hand = RPS_HANDS[(Math.floor((t - P.t0) / 3) * 7 + P.side * 5 + (r.seed | 0)) % 3];
-  if (hand === r.rpsShown) return;
-  r.rpsShown = hand;
-  const ctx = r.rpsCanvas.getContext('2d');
-  ctx.clearRect(0, 0, 200, 120);
-  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f2532'; ctx.lineWidth = 5;
-  rr(ctx, 6, 6, 188, 108, 26); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#1f2532'; ctx.font = `700 46px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(hand, 100, 62);
+  const key = `${R.hands[P.side]}:${r.rpsState.res || ''}`;
+  if (key === r.rpsShown) return;
+  r.rpsShown = key;
+  rpsDraw(r.rpsCanvas.getContext('2d'), 300, 210, R.hands[P.side], r.rpsState.res);
   r.rps.material.map.needsUpdate = true;
 }
 /* Alone in its room (requester, 10-18): r.solo is { kind: 'nap' | 'bento', t0 } while the scene says so. nap: the head

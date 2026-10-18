@@ -763,8 +763,8 @@ function liveWalk(R, dt, nowMs) {
   if (!next && R.play) {                                          // at the play spot: no desk, facing the partner
     if (R.robot.desk) R.robot.desk.visible = false;
     R.play.phase = 'playing';
-    const q = R.play.partner.robot.root.position, ry = Math.atan2(q.x - root.position.x, q.z - root.position.z);
-    root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * 6);
+    const q = R.play.partner.robot.root.position, ry = Math.atan2(q.x - root.position.x, q.z - root.position.z) + (R.play.turn || 0);
+    root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * (R.play.turn !== undefined ? 12 : 6));   // highfive: turns to slap
     return 'playing';
   }
   if (!next && R.playBack) R.playBack = false;                    // back at its desk
@@ -810,7 +810,7 @@ function liveCallTag(R, call) {
   R.robot.call = call && CALL_ON_LINE.has(call.state) ? call : null;
   const c = R.robot.call;
   const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}`
-    : R.solo ? SOLO_TAG_TEXT[R.solo.kind] || '' : '';
+    : R.solo ? SOLO_TAG_TEXT[R.solo.kind] || '' : playText(R);
   if (text === (R.callText || '')) return;
   R.callText = text;
   if (!R.callEl) { R.callEl = document.createElement('span'); R.callEl.className = 'call-mark'; R.tag.insertBefore(R.callEl, R.text); }
@@ -839,6 +839,59 @@ const PLAY = { seed: 20261019, kinds: PLAY_KINDS, idleMs: 60_000, p: 1 / 15, gam
   walkSec: 30, next: 0, rng: null, list: [], ends: [] };
 const SOLO_KINDS = ['nap', 'bento'];
 const SOLO = { p: 1 / 20, minSec: 20, maxSec: 60, kinds: SOLO_KINDS };
+/* What a game looks like (2.3.3, requester 10-19: "ずっと二人で向き合ってるだけで何やってるかわからない"): the name tag,
+   the robot's card and the building's window say which game it is (遊びに行く on the way), the ball is big enough to
+   see from the usual view and goes from hand to hands, and at highfive the two walk toward each other and slap with a
+   パチン mark. The poses are 10-robot-core.js's; both read the same phase helpers (ballPhase, highfivePhase). */
+const PLAY_LOOK = { ballR: 0.3, gap: { ball: 1.3, highfive: 1.4 }, hfNear: 0.8 };   // gap: half the distance between the two spots
+const PLAY_TAG_TEXT = { ball: 'キャッチボール中', highfive: 'ハイタッチ中', rps: 'じゃんけん中' };
+function playText(R) {
+  if (!R.play) return '';
+  return R.robot.play ? PLAY_TAG_TEXT[R.robot.play.kind] || '' : '遊びに行く';
+}
+function playTagText(id) { const R = robots.find((x) => x.def.id === id); return R ? playText(R) : ''; }   // the card (50-panel.js)
+function playRoomText(room) { const G = PLAY.list.find((x) => x.room === room); return !G ? '' : G.t0 ? PLAY_TAG_TEXT[G.kind] || '' : '遊びに行く'; }   // the building
+const playV = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+function playHand(r, side, out) { return (side === 'L' ? r.armL : r.armR).localToWorld(out.set(0, -0.38, 0)); }
+function pachinCanvas() {
+  const c = makeCanvas(280, 180), ctx = c.getContext('2d');
+  ctx.beginPath();
+  for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2, rad = i % 2 ? 52 : 88; ctx.lineTo(140 + Math.cos(a) * rad * 1.45, 90 + Math.sin(a) * rad); }
+  ctx.closePath(); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.lineWidth = 7; ctx.strokeStyle = '#1f2532'; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.font = `700 52px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 8; ctx.strokeStyle = '#ffffff'; ctx.strokeText('パチン!', 140, 92);
+  ctx.fillStyle = '#d0352b'; ctx.fillText('パチン!', 140, 92);
+  return c;
+}
+function playMove(G, left, nowSec) {
+  if (left.length < 2) return;
+  const u = Math.max(0, nowSec - G.t0);
+  if (G.kind === 'ball') {
+    if (!G.ball) { G.ball = new THREE.Mesh(new THREE.SphereGeometry(PLAY_LOOK.ballR, 16, 12), toon('#ff7a3d')); scene.add(G.ball); }
+    const { n, thrower, w } = ballPhase(u), from = left[thrower].robot, to = left[1 - thrower].robot;
+    const hand = playHand(from, 'R', playV[0]);
+    if (w < BALL_T.release) { G.ball.position.copy(hand); return; }   // in the thrower's hand through the wind-up
+    if (G.ballN !== n) { G.ballFrom = hand.clone(); G.ballN = n; }
+    const at = playHand(to, 'L', playV[1]).add(playHand(to, 'R', playV[2])).multiplyScalar(0.5);   // between the catcher's hands
+    const k = (w - BALL_T.release) / (1 - BALL_T.release);
+    G.ball.position.lerpVectors(G.ballFrom, at, k); G.ball.position.y += Math.sin(Math.PI * k) * 0.8;
+  } else if (G.kind === 'highfive') {
+    const H = highfivePhase(u), [a, b] = left, sa = a.play.spot, sb = b.play.spot;
+    const dx = sb[0] - sa[0], dz = sb[1] - sa[1], d = Math.hypot(dx, dz) || 1;
+    const walk = Math.max(0, d / 2 - PLAY_LOOK.hfNear) * H.near;   // each walks this far toward the other
+    left.forEach((R, i) => {
+      const s = i ? -1 : 1, root = R.robot.root;
+      root.position.x = R.play.spot[0] + (s * dx / d) * walk; root.position.z = R.play.spot[1] + (s * dz / d) * walk;
+      R.play.turn = (i ? 1 : -1) * HIGHFIVE_T.turn * H.up;   // a little to the front: the inner hands meet between them
+    });
+    if (!G.mark) {
+      G.mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(pachinCanvas()), transparent: true, depthTest: false }));
+      G.mark.renderOrder = 6; G.mark.scale.set(1.5, 0.96, 1); G.mark.userData.playMark = true; scene.add(G.mark);
+    }
+    G.mark.visible = H.slap;
+    if (H.slap) { G.mark.position.copy(playHand(a.robot, 'L', playV[0])).add(playHand(b.robot, 'R', playV[1])).multiplyScalar(0.5); G.mark.position.y += 0.6; }
+  }
+}
 const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
   && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo;
 /* Why a robot stops (null: it does not): the reasons the requester's "walked up and went back" can be told by. Only a
@@ -867,12 +920,14 @@ function playStop(R) {
 function playEnd(G) {
   for (const R of G.players) playStop(R);
   if (G.ball) { scene.remove(G.ball); G.ball.geometry.dispose(); G.ball.material.dispose(); }
+  if (G.mark) { scene.remove(G.mark); G.mark.material.map.dispose(); G.mark.material.dispose(); }
   PLAY.list.splice(PLAY.list.indexOf(G), 1);
 }
 /* The game's room laid out again (another room came or went, its robot count changed its size): the spot and the
    players move with it, as a jump (the e2e wall check skips jumps, as it does for livePlan's), and the game goes on.
    Without it the spot and the players stayed where the room had been — inside a wall of the new layout. */
-const playSpotOf = (rm, side) => [(rm.x0 + rm.x1) / 2 + (side ? 0.8 : -0.8), rm.z1 - 0.9];
+// ball and highfive (2.3.3): farther apart, so the ball's flight shows and the two can walk toward each other (playMove)
+const playSpotOf = (rm, side, kind) => [(rm.x0 + rm.x1) / 2 + (side ? 1 : -1) * (PLAY_LOOK.gap[kind] || 0.8), rm.z1 - 0.9];
 function playFollowRoom(G) {
   const rm = PROJECT[G.room];
   if (!rm) return;
@@ -881,7 +936,7 @@ function playFollowRoom(G) {
   G.rect = rect;
   G.players.forEach((R, i) => {
     if (!R.play) return;
-    const to = playSpotOf(rm, i), dx = to[0] - R.play.spot[0], dz = to[1] - R.play.spot[1];
+    const to = playSpotOf(rm, i, G.kind), dx = to[0] - R.play.spot[0], dz = to[1] - R.play.spot[1];
     const root = R.robot.root;
     root.position.x += dx; root.position.z += dz;
     R.path = R.path.map((p) => [p[0] + dx, p[1] + dz]);
@@ -903,17 +958,12 @@ function playTick(nowSec, now) {
     const at = left.filter((R) => R.play.phase === 'playing');
     if (at.length === left.length && left.length >= 2 && !G.t0) {   // all there: the game's clock starts now
       G.t0 = nowSec; G.until = nowSec + G.len;
-      left.forEach((R, i) => { R.robot.play = { kind: G.kind, t0: nowSec, side: i }; });
+      left.forEach((R, i) => { R.robot.play = { kind: G.kind, t0: nowSec, side: i, seed: G.seed }; });
     }
     const end = left.length < 2 ? `alone (${why || 'partner stopped'})` : G.t0 && nowSec >= G.until ? 'done'
       : !G.t0 && nowSec >= G.walkUntil ? 'walk too long' : null;
     if (end) { playLog(G, end, nowSec); G.players = left; playEnd(G); continue; }
-    if (G.t0 && G.kind === 'ball') {
-      if (!G.ball) { G.ball = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), toon('#ff7a3d')); scene.add(G.ball); }
-      const [a, b] = left.map((R) => R.robot.root.position), u = ((nowSec - G.t0) / 1.6) % 1;
-      const k = u < 0.5 ? u * 2 : 2 - u * 2;                          // there and back
-      G.ball.position.set(a.x + (b.x - a.x) * k, 1.25 + Math.sin(Math.PI * (u < 0.5 ? u * 2 : u * 2 - 1)) * 0.9, a.z + (b.z - a.z) * k);
-    }
+    if (G.t0) playMove(G, left, nowSec);
   }
   if (reduceMotion || nowSec < PLAY.next) return;
   PLAY.next = nowSec + 1;
@@ -933,10 +983,11 @@ function playTick(nowSec, now) {
     const rm = PROJECT[room];
     const kind = PLAY.kinds[Math.floor(PLAY.rng() * PLAY.kinds.length)];
     const len = PLAY.minSec + PLAY.rng() * (PLAY.maxSec - PLAY.minSec);
-    const G = { room, kind, players: [a, b], t0: 0, len, until: 0, walkUntil: nowSec + PLAY.walkSec, ball: null, rect: `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` };
+    PLAY.count = (PLAY.count || 0) + 1;
+    const G = { room, kind, players: [a, b], t0: 0, len, until: 0, walkUntil: nowSec + PLAY.walkSec, ball: null, rect: `${rm.x0},${rm.z0},${rm.x1},${rm.z1}`, seed: PLAY.seed + PLAY.count };
     [a, b].forEach((R, i) => {
-      const spot = playSpotOf(rm, i);
-      R.play = { phase: 'going', spot, partner: i ? a : b, since: robotState[R.def.id].since, len };
+      const spot = playSpotOf(rm, i, kind);
+      R.play = { phase: 'going', spot, partner: i ? a : b, since: robotState[R.def.id].since, len, kind };
       R.path = [spot];
       R.restUntil = nowSec + PLAY.walkSec + len + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
     });
@@ -1522,11 +1573,20 @@ function towerFacade(F, k, P) {
       ctx.setLineDash([14, 10]); ctx.strokeStyle = P.soft; ctx.lineWidth = 4; ctx.strokeRect(x + 10, gy + 10, w - 20, WIN_BOTTOM - gy - 20); ctx.setLineDash([]);
     }
     if (state === 'waiting') { ctx.strokeStyle = P.warn; ctx.lineWidth = 12; ctx.globalAlpha = 0.5 + 0.5 * TOWER.pulse; ctx.strokeRect(x + 6, WIN_TOP + 6, w - 12, WIN_BOTTOM - WIN_TOP - 12); ctx.globalAlpha = 1; }
+    const play = id && SOURCE.mode === 'live' ? playRoomText(id) : '';   // a game in the room (2.3.3): its name at the window's foot
+    if (play) {
+      let size = 32; ctx.font = `700 ${size}px ${FONT_BODY}`;
+      while (ctx.measureText(play).width > w - 40 && size > 14) { size -= 2; ctx.font = `700 ${size}px ${FONT_BODY}`; }
+      const pw = ctx.measureText(play).width + 28;
+      ctx.fillStyle = P.panel; ctx.beginPath(); ctx.roundRect(x + (w - pw) / 2, WIN_BOTTOM - 58, pw, size + 22, 12); ctx.fill();
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = P.ink; ctx.textAlign = 'center'; ctx.fillText(play, x + w / 2, WIN_BOTTOM - 58 + size + 8);
+    }
     // the name band
     ctx.fillStyle = id ? P.ink : P.soft; ctx.textAlign = 'center';
     const fit = id ? towerNameFit(ctx, towerName(id), w - 8) : (ctx.font = `700 30px ${FONT_BODY}`, { size: 30, lines: ['—'] });
     fit.lines.forEach((ln, j) => ctx.fillText(ln, x + w / 2, NAME_TOP + 30 + j * (fit.size + 10)));
-    F.bays.push({ x0: x / W, x1: (x + w) / W, gy0: gy / H, gy1: WIN_BOTTOM / H, id, state });
+    F.bays.push({ x0: x / W, x1: (x + w) / W, gy0: gy / H, gy1: WIN_BOTTOM / H, id, state, play });
   });
   const sx = W - STATS + 18;
   ctx.fillStyle = P.chip; ctx.beginPath(); ctx.roundRect(sx - 8, 22, STATS - 36, H - 44, 20); ctx.fill();
@@ -1718,7 +1778,8 @@ function towerSync(now = performance.now()) {
   towerBuild();
   const waits = LIVE.floors.some((f) => f.some((id) => LIVE.rank[id] === 0));
   const pulse = waits && !reduceMotion ? Math.round((0.5 + 0.5 * Math.sin(now / 160)) * 4) / 4 : 1;   // a waiting window's frame
-  const sig = JSON.stringify([LIVE.floors, LIVE.rank, TOWER.floors.map((F, k) => towerFloorText(k)).map((t) => [t.working, t.waiting, t.idle])]);
+  const sig = JSON.stringify([LIVE.floors, LIVE.rank, TOWER.floors.map((F, k) => towerFloorText(k)).map((t) => [t.working, t.waiting, t.idle]),
+    SOURCE.mode === 'live' ? PLAY.list.map((G) => [G.room, G.kind, !!G.t0]) : []]);   // a game's name on its window (2.3.3)
   if (sig === TOWER.sig && pulse === TOWER.pulse) return;
   const P = towerPalette(), all = sig !== TOWER.sig;
   TOWER.sig = sig; TOWER.pulse = pulse;
