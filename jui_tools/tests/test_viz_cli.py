@@ -51,7 +51,7 @@ def _start_serve(home: Path, port: int) -> subprocess.Popen:
     )
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
-        if (home / ".jsonui-cli" / "viz" / "server.json").exists():
+        if (home / ".local" / "state" / "jui-viz" / "server.json").exists():
             return proc
         if proc.poll() is not None:
             break
@@ -72,7 +72,7 @@ def _get(url: str, headers: dict | None = None) -> int:
 
 
 def test_paths_follow_home_at_call_time(home):
-    assert paths.pid_file() == home / ".jsonui-cli" / "viz" / "viz.pid"
+    assert paths.pid_file() == home / ".local" / "state" / "jui-viz" / "viz.pid"
     assert paths.server_json().parent == paths.viz_home()
     assert paths.claude_settings() == home / ".claude" / "settings.json"
 

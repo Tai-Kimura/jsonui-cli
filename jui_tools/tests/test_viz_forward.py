@@ -44,7 +44,7 @@ class _Server:
 
 
 def _server_json(home: Path, port: int, token: str = "tok") -> None:
-    folder = home / ".jsonui-cli" / "viz"
+    folder = home / ".local" / "state" / "jui-viz"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "server.json").write_text(json.dumps({"pid": 1, "port": port, "token": token}))
 
@@ -120,7 +120,7 @@ def test_a_refused_token_or_a_dead_port_is_still_silent(home):
 
 
 def test_a_broken_server_json_or_an_oversized_body_is_silent(home):
-    folder = home / ".jsonui-cli" / "viz"
+    folder = home / ".local" / "state" / "jui-viz"
     folder.mkdir(parents=True)
     (folder / "server.json").write_text("{not json")
     done, _ = _run(home)

@@ -37,7 +37,8 @@ def test_the_plugin_hooks_cover_the_same_events_as_the_installer():
     env = [h for g in hooks["SessionStart"] for h in g["hooks"] if "session_env.sh" in h.get("command", "")]
     assert len(env) == 1
     script = (PLUGIN / "scripts" / "session_env.sh").read_text()
-    assert "CLAUDE_ENV_FILE" in script and hi.PROGRESS_ENV in script and ".jsonui-cli/viz/test-progress" in script
+    assert "CLAUDE_ENV_FILE" in script and hi.PROGRESS_ENV in script and "/test-progress" in script
+    assert ".jsonui-cli" not in script  # the install folder is replaced by every bootstrap (test_viz_state_home.py runs it)
 
 
 def test_the_manifest_binds_the_channel_and_the_marketplace_lists_the_plugin():

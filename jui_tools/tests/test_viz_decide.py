@@ -38,7 +38,7 @@ def _payload(**extra) -> dict:
 
 async def _setup(tmp_path, wait_sec: float = 5):
     port = _free_port()
-    viz = tmp_path / ".jsonui-cli" / "viz"
+    viz = tmp_path / ".local" / "state" / "jui-viz"
     viz.mkdir(parents=True, exist_ok=True)
     (viz / "server.json").write_text(json.dumps({"pid": 1, "port": port, "token": TOKEN, "decideWaitSec": wait_sec}))
     world = World(VizState())

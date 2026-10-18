@@ -51,3 +51,14 @@ if _loaded != _SOURCE_ROOT:
 # What has NOT changed: a fix placed only in this file reaches only the
 # runners that read conftest. `python -m unittest discover` still runs by
 # hand, and still collects nothing from the pytest-style modules.
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _viz_home_follows_home(monkeypatch):
+    """jui viz's runtime folder comes from JUI_VIZ_HOME / XDG_STATE_HOME before HOME. A test that points
+    HOME at a temporary folder must not reach the real one through a variable the machine happens to set."""
+    monkeypatch.delenv("JUI_VIZ_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)

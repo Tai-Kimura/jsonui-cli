@@ -60,7 +60,7 @@ def stop_after(home):
 
 def test_start_status_open_stop_round_trip(home, stop_after, tmp_path):
     port = _free_port()
-    old = home / ".jsonui-cli" / "viz" / "serve.log"   # a log left by an earlier start, readable by others
+    old = home / ".local" / "state" / "jui-viz" / "serve.log"   # a log left by an earlier start, readable by others
     old.parent.mkdir(parents=True)
     old.write_text("earlier run\n" * 700)   # longer than serve writes, so an untruncated log keeps some
     old.chmod(0o644)
@@ -74,7 +74,7 @@ def test_start_status_open_stop_round_trip(home, stop_after, tmp_path):
     log = Path(info["log"])
     assert log == old and stat.S_IMODE(log.stat().st_mode) == 0o600   # recreated on each start, 0600
     assert "earlier run" not in log.read_text()
-    token = json.loads((home / ".jsonui-cli" / "viz" / "server.json").read_text())["token"]
+    token = json.loads((home / ".local" / "state" / "jui-viz" / "server.json").read_text())["token"]
     assert token not in log.read_text() and token not in started.stdout and token not in started.stderr
 
     status = json.loads(_jui(home, "viz", "status", "--json").stdout)
@@ -98,7 +98,7 @@ def test_start_status_open_stop_round_trip(home, stop_after, tmp_path):
     assert stopped.returncode == 0, stopped.stderr
     assert not _alive(info["pid"])
     assert json.loads(_jui(home, "viz", "status", "--json").stdout)["running"] is False
-    assert not (home / ".jsonui-cli" / "viz" / "server.json").exists()
+    assert not (home / ".local" / "state" / "jui-viz" / "server.json").exists()
 
 
 def test_a_second_start_reports_the_running_server(home, stop_after):
@@ -155,7 +155,7 @@ def test_a_start_on_a_busy_port_fails_and_leaves_the_holder_alone(home):
         assert elapsed < viz_cmd.START_WAIT_SEC, f"{elapsed:.1f}s"
         info = json.loads(res.stdout)
         assert info["running"] is False and "使用中" in info["logTail"], info
-        assert not (home / ".jsonui-cli" / "viz" / "viz.pid").exists()
+        assert not (home / ".local" / "state" / "jui-viz" / "viz.pid").exists()
         assert holder.fileno() != -1   # still ours, still listening
         assert _listening(port)
     finally:

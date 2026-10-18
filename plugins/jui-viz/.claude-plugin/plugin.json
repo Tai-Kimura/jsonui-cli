@@ -1,7 +1,7 @@
 {
   "name": "jui-viz",
   "displayName": "jui viz",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shows this machine's Claude Code sessions and subagents in the local jui viz page (jui viz serve), and lets the page answer permission prompts.",
   "author": {
     "name": "Tai-Kimura"

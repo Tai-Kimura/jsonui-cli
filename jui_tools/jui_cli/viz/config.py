@@ -1,4 +1,4 @@
-"""Settings for ``jui viz``: defaults, then ``~/.jsonui-cli/viz/config.json``,
+"""Settings for ``jui viz``: defaults, then ``<paths.viz_home()>/config.json``,
 then command-line options (applied by the caller)."""
 from __future__ import annotations
 

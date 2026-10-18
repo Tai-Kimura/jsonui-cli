@@ -3,7 +3,8 @@
 Routes (design: dev-guide, 05 §3):
   GET  /            the page, with the per-start token in <meta name="jui-viz-token">
   GET  /debug       the plain check page (P1–P2)
-  GET  /health      {ok, version, pid}; no token, nothing secret
+  GET  /health      {ok, version, pid, home}; no token, nothing secret (home: the runtime folder, so
+                    `jui viz stop` can tell a server whose files were lost from one that is someone else's)
   GET  /app.js      the page's script, concatenated by ``bundle.build`` (P3)
   GET  /<static>    files under web/ (read with importlib.resources)
   GET  /ws          browser WebSocket: hello → auth (within 2 s) → snapshot → pushes
@@ -24,7 +25,7 @@ from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import security
+from . import paths, security
 from .config import VizConfig
 from .state import VizState, now_ms
 
@@ -156,7 +157,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         return _with_token(raw.decode("utf-8"))
 
     async def health(request: web.Request) -> web.Response:
-        return web.json_response({"ok": True, "version": ctx.version, "pid": os.getpid()})
+        return web.json_response({"ok": True, "version": ctx.version, "pid": os.getpid(), "home": str(paths.viz_home())})
 
     async def app_js(request: web.Request) -> web.Response:
         from . import bundle  # concatenates web/js/ in a fixed order

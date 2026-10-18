@@ -8,7 +8,9 @@ itself, so a change on either side turns that test red.
 
 Where the records come from:
   * Web: <JSONUI_TEST_PROGRESS_DIR>/<run>.jsonl, appended by the runner
-    (hooks install puts ~/.jsonui-cli/viz/test-progress there).
+    (hooks install and the plugin put <paths.viz_home()>/test-progress there;
+    serve also reads the folder of 2.1.0 and earlier, ~/.jsonui-cli/viz/test-progress, while a
+    session still writes there).
   * Android: logcat tag JsonUITestProgress at Info, read per device with
     ``adb -s <serial> logcat -v raw -s JsonUITestProgress:I -T 1``.
   * iOS: unified logging, read per simulator with ``xcrun simctl spawn

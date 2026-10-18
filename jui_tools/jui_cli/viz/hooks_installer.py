@@ -54,7 +54,15 @@ def forward_path() -> Path:
 
 
 def progress_dir() -> Path:
-    return paths.viz_home() / "test-progress"
+    return paths.progress_dir()
+
+
+def legacy_progress_values() -> set[str]:
+    """Values of our env entry an earlier install wrote: the progress folder inside the install folder.
+
+    Ours to replace (install) and to remove (uninstall); any other value is the user's.
+    """
+    return {str(paths.legacy_progress_dir())}
 
 
 def our_handler(python: str | None = None, forward: Path | None = None) -> dict:
@@ -180,7 +188,7 @@ def add_env(settings: dict, value: str) -> tuple[dict, str | None]:
     if env is not None and not isinstance(env, dict):
         return out, "settings.json の env がオブジェクトではないため、テストの進捗の場所を入れませんでした"
     current = (env or {}).get(PROGRESS_ENV)
-    if current is not None and current != value:
+    if current is not None and current != value and current not in legacy_progress_values():
         return out, f"env の {PROGRESS_ENV} に別の値が入っているため上書きしません（テストの進捗は取れません）"
     out.setdefault("env", {})[PROGRESS_ENV] = value
     return out, None
@@ -189,7 +197,7 @@ def add_env(settings: dict, value: str) -> tuple[dict, str | None]:
 def strip_env(settings: dict, value: str) -> dict:
     out = copy.deepcopy(settings)
     env = out.get("env")
-    if isinstance(env, dict) and env.get(PROGRESS_ENV) == value:
+    if isinstance(env, dict) and (env.get(PROGRESS_ENV) == value or env.get(PROGRESS_ENV) in legacy_progress_values()):
         del env[PROGRESS_ENV]
         if not env:
             del out["env"]

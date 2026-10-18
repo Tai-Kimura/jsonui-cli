@@ -51,11 +51,24 @@ def decide(body: bytes, info: dict) -> None:
         sys.stdout.flush()
 
 
+def viz_home() -> str:
+    """jui viz's runtime folder. ⚠️ The rule of jui_cli/viz/paths.py viz_home(), which this script
+    cannot import (it runs as python3 -I -S, and as a copy in the plugin): $JUI_VIZ_HOME, else
+    $XDG_STATE_HOME/jui-viz, each only when absolute, else ~/.local/state/jui-viz."""
+    override = os.environ.get("JUI_VIZ_HOME", "")
+    if os.path.isabs(override):
+        return override
+    state = os.environ.get("XDG_STATE_HOME", "")
+    if os.path.isabs(state):
+        return os.path.join(state, "jui-viz")
+    return os.path.join(os.path.expanduser("~"), ".local", "state", "jui-viz")
+
+
 def main() -> int:
     try:
         # Drain stdin first so Claude Code never writes into a closed pipe.
         body = sys.stdin.buffer.read()
-        info_path = os.path.join(os.path.expanduser("~"), ".jsonui-cli", "viz", "server.json")
+        info_path = os.path.join(viz_home(), "server.json")
         if len(body) > MAX_BODY or not os.path.exists(info_path):
             return 0  # too large, or the server is not running
         import json
