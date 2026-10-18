@@ -130,6 +130,40 @@ async def run_focus_cam(pw, out, failures):
         await page.wait_for_timeout(600)
         await page.screenshot(path=str(out / "usual-faint-dark.png"))
         await page.emulate_media(color_scheme="light")
+
+        # 4b. the room of a faint wall is built again (more sessions: a bigger room): the faint meshes go with their
+        # room, their own materials are disposed (a shared one is not), and nothing faint is left out of the scene
+        # the specimen: a faint mesh whose own material no other mesh uses (shared with another wall, taking the room
+        # down disposes it anyway through that wall, and nothing could leak); turn the camera until one is faint
+        info = await page.evaluate("() => window.__dbg.fadedInfo()")
+        tried = []
+        for step in range(24):
+            if any(x["room"] and x["exclusive"] and not x["shared"] for x in info):
+                break
+            await page.evaluate("(a) => window.__dbg.focusSet({ az: a.az + a.k * Math.PI / 12, el: a.el })", {**base, "k": step + 1})
+            await page.wait_for_timeout(900)
+            info = await page.evaluate("() => window.__dbg.fadedInfo()")
+            tried.append(len(info))
+        res["specimenTurns"] = tried
+        room = next((x["room"] for x in info if x["room"] and x["exclusive"] and not x["shared"]), None)
+        path = await page.evaluate("(r) => window.__dbg.projectPath(r)", room) if room else None
+        check(failures, room and path, f"a faint mesh of a room with a material of its own (the specimen): {info}")
+        if room and path:
+            old = await page.evaluate("() => window.__dbg.markOwnMaterials()")
+            for k in range(3):
+                sid = f"d{k}000000-0000-4000-8000-0000000000e{k}"
+                hook({"session_id": sid, "cwd": path.replace("~", str(home)) if path.startswith("~") else path,
+                      "hook_event_name": "SessionStart", "source": "startup"})
+            await wait(page, "(u) => u.every((x) => !window.__dbg.inScene(x))", arg=old, timeout=30000, label="the room built again")
+            await page.wait_for_timeout(1500)
+            marks = await page.evaluate("() => window.__dbg.disposedMarks()")
+            after = await page.evaluate("() => window.__dbg.fadedInfo()")
+            res["rebuilt"] = {"room": room, "path": path, "faded": info, "disposed": marks, "after": after}
+            own = [x for x in info if x["uuid"] in old and not x["shared"] and x["exclusive"]]
+            shared = [x for x in info if x["uuid"] in old and x["shared"]]
+            check(failures, own and all(marks.get(x["uuid"]) for x in own) and not any(marks.get(x["uuid"]) for x in shared),
+                  f"taking the room down disposes the faint meshes' own materials (not a shared one): {res['rebuilt']}")
+            check(failures, all(x["inScene"] for x in after), f"nothing faint is left out of the scene: {after}")
         await page.keyboard.press("Escape")
         await wait(page, "() => !window.__dbg.focus().zoomed && !window.__dbg.focus().tween", label="back from the robot")
         e = res["closed"] = await page.evaluate(FOCUS)

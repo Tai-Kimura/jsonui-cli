@@ -56,6 +56,26 @@ window.__dbg = {
   // the arm turns the camera back to the usual direction, as a drag would (to see the faint walls)
   focusSet: (o) => { if ('az' in o) FOCUS.az = o.az; if ('el' in o) FOCUS.el = o.el; if ('dist' in o) FOCUS.dist = o.dist; return { az: FOCUS.az, el: FOCUS.el }; },
   focusBase: () => ({ ...FOCUS_BASE }),
+  // the faint meshes: whether still in the scene, their room, whether their own material is a shared one; and a mark
+  // on each own material's dispose (the arm sees whether taking a room down disposes it)
+  fadedInfo: () => (liveShared(), [...FOCUS.faded.entries()]).map(([o, mat]) => {
+    let inScene = false; for (let x = o; x; x = x.parent) if (x === scene) inScene = true;
+    const room = Object.keys(LIVE3D.rooms).find((id) => { let hit = false; LIVE3D.rooms[id].group.traverse((c) => { if (c === o) hit = true; }); return hit; }) || null;
+    // exclusive: no other mesh in the scene uses its own material — the only case taking the room down could leak it
+    const own = [].concat(mat); let others = 0;
+    scene.traverse((c) => { if (c !== o && c.material && [].concat(c.material).some((m) => own.includes(m))) others += 1; });
+    return { uuid: o.uuid, inScene, room, shared: own.some((m) => LIVE3D.sharedMat.has(m)), exclusive: others === 0 };
+  }),
+  markOwnMaterials: () => {
+    window.__disposed = window.__disposed || {};
+    return [...FOCUS.faded.entries()].map(([o, mat]) => {
+      for (const m of [].concat(mat)) { const d = m.dispose.bind(m); m.dispose = () => { window.__disposed[o.uuid] = (window.__disposed[o.uuid] || 0) + 1; d(); }; }
+      return o.uuid;
+    });
+  },
+  disposedMarks: () => ({ ...(window.__disposed || {}) }),
+  inScene: (uuid) => !!scene.getObjectByProperty('uuid', uuid),
+  projectPath: (id) => (PROJECT[id] ? PROJECT[id].path : null),
   // what a robot's view would cross from the usual direction (the arm looks for a robot the usual view cannot see)
   usualBlockers: (id) => { const R = robots.find((x) => x.def.id === id); return R ? focusBlockers(R, focusPose(R, FOCUS_BASE.az, FOCUS_BASE.el, 8).p).size : -1; },
   renderInfo: () => (renderer ? { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures } : null),

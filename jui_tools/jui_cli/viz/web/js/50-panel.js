@@ -1117,6 +1117,21 @@ function focusFadeSync() {
     if (!Array.isArray(FOCUS.faded.get(o))) o.material = o.material[0];
   }
 }
+/* A room or a robot about to be taken down (40-scene.js liveDropRoom / liveDropRobot): what of it is faint gets its
+   own material back first, so disposeTree works as if nothing had been faint — the room's own materials disposed,
+   the shared ones left — and the faint copies go with it. Left faint, disposeTree disposed the copies and never the
+   own materials (5b's review, 10-18). */
+function focusRelease(root) {
+  for (const [o, mat] of FOCUS.faded) {
+    let inside = false;
+    for (let x = o; x; x = x.parent) if (x === root) { inside = true; break; }
+    if (!inside) continue;
+    const faint = o.material;
+    o.material = mat;
+    for (const m of [].concat(faint)) m.dispose();
+    FOCUS.faded.delete(o);
+  }
+}
 const focusing = () => has3D && !!rbState.id && zoom.zoomed && !camTween;
 {
   // drag: around the robot; wheel and pinch: nearer or farther. Only while a robot's card has the camera.
