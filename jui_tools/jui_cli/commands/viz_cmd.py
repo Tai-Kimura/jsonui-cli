@@ -176,6 +176,80 @@ def _clear_runtime_files(pid: int | None = None) -> None:
             pass
 
 
+# ---------------------------------------------------------------- the jui-viz plugin 1.0.0
+#
+# ⏳ COMPATIBILITY, TO REMOVE IN jsonui-cli 3.0.0 (the next major), together with
+# LEGACY_MIRROR_SEC, the mirror task in _serve and its clear in _cmd_serve.
+#
+# The plugin 1.0.0's forward.py / channel.py read ~/.jsonui-cli/viz/server.json
+# and nothing else; a plugin is updated by hand, so it outlives the CLI that
+# moved the runtime folder. Without this, a new server and an old plugin meet
+# silently: no robot moves and the permission relay is gone. So a running
+# server also writes a copy of server.json there, marked with "mirrorOf" (the
+# real one's path). Only when the install folder (~/.jsonui-cli) exists, so a
+# machine without one gets no folder of ours; never over a server.json that is
+# not a mirror (a 2.1.0 server's own). The bootstrap deletes that folder, so
+# the server rewrites a missing copy every LEGACY_MIRROR_SEC. Stopping removes
+# it. The plugin 1.0.1 and later read the new folder only.
+
+LEGACY_MIRROR_SEC = 2.0
+LEGACY_MIRROR_KEY = "mirrorOf"
+
+
+def _legacy_server_json() -> Path:
+    return paths.legacy_viz_home() / "server.json"
+
+
+def _read_legacy_server_json() -> dict | None:
+    """The old folder's server.json; {} when it exists but is not a JSON object; None when absent."""
+    try:
+        data = json.loads(_legacy_server_json().read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _legacy_mirror_write(info: dict) -> bool:
+    """Write the copy for old plugins when it is missing or stale. True when written."""
+    if not paths.legacy_viz_home().parent.is_dir():
+        return False
+    current = _read_legacy_server_json()
+    if current is not None and not current.get(LEGACY_MIRROR_KEY):
+        return False  # a server.json that is not a mirror: an old server's, not ours to replace
+    wanted = dict(info, **{LEGACY_MIRROR_KEY: str(paths.server_json())})
+    if current == wanted:
+        return False
+    paths.legacy_viz_home().mkdir(mode=0o700, exist_ok=True)
+    _write_private_json(_legacy_server_json(), wanted)
+    return True
+
+
+def _legacy_mirror_clear(pid: int) -> None:
+    """Remove the copy this server wrote (only a mirror naming ``pid``), and the old folder when that leaves it empty."""
+    current = _read_legacy_server_json()
+    if current and current.get(LEGACY_MIRROR_KEY) and current.get("pid") == pid:
+        try:
+            _legacy_server_json().unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            paths.legacy_viz_home().rmdir()
+        except OSError:
+            pass
+
+
+def _legacy_in_use() -> list[str]:
+    """What the old folder holds besides our mirror: something still written by an old plugin or hook."""
+    folder = paths.legacy_viz_home()
+    if not folder.is_dir():
+        return []
+    mirror = _read_legacy_server_json()
+    return sorted(p.name for p in folder.iterdir()
+                  if not (p.name == "server.json" and mirror and mirror.get(LEGACY_MIRROR_KEY)))
+
+
 #: _health_pid's answers besides a pid.
 REFUSED = "refused"  # nothing listens there: certainly not our server
 UNKNOWN = "unknown"  # no answer in time / not a viz answer: cannot tell
@@ -405,6 +479,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         ))
     finally:
         _clear_runtime_files(os.getpid())
+        _legacy_mirror_clear(os.getpid())
 
 
 async def _serve(config, open_browser: bool, record: str | None = None, replay: str | None = None,
@@ -504,11 +579,24 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     reader_cleanup: list = []
     observer = None
     try:
-        _write_private_json(paths.server_json(), {
+        info = {
             "pid": pid, "port": port, "token": ctx.token,
             "startedAt": started_at, "version": ctx.version, "decideWaitSec": config.decideWaitSec,
-        })
+        }
+        _write_private_json(paths.server_json(), info)
         hooks_installer.progress_dir().mkdir(parents=True, exist_ok=True)
+
+        _legacy_mirror_write(info)  # ⏳ for the plugin 1.0.0 (see _legacy_mirror_write); remove in 3.0.0
+
+        async def legacy_mirror_loop() -> None:
+            while True:
+                await asyncio.sleep(LEGACY_MIRROR_SEC)
+                try:
+                    _legacy_mirror_write(info)
+                except OSError:
+                    pass
+
+        tasks.append(asyncio.create_task(legacy_mirror_loop()))
 
         if replay:
             set_source("agents", "stopped", None)
@@ -1145,9 +1233,9 @@ def _doctor_checks() -> list[dict]:
         if hooks.get("progressEnv") in hooks_installer.legacy_progress_values():
             add("progressEnv", False, f"settings.json の {hooks_installer.PROGRESS_ENV} が古い場所（{hooks['progressEnv']}）のままです。"
                 "jui viz hooks install を撃ち直すと新しい場所に書き換わります")
-    legacy = paths.legacy_viz_home()
-    add("state", not legacy.exists(), f"{paths.viz_home()}" + ("" if not legacy.exists() else
-        f"（古い場所 {legacy} がまだ使われています。プラグインなら /plugin で jui-viz を更新し、"
+    legacy, in_use = paths.legacy_viz_home(), _legacy_in_use()
+    add("state", not in_use, f"{paths.viz_home()}" + ("" if not in_use else
+        f"（古い場所 {legacy} がまだ使われています: {', '.join(in_use)}。プラグインなら /plugin で jui-viz を更新し、"
         "settings.json のフックなら jui viz hooks install を撃ち直してください。どちらも Claude Code のセッションの再起動が要ります）"))
 
     if claude is not None:

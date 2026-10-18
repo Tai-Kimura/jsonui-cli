@@ -293,3 +293,115 @@ def test_a_server_of_another_home_is_not_stopped(home, tmp_path):
         _jui(other, "viz", "stop")
         if _alive(pid):
             os.kill(pid, signal.SIGTERM)  # the server this test started
+
+
+# ---------------------------------------------------------------- ⏳ the jui-viz plugin 1.0.0 (remove in 3.0.0)
+#
+# tests/fixtures/viz/forward_plugin_1_0_0.py is plugins/jui-viz/scripts/forward.py
+# of 8ccee0a2 (jsonui-cli 2.1.0, plugin 1.0.0) byte for byte: it reads
+# ~/.jsonui-cli/viz/server.json and nothing else.
+
+OLD_FORWARD = Path(__file__).resolve().parent / "fixtures" / "viz" / "forward_plugin_1_0_0.py"
+
+
+def _wait_for(predicate, seconds: float = 10.0) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.1)
+    return predicate()
+
+
+def _mirror(home: Path) -> dict | None:
+    try:
+        return json.loads((home / ".jsonui-cli" / "viz" / "server.json").read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _snapshot(port: int, token: str) -> dict:
+    import urllib.request
+
+    request = urllib.request.Request(f"http://127.0.0.1:{port}/api/snapshot", headers={"X-Jui-Viz-Token": token})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    return json.loads(opener.open(request, timeout=5).read())
+
+
+@pytest.fixture()
+def server(home):
+    """A server started in this HOME (with an install folder there, as on a real machine)."""
+    (home / ".jsonui-cli" / "jui_tools").mkdir(parents=True)
+    started = _jui(home, "viz", "start", "--json")
+    assert started.returncode == 0, started.stderr
+    pid = json.loads(started.stdout)["pid"]
+    yield pid
+    _jui(home, "viz", "stop")
+    if _alive(pid):
+        os.kill(pid, signal.SIGTERM)  # the server this test started
+
+
+def test_an_old_plugin_reaches_a_new_server_through_the_copy(home, server):
+    assert OLD_FORWARD.read_text().count('".jsonui-cli", "viz", "server.json"') == 1
+    info = json.loads(paths.server_json().read_text())
+    assert _wait_for(lambda: _mirror(home) is not None)
+    mirror = _mirror(home)
+    assert {k: mirror[k] for k in info} == info and mirror["mirrorOf"] == str(paths.server_json())
+    assert (home / ".jsonui-cli" / "viz" / "server.json").stat().st_mode & 0o777 == 0o600
+
+    body = {"session_id": "0ld-p1ug-1n00", "hook_event_name": "SessionStart", "cwd": str(home), "source": "startup"}
+    done = subprocess.run([sys.executable, "-I", "-S", str(OLD_FORWARD)], input=json.dumps(body).encode(),
+                          env=_env(home), capture_output=True, timeout=10)
+    assert done.returncode == 0
+
+    def arrived() -> bool:
+        sessions = _snapshot(info["port"], info["token"])["slices"].get("sessions") or []
+        return any(s.get("id", "").startswith("0ld") or "0ld-p1ug-1n00" in json.dumps(s) for s in sessions)
+
+    assert _wait_for(arrived), "the 1.0.0 forward.py did not reach the server"
+
+
+def test_the_copy_comes_back_after_the_bootstrap_deletes_it(home, server):
+    assert _wait_for(lambda: _mirror(home) is not None)
+    shutil.rmtree(home / ".jsonui-cli")                      # the bootstrap's rm -rf
+    (home / ".jsonui-cli" / "jui_tools").mkdir(parents=True)  # and its clone
+    assert _mirror(home) is None
+    assert _wait_for(lambda: _mirror(home) is not None, seconds=10), "the server did not write the copy again"
+    assert _mirror(home)["pid"] == server
+
+
+def test_stopping_removes_the_copy_and_the_real_file(home, server):
+    assert _wait_for(lambda: _mirror(home) is not None)
+    assert _jui(home, "viz", "stop").returncode == 0
+    assert not paths.server_json().exists()
+    assert not (home / ".jsonui-cli" / "viz").exists()
+
+
+def test_no_install_folder_means_no_copy(home):
+    started = _jui(home, "viz", "start", "--json")
+    assert started.returncode == 0, started.stderr
+    pid = json.loads(started.stdout)["pid"]
+    try:
+        time.sleep(2.5)  # past one rewrite
+        assert not (home / ".jsonui-cli").exists()
+    finally:
+        _jui(home, "viz", "stop")
+        if _alive(pid):
+            os.kill(pid, signal.SIGTERM)  # the server this test started
+
+
+def test_an_old_servers_own_file_is_not_replaced(home, server):
+    """A server.json without mirrorOf appearing while ours runs (an old CLI's server) is left as it is."""
+    assert _wait_for(lambda: _mirror(home) is not None)
+    own = json.dumps({"pid": 999999, "port": 1, "token": "old"})
+    (home / ".jsonui-cli" / "viz" / "server.json").write_text(own)
+    time.sleep(2.5)  # past one rewrite
+    assert (home / ".jsonui-cli" / "viz" / "server.json").read_text() == own
+
+
+def test_the_copy_is_never_moved_into_the_new_folder(home):
+    old = home / ".jsonui-cli" / "viz"
+    old.mkdir(parents=True)
+    (old / "server.json").write_text(json.dumps({"pid": 999999, "port": 1, "token": "t", "mirrorOf": "x"}))
+    assert main(["viz", "status"]) == 0
+    assert not paths.server_json().exists() and (old / "server.json").exists()

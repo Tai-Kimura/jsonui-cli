@@ -23,6 +23,7 @@ tests/test_viz_state_home.py runs all of them against the same environments.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -66,7 +67,7 @@ def migrate_legacy() -> list[str]:
     moved: list[str] = []
     for child in sorted(old.iterdir()):
         target = new / child.name
-        if target.exists() or target.is_symlink():
+        if target.exists() or target.is_symlink() or _is_mirror(child):
             continue
         try:
             shutil.move(str(child), str(target))
@@ -78,6 +79,17 @@ def migrate_legacy() -> list[str]:
     except OSError:
         pass
     return moved
+
+
+def _is_mirror(path: Path) -> bool:
+    """The copy of server.json a running server keeps in the old folder for old plugins (viz_cmd)."""
+    if path.name != "server.json":
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and bool(data.get("mirrorOf"))
 
 
 def pid_file() -> Path:
