@@ -101,6 +101,25 @@ def test_a_named_receiver_rings_at_once_and_picks_up_when_it_reads_idle(tmp_path
     assert _calls(world, T + 4_000 + calls_mod.ANSWERED_SHOW_MS) == []   # both back to work
 
 
+def _dequeue(at):
+    return {"type": "queue-operation", "operation": "dequeue", "timestamp": _iso(at), "sessionId": B}
+
+
+def test_messages_to_subagents_sent_with_the_one_to_the_receiver_do_not_take_its_ring_or_its_pick_up(tmp_path):
+    """The sender writes to its subagents (agent ids: no receiver session) in the same turn as to B, before or after
+    it (10-19: B read it, its 3 records 1-4 ms apart, and B's call stayed ringing for 10 minutes)."""
+    for first in ("subagents", "receiver"):
+        world, f = _setup(tmp_path / first)
+        sends = [(f"a{n}5ffa58a9b87d19", f"tu-sub{n}") for n in range(3)]
+        sends = sends + [(NAMES[B], "tu-b")] if first == "subagents" else [(NAMES[B], "tu-b")] + sends
+        for i, (to, use_id) in enumerate(sends):
+            _send(world, A, to, use_id=use_id, at=T + 1_000 + i)
+        _append(f[B], _enqueue(A, T + 2_000), _dequeue(T + 2_001), _meta(A, T + 2_004))
+        calls = {c["id"]: c for c in _calls(world, T + 3_000)}
+        assert calls["call-tu-b"]["state"] == "answered", (first, calls["call-tu-b"])
+        assert all(calls[f"call-tu-sub{n}"]["state"] == "dialing" for n in range(3)), (first, calls)
+
+
 def test_a_busy_receiver_picks_up_at_its_next_tool_boundary(tmp_path):
     world, f = _setup(tmp_path)
     _send(world, A, NAMES[B])

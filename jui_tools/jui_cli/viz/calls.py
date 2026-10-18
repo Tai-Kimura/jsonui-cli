@@ -129,11 +129,15 @@ class CallBook:
 
     def _open_to(self, to_session: str, from_name: str, newest: bool, written: int | None = None) -> dict | None:
         """An open call from that sender that this receiver can be the end of (and, for a read written at
-        ``written``, one that had arrived by then)."""
+        ``written``, one that had arrived by then). A call already addressed to this receiver comes first; one with
+        no receiver session (a message to a subagent, or a name not resolved) only when there is none: a sender's
+        messages to its subagents, sent with the one to this receiver, took its pick-up and left it ringing (10-19
+        ticket 2026-10-19-jui-viz-call-stays-ringing-after-it-was-read)."""
         found = [c for c in self.calls.values() if c["state"] in OPEN
                  and (c.get("toSession") in (None, to_session))
                  and (c.get("fromName") == from_name if c.get("fromName") else c.get("toSession") == to_session)
                  and (written is None or written >= (c.get("arrived") or c["startedAt"] - PICK_UP_SLACK_MS))]
+        found = [c for c in found if c.get("toSession") == to_session] or found
         if not found:
             return None
         found.sort(key=lambda c: c["startedAt"])
