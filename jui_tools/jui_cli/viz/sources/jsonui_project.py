@@ -261,6 +261,13 @@ def resolve_declared(value: str, roots: list[Path]) -> tuple[Path, bool]:
 _TEST_DIRS: list = []
 
 
+def _resolved(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
 def test_dirs():
     """jsonui-test's own rules for where test files live and which one a driver's `file` names
     (test_tools/jsonui_test_cli/test_dirs.py of the distribution this jui runs from), loaded by
@@ -290,6 +297,7 @@ class Source:
     tests_dir: Path | None  # None: jsonui-test's rules were not found (see test_dirs())
     test_cases: dict = field(default_factory=dict)       # spec file stem / layout name -> case count
     test_file_keys: dict = field(default_factory=dict)   # "screens/login.test.json" -> spec keys
+    test_file_paths: dict = field(default_factory=dict)  # the same key -> the file under the room ("tests/user/screens/login.test.json")
     android_app_id: str | None = None                    # test.artifacts.android.appId: ties a saved Android result
 
     @classmethod
@@ -447,12 +455,21 @@ class JsonUIProject:
     def load_tests(self) -> None:
         """Every test file under each app's test folder (jsonui-test's rule: test.testDir, recursive)."""
         rules = test_dirs()
+        # A test folder inside another app's (the room's tests/ holding the user app's tests/user): its files
+        # are the inner app's only. The outer key (user/flows/x) agrees with a driver's path for longer than the
+        # inner one (flows/x), so the outer app — no specs — won every saved row (10-19 ticket
+        # 2026-10-19-jui-viz-saved-results-tie-to-the-outer-tests-folder).
+        folders = {id(s): _resolved(s.tests_dir) for s in self.sources if s.tests_dir is not None}
         for source in self.sources:
-            source.test_cases, source.test_file_keys = {}, {}
+            source.test_cases, source.test_file_keys, source.test_file_paths = {}, {}, {}
             self._tests_by_name = None
             if rules is None or source.tests_dir is None:
                 continue
+            mine = folders[id(source)]
+            inner = [d for k, d in folders.items() if k != id(source) and d != mine and mine in d.parents]
             for path in rules.test_files(source.tests_dir):
+                if inner and any(d in _resolved(path).parents for d in inner):
+                    continue
                 try:
                     data = json.loads(path.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
@@ -462,13 +479,26 @@ class JsonUIProject:
                 cases = data.get("cases") if isinstance(data.get("cases"), list) else []
                 n = sum(1 for c in cases if isinstance(c, dict) and c.get("name"))
                 keys = self._test_keys(data)
-                source.test_file_keys[path.relative_to(source.tests_dir).as_posix()] = keys
+                key = path.relative_to(source.tests_dir).as_posix()
+                source.test_file_keys[key] = keys
+                source.test_file_paths[key] = self.room_path(path)
                 for key in keys:
                     source.test_cases[key] = source.test_cases.get(key, 0) + n
 
+    def room_path(self, path: Path) -> str:
+        """A test file as a path under the room ("tests/admin/screens/x.test.json"), else its whole path."""
+        full = _resolved(path)
+        try:
+            return full.relative_to(_resolved(self.root)).as_posix()
+        except ValueError:
+            return full.as_posix()
+
     def test_file_matches(self, name: str, only: list[Source] | None = None) -> list[tuple[Source, str]]:
         """The (app, test file) a driver's `file` names: the longest agreeing path tail, one file only
-        (test_dirs.match_test_file across every candidate app's files; a tie names none)."""
+        (test_dirs.match_test_file across every candidate app's files; a tie names none). The tail is matched
+        against the file's path under the room, not under its app's test folder: two apps' tests/admin/screens/x
+        and tests/user/screens/x are both screens/x under their folders, and a driver's
+        ../tests/admin/screens/x names one of them (10-19, the outer tests folder ticket)."""
         rules = test_dirs()
         if rules is None:
             return []
@@ -477,17 +507,15 @@ class JsonUIProject:
         if self._tests_by_name is None:
             self._tests_by_name = {}
             for source in self.sources:
-                for key in source.test_file_keys:
-                    self._tests_by_name.setdefault(rules.segments(key)[-1], []).append((source, key))
+                for key, where in source.test_file_paths.items():
+                    self._tests_by_name.setdefault(rules.segments(key)[-1], []).append((source, key, where))
         wanted = rules.segments(name)
-        pool = {}
-        for source, key in self._tests_by_name.get(wanted[-1] if wanted else "", ()):
-            if only is None or source in only:
-                pool[f"{id(source)}\x00{key}"] = (source, key)
-        hit = rules.match_test_file(name, [k.split("\x00", 1)[1] for k in pool])
+        pool = [(source, key, where) for source, key, where in self._tests_by_name.get(wanted[-1] if wanted else "", ())
+                if only is None or source in only]
+        hit = rules.match_test_file(name, [where for _, _, where in pool])
         if hit is None:
             return []
-        found = [v for v in pool.values() if v[1] == hit]
+        found = [(source, key) for source, key, where in pool if where == hit]
         return found if len(found) == 1 else []
 
     @staticmethod

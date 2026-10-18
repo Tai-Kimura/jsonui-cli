@@ -1015,7 +1015,7 @@ class World:
             return True
         if self._all_test_keys is None:
             self._all_test_keys = {}
-            for k in (k for p in self.jsonui.values() for s in p.sources for k in s.test_file_keys):
+            for k in (k for p in self.jsonui.values() for s in p.sources for k in s.test_file_paths.values()):
                 self._all_test_keys.setdefault(rules.segments(k)[-1], []).append(k)
         wanted = rules.segments(file)
         return rules.match_test_file(file, self._all_test_keys.get(wanted[-1] if wanted else "", [])) is None
