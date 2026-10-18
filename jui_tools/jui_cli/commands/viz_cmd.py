@@ -503,9 +503,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         state=VizState(config.eventsKeep),
     )
     from ..viz.paths import claude_home
-    from ..viz.sources import transcripts
+    from ..viz.sources import history, transcripts
     world = World(ctx.state, config.toolInputMaxChars, session_start=transcripts.session_start(claude_home() / "projects"))
     world.transcript_path = transcripts.transcript_path(claude_home() / "projects")
+    world.history_reader = history.reader(claude_home() / "projects")
     started_at = now_ms()
     sources: dict[str, dict] = {}
 

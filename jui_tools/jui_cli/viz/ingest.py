@@ -96,6 +96,9 @@ class World:
         self._since_tries: dict[str, int] = {}
         # session id -> (cwd, transcript path from a hook); the transcript's usage tail; tokens per message id
         self.transcript_path = None
+        # session id, cwd, transcript path, agent id, agent transcript path -> the 応答の履歴 tab (sources/history.py)
+        self.history_reader = None
+        self._agent_paths: dict[str, str] = {}   # subagent id -> the hook's agent_transcript_path
         self._paths: dict[str, tuple[str | None, str | None]] = {}
         self._tails: dict = {}
         self._usage_seen: dict[str, dict[str, int]] = {}
@@ -336,6 +339,8 @@ class World:
         aid = _s(payload.get("agent_id"))
         agent_type = _s(payload.get("agent_type"))
         agent = self._sub(sid, aid, agent_type, at) if aid else self._main(sid, at)
+        if aid and _s(payload.get("agent_transcript_path")):
+            self._agent_paths[aid] = payload["agent_transcript_path"]
         tool = _s(payload.get("tool_name"))
         tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
         use_id = _s(payload.get("tool_use_id"))
@@ -906,6 +911,19 @@ class World:
                     self._set(agent, at, "idle", "待機")
         self._background_cap(at)
         self._heavy(at)
+
+    # ---------------------------------------------------------------- the 応答の履歴 tab (10-18)
+
+    def history(self, agent_id: str) -> dict | None:
+        """The last turns of one robot's transcript, read now (never kept in a slice), or None."""
+        agent = self.agents.get(agent_id)
+        if agent is None or self.history_reader is None:
+            return None
+        sid = agent["sessionId"]
+        cwd, given = self._paths.get(sid, (None, None))
+        if agent["kind"] == "sub":
+            return self.history_reader(sid, cwd, given, agent_id, self._agent_paths.get(agent_id))
+        return self.history_reader(sid, cwd, given)
 
     # ---------------------------------------------------------------- heavy work (10-18)
 

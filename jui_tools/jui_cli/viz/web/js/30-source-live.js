@@ -68,6 +68,8 @@ const SOURCE = {
       : `送れなかった（${ack.error || '不明'}）`));
   },
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
+  /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
+  history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
   /* question.answer (10-18): picks are question text -> { labels, other }; the card says "sent" when the slice does. */
   /* question.hold while someone answers (the hook waits a little longer); question.release: answer in the terminal */
   holdQuestion(id) { netRequest('question.hold', { questionId: id }); },
@@ -202,7 +204,7 @@ function rebuildTasks() {
       status: x.status, blockedByAll: blockedBy, blocksAll: Array.isArray(x.blocks) ? x.blocks.map(String) : [],
       created: x.createdAt ? secOfDay(x.createdAt) : -1, createdMs: x.createdAt || 0,
       start: x.startedAt ? secOfDay(x.startedAt) : null, end: x.completedAt ? secOfDay(x.completedAt) : null,
-      source: String(x.source || 'task'), turn: Number(x.turn) || 0, waiting: !!x.waiting, waitingFor: x.waitingFor === 'question' ? 'question' : '', background: !!x.background, failed: !!x.failed,
+      source: String(x.source || 'task'), turn: Number(x.turn) || 0, harness: typeof x.harness === 'string' ? x.harness : '', waiting: !!x.waiting, waitingFor: x.waitingFor === 'question' ? 'question' : '', background: !!x.background, failed: !!x.failed,
     });
   }
   TASKS.splice(0, TASKS.length, ...rows);

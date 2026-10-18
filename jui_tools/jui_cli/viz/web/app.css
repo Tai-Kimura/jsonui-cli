@@ -708,6 +708,48 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-name { margin: 0; font: 400 clamp(15px, 4vw, 17px)/1.3 var(--font-display); overflow-wrap: anywhere; }
 .rb-sub { margin: 2px 0 0; color: var(--ink-soft); font: 500 11.5px/1.5 var(--font-body); }
 .rb-body { display: grid; align-content: start; gap: 16px; min-height: 0; overflow-y: auto; padding: 12px 14px 20px; }
+.rb-body[hidden] { display: none; }
+.rb-tabs { display: flex; gap: 4px; padding: 6px 14px 0; border-bottom: 1px solid var(--line); }
+.rb-tabs button { padding: 6px 12px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--ink-soft); font: 700 12.5px/1.4 var(--font-body); cursor: pointer; }
+.rb-tabs button[aria-selected="true"] { border-bottom-color: var(--info); color: var(--ink); }
+/* 応答の履歴 (55-history.js): the conversation as the VS Code extension shows it */
+.rb-hist { gap: 8px; font-size: 13px; }
+.h-list-box { display: grid; gap: 8px; min-width: 0; }
+.h-item { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.h-user { padding: 8px 10px; border-radius: 10px; background: var(--chip); }
+.h-who { display: flex; gap: 8px; margin: 0 0 2px; color: var(--ink-soft); font: 700 11px/1.4 var(--font-body); }
+.h-at { color: var(--ink-soft); font: 500 11px/1.4 var(--font-mono); }
+.h-plain { margin: 0; white-space: pre-wrap; }
+.h-md { display: grid; gap: 6px; line-height: 1.6; }
+.h-md p, .h-md .h-h, .h-md .h-list, .h-md blockquote { margin: 0; }
+.h-md .h-list { padding-left: 1.3em; }
+.h-md .h-sub { margin-left: 1.2em; }
+.h-md code { padding: 0 3px; border-radius: 4px; background: var(--chip); font: 500 12px/1.5 var(--font-mono); }
+.h-code { margin: 0; padding: 6px 8px; overflow-x: auto; border-radius: 6px; background: var(--bg); font: 500 12px/1.5 var(--font-mono); white-space: pre-wrap; }
+.h-code code { padding: 0; background: none; }
+.h-code-err { color: var(--warn); }
+.h-quote { padding-left: 10px; border-left: 3px solid var(--line); color: var(--ink-soft); }
+.h-tablewrap { overflow-x: auto; }
+.h-table { border-collapse: collapse; font-size: 12px; }
+.h-table th, .h-table td { padding: 3px 6px; border: 1px solid var(--line); text-align: left; }
+.h-md a { color: var(--info); }
+.h-img { color: var(--ink-soft); font-style: italic; }
+.h-tool, .h-peer, .h-harness { border-radius: 8px; background: var(--bg); }
+.h-tool summary, .h-peer summary, .h-harness summary { display: flex; gap: 8px; align-items: baseline; min-width: 0; padding: 5px 8px; cursor: pointer; font-size: 12.5px; }
+.h-head { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; }
+.h-tname { font-family: var(--font-mono); }
+.h-err { color: var(--warn); font-weight: 700; }
+.h-run { color: var(--info); }
+.h-io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 0 8px 8px; }
+.h-io-k { color: var(--ink-soft); font: 700 11px/1.9 var(--font-mono); }
+.h-peer { border-left: 3px solid var(--info); }
+.h-peer > .h-plain, .h-harness > .h-plain { padding: 0 8px 8px; }
+.h-harness { border-left: 3px solid var(--line); background: none; }
+.h-harness summary b { color: var(--ink-soft); }
+.h-mark { color: var(--ink-soft); font-size: 11.5px; font-style: italic; }
+/* a turn whose prompt the harness wrote (sources/history.harness_label): tagged, not the requester's words */
+.h-tag { margin-right: 6px; padding: 0 5px; border-radius: 4px; background: var(--chip); color: var(--ink-soft); font: 700 10.5px/1.6 var(--font-body); }
+.h-cut, .h-note { margin: 0; color: var(--ink-soft); font-size: 11.5px; }
 .rb-sec { display: grid; gap: 6px; min-width: 0; }
 .rb-sec h3 { display: flex; align-items: baseline; gap: 8px; margin: 0; }
 .rb-sec h3 small { font: 700 11px/1.5 var(--font-mono); }

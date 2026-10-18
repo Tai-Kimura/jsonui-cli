@@ -126,8 +126,9 @@ class TaskBook:
         """A prompt arrived: the turn before it (if it was still open) is done, and a new card starts working."""
         self.turn_ended(sid, at, background=False, failed=False)
         n = 1 + max((t.get("turn", 0) for t in self.tasks.values() if t["sessionId"] == sid and t.get("source") == "turn"), default=0)
+        from .history import harness_label   # the one place harness text is told from the requester's words
         self._put(sid, f"turn-{n}", at, subject=self.turn_title(prompt) or "（題のない指示）", status="in_progress",
-                  owner=owner, source="turn", turn=n, waiting=False)
+                  owner=owner, source="turn", turn=n, waiting=False, harness=harness_label(prompt))
 
     def turn_ended(self, sid: str, at: int, background: bool, failed: bool) -> None:
         task = self._open_turn(sid)
