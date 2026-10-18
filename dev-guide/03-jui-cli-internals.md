@@ -161,8 +161,14 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   Android は端末の `/data/local/tmp/jsonui-test-results/<package>/` を、起動時に 1 回と run_end のときだけ
   `adb pull`（timeout 20 秒）。spec への結び付けは推測しない: ① サーバーが見た run id → ② Android の
   `test.artifacts.android.appId` → ③ そのテストファイルを持つ app が 1 つだけ、のどれにも当たらなければ付けない
-  （iOS に ② は無い）。進捗と保存分はケースごとに新しいほうを採る。spec / layout の mtime が新しければ
+  （iOS に ② は無い）。進捗と保存分は (file, test, case) ごとに新しいほうを採る。spec / layout の mtime が新しければ
   「結果は古い可能性」（checkout でも mtime は動くので断定しない）。`jui viz doctor` が読む場所を印字する。
+- **テストファイルと spec**: テストの根と照合は jsonui-test の `test_tools/jsonui_test_cli/test_dirs.py` を
+  パスで読んで使う（規則の写しを作らない。無ければテストを数えない）。根は `test.testDir`（既定 `tests`、
+  config のフォルダ相対、app の外も可）で、再帰で読む。driver の `file` は面ごとに綴りが違う（iOS はファイル名だけ、
+  Android は `tests/<name>`、Web は起動フォルダからの相対）ので、後ろからのパスの要素が最も長く一致する
+  ただ 1 つのテストファイルに解決し、同点なら付けない。driver は 1 テストファイルに 1 run を出すので、
+  1 つのテストのコマンドに run を全部結ぶ（`progressRuns`。`progressRun` は最初の 1 本のまま）。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 

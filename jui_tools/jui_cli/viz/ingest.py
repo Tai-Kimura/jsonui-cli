@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import robots
 from .rooms import Rooms, tilde
-from .sources.jsonui_project import JsonUIProject
+from .sources.jsonui_project import JsonUIProject, test_dirs
 from .calls import CallBook, peer_name
 from .permissions import PermissionBook
 from .questions import QuestionBook
@@ -87,6 +87,22 @@ def _head(text: Any, n: int) -> str | None:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+
+def _runs_of(test: dict) -> list[str]:
+    """Every progress run tied to a test command (a command runs one per test file)."""
+    runs = test.get("progressRuns")
+    if runs:
+        return runs
+    return [test["progressRun"]] if test.get("progressRun") else []
+
+
+def _file_key(project: JsonUIProject, file: str | None) -> str:
+    """A driver's `file` as the test file it names in *project* (any platform's spelling), else as written:
+    the case key is (file, test, case), so two test files with the same test / case names stay two."""
+    matched = project.test_file_matches(file) if file else []
+    return matched[0][1] if matched else (file or "")
+
+
 class World:
     def __init__(self, state: VizState, tool_input_max: int = 2000, session_start=None) -> None:
         self.state = state
@@ -134,7 +150,7 @@ class World:
         # live progress (project id -> spec id -> (test, case) -> (t, status)) and the saved
         # result files' rows (sources/test_results.py). Newest wins, so a case that ran live
         # and was then written to a file is counted once.
-        self.live_cases: dict[str, dict[str, dict[tuple[str, str], tuple[int, str]]]] = {}
+        self.live_cases: dict[str, dict[str, dict[tuple[str, str, str], tuple[int, str]]]] = {}
         self.saved_rows: list[dict] = []
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
@@ -839,56 +855,61 @@ class World:
             return False
         # Tie the runner's run to the test command that started it: same
         # platform, running, started before the record (and on that device when known).
-        target = next((t for t in self.tests.values() if t.get("progressRun") == run["run"]), None)
+        # One command runs many: each driver starts a run per test file (xcodebuild, gradle and playwright
+        # alike), so a command keeps every run tied to it (progressRuns); progressRun stays its first.
+        target = next((t for t in self.tests.values() if run["run"] in _runs_of(t)), None)
         if target is None:
             candidates = [t for t in self.running_tests(run["platform"]) if t["startedAt"] <= run["startedAt"] + 5_000
-                          and "progressRun" not in t and (not run.get("deviceId") or t.get("deviceId") in (None, run.get("deviceId")))]
+                          and (not run.get("deviceId") or t.get("deviceId") in (None, run.get("deviceId")))]
             if len(candidates) == 1:
                 target = candidates[0]
-                target["progressRun"] = run["run"]
+                target.setdefault("progressRun", run["run"])
+                target.setdefault("progressRuns", []).append(run["run"])
         if target is not None:
             self._run_cases(target)
             project = self.jsonui.get(target["projectId"])
             if project is not None:
                 live = self.live_cases.setdefault(project.project_id, {})
                 for case in run["cases"].values():
+                    key = (_file_key(project, case["file"]), case["test"], case["name"])
                     for spec_id in project.specs_for_test_file(case["file"]):
-                        live.setdefault(spec_id, {})[(case["test"], case["name"])] = (run["updatedAt"], case["status"])
+                        live.setdefault(spec_id, {})[key] = (run["updatedAt"], case["status"])
                 self._merge_results(project)
                 self._dirty.add("specs")
         self._dirty.add("tests")
         return True
 
     def _run_cases(self, target: dict) -> None:
-        """A test command's cases (a robot's card and the test pane): its live progress, and the saved result file
-        of the same run (B's rows, sources/test_results.py) — tied by the run id only, so only a run this server saw
-        start. Per case the newer outcome wins, so a case seen live and then saved counts once."""
-        rid = target.get("progressRun")
-        run = self.progress.runs.get(rid) if rid else None
-        live = list(run["cases"].values()) if run else []
-        saved = [r for r in self.saved_rows if rid and r.get("run") == rid]
-        if not saved:
-            target["cases"] = [{"name": c["name"], "status": c["status"]} for c in live]
-            target.pop("savedAt", None)
-        else:
-            merged: dict[tuple, tuple[int, str, str]] = {}
-            for c in live:
-                merged[(c["file"], c["test"], c["name"])] = (run["updatedAt"], c["status"], c["name"])
+        """A test command's cases (a robot's card and the test pane): the live progress of every run it started
+        (one per test file), and the saved result files of the same runs (B's rows, sources/test_results.py) —
+        tied by run id only, so only runs this server saw start. Per (file, test, case) the newer outcome wins,
+        so a case seen live and then saved counts once."""
+        rids = _runs_of(target)
+        runs = [self.progress.runs[r] for r in rids if r in self.progress.runs]
+        saved = [r for r in self.saved_rows if r.get("run") in rids]
+        merged: dict[tuple, tuple[int, str, str]] = {}
+        for run in runs:
+            for c in run["cases"].values():
+                merged[(c["file"], c["test"], c["name"], len(merged))] = (run["updatedAt"], c["status"], c["name"])
+        if saved:
+            merged = {k[:3]: v for k, v in merged.items()}  # one row per (file, test, case) once files are merged in
             for r in saved:
                 key = (r["file"], r["test"], r["case"])
                 if key not in merged or merged[key][0] <= r["t"]:
                     merged[key] = (r["t"], r["status"], r["case"])
-            target["cases"] = [{"name": name, "status": status} for _, status, name in merged.values()]
             target["savedAt"] = max(r["t"] for r in saved)
+        else:
+            target.pop("savedAt", None)
+        target["cases"] = [{"name": name, "status": status} for _, status, name in merged.values()]
         done = [c for c in target["cases"] if c["status"] in ("passed", "failed")]
-        if run is not None or saved:
+        if runs or saved:
             target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
 
     def apply_saved_results(self, rows: list[dict]) -> None:
         """The rows of every saved result file (sources/test_results.py), replacing the previous scan."""
         self.saved_rows = rows
         for target in self.tests.values():
-            if target.get("progressRun"):
+            if _runs_of(target):
                 self._run_cases(target)
                 self._dirty.add("tests")
         for project in self.jsonui.values():
@@ -904,30 +925,39 @@ class World:
         file = row.get("file")
         if not file:
             return []
-        if row.get("run") and any(t.get("progressRun") == row["run"] for t in self.tests.values()):
-            mine = any(t.get("progressRun") == row["run"] and t["projectId"] == project.project_id for t in self.tests.values())
+        if row.get("run") and any(row["run"] in _runs_of(t) for t in self.tests.values()):
+            mine = any(row["run"] in _runs_of(t) and t["projectId"] == project.project_id for t in self.tests.values())
             return project.specs_for_test_file(file) if mine else []
         if row["platform"] == "android" and row.get("app"):
             by_app = [(p, s) for p in self.jsonui.values() for s in p.sources if s.android_app_id == row["app"]]
             if by_app:
                 return project.specs_for_test_file(file, only=[s for p, s in by_app if p is project]) \
                     if any(p is project for p, _ in by_app) else []
-        owners = [(p, s) for p in self.jsonui.values() for s in p.sources if file in s.test_file_keys]
-        if len(owners) == 1 and owners[0][0] is project:
+        owners = [(p, s) for p in self.jsonui.values() for s, _ in p.test_file_matches(file)]
+        if len(owners) == 1 and owners[0][0] is project and not self._file_elsewhere(project, file):
             return project.specs_for_test_file(file, only=[owners[0][1]])
         return []
 
-    def _merge_results(self, project: JsonUIProject) -> None:
-        merged: dict[str, dict[tuple[str, str], tuple[int, str, bool]]] = {}
+    def _file_elsewhere(self, project: JsonUIProject, file: str) -> bool:
+        """Another room has a test file whose path agrees with *file* at least as far as *project*'s does:
+        the best match is not unique across rooms, so the row is not tied (hand 3 never guesses)."""
+        rules = test_dirs()
+        if rules is None:
+            return True
+        keys = [k for p in self.jsonui.values() for s in p.sources for k in s.test_file_keys]
+        return rules.match_test_file(file, keys) is None
 
-        def put(spec_id: str, key: tuple[str, str], t: int, status: str, saved: bool) -> None:
+    def _merge_results(self, project: JsonUIProject) -> None:
+        merged: dict[str, dict[tuple[str, str, str], tuple[int, str, bool]]] = {}
+
+        def put(spec_id: str, key: tuple[str, str, str], t: int, status: str, saved: bool) -> None:
             cases = merged.setdefault(spec_id, {})
             if key not in cases or cases[key][0] <= t:
                 cases[key] = (t, status, saved)
 
         for row in self.saved_rows:
             for spec_id in self._saved_specs(project, row):
-                put(spec_id, (row["test"], row["case"]), row["t"], row["status"], True)
+                put(spec_id, (_file_key(project, row["file"]), row["test"], row["case"]), row["t"], row["status"], True)
         for spec_id, cases in self.live_cases.get(project.project_id, {}).items():
             for key, (t, status) in cases.items():
                 put(spec_id, key, t, status, False)
@@ -1110,7 +1140,7 @@ class World:
         if "tasks" in self._dirty:
             self.state.set_slice("tasks", self.tasks.items())
         if "tests" in self._dirty:
-            self.state.set_slice("tests", sorted(({k: v for k, v in t.items() if k != "progressRun"} for t in self.tests.values()),
+            self.state.set_slice("tests", sorted(({k: v for k, v in t.items() if k not in ("progressRun", "progressRuns")} for t in self.tests.values()),
                                                  key=lambda t: t["startedAt"]))
         if "devices" in self._dirty:
             busy = {t["deviceId"]: t["agentId"] for t in self.running_tests() if t.get("deviceId")}

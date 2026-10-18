@@ -30,8 +30,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import importlib.util
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from ...core.document_tools_import import distribution_root
 
 SECTIONS = ("metadata", "structure", "stateManagement", "dataFlow", "userActions", "transitions", "branchContracts")
 METADATA_FIELDS = ("name", "displayName", "description", "platforms", "layoutFile")
@@ -254,6 +258,28 @@ def resolve_declared(value: str, roots: list[Path]) -> tuple[Path, bool]:
     return (roots[0] / path if roots else path), False
 
 
+_TEST_DIRS: list = []
+
+
+def test_dirs():
+    """jsonui-test's own rules for where test files live and which one a driver's `file` names
+    (test_tools/jsonui_test_cli/test_dirs.py of the distribution this jui runs from), loaded by
+    path so there is one copy of them. None when the tree has no test_tools/: tests are then
+    not counted, rather than counted by a second, guessed rule."""
+    if not _TEST_DIRS:
+        path = distribution_root() / "test_tools" / "jsonui_test_cli" / "test_dirs.py"
+        module = None
+        if path.is_file():
+            name = "_jui_viz_jsonui_test_dirs"
+            spec = importlib.util.spec_from_file_location(name, path)
+            if spec is not None and spec.loader is not None:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[name] = module
+                spec.loader.exec_module(module)
+        _TEST_DIRS.append(module)
+    return _TEST_DIRS[0]
+
+
 @dataclass
 class Source:
     """One JsonUI app in a room: where its specs, layouts and tests are."""
@@ -261,7 +287,7 @@ class Source:
     root: Path          # the folder of the config that declares the specs
     spec_dir: Path
     layouts_dir: Path
-    tests_dir: Path
+    tests_dir: Path | None  # None: jsonui-test's rules were not found (see test_dirs())
     test_cases: dict = field(default_factory=dict)       # spec file stem / layout name -> case count
     test_file_keys: dict = field(default_factory=dict)   # "screens/login.test.json" -> spec keys
     android_app_id: str | None = None                    # test.artifacts.android.appId: ties a saved Android result
@@ -282,7 +308,7 @@ class Source:
         return cls(key=key, root=root, android_app_id=app_id if isinstance(app_id, str) and app_id else None,
                    spec_dir=folder(config.get("spec_directory"), DEFAULT_SPEC_DIR),
                    layouts_dir=folder(config.get("layouts_directory"), "docs/screens/layouts"),
-                   tests_dir=folder(test_cfg.get("testDir"), "tests"))
+                   tests_dir=test_dirs().test_root(test_cfg, root) if test_dirs() else None)
 
 
 def discover_sources(root: Path) -> list[Source]:
@@ -354,7 +380,7 @@ class JsonUIProject:
         out: list[Path] = []
         for source in self.sources:
             for d in (source.spec_dir, source.layouts_dir, source.tests_dir):
-                if d not in out:
+                if d is not None and d not in out:
                     out.append(d)
         return out
 
@@ -418,25 +444,42 @@ class JsonUIProject:
         return changed
 
     def load_tests(self) -> None:
+        """Every test file under each app's test folder (jsonui-test's rule: test.testDir, recursive)."""
+        rules = test_dirs()
         for source in self.sources:
             source.test_cases, source.test_file_keys = {}, {}
-            for sub in ("screens", "flows"):
-                folder = source.tests_dir / sub
-                if not folder.is_dir():
+            if rules is None or source.tests_dir is None:
+                continue
+            for path in rules.test_files(source.tests_dir):
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
                     continue
-                for path in folder.glob("*.test.json"):
-                    try:
-                        data = json.loads(path.read_text(encoding="utf-8"))
-                    except (OSError, ValueError):
-                        continue
-                    if not isinstance(data, dict):
-                        continue
-                    cases = data.get("cases") if isinstance(data.get("cases"), list) else []
-                    n = sum(1 for c in cases if isinstance(c, dict) and c.get("name"))
-                    keys = self._test_keys(data)
-                    source.test_file_keys[f"{sub}/{path.name}"] = keys
-                    for key in keys:
-                        source.test_cases[key] = source.test_cases.get(key, 0) + n
+                if not isinstance(data, dict):
+                    continue
+                cases = data.get("cases") if isinstance(data.get("cases"), list) else []
+                n = sum(1 for c in cases if isinstance(c, dict) and c.get("name"))
+                keys = self._test_keys(data)
+                source.test_file_keys[path.relative_to(source.tests_dir).as_posix()] = keys
+                for key in keys:
+                    source.test_cases[key] = source.test_cases.get(key, 0) + n
+
+    def test_file_matches(self, name: str, only: list[Source] | None = None) -> list[tuple[Source, str]]:
+        """The (app, test file) a driver's `file` names: the longest agreeing path tail, one file only
+        (test_dirs.match_test_file across every candidate app's files; a tie names none)."""
+        rules = test_dirs()
+        if rules is None:
+            return []
+        pool = {}
+        for source in self.sources:
+            if only is None or source in only:
+                for key in source.test_file_keys:
+                    pool[f"{id(source)}\x00{key}"] = (source, key)
+        hit = rules.match_test_file(name, [k.split("\x00", 1)[1] for k in pool])
+        if hit is None:
+            return []
+        found = [v for v in pool.values() if v[1] == hit]
+        return found if len(found) == 1 else []
 
     @staticmethod
     def _test_keys(data: dict) -> list[str]:
@@ -547,13 +590,17 @@ class JsonUIProject:
                 "layout": layout, "components": components}
 
     def specs_for_test_file(self, rel: str, only: list[Source] | None = None) -> list[str]:
-        """Spec ids a test file (as the runner names it, e.g. screens/login.test.json) belongs to.
+        """Spec ids a test file belongs to, *rel* as a driver names it (any of the three spellings).
         *only*: the apps a saved result was tied to (none of the others is a candidate)."""
-        # The apps that have this test file; when none does, every app (by name).
-        owners = [s for s in self.sources if rel in s.test_file_keys and (only is None or s in only)]
+        matched = self.test_file_matches(rel, only)
+        owners = [source for source, _ in matched]
         if only is not None and not owners:
             return []
-        keys = {k for s in owners for k in s.test_file_keys[rel]}
+        if matched:
+            source, key = matched[0]
+            keys = set(source.test_file_keys[key])
+        else:  # no app has this test file: every app, by the file's name
+            keys = set()
         if not keys:
             keys = {Path(rel).name.replace(".test.json", "")}
         hits = []
