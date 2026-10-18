@@ -675,7 +675,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
       identifying = ['ExistingWiring.swift', 'HotLoader.instance.isHotLoadEnabled = true']
       identifying.each { |field| expect(msg).to include(field), msg }
       expect(msg).to include('2 系統'), msg
-      expect(msg).to match(/sjui 1\.\d+\.\d+ が \d{4}-\d{2}-\d{2} に観測/), msg
+      expect(msg).to match(/sjui \d+\.\d+\.\d+ が \d{4}-\d{2}-\d{2} に観測/), msg
       note_line = msg.lines.find { |l| l.include?('HotLoader の配線が区間の外にも') }
       # stdout だけに頼らない: 区間の中に痕跡が残る。
       # ⚠️ 判別子は**綴り**で、行番号ではない。区間は setup を撃ったときにしか
@@ -683,7 +683,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
       comment_line = after.lines.find { |l| l.include?('HotLoader の配線が区間の外にも') }
       expect(comment_line).not_to be_nil, after
       identifying.each { |field| expect(comment_line).to include(field), after }
-      expect(comment_line).to match(/sjui 1\.\d+\.\d+ が \d{4}-\d{2}-\d{2} に観測/), comment_line
+      expect(comment_line).to match(/sjui \d+\.\d+\.\d+ が \d{4}-\d{2}-\d{2} に観測/), comment_line
       expect(comment_line).to include('以後の編集には追随しません'), comment_line
       # 🔻 2 つが同じ識別フィールドを持つこと。片方だけ文言を直すと、読み手ごとに
       #   違う事実が届く（stdout は撃った人、コメントは次に開く人）。

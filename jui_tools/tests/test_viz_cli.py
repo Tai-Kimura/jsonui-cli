@@ -362,7 +362,12 @@ def test_malformed_requests_are_one_line_each_on_stderr(home):
         proc.wait(timeout=10)
     _, err = proc.communicate()
     assert "Traceback" not in err
-    assert len(err.strip().splitlines()) <= 5, err
+    # Count the request lines, not the whole stderr: how many startup notes serve prints depends on the
+    # machine (CI has no ~/.claude/sessions, no adb and no xcrun — one note each), and a total of <= 5
+    # went red there for 2.0.0 while the requests themselves logged one line each.
+    lines = err.strip().splitlines()
+    assert all(line.startswith("jui viz: ") for line in lines), err
+    assert len([line for line in lines if "拒否" in line]) <= 2, err
 
 
 def test_a_proxy_variable_does_not_make_a_live_server_look_dead(home):

@@ -67,6 +67,9 @@ def _start_hook(tmp_path, payload):
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(os.environ, HOME=str(tmp_path)))
     proc.stdin.write(json.dumps(payload).encode())
     proc.stdin.close()
+    # communicate() flushes stdin before reading on Python 3.11 and raises on a closed one
+    # ("flush of closed file", CI's python-suite for 2.0.0); the hook already has its whole input.
+    proc.stdin = None
     return proc
 
 
