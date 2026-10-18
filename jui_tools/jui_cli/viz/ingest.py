@@ -16,6 +16,7 @@ from . import robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject
 from .permissions import PermissionBook
+from .questions import QuestionBook
 from .sources import devices as devices_mod
 from .sources import processes
 from .sources.tasks import TaskBook
@@ -68,6 +69,16 @@ def _s(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+QUESTION_TOOL = "AskUserQuestion"
+
+
+def _question_summary(card: dict) -> str:
+    """The log line of an answered question: each question's header (or text) and the answer it got."""
+    got = card.get("sentAnswers") or card.get("gotAnswers") or {}
+    parts = [f"{q.get('header') or q['question']}: {got.get(q['question'], '?')}" for q in card["questions"]]
+    return _head(" / ".join(parts), 300) or ""
+
+
 def _head(text: Any, n: int) -> str | None:
     if not isinstance(text, str) or not text:
         return None
@@ -106,6 +117,7 @@ class World:
         self.pid_to_session: dict[int, str] = {}
         self.tasks = TaskBook()
         self.perms = PermissionBook()
+        self.questions = QuestionBook()
         self.devices: list[dict] = []
         self.progress = ProgressBook()
         self.tests: dict[str, dict] = {}
@@ -333,11 +345,15 @@ class World:
             self._background_off(session, at)
             self.perms.session_stopped(sid, at)
             self._dirty.add("perms")
+            if self.questions.session_stopped(sid, at):
+                self._dirty.add("questions")
             self._status(session, "ended", at)
             self._set(agent, at, "idle", "退勤", leftAt=at)
             text = f"退勤 {payload.get('reason') or ''}".strip()
         elif kind == "UserPromptSubmit":
             session["lastPrompt"] = _head(payload.get("prompt"), PROMPT_MAX)
+            if self.questions.session_stopped(sid, at):   # a question left open: the person moved on
+                self._dirty.add("questions")
             if agent["kind"] == "main":
                 self.tasks.turn_started(sid, agent["id"], payload.get("prompt"), at)
                 self._dirty.add("tasks")
@@ -347,10 +363,17 @@ class World:
             self._set(agent, at, "idle", "指示を受けた")
             text = f"指示 {session['lastPrompt'] or ''}".strip()
         elif kind == "PreToolUse" and tool:
+            if tool == QUESTION_TOOL:   # a question for the person (both the async forward and --ask bring it)
+                self.questions.from_hook(sid, agent["id"], tool_input, use_id, at)
+                self._dirty.add("questions")
             self._status(session, "busy", at)
             self._settle_asking(agent["id"])
             state = robots.state_for_tool(tool, tool_input)
             act = robots.act_for_tool(tool, tool_input, root)
+            if tool == QUESTION_TOOL:   # it waits for the person: a raised hand, the room lit as waiting
+                card = self.questions.cards.get(self.questions._by_use.get(use_id or "", ""))
+                heads = [q.get("header") or q["question"] for q in (card or {}).get("questions", [])]
+                state, act = "waiting", _head(f"質問に回答待ち {' / '.join(heads)}", 120) or "質問に回答待ち"
             if use_id:
                 self._open.setdefault(agent["id"], []).append(use_id)
                 self._open_tool[use_id] = tool
@@ -382,6 +405,13 @@ class World:
                 self._dirty.add("tests")
             text = act
         elif kind in ("PostToolUse", "PostToolUseFailure") and tool:
+            if tool == QUESTION_TOOL:
+                card = self.questions.tool_finished(sid, use_id, tool_input, at)
+                if card is not None:
+                    self._dirty.add("questions")
+                    if card["status"] == "answered_in_terminal":
+                        self.state.add_event({"at": at, "sessionId": sid, "agentId": agent["id"], "kind": "QuestionAnswered",
+                                              "cat": "perm", "text": f"ターミナルで質問に回答 {_question_summary(card)}"})
             opened = self._open.get(agent["id"], [])
             if use_id in opened:
                 opened.remove(use_id)
@@ -475,6 +505,8 @@ class World:
             if agent["kind"] == "main":
                 self.perms.session_stopped(sid, at)
                 self._dirty.add("perms")
+                if self.questions.session_stopped(sid, at):
+                    self._dirty.add("questions")
             background = payload.get("background_tasks")
             busy = isinstance(background, list) and len(background) > 0
             if agent["kind"] == "main":
@@ -648,6 +680,53 @@ class World:
         self.perms.hook_gave_up(card)
         self._dirty.add("perms")
 
+    # ---------------------------------------------------------------- questions (AskUserQuestion, 10-18)
+
+    def hook_ask(self, payload: dict, at: int) -> dict | None:
+        """The synchronous PreToolUse hook of AskUserQuestion (forward.py --ask): the card it waits on."""
+        if (payload.get("hook_event_name") != "PreToolUse" or payload.get("tool_name") != QUESTION_TOOL
+                or not _s(payload.get("session_id"))):
+            return None
+        sid = payload["session_id"]
+        self._session(sid, _s(payload.get("cwd")), at)
+        aid = _s(payload.get("agent_id"))
+        agent = self._sub(sid, aid, _s(payload.get("agent_type")), at) if aid else self._main(sid, at)
+        tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
+        card = self.questions.from_hook(sid, agent["id"], tool_input, _s(payload.get("tool_use_id")), at)
+        self._dirty.add("questions")
+        return card
+
+    def question_waiting(self, card: dict, future, until: int, latest: int) -> None:
+        self.questions.hook_waiting(card, future, until, latest)
+        self._dirty.add("questions")
+
+    def hold_question(self, card_id: str, at: int, wait_ms: int) -> str | None:
+        error = self.questions.hold(card_id, at, wait_ms)
+        self._dirty.add("questions")
+        return error
+
+    def release_question(self, card_id: str, at: int) -> str | None:
+        error = self.questions.release(card_id)
+        if error is None:
+            card = self.questions.cards[card_id]
+            self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "QuestionReleased",
+                                  "cat": "perm", "text": "質問をターミナルに返した（ブラウザでは答えない）"})
+            self._dirty.add("questions")
+        return error
+
+    def question_gave_up(self, card: dict) -> None:
+        self.questions.hook_gave_up(card)
+        self._dirty.add("questions")
+
+    def answer_question(self, card_id: str, picks, at: int) -> str | None:
+        error = self.questions.answer(card_id, picks, at)
+        if error is None:
+            card = self.questions.cards[card_id]
+            self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "QuestionAnswered",
+                                  "cat": "perm", "text": f"ブラウザで質問に回答 {_question_summary(card)}"})
+            self._dirty.add("questions")
+        return error
+
     def decide(self, perm_id: str, behavior: str, at: int, always=None, reason=None) -> str | None:
         error = self.perms.decide(perm_id, behavior, at, always, reason)
         if error is None:
@@ -713,6 +792,8 @@ class World:
         self._now = max(self._now, at)
         if self.perms.tick(at):
             self._dirty |= {"perms", "sessions"}
+        if self.questions.tick(at):
+            self._dirty.add("questions")
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]
@@ -832,6 +913,8 @@ class World:
                 self._dirty.add("sessions")
         if "perms" in self._dirty:
             self.state.set_slice("perms", self.perms.items())
+        if "questions" in self._dirty:
+            self.state.set_slice("questions", self.questions.items())
         if "sessions" in self._dirty:
             self.state.set_slice("sessions", sorted((dict(s) for s in self.sessions.values()), key=lambda s: s["startedAt"]))
         if "agents" in self._dirty:

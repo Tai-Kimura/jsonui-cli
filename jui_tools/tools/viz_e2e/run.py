@@ -195,7 +195,7 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms"], help="run one half (rooms: only the rooms/doors suite)")
+    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask"], help="run one half (rooms / ask: only that suite)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
     ap.add_argument("--record-demo", metavar="URL",
                     help="run the demo suites against URL (the prototype's agent-test.html) and write expect_demo.json")
@@ -238,6 +238,9 @@ def main(argv=None) -> int:
                 await live.run(pw, out, failures, Server)
                 await live.run_real(pw, out, failures, RealServer)
                 await live.run_real_decide(pw, out, failures)
+            if a.only in (None, "live", "ask"):
+                import ask
+                await ask.run_ask(pw, out, failures)
             if a.only in (None, "live", "rooms"):
                 import rooms
                 await rooms.run_rooms(pw, out, failures, RealServer)

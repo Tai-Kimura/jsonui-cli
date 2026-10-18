@@ -375,6 +375,26 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .perm-box { display: grid; grid-column: 1 / -1; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--warn-bg); }
 .perm-q { margin: 0; color: var(--ink); font-size: 12.5px; overflow-wrap: anywhere; }
 .perm-q code, .pc-what code, .n-permq code { font: 500 12px/1.5 var(--font-mono); }
+/* questions (AskUserQuestion, 10-18) */
+.questions { display: grid; gap: 10px; }
+.qcard { display: grid; gap: 8px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg); }
+.qcard.q-open { border-color: var(--warn); background: var(--warn-bg); }
+.qwho { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-soft); font: 600 12px/1.5 var(--font-mono); }
+.qq { display: grid; gap: 4px; min-width: 0; margin: 0; padding: 6px 0 0; border: 0; border-top: 1px solid var(--line); }
+.qq legend { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 0 0 4px; font: 700 13.5px/1.5 var(--font-body); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.qhead { padding: 0 6px; border-radius: 4px; background: var(--chip); color: var(--ink-soft); font: 700 11px/1.6 var(--font-mono); }
+.qmulti { color: var(--ink-soft); font-size: 11px; font-weight: 600; }
+.qopt { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 2px 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.qopt:hover { background: var(--chip); }
+.qopt input[type="radio"], .qopt input[type="checkbox"] { margin: 3px 0 0; }
+.qlabel { font: 700 13px/1.5 var(--font-body); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.qdesc, .qprev { grid-column: 2; color: var(--ink-soft); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.qprev { max-height: 160px; margin: 2px 0 0; padding: 6px 8px; overflow: auto; border-radius: 6px; background: var(--chip); font: 500 11.5px/1.5 var(--font-mono); }
+.qother-text { grid-column: 2; min-width: 0; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: 500 13px/1.5 var(--font-body); }
+.qgot { margin: 2px 0 0; color: var(--ink-soft); font-size: 12px; overflow-wrap: anywhere; }
+.qfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.qfoot .pa:disabled { opacity: 0.45; cursor: default; }
+.qnote { margin: 0; color: var(--ink-soft); font-size: 12px; }
 .perm-acts { display: flex; flex-wrap: wrap; gap: 6px; }
 .pa { padding: 3px 12px; border: 1px solid transparent; border-radius: 6px; font: 700 12.5px/1.5 var(--font-body); white-space: nowrap; cursor: pointer; }
 .pa-allow { background: var(--ok); color: var(--panel); }

@@ -189,7 +189,7 @@ def test_the_channel_speaks_only_json_rpc_and_relays_a_browser_answer(tmp_path):
     prompt reaches a card, the browser answers, the channel emits the verdict."""
     port = _free_port()
     token = "t" * 43
-    viz = tmp_path / ".jsonui-cli" / "viz"
+    viz = tmp_path / ".local" / "state" / "jui-viz"
     viz.mkdir(parents=True)
     (viz / "server.json").write_text(json.dumps({"pid": 1, "port": port, "token": token}))
 

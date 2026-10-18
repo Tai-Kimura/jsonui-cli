@@ -53,9 +53,22 @@ def _home() -> str:
     return os.path.expanduser("~")
 
 
+def viz_home() -> str:
+    """jui viz's runtime folder. ⚠️ The rule of jui_cli/viz/paths.py viz_home(), which this script
+    cannot import (it runs as python3 -I, and as a copy in the plugin): $JUI_VIZ_HOME, else
+    $XDG_STATE_HOME/jui-viz, each only when absolute, else ~/.local/state/jui-viz."""
+    override = os.environ.get("JUI_VIZ_HOME", "")
+    if os.path.isabs(override):
+        return override
+    state = os.environ.get("XDG_STATE_HOME", "")
+    if os.path.isabs(state):
+        return os.path.join(state, "jui-viz")
+    return os.path.join(_home(), ".local", "state", "jui-viz")
+
+
 def read_server() -> dict | None:
     try:
-        with open(os.path.join(_home(), ".jsonui-cli", "viz", "server.json"), encoding="utf-8") as f:
+        with open(os.path.join(viz_home(), "server.json"), encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) and isinstance(data.get("port"), int) else None
     except (OSError, ValueError):

@@ -12,7 +12,7 @@ import sys
 MAX_BODY = 2_000_000
 
 
-def decide(body: bytes, info: dict) -> None:
+def decide(body: bytes, info: dict, path: str = "/hook/decide", wait_key: str = "decideWaitSec") -> None:
     """--decide: the synchronous PermissionRequest hook (P6).
 
     Posts the request to /hook/decide and prints the server's answer — a
@@ -26,9 +26,9 @@ def decide(body: bytes, info: dict) -> None:
     import socket
 
     port = int(info["port"])
-    wait = float(info.get("decideWaitSec", 30))
+    wait = float(info.get(wait_key, 300 if wait_key == "askMaxSec" else 30))
     head = (
-        f"POST /hook/decide HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+        f"POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
         f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
         f"X-Jui-Viz-Token: {info['token']}\r\nConnection: close\r\n\r\n"
     )
@@ -51,11 +51,24 @@ def decide(body: bytes, info: dict) -> None:
         sys.stdout.flush()
 
 
+def viz_home() -> str:
+    """jui viz's runtime folder. ⚠️ The rule of jui_cli/viz/paths.py viz_home(), which this script
+    cannot import (it runs as python3 -I -S, and as a copy in the plugin): $JUI_VIZ_HOME, else
+    $XDG_STATE_HOME/jui-viz, each only when absolute, else ~/.local/state/jui-viz."""
+    override = os.environ.get("JUI_VIZ_HOME", "")
+    if os.path.isabs(override):
+        return override
+    state = os.environ.get("XDG_STATE_HOME", "")
+    if os.path.isabs(state):
+        return os.path.join(state, "jui-viz")
+    return os.path.join(os.path.expanduser("~"), ".local", "state", "jui-viz")
+
+
 def main() -> int:
     try:
         # Drain stdin first so Claude Code never writes into a closed pipe.
         body = sys.stdin.buffer.read()
-        info_path = os.path.join(os.path.expanduser("~"), ".jsonui-cli", "viz", "server.json")
+        info_path = os.path.join(viz_home(), "server.json")
         if len(body) > MAX_BODY or not os.path.exists(info_path):
             return 0  # too large, or the server is not running
         import json
@@ -66,6 +79,9 @@ def main() -> int:
             info = json.load(f)
         if "--decide" in sys.argv[1:]:
             decide(body, info)
+            return 0
+        if "--ask" in sys.argv[1:]:   # PreToolUse of AskUserQuestion: the page's answer, the same way (10-18)
+            decide(body, info, "/hook/ask", "askMaxSec")   # holds can keep it waiting up to the max
             return 0
         port = int(info["port"])
         head = (

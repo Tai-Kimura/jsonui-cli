@@ -171,6 +171,46 @@ fi
 
 echo ""
 
+# >>> viz-state (extracted and run by jui_tools/tests/test_viz_state_home.py; keep it free of rm)
+# jui viz's runtime folder. ⚠️ The rule of jui_tools/jui_cli/viz/paths.py viz_home():
+# $JUI_VIZ_HOME, else $XDG_STATE_HOME/jui-viz, each only when absolute, else
+# $HOME/.local/state/jui-viz.
+viz_state_home() {
+    case "$JUI_VIZ_HOME" in
+        /*) printf '%s\n' "$JUI_VIZ_HOME" ;;
+        *)
+            case "$XDG_STATE_HOME" in
+                /*) printf '%s\n' "$XDG_STATE_HOME/jui-viz" ;;
+                *) printf '%s\n' "$HOME/.local/state/jui-viz" ;;
+            esac
+            ;;
+    esac
+}
+
+# Up to 2.1.0, jui viz kept its runtime files in <install dir>/viz: the running
+# server's pid and port, its config, the backups of ~/.claude/settings.json and
+# the web runner's test progress. The re-install below deletes the install
+# folder before any viz command of the new version can run, so the move to the
+# new folder has to happen here, first. A name the new folder already has is
+# left where it is (never overwritten). Works once: afterwards there is no
+# <install dir>/viz to move.
+migrate_viz_state() {
+    old="$1/viz"
+    [ -d "$old" ] && [ ! -L "$old" ] || return 0
+    new="$(viz_state_home)"
+    mkdir -p "$new" && chmod 700 "$new" || return 0
+    for item in "$old"/* "$old"/.[!.]* "$old"/..?*; do
+        [ -e "$item" ] || [ -L "$item" ] || continue
+        name="${item##*/}"
+        if [ -e "$new/$name" ] || [ -L "$new/$name" ]; then
+            continue
+        fi
+        mv "$item" "$new/$name" || true
+    done
+    return 0
+}
+# <<< viz-state
+
 # Clone or update repository
 info "Installing to $INSTALL_DIR..."
 
@@ -185,6 +225,7 @@ if [ -d "$INSTALL_DIR" ]; then
     else
         # No .git directory - remove and re-clone
         info "Re-installing (previous .git was cleaned up)..."
+        migrate_viz_state "$INSTALL_DIR"
         rm -rf "$INSTALL_DIR"
         git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
         success "Re-cloned repository"

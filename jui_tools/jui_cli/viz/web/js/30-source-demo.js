@@ -379,6 +379,8 @@ TASKS.push(
   { list: 'c9', id: 'turn-1', source: 'turn', turn: 1, subject: 'spec の構造ページを生成して', owner: 'c9', spec: null, created: -1, start: -1, end: 60 },
 );
 const TASK_BY_KEY = Object.fromEntries(TASKS.map((x) => [`${x.list}#${x.id}`, x]));
+/* Questions (AskUserQuestion) come from live sessions only: the demo script asks none. */
+const QUESTIONS = [];
 const EVENTS = [
   [0.2, 'a5', 'Read', 'docs/screens/json/home.spec.json'],
   [0.4, 'f2', 'Edit', 'docs/screens/layouts/product-detail.json'],

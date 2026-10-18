@@ -149,7 +149,7 @@ BUILDERS = {
         "roleVar", "actAttr", "chipCls", "wfElement", "li", "tr", "projectTag", "rowHTML", "noteHTML",
         "permButtons", "permButtonsLive", "permButtonsDemo", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
         "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
-        "liveTestsHTML",
+        "liveTestsHTML", "questionHTML",
     },
 }
 # Builders a part may call that another part defines (each checked where it is defined).

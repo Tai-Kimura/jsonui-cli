@@ -27,6 +27,7 @@
       <span class="chip" title="フックの受け口">127.0.0.1:7788</span>
       <span class="chip" id="chip-clock">14:20:24</span>
       <button type="button" class="chip perm-chip" id="chip-perm" hidden aria-haspopup="dialog">許可待ち 0</button>
+      <button type="button" class="chip perm-chip" id="chip-ask" hidden aria-controls="questions-sec">質問 0</button>
     </div>
     <div class="controls">
       <button type="button" id="btn-play" aria-pressed="false">一時停止</button>
@@ -115,6 +116,10 @@
       <section class="rb" id="rb" hidden role="dialog" aria-modal="false" aria-labelledby="rb-title"></section>
     </div>
     <aside class="side" id="side" aria-label="セッション、spec、テスト、タスク">
+      <section aria-labelledby="h-questions" id="questions-sec" hidden>
+        <h2 id="h-questions">質問に答える</h2>
+        <div class="questions" id="questions"></div>
+      </section>
       <section aria-labelledby="h-sessions">
         <h2 id="h-sessions">セッション</h2>
         <div class="seg-filter" id="sess-filter" role="group" aria-label="セッションを状態で絞り込む"></div>
