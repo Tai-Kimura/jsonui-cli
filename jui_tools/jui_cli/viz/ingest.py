@@ -737,11 +737,15 @@ class World:
                 reasons.append("subagents")
             if session["status"] == "ended":
                 reasons = []
-            if reasons != session.get("heavy", []):
+            open_ms = [at - self._tool_started.get(u, at) for aid in mine for u in self._open.get(aid, [])]
+            info = {"tokensPerMin": round(sum(t for _, t in window) * 60_000 / HEAVY_WINDOW_MS), "toolSec": max(open_ms, default=0) // 1000,
+                    "subagents": subs} if reasons else None
+            if reasons != session.get("heavy", []) or info != session.get("heavyInfo"):
                 if reasons:
-                    session["heavy"] = reasons
+                    session["heavy"], session["heavyInfo"] = reasons, info   # the card says what made it heavy
                 else:
                     session.pop("heavy", None)
+                    session.pop("heavyInfo", None)
                 self._dirty.add("sessions")
 
     # ---------------------------------------------------------------- publish

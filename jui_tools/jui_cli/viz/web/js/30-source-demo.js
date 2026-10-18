@@ -41,7 +41,7 @@ const ROBOT_DEFS = [
   { id: 'f2', role: 'implement', agent: 'jsonui-implement', pos: [-5.3, 3.3], ry: 0.4, furnished: true,
     plan: [[0, 'typing', 'Edit docs/screens/layouts/product-detail.json'], [30, 'command', 'Bash jui build'], [36, 'typing', 'Edit ProductDetailViewModel.swift'], [74, 'command', 'jui_verify product-detail.spec.json'], [78, 'done', 'ProductDetail の実装が終わった'], [82, 'idle', '待機']] },
   { id: 'd8', role: 'main', agent: 'セッション d8a5…', pos: [-8.5, -3.5], ry: 0.6, furnished: true,
-    plan: [[0, 'idle', '待機（次の指示待ち）']] },
+    plan: [[0, 'idle', '待機（次の指示待ち）'], [34, 'thinking', '考え中'], [50, 'idle', '待機（次の指示待ち）']] },
   { id: '4f', role: 'main', agent: 'セッション 4f2b…', pos: [6.0, -2.9], ry: 0.05, furnished: true,
     plan: [[0, 'command', 'Bash jui build --ios-only'], [22, 'done', 'ビルド完了'], [26, 'idle', '待機'], [38, 'reading', 'Read jui_cli/commands/hotload_cmd.py'], [44, 'command', 'Bash pip install aiohttp watchdog'], [47, 'typing', 'Edit jui_cli/commands/viz_cmd.py'], [78, 'reading', '差分を確認']] },
   { id: '7c', role: 'main', agent: 'セッション 7c3f…', pos: [8.9, -2.6], ry: -0.15, furnished: true,
@@ -637,6 +637,48 @@ function computeModel(t, loop = 0) {
   const tests = computeTests(t), perms = computePerms(t, loop), tasks = computeTasks(t);
   for (const x of tasks) x.perm = perms.find((p) => p.task === x.key && p.status === 'pending') || null;
   return { t, loop, tests, specs: computeSpecs(t, tests), tasks, perms, pending: perms.filter((p) => p.status === 'pending') };
+}
+
+/* ---------- the demo's show (10-18): everything the live view can do, once a loop ----------
+   The demo clock runs 5:00 → 23:00 over the 84 s (the sky; b4's session began at 9:00, so it tires at 17:00). The
+   beats stay out of 26–33 s, where the e2e suites freeze the script to compare it with the prototype. The camera
+   beats only play while nobody has touched the 3D view for a while (demoDirector, 40-scene.js). */
+const DEMO_DAY = { from: 5, to: 23 };
+const demoHour = (t) => DEMO_DAY.from + ((DEMO_DAY.to - DEMO_DAY.from) * ((((t % LOOP) + LOOP) % LOOP))) / LOOP;
+const demoDayMs = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const demoClockMs = (t) => demoDayMs() + Math.round(demoHour(t) * 3600000);
+const DEMO_BEATS = {
+  towerOut: 36, look2F: 40, look1F: 44, towerIn: 47,   // by day: out to the building, up to 2F, back to 1F, down
+  nightOut: 70, nightIn: 78,                            // at night: the rooms working late lit, the sign aglow
+  thinking: [34, 50, 'd8'],                             // a quiet busy session (d8's plan)
+  heavy: [38, 58, '7c'],                                // heavy work: fast typing and sweat
+  tired: { session: 'b4', since: 9 },                   // the session began at 9:00 of the demo clock
+  snacks: [[34, '4f', 'coffee'], [42, 'e1', 'coffee'], [64, 'c9', 'meal']],
+};
+// The building's data, as the live source keeps it (40-scene.js reads it): 1F the demo's three rooms and three
+// other teams', 2F four more. The other teams work by the demo clock: [from hour, to hour, rank 0 waiting | 1 working].
+const LIVE = { floors: [['shop', 'cli', 'doc', 'x1', 'x2', 'x3'], ['y1', 'y2', 'y3', 'y4']], floor: 0, rank: {}, leaving: {} };
+const PERMS_LIVE = [];
+Object.assign(TOWER_NAMES, { x1: 'design-system/', x2: 'payments/', x3: 'infra/', y1: 'ec-site/', y2: 'admin-web/', y3: 'blog-cms/', y4: 'mobile-api/' });
+const DEMO_OTHERS = { x1: [[8, 18, 1]], x2: [[9, 12, 1], [12, 14, 0], [14, 19, 1]], x3: [[10, 16, 1]], y1: [[9, 19, 1]], y2: [[8, 24, 1]], y3: [], y4: [[11, 17, 1]] };
+function liveGoToFloor() { return false; }   // one office: the other floors are only in the building view
+function liveFloorOf() { return 0; }
+function demoBuilding(t) {
+  const h = demoHour(t), rank = {};
+  for (const r of ROOMS) rank[r.id] = 3;
+  for (const d of ROBOT_DEFS) {
+    const room = projectOfRobot(d.id), st = (robotState[d.id] || {}).state;
+    if (room) rank[room] = Math.min(rank[room], st === 'waiting' ? 0 : st && st !== 'idle' && st !== 'done' ? 1 : 2);
+  }
+  for (const [id, spans] of Object.entries(DEMO_OTHERS)) { const span = spans.find(([a, b]) => h >= a && h < b); rank[id] = span ? span[2] : 2; }
+  LIVE.rank = rank;
+}
+const demoTired = (id) => id === DEMO_BEATS.tired.session && isTired(demoDayMs() + DEMO_BEATS.tired.since * 3600000, vizNow());
+const demoHeavy = (id, t) => id === DEMO_BEATS.heavy[2] && t >= DEMO_BEATS.heavy[0] && t < DEMO_BEATS.heavy[1];
+function robotCondition(id) {
+  const t = latestModel ? latestModel.t : 0;
+  return { tired: demoTired(id), hours: (vizNow() - demoDayMs()) / 3600000 - DEMO_BEATS.tired.since,
+    heavy: demoHeavy(id, t) ? { reasons: ['tokens'], tokensPerMin: 3200 } : null };
 }
 
 /* ---------- the source's face to the rest of the view (plan 07 §2) ---------- */

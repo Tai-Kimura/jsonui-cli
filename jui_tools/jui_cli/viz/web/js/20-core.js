@@ -12,6 +12,13 @@ const pill = (label, role) => `<span class="pill" style="--c:${ROLES[role].color
 /* The time the view shows (the sky, the 8-hour tiredness): the machine's clock, unless a test or the demo sets one. */
 const VIZ_CLOCK = { at: null };
 const vizNow = () => (VIZ_CLOCK.at !== null ? VIZ_CLOCK.at : Date.now());
+/* Six rooms to a floor (the live office's floors and the building's bays, in both views). */
+const ROOM_MAX = 6;
+/* Rooms that exist only in the building view (the demo's other teams): id -> name. Empty in the live view. */
+const TOWER_NAMES = {};
+/* Eight hours into its session a main robot gets tired (requester, 10-18); never without the session's own start. */
+const TIRED_MS = 8 * 3600 * 1000;
+const isTired = (since, now) => Number.isFinite(since) && since > 0 && now - since >= TIRED_MS;
 const isDark = () => { const th = document.documentElement.dataset.theme; return th === 'dark' || (th !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches); };
 const readPref = (key, fallback) => { try { return localStorage.getItem(`agent-view:${key}`) || fallback; } catch (err) { return fallback; } };
 const writePref = (key, value) => { try { localStorage.setItem(`agent-view:${key}`, value); } catch (err) { /* storage blocked: the choice lasts until reload */ } };

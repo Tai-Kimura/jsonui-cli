@@ -550,6 +550,14 @@ async def scenario_building(browser, srv, out, failures, res):
     check(failures, hv.get("b1", (0, 0, 0))[:2] == (True, True) and hv.get("b6", (0, 0, 0))[:2] == (True, False)
           and not any(v[1] for k, v in hv.items() if k not in ("b1",)),
           f"building: a heavy session's working robot types fast and sweats; a heavy one waiting does not {hv}")
+    await page.evaluate("() => window.__dbg.openRobot('b1')")
+    await wait(page, "() => { const el = document.querySelector('[data-rb-cond]'); return !!el && !el.hidden; }", label="the robot card's condition line")
+    card = await page.evaluate("() => { const el = document.querySelector('[data-rb-cond]'); return el && !el.hidden ? el.textContent : ''; }")
+    await page.keyboard.press("Escape")
+    await page.wait_for_timeout(500)
+    res["card"] = card
+    check(failures, "稼働 9 時間（疲れ気味）" in card and "重い作業: 出力 3,200 トークン/分" in card,
+          f"building: the robot card says it is tired and why the work is heavy: {card!r}")
     empty = [k for k, v in g2.items() if not v["act"] and v["actShown"]]
     check(failures, empty == [], f"building: a robot with nothing to say shows no empty bubble {empty}")
     # coffee and meals: a fixed seed, never on a robot waiting / thinking / done, at most half of them at once
@@ -601,6 +609,97 @@ async def scenario_building(browser, srv, out, failures, res):
         failures.append(f"live/building: request outside the server: {u}")
 
 
+async def scenario_demo_show(browser, srv, out, failures, res):
+    """The demo plays every effect once a loop (requester, 10-18), at the beats its script declares (DEMO_BEATS):
+    the building by day (out, 2F, back, down) and by night, thinking, heavy work, the 8-hour tiredness with its drink,
+    coffee and meals, a fist pump on a granted permission, the sky by the demo clock. A touch on the 3D view holds the
+    camera beats back. Ends with a recording of one whole loop."""
+    watch = Watch(origin=srv.url)
+    page = await new_page(browser, watch, "demo-show", **DESKTOP)
+    await page.goto(srv.url + "/?demo=1")
+    await ready(page)
+    B = await page.evaluate("() => window.__dbg.beats()")
+    show = {}
+
+    # The demo's clock advances 0.05 s a frame at most, so on a slow renderer (7 fps here) it runs slow: wait on the
+    # script's own time, not on seconds. at(t, lead) jumps to t - lead and plays until t + 0.4.
+    async def at(t, lead=1.0, after=0.4, settle=700):
+        await page.evaluate("(t) => window.__dbg.setSim(t)", t - lead)
+        # between the target and two seconds past it: right after a jump back the model still holds the old time
+        await page.wait_for_function("(t) => { const m = window.__dbg.model().t; return m >= t && m < t + 2; }", arg=t + after, timeout=60000)
+        await page.wait_for_timeout(settle)
+
+    async def robot(id_):
+        return await page.evaluate("(id) => window.__dbg.gestures().find((x) => x.id === id)", id_)
+
+    await at(B["towerOut"])
+    show["out"] = await page.evaluate("() => window.__dbg.floors()")
+    await page.screenshot(path=f"{out}/demo-building-day.png")
+    await at(B["look2F"], 0.6)
+    show["look2F"] = await page.evaluate("() => ({ look: window.__dbg.floors().look, label: document.getElementById('floor-label').textContent })")
+    await at(B["look1F"], 0.6)
+    show["look1F"] = (await page.evaluate("() => window.__dbg.floors()"))["look"]
+    await at(B["towerIn"], 0.6)
+    show["in"] = (await page.evaluate("() => window.__dbg.floors()"))["tower"]
+    check(failures, show["out"]["tower"] and show["look2F"] == {"look": 1, "label": "2F / 2F"} and show["look1F"] == 0 and show["in"] is False,
+          f"demo: the building by day — out, up to 2F, back, down {show}")
+    await at(B["thinking"][0] + 4)
+    show["thinking"] = await page.evaluate("(id) => { const R = window.__dbg.robots.find((x) => x.def.id === id); return { state: R.robot.state, bubble: !!(R.robot.props.thinking && R.robot.props.thinking.group.visible) }; }", B["thinking"][2])
+    await at(B["heavy"][0] + 4)
+    show["heavy"] = await robot(B["heavy"][2])
+    await at(B["snacks"][1][0], 0.5)
+    show["snack"] = (await robot(B["snacks"][1][1]))["gesture"]
+    await at(44, 0.5, 0.02, 0)                              # 4f's permission ends at 44; the pump lasts 1.6 s of real time
+    show["cheer"] = (await robot("4f"))["gesture"]
+    tired_at = (17 - 5) / 18 * 84                           # 17:00 on the demo clock (b4 began at 9:00)
+    await at(tired_at - 1.5, 0.5)
+    before = await robot(B["tired"]["session"])
+    await at(tired_at + 0.3, 0.5)
+    after = await robot(B["tired"]["session"])
+    show["tired"] = [before["tired"], after["tired"], after["drinks"]]
+    show["card"] = await page.evaluate("(id) => window.__dbg.condition(id)", B["tired"]["session"])
+    check(failures, show["thinking"] == {"state": "thinking", "bubble": True} and show["heavy"]["sweat"] and show["snack"] == "coffee"
+          and show["cheer"] == "cheer" and show["tired"] == [False, True, 1] and show["card"]["tired"],
+          f"demo: thinking, sweat, coffee, a fist pump, tired at 17:00 with one drink {show}")
+    skies = {}
+    for t in (3, 20, 60, 72):
+        await at(t, 0.3)
+        skies[t] = (await page.evaluate("() => window.__dbg.sky()"))["phase"]
+    show["skies"] = skies
+    show["clock"] = await page.evaluate("() => document.getElementById('demo-clock').textContent")
+    check(failures, list(skies.values()) == ["dawn", "day", "dusk", "night"] and "デモの時計" in show["clock"],
+          f"demo: the sky by the demo clock, which says it is one {show['skies']} {show['clock']}")
+    await at(B["nightOut"])
+    show["night"] = (await page.evaluate("() => window.__dbg.floors()"))["tower"]
+    await page.screenshot(path=f"{out}/demo-building-night.png")
+    await at(B["nightIn"], 0.5)
+    # a touch on the 3D view holds the camera back
+    box = await page.evaluate("() => { const r = document.getElementById('scene-canvas').getBoundingClientRect(); return [r.left + r.width / 3, r.top + r.height / 2]; }")
+    # a small wheel toward the office: a touch that opens nothing (a click hit a board and held the camera for that)
+    await page.mouse.move(box[0], box[1])
+    await page.mouse.wheel(0, -60)
+    await at(B["towerOut"])
+    show["touchOpened"] = await page.evaluate("() => !document.getElementById('wb').hidden || !document.getElementById('rb').hidden")
+    show["heldBack"] = not (await page.evaluate("() => window.__dbg.floors()"))["tower"]
+    check(failures, show["night"] and show["heldBack"] and not show["touchOpened"], f"demo: the building at night; a touch holds the camera back {show}")
+    res["demoShow"] = show
+    await page.close()
+    # one whole loop, from where the demo opens
+    ctx = await browser.new_context(record_video_dir=out, record_video_size={"width": 1280, "height": 800}, viewport={"width": 1280, "height": 800})
+    vp = await ctx.new_page()
+    await vp.goto(srv.url + "/?demo=1")
+    await ready(vp)
+    # at the demo's ×3 the 0.05 s-a-frame clock runs about real time on this renderer (7 fps): one loop is ~80 s
+    await vp.click("#btn-speed")
+    await vp.evaluate("() => window.__dbg.setSim(0)")
+    await vp.wait_for_function("() => window.__dbg.model().t >= 83.5", timeout=400_000, polling=500)
+    video = vp.video
+    await ctx.close()
+    res["demoVideo"] = str(await video.path()) if video else None
+    for line in watch.console:
+        failures.append(f"demo-show: console: {line}")
+
+
 async def run(pw, out, failures, Server):
     out = pathlib.Path(out) / "live"
     out.mkdir(parents=True, exist_ok=True)
@@ -612,7 +711,8 @@ async def run(pw, out, failures, Server):
                                 ("empty", scenarios.empty, scenario_empty),
                                 ("work", scenarios.work, scenario_work),
                                 ("floors", scenarios.floors, scenario_floors),
-                                ("building", scenarios.building, scenario_building)):
+                                ("building", scenarios.building, scenario_building),
+                                ("demo-show", scenarios.empty, scenario_demo_show)):
             path = scenarios.write(build(), out / f"{name}.jsonl")
             srv = Server(scenario=path)
             t0 = time.monotonic()

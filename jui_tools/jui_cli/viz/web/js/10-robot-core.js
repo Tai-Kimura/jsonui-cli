@@ -508,18 +508,23 @@ function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, fu
    Only while idle or at work (typing, reading, a command) — never while waiting for permission, thinking or done:
    a gesture there ends at once. None under reduced motion. */
 const GESTURE_OK = new Set(['idle', 'typing', 'reading', 'command']);
-const GESTURE_LEN = { drink: 3.6, coffee: 5, meal: 5 };
+const GESTURE_LEN = { drink: 3.6, coffee: 5, meal: 5, cheer: 1.6 };   // cheer: a small fist pump when a permission is granted (demo)
 function handThing(kind) {
   const g = new THREE.Group();
   if (kind === 'drink') {                                   // a tall can, bright
-    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.26, 12), toon('#25c4ff'));
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.07, 12), toon('#ffe14d')); band.position.y = 0.02;
+    // dark with a lime band: no role colour (the hand is the role's colour) and not the white of the robot
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.26, 12), toon('#1c2440'));
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.08, 12), toon('#b6f03c')); band.position.y = 0.03;
     g.add(can, band);
   } else if (kind === 'coffee') {                           // a mug with a handle
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.15, 12), toon('#ff8a3d'));   // not white on a white robot
+    // a white mug with a navy band, coffee on top and steam: the hand (the role's colour) and the mug stay apart
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.15, 12), toon('#ffffff'));
+    const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.078, 0.04, 12), toon('#24407a')); stripe.position.y = -0.01;
     const coffee = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.01, 12), toon('#6b4226')); coffee.position.y = 0.07;
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 6, 10), toon('#ff8a3d')); handle.position.x = 0.1;
-    g.add(mug, coffee, handle);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 6, 10), toon('#ffffff')); handle.position.x = 0.1;
+    g.add(mug, stripe, coffee, handle);
+    const steamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false });
+    for (let i = 0; i < 3; i++) { const puff = new THREE.Mesh(new THREE.SphereGeometry(0.03 + i * 0.008, 6, 4), steamMat); puff.position.set((i - 1) * 0.025, 0.12 + i * 0.06, 0); puff.userData.steam = i; g.add(puff); }
   } else {                                                  // a rice bowl and chopsticks
     const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), toon('#e8554e'));
     bowl.rotation.x = Math.PI;
@@ -532,8 +537,7 @@ function handThing(kind) {
 function startGesture(r, kind, t) {
   if (reduceMotion || !GESTURE_OK.has(r.state)) return false;
   endGesture(r);
-  r.hand = handThing(kind);
-  (kind === 'meal' ? r.armL : r.armR).add(r.hand);
+  if (kind !== 'cheer') { r.hand = handThing(kind); (kind === 'meal' ? r.armL : r.armR).add(r.hand); }
   r.gesture = { kind, t0: t, t1: t + GESTURE_LEN[kind] };
   if (kind === 'drink') r.drinks += 1;
   return true;
@@ -575,6 +579,8 @@ function gesturePose(r, p, t) {
   const G = r.gesture, k = Math.min(1, (t - G.t0) / 0.35, (G.t1 - t) / 0.35);   // ease in and out
   const sip = 0.5 + 0.5 * Math.sin((t - G.t0) * (G.kind === 'meal' ? 5 : 2.6));
   const mix = (key, v) => { p[key] += (v - p[key]) * k; };
+  if (r.hand) for (const o of r.hand.children) if (o.userData.steam !== undefined) o.position.y = 0.12 + ((t * 0.6 + o.userData.steam / 3) % 1) * 0.2;
+  if (G.kind === 'cheer') { const pump = Math.abs(Math.sin((t - G.t0) * 9)); mix('aRx', -0.3); mix('aRz', -2.5 + pump * 0.35); mix('headX', -0.15); return; }
   // Arms forward (not up: a raised hand ends inside the head), the thing lifted toward the face and back.
   if (G.kind === 'meal') {                                  // the bowl in the left hand, chopsticks to the mouth
     mix('aLx', -1.35); mix('aLz', -0.4); mix('aRx', -1.45 - sip * 0.35); mix('aRz', 0.3); mix('headX', 0.18);

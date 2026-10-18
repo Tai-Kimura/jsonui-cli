@@ -639,7 +639,13 @@ LIVE_ONLY = {
     "liveWantSheet",                              # 50-panel: the live branch of the sheet
     "netConnect", "secOfDay",                     # 70-main: the live branches
     "liveGoToFloor", "liveFloorOf",               # 40-scene: the building and the floor steps (live only)
-    "isTired", "sinceOf", "heavyOf",              # 40-scene: liveUpdateRobots (tiredness and heavy work of a live session)
+    "sinceOf", "heavyOf",                         # 40-scene: liveUpdateRobots (tiredness and heavy work of a live session)
+}
+# Calls in the live bundle to functions only the demo script defines: each sits in a demo branch (the demo's update
+# in update3D, demoDirector, the demo clock in 70-main) and never runs live.
+DEMO_ONLY = {
+    "demoBuilding", "demoTired", "demoHeavy",      # 40-scene: demoDirector and the demo branch of update3D
+    "demoClockMs", "demoHour",                     # 70-main: the demo clock
 }
 
 
@@ -718,6 +724,8 @@ def test_every_called_function_is_defined():
         missing = undefined_calls(bundle.build(mode, e2e=True))
         if mode == "demo":
             missing -= LIVE_ONLY
+        else:
+            missing -= DEMO_ONLY
         assert missing == set(), f"{mode}: called but defined nowhere: {sorted(missing)}"
 
 
@@ -813,7 +821,7 @@ def _run_js(file: str, names: list, expr: str):
 
 def test_a_session_is_tired_from_8_hours_and_never_without_its_own_start():
     h8 = 8 * 3600 * 1000
-    got = _run_js("30-source-live.js", ["TIRED_MS", "isTired"],
+    got = _run_js("20-core.js", ["TIRED_MS", "isTired"],
                   f"[isTired(1000, 1000 + {h8} - 1), isTired(1000, 1000 + {h8}), isTired(null, 9e15), isTired(0, 9e15), isTired(undefined, 9e15)]")
     assert got == [False, True, False, False, False]
 
