@@ -229,7 +229,14 @@ class PermissionBook:
     def session_stopped(self, sid: str, at: int) -> None:
         for card in self.perms.values():
             if card["sessionId"] == sid and card["status"] in ("pending", "sent"):
-                self._resolve(card, "expired", at)
+                # A refusal sends no PostToolUse and no PermissionDenied (live
+                # check, 10-18), so a sent deny has nothing to settle it but
+                # this Stop. Had the terminal allowed first, PostToolUse would
+                # have settled the card before the turn ended.
+                if card["status"] == "sent" and card.get("sentBehavior") == "deny":
+                    self._resolve(card, "deny", at, by="browser")
+                else:
+                    self._resolve(card, "expired", at)
 
     def link_use_id(self, card: dict, use_id: str) -> None:
         card["_useId"] = use_id

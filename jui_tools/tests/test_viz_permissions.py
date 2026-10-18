@@ -130,6 +130,29 @@ def test_a_channel_request_before_its_hook_waits_and_then_links():
     assert len(world.perms.perms) == 1  # no relay-only duplicate
 
 
+def test_a_deny_sent_through_the_hook_is_a_deny_when_the_turn_ends():
+    # Claude Code sends neither PostToolUse nor PermissionDenied after a hook
+    # deny (live check, 10-18): the card showed "expired" though the deny and
+    # its reason reached Claude.
+    loop = asyncio.new_event_loop()
+    world, state = _world()
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b1", tool_input={"command": "rm a"}), 1)
+    world.apply_hook(_hook("PermissionRequest", tool_name="Bash", tool_input={"command": "rm a"}), 2)
+    (card,) = world.perms.perms.values()
+    card["_future"] = loop.create_future()
+    assert world.perms.decide(card["id"], "deny", 3, reason="keep it") is None
+    world.apply_hook(_hook("Stop"), 4)
+    assert card["status"] == "deny" and card["decidedBy"] == "browser" and card["sentReason"] == "keep it"
+    # A sent allow the tool never followed stays expired: nothing says it ran.
+    book = PermissionBook()
+    other = book.from_hook("s1", "s1", "Bash", {"command": "x"}, "u", None, 0)
+    other["_future"] = loop.create_future()
+    assert book.decide(other["id"], "allow", 1) is None
+    book.session_stopped("s1", 5)
+    assert other["status"] == "expired"
+    loop.close()
+
+
 def test_stop_expires_open_cards_and_a_silent_channel_goes_away():
     book = PermissionBook()
     card = book.from_hook("s1", "s1", "Bash", {"command": "x"}, "u", None, 0)
