@@ -80,6 +80,7 @@
             <button type="button" class="wb-btn" id="wb-close">← 3D に戻る</button>
             <button type="button" class="wb-btn" id="wb-side-btn" aria-controls="wb-side" aria-expanded="true">一覧を閉じる</button>
             <h2 id="wb-title">spec ボード</h2>
+            <button type="button" class="help-btn" id="spec-help-board" data-spec-help hidden aria-label="spec の進み具合の説明" aria-haspopup="dialog">?</button>
             <button type="button" class="scope-btn" data-scope-btn aria-haspopup="dialog" aria-expanded="false"></button>
             <code id="wb-file">docs/screens/json/</code>
             <span class="state" id="wb-status"></span>
@@ -131,11 +132,9 @@
         <div class="sess-groups" id="sessions"></div>
       </section>
       <section aria-labelledby="h-spec">
-        <div class="sec-head"><h2 id="h-spec">spec の進み具合</h2><button type="button" class="mini-btn" id="btn-specboard" aria-haspopup="dialog">ボードで全部見る</button></div>
-        <p class="sub">spec ファイルの書き込みをファイル監視で追い、今どのセクションが実装・テストされているかを relatedFiles から割り出す。行を押すとホワイトボードに寄ってその spec を開く</p>
+        <div class="sec-head"><div class="head-help"><h2 id="h-spec">spec の進み具合</h2><button type="button" class="help-btn" id="spec-help-panel" data-spec-help aria-label="spec の進み具合の説明" aria-haspopup="dialog">?</button></div><button type="button" class="mini-btn" id="btn-specboard" aria-haspopup="dialog">ボードで全部見る</button></div>
         <div class="seg-filter" id="spec-filter" role="group" aria-label="spec を状態で絞り込む"></div>
         <ul class="spec-list" id="spec-list"></ul>
-        <p class="seg-legend"><span>バーは 概要〜分岐 の 7 区分</span><span><i class="sw sw-writing"></i>書き込み中</span><span><i class="sw sw-written"></i>記入済み</span><span><i class="sw sw-impl"></i>実装済み</span><span><i class="sw sw-tested"></i>テスト済み</span><span><i class="sw sw-empty"></i>未記入</span></p>
       </section>
       <section aria-labelledby="h-tests">
         <h2 id="h-tests">テスト実行</h2>

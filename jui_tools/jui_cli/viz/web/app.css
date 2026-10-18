@@ -958,3 +958,17 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .usage .uw .limit { color: var(--ink-soft); opacity: 0.75; font-weight: 700; }
 .usage .uw .stale { opacity: 0.8; }   /* not .note: the board's sticky-note card took it and swelled the header (10-19) */
 .usage .none { opacity: 0.7; }
+
+/* 「spec の進み具合」 explained in a dialog (2.3.4): a 「?」 next to the heading in the panel and on the overview board */
+.head-help { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.help-btn { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; padding: 0; border: 1.5px solid currentColor; border-radius: 50%; background: transparent; color: var(--ink-soft); font: 700 13px/1 var(--font-body); cursor: pointer; }
+.help-btn:hover { color: var(--ink); }
+.wb-head .help-btn { color: var(--wb-soft); }
+.wb-head .help-btn[hidden], .wb-legend[hidden] { display: none; }
+.spec-help { position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; padding: 16px; background: rgba(10, 20, 35, 0.45); }
+.sh-box { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 14px 18px 16px; border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 12px 40px var(--shadow); }
+.sh-box:focus { outline: none; }
+.sh-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.sh-head h3 { margin: 0; font: 700 16px/1.5 var(--font-body); }
+.sh-body p { margin: 0 0 10px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.sh-body .sh-legend { gap: 4px 14px; font-size: 12.5px; color: var(--ink); }

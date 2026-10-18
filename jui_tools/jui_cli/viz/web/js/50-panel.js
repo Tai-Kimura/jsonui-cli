@@ -691,7 +691,44 @@ function renderWbSide(model) {
 }
 
 const SWATCHES = '<span><i class="sw sw-writing"></i>書き込み中</span><span><i class="sw sw-written"></i>記入済み</span><span><i class="sw sw-impl"></i>実装済み</span><span><i class="sw sw-tested"></i>テスト済み</span><span><i class="sw sw-empty"></i>未記入</span>';
-const OV_LEGEND = `${SWATCHES}<span>バーは左から 概要・構造・状態・データ・操作・遷移・分岐</span><span>カードを押すとその spec を開く</span>`;
+/* The explanation of 「spec の進み具合」 (2.3.4, requester 10-19: "specの進み具合の説明をボードから消してその代わりに？
+   ボタンおいて押したらモーダルで説明出して", for the panel and the overview alike: "同じで"). It used to sit under the
+   panel's heading and over the overview's cards; now both places have a 「?」 next to the heading and both open this
+   one dialog, built from this one source (the two can no longer say different things). */
+const SPEC_HELP_HTML = `<p>spec ファイルの書き込みをファイル監視で追い、今どのセクションが実装・テストされているかを relatedFiles から割り出す。</p>
+<p>バーは左から 概要・構造・状態・データ・操作・遷移・分岐 の 7 区分。色は次のとおり。</p>
+<p class="seg-legend sh-legend">${SWATCHES}</p>
+<p>右のパネルでは行を押すとホワイトボードに寄ってその spec を開く。「ボードで全部見る」の一覧では、カードを押すとその spec を開く。</p>`;
+let specHelp = null;
+function openSpecHelp(opener) {
+  closeSpecHelp(false);
+  const el = document.createElement('div');
+  el.className = 'spec-help'; el.id = 'spec-help';
+  el.innerHTML = `<div class="sh-box" role="dialog" aria-modal="true" aria-labelledby="sh-title" tabindex="-1"><div class="sh-head"><h3 id="sh-title">spec の進み具合の見かた</h3><button type="button" class="mini-btn" data-sh-close>閉じる</button></div><div class="sh-body">${SPEC_HELP_HTML}</div></div>`;
+  document.body.append(el);
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSpecHelp(true); return; }
+    if (e.key !== 'Tab') return;
+    const box = el.querySelector('.sh-box'), list = [...box.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])')];
+    const first = list[0], last = list[list.length - 1];
+    if (!box.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && (document.activeElement === first || document.activeElement === box)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener('keydown', onKey, true);   // first, so Esc closes this and not the board under it
+  el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-sh-close]')) closeSpecHelp(true); });
+  specHelp = { el, opener, onKey };
+  el.querySelector('[data-sh-close]').focus();
+}
+function closeSpecHelp(back) {
+  if (!specHelp) return;
+  const { el, opener, onKey } = specHelp;
+  specHelp = null; el.remove(); document.removeEventListener('keydown', onKey, true);
+  if (back && opener && document.contains(opener)) opener.focus({ preventScroll: true });
+}
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-spec-help]'); if (b) openSpecHelp(b); });
+// the overview shows the 「?」 instead of its legend; an open spec keeps its own legend (what the marks on the sheet mean)
+function wbHelpMode(overview) { $('spec-help-board').hidden = !overview; $('wb-legend').hidden = overview; }
 const SHEET_LEGEND_LIVE = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 構造: layout に在る ／ 分岐: テスト通過</span><span><b class="m-todo">○</b> 構造: layout が無い ／ 分岐: 未テスト</span><span><b class="m-test">▶</b> テスト中</span><span>状態・データ・操作・遷移は項目ごとの実装を測れないので印なし（関連ファイルの節に、在るファイルの数）</span>';
 const SHEET_LEGEND = '<span class="lg-writing">✎ 紫の枠 = 書き込み中</span><span class="lg-empty">点線 = 未記入</span><span><b class="m-done">✓</b> 実装済み・テスト済み</span><span><b class="m-doing">●</b> 実装中</span><span><b class="m-todo">○</b> 未実装・未テスト</span><span><b class="m-test">▶</b> テスト中</span><span><b class="m-flaky">⚠</b> 再実行で通過</span><span>中身はデモの例</span>';
 function setHead(title, file, stCls, stText, whoHTML) {
@@ -718,7 +755,7 @@ function renderOverview(model) {
   const title = `spec ボード${UI.project === 'all' ? '' : ` · ${PROJECT[UI.project].name}`}${wb.app !== 'all' && apps.length > 1 ? ` · ${appLabel(wb.app)}` : ''}`;
   setHead(title, `${where}（${inS.length} 画面）`, 'st-busy', `作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, '');
   wbNav.hidden = true; $('wb-follow-label').hidden = true;
-  setHTML($('wb-legend'), OV_LEGEND);
+  wbHelpMode(true);
   const sig = JSON.stringify(['ov', UI.project, wb.app, model.specs.map((s) => `${s.bucket}:${s.by || ''}`)]);
   if (wbCode._sig !== sig) {
     wbCode.innerHTML = !inS.length ? `<p class="sc-ph ov-none">${esc(scopeLabel())} には画面の spec がない（CLI ツールなど）。上の「プロジェクト」で別のプロジェクトを選べる</p>` : BUCKETS.map(([b, label]) => {
@@ -784,7 +821,7 @@ function renderSheet(model, force) {
     if (!d) {
       setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
       wbNav.hidden = false; $('wb-follow-label').hidden = false;
-      setHTML($('wb-legend'), SHEET_LEGEND_LIVE);
+      setHTML($('wb-legend'), SHEET_LEGEND_LIVE); wbHelpMode(false);
       renderNav(s);
       const failed = LIVE.sheetFailed[s.id];
       setHTML(wbCode, `<p class="sc-ph">${failed ? `この spec を読めなかった（${esc(failed)}）` : 'spec を読み込んでいます…'}</p>`);
@@ -795,7 +832,7 @@ function renderSheet(model, force) {
   if (SOURCE.mode === 'live') setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
   else setHead(`${s.name}（${s.screen}）`, `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
   wbNav.hidden = false; $('wb-follow-label').hidden = false;
-  setHTML($('wb-legend'), SOURCE.mode === 'live' ? SHEET_LEGEND_LIVE : SHEET_LEGEND);
+  setHTML($('wb-legend'), SOURCE.mode === 'live' ? SHEET_LEGEND_LIVE : SHEET_LEGEND); wbHelpMode(false);
   renderNav(s);
   if (wbCode._sig) { wbCode._sig = null; wbCode._html = null; }
 
