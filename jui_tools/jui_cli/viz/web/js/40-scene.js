@@ -526,7 +526,7 @@ function build3D() {
     if (!h) return;
     // A board belongs to one project room, so opening it narrows the view to that project (unless it already shows everything).
     const fit = (proj) => { if (proj && UI.project !== 'all' && UI.project !== proj) setProject(proj, { camera: false }); };
-    if (h.kind === 'floor') towerLeave(SOURCE.mode === 'live' ? h.k : 0);   // the demo has one office
+    if (h.kind === 'floor') { if (SOURCE.mode === 'live') towerLeave(h.k, h.project); else towerLeave(0); }   // the demo has one office
     else if (h.kind === 'room') setProject(h.project);
     else if (h.kind === 'robot') openRobot(h.id, canvas);
     else if (h.kind === 'tasks') { fit(h.project); openTaskBoard(canvas, undefined, h.project); }
@@ -826,7 +826,11 @@ function towerHit(ray) {
   ray.layers.set(TOWER.LAYER);
   const h = ray.intersectObjects(TOWER.floors.map((F) => F.box), false)[0];
   ray.layers.set(0);
-  return h ? { kind: 'floor', k: h.object.userData.floor, title: towerHover(h) } : null;
+  if (!h) return null;
+  // The window pressed names its room (towerHover reads the same bay): the room, not the one open before (10-18).
+  const F = TOWER.floors[h.object.userData.floor];
+  const bay = F && h.uv ? F.bays.find((b) => h.uv.x >= b.x0 && h.uv.x <= b.x1) : null;
+  return { kind: 'floor', k: h.object.userData.floor, project: bay && bay.id && PROJECT[bay.id] ? bay.id : null, title: towerHover(h) };
 }
 function liveHit(ray) {
   const solo = liveSolo(), rooms = Object.entries(LIVE3D.rooms).filter(([id]) => !solo || id === solo).map(([, R]) => R);
@@ -1325,11 +1329,15 @@ function towerEnter() {
   controls.enabled = false;
   flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.8, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });
 }
-/* Down from the building into floor k (the camera starts at that floor's height in the building). */
-function towerLeave(k) {
+/* Down from the building into floor k (the camera starts at that floor's height in the building).
+   ``project``: the room of the window pressed (that room alone), or null for an empty window (the whole floor);
+   left out (the building button, the wheel), the view stays on what was picked before. */
+function towerLeave(k, project) {
   if (!TOWER.on) return;
   towerSetView(false);
   if (liveGoToFloor(k)) LIVE3D.floorMove = true;
+  const picked = project === undefined ? undefined : project && PROJECT[project] ? project : 'all';
+  if (picked !== undefined && UI.project !== picked) { setProject(picked); return; }   // setProject flies there
   const pose = SOURCE.mode === 'live' ? liveRoomPose(UI.project !== 'all' && PROJECT[UI.project] && PROJECT[UI.project].shown ? UI.project : 'all') : roomPose(UI.project);
   controls.enabled = false;
   flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.8, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });

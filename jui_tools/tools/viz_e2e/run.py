@@ -195,7 +195,8 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms"], help="run one half (rooms: only the rooms/doors suite)")
+    ap.add_argument("--only", choices=["demo", "live", "rooms", "tower"],
+                    help="run one half (rooms: only the rooms/doors suite; tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
     ap.add_argument("--record-demo", metavar="URL",
                     help="run the demo suites against URL (the prototype's agent-test.html) and write expect_demo.json")
@@ -241,6 +242,9 @@ def main(argv=None) -> int:
             if a.only in (None, "live", "rooms"):
                 import rooms
                 await rooms.run_rooms(pw, out, failures, RealServer)
+            if a.only in (None, "live", "tower"):
+                import tower_press
+                await tower_press.run_tower_press(pw, out, failures, RealServer)
 
     asyncio.run(go())
     if a.record_demo:

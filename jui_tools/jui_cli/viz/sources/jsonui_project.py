@@ -216,6 +216,44 @@ def find_configs(root: Path, depth: int = SOURCE_DEPTH) -> list[Path]:
     return found + below
 
 
+def boundary_roots(spec_path: Path, ceiling: Path | None = None) -> list[Path]:
+    """The folders a path a spec declares may be written from: the spec's own folder, then every declared boundary
+    above it — a folder holding jui.config.json or .git — up to the nearest .git, or up to ``ceiling`` (the room's
+    root) when the spec is inside it.
+
+    ⚠️ The rule of document_tools/jsonui_doc_cli/spec_doc/validator.py ``_declared_path_roots`` (steps 2 and 3) and
+    ``_boundary_roots``, which jui_cli cannot import (document_tools is reached only through the sys.path bridge).
+    Each names the other; change one and change the other. In a repository of several apps a spec names files
+    from the repository root (client/acme-mobile-ios/…) as well as from its app, so the app folder alone
+    found none of them and a finished screen read as 4% implemented.
+
+    One difference, deliberate: the validator stops at the nearest .git, so an app that is a submodule of the
+    room's repository stops at its own; a room is the parent repository with its submodules in it (bar/,
+    orders/ … each with a .git of its own), and their specs spell paths from the parent. The room's root is
+    a bound the room already has, not a guess about the machine.
+    """
+    within = ceiling is not None and spec_path.is_relative_to(ceiling)
+    roots = [spec_path.parent]
+    for parent in spec_path.parents:
+        if (parent / "jui.config.json").is_file() or (parent / ".git").exists():
+            if parent not in roots:
+                roots.append(parent)
+        if (parent == ceiling) if within else (parent / ".git").exists():
+            break
+    return roots
+
+
+def resolve_declared(value: str, roots: list[Path]) -> tuple[Path, bool]:
+    """(where the declared path is, whether it exists): the first root it exists under, else the first root."""
+    path = Path(value)
+    if path.is_absolute():
+        return path, path.exists()
+    for root in roots:
+        if (root / path).exists():
+            return root / path, True
+    return (roots[0] / path if roots else path), False
+
+
 @dataclass
 class Source:
     """One JsonUI app in a room: where its specs, layouts and tests are."""
@@ -430,24 +468,27 @@ class JsonUIProject:
     def _source(self, source: Source | None) -> Source | None:
         return source or (self.sources[0] if self.sources else None)
 
-    def layout_path(self, spec: dict, source: Source | None = None) -> Path | None:
+    def _roots(self, source: Source | None, spec_path: Path | None) -> list[Path]:
+        if spec_path is not None:
+            return boundary_roots(spec_path, self.root)
+        return [source.root] if source else [self.root]
+
+    def layout_path(self, spec: dict, source: Source | None = None, spec_path: Path | None = None) -> Path | None:
+        """The Layout file a spec names: under the declared layouts folder first, then as relatedFiles are (the
+        validator's ``_declared_path_roots("layout")``)."""
         meta = spec.get("metadata") if isinstance(spec.get("metadata"), dict) else {}
         name = meta.get("layoutFile")
         source = self._source(source)
         if not isinstance(name, str) or not name or source is None:
             return None
-        path = source.layouts_dir / (name if name.endswith(".json") else f"{name}.json")
-        return path
+        name = name if name.endswith(".json") else f"{name}.json"
+        roots = [source.layouts_dir] + (boundary_roots(spec_path, self.root) if spec_path is not None else [])
+        return resolve_declared(name, roots)[0]
 
-    def related_paths(self, spec: dict, source: Source | None = None) -> list[Path]:
-        source = self._source(source)
-        base = source.root if source else self.root
-        out = []
-        for item in spec.get("relatedFiles") or []:
-            if isinstance(item, dict) and isinstance(item.get("path"), str):
-                p = Path(item["path"])
-                out.append(p if p.is_absolute() else base / p)
-        return out
+    def related_paths(self, spec: dict, source: Source | None = None, spec_path: Path | None = None) -> list[Path]:
+        roots = self._roots(self._source(source), spec_path)
+        return [resolve_declared(item["path"], roots)[0] for item in spec.get("relatedFiles") or []
+                if isinstance(item, dict) and isinstance(item.get("path"), str)]
 
     def specs_touching(self, file_path: str) -> list[str]:
         """Spec ids a file edit belongs to: the spec itself, its Layout, its relatedFiles."""
@@ -458,26 +499,38 @@ class JsonUIProject:
                 hits.append(sid)
                 continue
             data = entry.data or {}
-            lp = self.layout_path(data, entry.source)
-            if (lp and target == lp) or target in self.related_paths(data, entry.source):
+            lp = self.layout_path(data, entry.source, entry.path)
+            # Every place a relatedFile may be written from: a file being created does not exist anywhere yet.
+            roots = self._roots(self._source(entry.source), entry.path)
+            declared = [Path(item["path"]) for item in data.get("relatedFiles") or []
+                        if isinstance(item, dict) and isinstance(item.get("path"), str)]
+            if (lp and target == lp) or any(target == (d if d.is_absolute() else r / d) for d in declared for r in roots):
                 hits.append(sid)
         return hits
 
-    def impl(self, spec: dict, source: Source | None = None) -> dict:
-        total = done = 0
-        for path in self.related_paths(spec, source):
-            total += 1
-            done += path.exists()
-        lp = self.layout_path(spec, source)
-        if lp is not None:
-            total += 1
-            done += lp.exists()
+    def impl(self, spec: dict, source: Source | None = None, spec_path: Path | None = None) -> dict:
+        """What can be measured about a spec's implementation, and its sum.
+
+        related     relatedFiles that exist / all
+        layout      whether the Layout file exists (None: the spec names none)
+        components  listed component ids found in the Layout / all (None: the spec lists none — the usual case,
+                    where the structure IS the Layout, so it is implemented exactly when the Layout exists)
+        total/done  the sum of the three, for the bucket and the status line
+        Nothing here measures a state, a data-flow item, a user action or a transition one by one: the inputs say
+        nothing about them, and the board says so instead of guessing.
+        """
+        related = [p.exists() for p in self.related_paths(spec, source, spec_path)]
+        lp = self.layout_path(spec, source, spec_path)
+        layout = None if lp is None else lp.exists()
         ids = component_ids(spec)
+        components = None
         if ids:
             present = self.layout_ids_cached(lp) if lp else set()
-            total += len(ids)
-            done += sum(1 for i in ids if i in present)
-        return {"total": total, "done": done}
+            components = {"total": len(ids), "done": sum(1 for i in ids if i in present)}
+        total = len(related) + (layout is not None) + (components["total"] if components else 0)
+        done = sum(related) + bool(layout) + (components["done"] if components else 0)
+        return {"total": total, "done": done, "related": {"total": len(related), "done": sum(related)},
+                "layout": layout, "components": components}
 
     def specs_for_test_file(self, rel: str) -> list[str]:
         """Spec ids a test file (as the runner names it, e.g. screens/login.test.json) belongs to."""
@@ -507,13 +560,13 @@ class JsonUIProject:
             meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
             stem = entry.path.name.replace(".spec.json", "")
             sections = []
-            nodes = len(self.layout_nodes_cached(self.layout_path(data, entry.source)))
+            nodes = len(self.layout_nodes_cached(self.layout_path(data, entry.source, entry.path)))
             for key in SECTIONS:
                 items = section_items(data, key, nodes)
                 writing = entry.writing_until.get(key, 0) > at or (entry.broken and entry.by_until > at)
                 state = "writing" if writing else ("written" if items else "empty")
                 sections.append({"key": key, "state": state, "items": items})
-            impl = self.impl(data, entry.source)
+            impl = self.impl(data, entry.source, entry.path)
             layout_name = meta.get("layoutFile") if isinstance(meta.get("layoutFile"), str) else None
             test_cases = entry.source.test_cases if entry.source else {}
             cases = test_cases.get(stem, 0) + (test_cases.get(layout_name, 0) if layout_name and layout_name != stem else 0)

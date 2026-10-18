@@ -106,9 +106,14 @@ function liveSpecRow(x) {
   const totals = SPEC_KEYS.map((k) => Math.max(0, Number((secs[k] || {}).items) || 0));
   const impl = x.impl || { total: 0, done: 0 }, tests = x.tests || { total: 0, passed: 0, failed: 0, running: false };
   const share = impl.total > 0 ? Math.min(1, impl.done / impl.total) : 0;
-  let left = Math.round(sumImpl(totals) * share);
-  const implN = totals.map((n, k) => { if (k < 1 || k > 5) return 0; const v = Math.min(n, left); left -= v; return v; });
+  // Only what the server measured (jsonui_project.impl): the structure is the Layout's tree, so it is implemented
+  // exactly when the Layout exists (or, when the spec lists components, as many as the Layout has). States, data,
+  // actions and transitions are not measured one by one, so they get no ✓ / ○ (unmeasured); 分岐 comes from tests.
+  const measure = { related: impl.related || { total: 0, done: 0 }, layout: impl.layout === undefined ? null : impl.layout, components: impl.components || null };
+  const implN = totals.map(() => 0);
+  implN[1] = measure.components ? Math.min(totals[1], measure.components.done) : measure.layout ? totals[1] : 0;
   implN[6] = Math.min(totals[6] || tests.total, tests.passed);
+  const unmeasured = [false, false, true, true, true, true, false];
   if (!totals[6] && tests.total) totals[6] = tests.total;
   const implPhase = impl.done > 0 || tests.total > 0;
   const writingIdx = SPEC_KEYS.findIndex((k) => (secs[k] || {}).state === 'writing');
@@ -127,8 +132,8 @@ function liveSpecRow(x) {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
     app: String(x.app || ''), specDir: String(x.specDir || ''),   // the app inside the room that holds the spec
     doc: prev && prev.docAt === x.updatedAt ? prev.doc : (prev ? prev.doc : null), docAt: prev ? prev.docAt : null, updatedAt: x.updatedAt,
-    totals, related: prev && prev.doc ? (prev.doc.related || []) : [], written, implN, implPhase, writingIdx,
-    implIdx: by && writingIdx < 0 && x.bucket === 'live' && !tests.running ? Math.max(1, implN.findIndex((n, k) => k >= 1 && k <= 5 && n < totals[k])) : -1,
+    totals, related: prev && prev.doc ? (prev.doc.related || []) : [], written, implN, implPhase, writingIdx, measure, unmeasured,
+    implIdx: by && writingIdx < 0 && x.bucket === 'live' && !tests.running && implN[1] < totals[1] ? 1 : -1,
     testIdx: tests.running ? 6 : -1, by, relatedNow: -1, status, note, bucket: ['live', 'partial', 'todo', 'done'].includes(x.bucket) ? x.bucket : 'partial',
   };
   if (row.implIdx === 0) row.implIdx = -1;
