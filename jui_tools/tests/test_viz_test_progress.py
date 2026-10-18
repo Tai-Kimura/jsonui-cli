@@ -151,6 +151,7 @@ def test_progress_records_fill_the_test_run_the_device_and_the_spec(tmp_path):
     for rec in (_rec("run_start", t=200, files=1, deviceId="11111111-2222-3333-4444-555555555555"),
                 _rec("case_start", t=300, file="screens/login.test.json", test="login", case="ok", attempt=1)):
         assert world.apply_progress(rec, "ios", "11111111-2222-3333-4444-555555555555", 300)
+    world.tick(300)  # the spec merges at the tick, not per record (serve ticks every 0.5 s)
     world.publish()
     run = state.slices["tests"][0]
     assert run["cases"] == [{"name": "ok", "status": "running"}]
@@ -162,6 +163,7 @@ def test_progress_records_fill_the_test_run_the_device_and_the_spec(tmp_path):
                 _rec("case_end", t=500, file="screens/login.test.json", test="login", case="ng", attempt=1, status="failed", durationMs=90)):
         world.apply_progress(rec, "ios", None, 500)
     assert not world.apply_progress({"v": 1, "nope": True}, "ios", None, 500)  # dropped, counted
+    world.tick(500)
     world.publish()
     assert state.slices["tests"][0]["summary"] == "1 passed, 1 failed"
     assert state.slices["specs"][0]["tests"] == {"total": 2, "passed": 1, "failed": 1, "running": False}

@@ -67,6 +67,7 @@ def _run(world: World, platform: str, file: str, test: str, cases: dict, at: int
         world.apply_progress(rec("case_end", file=file, test=test, case=case, attempt=1, status=status, durationMs=1), platform, None, at)
     world.apply_progress(rec("run_end", passed=sum(s == "passed" for s in cases.values()),
                              failed=sum(s == "failed" for s in cases.values()), skipped=0), platform, None, at)
+    world.tick(at)  # the spec merges at the tick, not per record (serve ticks every 0.5 s)
     return run
 
 

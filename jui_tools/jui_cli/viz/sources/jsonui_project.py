@@ -366,6 +366,7 @@ class JsonUIProject:
         self.specs: dict[str, SpecEntry] = {}
         self._layout_cache: dict[Path, tuple[int, list[dict]]] = {}
         self.test_results: dict[str, dict] = {}  # spec id -> {passed, failed, running}
+        self._tests_by_name: dict[str, list[tuple[Source, str]]] | None = None  # test file name -> (app, key)
 
     @property
     def test_cases(self) -> dict[str, int]:
@@ -448,6 +449,7 @@ class JsonUIProject:
         rules = test_dirs()
         for source in self.sources:
             source.test_cases, source.test_file_keys = {}, {}
+            self._tests_by_name = None
             if rules is None or source.tests_dir is None:
                 continue
             for path in rules.test_files(source.tests_dir):
@@ -470,11 +472,18 @@ class JsonUIProject:
         rules = test_dirs()
         if rules is None:
             return []
-        pool = {}
-        for source in self.sources:
-            if only is None or source in only:
+        # The rule needs at least the file name to agree, so only the files of that name are candidates
+        # (a row is matched for each room; every file of every app was 2.3.1's freeze, 10-19).
+        if self._tests_by_name is None:
+            self._tests_by_name = {}
+            for source in self.sources:
                 for key in source.test_file_keys:
-                    pool[f"{id(source)}\x00{key}"] = (source, key)
+                    self._tests_by_name.setdefault(rules.segments(key)[-1], []).append((source, key))
+        wanted = rules.segments(name)
+        pool = {}
+        for source, key in self._tests_by_name.get(wanted[-1] if wanted else "", ()):
+            if only is None or source in only:
+                pool[f"{id(source)}\x00{key}"] = (source, key)
         hit = rules.match_test_file(name, [k.split("\x00", 1)[1] for k in pool])
         if hit is None:
             return []

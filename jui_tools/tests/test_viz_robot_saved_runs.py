@@ -40,6 +40,7 @@ def _live_run(world):
         if status:
             _progress(world, run, "case_end", T0 + 300, file="tests/a.test.json", test="a", case=case, attempt=1,
                       status=status, durationMs=1)
+    world.tick(T0 + 400)  # a command's cases are rebuilt at the tick, not per record (serve ticks every 0.5 s)
     return run
 
 

@@ -152,6 +152,17 @@ class World:
         # and was then written to a file is counted once.
         self.live_cases: dict[str, dict[str, dict[tuple[str, str, str], tuple[int, str]]]] = {}
         self.saved_rows: list[dict] = []
+        self._saved_by_run: dict[str, list[dict]] = {}
+        # Merging is not per record (ticket 2026-10-19-jui-viz-merge-results-per-progress-record-freezes-the-server):
+        # a record marks its project, tick merges each marked project once. Where a saved row's file goes
+        # (_saved_specs) is remembered per (project, file, platform, app) until a project loads or a spec / test
+        # file changes; which runs are tied to a command is compared at each merge (_run_rooms).
+        self._merge_due: set[str] = set()
+        self._ties: dict[tuple, list[str]] = {}
+        self._file_keys: dict[tuple[str, str], str] = {}
+        self._all_test_keys: dict[str, list[str]] | None = None   # test file name -> every room's keys of it
+        self._cases_due: set[str] = set()                         # test commands whose cases tick rebuilds
+        self._run_rooms_seen: dict[str, frozenset[str]] = {}
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
         self._dirty: set[str] = set()
@@ -295,7 +306,9 @@ class World:
             self.jsonui_errors[project_id] = f"{type(exc).__name__}: {exc}"[:200]
             return None
         self.jsonui[project_id] = loaded
-        self._merge_results(loaded)
+        self._forget_ties()
+        for other in self.jsonui.values():  # a new room's test files can make another room's row ambiguous
+            self._merge_results(other)
         self._dirty |= {"specs", "tasks"}
         if self.on_project_loaded is not None:
             self.on_project_loaded(loaded)
@@ -309,9 +322,12 @@ class World:
         target = Path(path)
         if target.name.endswith(".spec.json"):
             project.reload_spec(target, at, by)
+            self._forget_ties()  # a spec's name and layoutFile decide which spec a test file reaches
+            self._merge_due.add(project.project_id)
         elif target.name.endswith(".test.json"):
             project.load_tests()
-            self._merge_results(project)  # which app has a test file decides where a saved row goes
+            self._forget_ties()  # which app has a test file decides where a saved row goes
+            self._merge_due.update(self.jsonui)
         for sid in project.specs_touching(path):
             if by:
                 entry = project.specs[sid]
@@ -867,16 +883,15 @@ class World:
                 target.setdefault("progressRun", run["run"])
                 target.setdefault("progressRuns", []).append(run["run"])
         if target is not None:
-            self._run_cases(target)
+            self._cases_due.add(target["id"])  # tick rebuilds its cases once: each record would go over every run again
             project = self.jsonui.get(target["projectId"])
             if project is not None:
                 live = self.live_cases.setdefault(project.project_id, {})
                 for case in run["cases"].values():
-                    key = (_file_key(project, case["file"]), case["test"], case["name"])
-                    for spec_id in project.specs_for_test_file(case["file"]):
+                    key = (self._file_key(project, case["file"]), case["test"], case["name"])
+                    for spec_id in self._specs_of_file(project, case["file"]):
                         live.setdefault(spec_id, {})[key] = (run["updatedAt"], case["status"])
-                self._merge_results(project)
-                self._dirty.add("specs")
+                self._merge_due.add(project.project_id)
         self._dirty.add("tests")
         return True
 
@@ -887,7 +902,7 @@ class World:
         so a case seen live and then saved counts once."""
         rids = _runs_of(target)
         runs = [self.progress.runs[r] for r in rids if r in self.progress.runs]
-        saved = [r for r in self.saved_rows if r.get("run") in rids]
+        saved = [r for rid in rids for r in self._saved_by_run.get(rid, ())]
         merged: dict[tuple, tuple[int, str, str]] = {}
         for run in runs:
             for c in run["cases"].values():
@@ -907,17 +922,62 @@ class World:
             target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
 
     def apply_saved_results(self, rows: list[dict]) -> None:
-        """The rows of every saved result file (sources/test_results.py), replacing the previous scan."""
+        """The rows of every saved result file (sources/test_results.py), replacing the previous scan.
+        The same scan again (every 5 s while nothing was written) changes nothing and costs nothing."""
+        if rows == self.saved_rows:
+            return
         self.saved_rows = rows
+        self._saved_by_run = {}
+        for row in rows:
+            if row.get("run"):
+                self._saved_by_run.setdefault(row["run"], []).append(row)
         for target in self.tests.values():
             if _runs_of(target):
                 self._run_cases(target)
                 self._dirty.add("tests")
         for project in self.jsonui.values():
             self._merge_results(project)
-        self._dirty.add("specs")
 
-    def _saved_specs(self, project: JsonUIProject, row: dict) -> list[str]:
+    def _forget_ties(self) -> None:
+        self._ties, self._file_keys, self._all_test_keys = {}, {}, None
+
+    def _file_key(self, project: JsonUIProject, file: str | None) -> str:
+        key = (project.project_id, file or "")
+        if key not in self._file_keys:
+            self._file_keys[key] = _file_key(project, file)
+        return self._file_keys[key]
+
+    def _specs_of_file(self, project: JsonUIProject, file: str) -> list[str]:
+        key = (project.project_id, "file", file)
+        if key not in self._ties:
+            self._ties[key] = project.specs_for_test_file(file)
+        return self._ties[key]
+
+    def _run_rooms(self) -> dict[str, frozenset[str]]:
+        """Run id -> the rooms of the test commands it is tied to (hand 1 of _saved_specs)."""
+        rooms: dict[str, set[str]] = {}
+        for t in self.tests.values():
+            for rid in _runs_of(t):
+                rooms.setdefault(rid, set()).add(t["projectId"])
+        return {rid: frozenset(r) for rid, r in rooms.items()}
+
+    def flush_results(self) -> None:
+        """Merge each project a record or a file change marked, once (tick). A run newly tied to a command
+        moves its saved rows (hand 1 of _saved_specs), so every room merges again when the ties changed."""
+        for tid in sorted(self._cases_due):
+            if tid in self.tests:
+                self._run_cases(self.tests[tid])
+        self._cases_due.clear()
+        ties = self._run_rooms()
+        if ties != self._run_rooms_seen:
+            self._run_rooms_seen = ties
+            self._merge_due.update(self.jsonui)
+        for pid in sorted(self._merge_due):
+            if pid in self.jsonui:
+                self._merge_results(self.jsonui[pid])
+        self._merge_due.clear()
+
+    def _saved_specs(self, project: JsonUIProject, row: dict, run_rooms: dict | None = None) -> list[str]:
         """The specs of *project* a saved row belongs to, tied without guessing (design memo ②, 10-18):
         1. its run is one this server saw start from a test command: that command's room;
         2. Android: the app whose config names the row's package as test.artifacts.android.appId;
@@ -926,9 +986,17 @@ class World:
         file = row.get("file")
         if not file:
             return []
-        if row.get("run") and any(row["run"] in _runs_of(t) for t in self.tests.values()):
-            mine = any(row["run"] in _runs_of(t) and t["projectId"] == project.project_id for t in self.tests.values())
-            return project.specs_for_test_file(file) if mine else []
+        run_rooms = self._run_rooms() if run_rooms is None else run_rooms
+        if row.get("run") and row["run"] in run_rooms:
+            return self._specs_of_file(project, file) if project.project_id in run_rooms[row["run"]] else []
+        key = (project.project_id, file, row["platform"], row.get("app"))
+        if key not in self._ties:
+            self._ties[key] = self._untied_specs(project, row)
+        return self._ties[key]
+
+    def _untied_specs(self, project: JsonUIProject, row: dict) -> list[str]:
+        """Hands 2 and 3 of _saved_specs: they read only the loaded rooms' apps and test files."""
+        file = row["file"]
         if row["platform"] == "android" and row.get("app"):
             by_app = [(p, s) for p in self.jsonui.values() for s in p.sources if s.android_app_id == row["app"]]
             if by_app:
@@ -945,8 +1013,12 @@ class World:
         rules = test_dirs()
         if rules is None:
             return True
-        keys = [k for p in self.jsonui.values() for s in p.sources for k in s.test_file_keys]
-        return rules.match_test_file(file, keys) is None
+        if self._all_test_keys is None:
+            self._all_test_keys = {}
+            for k in (k for p in self.jsonui.values() for s in p.sources for k in s.test_file_keys):
+                self._all_test_keys.setdefault(rules.segments(k)[-1], []).append(k)
+        wanted = rules.segments(file)
+        return rules.match_test_file(file, self._all_test_keys.get(wanted[-1] if wanted else "", [])) is None
 
     def _merge_results(self, project: JsonUIProject) -> None:
         merged: dict[str, dict[tuple[str, str, str], tuple[int, str, bool]]] = {}
@@ -956,9 +1028,10 @@ class World:
             if key not in cases or cases[key][0] <= t:
                 cases[key] = (t, status, saved)
 
+        run_rooms = self._run_rooms()
         for row in self.saved_rows:
-            for spec_id in self._saved_specs(project, row):
-                put(spec_id, (_file_key(project, row["file"]), row["test"], row["case"]), row["t"], row["status"], True)
+            for spec_id in self._saved_specs(project, row, run_rooms):
+                put(spec_id, (self._file_key(project, row["file"]), row["test"], row["case"]), row["t"], row["status"], True)
         for spec_id, cases in self.live_cases.get(project.project_id, {}).items():
             for key, (t, status) in cases.items():
                 put(spec_id, key, t, status, False)
@@ -970,12 +1043,15 @@ class World:
             saved_at = [t for t, _, saved in cases.values() if saved]
             if saved_at:  # a case shown from a file, not from this server's own run: how old it may be
                 results[spec_id]["latest"] = max(saved_at)
-        project.test_results = results
+        if results != project.test_results:
+            project.test_results = results
+            self._dirty.add("specs")
 
     # ---------------------------------------------------------------- time
 
     def tick(self, at: int) -> None:
         self._now = max(self._now, at)
+        self.flush_results()
         if self.perms.tick(at):
             self._dirty |= {"perms", "sessions"}
         if self.questions.tick(at):
