@@ -55,6 +55,8 @@ class WatchTest(unittest.TestCase):
             import sys
             with open({str(self.calls)!r}, "a") as f:
                 f.write(" ".join(sys.argv[1:]) + "\\n")
+            import os, time
+            time.sleep(float(os.environ.get("KJUI_TEST_SLOW_ADB", "0")))   # a slow device (the arms below)
             print("stand-in adb")
             """))
         adb.chmod(adb.stat().st_mode | stat.S_IEXEC)
@@ -132,6 +134,40 @@ class WatchTest(unittest.TestCase):
         self.assertEqual(rc, 1, "the command's own exit is the watch's when nothing stalls")
         self.assertTrue((self.evidence / "first-failure" / "input_method.txt").is_file())
         self.assertEqual(out.count("device evidence (first-failure) saved"), 1)
+
+    # --- the watch's own adb work is not the command's silence (ticket kjui-watch-counts-its-own-snapshot-time-as-idle)
+    # The first failure's snapshot calls adb several times inside the watch's loop. With the moved read before it, the
+    # snapshot's time counted as silence: on a slow device (here 0.3 s an adb call) a command that kept moving every
+    # 0.4 s was stopped with 124 (3/3 before the fix; seen in the full suite under load).
+
+    def slow_adb(self, seconds: float) -> None:
+        os.environ["KJUI_TEST_SLOW_ADB"] = str(seconds)
+        self.addCleanup(os.environ.pop, "KJUI_TEST_SLOW_ADB", None)
+
+    def test_a_slow_snapshot_is_not_the_commands_silence(self):
+        self.slow_adb(0.3)
+        rc, out, _ = self.run_watch(f"""
+            print({STARTING!r})
+            print({FAILED!r}); print({COUNT.format(n=1, f=1)!r})
+            time.sleep(0.4)
+            print({FAILED!r}); print({COUNT.format(n=2, f=2)!r})
+            time.sleep(0.4)
+            print({COUNT.format(n=3, f=2)!r}); print({FINISHED!r})
+            sys.exit(1)
+        """)
+        self.assertEqual(rc, 1, f"a command that kept moving is not stopped while the watch saves the device: {out[-300:]}")
+        self.assertTrue((self.evidence / "first-failure" / "input_method.txt").is_file())
+        self.assertNotIn("has not moved", out)
+
+    def test_a_slow_device_still_stops_a_command_that_truly_stalled(self):
+        self.slow_adb(0.3)
+        rc, out, took = self.run_watch(f"""
+            print({STARTING!r}); print({FAILED!r}); print({COUNT.format(n=1, f=1)!r})
+            time.sleep(60)
+        """)
+        self.assertEqual(rc, 124, out[-300:])
+        self.assertLess(took, 30, "the stand-in's 60 s sleep ran out: the command was not stopped")
+        self.assertIn("has not moved", out)
 
     def test_a_gradle_task_failure_line_is_not_a_failed_case(self):
         rc, out, _ = self.run_watch(f"""

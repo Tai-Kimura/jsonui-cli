@@ -404,10 +404,16 @@ def watch(command: list[str], evidence: Path, idle_seconds: float = DEFAULT_IDLE
                 anrs += 1
                 close_anr(evidence, adb, anrs, hit[1])
         with lock:
-            failed, running, moved, count = state["failed"], state["running"], state["moved"], state["count"]
+            failed = state["failed"]
         if failed and not snapped:
             snapshot(evidence, "first-failure", adb)
             snapped = True
+        # Read where the cases are after the watch's own adb work (the focus check, an ANR closed, the snapshot): the
+        # reader went on while it ran. Read before it, the moved was as old as the work was long, and a command that
+        # kept moving was stopped with 124 when the work took longer than idle_seconds (ticket kjui-watch-counts-its-
+        # own-snapshot-time-as-idle: seen in the full suite under load; 3/3 with a stand-in adb 0.3 s slower).
+        with lock:
+            running, moved, count = state["running"], state["moved"], state["count"]
         if running and time.monotonic() - moved > idle_seconds:
             print(f"watch: the cases' progress has not moved for {int(idle_seconds)} s "
                   f"(last count: {count if count is not None else 'none since Starting'}) — "
