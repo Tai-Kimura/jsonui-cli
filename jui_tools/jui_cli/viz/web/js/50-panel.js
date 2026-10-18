@@ -497,7 +497,18 @@ function taskPose(pref) {
 
 /* ---------- spec board up close: every spec (overview) or one spec as a readable sheet ---------- */
 const wbEl = $('wb'), wbCode = $('wb-code'), wbNav = $('wb-nav'), wbBody = $('wb-body'), wbSideList = $('wb-side-list');
-const wb = { open: false, idx: -1, lastActive: null, q: '' };
+const wb = { open: false, idx: -1, lastActive: null, q: '', app: 'all' };
+/* The apps of the rooms in scope (a repo with client/, admin/, … each declaring its own specs): [app, count, specDir],
+   in the order the specs come. The board offers them only when there is more than one; 全体 adds them up. */
+function wbApps(model) {
+  const apps = new Map();
+  for (const s of model.specs) if (inScope(s.project)) { const a = apps.get(s.app || '') || [s.app || '', 0, s.specDir || '']; a[1] += 1; apps.set(s.app || '', a); }
+  const list = [...apps.values()];
+  if (wb.app !== 'all' && !apps.has(wb.app)) wb.app = 'all';
+  return list;
+}
+const inApp = (s) => wb.app === 'all' || (s.app || '') === wb.app;
+const appLabel = (app) => app || '直下';
 let wbSideOpen = readPref('wbSide', 'open') === 'open';
 const narrowWb = () => sceneEl.clientWidth < 800;
 function applyWbSide() {
@@ -514,6 +525,8 @@ $('wb-side-btn').addEventListener('click', () => {
 });
 $('wb-search').addEventListener('input', (e) => { wb.q = e.target.value.trim().toLowerCase(); renderWbSide(latestModel); });
 wbSideList.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-app]');
+  if (a) { wb.app = a.dataset.app; renderWhiteboard(latestModel, true); return; }
   const b = e.target.closest('[data-idx]');
   if (!b) return;
   openWhiteboard(Number(b.dataset.idx));
@@ -534,6 +547,7 @@ function openWhiteboard(i, opener, board) {
   if (tb.open) { tb.open = false; tb.detail = null; hideOverlay(tbEl); }
   if (rbState.id) closeRobot(true);
   if (i >= 0 && !inScope(SPECS[i].project)) setProject(SPECS[i].project, { camera: false });
+  if (i >= 0 && !inApp(SPECS[i])) wb.app = 'all';
   wb.idx = i; wb.lastActive = null; wb.board = board || null;
   if (wb.open) {
     if (opener) zoom.opener = opener;
@@ -568,12 +582,14 @@ function renderWhiteboard(model, force) {
   if (wb.idx < 0) renderOverview(model); else renderSheet(model, force);
 }
 function renderWbSide(model) {
-  const q = wb.q;
-  const match = (s) => inScope(s.project) && (!q || `${s.name} ${s.screen} ${s.file} ${PROJECT[s.project].name}`.toLowerCase().includes(q));
+  const q = wb.q, apps = wbApps(model);
+  const match = (s) => inScope(s.project) && inApp(s) && (!q || `${s.name} ${s.screen} ${s.file} ${PROJECT[s.project].name}`.toLowerCase().includes(q));
   const groups = BUCKETS.map(([b, label]) => [label, model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && match(s))]).filter(([, items]) => items.length);
-  const n = model.specs.filter((s) => inScope(s.project)).length;
-  keyed(wbSideList, JSON.stringify([UI.project, q, wb.idx, groups.map(([label, items]) => [label, items.map(([s, i]) => `${i}:${s.by || ''}:${s.name}`)])]), () => {
-    const allHTML = `<button type="button" class="ws-item ws-all" data-idx="-1" data-fk="ws--1" aria-current="${wb.idx === -1}"><span class="dot" aria-hidden="true"></span><span class="nm">全体を見る</span><span></span><small>${esc(scopeLabel())} · ${n} 画面の進み具合</small></button>`;
+  const n = model.specs.filter((s) => inScope(s.project) && inApp(s)).length;
+  keyed(wbSideList, JSON.stringify([UI.project, q, wb.idx, wb.app, apps, groups.map(([label, items]) => [label, items.map(([s, i]) => `${i}:${s.by || ''}:${s.name}`)])]), () => {
+    const total = apps.reduce((k, [, c]) => k + c, 0);
+    const appsHTML = apps.length > 1 ? `<div class="seg-filter ws-apps" role="group" aria-label="アプリで絞り込む">${[['all', total], ...apps].map(([a, c]) => `<button type="button" data-app="${esc(a)}" aria-pressed="${wb.app === a}">${esc(a === 'all' ? '全体' : appLabel(a))}<b>${esc(String(c))}</b></button>`).join('')}</div>` : '';
+    const allHTML = appsHTML + `<button type="button" class="ws-item ws-all" data-idx="-1" data-fk="ws--1" aria-current="${wb.idx === -1}"><span class="dot" aria-hidden="true"></span><span class="nm">全体を見る</span><span></span><small>${esc(scopeLabel())} · ${n} 画面の進み具合</small></button>`;
     const bodyHTML = groups.map(([label, items]) => `<p class="ws-group"><span>${esc(label)}</span><b>${items.length}</b></p>${items.map(([s, i]) => `<button type="button" class="ws-item b-${esc(s.bucket)}" data-idx="${i}" data-fk="ws-${i}" aria-current="${wb.idx === i}"${roleVar(s)}><span class="dot" aria-hidden="true"></span><span class="nm">${esc(s.name)}</span>${s.by ? pill(s.by, DEF[s.by].role) : '<span></span>'}<small></small></button>`).join('')}`).join('');
     return allHTML + (bodyHTML || '<p class="ws-none">該当する画面がない</p>');
   });
@@ -598,14 +614,17 @@ function specSummary(s) {
   return `記述 ${pct(w)}% · 実装 ${s.implPhase ? `${sumImpl(s.implN)}/${sumImpl(s.totals)}` : '—'} · テスト ${s.implPhase ? `${s.implN[6]}/${s.totals[6]}` : '—'}`;
 }
 function renderOverview(model) {
-  const inS = model.specs.filter((s) => inScope(s.project)), c = bucketCounts(inS);
-  setHead(UI.project === 'all' ? 'spec ボード' : `spec ボード · ${PROJECT[UI.project].name}`, `docs/screens/json/（${inS.length} 画面）`, 'st-busy', `作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, '');
+  const apps = wbApps(model), inS = model.specs.filter((s) => inScope(s.project) && inApp(s)), c = bucketCounts(inS);
+  const dirs = [...new Set(inS.map((s) => s.specDir).filter(Boolean))];
+  const where = dirs.length > 1 ? `${dirs.length} か所の spec フォルダ` : `${dirs[0] || 'docs/screens/json'}/`;
+  const title = `spec ボード${UI.project === 'all' ? '' : ` · ${PROJECT[UI.project].name}`}${wb.app !== 'all' && apps.length > 1 ? ` · ${appLabel(wb.app)}` : ''}`;
+  setHead(title, `${where}（${inS.length} 画面）`, 'st-busy', `作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, '');
   wbNav.hidden = true; $('wb-follow-label').hidden = true;
   setHTML($('wb-legend'), OV_LEGEND);
-  const sig = JSON.stringify(['ov', UI.project, model.specs.map((s) => `${s.bucket}:${s.by || ''}`)]);
+  const sig = JSON.stringify(['ov', UI.project, wb.app, model.specs.map((s) => `${s.bucket}:${s.by || ''}`)]);
   if (wbCode._sig !== sig) {
     wbCode.innerHTML = !inS.length ? `<p class="sc-ph ov-none">${esc(scopeLabel())} には画面の spec がない（CLI ツールなど）。上の「プロジェクト」で別のプロジェクトを選べる</p>` : BUCKETS.map(([b, label]) => {
-      const items = model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && inScope(s.project));
+      const items = model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && inScope(s.project) && inApp(s));
       if (!items.length) return '';
       return `<section class="ov-group" aria-label="${esc(label)}"><h3>${esc(label)}<small>${items.length}</small></h3><div class="ov-grid">${items.map(([s, i]) => `<button type="button" class="ov-card b-${esc(s.bucket)}" data-idx="${i}"${roleVar(s)}><span class="ov-top"><strong>${esc(s.name)}</strong><span class="state"></span></span><code class="ov-file">${UI.project === 'all' ? `${esc(PROJECT[s.project].name)} · ` : ''}${esc(s.file)}</code><span class="ov-who"></span><span class="ov-secs">${SEGS}<span class="ov-labels" aria-hidden="true">${SECTIONS.map((x) => `<span>${esc(x)}</span>`).join('')}</span></span><span class="ov-sum"></span></button>`).join('')}</div></section>`;
     }).join('');

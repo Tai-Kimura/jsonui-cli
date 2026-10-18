@@ -121,6 +121,6 @@ def sheet_for(project, spec_id: str) -> dict | None:
     if entry is None or entry.data is None:
         return None
     data = entry.data
-    nodes = project.layout_nodes_cached(project.layout_path(data))
-    exists = [Path(p).exists() for p in project.related_paths(data)]
-    return build_doc(data, nodes, exists, project.impl(data))
+    nodes = project.layout_nodes_cached(project.layout_path(data, entry.source))
+    exists = [Path(p).exists() for p in project.related_paths(data, entry.source)]
+    return build_doc(data, nodes, exists, project.impl(data, entry.source))

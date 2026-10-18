@@ -14,6 +14,16 @@ file; components are used only when a spec does list them.
 
 The implementation count is a guide, not a verdict: `jui verify` is the
 judge, and it is never run automatically (it is heavy).
+
+A room can hold more than one JsonUI app. Its root is the nearest
+jui.config.json above the session's cwd (rooms.py), and that config may
+declare no specs at all — a repo whose top config only carries the docs
+contract checks, with each app below it (client/, admin/, …) declaring its
+own ``spec_directory``. So the specs are read from every config in the room:
+the root's and those up to SOURCE_DEPTH folders below it (SKIP_DIRS pruned),
+each one a Source with its own spec, layout and test folders. A config
+reached twice — a signpost that ``extends`` the real one, both landing on the
+same spec folder — is one Source (spec folders are compared by realpath).
 """
 from __future__ import annotations
 
@@ -27,6 +37,19 @@ SECTIONS = ("metadata", "structure", "stateManagement", "dataFlow", "userActions
 METADATA_FIELDS = ("name", "displayName", "description", "platforms", "layoutFile")
 SKIP_DIRS = {"node_modules", "build", ".git", "DerivedData", "Pods", ".gradle", "dist", ".next"}
 WRITING_MS = 10_000
+CONFIG_NAME = "jui.config.json"
+DEFAULT_SPEC_DIR = "docs/screens/json"
+#: How many folders below the room's root a config is looked for.
+SOURCE_DEPTH = 3
+#: Four hops past the first config, five files at most.
+#: ⚠️ The same number and rules as `_MAX_EXTENDS_HOPS` / `_follow_extends` /
+#: `_extends_target` in document_tools/jsonui_doc_cli/project_config.py
+#: (resolve against the config's own folder, complete a folder with
+#: jui.config.json, stop on a cycle). Not imported: jui_cli reaches
+#: document_tools only through the sys.path bridge
+#: (config_manager.ensure_document_tools_importable), which a live server
+#: should not depend on. Change the rules in one and change them in the other.
+MAX_EXTENDS_HOPS = 4
 
 
 def _count(value) -> int:
@@ -128,6 +151,130 @@ def layout_ids(path: Path) -> set[str]:
     return {n["id"] for n in layout_nodes(path) if "id" in n}
 
 
+def _read_config(path: Path) -> dict:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _extends_target(config: Path) -> Path | None:
+    """The config this one extends, resolved against its own folder (a folder gets jui.config.json)."""
+    extends = _read_config(config).get("extends")
+    if not isinstance(extends, str) or not extends.strip():
+        return None
+    resolved = (config.parent / extends).resolve()
+    if resolved.is_dir():
+        resolved = resolved / CONFIG_NAME
+    return resolved
+
+
+def follow_extends(config: Path) -> Path | None:
+    """The first config along ``extends`` (this one included) that declares ``spec_directory``.
+
+    A config without one is a signpost when it extends another — the real
+    tree keeps ``docs/<app>/jui.config.json`` with only ``extends:
+    ../../<app>/jui.config.json``. None when nothing on the chain declares
+    specs, the chain breaks, loops, or runs past MAX_EXTENDS_HOPS.
+    """
+    seen: set[Path] = set()
+    current = config
+    for _ in range(MAX_EXTENDS_HOPS + 1):
+        if current in seen:
+            return None
+        seen.add(current)
+        if _read_config(current).get("spec_directory"):
+            return current
+        nxt = _extends_target(current)
+        if nxt is None or not nxt.is_file():
+            return None
+        current = nxt
+    return None
+
+
+def find_configs(root: Path, depth: int = SOURCE_DEPTH) -> list[Path]:
+    """jui.config.json at the room's root and up to ``depth`` folders below it, root first, then by path."""
+    found = [root / CONFIG_NAME] if (root / CONFIG_NAME).is_file() else []
+    below: list[Path] = []
+
+    def walk(folder: Path, level: int) -> None:
+        if level > depth:
+            return
+        try:
+            children = sorted(p for p in folder.iterdir() if p.is_dir() and not p.is_symlink())
+        except OSError:
+            return
+        for child in children:
+            if child.name in SKIP_DIRS:
+                continue
+            if (child / CONFIG_NAME).is_file():
+                below.append(child / CONFIG_NAME)
+            walk(child, level + 1)
+
+    walk(root, 1)
+    return found + below
+
+
+@dataclass
+class Source:
+    """One JsonUI app in a room: where its specs, layouts and tests are."""
+    key: str            # "" for the room's own config, else the app folder relative to the room ("client")
+    root: Path          # the folder of the config that declares the specs
+    spec_dir: Path
+    layouts_dir: Path
+    tests_dir: Path
+    test_cases: dict = field(default_factory=dict)       # spec file stem / layout name -> case count
+    test_file_keys: dict = field(default_factory=dict)   # "screens/login.test.json" -> spec keys
+
+    @classmethod
+    def from_config(cls, key: str, config_path: Path) -> "Source":
+        root = config_path.parent
+        config = _read_config(config_path)
+
+        def folder(value, default: str) -> Path:
+            path = Path(value or default)
+            return path if path.is_absolute() else root / path
+
+        test_cfg = config.get("test") if isinstance(config.get("test"), dict) else {}
+        return cls(key=key, root=root,
+                   spec_dir=folder(config.get("spec_directory"), DEFAULT_SPEC_DIR),
+                   layouts_dir=folder(config.get("layouts_directory"), "docs/screens/layouts"),
+                   tests_dir=folder(test_cfg.get("testDir"), "tests"))
+
+
+def discover_sources(root: Path) -> list[Source]:
+    """Every Source of a room, one per distinct spec folder.
+
+    The room's own config is read as it always was: its ``spec_directory``,
+    else the default folder. A config below it counts when it, or a config it
+    extends, declares ``spec_directory``. The app is named after the folder of
+    the config that declares (so a signpost and its target are one app).
+    A config that declares outside the room (``extends`` into another repo)
+    is that repo's app, read in that repo's room, not here.
+    """
+    root = Path(root)
+    room = root.resolve()
+    sources: list[Source] = []
+    seen: set[str] = set()
+    for config in find_configs(root):
+        is_root = config.parent == root
+        declared = follow_extends(config)
+        if declared is not None and not declared.resolve().parent.is_relative_to(room):
+            declared = None
+        if declared is None and not is_root:
+            continue
+        owner = declared or config
+        key = "" if owner.parent.resolve() == root.resolve() else os.path.relpath(owner.parent, root).replace(os.sep, "/")
+        source = Source.from_config(key, owner)
+        real = os.path.realpath(source.spec_dir)
+        if real in seen:
+            continue
+        seen.add(real)
+        sources.append(source)
+    return sources
+
+
 @dataclass
 class SpecEntry:
     path: Path
@@ -137,51 +284,71 @@ class SpecEntry:
     broken: bool = False
     by: str | None = None
     by_until: int = 0
+    source: Source | None = None
 
 
 class JsonUIProject:
     def __init__(self, root: Path, project_id: str) -> None:
         self.root = Path(root)
         self.project_id = project_id
-        raw = json.loads((self.root / "jui.config.json").read_text(encoding="utf-8"))
+        # Raises like it always did when the room's own config is unreadable.
+        raw = json.loads((self.root / CONFIG_NAME).read_text(encoding="utf-8"))
         self.config = raw if isinstance(raw, dict) else {}
-
-        def folder(key: str, default: str) -> Path:
-            value = self.config.get(key) or default
-            path = Path(value)
-            return path if path.is_absolute() else self.root / path
-
-        self.spec_dir = folder("spec_directory", "docs/screens/json")
-        self.layouts_dir = folder("layouts_directory", "docs/screens/layouts")
-        test_cfg = self.config.get("test") if isinstance(self.config.get("test"), dict) else {}
-        test_dir = Path(test_cfg.get("testDir") or "tests")
-        self.tests_dir = test_dir if test_dir.is_absolute() else self.root / test_dir
+        self.sources = discover_sources(self.root)
         self.specs: dict[str, SpecEntry] = {}
         self._layout_cache: dict[Path, tuple[int, list[dict]]] = {}
-        self.test_cases: dict[str, int] = {}  # spec file stem / layout name -> case count
-        self.test_file_keys: dict[str, list[str]] = {}
         self.test_results: dict[str, dict] = {}  # spec id -> {passed, failed, running}
+
+    @property
+    def test_cases(self) -> dict[str, int]:
+        merged: dict[str, int] = {}
+        for source in self.sources:
+            for k, n in source.test_cases.items():
+                merged[k] = merged.get(k, 0) + n
+        return merged
+
+    def artifact_dirs(self) -> list[Path]:
+        """Every spec, layout and test folder of the room's apps."""
+        out: list[Path] = []
+        for source in self.sources:
+            for d in (source.spec_dir, source.layouts_dir, source.tests_dir):
+                if d not in out:
+                    out.append(d)
+        return out
 
     # ---------------------------------------------------------------- loading
 
-    def spec_id(self, path: Path) -> str:
+    def source_of(self, path: Path) -> Source | None:
+        """The app whose spec folder holds this file (the deepest one when folders nest)."""
+        best = None
+        for source in self.sources:
+            if path.is_relative_to(source.spec_dir) and (best is None or len(source.spec_dir.parts) > len(best.spec_dir.parts)):
+                best = source
+        return best
+
+    def spec_id(self, path: Path, source: Source | None = None) -> str:
+        source = source or self.source_of(path)
         try:
-            rel = path.relative_to(self.spec_dir).as_posix()
+            rel = path.relative_to(source.spec_dir).as_posix() if source else path.name
         except ValueError:
             rel = path.name
-        return f"{self.project_id}:{rel}"
+        # The room's own app keeps the id it always had.
+        return f"{self.project_id}:{source.key}/{rel}" if source and source.key else f"{self.project_id}:{rel}"
 
     def load_all(self, at: int) -> None:
-        if self.spec_dir.is_dir():
-            for path in sorted(self.spec_dir.rglob("*.spec.json")):
-                if not SKIP_DIRS.intersection(path.relative_to(self.spec_dir).parts):
-                    self.reload_spec(path, at, by=None, initial=True)
+        for source in self.sources:
+            if source.spec_dir.is_dir():
+                for path in sorted(source.spec_dir.rglob("*.spec.json")):
+                    if not SKIP_DIRS.intersection(path.relative_to(source.spec_dir).parts):
+                        self.reload_spec(path, at, by=None, initial=True, source=source)
         self.load_tests()
 
-    def reload_spec(self, path: Path, at: int, by: str | None, initial: bool = False) -> list[str]:
+    def reload_spec(self, path: Path, at: int, by: str | None, initial: bool = False,
+                    source: Source | None = None) -> list[str]:
         """Read one spec again. Returns the sections that changed (written now)."""
-        sid = self.spec_id(path)
-        entry = self.specs.get(sid) or SpecEntry(path=path)
+        source = source or self.source_of(path)
+        sid = self.spec_id(path, source)
+        entry = self.specs.get(sid) or SpecEntry(path=path, source=source)
         self.specs[sid] = entry
         if not path.exists():
             del self.specs[sid]
@@ -209,25 +376,25 @@ class JsonUIProject:
         return changed
 
     def load_tests(self) -> None:
-        self.test_cases = {}
-        self.test_file_keys: dict[str, list[str]] = {}  # "screens/login.test.json" -> spec keys
-        for sub in ("screens", "flows"):
-            folder = self.tests_dir / sub
-            if not folder.is_dir():
-                continue
-            for path in folder.glob("*.test.json"):
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
+        for source in self.sources:
+            source.test_cases, source.test_file_keys = {}, {}
+            for sub in ("screens", "flows"):
+                folder = source.tests_dir / sub
+                if not folder.is_dir():
                     continue
-                if not isinstance(data, dict):
-                    continue
-                cases = data.get("cases") if isinstance(data.get("cases"), list) else []
-                n = sum(1 for c in cases if isinstance(c, dict) and c.get("name"))
-                keys = self._test_keys(data)
-                self.test_file_keys[f"{sub}/{path.name}"] = keys
-                for key in keys:
-                    self.test_cases[key] = self.test_cases.get(key, 0) + n
+                for path in folder.glob("*.test.json"):
+                    try:
+                        data = json.loads(path.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        continue
+                    if not isinstance(data, dict):
+                        continue
+                    cases = data.get("cases") if isinstance(data.get("cases"), list) else []
+                    n = sum(1 for c in cases if isinstance(c, dict) and c.get("name"))
+                    keys = self._test_keys(data)
+                    source.test_file_keys[f"{sub}/{path.name}"] = keys
+                    for key in keys:
+                        source.test_cases[key] = source.test_cases.get(key, 0) + n
 
     @staticmethod
     def _test_keys(data: dict) -> list[str]:
@@ -260,20 +427,26 @@ class JsonUIProject:
     def layout_ids_cached(self, path: Path | None) -> set[str]:
         return {n["id"] for n in self.layout_nodes_cached(path) if "id" in n}
 
-    def layout_path(self, spec: dict) -> Path | None:
+    def _source(self, source: Source | None) -> Source | None:
+        return source or (self.sources[0] if self.sources else None)
+
+    def layout_path(self, spec: dict, source: Source | None = None) -> Path | None:
         meta = spec.get("metadata") if isinstance(spec.get("metadata"), dict) else {}
         name = meta.get("layoutFile")
-        if not isinstance(name, str) or not name:
+        source = self._source(source)
+        if not isinstance(name, str) or not name or source is None:
             return None
-        path = self.layouts_dir / (name if name.endswith(".json") else f"{name}.json")
+        path = source.layouts_dir / (name if name.endswith(".json") else f"{name}.json")
         return path
 
-    def related_paths(self, spec: dict) -> list[Path]:
+    def related_paths(self, spec: dict, source: Source | None = None) -> list[Path]:
+        source = self._source(source)
+        base = source.root if source else self.root
         out = []
         for item in spec.get("relatedFiles") or []:
             if isinstance(item, dict) and isinstance(item.get("path"), str):
                 p = Path(item["path"])
-                out.append(p if p.is_absolute() else self.root / p)
+                out.append(p if p.is_absolute() else base / p)
         return out
 
     def specs_touching(self, file_path: str) -> list[str]:
@@ -285,17 +458,17 @@ class JsonUIProject:
                 hits.append(sid)
                 continue
             data = entry.data or {}
-            lp = self.layout_path(data)
-            if (lp and target == lp) or target in self.related_paths(data):
+            lp = self.layout_path(data, entry.source)
+            if (lp and target == lp) or target in self.related_paths(data, entry.source):
                 hits.append(sid)
         return hits
 
-    def impl(self, spec: dict) -> dict:
+    def impl(self, spec: dict, source: Source | None = None) -> dict:
         total = done = 0
-        for path in self.related_paths(spec):
+        for path in self.related_paths(spec, source):
             total += 1
             done += path.exists()
-        lp = self.layout_path(spec)
+        lp = self.layout_path(spec, source)
         if lp is not None:
             total += 1
             done += lp.exists()
@@ -308,11 +481,15 @@ class JsonUIProject:
 
     def specs_for_test_file(self, rel: str) -> list[str]:
         """Spec ids a test file (as the runner names it, e.g. screens/login.test.json) belongs to."""
-        keys = set(self.test_file_keys.get(rel, []))
+        # The apps that have this test file; when none does, every app (by name).
+        owners = [s for s in self.sources if rel in s.test_file_keys]
+        keys = {k for s in owners for k in s.test_file_keys[rel]}
         if not keys:
             keys = {Path(rel).name.replace(".test.json", "")}
         hits = []
         for sid, entry in self.specs.items():
+            if owners and entry.source not in owners:
+                continue
             meta = (entry.data or {}).get("metadata") or {}
             names = {entry.path.name.replace(".spec.json", "")}
             if isinstance(meta.get("layoutFile"), str):
@@ -330,15 +507,16 @@ class JsonUIProject:
             meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
             stem = entry.path.name.replace(".spec.json", "")
             sections = []
-            nodes = len(self.layout_nodes_cached(self.layout_path(data)))
+            nodes = len(self.layout_nodes_cached(self.layout_path(data, entry.source)))
             for key in SECTIONS:
                 items = section_items(data, key, nodes)
                 writing = entry.writing_until.get(key, 0) > at or (entry.broken and entry.by_until > at)
                 state = "writing" if writing else ("written" if items else "empty")
                 sections.append({"key": key, "state": state, "items": items})
-            impl = self.impl(data)
+            impl = self.impl(data, entry.source)
             layout_name = meta.get("layoutFile") if isinstance(meta.get("layoutFile"), str) else None
-            cases = self.test_cases.get(stem, 0) + (self.test_cases.get(layout_name, 0) if layout_name and layout_name != stem else 0)
+            test_cases = entry.source.test_cases if entry.source else {}
+            cases = test_cases.get(stem, 0) + (test_cases.get(layout_name, 0) if layout_name and layout_name != stem else 0)
             result = self.test_results.get(sid, {})
             tests = {"total": cases, "passed": result.get("passed", 0), "failed": result.get("failed", 0),
                      "running": bool(result.get("running"))}
@@ -349,6 +527,9 @@ class JsonUIProject:
             bucket = "live" if by else "todo" if not written_any else "done" if impl_done and tests_done else "partial"
             item = {
                 "id": sid, "projectId": self.project_id,
+                # The app inside the room ("" = the room's own config) and its spec folder.
+                "app": entry.source.key if entry.source else "",
+                "specDir": os.path.relpath(entry.source.spec_dir, self.root) if entry.source else "",
                 "name": meta.get("displayName") or meta.get("name") or stem,
                 "file": os.path.relpath(entry.path, self.root),
                 "sections": sections, "impl": impl, "tests": tests, "bucket": bucket,
@@ -366,7 +547,7 @@ def watch(project: JsonUIProject, on_change):
     Returns the observer (call .stop() / .join()), or None when none of the
     folders exist. Folders in SKIP_DIRS are ignored.
     """
-    folders = [f for f in {project.spec_dir, project.layouts_dir, project.tests_dir} if f.is_dir()]
+    folders = [f for f in project.artifact_dirs() if f.is_dir()]
     if not folders:
         return None
     from watchdog.events import FileSystemEventHandler

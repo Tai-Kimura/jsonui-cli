@@ -386,6 +386,12 @@ def _follow_extends(config: Path) -> tuple[Path | None, Path]:
     hops), because a consumer writes one `extends` and both faces read it.
     Change the rules in one and change them in the other.
 
+    ⚠️ A third copy of the same rules: `follow_extends` / `_extends_target` /
+    `MAX_EXTENDS_HOPS` in jui_tools/jui_cli/viz/sources/jsonui_project.py
+    (jui viz reading the specs of every app in a room). It is not imported
+    from here because jui_cli reaches this package only through the sys.path
+    bridge; tests/test_viz_nested_specs.py runs both on the same trees.
+
     A config that cannot enumerate but declares `extends` is not a dead end —
     it is a POINTER, and the project wrote it deliberately. The real tree
     keeps a stub at `docs/<app>/jui.config.json` carrying only

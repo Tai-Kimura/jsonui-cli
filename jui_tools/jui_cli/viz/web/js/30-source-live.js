@@ -125,6 +125,7 @@ function liveSpecRow(x) {
   const prev = LIVE.specRows[x.id];
   const row = {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
+    app: String(x.app || ''), specDir: String(x.specDir || ''),   // the app inside the room that holds the spec
     doc: prev && prev.docAt === x.updatedAt ? prev.doc : (prev ? prev.doc : null), docAt: prev ? prev.docAt : null, updatedAt: x.updatedAt,
     totals, related: prev && prev.doc ? (prev.doc.related || []) : [], written, implN, implPhase, writingIdx,
     implIdx: by && writingIdx < 0 && x.bucket === 'live' && !tests.running ? Math.max(1, implN.findIndex((n, k) => k >= 1 && k <= 5 && n < totals[k])) : -1,
