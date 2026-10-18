@@ -211,3 +211,43 @@ def test_a_record_written_long_ago_still_rings_and_shows_the_pick_up(tmp_path):
     _append(f[B], _enqueue(A, T + 2_000), _meta(A, T + 2_010))
     [c] = _calls(world, late)
     assert c["state"] == "answered" and c["endedAt"] == late         # not missed, not hidden at once
+
+
+# ---- Remote Control re-appends past isMeta records (same uuid, old times) when it attaches again: measured and
+# ---- armed by jsonuidocument-96 in its independent check (10-18), taken in here.
+HOUR = 3_600_000
+
+
+def _replay(sender_msgs):
+    recs = [{"type": "bridge-session", "timestamp": "2026-10-18T00:00:00Z"}]
+    for sender, at in sender_msgs:
+        m = _meta(sender, at + 10)                 # only the isMeta user records are re-written; queue-operation never
+        m["uuid"] = f"u-m-{sender}-{at}"
+        recs.append(m)
+    return recs
+
+
+def test_replayed_history_does_not_pick_up_an_unread_call(tmp_path):
+    world, f = _setup(tmp_path)
+    _send(world, A, NAMES[B])
+    _append(f[B], _enqueue(A, T + 2_000))
+    assert _calls(world, T + 3_000)[0]["state"] == "ringing"
+    _append(f[B], *_replay([(A, T - HOUR), (C, T - HOUR + 5_000)]))   # B has NOT read the new message
+    [real] = [c for c in _calls(world, T + 5_000) if c["id"] == "call-tu1"]
+    assert real["state"] == "ringing"
+    _append(f[B], _meta(A, T + 6_000))                                 # now it reads it
+    [real] = [c for c in _calls(world, T + 7_000) if c["id"] == "call-tu1"]
+    assert real["state"] == "answered"
+
+
+def test_replayed_history_before_the_enqueue_is_seen_does_not_pick_up(tmp_path):
+    world, f = _setup(tmp_path)
+    _send(world, A, NAMES[B])                                          # rings by name; no enqueue read yet
+    _append(f[B], *_replay([(A, T - HOUR)]))
+    assert _calls(world, T + 3_000)[0]["state"] == "ringing"
+
+
+def test_replayed_history_makes_no_calls(tmp_path):
+    world, f = _setup(tmp_path)
+    _append(f[B], *_replay([(A if i % 2 else C, T - HOUR + i * 60_000) for i in range(30)]))
+    assert _calls(world, T + 5_000) == []

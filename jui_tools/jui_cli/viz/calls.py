@@ -12,6 +12,11 @@ so the receiver rings at once. The receiver's own transcript then says what happ
   8 s to 3 min 14 s later). Either one picks up.
 - any other ``remove``: it hangs up.
 
+A read counts only when its record was written at or after the message arrived (the enqueue record's time, or the
+dial when no enqueue was seen): Remote Control re-appends a transcript's past isMeta records with their old times
+when it attaches again (measured 10-18 by jsonuidocument-96: 2,473 copies in 24 transcripts, never a queue-operation),
+and those must not pick up a call that is still unread. Both times are records of this machine's clock.
+
 Only the sender's name is read from a message, never its text. A call that nobody picks up stops ringing after
 RING_MAX_MS. A send whose receiver is not a session here (cloud, Remote Control, ``main``, a subagent's name)
 moves the sender only, and stops UNREACHABLE_GRACE_MS after the tool ends without an enqueue.
@@ -25,6 +30,7 @@ UNREACHABLE_GRACE_MS = 6_000   # the enqueue came 0.5–5 s after the send, and 
 ANSWERED_SHOW_MS = 4_000       # both robots on the line for a moment, then back to work
 ENDED_SHOW_MS = 1_500
 CALLS_KEPT = 50
+PICK_UP_SLACK_MS = 2_000      # a call dialed with no enqueue seen yet: a read written a little before the dial still counts
 
 _REF = re.compile(r"\s*\[[^\]]*\]\s*$")
 _FROM_NAME = re.compile(r'<cross-session-message\b[^>]*?\bfrom-name="([^"]*)"')
@@ -121,11 +127,13 @@ class CallBook:
         call["state"], call["endedAt"] = state, at
         call["hideAt"] = at + (ANSWERED_SHOW_MS if state == "answered" else ENDED_SHOW_MS)
 
-    def _open_to(self, to_session: str, from_name: str, newest: bool) -> dict | None:
-        """An open call from that sender that this receiver can be the end of."""
+    def _open_to(self, to_session: str, from_name: str, newest: bool, written: int | None = None) -> dict | None:
+        """An open call from that sender that this receiver can be the end of (and, for a read written at
+        ``written``, one that had arrived by then)."""
         found = [c for c in self.calls.values() if c["state"] in OPEN
                  and (c.get("toSession") in (None, to_session))
-                 and (c.get("fromName") == from_name if c.get("fromName") else c.get("toSession") == to_session)]
+                 and (c.get("fromName") == from_name if c.get("fromName") else c.get("toSession") == to_session)
+                 and (written is None or written >= (c.get("arrived") or c["startedAt"] - PICK_UP_SLACK_MS))]
         if not found:
             return None
         found.sort(key=lambda c: c["startedAt"])
@@ -144,7 +152,7 @@ class CallBook:
         return changed
 
     def pick_up(self, to_session: str, from_name: str, at: int, written: int | None = None) -> bool:
-        call = self._open_to(to_session, from_name, newest=False)
+        call = self._open_to(to_session, from_name, newest=False, written=written)
         if call is None:
             return False
         call["toSession"], call["read"] = to_session, written or at

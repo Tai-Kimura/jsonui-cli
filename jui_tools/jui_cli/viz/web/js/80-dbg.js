@@ -3,9 +3,9 @@
 // Demo: setSim(seconds) jumps the script. Live: setSim(factor) sets the replay speed instead (25-net.js).
 window.__dbg = {
   camera, sbTile, sbPoint, SB, KB, THREE, robots,
-  robotState: () => robotState,
+  robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
   calls: () => robots.map((R) => ({ id: R.def.id, call: R.robot.call ? { role: R.robot.call.role, state: R.robot.call.state, peer: R.robot.call.peer } : null,
-    handset: !!R.robot.handset, ring: !!(R.robot.ring && R.robot.ring.visible), tag: R.callText || '', state: R.robot.state })),   // phone calls (10-18)   // the model behind the robots (live: what the last slice said)
+    handset: !!R.robot.handset, ring: !!(R.robot.ring && R.robot.ring.visible), tag: R.callText || '', state: R.robot.state })),   // phone calls (10-18)
   model: () => latestModel,       // what the panels and boards draw from
   live3d: () => (SOURCE.mode === 'live' ? LIVE3D : null),   // the live rooms' boards
   links: () => links,             // the robot → board lines
