@@ -475,7 +475,7 @@ function build3D() {
   controls = new OrbitControls(camera, canvas);
   controls.target.set(0.3, 0.4, -0.4);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
-  controls.minDistance = 8; controls.maxDistance = 44;
+  controls.minDistance = 8; controls.maxDistance = SOURCE.mode === 'live' ? 80 : 44;   // live: a floor of 3×2 big rooms
   controls.minPolarAngle = 0.3; controls.maxPolarAngle = 1.25;
   controls.screenSpacePanning = false;
   controls.update();
@@ -524,7 +524,8 @@ function build3D() {
     if (!h) return;
     // A board belongs to one project room, so opening it narrows the view to that project (unless it already shows everything).
     const fit = (proj) => { if (proj && UI.project !== 'all' && UI.project !== proj) setProject(proj, { camera: false }); };
-    if (h.kind === 'robot') openRobot(h.id, canvas);
+    if (h.kind === 'floor') towerLeave(h.k);
+    else if (h.kind === 'robot') openRobot(h.id, canvas);
     else if (h.kind === 'tasks') { fit(h.project); openTaskBoard(canvas, undefined, h.project); }
     else if (h.kind === 'spec') { fit(SPECS[h.i].project); openWhiteboard(h.i, canvas); }
     else { fit(h.project); openWhiteboard(-1, canvas, h.project); }
@@ -534,6 +535,18 @@ function build3D() {
     canvas.style.cursor = hitAt(ev) ? 'pointer' : '';
   });
 
+  if (SOURCE.mode === 'live') {
+    // The wheel past the farthest distance shows the building; past the nearest in the building, the floor.
+    // On the whole scene, not the canvas: a room's or a robot's tag can be under the pointer.
+    sceneEl.addEventListener('wheel', (ev) => {
+      const d = camera.position.distanceTo(controls.target);
+      if (!TOWER.on && ev.deltaY > 0 && d >= controls.maxDistance - 0.5) towerEnter();
+      else if (TOWER.on && ev.deltaY < 0 && d <= controls.minDistance + 0.5) towerLeave(LIVE.floor);
+    }, { passive: true });
+    document.getElementById('floor-up').addEventListener('click', () => liveFloorStep(1));
+    document.getElementById('floor-down').addEventListener('click', () => liveFloorStep(-1));
+    document.getElementById('floor-building').addEventListener('click', () => (TOWER.on ? towerLeave(LIVE.floor) : towerEnter()));
+  }
   const applyTheme = () => { for (const [mat, token, fallback] of roomMats) mat.color.set(readToken(token, fallback)); };
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
   new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -662,7 +675,8 @@ function liveSync() {
   const sig = shown.map((r) => r.geo).join(';');
   if (sig !== LIVE3D.roomsSig) {
     LIVE3D.roomsSig = sig;
-    if (!zoom.zoomed && (UI.project === 'all' || !PROJECT[UI.project] || !PROJECT[UI.project].shown)) focusProject('all', LIVE3D.rev <= 1);
+    if (LIVE3D.floorMove) LIVE3D.floorMove = false;   // the floor change flies the camera itself
+    else if (!zoom.zoomed && (UI.project === 'all' || !PROJECT[UI.project] || !PROJECT[UI.project].shown)) focusProject('all', LIVE3D.rev <= 1);
     else if (!zoom.zoomed) focusProject(UI.project, false);
   }
   redrawBoards(latestModel, performance.now() / 1000, true);
@@ -730,6 +744,12 @@ function liveUpdateRobots(nowSec, dt) {
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
    part and the cork board the task board, a robot its card. */
 function liveHit(ray) {
+  if (TOWER.on) {
+    ray.layers.set(TOWER.LAYER);
+    const h = ray.intersectObjects(TOWER.floors.map((F) => F.box), false)[0];
+    ray.layers.set(0);
+    return h ? { kind: 'floor', k: h.object.userData.floor } : null;
+  }
   const targets = [...Object.values(LIVE3D.rooms).flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.map((R) => R.robot.root)];
   const hit = ray.intersectObjects(targets, true)[0];
   if (!hit) return null;
@@ -827,11 +847,123 @@ function liveLinks(model, nowSec) {
   }
   for (const [id, L] of Object.entries(links)) if (!used.has(id)) L.set(null, null, false, nowSec);
 }
+/* One room fills most of the view (about 80 % of the narrower side, from the camera's field of view and aspect);
+   everything is framed with a margin. */
 function liveRoomPose(id) {
-  if (id !== 'all' && PROJECT[id] && !PROJECT[id].shown) liveShowRoom(id);
   const b = liveBounds(id === 'all' ? null : [id]) || { c: new THREE.Vector3(0, 0.4, 0), size: 12 };
-  const dist = id === 'all' ? Math.max(22, b.size * 1.55 + 6) : b.size * 1.9 + 3;
+  const half = THREE.MathUtils.degToRad(camera.fov) / 2, tanH = Math.tan(half) * Math.min(1, camera.aspect || 1);
+  const fit = (size, share) => (size / 2) / (tanH * share);
+  const dist = id === 'all' ? Math.max(22, fit(b.size, 0.92)) : Math.max(9, fit(b.size, 0.8));
   return { p: b.c.clone().add(new THREE.Vector3(6.5, 15.5, 22.5).normalize().multiplyScalar(dist)), t: b.c };
+}
+/* ---------- the building: every floor of six rooms, stacked (requester's ruling, 10-18) ----------
+   Looking at a floor, the 3D is that floor's rooms in full, as before; the other floors are not drawn. Zoomed out
+   (the ビル全体 button, or the wheel past the farthest distance) the building replaces them: one plain box per floor
+   on its own layer, with the floor number, a window per room (lit: a robot works; yellow: one waits for permission),
+   the counts and the room names on its front. Pressing a floor goes down to it. Changing floors moves the camera
+   up or down into the new floor. */
+const TOWER = { on: false, group: null, floors: [], sig: '', W: 15, D: 9, H: 3, GAP: 0.4, LAYER: 1 };
+const towerY = (k) => k * (TOWER.H + TOWER.GAP) + TOWER.H / 2;
+function towerFloorText(k) {
+  const ids = LIVE.floors[k] || [];
+  let working = 0, waiting = 0;
+  for (const d of ROBOT_DEFS) {
+    if (!ids.includes(d.room) || LIVE.leaving[d.id]) continue;
+    const st = (robotState[d.id] || {}).state;
+    if (st === 'waiting') waiting += 1; else if (st && st !== 'idle' && st !== 'done') working += 1;
+  }
+  waiting = Math.max(waiting, PERMS_LIVE.filter((p) => p.status === 'pending' && DEF[p.who] && ids.includes(DEF[p.who].room)).length);
+  return { ids, working, waiting };
+}
+function towerDraw(F, k) {
+  const { ids, working, waiting } = towerFloorText(k);
+  const dark = isDark(), ctx = F.canvas.getContext('2d'), W = F.canvas.width, H = F.canvas.height;
+  ctx.fillStyle = dark ? '#2b3240' : '#e4e9f1'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = dark ? '#f2f4f8' : '#1d2433'; ctx.font = `64px ${FONT_DISPLAY}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.fillText(`${k + 1}F`, 28, H / 2);
+  const x0 = 190, ww = (W - x0 - 24) / ROOM_MAX;
+  for (let i = 0; i < ROOM_MAX; i++) {
+    const id = ids[i], rank = id ? LIVE.rank[id] : 4;
+    ctx.fillStyle = rank === 0 ? '#f2c230' : rank === 1 ? '#ffe7a8' : rank === 2 ? (dark ? '#5b6577' : '#c7d0de') : (dark ? '#3a4252' : '#9aa5b6');
+    ctx.fillRect(x0 + i * ww + 8, 26, ww - 16, 104);
+    if (rank === 0) { ctx.fillStyle = '#5a4300'; ctx.font = `700 54px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('!', x0 + i * ww + ww / 2, 80); ctx.textAlign = 'left'; }
+    if (id) { ctx.fillStyle = dark ? '#dfe4ec' : '#2a3242'; ctx.font = `700 24px ${FONT_BODY}`; fitText(ctx, PROJECT[id] ? PROJECT[id].name : id, x0 + i * ww + 8, 158, ww - 16); }
+  }
+  ctx.fillStyle = dark ? '#dfe4ec' : '#2a3242'; ctx.font = `700 28px ${FONT_BODY}`;
+  fitText(ctx, `作業中 ${working} · 許可待ち ${waiting}`, 28, H - 30, x0 - 40 + ww * 2);
+  F.tex.needsUpdate = true;
+}
+function towerBuild() {
+  const n = LIVE.floors.length;
+  if (TOWER.group && TOWER.floors.length === n) return;
+  if (TOWER.group) { scene.remove(TOWER.group); disposeTree(TOWER.group); }
+  TOWER.group = new THREE.Group(); TOWER.floors = []; TOWER.sig = '';
+  const side = new THREE.MeshBasicMaterial({ color: isDark() ? 0x3a4252 : 0xcfd6e2 });
+  const top = new THREE.MeshBasicMaterial({ color: isDark() ? 0x485164 : 0xdfe4ec });
+  for (let k = 0; k < n; k++) {
+    const canvas = makeCanvas(1280, 210), tex = texFrom(canvas);
+    const front = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(TOWER.W, TOWER.H, TOWER.D), [side, side, top, side, front, side]);
+    box.position.set(0, towerY(k), 0); box.userData.floor = k; box.layers.set(TOWER.LAYER);
+    TOWER.group.add(box);
+    TOWER.floors.push({ box, canvas, tex });
+  }
+  const ground = new THREE.Mesh(new THREE.BoxGeometry(TOWER.W + 4, 0.2, TOWER.D + 4), new THREE.MeshBasicMaterial({ color: isDark() ? 0x252b36 : 0xbfc8d6 }));
+  ground.position.set(0, -0.1, 0); ground.layers.set(TOWER.LAYER); TOWER.group.add(ground);
+  scene.add(TOWER.group);
+}
+function towerSync() {
+  towerBuild();
+  const sig = JSON.stringify([LIVE.floors, LIVE.rank, isDark(), TOWER.floors.map((F, k) => towerFloorText(k)).map((t) => [t.working, t.waiting])]);
+  if (sig === TOWER.sig) return;
+  TOWER.sig = sig;
+  TOWER.floors.forEach((F, k) => towerDraw(F, k));
+}
+function towerPose() {
+  const h = LIVE.floors.length * (TOWER.H + TOWER.GAP), c = new THREE.Vector3(0, h / 2, 0);
+  const dist = Math.max(30, h * 2.1 + 16);
+  return { p: c.clone().add(new THREE.Vector3(6.5, 6, 22.5).normalize().multiplyScalar(dist)), t: c };
+}
+function towerSetView(on) {
+  TOWER.on = on;
+  camera.layers.set(on ? TOWER.LAYER : 0);
+  controls.minDistance = on ? 14 : 8; controls.maxDistance = on ? 150 : 80;
+}
+function towerEnter() {
+  if (TOWER.on || LIVE.floors.length < 2 || zoom.zoomed) return;
+  towerSync();
+  towerSetView(true);
+  const pose = towerPose();
+  controls.enabled = false;
+  flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.8, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });
+}
+/* Down from the building into floor k (the camera starts at that floor's height in the building). */
+function towerLeave(k) {
+  if (!TOWER.on) return;
+  towerSetView(false);
+  if (liveGoToFloor(k)) LIVE3D.floorMove = true;
+  const pose = liveRoomPose(UI.project !== 'all' && PROJECT[UI.project] && PROJECT[UI.project].shown ? UI.project : 'all');
+  controls.enabled = false;
+  flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.8, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });
+}
+/* One floor up (+1) or down (-1): the camera comes in from above or below. */
+function liveFloorStep(dir) {
+  const k = LIVE.floor + dir;
+  if (TOWER.on) { towerLeave(Math.max(0, Math.min(LIVE.floors.length - 1, k))); return; }
+  if (zoom.zoomed || !liveGoToFloor(k)) return;
+  LIVE3D.floorMove = true;
+  const id = UI.project !== 'all' && PROJECT[UI.project] && PROJECT[UI.project].shown ? UI.project : 'all';
+  const pose = liveRoomPose(id), lift = new THREE.Vector3(0, -dir * 14, 0);
+  camera.position.copy(pose.p).add(lift); controls.target.copy(pose.t).add(lift);
+  controls.enabled = false;
+  flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.7, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });
+}
+/* A project picked in the menu: its floor first (out of the building if need be); focusProject then flies to it. */
+function liveShowFloorOf(id) {
+  if (id === 'all' || !PROJECT[id]) return;
+  if (TOWER.on) towerSetView(false);
+  const k = liveFloorOf(id);
+  if (k >= 0 && liveGoToFloor(k)) LIVE3D.floorMove = true;
 }
 function liveBoardPose(project, which, i) {
   const R = LIVE3D.rooms[project] || Object.values(LIVE3D.rooms)[0];
@@ -939,7 +1071,8 @@ function update3D(model, nowSec, dt) {
   stepTween(performance.now());
   if (camTween || zoom.zoomed) camera.lookAt(viewTarget); else controls.update();
   renderer.render(scene, camera);
-  tagsEl.hidden = zoom.zoomed;
+  if (TOWER.on) towerSync();
+  tagsEl.hidden = zoom.zoomed || TOWER.on;
   for (const R of robots) placeTag(R.tag, tmpV.copy(R.robot.root.position).add(TAG_UP).clone());
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }
   if (trayTag) placeTag(trayTag.el, trayTag.p);   // the demo's document tray

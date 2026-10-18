@@ -613,3 +613,166 @@ def test_a_declared_exception_is_exact():
     assert "50-panel.js: innerHTML appears 3 times (declared 2)" in html_checks("50-panel.js", two)
     one = "const li = (m, key, innerHTML) => `<li>${innerHTML}</li>`;"
     assert not any("innerHTML" in line for line in html_checks("50-panel.js", one))
+
+
+# ---- every function the page calls is defined somewhere (10-18 live check) -----------------------------------------
+# liveRoomPose called liveShowRoom, which no file defined: picking a room that was not shown threw a ReferenceError
+# and the camera never moved, while all 55 arms passed. This gate reads each assembled app.js as code (strings,
+# comments and template text blanked, ${…} kept), collects every bare `name(` call and every name the bundle
+# defines (function / class / const / let / var, destructured names, parameters, imports), and fails on a call to
+# a name that is neither defined nor a browser / JavaScript global.
+JS_GLOBALS = {
+    "Array", "Boolean", "Date", "Error", "JSON", "Map", "Math", "Number", "Object", "Promise", "Set", "String", "Symbol",
+    "WeakMap", "RegExp", "Intl", "parseInt", "parseFloat", "isFinite", "isNaN", "encodeURIComponent",
+    "decodeURIComponent", "structuredClone", "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+    "requestAnimationFrame", "cancelAnimationFrame", "fetch", "getComputedStyle", "queueMicrotask", "alert",
+    "WebSocket", "URL", "URLSearchParams", "Event", "CustomEvent", "MutationObserver", "ResizeObserver",
+    "IntersectionObserver", "TextEncoder", "TextDecoder", "Blob", "FileReader", "Image", "CSS",
+    "Float32Array", "Uint8Array", "Uint16Array", "Int32Array",
+}
+JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "typeof", "new", "await", "async",
+               "super", "import", "with", "do", "else", "in", "of", "delete", "void", "yield", "case", "throw"}
+# Calls in the demo bundle to functions only the live source defines: each sits behind SOURCE.mode === 'live' (or in
+# a live-only path such as the building) and never runs in the demo.
+LIVE_ONLY = {
+    "doorOf", "labelOf", "liveTestsFor",          # 40-scene: liveUpdateRobots / drawLivePhone / liveSync
+    "liveWantSheet",                              # 50-panel: the live branch of the sheet
+    "netConnect", "secOfDay",                     # 70-main: the live branches
+    "liveGoToFloor", "liveFloorOf",               # 40-scene: the building and the floor steps (live only)
+}
+
+
+def _code_only(src: str) -> str:
+    """src with string and template text and comments replaced by spaces; ${…} expressions kept."""
+    out, i, n = list(src), 0, len(src)
+
+    def blank(a, b):
+        for k in range(a, b):
+            if out[k] != "\n":
+                out[k] = " "
+    while i < n:
+        c = src[i]
+        if src.startswith("//", i):
+            j = src.find("\n", i)
+            j = n if j < 0 else j
+            blank(i, j)
+            i = j
+        elif src.startswith("/*", i):
+            j = src.find("*/", i) + 2
+            blank(i, j)
+            i = j
+        elif c in "\"'":
+            j = _skip_string(src, i)
+            blank(i + 1, j - 1)
+            i = j
+        elif c == "`":
+            j, k = i + 1, i + 1
+            while j < n and src[j] != "`":
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                if src.startswith("${", j):
+                    blank(k, j)
+                    close = _scan_code(src, j + 2, [], False, stop="}")
+                    inner = _code_only(src[j + 2:close])
+                    out[j + 2:close] = list(inner)
+                    j = k = close + 1
+                    continue
+                j += 1
+            blank(k, j)
+            i = j + 1
+        else:
+            i += 1
+    return "".join(out)
+
+
+def _defined_names(code: str) -> set:
+    names = set()
+    names |= set(re.findall(rf"\b(?:function\*?|class)\s+({_ID})", code))
+    names |= set(re.findall(rf"\b(?:const|let|var)\s+({_ID})", code))
+    for pat in re.findall(r"\b(?:const|let|var)\s+(\[[^\]=]*\]|\{[^}=]*\})\s*=", code):
+        for part in re.split(r"[,\[\]{}]", pat):
+            part = part.split(":")[-1].strip().lstrip(".")
+            if re.fullmatch(_ID, part):
+                names.add(part)
+    for params in re.findall(r"\(([^()]*)\)\s*(?:=>|\{)", code) + re.findall(rf"\bfunction\s*{_ID}?\s*\(([^()]*)\)", code):
+        names |= set(re.findall(_ID, params))
+    names |= set(re.findall(rf"({_ID})\s*=>", code))
+    names |= set(re.findall(rf"(?<![\w$.])({_ID})\s*\([^()]*\)\s*\{{", code)) - JS_KEYWORDS   # method shorthand
+    names |= set(re.findall(rf"(?<![\w$.])({_ID})\s*:\s*(?:async\s+)?(?:function\b|\([^()]*\)\s*=>|{_ID}\s*=>)", code))
+    names |= set(re.findall(rf"\bcatch\s*\(\s*({_ID})", code))
+    for imp in re.findall(r"\bimport\s*\{([^}]*)\}", code) + re.findall(rf"\bimport\s+({_ID})", code):
+        names |= {p.split(" as ")[-1].strip() for p in imp.split(",") if p.strip()}
+    return names
+
+
+def undefined_calls(src: str) -> set:
+    code = _code_only(src)
+    called = set(re.findall(rf"(?<![\w$.])({_ID})\s*\(", code)) - JS_KEYWORDS
+    return called - _defined_names(code) - JS_GLOBALS
+
+
+def test_every_called_function_is_defined():
+    for mode in bundle.MODES:
+        missing = undefined_calls(bundle.build(mode, e2e=True))
+        if mode == "demo":
+            missing -= LIVE_ONLY
+        assert missing == set(), f"{mode}: called but defined nowhere: {sorted(missing)}"
+
+
+def test_the_undefined_call_gate_catches_the_live_check_shape():
+    shape = "function liveRoomPose(id) { if (id !== 'all') liveShowRoom(id); const b = liveBounds(id); return b; }\nfunction liveBounds(ids) { return ids; }"
+    assert undefined_calls(shape) == {"liveShowRoom"}
+    assert undefined_calls("const f = (a) => a; f(1); `${g(2)}`; 'h(3)'; // k(4)\nfunction g(x) { return x; }") == set()
+
+
+# ---- the floors: six rooms to a floor, the active rooms on 1F (requester's ruling, 10-18) ---------------------------
+# assignFloors as the page has it (cut out of 30-source-live.js and run in node, as the browser would run it).
+def _assign_floors(cases: list) -> list:
+    import json as _json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    assert node, "node is needed for the floor arms (the jui_tools job has it; a skip would hide the arms)"
+    src = web_text("js", "30-source-live.js")
+    start = src.index("function assignFloors(")
+    body = src[start:_match(src, src.index("{", start)) + 1]
+    script = f"const ROOM_MAX = 6;\n{body}\nconst cases = {_json.dumps(cases)};\n" \
+             "process.stdout.write(JSON.stringify(cases.map((c) => assignFloors(c.rooms, c.rank, c.prev))));"
+    out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return _json.loads(out.stdout)
+
+
+def _rooms(n):
+    return [{"id": f"p{i}", "order": i} for i in range(n)]
+
+
+def test_floors_put_the_one_working_room_on_1f_even_when_it_is_last_by_order():
+    """The live check: 11 projects, only the last by order works -> it is on 1F (it never reached the 3D before)."""
+    rank = {f"p{i}": 2 for i in range(10)} | {"p10": 1}
+    prev = ["p0", "p1", "p2", "p3", "p4", "p5"]
+    [floors] = _assign_floors([{"rooms": _rooms(11), "rank": rank, "prev": prev}])
+    assert "p10" in floors[0] and len(floors[0]) == 6
+    assert [len(f) for f in floors] == [6, 5]
+    assert sorted(sum(floors, [])) == sorted(r["id"] for r in _rooms(11))
+
+
+def test_floors_spill_the_seventh_active_room_to_2f_waiting_first():
+    rank = {f"p{i}": (1 if i < 7 else 3) for i in range(11)} | {"p6": 0}
+    [floors] = _assign_floors([{"rooms": _rooms(11), "rank": rank, "prev": []}])
+    assert floors[0] == ["p6", "p0", "p1", "p2", "p3", "p4"]     # the waiting room first, then the working by order
+    assert floors[1][0] == "p5"                                   # the seventh active room leads 2F
+
+
+def test_floors_keep_a_room_that_stopped_until_its_seat_is_needed_and_keep_slots():
+    rooms = _rooms(9)
+    prev = ["p8", "p1", "p2", "p3", "p4", "p5"]
+    idle = {f"p{i}": 2 for i in range(9)}
+    stopped, needed = _assign_floors([
+        {"rooms": rooms, "rank": idle, "prev": prev},                    # p8 stopped working: nothing needs its seat
+        {"rooms": rooms, "rank": idle | {"p0": 1, "p6": 1, "p7": 1, "p1": 1, "p2": 1, "p3": 1}, "prev": prev},
+    ])
+    assert stopped[0] == prev                                            # nobody moved, nobody changed seats
+    assert set(needed[0]) == {"p0", "p6", "p7", "p1", "p2", "p3"}        # six active rooms take 1F
+    assert needed[0][1:4] == ["p1", "p2", "p3"]                          # the ones that stayed kept their slots
