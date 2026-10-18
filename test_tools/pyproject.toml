@@ -17,7 +17,7 @@ jsonui_test_cli = ["static/*"]
 
 [project]
 name = "jsonui-test-cli"
-version = "2.1.0"
+version = "2.2.0"
 description = "CLI tool for validating JsonUI test files and generating test templates"
 requires-python = ">=3.10"
 license = "MIT"
