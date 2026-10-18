@@ -19,6 +19,15 @@ window.__dbg = {
   walls: () => (SOURCE.mode === 'live' ? liveWalls() : null),   // the wall pieces, door gaps cut out (the e2e checks no robot is in one)
   seats: () => (SOURCE.mode === 'live' ? JSON.parse(JSON.stringify(LIVE.seatOf)) : null),
   solo: () => (SOURCE.mode === 'live' ? liveSolo() : null),
+  // the room up close (10-18): what is placed, where the vacuum is, the boxes it keeps clear of, and three's counts
+  props: () => {
+    const R = PROPS.room ? LIVE3D.rooms[PROPS.room] : null, v = PROPS.vac, sv = PROPS.server;
+    return { room: PROPS.room, server: sv ? [+sv.position.x.toFixed(2), +sv.position.z.toFixed(2)] : null,
+      vac: v ? [+v.position.x.toFixed(3), +v.position.z.toFixed(3)] : null, radius: PROPS.radius, boxes: PROPS.boxes,
+      area: PROPS.room ? propsArea() : null, wood: !!(R && R.floor.material === PROPS.woodMat && PROPS.woodMat && PROPS.woodMat.map),
+      floorMap: Object.values(LIVE3D.rooms).some((x) => !!x.floor.material.map), sceneChildren: scene.children.length - robots.length,   // less the robots, which come and go
+      memory: { ...renderer.info.memory } };
+  },
   floors: () => ({ floors: LIVE.floors, floor: LIVE.floor, rank: LIVE.rank, tower: TOWER.on, look: TOWER.look }),
   beats: () => (SOURCE.mode === 'demo' ? DEMO_BEATS : null),
   director: () => ({ userAt: DIRECTOR.userAt }),

@@ -29,7 +29,7 @@ body { margin: 0; }
   --floor-a: #efe8da;
   --floor-b: #e3ebf5;
   --floor-c: #e6efe3;
-  --wall: #f7f9fc;
+  --wall: #ebe4d9;
   --cloth: #fffdf7;
   --cloth-ink: #d62839;
   /* Boards seen up close (the spec whiteboard and the task board) follow the theme like the rest of the page. */
@@ -93,7 +93,7 @@ body { margin: 0; }
     --floor-a: #3a3a40;
     --floor-b: #24324a;
     --floor-c: #263a33;
-    --wall: #2c384b;
+    --wall: #48423d;
     --wb-bg: #0f1b2c;
     --wb-card: #15243a;
     --wb-rim: #2b3c55;
@@ -152,7 +152,7 @@ body { margin: 0; }
   --floor-a: #3a3a40;
   --floor-b: #24324a;
   --floor-c: #263a33;
-  --wall: #2c384b;
+  --wall: #48423d;
   --wb-bg: #0f1b2c;
   --wb-card: #15243a;
   --wb-rim: #2b3c55;

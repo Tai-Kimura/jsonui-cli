@@ -378,9 +378,11 @@ function addFrame(cx, cy, z, w, h, mat) {
 
 /* The demo office: three fixed rooms with their boards, the test stand, the document tray and the robots of
    the script (the prototype as it was). The live view builds its rooms from the slices instead (liveSync). */
+// The walls' colour is the --wall token (app.css, light and dark); this is only what a page without the stylesheet gets.
+const WALL_FALLBACK = '#ebe4d9';
 function buildDemoOffice() {
-  const wallMat = toon(readToken('--wall', '#f7f9fc'));
-  roomMats.push([wallMat, '--wall', '#f7f9fc']);
+  const wallMat = toon(readToken('--wall', WALL_FALLBACK));
+  roomMats.push([wallMat, '--wall', WALL_FALLBACK]);
   for (const room of ROOMS) {
     const w = room.x1 - room.x0, d = room.z1 - room.z0, cx = (room.x0 + room.x1) / 2, cz = (room.z0 + room.z1) / 2;
     const floorMat = toon(readToken(room.floor, '#e9eef6'));
@@ -589,8 +591,8 @@ function disposeTree(root) {
 function liveBuildRoom(room) {
   const g = new THREE.Group();
   const w = room.x1 - room.x0, d = room.z1 - room.z0, cx = (room.x0 + room.x1) / 2, cz = (room.z0 + room.z1) / 2;
-  const wallMat = toon(readToken('--wall', '#f7f9fc')), floorMat = toon(readToken(room.floor, '#e9eef6'));
-  const mats = [[wallMat, '--wall', '#f7f9fc'], [floorMat, room.floor, '#e9eef6']];
+  const wallMat = toon(readToken('--wall', WALL_FALLBACK)), floorMat = toon(readToken(room.floor, '#e9eef6'));
+  const mats = [[wallMat, '--wall', WALL_FALLBACK], [floorMat, room.floor, '#e9eef6']];
   roomMats.push(...mats);
   const floor = new THREE.Mesh(new RoundedBoxGeometry(w, 0.16, d, 2, 0.05), floorMat); floor.position.set(cx, -0.08, cz); g.add(floor);
   const frameMat = toon('#7a5a3c');
@@ -661,6 +663,7 @@ function liveBuildRoom(room) {
 function liveDropRoom(id) {
   const R = LIVE3D.rooms[id];
   if (!R) return;
+  if (PROPS.room === id) propsClear();   // the floor's own material goes back before the room is disposed
   scene.remove(R.group); disposeTree(R.group);
   R.rt.el.remove();
   roomTags.splice(roomTags.indexOf(R.rt), 1);
@@ -990,6 +993,7 @@ function liveUpdateRobots(nowSec, dt) {
     if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
     updateRobot(R.robot, nowSec, dt);
   }
+  propsTick(nowSec, dt);
 }
 /* One room at a time (requester, 10-18): a project picked (its room's tag, its floor in 3D, the menu) lays out only
    that room, wider (layoutRooms, SOLO_GROW), with the way back at the top left. The other rooms' robots keep their
@@ -1006,6 +1010,123 @@ function liveSoloSync() {
   if (!box) return;
   box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed;
   if (solo) setText(document.getElementById('room-solo-name'), PROJECT[solo].name);
+}
+/* ---------- the room up close: a water server, a robot vacuum and a wooden floor (requester, 10-18) ----------
+   Only in the one-room view (room-solo) and only while that room has 10 robots or fewer; built when it is wanted and
+   disposed as soon as it is not (back to the floor, the building, an 11th robot). The floor's own material is swapped
+   for a toon material with a canvas plank texture (512 px, repeated; no image, no light, no shadow) and put back. */
+const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
+  boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9 };   // the robots' scale (they stand about 1 m)
+function woodTexture(dark) {
+  const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
+  const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
+  for (let r = 0; r < rows; r++) {
+    let x = -Math.floor(W.rng() * N);
+    while (x < N) {
+      const len = N * (0.45 + W.rng() * 0.5), k = (W.rng() - 0.5) * (dark ? 14 : 22);
+      ctx.fillStyle = `rgb(${base.map((c) => Math.round(c + k)).join(',')})`;
+      ctx.fillRect(x, r * h, len, h);
+      ctx.globalAlpha = dark ? 0.10 : 0.12;   // a few faint grain lines along the plank
+      ctx.strokeStyle = dark ? '#2b2018' : '#8a6a45'; ctx.lineWidth = 1;
+      for (let g = 0; g < 4; g++) { const y = r * h + 6 + W.rng() * (h - 12); ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x + len / 3, y + (W.rng() - 0.5) * 6, x + len * 2 / 3, y + (W.rng() - 0.5) * 6, x + len, y); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = dark ? '#2a1f17' : '#9c7b55'; ctx.fillRect(x, r * h, 2, h);   // the joint at the plank's end
+      x += len;
+    }
+    ctx.fillStyle = dark ? '#2a1f17' : '#a5845c'; ctx.fillRect(0, r * h, N, 2);       // the seam between rows
+  }
+  const t = texFrom(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function propsWanted() {
+  const solo = liveSolo();
+  if (!solo || !has3D || TOWER.on || !LIVE3D.rooms[solo]) return null;
+  return robots.filter((R) => R.def.room === solo).length <= PROPS.max ? solo : null;
+}
+function propsClear() {
+  if (!PROPS.room) return;
+  const R = LIVE3D.rooms[PROPS.room];
+  if (R && PROPS.floorMat && R.floor.material === PROPS.woodMat) R.floor.material = PROPS.floorMat;
+  if (PROPS.group) { scene.remove(PROPS.group); disposeTree(PROPS.group); }
+  if (PROPS.woodMat) PROPS.woodMat.dispose();
+  if (PROPS.woodTex) PROPS.woodTex.dispose();
+  Object.assign(PROPS, { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0 });
+}
+function propsBuild(id) {
+  const r = PROJECT[id], R = LIVE3D.rooms[id], g = new THREE.Group();
+  PROPS.room = id; PROPS.geo = R.geo; PROPS.dark = isDark(); PROPS.group = g; PROPS.rng = snackRandom(PROPS.seed);
+  // the floor: the same mesh, a wooden material while the room is up close
+  PROPS.woodTex = woodTexture(PROPS.dark); PROPS.woodTex.repeat.set((r.x1 - r.x0) / 2.4, (r.z1 - r.z0) / 2.4);
+  PROPS.woodMat = toon('#ffffff', { map: PROPS.woodTex }); PROPS.floorMat = R.floor.material; R.floor.material = PROPS.woodMat;
+  // the water server: the back-right corner, in sight from the usual view; the back-left one when a back door opens
+  // near the right (doorAt). No desk takes either corner (SEAT.left / SEAT.back / SEAT.aisleR).
+  const sv = new THREE.Group(), body = toon('#eef1f4'), dark = toon('#5b6573');
+  const cab = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.95, 0.38, 2, 0.04), body); cab.position.y = 0.475; sv.add(cab);
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.02), dark); panel.position.set(0, 0.72, 0.2); sv.add(panel);
+  for (const [x, c] of [[-0.07, '#4aa3ff'], [0.07, '#ff6b5b']]) { const tap = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.06), toon(c)); tap.position.set(x, 0.66, 0.22); sv.add(tap); }
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.12), dark); tray.position.set(0, 0.5, 0.2); sv.add(tray);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.42, 20), toon('#8fd0f2', { transparent: true, opacity: 0.82 }));
+  tank.position.y = 0.95 + 0.21; sv.add(tank);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 12), toon('#2f7fd1')); cap.position.y = 1.39; sv.add(cap);
+  const right = !(r.doors && r.doors.back);
+  const k = PROPS.serverScale, off = 0.42 * k;   // built at 1, shown bigger (requester, 10-18: the robots' size)
+  sv.scale.setScalar(k);
+  sv.position.set(right ? r.x1 - off : r.x0 + off, 0, r.z0 + 0.38 * k); sv.rotation.y = right ? -Math.PI / 4 : Math.PI / 4; g.add(sv); PROPS.server = sv;
+  // the robot vacuum: a flat disc with a bumper and a light, on the floor clear of desks, robots and the front aisle
+  const vac = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(PROPS.radius, PROPS.radius, 0.11, 32), toon('#3a3f47')); shell.position.y = 0.065; vac.add(shell);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(PROPS.radius * 0.74, PROPS.radius * 0.74, 0.02, 28), toon('#5d6470')); top.position.y = 0.13; vac.add(top);
+  const bumper = new THREE.Mesh(new THREE.CylinderGeometry(PROPS.radius * 1.02, PROPS.radius * 1.02, 0.04, 32, 1, true, -Math.PI / 2, Math.PI), toon('#9aa3ad')); bumper.position.y = 0.05; vac.add(bumper);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), toon('#52e08a')); lamp.position.set(0, 0.145, PROPS.radius * 0.5); vac.add(lamp);
+  vac.userData.heading = PROPS.rng() * Math.PI * 2;
+  g.add(vac); PROPS.vac = vac;
+  propsBoxes(0, true);
+  const start = propsSpot();
+  vac.position.set(start[0], 0, start[1]);
+  scene.add(g);
+}
+// Where the vacuum may go: the room's floor less the front aisle (doors, the play spot, the easel) and the corner of the
+// water server; and never into a robot or its desk (their boxes, kept current while robots come and go).
+function propsArea() {
+  const r = PROJECT[PROPS.room];
+  return { x0: r.x0 + 0.3, x1: r.x1 - 0.3, z0: r.z0 + 0.3, z1: r.z1 - SEAT.aisleF - 0.1 };
+}
+function propsBoxes(nowSec, force) {
+  if (!force && nowSec - PROPS.boxesAt < 0.25) return;
+  PROPS.boxesAt = nowSec;
+  const box = new THREE.Box3();
+  PROPS.boxes = robots.filter((R) => R.robot.root.visible && (R.def.room === PROPS.room || roomAtPoint([R.robot.root.position.x, R.robot.root.position.z]) === PROPS.room))
+    .map((R) => { box.setFromObject(R.robot.root); return [box.min.x, box.max.x, box.min.z, box.max.z]; });
+  const s = PROPS.server.position;
+  const half = 0.42 * PROPS.serverScale;
+  PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
+}
+function propsClearAt(x, z) {
+  const a = propsArea(), m = PROPS.radius + 0.06;
+  if (x < a.x0 || x > a.x1 || z < a.z0 || z > a.z1) return false;
+  return !PROPS.boxes.some(([x0, x1, z0, z1]) => x > x0 - m && x < x1 + m && z > z0 - m && z < z1 + m);
+}
+function propsSpot() {
+  const a = propsArea();
+  for (let i = 0; i < 200; i++) {
+    const x = a.x0 + PROPS.rng() * (a.x1 - a.x0), z = a.z0 + PROPS.rng() * (a.z1 - a.z0);
+    if (propsClearAt(x, z)) return [x, z];
+  }
+  return [a.x1, a.z1];
+}
+function propsTick(nowSec, dt) {
+  const want = propsWanted();
+  if (PROPS.room && (want !== PROPS.room || LIVE3D.rooms[PROPS.room].geo !== PROPS.geo || isDark() !== PROPS.dark)) propsClear();
+  if (!want) return;
+  if (!PROPS.room) propsBuild(want);
+  propsBoxes(nowSec, false);
+  if (reduceMotion) return;   // placed, not driven
+  const v = PROPS.vac, p = v.position;
+  if (!propsClearAt(p.x, p.z)) { const s = propsSpot(); p.set(s[0], 0, s[1]); return; }   // a robot sat down on it: start elsewhere
+  const step = PROPS.speed * Math.min(dt, 0.1), h = v.userData.heading;
+  const nx = p.x + Math.sin(h) * step, nz = p.z + Math.cos(h) * step;
+  if (propsClearAt(nx, nz)) { p.x = nx; p.z = nz; v.rotation.y = h; }
+  else v.userData.heading = h + Math.PI * (0.5 + PROPS.rng());   // a bump: turn away and try again next frame
 }
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
    part and the cork board the task board, a robot its card. */
