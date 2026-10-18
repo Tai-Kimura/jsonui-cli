@@ -276,10 +276,13 @@ def building():
     names = ["harbor-booking-site", "harbor-booking-admin", "tea-finder-agent", "tea-finder-ios", "aurora_base_flutter",
              "aurora_base_android2", "nimbus_server", "nimbus_android", "JsonUI-Agents-for-claude", "jsonui-cli"]
     P = [project(f"b{k:02d}", n, k) for k, n in enumerate(names)]
+    import time
+    now = int(time.time() * 1000)
+    since = {0: now - 9 * 3600_000, 1: now - 9 * 3600_000, 6: now - 9 * 3600_000, 2: now - 3600_000}   # the rest: none (not guessed)
     S, A = [], []
     for k, n in enumerate(names):
         sid = f"b{k:07x}-0000-4000-8000-{k:012x}"
-        S.append(session(sid, f"b{k:x}", f"b{k:02d}", n, status="idle"))
+        S.append(dict(session(sid, f"b{k:x}", f"b{k:02d}", n, status="idle"), **({"since": since[k]} if k in since else {})))
         A.append(agent(sid, f"b{k:x}", sid, state="idle"))
     mixed = [dict(a) for a in A]
     for k in (1, 4, 8):

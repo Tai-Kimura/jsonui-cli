@@ -639,6 +639,7 @@ LIVE_ONLY = {
     "liveWantSheet",                              # 50-panel: the live branch of the sheet
     "netConnect", "secOfDay",                     # 70-main: the live branches
     "liveGoToFloor", "liveFloorOf",               # 40-scene: the building and the floor steps (live only)
+    "isTired", "sinceOf",                         # 40-scene: liveUpdateRobots (the 8-hour tiredness of a live session)
 }
 
 
@@ -789,3 +790,35 @@ def test_every_bundle_parses_as_a_module(tmp_path):
         f.write_text(bundle.build(mode, e2e=True), encoding="utf-8")
         out = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, timeout=30)
         assert out.returncode == 0, f"{mode}: {out.stderr[-600:]}"
+
+
+# ---- the 8-hour tiredness and the sky's hour (requester, 10-18), run in node from the page's source ---------------
+def _run_js(file: str, names: list, expr: str):
+    import json as _json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    assert node, "node is needed (the jui_tools job has it)"
+    src = web_text("js", file)
+    parts = []
+    for name in names:
+        m = re.search(rf"(?:^|\n)((?:const {name} = |function {name}\())", src)
+        start = m.start(1)
+        end = _match(src, src.index("{", start)) + 1 if m.group(1).startswith("function") else src.index(";\n", start) + 1
+        parts.append(src[start:end])
+    out = subprocess.run([node, "-e", "\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({expr}));"], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return _json.loads(out.stdout)
+
+
+def test_a_session_is_tired_from_8_hours_and_never_without_its_own_start():
+    h8 = 8 * 3600 * 1000
+    got = _run_js("30-source-live.js", ["TIRED_MS", "isTired"],
+                  f"[isTired(1000, 1000 + {h8} - 1), isTired(1000, 1000 + {h8}), isTired(null, 9e15), isTired(0, 9e15), isTired(undefined, 9e15)]")
+    assert got == [False, True, False, False, False]
+
+
+def test_the_sky_has_four_hours_with_their_edges():
+    hours = [(4, 59), (5, 0), (6, 59), (7, 0), (16, 29), (16, 30), (18, 59), (19, 0), (23, 30), (12, 0)]
+    got = _run_js("40-scene.js", ["skyPhase"], "[" + ",".join(f"skyPhase(new Date(2026, 9, 18, {h}, {m}))" for h, m in hours) + "]")
+    assert got == ["night", "dawn", "dawn", "day", "day", "dusk", "dusk", "night", "night", "day"]

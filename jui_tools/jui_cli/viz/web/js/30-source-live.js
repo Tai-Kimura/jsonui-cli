@@ -380,6 +380,13 @@ function layoutRooms() {
   });
 }
 
+/* Eight hours into its session a main robot gets tired (requester, 10-18). The start is the session's own
+   (sessions[].since, from its transcript); a session without one is never tired — startedAt is when the server
+   first saw it, not when it began. */
+const TIRED_MS = 8 * 3600 * 1000;
+const isTired = (since, now) => Number.isFinite(since) && since > 0 && now - since >= TIRED_MS;
+const sinceOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return s ? s.since : null; };
+
 /* Another floor, from the floor buttons, the building view or a project picked in the menu. */
 function liveFloorOf(id) { return LIVE.floors.findIndex((f) => f.includes(id)); }
 function liveGoToFloor(k) {
@@ -514,7 +521,8 @@ function rebuildSessions() {
     const robots = ROBOT_DEFS.filter((d) => d.mainLabel === label || d.id === label)
       .sort((a, b) => (a.kind === 'main' ? -1 : 0) - (b.kind === 'main' ? -1 : 0) || a.id.localeCompare(b.id)).map((d) => d.id);
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
-    next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '' });
+    next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
+      since: Number.isFinite(s.since) && s.since > 0 ? s.since : null });   // the transcript's first record; none: not guessed
   }
   SESSIONS.splice(0, SESSIONS.length, ...next);
 }
