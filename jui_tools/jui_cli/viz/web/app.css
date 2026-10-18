@@ -918,3 +918,11 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 /* a phone call on a robot's name tag (SendMessage, 10-18): a mark and the other robot's number */
 .tag .call-mark { flex: none; padding: 0 6px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font: 700 10px/1.6 var(--font-body); }
 .tag .call-mark[hidden] { display: none; }
+
+/* The plan's usage limits in the header (10-18): the number and its % share one colour, green (0) to red (100). */
+.usage { display: inline-flex; gap: 6px; align-items: center; }
+.usage .uw { padding: 2px 9px; border-radius: 999px; background: var(--chip); color: var(--ink-soft); font: 500 12px/1.6 var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.usage .uw b { font-weight: 700; }
+.usage .uw .limit { color: var(--ink-soft); opacity: 0.75; font-weight: 700; }
+.usage .uw .note { opacity: 0.8; }
+.usage .none { opacity: 0.7; }

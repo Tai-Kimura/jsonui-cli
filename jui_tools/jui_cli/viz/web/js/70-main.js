@@ -50,6 +50,7 @@ function frame(ms) {
 /* ---------- live only: the connection chip, no-session and source-error notes (plan 07 §5) ---------- */
 function liveChrome() {
   if (SOURCE.mode !== 'live') return;
+  renderUsage(vizNow());   // the time to each reset counts down between slices
   const chip = document.querySelector('.chip.demo');
   if (chip) {
     const ok = NET.state === 'connected';

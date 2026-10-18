@@ -18,6 +18,14 @@ window.__dbg = {
   walls: () => (SOURCE.mode === 'live' ? liveWalls() : null),   // the wall pieces, door gaps cut out (the e2e checks no robot is in one)
   seats: () => (SOURCE.mode === 'live' ? JSON.parse(JSON.stringify(LIVE.seatOf)) : null),
   solo: () => (SOURCE.mode === 'live' ? liveSolo() : null),
+  // the usage chips as drawn (10-18): per window its text, the number's and the %'s colours, 上限到達, the note
+  usage: () => [...document.querySelectorAll('#usage .uw')].map((e) => ({ window: e.dataset.window || null, text: e.textContent,
+    num: e.querySelector('.num') ? getComputedStyle(e.querySelector('.num')).color : null,
+    pc: e.querySelector('.pc') ? getComputedStyle(e.querySelector('.pc')).color : null,
+    limit: !!e.querySelector('.limit'), limitColor: e.querySelector('.limit') ? getComputedStyle(e.querySelector('.limit')).color : null,
+    note: e.querySelector('.note') ? e.querySelector('.note').textContent : '' })),
+  usageHue: SOURCE.mode === 'live' ? usageHue : null,
+  inkSoft: () => { const e = document.createElement('span'); e.style.color = 'var(--ink-soft)'; document.body.append(e); const c = getComputedStyle(e).color; e.remove(); return c; },
   floors: () => ({ floors: LIVE.floors, floor: LIVE.floor, rank: LIVE.rank, tower: TOWER.on, look: TOWER.look }),
   beats: () => (SOURCE.mode === 'demo' ? DEMO_BEATS : null),
   director: () => ({ userAt: DIRECTOR.userAt }),

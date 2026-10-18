@@ -30,6 +30,7 @@ from .config import VizConfig
 from .state import VizState, now_ms
 
 MAX_HOOK_BODY = 2_000_000
+USAGE_MAX_BODY = 64_000
 AUTH_TIMEOUT_SEC = 2.0
 POLL_SEC = 25.0
 PRESENCE_MS = 12_000
@@ -110,6 +111,8 @@ class ServerContext:
     # what to call after changing it.
     world: object | None = None
     publish: Callable[[], None] | None = None
+    # Called with each accepted POST /usage body (the statusLine's rate_limits, 10-18).
+    on_usage: Callable[[dict], None] | None = None
     # Until when a page reported itself visible (presence), epoch ms.
     present_until: int = 0
 
@@ -211,6 +214,21 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=400, text="not an object\n")
         if ctx.on_hook is not None:
             asyncio.get_running_loop().call_soon(_dispatch_hook, ctx, payload)
+        return web.Response(status=204)
+
+    async def usage(request: web.Request) -> web.Response:
+        """The plan's usage limits from statusline.py (local processes only, like /hook)."""
+        refused = _check_token(request)
+        if refused is not None:
+            return refused
+        if request.content_length is not None and request.content_length > USAGE_MAX_BODY:
+            return web.Response(status=413, text="too large\n")
+        try:
+            payload = json.loads(await request.read())
+        except (ValueError, web.HTTPRequestEntityTooLarge):
+            return web.Response(status=400, text="not json\n")
+        if ctx.on_usage is not None and isinstance(payload, dict):
+            ctx.on_usage(payload)
         return web.Response(status=204)
 
     async def api_snapshot(request: web.Request) -> web.Response:
@@ -396,6 +414,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_get("/app.js", app_js)
     app.router.add_get("/ws", ws)
     app.router.add_post("/hook", hook)
+    app.router.add_post("/usage", usage)
     app.router.add_get("/api/snapshot", api_snapshot)
     app.router.add_get("/{path:.+}", static)
 

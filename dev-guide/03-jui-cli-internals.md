@@ -163,6 +163,12 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   `test.artifacts.android.appId` → ③ そのテストファイルを持つ app が 1 つだけ、のどれにも当たらなければ付けない
   （iOS に ② は無い）。進捗と保存分はケースごとに新しいほうを採る。spec / layout の mtime が新しければ
   「結果は古い可能性」（checkout でも mtime は動くので断定しない）。`jui viz doctor` が読む場所を印字する。
+- **上限（ヘッダ）**: 取れる口は、Claude Code が statusLine のコマンドに渡す JSON の `rate_limits` だけ
+  （five_hour / seven_day、used_percentage は 0〜100 で 100 頭打ち、resets_at は epoch 秒）。`viz/statusline.py` が
+  POST /usage に送り（forward.py と同じ生ソケット・短い timeout・失敗は黙る）、`viz/usage.py` が検証して
+  viz_home/usage.json に残す（再起動しても最後の値）。`jui viz statusline install` が settings.json に書き、既存の
+  statusLine は `--wrap <base64>` で包む（出力はそのまま、uninstall で元の値に戻す）。⚠️ statusLine を走らせるのは
+  ターミナルの claude だけで、VS Code 拡張は走らせない（2.1.301 で確認）ので、ヘッダは 15 分を超えると「◯分前の値」。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 

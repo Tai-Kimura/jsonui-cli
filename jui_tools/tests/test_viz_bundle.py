@@ -644,6 +644,7 @@ LIVE_ONLY = {
     "netConnect", "secOfDay",                     # 70-main: the live branches
     "liveGoToFloor", "liveFloorOf",               # 40-scene: the building and the floor steps (live only)
     "sinceOf", "heavyOf",                         # 40-scene: liveUpdateRobots (tiredness and heavy work of a live session)
+    "renderUsage",                                # 70-main: liveChrome (the usage limits in the header, 10-18)
 }
 # Calls in the live bundle to functions only the demo script defines: each sits in a demo branch (the demo's update
 # in update3D, demoDirector, the demo clock in 70-main) and never runs live.

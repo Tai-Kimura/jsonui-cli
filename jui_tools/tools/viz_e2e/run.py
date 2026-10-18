@@ -195,7 +195,7 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "tower", "calls", "play"],
+    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "tower", "calls", "play", "usage"],
                     help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
@@ -259,6 +259,9 @@ def main(argv=None) -> int:
             if a.only in (None, "live", "play"):
                 import play
                 await play.run_play(pw, out, failures)
+            if a.only in (None, "live", "usage"):
+                import usage_header
+                await usage_header.run_usage(pw, out, failures)
             if a.only in (None, "live", "rooms"):
                 import rooms
                 await rooms.run_rooms(pw, out, failures, RealServer)

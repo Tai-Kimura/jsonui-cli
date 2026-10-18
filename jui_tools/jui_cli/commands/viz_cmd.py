@@ -72,6 +72,10 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     hooks.add_argument("hooks_action", nargs="?", choices=["install", "uninstall", "status"])
     hooks.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the change, write nothing")
     hooks.add_argument("--json", action="store_true", help="Machine-readable status")
+    statusline = sub.add_parser("statusline", help="Install or remove the statusLine that hands the usage limits to jui viz")
+    statusline.add_argument("statusline_action", nargs="?", choices=["install", "uninstall", "status"])
+    statusline.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the change, write nothing")
+    statusline.add_argument("--json", action="store_true", help="Machine-readable status")
     export = sub.add_parser("export-demo", help="Write the demo page as a static folder (for a docs site)")
     export.add_argument("--out", required=True, help="An empty or new folder")
 
@@ -90,12 +94,13 @@ def cmd_viz(args: argparse.Namespace) -> int:
         "open": _cmd_open,
         "doctor": _cmd_doctor,
         "hooks": _cmd_hooks,
+        "statusline": _cmd_statusline,
         "relay": _cmd_relay,
         "export-demo": _cmd_export_demo,
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,relay,export-demo}")
+        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo}")
         return 1
     try:
         # Every command that reads or writes the runtime folder moves the old one first; export-demo uses none.
@@ -555,6 +560,18 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     ctx.on_hook = None if replay else on_hook
     set_source("hooks", "replay" if replay else "running")
 
+    # The plan's usage limits (statusline.py → POST /usage): the last value kept survives a restart.
+    from ..viz import usage as usage_mod
+
+    ctx.state.set_slice("usage", usage_mod.load())
+
+    def on_usage(payload: dict) -> None:
+        value = usage_mod.accept(payload, now_ms())
+        if value is not None:
+            ctx.state.set_slice("usage", value)
+
+    ctx.on_usage = None if replay else on_usage
+
     in_use = f"ポート {port} は使用中です。--port で変えるか、使っているプロセスを止めてください"
     # SO_REUSEADDR stays on so a restart is not refused for a minute by the
     # last run's TIME_WAIT connections. On macOS it would also let us bind
@@ -917,6 +934,51 @@ def _cmd_relay(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------- hooks
+
+
+STATUSLINE_NOTE = ("上限の値は、ターミナルの claude（の statusLine）からだけ届きます。VS Code 拡張のセッションからは更新されません。"
+                   "ターミナルの claude が 1 つ動いていれば更新されます")
+
+
+def _cmd_statusline(args: argparse.Namespace) -> int:
+    from ..viz import hooks_installer as hi
+    from ..viz import statusline_installer as sl
+
+    action = getattr(args, "statusline_action", None)
+    if action is None:
+        _err("使い方: jui viz statusline {install,uninstall,status} [--dry-run]")
+        return 1
+    if action == "status":
+        info = sl.status()
+        if getattr(args, "json", False):
+            print(json.dumps(info, ensure_ascii=False))
+            return 0
+        if not info.get("readable"):
+            _err(info.get("error", "settings.json を読めません"))
+            return 1
+        if info["installed"]:
+            print(f"jui viz: statusLine を入れています（{info['path']}）" + (f"。元の statusLine を包んでいます: {info['wraps']}" if info["wraps"] else ""))
+        else:
+            print("jui viz: statusLine は入っていません" + ("（別の statusLine があります。install すると包みます）" if info["other"] else ""))
+        print(f"  {STATUSLINE_NOTE}")
+        return 0
+    try:
+        result = sl.install(dry_run=args.dry_run) if action == "install" else sl.uninstall(dry_run=args.dry_run)
+    except hi.SettingsError as exc:
+        _err(str(exc))
+        return 1
+    if args.dry_run:
+        print(result.diff or "変更はありません")
+        return 0
+    if not result.changed:
+        print("jui viz: 変更はありません")
+        return 0
+    print("jui viz: statusLine を入れました" if action == "install" else "jui viz: statusLine を外しました（包んでいたものは元に戻しました）")
+    if result.backup is not None:
+        print(f"  元の settings.json の控え: {result.backup}")
+    if action == "install":
+        print(f"  {STATUSLINE_NOTE}")
+    return 0
 
 
 def _cmd_hooks(args: argparse.Namespace) -> int:
@@ -1282,6 +1344,15 @@ def _doctor_checks() -> list[dict]:
     add("results", True, f"テストの結果を読む場所: {base}"
         + (f"（{test_results.BASE_ENV} で指定。driver 側にも同じ値が要ります）" if os.path.isabs(override) else "")
         + ("" if devices_src.find_adb() else "。adb が無いので Android の結果は取りません"))
+
+    from ..viz import statusline_installer as sl
+    from ..viz import usage as usage_mod
+
+    line = sl.status()
+    last = usage_mod.load()
+    when = time.strftime("%m-%d %H:%M", time.localtime(last["receivedAt"] / 1000)) if last else None
+    add("usage", True, ("statusLine: 入っています" if line.get("installed") else "statusLine: 入っていません（jui viz statusline install）")
+        + (f"。最後の値 {when}" if when else "。値はまだありません") + f"。{STATUSLINE_NOTE}")
 
     if claude is not None:
         registered = _relay_registered(claude)
