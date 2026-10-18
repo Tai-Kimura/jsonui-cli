@@ -135,6 +135,15 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # install fails the release instead of re-earning this allowance.
     "rsvg-convert not on PATH",
     "cairosvg / cairocffi not importable",
+    # THE SECOND SHAPE: A COPY JUDGED IN ANOTHER JOB. test_viz_test_results
+    # compares jui viz's copy of jsonui-test-runner's results-prune.json only
+    # when a checkout of that repo is at hand; python-suite checks out this
+    # repo alone, so it always skips here. Allowed only because the same copy
+    # is in dev-guide/ci/check-canonical-sync.py's VENDORED_VECTORS, which the
+    # ssot-guards job runs against a real checkout of jsonui-test-runner.
+    # Added in 2.3.1 after its first candidate went red on this skip with the
+    # copy compared nowhere in CI.
+    "jsonui-test-runner specs/vectors not found",
 )
 
 

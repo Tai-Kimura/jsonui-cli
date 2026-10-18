@@ -231,6 +231,11 @@ VENDORED_VECTORS = [
     # are validate errors / warnings, by code.
     ("specs/vectors/initial-state-payload.json",
      "shared/core/initial_state_payload_vectors.json"),
+    # jui viz's names and pruning of the drivers' default results folder (2.3.1).
+    # Its own pytest arm compares only with a sibling checkout, so python-suite
+    # skips it; this is the place in CI where the copy is compared.
+    ("specs/vectors/results-prune.json",
+     "jui_tools/tests/fixtures/viz/results-prune.json"),
 ]
 
 
