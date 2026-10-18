@@ -124,7 +124,9 @@ def test_stop_with_background_tasks_keeps_the_session_busy():
     ("./gradlew connectedDebugAndroidTest", "phone"),
     ("adb -s emulator-5554 shell ls", "phone"),
     ("npx playwright test", "phone"),
-    ("jsonui-test run", "phone"),
+    ("xcrun simctl io booted screenshot x.png", "phone"),
+    ("jsonui-test validate tests", "command"),   # jsonui-test has no subcommand that runs tests (10-18)
+    ("find ~/.local/state/jsonui-test -maxdepth 3", "command"),
     ("git status", "command"),
     ("readb file", "command"),
 ])
@@ -225,7 +227,7 @@ def test_a_busy_session_quiet_for_30_s_is_thinking_then_works_then_stops():
     world.tick(1_000 + THINKING_AFTER_MS)
     world.publish()
     assert _states(state)["s-aaaa"] == "thinking" and _agent(state, "s-aaaa")["act"] == "考え中"
-    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b", tool_input={"command": "npm test"}), 40_000)
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b", tool_input={"command": "npm run build"}), 40_000)
     world.publish()
     assert _states(state)["s-aaaa"] == "command"                 # a tool: thinking gives way to the work
     world.apply_hook(_hook("PostToolUse", tool_name="Bash", tool_use_id="b", tool_input={}), 41_000)

@@ -433,11 +433,12 @@ class World:
                 self._dirty.add("tasks")
             if tool == "SendMessage" and _s(tool_input.get("to")):
                 self._dial(session, agent, tool_input["to"], use_id, at)
-            if state == "phone" and use_id:
+            platform = robots.test_platform(str(tool_input.get("command", ""))) if state == "phone" else None
+            if platform is not None and use_id:  # a test run only when it runs tests, not when it holds a device
                 command = str(tool_input.get("command", ""))
                 self.tests[use_id] = {
                     "id": use_id, "projectId": session["projectId"], "agentId": agent["id"],
-                    "platform": robots.test_platform(command), "command": robots._clip(command, 200),
+                    "platform": platform, "command": robots._clip(command, 200),
                     "status": "running", "startedAt": at,
                 }
                 device_id = devices_mod.device_for_command(command, self.devices)
