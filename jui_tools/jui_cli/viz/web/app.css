@@ -722,6 +722,20 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-list-box { display: grid; gap: 8px; min-width: 0; }
 .h-newer { position: sticky; bottom: 0; justify-self: center; padding: 5px 14px; border: 0; border-radius: 999px; background: var(--info); color: var(--bg); font: 700 12px/1.4 var(--font-body); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); cursor: pointer; }
 .h-newer[hidden] { display: none; }
+.h-compose { display: grid; gap: 6px; padding: 8px 14px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+.h-compose[hidden], .h-confirm[hidden], .h-compose-why[hidden] { display: none; }
+.h-compose-why { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font: 700 12px/1.5 var(--font-body); overflow-wrap: anywhere; }
+.h-compose-text { box-sizing: border-box; width: 100%; min-height: 3.6em; max-height: 30vh; resize: vertical; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 500 13px/1.5 var(--font-body); }
+.h-compose-text:disabled { opacity: 0.55; cursor: not-allowed; }
+.h-compose-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.h-compose-state { min-width: 0; color: var(--ink-soft); font: 700 12px/1.4 var(--font-body); }
+.h-compose-state.h-compose-err { color: var(--warn); }
+.h-confirm { display: grid; gap: 6px; padding: 8px 10px; border: 2px solid var(--info); border-radius: 10px; background: var(--info-bg); }
+.h-confirm-to { margin: 0; font: 700 12.5px/1.5 var(--font-body); overflow-wrap: anywhere; }
+.h-confirm-text { margin: 0; max-height: 8em; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 500 12.5px/1.5 var(--font-body); }
+.h-confirm-acts { display: flex; gap: 8px; }
+.h-compose .wb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.h-confirm-go { border-color: var(--info); background: var(--info); color: var(--bg); }
 .h-item { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .h-user { padding: 8px 10px; border-radius: 10px; background: var(--chip); }
 .h-who { display: flex; gap: 8px; margin: 0 0 2px; color: var(--ink-soft); font: 700 11px/1.4 var(--font-body); }

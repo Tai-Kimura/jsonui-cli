@@ -149,7 +149,14 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
 - **許可**（`permissions.py`、`channel.py`）: 段階 A（PermissionRequest でカード）、B（MCP チャンネル
   `jui-viz` の中継）、C（同期のフック。今後も許可＝その要求の `permission_suggestions` だけ、理由つきの拒否）。
   照合は推測でつながない（候補が 1 枚でも、コマンドやパスが中継の preview に含まれること）。
-  チャンネルは JSON-RPC 以外を stdout に書かず、`notifications/claude/channel`（Claude の文脈への書き込み）を送らない。
+  チャンネルは JSON-RPC 以外を stdout に書かない。`notifications/claude/channel`（セッションの文脈への書き込み）は、
+  サーバーの poll がそのチャンネルに渡したプロンプトだけを、打たれたとおりに送る（1.2.0、依頼者の裁定 10-19）。
+- **ページからのプロンプト**（`server.py` の `POST /api/prompt` と `prompt_checks`、`ingest.send_prompt`、`55-history.js`）:
+  応答の履歴タブの入力欄から、そのロボットのセッションへ。受けるのは POST・Host がちょうど `127.0.0.1:<port>`・Origin が
+  ちょうど `http://127.0.0.1:<port>`・トークン・`application/json`・本文 8 KB まで、の全部を満たすものだけ。宛先は
+  session id で、中継（relay）があり、そのチャンネルの hello が `accepts: ["prompt"]`（jui-viz 1.2.0 以上）のものだけ。
+  イベントログには時刻・宛先・先頭 40 文字だけ（本文はチャンネルの待ち行列にだけあり、渡したら消える）。
+  待ち受けは 127.0.0.1 固定で、変える口（オプション・設定）は無い。古いプラグインのセッションはページと doctor がそう言う。
   同期のフックは、表示中のページ（presence、12 秒）が無ければ即座に空で返る。
 - **テストの進捗**: driver 3 種が `schemas/progress.schema.json`（jsonui-test-runner、写しは
   `test_tools/tests/schema_fixtures/`）の 1 行を出す。Web はフォルダの .jsonl、Android は logcat、

@@ -13,7 +13,7 @@ const HIST_POLL_MS = 3000;
    whole card (keyed) whenever its key changes, and the new pane starts at scrollTop 0 (measured 10-19: every new turn of
    a working session sent the reader to the top). newer: answers came while the reader was above (the 新しい応答 marker). */
 const HIST = { tab: 'now', id: null, data: null, error: '', timer: 0, busy: false, node: null, sig: '',
-  atEnd: true, top: 0, newer: false, marker: null };
+  atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null };
 
 function hNode(tag, cls, text) {
   const n = document.createElement(tag);
@@ -282,6 +282,7 @@ async function histFetch() {
   const anchor = shown && !HIST.atEnd ? histAnchor(pane) : null;
   const had = !!HIST.data;
   HIST.sig = sig; HIST.data = got.data; HIST.node = histBuild(got.data);
+  composeArrived(got.data.items);
   if (had && !HIST.atEnd) HIST.newer = true;          // the reader is above: leave the place, show the marker
   histShow();                                          // at the end: histRestore sends the pane to the newest
   if (anchor && pane && pane.contains(HIST.node)) {   // the same item at the same place, though the oldest left
@@ -301,6 +302,7 @@ function histSync() {
   const body = rbEl.querySelector('.rb-body:not([data-rb-hist])'), pane = histPane();
   if (body) body.hidden = HIST.tab !== 'now';
   if (pane) pane.hidden = HIST.tab !== 'history';
+  composePlace(pane, id);
   if (!id || HIST.tab !== 'history') { histStop(); return; }
   histShow();
   if (!HIST.timer) { histFetch(); HIST.timer = setInterval(() => { if (document.visibilityState === 'visible') histFetch(); }, HIST_POLL_MS); }
@@ -317,3 +319,135 @@ rbEl.addEventListener('click', (e) => {
   }
   histSync();
 });
+
+/* ---------- a prompt to the session of this robot (requester, 10-19) ----------
+   "プロンプトをロボットの会話の履歴から打てないと不便だから打てるようにしよう" — and "別端末からは送れなくていいよ": the server takes it
+   only from this page at http://127.0.0.1:<port> (server.prompt_checks). Here: the box under the history; Enter is a new
+   line, the 送信 button or Ctrl/⌘+Enter opens a confirmation naming the robot and the session, and only its 送る sends.
+   After that 「送信済み」 until the prompt shows in the history. The box is built once and moved into each rebuilt card,
+   so what is typed survives a rebuild. A session without the relay, or with a jui-viz plugin older than 1.2.0 (its
+   channel cannot deliver), gets the box disabled and the reason. */
+const PROMPT_MAX_BYTES = 8192;   // server.PROMPT_MAX_BODY: the JSON body, not only the text
+const composeBytes = (label, text) => new TextEncoder().encode(JSON.stringify({ sessionId: SESSION_UUID[label] || '', text })).length;
+const RELAY_HOW_TEXT = RELAY_HOW.replace(/<[^>]+>/g, '');   // the same how-to as on a permission card, as plain text
+const composeNorm = (t) => String(t || '').split(/\s+/).join(' ').trim();
+function composeTarget(id) {
+  if (!id || !DEF[id]) return { why: '' };
+  const sess = SESSIONS.find((x) => x.id === SESSION_OF[id]);
+  const name = sess ? `${sess.id} のメインセッション（${DEF[sess.id].agent} · ${sess.room}）` : '';
+  if (SOURCE.mode !== 'live') return { why: 'デモでは送れない' };
+  if (DEF[id].kind === 'sub') return { why: `サブエージェントには送れない。${SESSION_OF[id]} のメインセッションのカードから送る` };
+  if (location.hostname !== '127.0.0.1') return { why: `このページは http://127.0.0.1:${location.port}/ で開いたときだけ送れる（jui viz open）` };
+  if (!sess || sess.status === 'ended') return { why: 'このセッションは終わっている' };
+  if (!sess.relay) return { why: 'このセッションは中継（jui-viz の channel）につながっていないので送れない。' + RELAY_HOW_TEXT };
+  if (!sess.prompt) return { why: 'このセッションの jui-viz プラグインが古いので送れない（1.2.0 から送れる）。/plugin で jui-viz を更新して、セッションを起動し直す' };
+  return { why: '', name };
+}
+function composeBuild() {
+  const box = hNode('div', 'h-compose');
+  box.dataset.hCompose = '';
+  const why = hNode('p', 'h-compose-why'); why.dataset.hWhy = '';
+  const area = hNode('textarea', 'h-compose-text');
+  area.rows = 3;
+  area.dataset.hText = '';
+  area.dataset.fk = 'rb-prompt';
+  area.setAttribute('aria-label', 'このセッションへのプロンプト');
+  area.placeholder = 'このセッションへのプロンプト（Enter は改行。送信は ボタン か Ctrl/⌘+Enter）';
+  const row = hNode('div', 'h-compose-row');
+  const state = hNode('span', 'h-compose-state'); state.dataset.hState = ''; state.setAttribute('aria-live', 'polite');
+  const send = hNode('button', 'wb-btn h-compose-send', '送信…'); send.type = 'button'; send.dataset.hSend = ''; send.dataset.fk = 'rb-prompt-send';
+  row.append(state, send);
+  const confirm = hNode('div', 'h-confirm'); confirm.dataset.hConfirm = ''; confirm.hidden = true;
+  confirm.setAttribute('role', 'group'); confirm.setAttribute('aria-label', '送信の確認');
+  const to = hNode('p', 'h-confirm-to'); to.dataset.hTo = '';
+  const preview = hNode('p', 'h-confirm-text'); preview.dataset.hPreview = '';
+  const acts = hNode('div', 'h-confirm-acts');
+  const go = hNode('button', 'wb-btn h-confirm-go', 'このセッションへ送る'); go.type = 'button'; go.dataset.hGo = '';
+  const back = hNode('button', 'wb-btn', 'やめる'); back.type = 'button'; back.dataset.hBack = '';
+  acts.append(go, back);
+  confirm.append(to, preview, acts);
+  box.append(why, area, row, confirm);
+  area.addEventListener('input', () => composePaint());
+  area.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); composeAsk(); }
+  });
+  send.addEventListener('click', () => composeAsk());
+  back.addEventListener('click', () => composeClose(true));
+  go.addEventListener('click', () => { if (Date.now() - (box._askedAt || 0) > 350) composeSend(); });   // not the same key press that opened it
+  return box;
+}
+function composeEls() {
+  const b = HIST.compose;
+  const q = (k) => b.querySelector(`[data-${k}]`);
+  return { box: b, why: q('h-why'), area: q('h-text'), state: q('h-state'), send: q('h-send'), confirm: q('h-confirm'), to: q('h-to'), preview: q('h-preview'), go: q('h-go') };
+}
+/* After every histSync: the box under the history pane of the card shown, and its state. */
+function composePlace(pane, id) {
+  if (!HIST.compose) HIST.compose = composeBuild();
+  const { box } = composeEls();
+  if (HIST.compose._for !== id) {   // another robot: nothing typed for the last one goes to this one
+    HIST.compose._for = id;
+    composeEls().area.value = '';
+    composeClose(false);
+  }
+  if (pane && box.previousElementSibling !== pane) pane.after(box);
+  box.hidden = !pane || HIST.tab !== 'history';
+  // The card was rebuilt (50-panel.js, keyed) while the box had the focus, and the box is put back only now: refocus.
+  const lost = rbEl._lostFk;
+  rbEl._lostFk = undefined;
+  const again = lost !== undefined && !box.hidden ? box.querySelector('[data-fk="' + CSS.escape(lost) + '"]') : null;
+  if (again) again.focus({ preventScroll: true });
+  composePaint();
+}
+function composePaint() {
+  if (!HIST.compose) return;
+  const E = composeEls(), id = HIST.compose._for, t = composeTarget(id);
+  const asking = !E.confirm.hidden;
+  E.why.textContent = t.why;
+  E.why.hidden = !t.why;
+  E.area.disabled = !!t.why;
+  E.area.readOnly = asking;
+  const text = E.area.value, bytes = text.trim() ? composeBytes(id, text) : 0;
+  E.send.disabled = !!t.why || !text.trim() || bytes > PROMPT_MAX_BYTES || asking;
+  const sent = HIST.sent && HIST.sent.id === id ? HIST.sent : null;
+  E.state.textContent = bytes > PROMPT_MAX_BYTES ? `長すぎる（${bytes.toLocaleString('ja-JP')} / ${PROMPT_MAX_BYTES.toLocaleString('ja-JP')} バイト）`
+    : sent && sent.error ? `送れなかった（${sent.error}）`
+    : sent ? `送信済み ${HIST_TIME(sent.at)}（履歴に出るまで待っている）` : '';
+  E.state.classList.toggle('h-compose-err', bytes > PROMPT_MAX_BYTES || !!(sent && sent.error));
+  if (asking && t.why) composeClose(false);   // the session lost its relay while the confirmation was open
+}
+function composeAsk() {
+  const E = composeEls(), id = HIST.compose._for, t = composeTarget(id), text = E.area.value;
+  if (t.why || !text.trim() || composeBytes(id, text) > PROMPT_MAX_BYTES || !E.confirm.hidden) return;
+  E.to.textContent = `送り先: ${t.name}`;
+  E.preview.textContent = text.length > 400 ? `${text.slice(0, 400)}…` : text;
+  E.confirm.hidden = false;
+  E.box._askedAt = Date.now();
+  composePaint();
+  E.go.focus({ preventScroll: true });
+}
+function composeClose(focusBack) {
+  const E = composeEls();
+  E.confirm.hidden = true;
+  composePaint();
+  if (focusBack) E.area.focus({ preventScroll: true });
+}
+async function composeSend() {
+  const E = composeEls(), id = HIST.compose._for, text = E.area.value;
+  if (composeTarget(id).why || !text.trim()) return;
+  E.go.disabled = true;
+  const got = await SOURCE.sendPrompt(id, text);
+  E.go.disabled = false;
+  composeClose(!got.ok);
+  if (got.ok) { HIST.sent = { id, text, at: Date.now() }; E.area.value = ''; }
+  else HIST.sent = { id, text, at: Date.now(), error: got.error || `HTTP ${got.status}` };
+  composePaint();
+}
+/* The prompt sent shows in the history (as words of the requester, or folded as text the harness put in): 送信済み ends. */
+function composeArrived(items) {
+  const sent = HIST.sent;
+  if (!sent || sent.error || sent.id !== HIST.id || !Array.isArray(items)) return;
+  const want = composeNorm(sent.text).slice(0, 120);
+  const fresh = (x) => !(Number(x.at) < sent.at - 60000);   // an older item with the same words is not this one
+  if (items.some((x) => ['user', 'harness', 'peer'].includes(x.kind) && fresh(x) && composeNorm(x.text).includes(want))) { HIST.sent = null; composePaint(); }
+}

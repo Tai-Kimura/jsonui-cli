@@ -10,6 +10,7 @@ Routes (design: dev-guide, 05 §3):
   GET  /ws          browser WebSocket: hello → auth (within 2 s) → snapshot → pushes
   POST /hook        hook payloads from forward.py (token; no Origin; 2 MB)
   GET  /api/snapshot  the whole state (token)
+  POST /api/prompt    a prompt typed in the page for one session (prompt_checks: the page's own origin only)
 """
 from __future__ import annotations
 
@@ -31,6 +32,8 @@ from .state import VizState, now_ms
 
 MAX_HOOK_BODY = 2_000_000
 USAGE_MAX_BODY = 64_000
+#: POST /api/prompt: the whole request body, JSON included (the requester's ruling, 10-19: "例: 8 KB").
+PROMPT_MAX_BODY = 8_192
 AUTH_TIMEOUT_SEC = 2.0
 POLL_SEC = 25.0
 PRESENCE_MS = 12_000
@@ -373,7 +376,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         body = await _json_body(request)
         if body is None or ctx.world is None:
             return web.Response(status=400, text="bad request\n")
-        channel_id = ctx.world.channel_hello(body.get("ppid"), body.get("cwd"), body.get("sessionId"), now_ms())
+        channel_id = ctx.world.channel_hello(body.get("ppid"), body.get("cwd"), body.get("sessionId"), now_ms(), body.get("accepts"))
         if ctx.publish:
             ctx.publish()
         return web.json_response({"channelId": channel_id})
@@ -404,10 +407,45 @@ def make_app(ctx: ServerContext) -> web.Application:
             verdicts = ctx.world.perms.take_verdicts(channel_id, now_ms())
             if verdicts is None:
                 return web.Response(status=404, text="unknown channel\n")
-            if verdicts or asyncio.get_running_loop().time() >= deadline:
-                return web.json_response({"verdicts": verdicts})
+            prompts = [{"text": p["text"]} for p in ctx.world.perms.take_prompts(channel_id)]
+            if verdicts or prompts or asyncio.get_running_loop().time() >= deadline:
+                return web.json_response({"verdicts": verdicts, "prompts": prompts})
             await asyncio.sleep(0.1)
 
+    async def api_prompt(request: web.Request) -> web.Response:
+        """A prompt typed in the page's 応答の履歴 tab, for one session (requester's ruling, 10-19: "別端末からは送れなくて
+        いいよ"). Every check in prompt_checks must pass; then World.send_prompt queues it for that session's channel."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: /api/prompt（{refused.text.strip()}）")
+            return refused
+        raw = b""
+        while len(raw) <= PROMPT_MAX_BODY:   # a chunked body has no Content-Length: stop reading past the cap
+            chunk = await request.content.read(PROMPT_MAX_BODY + 1 - len(raw))
+            if not chunk:
+                break
+            raw += chunk
+        if len(raw) > PROMPT_MAX_BODY:
+            return web.Response(status=413, text="too large\n")
+        try:
+            body = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            return web.Response(status=400, text="not json\n")
+        sid = body.get("sessionId") if isinstance(body, dict) else None
+        text = body.get("text") if isinstance(body, dict) else None
+        if not isinstance(sid, str) or not sid or not isinstance(text, str) or not text.strip():
+            return web.Response(status=400, text="sessionId and text are required\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        refused_by = ctx.world.send_prompt(sid, text, now_ms())
+        if refused_by is not None:
+            return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
+        if ctx.publish:
+            ctx.publish()
+        return web.json_response({"ok": True})
+
+    # Before the static catch-all: every method reaches the handler, which answers 405 to all but POST.
+    app.router.add_route("*", "/api/prompt", api_prompt)
     app.router.add_post("/channel/hello", channel_hello)
     app.router.add_post("/channel/request", channel_request)
     app.router.add_get("/channel/poll", channel_poll)
@@ -438,6 +476,37 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.on_startup.append(start_push)
     app.on_shutdown.append(stop_push)
     return app
+
+
+def prompt_checks(request: web.Request, ctx: ServerContext) -> web.Response | None:
+    """The checks of POST /api/prompt, each on its own (the requester's ruling, 10-19; none may be dropped):
+
+      * POST only (405). The page has no other way to send, and a GET could be made by an <img> on any site.
+      * Host exactly ``127.0.0.1:<port>`` (403). The middleware already refuses foreign names (DNS rebinding) with
+        421; this route also refuses ``localhost:<port>``: ``jui viz open`` / ``start`` give the page as
+        http://127.0.0.1:<port>/, so that is the only origin the page has, and one spelling is one thing to check.
+      * Origin exactly ``http://127.0.0.1:<port>`` (403), and present: a browser sends it on every POST, so a
+        request without one is not the page (CSRF from another site carries that site's origin).
+      * X-Jui-Viz-Token, the per-start token from the served page (401).
+      * Content-Type application/json (415): another site's form can only post the three "simple" types without a
+        preflight, which this route never answers with CORS headers.
+      * a declared body over PROMPT_MAX_BODY (413); the read in the handler stops at PROMPT_MAX_BODY + 1 bytes too.
+    The server binds 127.0.0.1 only and has no option to bind anything else (viz_cmd._serve), so no other machine
+    reaches it. What it does not stop: another process of this user (security.py says why)."""
+    if request.method != "POST":
+        return web.Response(status=405, text="POST only\n", headers={"Allow": "POST"})
+    own = f"127.0.0.1:{ctx.port}"
+    if request.headers.get("Host") != own:
+        return web.Response(status=403, text="host must be the page's own\n")
+    if request.headers.get("Origin") != f"http://{own}":
+        return web.Response(status=403, text="origin must be the page's own\n")
+    if not security.token_ok(request.headers.get(security.TOKEN_HEADER), ctx.token):
+        return web.Response(status=401, text="unauthorized\n")
+    if request.content_type != "application/json":
+        return web.Response(status=415, text="application/json only\n")
+    if request.content_length is not None and request.content_length > PROMPT_MAX_BODY:
+        return web.Response(status=413, text="too large\n")
+    return None
 
 
 def _dispatch_hook(ctx: ServerContext, payload: dict) -> None:

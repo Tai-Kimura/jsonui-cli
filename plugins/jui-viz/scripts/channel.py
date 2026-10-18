@@ -1,5 +1,6 @@
 """The jui-viz MCP channel: relays Claude Code's permission prompts to the local
-jui viz server, and the browser's answers back. Design: 08 §2.
+jui viz server, and the browser's answers back; and delivers the prompts typed
+for this session in the page's 応答の履歴 tab. Design: 08 §2.
 
 Claude Code starts this per session (``claude mcp add --scope user jui-viz --
 <python> -I <this file>``; the session runs with
@@ -9,9 +10,19 @@ only, and it must not import jui_cli.
 Rules:
   * stdout carries JSON-RPC and nothing else, one message per line, under a
     lock. Logs go to stderr.
-  * It never sends ``notifications/claude/channel`` (that would put text in
-    Claude's context): only permission verdicts, and only for request_ids it
-    received and that are still open (forgotten after 10 minutes).
+  * Permission verdicts only for request_ids it received and that are still
+    open (forgotten after 10 minutes).
+  * ``notifications/claude/channel`` (text into the session's context) only
+    for a prompt the viz server handed to THIS channel on its poll, with the
+    text exactly as typed. Until 1.2.0 this channel never sent it, for that
+    very reason: text in the context. The requester changed that rule (10-19:
+    "プロンプトをロボットの会話の履歴から打てないと不便だから打てるようにしよう"),
+    on the condition that only the page itself can send ("別端末からは送れなくて
+    いいよ"): the server takes a prompt only from http://127.0.0.1:<port> with
+    the per-start token, JSON, a size cap and a confirmation in the page, and
+    queues it for one session's channel (server.prompt_checks). The hello says
+    ``accepts: ["prompt"]``; a channel without it (jui-viz 1.1.0 and older) is
+    never given a prompt.
   * The server is reached over http.client on 127.0.0.1 (no proxy variables
     apply); when it is not running, retry quietly every 5 s.
 """
@@ -26,13 +37,14 @@ import sys
 import threading
 import time
 
-VERSION = "1"
+VERSION = "2"   # 2: delivers prompts from the page (jui-viz 1.2.0)
 FORGET_SEC = 600
 RETRY_SEC = 5
 POLL_TIMEOUT_SEC = 35  # the server holds a poll up to 25 s
 INSTRUCTIONS = (
-    "This server only relays permission prompts to the local jui viz page and "
-    "returns the answers given there. It sends no messages."
+    "This server relays permission prompts to the local jui viz page and returns the answers given there. "
+    "It also delivers prompts the user typed for this session in that page (served on 127.0.0.1 only): "
+    'they arrive as <channel source="jui-viz"> messages and are the user\'s own words to this session.'
 )
 
 _out_lock = threading.Lock()
@@ -129,7 +141,7 @@ class Bridge:
         if self.server is None:
             return False
         ppid = os.getppid()
-        body = {"ppid": ppid, "cwd": os.getcwd(), "sessionId": session_id_of(ppid)}
+        body = {"ppid": ppid, "cwd": os.getcwd(), "sessionId": session_id_of(ppid), "version": VERSION, "accepts": ["prompt"]}
         try:
             status, data = self._call("POST", "/channel/hello", body)
         except OSError:
@@ -174,9 +186,17 @@ class Bridge:
                 self.stopping.wait(RETRY_SEC)
                 continue
             try:
-                verdicts = json.loads(data.decode("utf-8")).get("verdicts") or []
+                answer = json.loads(data.decode("utf-8"))
+                verdicts = answer.get("verdicts") or []
+                prompts = answer.get("prompts") or []
             except (ValueError, UnicodeDecodeError, AttributeError):
                 continue
+            for prompt in prompts if isinstance(prompts, list) else []:
+                text = prompt.get("text") if isinstance(prompt, dict) else None
+                if isinstance(text, str) and text.strip():
+                    send({"jsonrpc": "2.0", "method": "notifications/claude/channel",
+                          "params": {"content": text, "meta": {"sender": "jui_viz_page"}}})
+                    log("delivered a prompt from the page")
             for verdict in verdicts:
                 rid = verdict.get("request_id") if isinstance(verdict, dict) else None
                 behavior = verdict.get("behavior") if isinstance(verdict, dict) else None

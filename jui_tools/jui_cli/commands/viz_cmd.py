@@ -1441,6 +1441,9 @@ def _doctor_checks() -> list[dict]:
     if running is not None:
         port = (running[1] or {}).get("port")
         add("server", True, f"起動中（pid {running[0]}、{_url(port) if isinstance(port, int) else 'URL 不明'}）")
+        sessions = _server_sessions(port, (running[1] or {}).get("token")) if isinstance(port, int) else None
+        if sessions is not None:
+            add("prompt", True, _prompt_reach(sessions))
     else:
         from ..viz.config import load_config
 
@@ -1448,6 +1451,39 @@ def _doctor_checks() -> list[dict]:
         add("server", True, "停止中")
         add("port", _port_free(port), f"{port} は{'空いています' if _port_free(port) else '使用中です'}")
     return checks
+
+
+def _server_sessions(port: int, token) -> list | None:
+    """The running server's sessions slice (http.client: no proxy variable applies), or None."""
+    import http.client
+
+    if not isinstance(token, str) or not token:
+        return None
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    try:
+        conn.request("GET", "/api/snapshot", headers={"Host": f"127.0.0.1:{port}", "X-Jui-Viz-Token": token})
+        res = conn.getresponse()
+        data = json.loads(res.read().decode("utf-8")) if res.status == 200 else None
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    finally:
+        conn.close()
+    sessions = (data or {}).get("slices", {}).get("sessions") if isinstance(data, dict) else None
+    return sessions if isinstance(sessions, list) else None
+
+
+def _prompt_reach(sessions: list) -> str:
+    """Which sessions a prompt typed in the page can reach (the robot card's 応答の履歴 tab, jui-viz 1.2.0+)."""
+    live = [s for s in sessions if isinstance(s, dict) and s.get("status") != "ended"]
+    relay = [s for s in live if s.get("relay")]
+    able = [s for s in relay if s.get("prompt")]
+    old = [s for s in relay if not s.get("prompt")]
+    text = f"ページからのプロンプト送信: 送れるセッション {len(able)}（中継あり {len(relay)} / 全 {len(live)}）"
+    if old:
+        names = ", ".join(str(s.get("label") or s.get("id")) for s in old)
+        text += (f"。jui-viz プラグインが 1.2.0 より古いセッション {len(old)}（{names}）には送れません"
+                 "（/plugin で jui-viz を更新し、そのセッションを起動し直す）")
+    return text
 
 
 def _port_free(port: int) -> bool:

@@ -128,13 +128,21 @@ def _keys(tool: str, tool_input: dict) -> list[str]:
     return out
 
 
+#: Prompts waiting for one channel's next poll; more is refused (the page sends one at a time, after a confirmation).
+PROMPTS_QUEUED_MAX = 5
+
+
 class Channel:
-    def __init__(self, channel_id: str, session_id: str | None, at: int) -> None:
+    def __init__(self, channel_id: str, session_id: str | None, at: int, prompts: bool = False) -> None:
         self.id = channel_id
         self.session_id = session_id
         self.last_seen = at
         self.open: dict[str, int] = {}       # request_id -> received at
         self.verdicts: list[dict] = []       # queued for the next poll
+        # Does this channel.py deliver prompts typed in the page (jui-viz 1.2.0+, its hello says so)? An older one
+        # ignores them, so none is ever queued for it.
+        self.prompts = prompts
+        self.inbox: list[dict] = []          # prompts queued for the next poll (the text lives only here)
 
 
 class PermissionBook:
@@ -149,6 +157,15 @@ class PermissionBook:
 
     def relay_sessions(self) -> set[str]:
         return {c.session_id for c in self.channels.values() if c.session_id}
+
+    def prompt_sessions(self) -> set[str]:
+        """Sessions whose channel can deliver a prompt typed in the page."""
+        return {c.session_id for c in self.channels.values() if c.session_id and c.prompts}
+
+    def prompt_channel(self, session_id: str) -> Channel | None:
+        """The one channel a prompt for this session goes to: the most recently seen that can deliver it."""
+        able = [c for c in self.channels.values() if c.session_id == session_id and c.prompts]
+        return max(able, key=lambda c: c.last_seen) if able else None
 
     def _new_id(self) -> str:
         return f"p{next(self._seq)}"
@@ -250,8 +267,8 @@ class PermissionBook:
 
     # ---------------------------------------------------------------- channel side
 
-    def hello(self, session_id: str | None, at: int) -> Channel:
-        channel = Channel(secrets.token_urlsafe(12), session_id, at)
+    def hello(self, session_id: str | None, at: int, prompts: bool = False) -> Channel:
+        channel = Channel(secrets.token_urlsafe(12), session_id, at, prompts)
         self.channels[channel.id] = channel
         return channel
 
@@ -378,6 +395,14 @@ class PermissionBook:
         card["sentBy"] = "relay"
         self.decisions.append({"permId": perm_id, "behavior": behavior, "at": at, "sessionId": card["sessionId"]})
         return None
+
+    def take_prompts(self, channel_id: str) -> list[dict]:
+        """The prompts queued for this channel, handed over once (the server keeps no copy)."""
+        channel = self.channels.get(channel_id)
+        if channel is None:
+            return []
+        out, channel.inbox = channel.inbox, []
+        return out
 
     def take_verdicts(self, channel_id: str, at: int) -> list[dict] | None:
         channel = self.channels.get(channel_id)

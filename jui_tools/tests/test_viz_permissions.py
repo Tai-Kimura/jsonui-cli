@@ -293,13 +293,18 @@ def test_channel_routes_refuse_without_token_or_with_an_origin(tmp_path):
     asyncio.run(main())
 
 
-def test_the_channel_never_writes_into_claudes_context():
-    """Only permission verdicts go out; notifications/claude/channel (a message
-    into Claude's context) has no sender in channel.py."""
+def test_the_channel_writes_into_the_context_only_a_prompt_the_server_handed_it():
+    """Until 1.2.0 the channel never sent notifications/claude/channel (text into the session's context). The
+    requester changed that (10-19, the page's prompt box): it is sent now, but from one place only — the loop over
+    the prompts the server's poll returned for this channel (the delivery arm in test_viz_send_prompt.py runs it)."""
     import re
 
-    methods = set(re.findall(r'"method":\s*"([^"]+)"', CHANNEL.read_text()))
-    assert methods == {"notifications/claude/channel/permission"}, methods
+    source = CHANNEL.read_text()
+    methods = set(re.findall(r'"method":\s*"([^"]+)"', source))
+    assert methods == {"notifications/claude/channel/permission", "notifications/claude/channel"}, methods
+    (at,) = [m.start() for m in re.finditer(r'"method":\s*"notifications/claude/channel"', source)]
+    loop = source.rfind("for prompt in prompts", 0, at)
+    assert loop != -1 and source.count("\n", loop, at) <= 4, "the channel message is sent outside the loop over the poll's prompts"
 
 
 def test_the_channel_answers_only_request_ids_it_received():

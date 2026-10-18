@@ -16,7 +16,7 @@ from . import robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .calls import CallBook, peer_name
-from .permissions import PermissionBook
+from .permissions import PROMPTS_QUEUED_MAX, PermissionBook
 from .questions import QuestionBook
 from .sources import devices as devices_mod
 from .sources import processes
@@ -34,6 +34,8 @@ KNOWN_EVENTS = frozenset({
 TOOL_EVENTS = frozenset({"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied"})
 
 PROMPT_MAX = 200
+#: How much of a prompt sent from the page goes into the event log (the rest is never stored).
+PROMPT_HEAD = 40
 MESSAGE_MAX = 300
 SUBAGENT_LINGER_MS = 5_000
 DONE_TO_IDLE_MS = 3_000
@@ -189,7 +191,7 @@ class World:
             project = self.rooms.project_for(cwd or "?")
             session = {
                 "id": sid, "label": self._label(sid), "projectId": project["id"],
-                "cwd": tilde(cwd) if cwd else "?", "status": "idle", "relay": False,
+                "cwd": tilde(cwd) if cwd else "?", "status": "idle", "relay": False, "prompt": False,
                 "startedAt": at, "updatedAt": at, "roomSince": at,
             }
             self.sessions[sid] = session
@@ -745,7 +747,7 @@ class World:
 
     # ---------------------------------------------------------------- relay channel (08 §2)
 
-    def channel_hello(self, ppid, cwd, session_id, at: int) -> str:
+    def channel_hello(self, ppid, cwd, session_id, at: int, accepts=None) -> str:
         """Register a channel; find its session by id, by the parent pid, or by a unique cwd."""
         sid = session_id if isinstance(session_id, str) and session_id in self.sessions else None
         if sid is None and isinstance(ppid, int):
@@ -754,9 +756,31 @@ class World:
             relay = self.perms.relay_sessions()
             same = [s for s, v in self.sessions.items() if v["cwd"] == tilde(cwd) and v["status"] != "ended" and s not in relay]
             sid = same[0] if len(same) == 1 else None
-        channel = self.perms.hello(sid, at)
+        prompts = isinstance(accepts, list) and "prompt" in accepts   # jui-viz 1.2.0+ (channel.py VERSION 2)
+        channel = self.perms.hello(sid, at, prompts)
         self._dirty.add("sessions")
         return channel.id
+
+    def send_prompt(self, sid: str, text: str, at: int) -> tuple[int, str] | None:
+        """A prompt typed in the page for this session (POST /api/prompt, after its checks): queued for that session's
+        channel only, and the event log gets when, to whom and the first PROMPT_HEAD characters — never the whole
+        text, which lives only in the channel's queue until its next poll. Returns None, or (HTTP status, why)."""
+        session = self.sessions.get(sid)
+        if session is None or session["status"] == "ended":
+            return 404, "no such session"
+        if sid not in self.perms.relay_sessions():
+            return 409, "this session has no relay (relay: false)"
+        channel = self.perms.prompt_channel(sid)
+        if channel is None:
+            return 409, "this session's jui-viz plugin is older than 1.2.0 and cannot receive prompts"
+        if len(channel.inbox) >= PROMPTS_QUEUED_MAX:
+            return 429, "earlier prompts have not been taken yet"
+        channel.inbox.append({"text": text, "at": at})
+        head = " ".join(text.split())
+        head = head if len(head) <= PROMPT_HEAD else head[: PROMPT_HEAD - 1] + "…"
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "PromptSent", "cat": "perm",
+                              "text": f"ブラウザからプロンプトを送信 → {session['label']}「{head}」"})
+        return None
 
     def channel_request(self, channel_id: str, request: dict, at: int) -> bool:
         ok = self.perms.channel_request(channel_id, request, at)
@@ -1185,10 +1209,11 @@ class World:
             used = {s["projectId"] for s in self.sessions.values()}
             projects = [p for p in self.rooms.projects.values() if p["id"] in used]
             self.state.set_slice("projects", sorted(projects, key=lambda p: p["order"]))
-        relay = self.perms.relay_sessions()
+        relay, prompt = self.perms.relay_sessions(), self.perms.prompt_sessions()
         for sid, session in self.sessions.items():
-            if session["relay"] != (sid in relay):
+            if session["relay"] != (sid in relay) or session.get("prompt") != (sid in prompt):
                 session["relay"] = sid in relay
+                session["prompt"] = sid in prompt   # relay true and prompt false: a jui-viz plugin older than 1.2.0
                 self._dirty.add("sessions")
         if "perms" in self._dirty:
             self.state.set_slice("perms", self.perms.items())

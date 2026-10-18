@@ -68,6 +68,18 @@ const SOURCE = {
       : `送れなかった（${ack.error || '不明'}）`));
   },
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
+  /* A prompt typed in the 応答の履歴 tab, for this robot's session (POST /api/prompt; server.prompt_checks says what it
+     must carry: the page's own Host and Origin, which the browser sets, the token, JSON). Resolves { ok, status, error }. */
+  async sendPrompt(label, text) {
+    try {
+      const res = await fetch('/api/prompt', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ sessionId: SESSION_UUID[label] || '', text }),
+      });
+      return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
+    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
   /* The near weather's switch (10-18): { on, lat, lon } with the position already rounded (40-scene.js). */
@@ -721,6 +733,7 @@ function rebuildSessions() {
       .sort((a, b) => (a.kind === 'main' ? -1 : 0) - (b.kind === 'main' ? -1 : 0) || a.id.localeCompare(b.id)).map((d) => d.id);
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
+      relay: s.relay === true, prompt: s.prompt === true,   // prompt: its channel takes a prompt from the page (jui-viz 1.2.0+)
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
       heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [],   // tokens / tool / subagents
       heavyInfo: s.heavyInfo && typeof s.heavyInfo === 'object' ? { tokensPerMin: Number(s.heavyInfo.tokensPerMin) || 0, toolSec: Number(s.heavyInfo.toolSec) || 0, subagents: Number(s.heavyInfo.subagents) || 0 } : null });   // the transcript's first record; none: not guessed
