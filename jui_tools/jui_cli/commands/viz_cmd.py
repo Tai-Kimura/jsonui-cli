@@ -2,6 +2,7 @@
 
 Subcommands:
     jui viz serve    Start the server in the foreground (127.0.0.1 only)
+    jui viz start    Start it in the background, wait until it answers, print the URL
     jui viz status   Whether a server is running, and its URL
     jui viz stop     SIGTERM the pid this tool wrote to its own pid file
     jui viz open     Open the running server's page in the browser
@@ -10,7 +11,8 @@ Subcommands:
     jui viz relay    (P5) the permission relay
 
 Exit codes: 0 success, 1 usage error or a missing precondition, 2 internal error.
-Runtime files live in ~/.jsonui-cli/viz/ (``viz.pid``, ``server.json`` 0600).
+Runtime files live in ~/.jsonui-cli/viz/ (``viz.pid``, ``server.json`` 0600,
+``serve.log`` 0600 for a server ``start`` launched).
 """
 from __future__ import annotations
 
@@ -47,8 +49,14 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     serve.add_argument("--no-agents-poll", dest="no_agents_poll", action="store_true",
                        help="Do not run `claude agents --json`")
 
+    start = sub.add_parser("start", help="Start the viz server in the background and print its URL")
+    start.add_argument("--port", type=int, help="Port on 127.0.0.1 (default 7788)")
+    start.add_argument("--json", action="store_true", help="Machine-readable output")
+
     status = sub.add_parser("status", help="Print whether a viz server is running")
     status.add_argument("--json", action="store_true", help="Machine-readable output")
+    status.add_argument("--with-relay", dest="with_relay", action="store_true",
+                        help="Also ask claude whether the permission relay is registered (runs claude mcp get; slower)")
 
     sub.add_parser("stop", help="Stop the running viz server")
     sub.add_parser("open", help="Open the running server's page in the browser")
@@ -72,6 +80,7 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
 def cmd_viz(args: argparse.Namespace) -> int:
     handlers = {
         "serve": _cmd_serve,
+        "start": _cmd_start,
         "status": _cmd_status,
         "stop": _cmd_stop,
         "open": _cmd_open,
@@ -82,7 +91,7 @@ def cmd_viz(args: argparse.Namespace) -> int:
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("使い方: jui viz {serve,status,stop,open,doctor,hooks,relay,export-demo}")
+        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,relay,export-demo}")
         return 1
     try:
         return handler(args)
@@ -753,8 +762,11 @@ def _cmd_status(args: argparse.Namespace) -> int:
         _, pid, data = found
         port = (data or {}).get("port")
         info = {"running": True, "pid": pid, "url": _url(port) if isinstance(port, int) else None}
+    info["hooks"] = _hooks_summary()
+    if getattr(args, "with_relay", False):
+        info["relay"] = _relay_summary()
     if getattr(args, "json", False):
-        print(json.dumps(info))
+        print(json.dumps(info, ensure_ascii=False))
     elif info.get("unresponsive"):
         print(f"jui viz: 起動中ですが /health に応答しません（pid {info['pid']}）")
     elif info.get("starting"):
@@ -764,6 +776,144 @@ def _cmd_status(args: argparse.Namespace) -> int:
     else:
         print("jui viz: 停止中")
     return 0
+
+
+def _hooks_summary() -> dict:
+    """What `status` says about the hooks: read from settings.json, no process started."""
+    from ..viz import hooks_installer
+
+    state = hooks_installer.status()
+    if not state.get("readable"):
+        return {"readable": False, "error": state.get("error")}
+    return {
+        "readable": True,
+        "installed": state.get("installed", 0),
+        "total": len(hooks_installer.EVENTS),
+        "broken": len(state.get("broken") or []),
+        "plugin": state.get("plugin"),
+        "disableAllHooks": bool(state.get("disableAllHooks")),
+    }
+
+
+def _relay_summary() -> dict:
+    """Whether the permission relay is registered: asks `claude mcp get`, so only with --with-relay."""
+    claude = shutil.which("claude")
+    if claude is None:
+        return {"registered": None, "reason": "claude が PATH にありません"}
+    registered = _relay_registered(claude)
+    return {"registered": registered} if registered is not None else {"registered": None, "reason": "claude mcp get が答えませんでした"}
+
+
+# ---------------------------------------------------------------- start
+
+#: How long `start` waits for the server it launched to answer /health with its own pid.
+START_WAIT_SEC = 15.0
+
+
+def serve_log() -> Path:
+    return paths.viz_home() / "serve.log"
+
+
+def _serve_child_argv(port: int) -> list[str]:
+    """This same jui_cli running `viz serve` — not whatever `jui` is first on PATH."""
+    root = str(Path(__file__).resolve().parents[2])
+    boot = f"import sys; sys.path.insert(0, {root!r}); from jui_cli.cli import main; sys.exit(main(sys.argv[1:]))"
+    return [sys.executable, "-c", boot, "viz", "serve", "--port", str(port)]
+
+
+def _log_tail(lines: int = 8) -> str:
+    try:
+        text = serve_log().read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return "\n".join(text.strip().splitlines()[-lines:])
+
+
+def _start_report(args, info: dict, code: int) -> int:
+    if getattr(args, "json", False):
+        print(json.dumps(info, ensure_ascii=False))
+    elif code == 0:
+        verb = "起動済みです" if info.get("alreadyRunning") else "起動しました"
+        print(f"jui viz: {verb}（pid {info['pid']}） {info['url']}")
+        if not info.get("alreadyRunning"):
+            print(f"  ログ: {info['log']}（止めるときは jui viz stop）")
+    else:
+        _err(info.get("error", "起動できませんでした"))
+        if info.get("logTail"):
+            print(info["logTail"], file=sys.stderr)
+    return code
+
+
+def _cmd_start(args: argparse.Namespace) -> int:
+    """`serve` detached: launch it in its own session, wait until it answers /health with its own pid, print
+    the URL and return. A server already running is reported, not started again (two `start`s at once: one
+    serve takes the pid lock, the other start reports that one). On failure, only the child this call launched
+    is signalled."""
+    from ..viz.config import load_config
+
+    config = load_config()
+    port = int(args.port) if getattr(args, "port", None) else config.port
+    if not 1 <= port <= 65535:
+        return _start_report(args, {"running": False, "error": f"ポート {port} は使えません（1〜65535）"}, 1)
+
+    def already(found) -> int:
+        _, pid, data = found
+        p = (data or {}).get("port")
+        return _start_report(args, {"running": True, "alreadyRunning": True, "pid": pid,
+                                    "url": _url(p) if isinstance(p, int) else None}, 0)
+
+    deadline = time.monotonic() + START_WAIT_SEC
+    found = _identify()
+    while found is not None and found[0] == "starting" and time.monotonic() < deadline:
+        time.sleep(0.2)          # another start/serve is coming up: report it once it answers
+        found = _identify()
+    if found is not None:
+        if found[0] == "running":
+            return already(found)
+        return _start_report(args, {"running": False, "pid": found[1], "error":
+                                    f"pid {found[1]} が起動中ですが /health に応答しません（jui viz status で確かめてください）"}, 1)
+
+    log = serve_log()
+    log.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        child = subprocess.Popen(_serve_child_argv(port), stdin=subprocess.DEVNULL, stdout=fd, stderr=fd,
+                                 start_new_session=True, close_fds=True)
+    finally:
+        os.close(fd)
+
+    while time.monotonic() < deadline:
+        found = _identify()
+        if found is not None and found[0] == "running":
+            if found[1] == child.pid:
+                data = found[2] or {}
+                return _start_report(args, {"running": True, "alreadyRunning": False, "pid": child.pid,
+                                            "url": _url(data.get("port")), "log": str(log)}, 0)
+            return already(found)   # another start won the lock; ours exits on its own
+        if child.poll() is not None:
+            found = _identify()
+            if found is not None and found[0] == "running":
+                return already(found)
+            if found is not None and found[0] == "starting" and found[1] != child.pid:
+                time.sleep(0.1)      # ours lost the pid lock to a serve still binding: report that one once it answers
+                continue
+            return _start_report(args, {"running": False, "error": f"jui viz serve が終了しました（終了コード {child.returncode}）",
+                                        "log": str(log), "logTail": _log_tail()}, 1)
+        time.sleep(0.1)
+
+    # Not up in time: stop the child this call launched, and nothing else. terminate() does nothing once the
+    # child has been reaped, so a pid reused after it exited is never signalled.
+    if child.poll() is not None:
+        return _start_report(args, {"running": False, "error": f"{int(START_WAIT_SEC)} 秒で /health に応答するサーバーがありませんでした",
+                                    "log": str(log), "logTail": _log_tail()}, 1)
+    try:
+        child.terminate()
+        child.wait(5)
+    except subprocess.TimeoutExpired:
+        pass
+    return _start_report(args, {"running": False, "error": f"{int(START_WAIT_SEC)} 秒で /health に応答しませんでした。起動した pid {child.pid} を止めました",
+                                "log": str(log), "logTail": _log_tail()}, 1)
 
 
 def _cmd_stop(args: argparse.Namespace) -> int:

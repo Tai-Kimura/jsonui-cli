@@ -62,6 +62,8 @@ NOT_A_TOOL = {
         "the Claude Code CLI, located by shutil.which('claude') — is the jui-viz relay registered",
     ("jui_tools/jui_cli/commands/viz_cmd.py", "_cmd_relay", "argv"):
         "claude mcp add / remove built by _relay_argv from shutil.which('claude'), shown and confirmed first",
+    ("jui_tools/jui_cli/commands/viz_cmd.py", "_cmd_start", "_serve_child_argv(port)"):
+        "jui viz serve itself: sys.executable -c importing this jui_cli, built by _serve_child_argv",
     ("jui_tools/jui_cli/viz/sources/devices.py", "_run", "*argv"):
         "xcrun simctl list / adb devices -l, built in devices.run from shutil.which and find_adb",
     ("jui_tools/jui_cli/viz/sources/test_progress.py", "follow", "*argv"):
