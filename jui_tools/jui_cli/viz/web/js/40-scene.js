@@ -532,7 +532,9 @@ function build3D() {
   });
   canvas.addEventListener('pointermove', (ev) => {
     if (ev.buttons || (zoom.zoomed && !rbState.id)) return;
-    canvas.style.cursor = hitAt(ev) ? 'pointer' : '';
+    const h = hitAt(ev);
+    canvas.style.cursor = h ? 'pointer' : '';
+    canvas.title = h && h.kind === 'floor' ? h.title : '';
   });
 
   if (SOURCE.mode === 'live') {
@@ -676,6 +678,7 @@ function liveSync() {
   if (sig !== LIVE3D.roomsSig) {
     LIVE3D.roomsSig = sig;
     if (LIVE3D.floorMove) LIVE3D.floorMove = false;   // the floor change flies the camera itself
+    else if (TOWER.on) { /* looking at the building: a regrouped floor does not move the camera */ }
     else if (!zoom.zoomed && (UI.project === 'all' || !PROJECT[UI.project] || !PROJECT[UI.project].shown)) focusProject('all', LIVE3D.rev <= 1);
     else if (!zoom.zoomed) focusProject(UI.project, false);
   }
@@ -748,7 +751,7 @@ function liveHit(ray) {
     ray.layers.set(TOWER.LAYER);
     const h = ray.intersectObjects(TOWER.floors.map((F) => F.box), false)[0];
     ray.layers.set(0);
-    return h ? { kind: 'floor', k: h.object.userData.floor } : null;
+    return h ? { kind: 'floor', k: h.object.userData.floor, title: towerHover(h) } : null;
   }
   const targets = [...Object.values(LIVE3D.rooms).flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.map((R) => R.robot.root)];
   const hit = ray.intersectObjects(targets, true)[0];
@@ -862,66 +865,264 @@ function liveRoomPose(id) {
    on its own layer, with the floor number, a window per room (lit: a robot works; yellow: one waits for permission),
    the counts and the room names on its front. Pressing a floor goes down to it. Changing floors moves the camera
    up or down into the new floor. */
-const TOWER = { on: false, group: null, floors: [], sig: '', W: 15, D: 9, H: 3, GAP: 0.4, LAYER: 1 };
-const towerY = (k) => k * (TOWER.H + TOWER.GAP) + TOWER.H / 2;
+const TOWER = { on: false, group: null, floors: [], sig: '', theme: null, W: 16, D: 9, H: 3, SLAB: 0.28, LOBBY: 1.1, LAYER: 1, pulse: 1,
+  lights: null, actors: null, bayColor: [] };
+const towerBase = (k) => TOWER.LOBBY + k * (TOWER.H + TOWER.SLAB);          // the slab under floor k
+const towerY = (k) => towerBase(k) + TOWER.SLAB + TOWER.H / 2;              // the middle of floor k
+// The page's colours (the side panel's state badges: 作業中 = --ok, 許可待ち = --warn, 待機 = --chip), per theme.
+function towerPalette() {
+  const dark = isDark(), t = (name, light, darkV) => readToken(name, dark ? darkV : light);
+  return {
+    dark, ink: t('--ink', '#13233a', '#e4ecf8'), soft: t('--ink-soft', '#4b5c76', '#9fb1cb'), panel: t('--panel', '#fbfcfe', '#111f34'),
+    line: t('--line', '#cfd9e7', '#24395a'), chip: t('--chip', '#e3eaf4', '#182c47'), ok: t('--ok', '#1d8f4e', '#5ad893'),
+    okBg: t('--ok-bg', '#dcf3e5', '#123a2a'), warn: t('--warn', '#9a6200', '#ffc65c'), warnBg: t('--warn-bg', '#fff0d1', '#3a2b0c'),
+    frame: dark ? '#4a5f80' : '#5d6f88', concrete: dark ? '#2a3546' : '#dfe5ee', glass: dark ? '#1b3150' : '#9fbbd9',
+    // the light in a window: on (warm), off (a dark room), none (no room at all)
+    on: '#ffd585', off: dark ? '#152238' : '#33445e', none: '#05070b',
+  };
+}
 function towerFloorText(k) {
   const ids = LIVE.floors[k] || [];
-  let working = 0, waiting = 0;
+  let working = 0, waiting = 0, idle = 0;
   for (const d of ROBOT_DEFS) {
     if (!ids.includes(d.room) || LIVE.leaving[d.id]) continue;
     const st = (robotState[d.id] || {}).state;
-    if (st === 'waiting') waiting += 1; else if (st && st !== 'idle' && st !== 'done') working += 1;
+    if (st === 'waiting') waiting += 1; else if (st && st !== 'idle' && st !== 'done') working += 1; else idle += 1;
   }
   waiting = Math.max(waiting, PERMS_LIVE.filter((p) => p.status === 'pending' && DEF[p.who] && ids.includes(DEF[p.who].room)).length);
-  return { ids, working, waiting };
+  return { ids, working, waiting, idle };
 }
-function towerDraw(F, k) {
-  const { ids, working, waiting } = towerFloorText(k);
-  const dark = isDark(), ctx = F.canvas.getContext('2d'), W = F.canvas.width, H = F.canvas.height;
-  ctx.fillStyle = dark ? '#2b3240' : '#e4e9f1'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = dark ? '#f2f4f8' : '#1d2433'; ctx.font = `64px ${FONT_DISPLAY}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  ctx.fillText(`${k + 1}F`, 28, H / 2);
-  const x0 = 190, ww = (W - x0 - 24) / ROOM_MAX;
-  for (let i = 0; i < ROOM_MAX; i++) {
-    const id = ids[i], rank = id ? LIVE.rank[id] : 4;
-    ctx.fillStyle = rank === 0 ? '#f2c230' : rank === 1 ? '#ffe7a8' : rank === 2 ? (dark ? '#5b6577' : '#c7d0de') : (dark ? '#3a4252' : '#9aa5b6');
-    ctx.fillRect(x0 + i * ww + 8, 26, ww - 16, 104);
-    if (rank === 0) { ctx.fillStyle = '#5a4300'; ctx.font = `700 54px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('!', x0 + i * ww + ww / 2, 80); ctx.textAlign = 'left'; }
-    if (id) { ctx.fillStyle = dark ? '#dfe4ec' : '#2a3242'; ctx.font = `700 24px ${FONT_BODY}`; fitText(ctx, PROJECT[id] ? PROJECT[id].name : id, x0 + i * ww + 8, 158, ww - 16); }
+const TOWER_STATE = ['waiting', 'working', 'idle', 'idle'];   // rank 0..3 → what a window shows
+const towerState = (id) => (id ? TOWER_STATE[LIVE.rank[id]] || 'idle' : 'empty');
+const towerName = (id) => String((PROJECT[id] && PROJECT[id].name) || id || '').replace(/\/+$/, '');
+/* A name in up to two lines that fit maxW; only a name longer than two lines gets '…'. */
+function towerLines(ctx, text, maxW) {
+  const out = [];
+  let line = '';
+  for (const ch of [...text]) {
+    if (ctx.measureText(line + ch).width > maxW && line) { out.push(line); line = ch; if (out.length === 2) break; }
+    else line += ch;
   }
-  ctx.fillStyle = dark ? '#dfe4ec' : '#2a3242'; ctx.font = `700 28px ${FONT_BODY}`;
-  fitText(ctx, `作業中 ${working} · 許可待ち ${waiting}`, 28, H - 30, x0 - 40 + ww * 2);
+  if (out.length < 2) out.push(line);
+  else if (line) { let last = out[1]; while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1); out[1] = last + '…'; }
+  return out.filter(Boolean);
+}
+/* A floor's front, 2048 × 384: the floor number | six bays (a badge band, the window — cut out, the light and the
+   robots behind it show through — and the name band) | the counts. Nothing shares a band, so nothing overlaps. */
+const FACADE = { W: 2048, H: 384, NUM: 210, STATS: 330, WIN_TOP: 22, BADGE: 52, WIN_BOTTOM: 246, NAME_TOP: 262 };
+function towerBays() {
+  const bw = (FACADE.W - FACADE.NUM - FACADE.STATS) / ROOM_MAX;
+  return Array.from({ length: ROOM_MAX }, (_, i) => ({ x: FACADE.NUM + i * bw + 10, w: bw - 20 }));
+}
+function towerFacade(F, k, P) {
+  const { ids, working, waiting, idle } = towerFloorText(k);
+  const ctx = F.canvas.getContext('2d'), { W, H, NUM, STATS, WIN_TOP, BADGE, WIN_BOTTOM, NAME_TOP } = FACADE;
+  ctx.textBaseline = 'alphabetic';
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = P.panel; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = P.ink; ctx.beginPath(); ctx.roundRect(28, 120, NUM - 56, 140, 24); ctx.fill();
+  ctx.fillStyle = P.panel; ctx.font = `78px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.fillText(`${k + 1}F`, NUM / 2, 220);
+  F.bays = [];
+  towerBays().forEach(({ x, w }, i) => {
+    const id = ids[i], state = towerState(id), gy = WIN_TOP + BADGE;
+    // the badge band: the state in words and a symbol (not only a colour)
+    ctx.fillStyle = P.frame; ctx.fillRect(x, WIN_TOP, w, BADGE);
+    const badge = { working: ['▶ 作業中', P.ok, P.okBg], waiting: ['! 許可待ち', P.warn, P.warnBg], idle: ['● 待機（消灯）', P.soft, P.chip], empty: ['空き', P.soft, P.panel] }[state];
+    ctx.font = `700 26px ${FONT_BODY}`;
+    const bwid = ctx.measureText(badge[0]).width + 26;
+    ctx.fillStyle = badge[2]; ctx.beginPath(); ctx.roundRect(x + 10, WIN_TOP + 8, bwid, 36, 18); ctx.fill();
+    if (state === 'empty') { ctx.setLineDash([8, 6]); ctx.strokeStyle = P.soft; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }
+    ctx.fillStyle = badge[1]; ctx.textAlign = 'left'; ctx.fillText(badge[0], x + 23, WIN_TOP + 35);
+    // the window: cut out of the front
+    ctx.clearRect(x, gy, w, WIN_BOTTOM - gy);
+    ctx.strokeStyle = P.frame; ctx.lineWidth = 6; ctx.strokeRect(x, WIN_TOP, w, WIN_BOTTOM - WIN_TOP);
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x + w / 2, gy); ctx.lineTo(x + w / 2, gy + 30); ctx.stroke();
+    if (state === 'empty') {                         // no room: a dashed frame across the dark glass
+      ctx.setLineDash([14, 10]); ctx.strokeStyle = P.soft; ctx.lineWidth = 4; ctx.strokeRect(x + 10, gy + 10, w - 20, WIN_BOTTOM - gy - 20); ctx.setLineDash([]);
+    }
+    if (state === 'waiting') { ctx.strokeStyle = P.warn; ctx.lineWidth = 12; ctx.globalAlpha = 0.5 + 0.5 * TOWER.pulse; ctx.strokeRect(x + 6, WIN_TOP + 6, w - 12, WIN_BOTTOM - WIN_TOP - 12); ctx.globalAlpha = 1; }
+    // the name band
+    ctx.fillStyle = id ? P.ink : P.soft; ctx.font = `700 30px ${FONT_BODY}`; ctx.textAlign = 'center';
+    (id ? towerLines(ctx, towerName(id), w - 8) : ['—']).forEach((ln, j) => ctx.fillText(ln, x + w / 2, NAME_TOP + 34 + j * 40));
+    F.bays.push({ x0: x / W, x1: (x + w) / W, gy0: gy / H, gy1: WIN_BOTTOM / H, id, state });
+  });
+  const sx = W - STATS + 18;
+  ctx.fillStyle = P.chip; ctx.beginPath(); ctx.roundRect(sx - 8, 22, STATS - 36, H - 44, 20); ctx.fill();
+  const row = (y, icon, label, n, fg, bg) => {
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(sx + 34, y - 12, 24, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = fg; ctx.font = `700 30px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText(icon, sx + 34, y - 1);
+    ctx.textAlign = 'left'; ctx.fillStyle = P.ink; ctx.fillText(label, sx + 70, y);
+    ctx.font = `700 40px ${FONT_MONO}`; ctx.textAlign = 'right'; ctx.fillText(String(n), W - 48, y + 2);
+  };
+  row(110, '▶', '作業中', working, P.ok, P.okBg);
+  row(206, '!', '許可待ち', waiting, P.warn, P.warnBg);
+  row(302, '●', '待機', idle, P.soft, P.panel);
   F.tex.needsUpdate = true;
 }
-function towerBuild() {
-  const n = LIVE.floors.length;
-  if (TOWER.group && TOWER.floors.length === n) return;
-  if (TOWER.group) { scene.remove(TOWER.group); disposeTree(TOWER.group); }
-  TOWER.group = new THREE.Group(); TOWER.floors = []; TOWER.sig = '';
-  const side = new THREE.MeshBasicMaterial({ color: isDark() ? 0x3a4252 : 0xcfd6e2 });
-  const top = new THREE.MeshBasicMaterial({ color: isDark() ? 0x485164 : 0xdfe4ec });
-  for (let k = 0; k < n; k++) {
-    const canvas = makeCanvas(1280, 210), tex = texFrom(canvas);
-    const front = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(TOWER.W, TOWER.H, TOWER.D), [side, side, top, side, front, side]);
-    box.position.set(0, towerY(k), 0); box.userData.floor = k; box.layers.set(TOWER.LAYER);
-    TOWER.group.add(box);
-    TOWER.floors.push({ box, canvas, tex });
+/* The office robots seen through the windows: one sprite per pose (a desk, a walk in two steps, pointing at a
+   board, a raised hand, a shadow in a dark room). How many and where is a picture of an office, not a count. */
+function towerSprite(pose, P) {
+  const c = makeCanvas(160, 200), ctx = c.getContext('2d');
+  const ink = pose === 'shadow' ? (P.dark ? 'rgba(140, 160, 192, 0.55)' : 'rgba(170, 186, 210, 0.6)') : '#2b2f3a';
+  const band = pose === 'shadow' ? ink : '#d62839';
+  const head = (x, y) => { ctx.fillStyle = ink; ctx.beginPath(); ctx.roundRect(x - 26, y - 22, 52, 44, 12); ctx.fill(); ctx.fillRect(x - 2, y - 38, 4, 16); ctx.beginPath(); ctx.arc(x, y - 40, 6, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = band; ctx.fillRect(x - 26, y - 10, 52, 7); };
+  const limb = (x1, y1, x2, y2, wdt = 12) => { ctx.strokeStyle = ink; ctx.lineWidth = wdt; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+  const torso = (x, y, h = 56) => { ctx.fillStyle = ink; ctx.beginPath(); ctx.roundRect(x - 22, y, 44, h, 10); ctx.fill(); };
+  if (pose === 'type' || pose === 'shadow') {          // at a desk, side on, hands on the keyboard
+    head(62, 74); torso(62, 98, 50); limb(70, 112, 112, 124);
+    ctx.fillStyle = ink; ctx.fillRect(40, 146, 46, 10); limb(48, 156, 48, 196, 10); limb(76, 156, 76, 196, 10);
+    ctx.fillStyle = pose === 'shadow' ? ink : '#6b4f33'; ctx.fillRect(96, 126, 64, 10); ctx.fillRect(146, 136, 8, 64);
+    if (pose === 'type') { ctx.fillStyle = '#9ad1ff'; ctx.fillRect(118, 96, 30, 26); }
+  } else if (pose === 'walkA' || pose === 'walkB') {
+    const s = pose === 'walkA' ? 1 : -1;
+    head(80, 52); torso(80, 76);
+    limb(72, 90, 72 - 16 * s, 126); limb(88, 90, 88 + 16 * s, 126);
+    limb(72, 132, 72 - 18 * s, 194); limb(88, 132, 88 + 18 * s, 194);
+  } else if (pose === 'point') {                       // at a board, one arm out
+    ctx.fillStyle = '#f4f6fa'; ctx.fillRect(100, 40, 58, 70); ctx.strokeStyle = '#6b4f33'; ctx.lineWidth = 4; ctx.strokeRect(100, 40, 58, 70);
+    ctx.fillStyle = '#7aa2d6'; ctx.fillRect(108, 52, 40, 6); ctx.fillRect(108, 66, 30, 6); ctx.fillRect(108, 80, 36, 6);
+    head(56, 60); torso(56, 84); limb(66, 98, 104, 70); limb(48, 98, 44, 136);
+    limb(48, 140, 46, 194); limb(64, 140, 66, 194);
+  } else {                                             // a raised hand, looking up
+    head(80, 60); torso(80, 84); limb(92, 96, 112, 30); limb(68, 96, 60, 136);
+    limb(72, 140, 70, 194); limb(88, 140, 90, 194);
+    ctx.fillStyle = '#ffc65c'; ctx.beginPath(); ctx.arc(126, 22, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2b1d00'; ctx.font = `700 24px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', 126, 23);
   }
-  const ground = new THREE.Mesh(new THREE.BoxGeometry(TOWER.W + 4, 0.2, TOWER.D + 4), new THREE.MeshBasicMaterial({ color: isDark() ? 0x252b36 : 0xbfc8d6 }));
-  ground.position.set(0, -0.1, 0); ground.layers.set(TOWER.LAYER); TOWER.group.add(ground);
+  return texFrom(c);
+}
+const TOWER_POSES = ['type', 'walkA', 'walkB', 'point', 'raise', 'shadow'];
+function towerBuild() {
+  const n = LIVE.floors.length, dark = isDark();
+  if (TOWER.group && TOWER.floors.length === n && TOWER.theme === dark) return;
+  if (TOWER.group) { scene.remove(TOWER.group); disposeTree(TOWER.group); }
+  const P = towerPalette(), L = TOWER.LAYER, { W, D, H, SLAB, LOBBY } = TOWER;
+  TOWER.group = new THREE.Group(); TOWER.floors = []; TOWER.sig = ''; TOWER.theme = dark; TOWER.bayColor = [];
+  const put = (mesh) => { mesh.layers.set(L); TOWER.group.add(mesh); return mesh; };
+  for (const o of scene.children) if (o.isLight) o.layers.enable(L);
+  const top = towerBase(n), front = D / 2;
+  const body = put(new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, top - LOBBY, D - 0.1), toon(P.glass)));
+  body.position.set(0, LOBBY + (top - LOBBY) / 2, 0);
+  const m = new THREE.Matrix4();
+  const slabs = put(new THREE.InstancedMesh(new THREE.BoxGeometry(W + 0.5, SLAB, D + 0.5), toon(P.concrete), n + 1));
+  for (let k = 0; k <= n; k++) { m.makeTranslation(0, towerBase(k) + SLAB / 2, 0); slabs.setMatrixAt(k, m); }
+  // the lights behind every window: one instanced quad each, coloured per window (on / off / no room)
+  const glow = makeCanvas(4, 64), gctx = glow.getContext('2d'), gg = gctx.createLinearGradient(0, 0, 0, 64);
+  gg.addColorStop(0, '#ffffff'); gg.addColorStop(1, '#b8bcc4'); gctx.fillStyle = gg; gctx.fillRect(0, 0, 4, 64);
+  TOWER.lights = put(new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: texFrom(glow), toneMapped: false }), n * ROOM_MAX));
+  TOWER.lights.renderOrder = 1;
+  const bays = towerBays(), off = new THREE.Color(P.off);
+  for (let k = 0; k < n; k++) bays.forEach((b, i) => {
+    const x0 = (b.x / FACADE.W - 0.5) * W, x1 = ((b.x + b.w) / FACADE.W - 0.5) * W;
+    const yTop = towerY(k) + H / 2 - ((FACADE.WIN_TOP + FACADE.BADGE) / FACADE.H) * H, yBot = towerY(k) + H / 2 - (FACADE.WIN_BOTTOM / FACADE.H) * H;
+    m.compose(new THREE.Vector3((x0 + x1) / 2, (yTop + yBot) / 2, front + 0.004), new THREE.Quaternion(), new THREE.Vector3(x1 - x0, yTop - yBot, 1));
+    TOWER.lights.setMatrixAt(k * ROOM_MAX + i, m);
+    TOWER.lights.setColorAt(k * ROOM_MAX + i, off);
+    TOWER.bayColor.push({ x0, x1, yBot, yTop, c: off.clone() });
+  });
+  // the robots in the windows: one instanced mesh per pose
+  TOWER.actors = {};
+  for (const pose of TOWER_POSES) {
+    const mesh = put(new THREE.InstancedMesh(new THREE.PlaneGeometry(0.5, 0.62), new THREE.MeshBasicMaterial({ map: towerSprite(pose, P), transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide /* flipped to face left */ }), n * ROOM_MAX * 3));
+    mesh.renderOrder = 2; mesh.count = 0; mesh.frustumCulled = false;
+    TOWER.actors[pose] = mesh;
+  }
+  // every floor's front over them: frames, badges, names, counts; the windows cut out
+  for (let k = 0; k < n; k++) {
+    const canvas = makeCanvas(FACADE.W, FACADE.H), tex = texFrom(canvas);
+    const face = put(new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false })));
+    face.position.set(0, towerY(k), front + 0.012); face.userData.floor = k; face.renderOrder = 3;
+    TOWER.floors.push({ box: face, canvas, tex, bays: [] });
+  }
+  // the lobby with its entrance, the roof (parapet, plant, the JsonUI sign), the plaza with a shadow and trees
+  const lobby = put(new THREE.Mesh(new THREE.BoxGeometry(W - 0.6, LOBBY, D - 0.6), toon(P.concrete)));
+  lobby.position.set(0, LOBBY / 2, 0);
+  const doorC = makeCanvas(1024, 160), dctx = doorC.getContext('2d');
+  dctx.fillStyle = P.concrete; dctx.fillRect(0, 0, 1024, 160);
+  dctx.fillStyle = P.on; dctx.fillRect(352, 20, 320, 140); dctx.strokeStyle = P.frame; dctx.lineWidth = 8; dctx.strokeRect(352, 20, 320, 140);
+  dctx.beginPath(); dctx.moveTo(512, 20); dctx.lineTo(512, 160); dctx.stroke();
+  const door = put(new THREE.Mesh(new THREE.PlaneGeometry(W - 0.6, LOBBY), new THREE.MeshBasicMaterial({ map: texFrom(doorC), toneMapped: false })));
+  door.position.set(0, LOBBY / 2, (D - 0.6) / 2 + 0.01);
+  const canopy = put(new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.12, 1.4), toon(P.frame)));
+  canopy.position.set(0, LOBBY + 0.02, front + 0.55);
+  const parapet = put(new THREE.Mesh(new THREE.BoxGeometry(W + 0.5, 0.5, D + 0.5), toon(P.concrete)));
+  parapet.position.set(0, top + SLAB + 0.25, 0);
+  const plant = put(new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.9, 2.4), toon(P.frame)));
+  plant.position.set(-W / 2 + 2.6, top + SLAB + 0.95, -D / 2 + 2);
+  const signC = makeCanvas(1024, 256), sctx = signC.getContext('2d');
+  sctx.fillStyle = P.ink; sctx.beginPath(); sctx.roundRect(8, 8, 1008, 240, 40); sctx.fill();
+  sctx.fillStyle = P.panel; sctx.font = `150px ${FONT_DISPLAY}`; sctx.textAlign = 'center'; sctx.textBaseline = 'middle'; sctx.fillText('JsonUI', 512, 136);
+  const sign = put(new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.3), new THREE.MeshBasicMaterial({ map: texFrom(signC), toneMapped: false, side: THREE.DoubleSide })));
+  sign.position.set(1.6, top + SLAB + 1.4, front - 0.4);
+  const plaza = put(new THREE.Mesh(new THREE.BoxGeometry(W + 9, 0.2, D + 9), toon(dark ? '#1c2636' : '#cfd8e4')));
+  plaza.position.set(0, -0.1, 0);
+  const shadow = put(new THREE.Mesh(new THREE.PlaneGeometry(W + 3, D + 3), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: dark ? 0.35 : 0.14, depthWrite: false })));
+  shadow.rotation.x = -Math.PI / 2; shadow.position.set(0.8, 0.01, 0.6);
+  const spots = [[-W / 2 - 2.2, front + 2.2], [W / 2 + 2.2, front + 2.2], [-W / 2 - 2.6, -D / 2 + 0.5], [W / 2 + 2.6, -D / 2 + 0.5], [-5.2, front + 3.4], [5.2, front + 3.4]];
+  const trunks = put(new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.16, 0.9, 6), toon('#7a5a3c'), spots.length));
+  const crowns = put(new THREE.InstancedMesh(new THREE.ConeGeometry(0.85, 1.9, 8), toon(dark ? '#3f7a58' : '#5fae7e'), spots.length));
+  spots.forEach(([x, z], i) => { m.makeTranslation(x, 0.45, z); trunks.setMatrixAt(i, m); m.makeTranslation(x, 1.7, z); crowns.setMatrixAt(i, m); });
   scene.add(TOWER.group);
 }
-function towerSync() {
+function towerSync(now = performance.now()) {
   towerBuild();
-  const sig = JSON.stringify([LIVE.floors, LIVE.rank, isDark(), TOWER.floors.map((F, k) => towerFloorText(k)).map((t) => [t.working, t.waiting])]);
-  if (sig === TOWER.sig) return;
-  TOWER.sig = sig;
-  TOWER.floors.forEach((F, k) => towerDraw(F, k));
+  const waits = LIVE.floors.some((f) => f.some((id) => LIVE.rank[id] === 0));
+  const pulse = waits && !reduceMotion ? Math.round((0.5 + 0.5 * Math.sin(now / 160)) * 4) / 4 : 1;   // a waiting window's frame
+  const sig = JSON.stringify([LIVE.floors, LIVE.rank, TOWER.floors.map((F, k) => towerFloorText(k)).map((t) => [t.working, t.waiting, t.idle])]);
+  if (sig === TOWER.sig && pulse === TOWER.pulse) return;
+  const P = towerPalette(), all = sig !== TOWER.sig;
+  TOWER.sig = sig; TOWER.pulse = pulse;
+  // A pulse alone redraws only the floors with a waiting window (a whole front is a 2048 × 384 upload).
+  TOWER.floors.forEach((F, k) => { if (all || (LIVE.floors[k] || []).some((id) => LIVE.rank[id] === 0)) towerFacade(F, k, P); });
+}
+/* Every frame in the building: the lights fade toward on / off / none (instant under reduced motion), and the
+   robots move — at their desks, walking across, pointing at a board where the room works; a raised hand where it
+   waits for permission; a still shadow in a room whose lights are off; nobody where there is no room. */
+const towerTmp = { m: new THREE.Matrix4(), q: new THREE.Quaternion(), p: new THREE.Vector3(), s: new THREE.Vector3(1, 1, 1), c: new THREE.Color() };
+function towerAnimate(t, dt) {
+  if (!TOWER.lights || !TOWER.actors) return;
+  const P = towerPalette(), want = { working: P.on, waiting: P.on, idle: P.off, empty: P.none };
+  const k = reduceMotion ? 1 : Math.min(1, dt * 4);
+  const counts = Object.fromEntries(TOWER_POSES.map((p) => [p, 0]));
+  const { m, q, p, s, c } = towerTmp;
+  const place = (pose, x, y, flip = 1, tilt = 0) => {
+    const mesh = TOWER.actors[pose];
+    q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt); p.set(x, y + 0.31, (TOWER.D / 2) + 0.008); s.set(flip, 1, 1);
+    m.compose(p, q, s); mesh.setMatrixAt(counts[pose]++, m);
+  };
+  const still = reduceMotion;
+  TOWER.floors.forEach((F, fk) => F.bays.forEach((bay, i) => {
+    const B = TOWER.bayColor[fk * ROOM_MAX + i];
+    if (!B) return;
+    B.c.lerp(c.set(want[bay.state]), k);
+    TOWER.lights.setColorAt(fk * ROOM_MAX + i, B.c);
+    const w = B.x1 - B.x0, x = (f) => B.x0 + w * f, seed = fk * 7 + i * 3;
+    if (bay.state === 'working') {
+      place('type', x(0.22), B.yBot + (still ? 0 : Math.abs(Math.sin(t * 9 + seed)) * 0.015));
+      const ph = still ? 0.25 : ((t / 6 + seed * 0.13) % 1);
+      const fwd = ph < 0.5, f = fwd ? ph * 2 : 2 - ph * 2;
+      place(still || Math.floor(t * 4 + seed) % 2 ? 'walkA' : 'walkB', x(0.38 + f * 0.36), B.yBot, fwd ? 1 : -1);
+      place('point', x(0.86), B.yBot, -1, still ? 0 : Math.sin(t * 1.4 + seed) * 0.04);
+    } else if (bay.state === 'waiting') {
+      place('raise', x(0.55), B.yBot + (still ? 0 : Math.abs(Math.sin(t * 3 + seed)) * 0.05));
+      place('type', x(0.2), B.yBot);
+    } else if (bay.state === 'idle') {
+      place('shadow', x(0.3), B.yBot); place('shadow', x(0.72), B.yBot, -1);
+    }
+  }));
+  TOWER.lights.instanceColor.needsUpdate = true;
+  for (const pose of TOWER_POSES) { const mesh = TOWER.actors[pose]; mesh.count = counts[pose]; mesh.instanceMatrix.needsUpdate = true; }
+}
+/* The room under the pointer in the building: its full name and state, as the canvas's title. */
+const TOWER_STATE_JA = { working: '作業中', waiting: '許可待ち', idle: '待機（消灯）', empty: '空き' };
+function towerHover(hit) {
+  const F = hit && TOWER.floors[hit.object.userData.floor];
+  const bay = F && hit.uv ? F.bays.find((b) => hit.uv.x >= b.x0 && hit.uv.x <= b.x1) : null;
+  return bay ? `${hit.object.userData.floor + 1}F · ${bay.id ? towerName(bay.id) : '（空き）'} · ${TOWER_STATE_JA[bay.state]}` : '';
 }
 function towerPose() {
-  const h = LIVE.floors.length * (TOWER.H + TOWER.GAP), c = new THREE.Vector3(0, h / 2, 0);
-  const dist = Math.max(30, h * 2.1 + 16);
+  const h = towerBase(LIVE.floors.length) + 3, c = new THREE.Vector3(0, h / 2, 0);
+  const dist = Math.max(24, h * 1.5 + 15);
   return { p: c.clone().add(new THREE.Vector3(6.5, 6, 22.5).normalize().multiplyScalar(dist)), t: c };
 }
 function towerSetView(on) {
@@ -1071,7 +1272,7 @@ function update3D(model, nowSec, dt) {
   stepTween(performance.now());
   if (camTween || zoom.zoomed) camera.lookAt(viewTarget); else controls.update();
   renderer.render(scene, camera);
-  if (TOWER.on) towerSync();
+  if (TOWER.on) { towerSync(); towerAnimate(nowSec, dt); }
   tagsEl.hidden = zoom.zoomed || TOWER.on;
   for (const R of robots) placeTag(R.tag, tmpV.copy(R.robot.root.position).add(TAG_UP).clone());
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }

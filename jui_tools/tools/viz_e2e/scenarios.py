@@ -268,3 +268,24 @@ def floors():
     later[16] = dict(later[16], state="typing", act="Edit src/late.ts")   # 1F is full: a room on 3F starts working
     return [{"mark": "start"}, slices(0, projects=P, sessions=S, agents=A, perms=[p13], server=server_slice()),
             {"mark": "later"}, slices(1, agents=later)]
+
+
+def building():
+    """The building's look (10-18): ten rooms with long, similar names (1F six, 2F four — two empty bays), first
+    everyone idle, then rooms working and one waiting for permission."""
+    names = ["harbor-booking-site", "harbor-booking-admin", "tea-finder-agent", "tea-finder-ios", "aurora_base_flutter",
+             "aurora_base_android2", "nimbus_server", "nimbus_android", "JsonUI-Agents-for-claude", "jsonui-cli"]
+    P = [project(f"b{k:02d}", n, k) for k, n in enumerate(names)]
+    S, A = [], []
+    for k, n in enumerate(names):
+        sid = f"b{k:07x}-0000-4000-8000-{k:012x}"
+        S.append(session(sid, f"b{k:x}", f"b{k:02d}", n, status="idle"))
+        A.append(agent(sid, f"b{k:x}", sid, state="idle"))
+    mixed = [dict(a) for a in A]
+    for k in (1, 4, 8):
+        mixed[k] = dict(mixed[k], state="typing", act="Edit src/app.ts")
+    mixed[6] = dict(mixed[6], state="waiting")
+    mixed[9] = dict(mixed[9], state="thinking", act="考え中")              # busy and quiet: thinking (lit, its own pose)
+    p6 = perm("perm-b6", S[6]["id"], "Bash", "npm test", sessionId=S[6]["id"])
+    return [{"mark": "idle"}, slices(0, projects=P, sessions=S, agents=A, server=server_slice()),
+            {"mark": "mixed"}, slices(1, agents=mixed, perms=[p6])]

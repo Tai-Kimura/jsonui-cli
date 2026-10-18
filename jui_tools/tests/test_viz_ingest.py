@@ -212,3 +212,46 @@ def test_idle_prompt_after_a_permission_prompt_idles_the_robot():
     assert _states(state)["s-aaaa"] == "idle"
     assert state.slices["sessions"][0]["status"] == "idle"
 
+
+
+def test_a_busy_session_quiet_for_30_s_is_thinking_then_works_then_stops():
+    """10-18 live check: thinking was idle with another act, so the page drew it asleep."""
+    from jui_cli.viz.ingest import THINKING_AFTER_MS
+    world, state = _world()
+    world.apply_hook(_hook("UserPromptSubmit", prompt="go"), 1_000)
+    world.tick(1_000 + THINKING_AFTER_MS - 1)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "idle"                    # not yet
+    world.tick(1_000 + THINKING_AFTER_MS)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "thinking" and _agent(state, "s-aaaa")["act"] == "考え中"
+    world.apply_hook(_hook("PreToolUse", tool_name="Bash", tool_use_id="b", tool_input={"command": "npm test"}), 40_000)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "command"                 # a tool: thinking gives way to the work
+    world.apply_hook(_hook("PostToolUse", tool_name="Bash", tool_use_id="b", tool_input={}), 41_000)
+    world.tick(41_000 + THINKING_AFTER_MS)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "thinking"                # quiet again after the tool
+    world.apply_hook(_hook("Stop", background_tasks=[]), 80_000)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "done"                    # Stop: the turn is done (a moment's cheer) ...
+    world.tick(80_000 + 10_000)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "idle"                    # ... then idle, not thinking
+    world.tick(80_000 + 2 * THINKING_AFTER_MS)
+    world.publish()
+    assert _states(state)["s-aaaa"] == "idle"                    # an idle session does not think
+
+
+def test_a_hookless_session_thinks_while_the_cli_says_busy_and_stops_when_it_does_not():
+    from jui_cli.viz.ingest import THINKING_AFTER_MS
+    world, state = _world()
+    row = {"sessionId": "s-bbbb", "cwd": "/work/shop-app", "status": "busy"}
+    world.apply_agents_list([row], 1_000)
+    world.tick(1_000 + THINKING_AFTER_MS)
+    world.publish()
+    assert _states(state)["s-bbbb"] == "thinking"
+    world.apply_agents_list([dict(row, status="idle")], 40_000)
+    world.tick(40_001)
+    world.publish()
+    assert _states(state)["s-bbbb"] == "idle"

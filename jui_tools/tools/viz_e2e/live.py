@@ -334,6 +334,16 @@ async def scenario_work(browser, srv, out, failures, res):
         failures.append(f"live/work: request outside the server: {u}")
 
 
+OVERLAP_JS = """() => { const vis = (el) => { if (!el || el.closest('[hidden]')) return false; const st = getComputedStyle(el);
+    if (st.display === 'none' || st.visibility === 'hidden') return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const mine = ['floor-nav', 'tower-legend'].map((id) => document.getElementById(id)).filter(vis);
+  const others = [...document.querySelectorAll('button, input, select, textarea, a[href], [role="option"], [role="dialog"], [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => vis(el) && !mine.some((m) => m.contains(el)) && !el.closest('.tags'));
+  const hits = [];
+  for (const m of mine) { const a = m.getBoundingClientRect();
+    for (const o of others) { const b = o.getBoundingClientRect();
+      if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) hits.push(`${m.id} x ${o.id || o.className || o.tagName}`); } }
+  return { shown: mine.map((m) => m.id), hits }; }"""
 FRAMES_JS = """(ms) => new Promise((done) => { const d = []; let last = performance.now(); const t0 = last;
   const tick = (now) => { d.push(now - last); last = now; if (now - t0 < ms) requestAnimationFrame(tick); else { d.sort((a, b) => a - b);
     done({ frames: d.length, median: +d[Math.floor(d.length / 2)].toFixed(1), p95: +d[Math.floor(d.length * 0.95)].toFixed(1) }); } };
@@ -405,11 +415,117 @@ async def scenario_floors(browser, srv, out, failures, res):
         await page.mouse.wheel(0, 300)
         await page.wait_for_timeout(80)
     await wait(page, "() => window.__dbg.floors().tower", label="the wheel out shows the building")
+    # the floor buttons and the legend never sit on another control (10-18: they covered the spec board's header):
+    # panel open / closed, floor / building, 1280 / 1024 / 768 px; hidden while a board or the log is open
+    res["overlap"] = {}
+    for width in (1280, 1024, 768):
+        await page.set_viewport_size({"width": width, "height": 800})
+        for side in ("open", "closed"):
+            if await page.evaluate("() => document.body.classList.contains('side-closed') || document.querySelector('.main').classList.contains('side-closed')") != (side == "closed"):
+                await page.click("#btn-side")
+            for view in ("floor", "building"):
+                await page.evaluate("(on) => window.__dbg.tower(on)", view == "building")
+                await page.wait_for_timeout(500)
+                o = await page.evaluate(OVERLAP_JS)
+                res["overlap"][f"{width}-{side}-{view}"] = o
+                check(failures, o["hits"] == [] and "floor-nav" in o["shown"] and (view == "floor" or "tower-legend" in o["shown"]),
+                      f"floors: the floor buttons overlap nothing at {width}px, panel {side}, {view} view: {o}")
+    await page.set_viewport_size(DESKTOP["viewport"])
+    if await page.evaluate("() => document.querySelector('.main').classList.contains('side-closed')"):
+        await page.click("#btn-side")                        # the boards open from the side panel
+    await page.evaluate("() => window.__dbg.tower(false)")
+    await page.wait_for_timeout(500)
+    opened = {"spec board": "!document.getElementById('wb').hidden", "task board": "document.getElementById('tb').classList.contains('show')",
+              "log": "!document.getElementById('log-overlay').hidden"}
+    for opener, closer, name in (("#btn-specboard", "#wb-close", "spec board"), ("#btn-taskboard", "#tb-close", "task board"), ("#btn-log", None, "log")):
+        await page.click(opener)
+        await wait(page, f"() => {opened[name]}", label=f"the {name} open")
+        await page.wait_for_timeout(600)                     # the chrome refreshes every 250 ms
+        o = await page.evaluate(OVERLAP_JS)
+        res["overlap"][name] = o
+        check(failures, o["shown"] == [], f"floors: the floor buttons are hidden while the {name} is open: {o}")
+        if closer:
+            await page.click(closer)
+        else:
+            await page.keyboard.press("Escape")
+        await page.wait_for_timeout(500)
     await page.close()
     for line in watch.console:
         failures.append(f"live/floors: console: {line}")
     for u in watch.foreign:
         failures.append(f"live/floors: request outside the server: {u}")
+
+
+async def scenario_building(browser, srv, out, failures, res):
+    """The building's look: light and dark, everyone idle / working and waiting mixed / a floor with empty bays;
+    the legend; the robots in the windows match the rooms' states; a 10-second recording."""
+    watch = Watch(origin=srv.url)
+    step(srv, "idle")
+    page = await new_page(browser, watch, "building", **DESKTOP)
+    await page.goto(srv.url + "/")
+    await ready(page)
+    await wait(page, "() => { const f = window.__dbg.floors(); return f && f.floors.length === 2 && f.floors[1].length === 4; }", label="two floors, 2F with four rooms")
+    shots = {}
+
+    async def theme(name):
+        await page.evaluate("(t) => { document.documentElement.dataset.theme = t; }", name)
+        await page.wait_for_timeout(900)
+
+    async def shot(name):
+        path = f"{out}/building-{name}.png"
+        await page.screenshot(path=path)
+        shots[name] = path
+
+    await page.evaluate("() => window.__dbg.tower(true)")
+    await wait(page, "() => window.__dbg.floors().tower", label="the building")
+    await page.wait_for_timeout(1500)
+    legend = await page.evaluate("() => !document.getElementById('tower-legend').hidden")
+    check(failures, legend, "building: the legend is shown next to the building")
+    idle = await page.evaluate("() => window.__dbg.towerActors()")
+    res["actorsIdle"] = idle
+    check(failures, idle["shadow"] == 20 and sum(v for k, v in idle.items() if k != "shadow") == 0,
+          f"building: everyone idle — only shadows in dark rooms (2 per room) {idle}")
+    for t in ("light", "dark"):
+        await theme(t)
+        await shot(f"{t}-idle")
+    step(srv, "mixed")
+    await wait(page, "() => { const a = window.__dbg.towerActors(); return a && a.raise > 0 && a.type > 0; }", label="the mixed state in the windows")
+    await page.wait_for_timeout(1200)
+    mixed = await page.evaluate("() => window.__dbg.towerActors()")
+    res["actorsMixed"] = mixed
+    check(failures, mixed["raise"] == 1 and mixed["point"] == 4 and mixed["walkA"] + mixed["walkB"] == 4 and mixed["shadow"] == 10,
+          f"building: three working rooms and one thinking (lit), one waiting, five idle {mixed}")
+    think = await page.evaluate("""() => { const R = window.__dbg.robots.find((x) => x.def.id === 'b9'); const pr = R && R.robot.props.thinking;
+      return { state: R && R.robot.state, bubble: !!(pr && pr.group.visible), badge: window.__dbg.robotState().b9.state }; }""")
+    res["thinking"] = think
+    check(failures, think == {"state": "thinking", "bubble": True, "badge": "thinking"}, f"building: the thinking robot has its own state and bubble {think}")
+    dist = await page.evaluate("() => window.__dbg.towerDistance()")
+    check(failures, abs(dist["at"] - dist["want"]) < 2, f"building: a regrouped floor did not move the camera off the building {dist}")
+    for t in ("dark", "light"):
+        await theme(t)
+        await shot(f"{t}-mixed")
+    await page.evaluate("() => window.__dbg.towerLook(1)")
+    await page.wait_for_timeout(900)
+    for t in ("light", "dark"):
+        await theme(t)
+        await shot(f"{t}-empty-bays")
+    res["buildingShots"] = shots
+    await page.close()
+    # ten seconds of the building, everyone working and one waiting (a webm the requester can watch)
+    ctx = await browser.new_context(record_video_dir=out, record_video_size={"width": 1280, "height": 800}, viewport={"width": 1280, "height": 800})
+    vp = await ctx.new_page()
+    await vp.goto(srv.url + "/")
+    await ready(vp)
+    await wait(vp, "() => { const f = window.__dbg.floors(); return f && f.floors.length === 2; }", label="video: floors")
+    await vp.evaluate("() => window.__dbg.tower(true)")
+    await vp.wait_for_timeout(10500)
+    video = vp.video
+    await ctx.close()
+    res["buildingVideo"] = str(await video.path()) if video else None
+    for line in watch.console:
+        failures.append(f"live/building: console: {line}")
+    for u in watch.foreign:
+        failures.append(f"live/building: request outside the server: {u}")
 
 
 async def run(pw, out, failures, Server):
@@ -422,7 +538,8 @@ async def run(pw, out, failures, Server):
                                 ("themes", scenarios.two_projects, scenario_themes),
                                 ("empty", scenarios.empty, scenario_empty),
                                 ("work", scenarios.work, scenario_work),
-                                ("floors", scenarios.floors, scenario_floors)):
+                                ("floors", scenarios.floors, scenario_floors),
+                                ("building", scenarios.building, scenario_building)):
             path = scenarios.write(build(), out / f"{name}.jsonl")
             srv = Server(scenario=path)
             t0 = time.monotonic()

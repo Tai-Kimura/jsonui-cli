@@ -1,7 +1,8 @@
 """Hook event → a robot's state and its one-line ``act``. Design: 04 §3.
 
-States match the page's STATES (robot-core.js): idle, typing, reading,
-command, phone, waiting, carry, done.
+States match the page's STATES (robot-core.js): idle, thinking, typing, reading,
+command, phone, waiting, carry, done. ``thinking`` is set by the world's tick (a busy
+session quiet for THINKING_AFTER_MS), not by an event.
 """
 from __future__ import annotations
 

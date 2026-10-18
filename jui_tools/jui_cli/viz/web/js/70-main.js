@@ -58,7 +58,11 @@ function liveChrome() {
   const nav = $('floor-nav');
   if (nav) {
     const n = LIVE.floors.length, k = LIVE.floor;
-    nav.hidden = !has3D || n < 2;
+    // The floors steer the 3D office: hidden while a board, the log or a zoomed view covers it (they sat on the
+    // spec board's header and its checkbox — 10-18 live check).
+    const covered = wb.open || tb.open || logState.open || zoom.zoomed || !!rbState.id;
+    nav.hidden = !has3D || n < 2 || covered;
+    if (nav.hidden) $('tower-legend').hidden = true;
     if (!nav.hidden) {
       setText($('floor-label'), TOWER.on ? `全 ${n} 階` : `${k + 1}F / ${n}F`);
       const waits = LIVE.floors.map((f) => f.some((id) => LIVE.rank[id] === 0));
@@ -70,6 +74,7 @@ function liveChrome() {
       up.setAttribute('aria-label', above ? '上の階へ（上の階に許可待ち）' : '上の階へ');
       down.setAttribute('aria-label', below ? '下の階へ（下の階に許可待ち）' : '下の階へ');
       bld.setAttribute('aria-pressed', TOWER.on ? 'true' : 'false');
+      $('tower-legend').hidden = !TOWER.on;
     }
   }
   const err = $('live-error');

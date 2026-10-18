@@ -9,6 +9,7 @@ function robotBadge(id) {
   if (s === 'waiting') return ['st-waiting', '許可待ち'];
   if (s === 'done') return ['st-done', '完了'];
   if (s === 'idle') return ['st-idle', '待機'];
+  if (s === 'thinking') return ['st-busy', '考え中'];
   return ['st-busy', '作業中'];
 }
 /* What the view is narrowed to: one project (or all), which sessions, how the session list is shown. */
