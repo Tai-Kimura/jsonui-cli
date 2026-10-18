@@ -761,6 +761,7 @@ function liveUpdateRobots(nowSec, dt) {
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
     setRobotTired(R.robot, R.def.kind === 'main' && isTired(sinceOf(R.def.id), now));
+    R.robot.heavy = heavyOf(R.def.id);   // fast typing and sweat while it works (the robot decides when)
     const how = liveWalk(R, walkDt, nowMs);
     if (how === 'gone') continue;
     const vis = how === 'walking' ? 'carry' : st.state;

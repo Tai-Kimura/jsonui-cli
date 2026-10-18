@@ -820,3 +820,6 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .tl-idle { background: #33445e; background-image: repeating-linear-gradient(0deg, transparent 0 4px, rgba(170, 186, 210, 0.35) 4px 6px); }
 .tl-empty { background: #05070b; border-style: dashed; border-color: var(--ink-soft); }
 :root[data-theme="dark"] .tl-idle { background-color: #152238; }
+
+/* a robot's tag with nothing to say shows just its name (an empty bubble read as a missing message) */
+.tag > span:empty { display: none; }

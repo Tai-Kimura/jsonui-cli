@@ -80,3 +80,102 @@ def session_start(projects: Path) -> Callable[[str, str | None, str | None], int
                 return ts
         return None
     return start
+
+
+# ---------------------------------------------------------------- what a session is doing now: its output tokens
+# "Heavy" work (requester, 10-18) includes more than 2,000 output tokens a minute over the last two minutes. The
+# transcript's assistant records carry message.usage.output_tokens; one message is written twice with the same
+# usage (measured 10-18), so a message counts once — by its id, the largest value seen. A transcript can be
+# hundreds of MB (251 MB measured) with single lines of several MB: only what was added since the last read is
+# read, from where the file ended when it was first seen (the past is never read), at most READ_MAX a read, and a
+# line longer than LINE_MAX is skipped to its end. The shape is Claude Code's own: unreadable lines are counted
+# (the server shows the source as unreadable), never fatal.
+LINE_MAX = 1_048_576
+READ_MAX = 524_288
+
+
+def usage_of(rec) -> tuple[str, int, int | None] | None:
+    """(message id, output tokens, epoch ms or None) of an assistant record, else None."""
+    if not isinstance(rec, dict) or rec.get("type") != "assistant":
+        return None
+    msg = rec.get("message")
+    usage = msg.get("usage") if isinstance(msg, dict) else None
+    mid = msg.get("id") if isinstance(msg, dict) else None
+    out = usage.get("output_tokens") if isinstance(usage, dict) else None
+    if not isinstance(mid, str) or not isinstance(out, int) or isinstance(out, bool) or out < 0:
+        return None
+    ts = rec.get("timestamp")
+    at = None
+    if isinstance(ts, str):
+        try:
+            at = int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000)
+        except ValueError:
+            at = None
+    return mid, out, at
+
+
+class UsageTail:
+    """The new complete lines of one transcript, from the end it had when first seen."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.offset: int | None = None
+        self.buf = b""
+        self.skipping = False
+
+    def read(self) -> dict:
+        """{'usage': [(id, tokens, at)], 'bytes': n, 'assistant': n, 'bad': n} for what was added."""
+        out = {"usage": [], "bytes": 0, "assistant": 0, "bad": 0}
+        try:
+            fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError:
+            return out
+        try:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
+                return out
+            if self.offset is None or st.st_size < self.offset:       # first sight, or a new file in its place
+                self.offset, self.buf, self.skipping = st.st_size, b"", False
+                return out
+            os.lseek(fd, self.offset, os.SEEK_SET)
+            chunk = os.read(fd, READ_MAX)
+        except OSError:
+            return out
+        finally:
+            os.close(fd)
+        self.offset += len(chunk)
+        out["bytes"] = len(chunk)
+        data = self.buf + chunk
+        lines = data.split(b"\n")
+        self.buf = lines.pop()                                         # an unfinished line waits for the rest
+        if len(self.buf) > LINE_MAX:
+            self.buf, self.skipping = b"", True
+        for i, line in enumerate(lines):
+            if self.skipping:
+                self.skipping = False                                  # the end of a skipped line
+                continue
+            if not line or len(line) > LINE_MAX:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                out["bad"] += 1
+                continue
+            if isinstance(rec, dict) and rec.get("type") == "assistant":
+                out["assistant"] += 1
+            u = usage_of(rec)
+            if u:
+                out["usage"].append(u)
+        return out
+
+
+def transcript_path(projects: Path) -> Callable[[str, str | None, str | None], Path | None]:
+    def find(session_id: str, cwd: str | None, given: str | None = None) -> Path | None:
+        for path in candidates(projects, session_id, cwd, given):
+            try:
+                if path.is_file() and not path.is_symlink():
+                    return path
+            except OSError:
+                continue
+        return None
+    return find
