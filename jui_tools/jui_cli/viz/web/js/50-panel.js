@@ -1151,7 +1151,7 @@ function robotRunHTML(T) {
   const failedRows = T.rows.filter((c) => c.status === 'failed');
   const namesHTML = failedRows.slice(0, FAILED_SHOWN).map((c) => `<li>${esc(c.name)}</li>`).join('');
   const moreHTML = failedRows.length > FAILED_SHOWN ? `<li class="rb-fail-more">ほか ${Math.max(0, failedRows.length - FAILED_SHOWN)} 件</li>` : '';
-  return `<li class="rb-run r-${esc(T.runStatus)}" data-rb-run="${esc(T.id)}"><p class="rb-run-head"><b>${esc(T.device || 'テスト')}</b> <span>${esc(T.statusText)}</span></p><code class="rb-run-file">${esc(T.file)}</code>
+  return `<li class="rb-run r-${esc(T.runStatus)}" data-rb-run="${esc(T.id)}"><p class="rb-run-head"><b>${esc(T.device || 'テスト')}</b> <span>${esc(T.statusText)}</span>${T.savedAt ? '<small class="rb-saved">保存された結果</small>' : ''}</p><code class="rb-run-file">${esc(T.file)}</code>
 <div class="prog" role="img" aria-label="通過 ${T.passed} 件 / 失敗 ${T.failed} 件 / 全 ${n} 件"><span class="p" style="width:${pPct}%"></span><span class="r" style="width:${rPct}%"></span><span class="x" style="width:${fPct}%"></span></div>${namesHTML ? `<ul class="rb-fails" aria-label="失敗したケース">${namesHTML}${moreHTML}</ul>` : ''}</li>`;
 }
 function liveTestsHTML(T) {

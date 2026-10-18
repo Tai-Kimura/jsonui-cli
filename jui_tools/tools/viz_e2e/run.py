@@ -30,18 +30,9 @@ sys.path.insert(0, str(HERE))
 from playwright.async_api import async_playwright  # noqa: E402
 
 import demo  # noqa: E402
-from common import ISOLATE, LAUNCH_ARGS, Watch, dump  # noqa: E402
+from common import ISOLATE, LAUNCH_ARGS, Watch, dump, progress_count, progress_grew  # noqa: E402
 
 EXPECT_DEMO = HERE / "expect_demo.json"
-
-
-# The real server's progress folder (cd's gate, 10-18: driver web's jest once wrote 480 files there from a test).
-# Every suite runs in a throwaway HOME; after each, this folder must not have grown.
-REAL_PROGRESS = pathlib.Path(os.path.expanduser("~")) / ".local" / "state" / "jui-viz" / "test-progress"
-
-
-def real_progress_count() -> int:
-    return len(list(REAL_PROGRESS.glob("*.jsonl"))) if REAL_PROGRESS.is_dir() else 0
 
 
 def free_port() -> int:
@@ -254,16 +245,14 @@ def main(argv=None) -> int:
                 await ask.run_ask(pw, out, failures)
             if a.only in (None, "live", "history"):
                 import history
-                before = real_progress_count()
+                before = progress_count()
                 await history.run_history(pw, out, failures)
-                if real_progress_count() > before:
-                    failures.append(f"history: the real test-progress folder grew ({before} -> {real_progress_count()})")
+                failures.extend(m for m in [progress_grew("history", before)] if m)
             if a.only in (None, "live", "robot-tests"):
                 import robot_tests
-                before = real_progress_count()
+                before = progress_count()
                 await robot_tests.run_robot_tests(pw, out, failures)
-                if real_progress_count() > before:
-                    failures.append(f"robot-tests: the real test-progress folder grew ({before} -> {real_progress_count()})")
+                failures.extend(m for m in [progress_grew("robot-tests", before)] if m)
             if a.only in (None, "live", "rooms"):
                 import rooms
                 await rooms.run_rooms(pw, out, failures, RealServer)

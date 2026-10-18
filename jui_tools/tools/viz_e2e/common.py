@@ -9,10 +9,24 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # Taken out of every environment a suite gives its server and its hooks: each would point the throwaway server at the
 # real one's state (its folder, the progress a runner writes, the saved results) — 10-18.
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
+# The real server's progress folder (cd's gate, 10-18: driver web's jest once wrote 480 files there from a test).
+# Every suite runs in a throwaway HOME; after each, this folder must not have grown. The folder is a parameter so a
+# pytest arm can show the gate turns red on a temporary one (tests/test_viz_e2e_gate.py) without writing to the real.
+REAL_PROGRESS = Path.home() / ".local" / "state" / "jui-viz" / "test-progress"
+
+
+def progress_count(folder: Path = REAL_PROGRESS) -> int:
+    return len(list(folder.glob("*.jsonl"))) if folder.is_dir() else 0
+
+
+def progress_grew(suite: str, before: int, folder: Path = REAL_PROGRESS) -> str | None:
+    now = progress_count(folder)
+    return f"{suite}: the real test-progress folder grew ({before} -> {now})" if now > before else None
 LAUNCH_ARGS = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
 DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
 PHONE = {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 2, "is_mobile": True, "has_touch": True}

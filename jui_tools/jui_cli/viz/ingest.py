@@ -794,9 +794,7 @@ class World:
                 target = candidates[0]
                 target["progressRun"] = run["run"]
         if target is not None:
-            target["cases"] = [{"name": c["name"], "status": c["status"]} for c in run["cases"].values()]
-            done = [c for c in run["cases"].values() if c["status"] in ("passed", "failed")]
-            target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
+            self._run_cases(target)
             project = self.jsonui.get(target["projectId"])
             if project is not None:
                 live = self.live_cases.setdefault(project.project_id, {})
@@ -808,9 +806,38 @@ class World:
         self._dirty.add("tests")
         return True
 
+    def _run_cases(self, target: dict) -> None:
+        """A test command's cases (a robot's card and the test pane): its live progress, and the saved result file
+        of the same run (B's rows, sources/test_results.py) — tied by the run id only, so only a run this server saw
+        start. Per case the newer outcome wins, so a case seen live and then saved counts once."""
+        rid = target.get("progressRun")
+        run = self.progress.runs.get(rid) if rid else None
+        live = list(run["cases"].values()) if run else []
+        saved = [r for r in self.saved_rows if rid and r.get("run") == rid]
+        if not saved:
+            target["cases"] = [{"name": c["name"], "status": c["status"]} for c in live]
+            target.pop("savedAt", None)
+        else:
+            merged: dict[tuple, tuple[int, str, str]] = {}
+            for c in live:
+                merged[(c["file"], c["test"], c["name"])] = (run["updatedAt"], c["status"], c["name"])
+            for r in saved:
+                key = (r["file"], r["test"], r["case"])
+                if key not in merged or merged[key][0] <= r["t"]:
+                    merged[key] = (r["t"], r["status"], r["case"])
+            target["cases"] = [{"name": name, "status": status} for _, status, name in merged.values()]
+            target["savedAt"] = max(r["t"] for r in saved)
+        done = [c for c in target["cases"] if c["status"] in ("passed", "failed")]
+        if run is not None or saved:
+            target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
+
     def apply_saved_results(self, rows: list[dict]) -> None:
         """The rows of every saved result file (sources/test_results.py), replacing the previous scan."""
         self.saved_rows = rows
+        for target in self.tests.values():
+            if target.get("progressRun"):
+                self._run_cases(target)
+                self._dirty.add("tests")
         for project in self.jsonui.values():
             self._merge_results(project)
         self._dirty.add("specs")

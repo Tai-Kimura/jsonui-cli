@@ -267,7 +267,7 @@ function liveRunView(run) {
     rows, passed, failed, runningIdx, retrying: false, active: run.status === 'running', statusText,
     file: String(run.file || run.command || ''), device: dev ? String(dev.name) : ({ ios: 'iOS', android: 'Android', web: 'Web' }[run.platform] || ''),
     who: labelOf(run.agentId), project: run.projectId, runStatus: run.status, command: String(run.command || ''),
-    id: String(run.id), startedAt: Number(run.startedAt) || 0,
+    id: String(run.id), startedAt: Number(run.startedAt) || 0, savedAt: Number(run.savedAt) || 0,
   };
 }
 /* A robot's own runs for its card (requester, 10-18: "ロボットのパネルにもテストの経過表示できない？"): only runs
