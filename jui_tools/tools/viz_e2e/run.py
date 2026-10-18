@@ -247,6 +247,7 @@ def main(argv=None) -> int:
                 import history
                 before = progress_count()
                 await history.run_history(pw, out, failures)
+                await history.run_history_scroll(pw, out, failures)
                 failures.extend(m for m in [progress_grew("history", before)] if m)
             if a.only in (None, "live", "rb-layout"):
                 import rb_layout

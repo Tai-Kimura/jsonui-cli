@@ -232,3 +232,172 @@ async def run_history(pw, out, failures):
         await browser.close()
     print(f"  history/tab: {time.monotonic() - t0:.0f}s", flush=True)
     (out / "history-results.json").write_text(dump(res) + "\n")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The scroll of the tab (requester, 10-19: "新しい応答きたら一番上にスクロールされない？"). The robot card is rebuilt
+# whenever its key changes (a task of the robot moves), and the history pane is part of it: the position must survive
+# that, a new answer scrolls down only when the reader is at the bottom, and the tab opens at the bottom (the latest).
+SCROLL_SID = "e2e00000-0000-4000-8000-0000000000c3"
+SCROLL_CWD = "/work/hist-scroll"
+
+
+def scroll_records(n, start=0):
+    out = []
+    for k in range(start, start + n):
+        if k % 2 == 0:
+            out.append({"type": "user", "timestamp": "2026-10-19T09:00:00Z", "message": {"role": "user", "content": f"依頼-{k:02d}"}})
+        else:
+            body = "\n".join([f"## 応答-{k:02d}", *[f"- 行 {i} の説明が少し長めに続く" for i in range(5)]])
+            out.append({"type": "assistant", "timestamp": "2026-10-19T09:00:01Z",
+                        "message": {"id": f"s{k}", "role": "assistant", "content": [{"type": "text", "text": body}]}})
+    return out
+
+
+SCROLL_STATE = """() => {
+  const pane = document.querySelector('[data-rb-hist]');
+  const top = pane.getBoundingClientRect().top;
+  const items = [...pane.querySelectorAll('.h-item')];
+  const first = items.find((n) => n.getBoundingClientRect().bottom > top + 1);
+  const marker = pane.querySelector('[data-h-newer]');
+  return {
+    top: Math.round(pane.scrollTop), max: pane.scrollHeight - pane.clientHeight,
+    atBottom: pane.scrollHeight - pane.scrollTop - pane.clientHeight < 4,
+    anchor: first ? first.textContent.slice(0, 12) : '', anchorY: first ? Math.round(first.getBoundingClientRect().top - top) : null,
+    marked: !!pane.__e2eMark, items: items.length,
+    marker: !!marker && !marker.hidden && marker.getBoundingClientRect().height > 0,
+  };
+}"""
+
+
+async def run_history_scroll(pw, out, failures):
+    from run import free_port
+    out = pathlib.Path(out) / "history-scroll"
+    out.mkdir(parents=True, exist_ok=True)
+    home = out / "home"
+    home.mkdir(exist_ok=True)
+    jt = pathlib.Path(__file__).resolve().parents[2]
+    forward = jt / "jui_cli" / "viz" / "forward.py"
+    port = free_port()
+    (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
+    transcript = home / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", SCROLL_CWD) / f"{SCROLL_SID}.jsonl"
+    transcript.parent.mkdir(parents=True, exist_ok=True)
+    transcript.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in scroll_records(38)))
+    base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
+    env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")
+    log = open(out / "serve.log", "w")
+    srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
+    url = f"http://127.0.0.1:{port}"
+    res: dict = {}
+    base = {"session_id": SCROLL_SID, "cwd": SCROLL_CWD, "transcript_path": str(transcript), "permission_mode": "default"}
+
+    def check_(cond, text):
+        if not cond:
+            failures.append(f"history-scroll: {text}")
+
+    def hook(payload):
+        subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(payload).encode(),
+                       capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
+
+    async def rebuild(page, n):
+        """A task of the robot moves: the card (and the history pane in it) is built anew."""
+        await page.evaluate("() => { document.querySelector('[data-rb-hist]').__e2eMark = 1; }")
+        hook(dict(base, hook_event_name="TaskCreated", task_id=str(n), task_subject=f"作業-{n}"))
+        await wait(page, "() => !document.querySelector('[data-rb-hist]').__e2eMark", timeout=10000, label=f"the card rebuilt ({n})")
+        await page.wait_for_timeout(400)
+
+    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+    t0 = time.monotonic()
+    try:
+        import urllib.request
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"{url}/health", timeout=1).read()
+                break
+            except OSError:
+                time.sleep(0.1)
+        watch = Watch(origin=url)
+        page = await new_page(browser, watch, "history-scroll", **DESKTOP)
+        await page.goto(url + "/")
+        await ready(page)
+        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        hook(dict(base, hook_event_name="SessionStart", source="startup"))
+        await wait(page, "() => !!document.querySelector('#sessions [data-robot-open]')", label="the session's robot")
+        await page.click("#sessions [data-robot-open]")
+        await wait(page, "() => !!document.querySelector('#rb [data-rb-tab=\"history\"]')", label="the robot card's tabs")
+        await page.click('#rb [data-rb-tab="history"]')
+        await wait(page, "() => document.querySelectorAll('[data-rb-hist] .h-item').length >= 38", label="the history")
+        await page.wait_for_timeout(600)
+        # 1. open: the bottom (the latest) shows
+        r = res["opened"] = await page.evaluate(SCROLL_STATE)
+        check_(r["max"] > 400, f"the sample overflows the pane: {r}")
+        check_(r["atBottom"], f"1. the tab opens at the bottom (the latest): {r}")
+        await page.screenshot(path=str(out / "opened.png"))
+        # 2. the card is rebuilt while at the bottom: still at the bottom
+        await rebuild(page, 1)
+        r = res["rebuiltAtBottom"] = await page.evaluate(SCROLL_STATE)
+        check_(r["atBottom"], f"2. a rebuilt card keeps the bottom: {r}")
+        # 3. reading above, the card is rebuilt: the same item at the same place
+        await page.evaluate("() => { const p = document.querySelector('[data-rb-hist]'); p.scrollTop = Math.round(p.scrollHeight / 3); }")
+        await page.wait_for_timeout(300)
+        before = res["readingAbove"] = await page.evaluate(SCROLL_STATE)
+        await rebuild(page, 2)
+        r = res["rebuiltAbove"] = await page.evaluate(SCROLL_STATE)
+        check_(not before["atBottom"] and r["anchor"] == before["anchor"] and abs(r["anchorY"] - before["anchorY"]) <= 2 and abs(r["top"] - before["top"]) <= 2,
+               f"3. a rebuilt card keeps the place read above: {before} -> {r}")
+        # 4. reading above, new answers come (and the oldest leave the 40-item window): the place stays, a marker shows
+        with open(transcript, "a") as f:
+            for rec in scroll_records(4, start=38):
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        await wait(page, "() => document.querySelector('[data-rb-hist]').textContent.includes('応答-41')", timeout=10000, label="the new answers")
+        await page.wait_for_timeout(400)
+        r = res["newWhileAbove"] = await page.evaluate(SCROLL_STATE)
+        check_(r["anchor"] == before["anchor"] and abs(r["anchorY"] - before["anchorY"]) <= 2 and not r["atBottom"],
+               f"4. new answers leave the place read above as it was: {before} -> {r}")
+        check_(r["marker"], f"4. a 新しい応答 marker shows while reading above: {r}")
+        await page.screenshot(path=str(out / "marker.png"))
+        # the marker takes the reader to the bottom and goes
+        if r["marker"]:
+            await page.click("[data-rb-hist] [data-h-newer]")
+            await page.wait_for_timeout(500)
+        r = res["markerClicked"] = await page.evaluate(SCROLL_STATE)
+        check_(r["atBottom"] and not r["marker"], f"the marker scrolls to the bottom and goes: {r}")
+        # at the bottom, a new answer scrolls down to it (no marker)
+        with open(transcript, "a") as f:
+            for rec in scroll_records(2, start=42):
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        await wait(page, "() => document.querySelector('[data-rb-hist]').textContent.includes('応答-43')", timeout=10000, label="the answer at the bottom")
+        await page.wait_for_timeout(400)
+        r = res["newAtBottom"] = await page.evaluate(SCROLL_STATE)
+        check_(r["atBottom"] and not r["marker"], f"at the bottom, a new answer is followed: {r}")
+        # back to 今の様子 and to the history again: the bottom
+        await page.evaluate("() => { const p = document.querySelector('[data-rb-hist]'); p.scrollTop = 0; }")
+        await page.click('#rb [data-rb-tab="now"]')
+        await page.click('#rb [data-rb-tab="history"]')
+        await page.wait_for_timeout(500)
+        r = res["reopened"] = await page.evaluate(SCROLL_STATE)
+        check_(r["atBottom"], f"1. the tab opened again shows the bottom: {r}")
+        await page.emulate_media(color_scheme="dark")
+        await page.evaluate("() => { const p = document.querySelector('[data-rb-hist]'); p.scrollTop = 0; }")
+        await page.wait_for_timeout(300)
+        with open(transcript, "a") as f:
+            for rec in scroll_records(2, start=44):
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        await wait(page, "() => !!document.querySelector('[data-rb-hist] [data-h-newer]:not([hidden])')", timeout=10000, label="the dark marker")
+        await page.screenshot(path=str(out / "marker-dark.png"))
+        await page.close()
+        for line in watch.console:
+            failures.append(f"history-scroll: console: {line}")
+        for u in watch.foreign:
+            failures.append(f"history-scroll: request outside the server: {u}")
+    except Exception as e:
+        failures.append(f"history-scroll: {type(e).__name__}: {str(e).splitlines()[0]}")
+    finally:
+        srv.terminate()
+        try:
+            srv.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            srv.kill()
+        await browser.close()
+    print(f"  history/scroll: {time.monotonic() - t0:.0f}s", flush=True)
+    (out / "history-scroll-results.json").write_text(dump(res) + "\n")

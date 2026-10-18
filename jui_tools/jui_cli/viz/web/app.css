@@ -720,6 +720,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 /* 応答の履歴 (55-history.js): the conversation as the VS Code extension shows it */
 .rb-hist { gap: 8px; font-size: 13px; }
 .h-list-box { display: grid; gap: 8px; min-width: 0; }
+.h-newer { position: sticky; bottom: 0; justify-self: center; padding: 5px 14px; border: 0; border-radius: 999px; background: var(--info); color: var(--bg); font: 700 12px/1.4 var(--font-body); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); cursor: pointer; }
+.h-newer[hidden] { display: none; }
 .h-item { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .h-user { padding: 8px 10px; border-radius: 10px; background: var(--chip); }
 .h-who { display: flex; gap: 8px; margin: 0 0 2px; color: var(--ink-soft); font: 700 11px/1.4 var(--font-body); }
