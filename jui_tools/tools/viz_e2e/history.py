@@ -240,6 +240,8 @@ async def run_history(pw, out, failures):
 # that, a new answer scrolls down only when the reader is at the bottom, and the tab opens at the bottom (the latest).
 SCROLL_SID = "e2e00000-0000-4000-8000-0000000000c3"
 SCROLL_CWD = "/work/hist-scroll"
+SCROLL_SID2 = "e2e00000-0000-4000-8000-0000000000c4"
+SCROLL_CWD2 = "/work/hist-scroll-two"
 
 
 def scroll_records(n, start=0):
@@ -385,6 +387,30 @@ async def run_history_scroll(pw, out, failures):
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         await wait(page, "() => !!document.querySelector('[data-rb-hist] [data-h-newer]:not([hidden])')", timeout=10000, label="the dark marker")
         await page.screenshot(path=str(out / "marker-dark.png"))
+        await page.emulate_media(color_scheme="light")
+        # 5. the tab open and read at the top, ← / → to another robot: that robot's newest shows (the bottom)
+        other = home / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", SCROLL_CWD2) / f"{SCROLL_SID2}.jsonl"
+        other.parent.mkdir(parents=True, exist_ok=True)
+        other.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in scroll_records(38, start=100)))
+        hook({"session_id": SCROLL_SID2, "cwd": SCROLL_CWD2, "transcript_path": str(other), "permission_mode": "default",
+              "hook_event_name": "SessionStart", "source": "startup"})
+        await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 2", label="the second robot")
+        first = await page.evaluate("() => document.getElementById('rb-title').textContent")
+        await page.evaluate("() => { const p = document.querySelector('[data-rb-hist]'); p.scrollTop = 0; document.activeElement && document.activeElement.blur(); }")
+        await page.wait_for_timeout(300)
+        res["b3Before"] = await page.evaluate(SCROLL_STATE)
+        for key in ("ArrowRight", "ArrowLeft"):   # whichever way the other robot is
+            await page.keyboard.press(key)
+            try:
+                await page.wait_for_function("(t) => document.getElementById('rb-title').textContent !== t", arg=first, timeout=3000)
+                break
+            except Exception:
+                continue
+        await wait(page, "() => document.querySelector('[data-rb-hist]').textContent.includes('応答-137')", timeout=10000, label="the other robot's history")
+        await page.wait_for_timeout(600)
+        r = res["b3Other"] = await page.evaluate(SCROLL_STATE)
+        check_(res["b3Before"]["top"] == 0 and r["atBottom"] and r["max"] > 400,
+               f"5. with the tab open, another robot (← / →) shows its newest at the bottom: {res['b3Before']} -> {r}")
         await page.close()
         for line in watch.console:
             failures.append(f"history-scroll: console: {line}")
