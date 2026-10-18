@@ -304,8 +304,14 @@ const Q_SHOW_MS = 30_000;   // an answered card stays a moment, saying who answe
 const qState = (q) => (q.status === 'sent' ? '送信済み · Claude Code の確定を待っている'
   : q.status === 'answered' ? 'ブラウザの答えが届いた' : q.status === 'answered_in_terminal' ? 'ターミナルで答えた'
     : q.status === 'expired' ? '答えないまま終わった' : '');
+/* Why a pending card cannot be answered here. It goes at the top, above choices drawn as not pickable: at the
+   bottom, under radios that looked live, the requester clicked them and nothing happened (10-18). */
+const qWhy = (q) => (q.tooLongToShow ? '質問の全部をここに表示できないため、ここでは答えられません'
+  : q.released ? 'ターミナルに返しました' : q.waitEnded ? 'ブラウザで答えられる時間が過ぎました（だれも操作しないまま待ちが終わった）'
+    : 'このセッションは答えの中継を待っていません');
 function questionHTML(q) {
   const open = q.status === 'pending' && q.hookWaiting && !q.tooLongToShow;
+  const closed = q.status === 'pending' && !open;
   const got = q.sentAnswers || q.gotAnswers || null;
   const itemsHTML = q.questions.map((x, i) => {
     const type = x.multiSelect ? 'checkbox' : 'radio', name = `qa-${q.id}-${i}`;
@@ -318,9 +324,9 @@ function questionHTML(q) {
   }).join('');
   // While the hook waits the terminal shows no question (measured 10-18): the time left, and the way to the terminal.
   const footHTML = open ? `<div class="qfoot"><button type="button" class="pa pa-allow" data-qsend="${esc(q.id)}" data-fk="qs-${esc(q.id)}" disabled>答えを送る</button><button type="button" class="pa pa-deny" data-qrelease="${esc(q.id)}" data-fk="qr-${esc(q.id)}">ターミナルで答える</button></div><p class="qnote">待っている間はターミナルに質問が出ない · <span data-quntil="${esc(q.id)}"></span>（操作すると延びる）</p>`
-    : q.status === 'pending' ? `<p class="qnote">${q.tooLongToShow ? '質問の全部をここに表示できないため、ターミナルで答えてください' : 'このセッションは答えの中継を待っていない。ターミナルで答えてください'}</p>`
-      : `<p class="qnote qdone">${esc(qState(q))}</p>`;
-  return `<article class="qcard${open ? ' q-open' : ''}" data-qcard="${esc(q.id)}"><header class="qwho">${pill(q.who, DEF[q.who].role)}<span>${esc(DEF[q.who].agent)}</span><span class="pc-wait" data-since="${q.at}"></span></header>${itemsHTML}${footHTML}</article>`;
+    : closed ? '' : `<p class="qnote qdone">${esc(qState(q))}</p>`;
+  const whyHTML = closed ? `<p class="qnote qwhy" role="note">${esc(qWhy(q))}。ターミナルで答えてください（ここでは選べません）</p>` : '';
+  return `<article class="qcard${open ? ' q-open' : ''}${closed ? ' q-closed' : ''}" data-qcard="${esc(q.id)}"><header class="qwho">${pill(q.who, DEF[q.who].role)}<span>${esc(DEF[q.who].agent)}</span><span class="pc-wait" data-since="${q.at}"></span></header>${whyHTML}${itemsHTML}${footHTML}</article>`;
 }
 function renderQuestions() {
   const now = Date.now();
@@ -330,7 +336,7 @@ function renderQuestions() {
   chip.hidden = waiting === 0;
   setText(chip, `質問 ${waiting}`);
   $('questions-sec').hidden = shown.length === 0;
-  keyed($('questions'), JSON.stringify(shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.sentAnswers, q.gotAnswers])), () => shown.map((q) => questionHTML(q)).join(''));
+  keyed($('questions'), JSON.stringify(shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])), () => shown.map((q) => questionHTML(q)).join(''));
   for (const el of $('questions').querySelectorAll('[data-quntil]')) {   // the countdown, in place (inputs keep their state)
     const q = QUESTIONS.find((x) => x.id === el.dataset.quntil);
     setText(el, q && q.waitUntil ? `あと ${Math.max(0, Math.ceil((q.waitUntil - now) / 1000))} 秒でターミナルに戻す` : '');

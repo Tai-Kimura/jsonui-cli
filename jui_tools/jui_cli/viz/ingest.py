@@ -453,6 +453,11 @@ class World:
                 run["endedAt"] = at
                 self._dirty |= {"tests", "devices", "specs"}
             text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
+        elif kind == "PermissionRequest" and tool == QUESTION_TOOL:
+            # A question, not a permission (permissions.NOT_PERMISSIONS): the robot stays "質問に回答待ち" from its
+            # PreToolUse, and nothing goes on the permission board.
+            cat = "perm"
+            text = "質問の許可の要求（許可の板には出さない。答えはターミナル）"
         elif kind == "PermissionRequest":
             # No tool_use_id here: take the newest open call of the same tool
             # (parallel calls are real: Bash and ToolSearch overlapped in P0).

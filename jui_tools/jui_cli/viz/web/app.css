@@ -395,6 +395,9 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .qfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .qfoot .pa:disabled { opacity: 0.45; cursor: default; }
 .qnote { margin: 0; color: var(--ink-soft); font-size: 12px; }
+.qnote.qwhy { padding: 6px 8px; border-radius: 6px; background: var(--chip); color: var(--ink); font-size: 13px; font-weight: 700; }
+.qcard.q-closed .qopt { cursor: not-allowed; opacity: .5; }
+.qcard.q-closed .qopt:hover { background: none; }
 .perm-acts { display: flex; flex-wrap: wrap; gap: 6px; }
 .pa { padding: 3px 12px; border: 1px solid transparent; border-radius: 6px; font: 700 12.5px/1.5 var(--font-body); white-space: nowrap; cursor: pointer; }
 .pa-allow { background: var(--ok); color: var(--panel); }

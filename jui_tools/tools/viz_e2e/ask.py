@@ -164,6 +164,31 @@ async def run_ask(pw, out, failures):
         res["nobody"] = {"printed": outp.decode(), "sec": round(time.monotonic() - t1, 1)}
         check(failures, res["nobody"]["printed"] == "" and 7 <= res["nobody"]["sec"] < 14, f"nobody answers: back after the short wait: {res['nobody']}")
 
+        # 2d. the card left behind cannot be answered here and says so first (requester, 10-18: the choices looked
+        # pickable and the reason was one line at the bottom)
+        await wait(page, "() => [...document.querySelectorAll('.qcard.q-closed .qwhy')].some((p) => p.textContent.includes('時間が過ぎました'))", label="the closed card's reason")
+        res["closed"] = await page.evaluate("""() => { const c = [...document.querySelectorAll('.qcard.q-closed')].find((x) => x.querySelector('.qwhy').textContent.includes('時間が過ぎました'));
+          const opt = c.querySelector('.qopt'), st = getComputedStyle(opt);
+          return { afterHeader: c.children[1].classList.contains('qwhy'), live: c.querySelectorAll('input:not([disabled])').length,
+                   inputs: c.querySelectorAll('input').length, cursor: st.cursor, opacity: Number(st.opacity), open: c.classList.contains('q-open') }; }""")
+        check(failures, res["closed"]["afterHeader"] and res["closed"]["live"] == 0 and res["closed"]["inputs"] > 0 and res["closed"]["cursor"] == "not-allowed"
+              and res["closed"]["opacity"] < 1 and not res["closed"]["open"], f"a card nobody waits on: the reason on top, choices not pickable: {res['closed']}")
+        await page.screenshot(path=str(out / "question-closed.png"))
+
+        # 2e. what the VS Code extension sent next (Claude Code 2.1.301, 10-18): a PermissionRequest for the question.
+        # The waiting hook lets it through at once, and nothing goes on the permission board or into its count.
+        ask_perm = dict(base, hook_event_name="PermissionRequest", tool_name="AskUserQuestion", tool_input=INPUT)
+        hook(ask_perm)
+        t1 = time.monotonic()
+        dp = subprocess.run([sys.executable, "-I", "-S", str(forward), "--decide"], input=json.dumps(ask_perm).encode(),
+                            capture_output=True, env=dict(base_env, HOME=str(home)), timeout=40)
+        await page.wait_for_timeout(1500)
+        res["askPerm"] = {"printed": dp.stdout.decode(), "sec": round(time.monotonic() - t1, 1),
+                          **(await page.evaluate("""() => ({ chip: document.getElementById('chip-perm').hidden,
+                             boxes: [...document.querySelectorAll('.perm-q b')].filter((b) => b.textContent === 'AskUserQuestion').length })"""))}
+        check(failures, res["askPerm"]["printed"] == "" and res["askPerm"]["sec"] < 5 and res["askPerm"]["chip"] is True and res["askPerm"]["boxes"] == 0,
+              f"a question's permission request is not a permission: {res['askPerm']}")
+
         # 3. a question that does not fit: no inputs, answer in the terminal (the hook lets it through at once)
         long = {"questions": [{**FRUIT, "options": [{"label": "りんご", "description": "x" * 5000}, FRUIT["options"][1]]}]}
         hook(pre("ask-3", long))
