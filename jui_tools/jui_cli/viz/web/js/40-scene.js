@@ -664,7 +664,7 @@ function liveDropRoom(id) {
   const R = LIVE3D.rooms[id];
   if (!R) return;
   if (PROPS.room === id) propsClear();   // the floor's own material goes back before the room is disposed
-  scene.remove(R.group); disposeTree(R.group);
+  scene.remove(R.group); focusRelease(R.group); disposeTree(R.group);   // focusRelease: 50-panel.js, the faint walls (10-18)
   R.rt.el.remove();
   roomTags.splice(roomTags.indexOf(R.rt), 1);
   for (const m of R.mats) roomMats.splice(roomMats.indexOf(m), 1);
@@ -687,7 +687,7 @@ function liveAddRobot(d, i) {
   return R;
 }
 function liveDropRobot(R) {
-  scene.remove(R.robot.root); disposeTree(R.robot.root);
+  scene.remove(R.robot.root); focusRelease(R.robot.root); disposeTree(R.robot.root);   // focusRelease: 50-panel.js (10-18)
   const k = fontRedraws.indexOf(R.robot.fontRedraw); if (k >= 0) fontRedraws.splice(k, 1);
   R.tag.remove();
   if (links[R.def.id]) links[R.def.id].set(null, null, false, 0);

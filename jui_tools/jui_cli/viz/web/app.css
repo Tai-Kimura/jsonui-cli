@@ -702,10 +702,13 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .tbd-raw pre { margin: 4px 0 0; padding: 8px 10px; border-radius: 6px; background: var(--wb-card); font: 500 11.5px/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* a robot up close */
-.rb { position: absolute; top: 14px; right: 14px; bottom: 14px; z-index: 5; display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(420px, calc(100% - 28px)); overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 30px var(--shadow); opacity: 0; transform: translateX(16px); transition: opacity 0.2s ease, transform 0.25s ease;
+.rb { position: absolute; top: 14px; right: 14px; bottom: 14px; z-index: 5; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: min(420px, calc(100% - 28px)); overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 30px var(--shadow); opacity: 0; transform: translateX(16px); transition: opacity 0.2s ease, transform 0.25s ease;
   --wb-ink: var(--ink); --wb-soft: var(--ink-soft); --wb-card: var(--bg); --wb-line: var(--line); --wb-blue: var(--info); }
 .rb.show { opacity: 1; transform: none; }
 .rb-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 12px 14px; border-top: 5px solid var(--c); border-bottom: 1px solid var(--line); }
+.rb-nav { display: flex; align-items: center; gap: 4px; }
+.rb-step { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 700 18px/1 var(--font-body); cursor: pointer; }
+.rb-step:hover { background: var(--chip); }
 .rb-badge { display: grid; place-items: center; min-width: 54px; height: 54px; padding: 0 6px; border: 3px solid var(--cloth-ink); border-radius: 12px; background: var(--cloth); color: var(--cloth-ink); font: 400 21px/1 var(--font-display); transform: rotate(-3deg); }
 .rb-name { margin: 0; font: 400 clamp(15px, 4vw, 17px)/1.3 var(--font-display); overflow-wrap: anywhere; }
 .rb-sub { margin: 2px 0 0; color: var(--ink-soft); font: 500 11.5px/1.5 var(--font-body); }
