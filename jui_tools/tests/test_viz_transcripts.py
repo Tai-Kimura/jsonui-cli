@@ -78,3 +78,26 @@ def test_a_new_sessions_transcript_is_found_when_it_appears(tmp_path):
     _transcript(projects, "/work/new", [{"timestamp": "2026-10-18T00:00:00Z"}])
     world.apply_agents_list([row], 2_000)
     assert world.sessions[SID]["since"] == 1792281600000
+
+
+def test_without_a_transcript_the_agents_rows_start_fills_in_and_a_transcript_later_wins(tmp_path):
+    """`claude agents --json` rows carry startedAt (the process start, 10-18 measured): the fallback, not the rule."""
+    projects = tmp_path / "projects"
+    state = VizState()
+    world = World(state, session_start=transcripts.session_start(projects))
+    row = {"sessionId": SID, "cwd": "/work/late", "status": "busy", "startedAt": 1792202664678}
+    world.apply_agents_list([row], 1792282347474)                       # the server's time is ~22 h later
+    assert world.sessions[SID]["since"] == 1792202664678 and world.sessions[SID]["sinceFrom"] == "agents"
+    _transcript(projects, "/work/late", [{"timestamp": "2026-10-18T00:00:00Z"}])
+    world.apply_agents_list([row], 1792282348000)
+    assert world.sessions[SID]["since"] == 1792281600000 and world.sessions[SID]["sinceFrom"] == "transcript"
+    world.apply_agents_list([dict(row, startedAt=1)], 1792282349000)    # a transcript's start is not replaced
+    assert world.sessions[SID]["since"] == 1792281600000
+
+
+def test_an_agents_start_in_the_future_or_not_a_number_is_ignored(tmp_path):
+    world = World(VizState(), session_start=transcripts.session_start(tmp_path / "projects"))
+    world.apply_agents_list([{"sessionId": SID, "cwd": "/work/x", "startedAt": 5_000}], 1_000)       # after now
+    world.apply_agents_list([{"sessionId": SID, "cwd": "/work/x", "startedAt": "1792202664678"}], 2_000)
+    world.apply_agents_list([{"sessionId": SID, "cwd": "/work/x", "startedAt": True}], 3_000)
+    assert "since" not in world.sessions[SID]

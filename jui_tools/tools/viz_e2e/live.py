@@ -493,8 +493,30 @@ async def scenario_building(browser, srv, out, failures, res):
     await page.wait_for_timeout(1200)
     mixed = await page.evaluate("() => window.__dbg.towerActors()")
     res["actorsMixed"] = mixed
-    check(failures, mixed["raise"] == 1 and mixed["point"] == 4 and mixed["walkA"] + mixed["walkB"] == 4 and mixed["shadow"] == 10,
-          f"building: three working rooms and one thinking (lit), one waiting, five idle {mixed}")
+    check(failures, mixed["raise"] == 1 and mixed["point"] == 3 and mixed["walkA"] + mixed["walkB"] == 3 and mixed["think"] == 1 and mixed["shadow"] == 10,
+          f"building: three working rooms, one thinking, one waiting (all lit), five idle {mixed}")
+    texts = await page.evaluate("""() => ({ legend: document.getElementById('tower-legend').textContent,
+      card: [...document.querySelectorAll('#sessions .session')].map((c) => c.textContent.replace(/\\s+/g, ' ')).find((t) => t.includes('b9')) || '' })""")
+    check(failures, "考え中" in texts["legend"], "building: the legend has 考え中")
+    check(failures, "考え中" in texts["card"] and "作業中" not in texts["card"], f"building: the thinking session's card says 考え中, not 作業中: {texts['card']}")
+    wraps = await page.evaluate("() => ['tea-finder-agent', 'aurora_base_android2', 'nimbus_android', 'a-very-long-project-name-that-goes-on-and-on-and-on'].map((n) => window.__dbg.towerLines(n))")
+    res["wraps"] = wraps
+    check(failures, wraps[0] == [30, "tea-finder-", "agent"] and wraps[1][1:] == ["aurora_base_", "android2"] and wraps[1][0] < 30
+          and wraps[2] == [30, "nimbus_", "android"] and wraps[3][0] == 22 and len(wraps[3]) == 3 and wraps[3][2].endswith("…"),
+          f"building: names break after - and _, a smaller size before '…', '…' only past two lines {wraps}")
+    # the sky follows the local hour: dawn, day, dusk, night
+    skies = {}
+    for hour in (6, 12, 17.5, 23):
+        await page.evaluate("(h) => { const d = new Date(); d.setHours(Math.floor(h), (h % 1) * 60, 0, 0); window.__dbg.setClock(d.getTime()); }", hour)
+        await page.wait_for_timeout(250)
+        skies[hour] = await page.evaluate("() => window.__dbg.sky()")
+    res["skies"] = skies
+    check(failures, [skies[h]["phase"] for h in (6, 12, 17.5, 23)] == ["dawn", "day", "dusk", "night"] and len({v["background"] for v in skies.values()}) == 4,
+          f"building: four skies for four hours {skies}")
+    for t in ("light", "dark"):
+        await theme(t)
+        await shot(f"{t}-night")
+    await page.evaluate("() => window.__dbg.setClock(null)")
     think = await page.evaluate("""() => { const R = window.__dbg.robots.find((x) => x.def.id === 'b9'); const pr = R && R.robot.props.thinking;
       return { state: R && R.robot.state, bubble: !!(pr && pr.group.visible), badge: window.__dbg.robotState().b9.state }; }""")
     res["thinking"] = think
@@ -510,6 +532,32 @@ async def scenario_building(browser, srv, out, failures, res):
         await theme(t)
         await shot(f"{t}-empty-bays")
     res["buildingShots"] = shots
+    # 8 hours: b0, b1 and b6 have a start 9 h ago, b2 1 h ago, the others none (never tired, not guessed)
+    await page.evaluate("() => window.__dbg.tower(false)")
+    await page.wait_for_timeout(5000)
+    g = {x["id"]: x for x in await page.evaluate("() => window.__dbg.gestures()")}
+    res["tired"] = {k: (v["tired"], v["drinks"]) for k, v in g.items()}
+    check(failures, all(g[k]["tired"] for k in ("b1",) if k in g) and not any(g[k]["tired"] for k in ("b2", "b3", "b4", "b8", "b9") if k in g),
+          f"building: tired from 8 hours of its own start, never without one {res['tired']}")
+    await page.wait_for_timeout(5000)                        # still tired: no second drink
+    g2 = {x["id"]: x for x in await page.evaluate("() => window.__dbg.gestures()")}
+    check(failures, all(g2[k]["drinks"] == g[k]["drinks"] for k in g if k in g2)
+          and all(g[k]["drinks"] >= 1 for k in g if g[k]["tired"] and g[k]["state"] in ("idle", "typing", "reading", "command"))
+          and all(g[k]["drinks"] == 0 for k in g if not g[k]["tired"]),
+          f"building: a drink when it got tired, none again while it stays tired, none if never tired {res['tired']}")
+    # coffee and meals: a fixed seed, never on a robot waiting / thinking / done, at most half of them at once
+    await page.evaluate("() => window.__dbg.snack({ seed: 7, p: 1, share: 0.5 })")
+    worst, seen, wrong = 0, set(), []
+    for _ in range(16):
+        await page.wait_for_timeout(300)
+        rows = await page.evaluate("() => window.__dbg.gestures()")
+        snacks = [x for x in rows if x["gesture"] in ("coffee", "meal")]
+        worst = max(worst, len(snacks)); seen |= {x["gesture"] for x in snacks}
+        wrong += [x for x in rows if x["gesture"] and x["state"] in ("waiting", "thinking", "done")]
+    cap = max(1, len(rows) // 2)
+    res["snacks"] = {"worst": worst, "cap": cap, "seen": sorted(seen), "wrong": wrong}
+    check(failures, wrong == [] and 0 < worst <= cap and seen, f"building: coffee and meals within the cap, never while waiting or thinking {res['snacks']}")
+    await page.evaluate("() => window.__dbg.snack({ seed: 20261018, p: 1 / 90, share: 0.15 })")
     await page.close()
     # ten seconds of the building, everyone working and one waiting (a webm the requester can watch)
     ctx = await browser.new_context(record_video_dir=out, record_video_size={"width": 1280, "height": 800}, viewport={"width": 1280, "height": 800})
@@ -517,8 +565,12 @@ async def scenario_building(browser, srv, out, failures, res):
     await vp.goto(srv.url + "/")
     await ready(vp)
     await wait(vp, "() => { const f = window.__dbg.floors(); return f && f.floors.length === 2; }", label="video: floors")
-    await vp.evaluate("() => window.__dbg.tower(true)")
-    await vp.wait_for_timeout(10500)
+    await vp.evaluate("() => { const d = new Date(); d.setHours(21, 0, 0, 0); window.__dbg.setClock(d.getTime()); window.__dbg.tower(true); }")
+    await vp.wait_for_timeout(4500)
+    await vp.evaluate("() => { window.__dbg.tower(false); window.__dbg.snack({ seed: 3, p: 0.35, share: 0.5 }); }")
+    await vp.click("#scope-top")
+    await vp.click('[data-pick-project="b01"]')        # a tired robot at work
+    await vp.wait_for_timeout(7000)
     video = vp.video
     await ctx.close()
     res["buildingVideo"] = str(await video.path()) if video else None

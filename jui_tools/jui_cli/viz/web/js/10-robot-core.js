@@ -221,6 +221,7 @@ function drawFace(ctx, mode) {
     else if (mode === 'focus') { rr(ctx, x - 19, ey - 8, 38, 17, 8); ctx.fill(); }
     else if (mode === 'happy') { ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(x, ey + 12, 17, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
     else if (mode === 'wide') { ctx.beginPath(); ctx.arc(x, ey, 22, 0, Math.PI * 2); ctx.fill(); }
+    else if (mode === 'tired') { rr(ctx, x - 16, ey - 2, 32, 22, 9); ctx.fill(); ctx.fillStyle = COL.screen; ctx.fillRect(x - 18, ey - 6, 36, 9); ctx.fillStyle = COL.eye; }
   }
   ctx.lineWidth = 6; ctx.beginPath();
   if (mode === 'happy') ctx.arc(cx, 86, 14, Math.PI * 0.1, Math.PI * 0.9);
@@ -229,6 +230,10 @@ function drawFace(ctx, mode) {
   else ctx.arc(cx, 86, 10, Math.PI * 0.2, Math.PI * 0.8);
   ctx.stroke();
   ctx.restore();
+  if (mode === 'tired') {                                  // bags under the eyes
+    ctx.strokeStyle = 'rgba(170, 120, 255, 0.85)'; ctx.lineWidth = 4;
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + side * dx, ey + 26, 15, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
+  }
   if (mode === 'wide') { ctx.fillStyle = COL.screen; for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + side * dx + 7, ey - 8, 6, 0, Math.PI * 2); ctx.fill(); } }
   ctx.fillStyle = 'rgba(255, 120, 160, 0.42)';
   for (const side of [-1, 1]) { ctx.beginPath(); ctx.ellipse(cx + side * 96, 88, 15, 8, 0, 0, Math.PI * 2); ctx.fill(); }
@@ -419,7 +424,8 @@ function faceToward(obj, target) {
 }
 function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, furnished = false }) {
   const g = S.geo, m = S.mat;
-  const r = { label, role, state, prev: state, blend: 1, seed, props: {}, faceMode: '', nextBlink: 1 + (seed % 2), blinkEnd: 0, termAt: 0, phoneAt: 0 };
+  const r = { label, role, state, prev: state, blend: 1, seed, props: {}, faceMode: '', nextBlink: 1 + (seed % 2), blinkEnd: 0, termAt: 0, phoneAt: 0,
+    tired: false, needDrink: false, drinks: 0, gesture: null, hand: null };
   r.furnished = furnished;
   r.accent = toon(ROLES[role].color);
   r.lampMat = new THREE.MeshBasicMaterial({ color: LAMP.idle });
@@ -455,8 +461,9 @@ function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, fu
     const ear = new THREE.Mesh(g.ear, r.accent); ear.rotation.z = Math.PI / 2; ear.position.set(side * (HEAD.w / 2 + 0.035), 0.4, 0); r.head.add(ear);
     const cap = new THREE.Mesh(g.earCap, m.limb); cap.rotation.z = Math.PI / 2; cap.position.set(side * (HEAD.w / 2 + 0.06), 0.4, 0); r.head.add(cap);
   }
-  const rod = new THREE.Mesh(g.rod, m.limb); rod.position.set(0, HEAD.h + 0.09, -0.12); r.head.add(rod);
-  const ball = new THREE.Mesh(g.ball, r.accent); ball.position.set(0, HEAD.h + 0.2, -0.12); r.head.add(ball);
+  r.antenna = new THREE.Group(); r.antenna.position.set(0, HEAD.h, -0.12); r.head.add(r.antenna);   // droops when tired
+  const rod = new THREE.Mesh(g.rod, m.limb); rod.position.set(0, 0.09, 0); r.antenna.add(rod);
+  const ball = new THREE.Mesh(g.ball, r.accent); ball.position.set(0, 0.2, 0); r.antenna.add(ball);
 
   r.bandCanvas = makeCanvas(2048, Math.round((2048 * BAND.h) / g.bandWall.userData.perimeter));
   r.bandTex = texFrom(r.bandCanvas);
@@ -494,6 +501,62 @@ function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, fu
   fontRedraws.push(r.fontRedraw);
   ensureProps(r, state);
   return r;
+}
+
+/* ---------- gestures: an energy drink once after 8 hours, coffee or a meal now and then (10-18) ----------
+   A gesture moves the arms and shows a thing in the hand; the state, its lamp and its label stay as they are.
+   Only while idle or at work (typing, reading, a command) — never while waiting for permission, thinking or done:
+   a gesture there ends at once. None under reduced motion. */
+const GESTURE_OK = new Set(['idle', 'typing', 'reading', 'command']);
+const GESTURE_LEN = { drink: 3.6, coffee: 5, meal: 5 };
+function handThing(kind) {
+  const g = new THREE.Group();
+  if (kind === 'drink') {                                   // a tall can, bright
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.26, 12), toon('#25c4ff'));
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.07, 12), toon('#ffe14d')); band.position.y = 0.02;
+    g.add(can, band);
+  } else if (kind === 'coffee') {                           // a mug with a handle
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.15, 12), toon('#ffffff'));
+    const coffee = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.01, 12), toon('#6b4226')); coffee.position.y = 0.07;
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 6, 10), toon('#ffffff')); handle.position.x = 0.1;
+    g.add(mug, coffee, handle);
+  } else {                                                  // a rice bowl and chopsticks
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), toon('#e8554e'));
+    bowl.rotation.x = Math.PI;
+    const rice = new THREE.Mesh(new THREE.CircleGeometry(0.11, 12), toon('#fffaf0')); rice.rotation.x = -Math.PI / 2; rice.position.y = 0.0;
+    g.add(bowl, rice);
+  }
+  g.position.set(0, -0.46, 0.06);
+  return g;
+}
+function startGesture(r, kind, t) {
+  if (reduceMotion || !GESTURE_OK.has(r.state)) return false;
+  endGesture(r);
+  r.hand = handThing(kind);
+  (kind === 'meal' ? r.armL : r.armR).add(r.hand);
+  r.gesture = { kind, t0: t, t1: t + GESTURE_LEN[kind] };
+  if (kind === 'drink') r.drinks += 1;
+  return true;
+}
+function endGesture(r) {
+  if (r.hand) { r.hand.parent.remove(r.hand); r.hand.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  r.hand = null; r.gesture = null;
+}
+/* Tired after 8 hours of its session (the page decides; the robot only shows it): the first time, a drink. */
+function setRobotTired(r, on) {
+  if (on && !r.tired) r.needDrink = true;
+  if (!on) r.needDrink = false;
+  r.tired = on;
+}
+function gesturePose(r, p, t) {
+  const G = r.gesture, k = Math.min(1, (t - G.t0) / 0.35, (G.t1 - t) / 0.35);   // ease in and out
+  const sip = 0.5 + 0.5 * Math.sin((t - G.t0) * (G.kind === 'meal' ? 5 : 2.6));
+  const mix = (key, v) => { p[key] += (v - p[key]) * k; };
+  if (G.kind === 'meal') {                                  // the bowl in the left hand, chopsticks to the mouth
+    mix('aLx', -1.25); mix('aLz', -0.45); mix('aRx', -1.7 - sip * 0.45); mix('aRz', 0.25); mix('headX', 0.18);
+  } else {                                                  // a can or a mug to the mouth, head back for the drink
+    mix('aRx', -2.05 - sip * 0.35); mix('aRz', 0.5); mix('headX', G.kind === 'drink' ? -0.28 : -0.1 - sip * 0.06);
+  }
 }
 
 /* ---------- props, built the first time a robot needs them ---------- */
@@ -695,12 +758,17 @@ function poseFor(state, s) {
   return p;
 }
 function updateRobot(r, t, dt) {
-  const s = t * SPEED + r.seed;
+  const s = t * SPEED * (r.tired ? 0.7 : 1) + r.seed;    // tired: a little slower
   r.blend = Math.min(1, r.blend + dt / 0.4);
   const e = r.blend * r.blend * (3 - 2 * r.blend);
   const a = poseFor(r.prev, s), b = poseFor(r.state, s);
   const p = {};
   for (const k in b) p[k] = a[k] + (b[k] - a[k]) * e;
+  if (r.tired) { p.headX += 0.2; p.torsoX += 0.08; p.hipsY -= 0.012; p.aLz *= 0.5; p.aRz *= 0.5; }   // head and shoulders down
+  if (r.gesture && (!GESTURE_OK.has(r.state) || t >= r.gesture.t1)) endGesture(r);
+  if (!r.gesture && r.needDrink && GESTURE_OK.has(r.state) && startGesture(r, 'drink', t)) r.needDrink = false;
+  if (r.gesture) gesturePose(r, p, t);
+  r.antenna.rotation.x += ((r.tired ? 1.0 : 0) - r.antenna.rotation.x) * Math.min(1, dt * 3);
   r.root.position.y = p.rootY;
   r.hips.position.y = HIPS_Y + p.hipsY;
   r.torso.rotation.set(p.torsoX, p.torsoY, 0);
@@ -717,7 +785,8 @@ function updateRobot(r, t, dt) {
   r.lampMat.color.set(lampOn ? LAMP[lampKey] : LAMP.off);
 
   let mode = STATES[r.blend < 0.5 ? r.prev : r.state].face;
-  if (mode === 'normal' || mode === 'focus') {
+  if (r.tired && mode === 'normal') mode = 'tired';
+  if (mode === 'normal' || mode === 'focus' || mode === 'tired') {
     if (s > r.nextBlink) { r.blinkEnd = s + 0.12; r.nextBlink = s + 2.4 + Math.random() * 3.2; }
     if (s < r.blinkEnd) mode = 'blink';
   }

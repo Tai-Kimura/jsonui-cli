@@ -133,13 +133,22 @@ class World:
     def _find_since(self, session: dict, cwd: str | None, transcript: str | None) -> None:
         """The session's real start, once (a new session's transcript appears with its first prompt: retried)."""
         sid = session["id"]
-        if self.session_start is None or "since" in session or self._since_tries.get(sid, 0) >= self.SINCE_TRIES:
+        if self.session_start is None or session.get("sinceFrom") == "transcript" or self._since_tries.get(sid, 0) >= self.SINCE_TRIES:
             return
         self._since_tries[sid] = self._since_tries.get(sid, 0) + 1
         since = self.session_start(sid, cwd, transcript)
         if isinstance(since, int) and since > 0:
-            session["since"] = since
+            session["since"], session["sinceFrom"] = since, "transcript"   # the session's own start wins
             self._dirty.add("sessions")
+
+    def _agents_since(self, session: dict, row: dict, at: int) -> None:
+        """Without a readable transcript, the process start `claude agents --json` reports (a real time, not
+        when the server saw the session). A transcript found later replaces it."""
+        started = row.get("startedAt")
+        if "since" in session or not isinstance(started, int) or isinstance(started, bool) or not 0 < started <= at:
+            return
+        session["since"], session["sinceFrom"] = started, "agents"
+        self._dirty.add("sessions")
 
     def _move(self, session: dict, cwd: str) -> None:
         project = self.rooms.project_for(cwd)
@@ -492,6 +501,7 @@ class World:
                 continue
             session = self._session(sid, _s(row.get("cwd")), at)
             self._find_since(session, _s(row.get("cwd")), None)
+            self._agents_since(session, row, at)
             status = row.get("status")
             if status in ("busy", "idle", "waiting"):
                 waiting_for = _s(row.get("waitingFor")) if status == "waiting" else None

@@ -626,7 +626,8 @@ function liveBuildRoom(room) {
   const tag = document.createElement('button');
   tag.type = 'button'; tag.className = 'tag room'; tag.dataset.setProject = room.id; tag.title = `${room.name} だけを表示する`; tag.textContent = room.name;
   tagsEl.append(tag);
-  const rt = { el: tag, id: room.id, p: new THREE.Vector3(room.x0 + 0.2, 0.02, room.z1 - 0.1) };
+  // over its own back wall's left end: at the front corner it sat on the back edge of the room in front (3×2 floors)
+  const rt = { el: tag, id: room.id, p: new THREE.Vector3(room.x0 + 0.6, room.back + 0.35, room.z0 - 0.05) };
   roomTags.push(rt);
   return { geo: room.geo, group: g, pb, kb, tb, rt, mats };
 }
@@ -726,6 +727,27 @@ function liveWalk(R, dt, nowMs) {
   else { root.position.x += (dx / dist) * step; root.position.z += (dz / dist) * step; root.rotation.y = Math.atan2(dx, dz); }
   return 'walking';
 }
+/* Coffee and meals, now and then (requester, 10-18): once a second each robot that is idle or at work may start
+   one (probability SNACK.p, a seeded generator so a test can repeat it), while at most SNACK.share of the robots
+   (at least one) are at it. Never while waiting, thinking or done (startGesture refuses), none under reduced motion. */
+const SNACK = { seed: 20261018, p: 1 / 90, share: 0.15, next: 0, rng: null };
+function snackRandom() {
+  let a = SNACK.seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function snackTick(t) {
+  if (reduceMotion || t < SNACK.next) return;
+  SNACK.next = t + 1;
+  if (!SNACK.rng) SNACK.rng = snackRandom();
+  const here = robots.filter((R) => !LIVE.leaving[R.def.id]);
+  const cap = Math.max(1, Math.floor(here.length * SNACK.share));
+  let busy = here.filter((R) => R.robot.gesture && R.robot.gesture.kind !== 'drink').length;
+  for (const R of here) {
+    if (busy >= cap) break;
+    if (R.robot.gesture || !GESTURE_OK.has(R.robot.state)) continue;
+    if (SNACK.rng() < SNACK.p && startGesture(R.robot, SNACK.rng() < 0.5 ? 'coffee' : 'meal', t)) busy += 1;
+  }
+}
 function liveUpdateRobots(nowSec, dt) {
   if (SOURCE.layoutRev !== LIVE3D.rev) liveSync();
   liveLinks(latestModel, nowSec);
@@ -734,8 +756,11 @@ function liveUpdateRobots(nowSec, dt) {
   // must not slow the walk down.
   const walkDt = LIVE3D.lastWalk ? Math.min(1, (nowMs - LIVE3D.lastWalk) / 1000) : 0;
   LIVE3D.lastWalk = nowMs;
+  snackTick(nowSec);
+  const now = vizNow();
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
+    setRobotTired(R.robot, R.def.kind === 'main' && isTired(sinceOf(R.def.id), now));
     const how = liveWalk(R, walkDt, nowMs);
     if (how === 'gone') continue;
     const vis = how === 'walking' ? 'carry' : st.state;
@@ -865,6 +890,19 @@ function liveRoomPose(id) {
    on its own layer, with the floor number, a window per room (lit: a robot works; yellow: one waits for permission),
    the counts and the room names on its front. Pressing a floor goes down to it. Changing floors moves the camera
    up or down into the new floor. */
+/* The sky behind the building follows the local time of the machine viewing it (requester, 10-18): dawn, day, dusk,
+   night. The panels, the floor buttons and the legend carry their own background, so they read at any hour. */
+const SKY = { dawn: ['#8fa9d6', '#f6c49f'], day: ['#8fc4f2', '#e3f1ff'], dusk: ['#3f4486', '#f0935f'], night: ['#050c1c', '#17264a'] };
+function skyPhase(date) {
+  const h = date.getHours() + date.getMinutes() / 60;
+  return h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 16.5 ? 'day' : h >= 16.5 && h < 19 ? 'dusk' : 'night';
+}
+function skySync() {
+  const phase = TOWER.on ? skyPhase(new Date(vizNow())) : '';
+  if ((sceneEl.dataset.sky || '') === phase) return;
+  sceneEl.dataset.sky = phase;
+  sceneEl.style.background = phase ? `linear-gradient(180deg, ${SKY[phase][0]}, ${SKY[phase][1]})` : '';
+}
 const TOWER = { on: false, group: null, floors: [], sig: '', theme: null, W: 16, D: 9, H: 3, SLAB: 0.28, LOBBY: 1.1, LAYER: 1, pulse: 1,
   lights: null, actors: null, bayColor: [] };
 const towerBase = (k) => TOWER.LOBBY + k * (TOWER.H + TOWER.SLAB);          // the slab under floor k
@@ -893,19 +931,41 @@ function towerFloorText(k) {
   return { ids, working, waiting, idle };
 }
 const TOWER_STATE = ['waiting', 'working', 'idle', 'idle'];   // rank 0..3 → what a window shows
-const towerState = (id) => (id ? TOWER_STATE[LIVE.rank[id]] || 'idle' : 'empty');
+// A working room where nobody does more than think shows "thinking" (lit, its own badge and pose).
+const roomThinks = (id) => { const st = ROBOT_DEFS.filter((d) => d.room === id && !LIVE.leaving[d.id]).map((d) => (robotState[d.id] || {}).state);
+  return st.includes('thinking') && !st.some((x) => x && !['idle', 'done', 'thinking', 'waiting'].includes(x)); };
+const towerState = (id) => { if (!id) return 'empty'; const t = TOWER_STATE[LIVE.rank[id]] || 'idle'; return t === 'working' && roomThinks(id) ? 'thinking' : t; };
 const towerName = (id) => String((PROJECT[id] && PROJECT[id].name) || id || '').replace(/\/+$/, '');
-/* A name in up to two lines that fit maxW; only a name longer than two lines gets '…'. */
+/* A name in up to two lines that fit maxW, broken after '-', '_' or a space when it can be (not "tea-finder-ag / ent");
+   a part longer than a line breaks where it must; a name longer than two lines ends with '…'. */
 function towerLines(ctx, text, maxW) {
-  const out = [];
-  let line = '';
-  for (const ch of [...text]) {
-    if (ctx.measureText(line + ch).width > maxW && line) { out.push(line); line = ch; if (out.length === 2) break; }
-    else line += ch;
+  const parts = text.match(/[^-_\s]*[-_\s]|[^-_\s]+$/g) || [text];
+  const lines = [''];
+  for (const part of parts) {
+    const cur = lines[lines.length - 1];
+    if (ctx.measureText(cur + part).width <= maxW) { lines[lines.length - 1] = cur + part; continue; }
+    if (cur) lines.push('');
+    for (const ch of [...part]) {                         // a part wider than a line: by character
+      const now = lines[lines.length - 1];
+      if (ctx.measureText(now + ch).width > maxW && now) lines.push(ch); else lines[lines.length - 1] = now + ch;
+    }
   }
-  if (out.length < 2) out.push(line);
-  else if (line) { let last = out[1]; while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1); out[1] = last + '…'; }
-  return out.filter(Boolean);
+  if (lines.length <= 2) return lines.filter(Boolean);
+  let last = lines[1];
+  lines.cut = true;
+  while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+  const out = [lines[0], last + '…'];
+  out.cut = true;
+  return out;
+}
+/* The largest of 30 / 26 / 22 px at which the name fits two lines uncut (only the smallest may cut it). */
+function towerNameFit(ctx, text, maxW) {
+  for (const size of [30, 26, 22]) {
+    ctx.font = `700 ${size}px ${FONT_BODY}`;
+    const lines = towerLines(ctx, text, maxW);
+    if (!lines.cut || size === 22) return { size, lines };
+  }
+  return null;
 }
 /* A floor's front, 2048 × 384: the floor number | six bays (a badge band, the window — cut out, the light and the
    robots behind it show through — and the name band) | the counts. Nothing shares a band, so nothing overlaps. */
@@ -927,7 +987,7 @@ function towerFacade(F, k, P) {
     const id = ids[i], state = towerState(id), gy = WIN_TOP + BADGE;
     // the badge band: the state in words and a symbol (not only a colour)
     ctx.fillStyle = P.frame; ctx.fillRect(x, WIN_TOP, w, BADGE);
-    const badge = { working: ['▶ 作業中', P.ok, P.okBg], waiting: ['! 許可待ち', P.warn, P.warnBg], idle: ['● 待機（消灯）', P.soft, P.chip], empty: ['空き', P.soft, P.panel] }[state];
+    const badge = { working: ['▶ 作業中', P.ok, P.okBg], thinking: ['… 考え中', P.ok, P.okBg], waiting: ['! 許可待ち', P.warn, P.warnBg], idle: ['● 待機（消灯）', P.soft, P.chip], empty: ['空き', P.soft, P.panel] }[state];
     ctx.font = `700 26px ${FONT_BODY}`;
     const bwid = ctx.measureText(badge[0]).width + 26;
     ctx.fillStyle = badge[2]; ctx.beginPath(); ctx.roundRect(x + 10, WIN_TOP + 8, bwid, 36, 18); ctx.fill();
@@ -942,8 +1002,9 @@ function towerFacade(F, k, P) {
     }
     if (state === 'waiting') { ctx.strokeStyle = P.warn; ctx.lineWidth = 12; ctx.globalAlpha = 0.5 + 0.5 * TOWER.pulse; ctx.strokeRect(x + 6, WIN_TOP + 6, w - 12, WIN_BOTTOM - WIN_TOP - 12); ctx.globalAlpha = 1; }
     // the name band
-    ctx.fillStyle = id ? P.ink : P.soft; ctx.font = `700 30px ${FONT_BODY}`; ctx.textAlign = 'center';
-    (id ? towerLines(ctx, towerName(id), w - 8) : ['—']).forEach((ln, j) => ctx.fillText(ln, x + w / 2, NAME_TOP + 34 + j * 40));
+    ctx.fillStyle = id ? P.ink : P.soft; ctx.textAlign = 'center';
+    const fit = id ? towerNameFit(ctx, towerName(id), w - 8) : (ctx.font = `700 30px ${FONT_BODY}`, { size: 30, lines: ['—'] });
+    fit.lines.forEach((ln, j) => ctx.fillText(ln, x + w / 2, NAME_TOP + 30 + j * (fit.size + 10)));
     F.bays.push({ x0: x / W, x1: (x + w) / W, gy0: gy / H, gy1: WIN_BOTTOM / H, id, state });
   });
   const sx = W - STATS + 18;
@@ -983,6 +1044,11 @@ function towerSprite(pose, P) {
     ctx.fillStyle = '#7aa2d6'; ctx.fillRect(108, 52, 40, 6); ctx.fillRect(108, 66, 30, 6); ctx.fillRect(108, 80, 36, 6);
     head(56, 60); torso(56, 84); limb(66, 98, 104, 70); limb(48, 98, 44, 136);
     limb(48, 140, 46, 194); limb(64, 140, 66, 194);
+  } else if (pose === 'think') {                       // standing, a hand to the chin, a … above
+    head(70, 70); torso(70, 94); limb(80, 108, 82, 76); limb(60, 108, 70, 128);
+    limb(62, 150, 60, 194); limb(78, 150, 80, 194);
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(120, 26, 30, 18, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2f6fd8'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(106 + i * 14, 26, 4.5, 0, Math.PI * 2); ctx.fill(); }
   } else {                                             // a raised hand, looking up
     head(80, 60); torso(80, 84); limb(92, 96, 112, 30); limb(68, 96, 60, 136);
     limb(72, 140, 70, 194); limb(88, 140, 90, 194);
@@ -991,7 +1057,7 @@ function towerSprite(pose, P) {
   }
   return texFrom(c);
 }
-const TOWER_POSES = ['type', 'walkA', 'walkB', 'point', 'raise', 'shadow'];
+const TOWER_POSES = ['type', 'walkA', 'walkB', 'point', 'raise', 'think', 'shadow'];
 function towerBuild() {
   const n = LIVE.floors.length, dark = isDark();
   if (TOWER.group && TOWER.floors.length === n && TOWER.theme === dark) return;
@@ -1081,7 +1147,7 @@ function towerSync(now = performance.now()) {
 const towerTmp = { m: new THREE.Matrix4(), q: new THREE.Quaternion(), p: new THREE.Vector3(), s: new THREE.Vector3(1, 1, 1), c: new THREE.Color() };
 function towerAnimate(t, dt) {
   if (!TOWER.lights || !TOWER.actors) return;
-  const P = towerPalette(), want = { working: P.on, waiting: P.on, idle: P.off, empty: P.none };
+  const P = towerPalette(), want = { working: P.on, thinking: P.on, waiting: P.on, idle: P.off, empty: P.none };
   const k = reduceMotion ? 1 : Math.min(1, dt * 4);
   const counts = Object.fromEntries(TOWER_POSES.map((p) => [p, 0]));
   const { m, q, p, s, c } = towerTmp;
@@ -1103,6 +1169,8 @@ function towerAnimate(t, dt) {
       const fwd = ph < 0.5, f = fwd ? ph * 2 : 2 - ph * 2;
       place(still || Math.floor(t * 4 + seed) % 2 ? 'walkA' : 'walkB', x(0.38 + f * 0.36), B.yBot, fwd ? 1 : -1);
       place('point', x(0.86), B.yBot, -1, still ? 0 : Math.sin(t * 1.4 + seed) * 0.04);
+    } else if (bay.state === 'thinking') {          // hands to chins, a … over one of them
+      place('think', x(0.35), B.yBot, 1, still ? 0 : Math.sin(t * 0.9 + seed) * 0.05); place('type', x(0.72), B.yBot, -1);
     } else if (bay.state === 'waiting') {
       place('raise', x(0.55), B.yBot + (still ? 0 : Math.abs(Math.sin(t * 3 + seed)) * 0.05));
       place('type', x(0.2), B.yBot);
@@ -1114,7 +1182,7 @@ function towerAnimate(t, dt) {
   for (const pose of TOWER_POSES) { const mesh = TOWER.actors[pose]; mesh.count = counts[pose]; mesh.instanceMatrix.needsUpdate = true; }
 }
 /* The room under the pointer in the building: its full name and state, as the canvas's title. */
-const TOWER_STATE_JA = { working: '作業中', waiting: '許可待ち', idle: '待機（消灯）', empty: '空き' };
+const TOWER_STATE_JA = { working: '作業中', thinking: '考え中', waiting: '許可待ち', idle: '待機（消灯）', empty: '空き' };
 function towerHover(hit) {
   const F = hit && TOWER.floors[hit.object.userData.floor];
   const bay = F && hit.uv ? F.bays.find((b) => hit.uv.x >= b.x0 && hit.uv.x <= b.x1) : null;
@@ -1273,6 +1341,7 @@ function update3D(model, nowSec, dt) {
   if (camTween || zoom.zoomed) camera.lookAt(viewTarget); else controls.update();
   renderer.render(scene, camera);
   if (TOWER.on) { towerSync(); towerAnimate(nowSec, dt); }
+  if (SOURCE.mode === 'live') skySync();
   tagsEl.hidden = zoom.zoomed || TOWER.on;
   for (const R of robots) placeTag(R.tag, tmpV.copy(R.robot.root.position).add(TAG_UP).clone());
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }
