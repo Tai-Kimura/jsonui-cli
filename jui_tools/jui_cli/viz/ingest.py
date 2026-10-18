@@ -64,9 +64,13 @@ def _head(text: Any, n: int) -> str | None:
 
 
 class World:
-    def __init__(self, state: VizState, tool_input_max: int = 2000) -> None:
+    def __init__(self, state: VizState, tool_input_max: int = 2000, session_start=None) -> None:
         self.state = state
         self.tool_input_max = tool_input_max
+        # session id, cwd, transcript path -> when the session really started (sources/transcripts.py), or None.
+        # A session gets ``since`` only from it; never the time the server first saw the session.
+        self.session_start = session_start
+        self._since_tries: dict[str, int] = {}
         self.rooms = Rooms()
         self.sessions: dict[str, dict] = {}
         self.agents: dict[str, dict] = {}
@@ -123,6 +127,19 @@ class World:
         elif cwd and session["cwd"] == "?":
             self._move(session, cwd)
         return session
+
+    SINCE_TRIES = 20
+
+    def _find_since(self, session: dict, cwd: str | None, transcript: str | None) -> None:
+        """The session's real start, once (a new session's transcript appears with its first prompt: retried)."""
+        sid = session["id"]
+        if self.session_start is None or "since" in session or self._since_tries.get(sid, 0) >= self.SINCE_TRIES:
+            return
+        self._since_tries[sid] = self._since_tries.get(sid, 0) + 1
+        since = self.session_start(sid, cwd, transcript)
+        if isinstance(since, int) and since > 0:
+            session["since"] = since
+            self._dirty.add("sessions")
 
     def _move(self, session: dict, cwd: str) -> None:
         project = self.rooms.project_for(cwd)
@@ -257,6 +274,7 @@ class World:
             return None
         cwd = _s(payload.get("cwd"))
         session = self._session(sid, cwd, at)
+        self._find_since(session, cwd, _s(payload.get("transcript_path")))
         root = self.rooms.root_of(session["projectId"])
         aid = _s(payload.get("agent_id"))
         agent_type = _s(payload.get("agent_type"))
@@ -473,6 +491,7 @@ class World:
             if sid is None:
                 continue
             session = self._session(sid, _s(row.get("cwd")), at)
+            self._find_since(session, _s(row.get("cwd")), None)
             status = row.get("status")
             if status in ("busy", "idle", "waiting"):
                 waiting_for = _s(row.get("waitingFor")) if status == "waiting" else None
@@ -629,10 +648,17 @@ class World:
                 self.tasks.drop_session(sid)
                 self._dirty |= {"sessions", "agents", "tasks"}
             elif session["status"] == "busy":
+                # Busy and quiet for a while: the model is thinking. Its own state, not idle with another act — the
+                # page drew it as idle (10-18 live check: every hookless session that worked looked asleep).
                 agent = self.agents.get(sid)
-                if agent and agent["state"] == "idle" and at - agent["updatedAt"] >= THINKING_AFTER_MS and agent["act"] != "考え中":
-                    agent["act"] = "考え中"
+                if agent and agent["state"] == "idle" and at - agent["updatedAt"] >= THINKING_AFTER_MS:
+                    agent["state"], agent["act"] = "thinking", "考え中"
                     self._dirty.add("agents")
+            else:
+                # No longer busy (a hookless session's status comes from `claude agents --json` only): stop thinking.
+                agent = self.agents.get(sid)
+                if agent and agent["state"] == "thinking":
+                    self._set(agent, at, "idle", "待機")
 
     # ---------------------------------------------------------------- publish
 

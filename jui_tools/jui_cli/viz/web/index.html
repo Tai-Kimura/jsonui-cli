@@ -44,6 +44,12 @@
         <button type="button" class="fn-btn" id="floor-down" aria-label="下の階へ">▼</button>
         <button type="button" class="fn-btn fn-building" id="floor-building" aria-pressed="false">ビル全体</button>
       </div>
+      <ul class="tower-legend" id="tower-legend" aria-label="窓の見方" hidden>
+        <li><span class="tl-win tl-work" aria-hidden="true">▶</span>作業中 — 明かりがつき、ロボットが動く</li>
+        <li><span class="tl-win tl-wait" aria-hidden="true">!</span>許可待ち — 黄色の枠、手を挙げている</li>
+        <li><span class="tl-win tl-idle" aria-hidden="true"></span>待機 — 電気が消え、影だけ</li>
+        <li><span class="tl-win tl-empty" aria-hidden="true"></span>空き — 部屋が無い（真っ暗）</li>
+      </ul>
       <div class="live-empty" id="live-empty" hidden>
         <p class="le-title">Claude Code のセッションがまだ見えません</p>
         <p>確かめること</p>

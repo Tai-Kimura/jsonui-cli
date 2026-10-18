@@ -24,9 +24,10 @@ const COL = {
   band: '#fffdf7', bandInk: '#d62839', wood: '#c99f73', woodDark: '#9e7752',
   laptop: '#c9d0db', phone: '#1f2532',
 };
-const LAMP = { idle: '#8fa3bf', busy: '#35d07f', waiting: '#ffb020', done: '#35d07f', off: '#2a3a30' };
+const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', waiting: '#ffb020', done: '#35d07f', off: '#2a3a30' };
 const STATES = {
   idle: { name: '待機', lamp: 'idle', face: 'normal' },
+  thinking: { name: '考え中', lamp: 'think', face: 'normal' },
   typing: { name: '入力', lamp: 'busy', face: 'focus' },
   reading: { name: '読む', lamp: 'busy', face: 'normal' },
   command: { name: 'コマンド', lamp: 'busy', face: 'focus' },
@@ -35,7 +36,7 @@ const STATES = {
   carry: { name: '運ぶ', lamp: 'busy', face: 'normal' },
   done: { name: '完了', lamp: 'done', face: 'happy' },
 };
-const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', waiting: '黄（許可待ち）', done: '緑の点滅（完了）' };
+const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', think: '淡い緑のゆっくり点滅（考え中）', waiting: '黄（許可待ち）', done: '緑の点滅（完了）' };
 
 const HIPS_Y = 0.36;
 const HEAD = { w: 1.1, h: 0.9, d: 0.92, r: 0.17 };
@@ -568,6 +569,32 @@ const BUILDERS = {
       },
     };
   },
+  thinking(r) {
+    const group = new THREE.Group();
+    const canvas = makeCanvas(160, 112), tex = texFrom(canvas);
+    const draw = (lit) => {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 160, 112);
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#8a9bb0'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.ellipse(86, 46, 66, 38, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      for (const [x, y, rr] of [[30, 92, 9], [14, 106, 5]]) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      for (let i = 0; i < 3; i++) { ctx.fillStyle = lit < 0 || i <= lit ? '#2f6fd8' : '#c8d3e3'; ctx.beginPath(); ctx.arc(58 + i * 28, 47, 9, 0, Math.PI * 2); ctx.fill(); }
+      tex.needsUpdate = true;
+    };
+    draw(reduceMotion ? -1 : 0);
+    const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+    bubble.position.set(0.62, 1.95, 0.1); bubble.scale.set(0.62, 0.43, 1); group.add(bubble);
+    let shown = 0;
+    return {
+      group,
+      update(s) {
+        if (reduceMotion) return;
+        bubble.position.y = 1.95 + Math.sin(s * 1.3) * 0.02;
+        const lit = Math.floor(s * 2.2) % 3;
+        if (lit !== shown) { shown = lit; draw(lit); }
+      },
+    };
+  },
   waiting() {
     const group = new THREE.Group();
     const bubble = new THREE.Sprite(S.mat.alert); bubble.position.set(0.6, 1.95, 0.1); bubble.scale.set(0.42, 0.462, 1); group.add(bubble);
@@ -616,6 +643,14 @@ function poseFor(state, s) {
       p.hipsY = b * 0.012;
       p.headY = Math.sin(s * 0.55) * 0.38; p.headX = Math.sin(s * 0.8) * 0.05 - 0.02; p.headZ = Math.sin(s * 0.65) * 0.05;
       p.aLx = b * 0.06; p.aRx = -b * 0.06;
+      break;
+    }
+    case 'thinking': {
+      const sway = reduceMotion ? 0 : Math.sin(s * 0.9);
+      p.headZ = 0.24 + sway * 0.08; p.headX = -0.14; p.headY = 0.18 + sway * 0.06;
+      p.aRx = -2.05; p.aRz = -0.95;           // a hand to the chin
+      p.aLx = -1.0; p.aLz = -0.55;            // the other arm folded
+      p.torsoY = sway * 0.04; p.hipsY = reduceMotion ? 0 : Math.sin(s * 1.8) * 0.006;
       break;
     }
     case 'typing':
@@ -677,7 +712,8 @@ function updateRobot(r, t, dt) {
   r.tails.forEach((tail, i) => tail.rotation.set(0.5 + Math.sin(s * 6.5 + i * 1.3) * 0.12, 0, tail.userData.spread));
 
   const lampKey = STATES[r.state].lamp;
-  const lampOn = lampKey !== 'done' || Math.floor(s * 3) % 2 === 0;
+  const lampOn = lampKey === 'think' ? (reduceMotion || Math.sin(s * 1.6) > -0.4)   // thinking: a slow blink
+    : lampKey !== 'done' || Math.floor(s * 3) % 2 === 0;
   r.lampMat.color.set(lampOn ? LAMP[lampKey] : LAMP.off);
 
   let mode = STATES[r.blend < 0.5 ? r.prev : r.state].face;

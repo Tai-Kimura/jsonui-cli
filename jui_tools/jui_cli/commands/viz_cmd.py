@@ -338,7 +338,9 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         version=version_label(),
         state=VizState(config.eventsKeep),
     )
-    world = World(ctx.state, config.toolInputMaxChars)
+    from ..viz.paths import claude_home
+    from ..viz.sources import transcripts
+    world = World(ctx.state, config.toolInputMaxChars, session_start=transcripts.session_start(claude_home() / "projects"))
     started_at = now_ms()
     sources: dict[str, dict] = {}
 

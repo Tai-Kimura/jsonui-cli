@@ -776,3 +776,16 @@ def test_floors_keep_a_room_that_stopped_until_its_seat_is_needed_and_keep_slots
     assert stopped[0] == prev                                            # nobody moved, nobody changed seats
     assert set(needed[0]) == {"p0", "p6", "p7", "p1", "p2", "p3"}        # six active rooms take 1F
     assert needed[0][1:4] == ["p1", "p2", "p3"]                          # the ones that stayed kept their slots
+
+
+def test_every_bundle_parses_as_a_module(tmp_path):
+    """A `//` dropped inside an argument list once commented out the rest of a line; nothing above parses the JS."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    assert node, "node is needed to parse the bundles (the jui_tools job has it)"
+    for mode in bundle.MODES:
+        f = tmp_path / f"app-{mode}.mjs"
+        f.write_text(bundle.build(mode, e2e=True), encoding="utf-8")
+        out = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, timeout=30)
+        assert out.returncode == 0, f"{mode}: {out.stderr[-600:]}"
