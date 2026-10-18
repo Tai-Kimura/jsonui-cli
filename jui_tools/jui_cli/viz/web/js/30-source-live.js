@@ -42,10 +42,11 @@ function updateRobotStates() { /* the server decides the states (plan 04 §3) */
 const EMPTY_TESTS = { rows: [], passed: 0, runningIdx: -1, retrying: false, active: false, statusText: 'まだ無い', file: '', device: '' };
 const LIVE = {
   slices: {}, model: null, modelAt: 0, labelOfReal: {}, seenSeq: 0, specRows: {}, sheetAsked: {}, sheetFailed: {},
-  seats: {}, seatOf: {}, leaving: {}, shown: [], connectedOnce: false, serverError: '',
+  seats: {}, seatOf: {}, leaving: {}, shown: [], floors: [], floor: 0, rank: {}, connectedOnce: false, serverError: '',
 };
 const ROOM_MAX = 6;
-const ROW_WIDTH = 24;
+/* A floor is three rooms across, two deep (requester, 10-18: the rooms looked cramped at 6×5 in rows of three). */
+const FLOOR_COLS = 3, ROOM_GAP = 0.6;
 const FLOORS = ['--floor-a', '--floor-b', '--floor-c'];
 const ROLE_OF = (a) => {
   if (a.kind === 'main') return 'main';
@@ -297,7 +298,8 @@ function rebuildPerms() {
 }
 
 /* ---------- rooms: size by robot count, left to right by order, a new row past 24 (plan 07 §4) ---------- */
-function roomSize(n) { return n <= 4 ? [6, 5] : n <= 8 ? [8, 6] : [10, 8]; }
+// Floor and walls only: the boards, desks and robots keep their scale, so a bigger room is more space around them.
+function roomSize(n) { return n <= 8 ? [10, 8] : n <= 12 ? [12, 9] : [14, 10]; }
 function seatGrid(room) {
   const xs = [], zs = [];
   for (let x = room.x0 + 1.15; x <= room.x1 - 0.85 + 1e-6; x += 1.75) xs.push(x);
@@ -308,33 +310,86 @@ function seatGrid(room) {
 }
 const doorOf = (room) => ({ inside: [room.x1 - 0.7, room.z1 - 0.5], outside: [room.x1 - 0.7, room.z1 + 1.6] });
 
+/* ---------- floors: six rooms to a floor, the rooms where something happens on 1F (requester's ruling, 10-18) ----------
+   A machine with 28 sessions in 11 projects showed the first six rooms by order and kept them: a project that started
+   working later (the last by order) never reached the 3D view. Now every room is on a floor; 1F takes the rooms where
+   a robot waits for permission, then the rooms where one works, and only the 1F rooms are drawn in detail.
+   - rank: 0 a robot waits for permission, 1 a robot works, 2 robots that are idle, 3 nobody.
+   - 1F: the active rooms (rank 0 or 1) by rank, a room already on 1F first within a rank, then order; at most
+     ROOM_MAX. Seats left over keep the rooms that were on 1F (a room that stopped working stays until an active one
+     needs its seat), then the rest by rank and order. Rooms that stay keep their slot, so they do not move around.
+   - 2F, 3F …: the other rooms by rank and order, ROOM_MAX to a floor. More than ROOM_MAX active rooms spill to 2F.
+   - The floor being looked at is a number: a regrouping never moves the view to another floor (only fewer floors
+     can bring it down). */
+function roomRanks() {
+  const waiting = new Set(PERMS_LIVE.filter((p) => p.status === 'pending' && DEF[p.who]).map((p) => DEF[p.who].room));
+  const rank = {};
+  for (const r of ROOMS) rank[r.id] = 3;
+  for (const d of ROBOT_DEFS) {
+    if (LIVE.leaving[d.id] || !(d.room in rank)) continue;
+    const st = (robotState[d.id] || {}).state;
+    const k = st === 'waiting' ? 0 : st && st !== 'idle' && st !== 'done' ? 1 : 2;
+    rank[d.room] = Math.min(rank[d.room], k);
+  }
+  for (const id of waiting) if (id in rank) rank[id] = 0;
+  return rank;
+}
+function assignFloors(rooms, rank, prevFirst, max = ROOM_MAX) {
+  const rk = (r) => (r.id in rank ? rank[r.id] : 3);
+  const ids = new Set(rooms.map((r) => r.id));
+  const was = new Set(prevFirst.filter((id) => ids.has(id)));
+  const active = rooms.filter((r) => rk(r) < 2).sort((a, b) => rk(a) - rk(b) || (was.has(b.id) - was.has(a.id)) || a.order - b.order);
+  const want = active.slice(0, max).map((r) => r.id);
+  for (const id of prevFirst) if (want.length < max && was.has(id) && !want.includes(id)) want.push(id);
+  const rest = rooms.filter((r) => !want.includes(r.id)).sort((a, b) => rk(a) - rk(b) || a.order - b.order);
+  while (want.length < max && rest.length) want.push(rest.shift().id);
+  // Rooms that stay on 1F keep their slot; the newcomers take the freed slots in their rank order.
+  const stay = prevFirst.filter((id) => want.includes(id));
+  const comers = want.filter((id) => !stay.includes(id));
+  const first = prevFirst.filter((id) => ids.has(id)).map((id) => (stay.includes(id) ? id : comers.shift() || null)).filter(Boolean);
+  first.push(...comers);
+  const floors = [first.slice(0, max)];
+  for (let k = 0; k < rest.length; k += max) floors.push(rest.slice(k, k + max).map((r) => r.id));
+  return floors.filter((f, k) => k === 0 || f.length);
+}
 function layoutRooms() {
   const counts = {};
   for (const d of ROBOT_DEFS) counts[d.room] = (counts[d.room] || 0) + 1;
-  // The rooms in 3D: the ones with robots first (by order), at most ROOM_MAX; a room the person picked stays.
-  const byOrder = [...ROOMS].sort((a, b) => a.order - b.order);
-  const keep = LIVE.shown.filter((id) => PROJECT[id]);
-  for (const r of byOrder) if (keep.length < ROOM_MAX && !keep.includes(r.id) && counts[r.id]) keep.push(r.id);
-  for (const r of byOrder) if (keep.length < ROOM_MAX && !keep.includes(r.id)) keep.push(r.id);
-  LIVE.shown = keep.slice(0, ROOM_MAX);
-  let x = 0, z = 0, rowDepth = 0, maxX = 0;
-  const placed = [];
+  LIVE.rank = roomRanks();
+  LIVE.floors = assignFloors(ROOMS, LIVE.rank, LIVE.floors[0] || []);
+  LIVE.floor = Math.min(LIVE.floor, LIVE.floors.length - 1);
+  LIVE.shown = LIVE.floors[LIVE.floor] || [];
+  const byOrder = LIVE.shown.map((id) => PROJECT[id]);   // the floor's slot order
+  for (const r of ROOMS) if (!LIVE.shown.includes(r.id)) { r.shown = false; r.x0 = r.x1 = r.z0 = r.z1 = undefined; }
+  // Every room on the floor gets the floor's largest size, in a fixed grid of FLOOR_COLS by two.
+  let w = 0, d = 0;
   for (const r of byOrder) {
-    r.shown = LIVE.shown.includes(r.id);
-    if (!r.shown) { r.x0 = r.x1 = r.z0 = r.z1 = undefined; continue; }
-    const [w, d] = roomSize(Math.max(r.peak || 0, counts[r.id] || 0));
+    r.shown = true;
     r.peak = Math.max(r.peak || 0, counts[r.id] || 0);   // a room does not shrink while the page is open
-    if (x > 0 && x + w > ROW_WIDTH) { x = 0; z += rowDepth + 0.6; rowDepth = 0; }
-    placed.push([r, x, z, w, d]);
-    x += w + 0.5; rowDepth = Math.max(rowDepth, d); maxX = Math.max(maxX, x - 0.5);
+    const [rw, rd] = roomSize(r.peak);
+    w = Math.max(w, rw); d = Math.max(d, rd);
   }
-  const depth = z + rowDepth, ox = -maxX / 2, oz = -depth / 2;
+  const cols = Math.min(FLOOR_COLS, byOrder.length), rows = Math.ceil(byOrder.length / FLOOR_COLS);
+  const ox = -(cols * w + (cols - 1) * ROOM_GAP) / 2, oz = -(rows * d + (rows - 1) * ROOM_GAP) / 2;
+  const placed = byOrder.map((r, i) => [r, (i % FLOOR_COLS) * (w + ROOM_GAP), Math.floor(i / FLOOR_COLS) * (d + ROOM_GAP), w, d]);
   placed.forEach(([r, px, pz, w, d], k) => {
     r.x0 = +(px + ox).toFixed(3); r.x1 = +(r.x0 + w).toFixed(3); r.z0 = +(pz + oz).toFixed(3); r.z1 = +(r.z0 + d).toFixed(3);
     r.floor = FLOORS[r.order % FLOORS.length]; r.back = 3.9; r.left = 3.9;
     r.geo = `${r.x0},${r.x1},${r.z0},${r.z1},${r.big ? 'big' : ''},${r.tests ? 'tests' : ''}`;
     void k;
   });
+}
+
+/* Another floor, from the floor buttons, the building view or a project picked in the menu. */
+function liveFloorOf(id) { return LIVE.floors.findIndex((f) => f.includes(id)); }
+function liveGoToFloor(k) {
+  if (!(k >= 0 && k < LIVE.floors.length) || k === LIVE.floor) return false;
+  LIVE.floor = k;
+  layoutRooms();
+  placeRobots();
+  SOURCE.layoutRev += 1;
+  LIVE.model = null;
+  return true;
 }
 
 /* ---------- seats: a robot keeps its seat; a subagent sits near its parent; no seat → stand by the wall ---------- */
@@ -474,11 +529,11 @@ function liveApply(changed, replace) {
   rebuildRobots(replace);
   rebuildSpecs();
   roomFlags();
-  layoutRooms();
-  placeRobots();
   rebuildSessions();
   rebuildTasks();
   rebuildPerms();
+  layoutRooms();   // after the permissions: a room's rank comes from this round's requests
+  placeRobots();
   const server = LIVE.slices.server || {};
   const errs = Object.entries(server.sources || {}).filter(([, s]) => s && (s.error || s.state === 'error')).map(([k, s]) => `${k}: ${s.error || 'エラー'}`);
   LIVE.serverError = errs.join(' / ');

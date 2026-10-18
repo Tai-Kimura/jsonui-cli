@@ -38,6 +38,12 @@
     <div class="scene" id="scene">
       <canvas id="scene-canvas" role="img" aria-label="プロジェクトフォルダごとの部屋で、ハチマキのロボットが spec の記述・実装・テストをしている 3D 表示"></canvas>
       <div class="tags" id="tags" aria-hidden="true"></div>
+      <div class="floor-nav" id="floor-nav" role="group" aria-label="階" hidden>
+        <button type="button" class="fn-btn" id="floor-up" aria-label="上の階へ">▲</button>
+        <span class="fn-label" id="floor-label" aria-live="polite">1F</span>
+        <button type="button" class="fn-btn" id="floor-down" aria-label="下の階へ">▼</button>
+        <button type="button" class="fn-btn fn-building" id="floor-building" aria-pressed="false">ビル全体</button>
+      </div>
       <div class="live-empty" id="live-empty" hidden>
         <p class="le-title">Claude Code のセッションがまだ見えません</p>
         <p>確かめること</p>

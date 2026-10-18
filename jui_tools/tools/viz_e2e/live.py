@@ -334,6 +334,84 @@ async def scenario_work(browser, srv, out, failures, res):
         failures.append(f"live/work: request outside the server: {u}")
 
 
+FRAMES_JS = """(ms) => new Promise((done) => { const d = []; let last = performance.now(); const t0 = last;
+  const tick = (now) => { d.push(now - last); last = now; if (now - t0 < ms) requestAnimationFrame(tick); else { d.sort((a, b) => a - b);
+    done({ frames: d.length, median: +d[Math.floor(d.length / 2)].toFixed(1), p95: +d[Math.floor(d.length * 0.95)].toFixed(1) }); } };
+  requestAnimationFrame(tick); })"""
+
+
+async def scenario_floors(browser, srv, out, failures, res):
+    """The building: six rooms to a floor, the active rooms on 1F, floor buttons, the building view, the menu."""
+    watch = Watch(origin=srv.url)
+    step(srv, "start")
+    page = await new_page(browser, watch, "floors", **DESKTOP)
+    await page.goto(srv.url + "/")
+    await ready(page)
+    await wait(page, "() => { const f = window.__dbg.floors(); return f && f.floors.length === 3 && Object.keys(window.__dbg.live3d().rooms).length === 6; }", label="three floors, six rooms drawn")
+    f = await page.evaluate("() => window.__dbg.floors()")
+    res["floors"] = f["floors"]
+    check(failures, {"p13", "p17"} <= set(f["floors"][0]) and len(f["floors"][0]) == 6, f"floors: the waiting and the working room are on 1F: {f['floors']}")
+    await wait(page, "() => !document.getElementById('floor-nav').hidden", label="the floor buttons shown")   # the chrome refreshes every 250 ms
+    nav = await page.evaluate("() => ({ hidden: document.getElementById('floor-nav').hidden, label: document.getElementById('floor-label').textContent, down: document.getElementById('floor-down').disabled })")
+    check(failures, nav == {"hidden": False, "label": "1F / 3F", "down": True}, f"floors: the floor buttons {nav}")
+    # 1F is full; then the room on 3F starts working: it comes to 1F, the two active rooms keep their slots
+    first = f["floors"][0]
+    step(srv, "later")
+    await wait(page, "() => window.__dbg.floors().floors[0].includes('p16')", label="the room that started later is on 1F")
+    after = (await page.evaluate("() => window.__dbg.floors()"))["floors"][0]
+    res["later"] = after
+    check(failures, after.index("p13") == first.index("p13") and after.index("p17") == first.index("p17") and len(after) == 6,
+          f"floors: the rooms that stayed kept their slots {first} -> {after}")
+    await page.wait_for_timeout(800)
+    res["floorView"] = {"render": await page.evaluate("() => window.__dbg.renderInfo()"), "frames": await page.evaluate(FRAMES_JS, 2000)}
+    await page.screenshot(path=f"{out}/floors-1f.png")
+    # up to 2F: its rooms are drawn; 1F has the waiting room, so the down button carries the mark
+    await page.click("#floor-up")
+    await wait(page, "() => { const f = window.__dbg.floors(); const ids = Object.keys(window.__dbg.live3d().rooms).sort(); return f.floor === 1 && JSON.stringify(ids) === JSON.stringify([...f.floors[1]].sort()); }", label="2F drawn")
+    await wait(page, "() => document.getElementById('floor-label').textContent === '2F / 3F'", label="the 2F label")
+    mark = await page.evaluate("() => ({ down: document.getElementById('floor-down').hasAttribute('data-alert'), up: document.getElementById('floor-up').hasAttribute('data-alert'), label: document.getElementById('floor-label').textContent })")
+    check(failures, mark == {"down": True, "up": False, "label": "2F / 3F"}, f"floors: 2F shows the mark toward 1F {mark}")
+    # the menu: a room on 3F — the floor changes and the camera goes there (it threw a ReferenceError before)
+    target = (await page.evaluate("() => window.__dbg.floors()"))["floors"][2][-1]   # a room on 3F now
+    await page.click("#scope-top")
+    await page.click(f'[data-pick-project="{target}"]')
+    await wait(page, f"() => {{ const f = window.__dbg.floors(); return f.floor === 2 && !!window.__dbg.live3d().rooms['{target}']; }}", label="the picked room's floor")
+    await page.wait_for_timeout(1500)
+    await page.screenshot(path=f"{out}/floors-picked.png")
+    # the picked room fills most of the view (it showed the whole floor before)
+    res["picked"] = await page.evaluate(f"""() => {{ const T = window.__dbg.THREE, cam = window.__dbg.camera, c = document.getElementById('scene-canvas').getBoundingClientRect();
+      const r = window.__dbg.model && window.__dbg.room('{target}'); const xs = [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]].map(([x, z]) => new T.Vector3(x, 0, z).project(cam).x);
+      return +((Math.max(...xs) - Math.min(...xs)) / 2).toFixed(2); }}""")
+    check(failures, res["picked"] >= 0.6, f"floors: the picked room fills most of the width: {res['picked']}")
+    # the building: from the button, then a floor pressed goes down to it
+    await page.click("#floor-building")
+    await wait(page, "() => window.__dbg.floors().tower", label="the building")
+    await page.wait_for_timeout(1200)
+    res["building"] = {"render": await page.evaluate("() => window.__dbg.renderInfo()"), "frames": await page.evaluate(FRAMES_JS, 2000),
+                       "tags": await page.evaluate("() => document.getElementById('tags').hidden")}
+    await page.screenshot(path=f"{out}/floors-building.png")
+    check(failures, res["building"]["tags"] is True, "floors: the building hides the robots' and rooms' tags")
+    pt = await page.evaluate("""() => { const T = window.__dbg.THREE, cam = window.__dbg.camera, c = document.getElementById('scene-canvas').getBoundingClientRect();
+      const v = new T.Vector3(0, 1.5, 4.5).project(cam); return [c.left + (v.x + 1) / 2 * c.width, c.top + (1 - v.y) / 2 * c.height]; }""")
+    await page.mouse.click(pt[0], pt[1])
+    await wait(page, "() => { const f = window.__dbg.floors(); return !f.tower && f.floor === 0; }", label="down to 1F from the building")
+    # the wheel past the farthest distance shows the building again: zoom out step by step, as a person would
+    await page.wait_for_timeout(1500)                        # the flight down has landed
+    box = await page.evaluate("() => { const r = document.getElementById('scene-canvas').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }")
+    await page.mouse.move(box[0], box[1])
+    for _ in range(60):
+        if await page.evaluate("() => window.__dbg.floors().tower"):
+            break
+        await page.mouse.wheel(0, 300)
+        await page.wait_for_timeout(80)
+    await wait(page, "() => window.__dbg.floors().tower", label="the wheel out shows the building")
+    await page.close()
+    for line in watch.console:
+        failures.append(f"live/floors: console: {line}")
+    for u in watch.foreign:
+        failures.append(f"live/floors: request outside the server: {u}")
+
+
 async def run(pw, out, failures, Server):
     out = pathlib.Path(out) / "live"
     out.mkdir(parents=True, exist_ok=True)
@@ -343,7 +421,8 @@ async def run(pw, out, failures, Server):
         for name, build, fn in (("two-projects", scenarios.two_projects, scenario_two_projects),
                                 ("themes", scenarios.two_projects, scenario_themes),
                                 ("empty", scenarios.empty, scenario_empty),
-                                ("work", scenarios.work, scenario_work)):
+                                ("work", scenarios.work, scenario_work),
+                                ("floors", scenarios.floors, scenario_floors)):
             path = scenarios.write(build(), out / f"{name}.jsonl")
             srv = Server(scenario=path)
             t0 = time.monotonic()

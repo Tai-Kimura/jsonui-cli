@@ -250,3 +250,21 @@ def heavy(seconds=90, rate=5):
         items.append(slices(t, specs=list(specs), tasks=list(tasks), agents=list(A)))
         t += 1 / rate
     return items
+
+
+def floors():
+    """The building (10-18 live check): 18 projects, one session each, every robot idle except the one in the last
+    project by order (it works) and one in p13 that waits for permission — so 3 floors of six, and the two active
+    rooms must be on 1F although they come late by order."""
+    P = [project(f"p{k:02d}", f"proj-{k:02d}", k) for k in range(18)]
+    S, A = [], []
+    for k in range(18):
+        sid = f"f{k:07x}-0000-4000-8000-{k:012x}"
+        S.append(session(sid, f"f{k:x}", f"p{k:02d}", f"proj-{k:02d}", status="busy" if k == 17 else "idle"))
+        A.append(agent(sid, f"f{k:x}", sid, state="typing" if k == 17 else "waiting" if k == 13 else "idle",
+                       act="Edit src/app.ts" if k == 17 else ""))
+    p13 = perm("perm-f13", S[13]["id"], "Bash", "npm test", sessionId=S[13]["id"])
+    later = [dict(x) for x in A]
+    later[16] = dict(later[16], state="typing", act="Edit src/late.ts")   # 1F is full: a room on 3F starts working
+    return [{"mark": "start"}, slices(0, projects=P, sessions=S, agents=A, perms=[p13], server=server_slice()),
+            {"mark": "later"}, slices(1, agents=later)]

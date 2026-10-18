@@ -280,6 +280,7 @@ function setProject(id, { camera: moveCamera = true } = {}) {
   UI.project = id; writePref('project', id);
   if (wb.open && wb.idx >= 0 && !inScope(SPECS[wb.idx].project)) wb.idx = -1;
   if (tb.detail && !tb.detail.startsWith('perm:') && !inScope(PROJECT_OF[tb.detail.split('#')[0]])) tb.detail = null;
+  if (SOURCE.mode === 'live' && has3D) liveShowFloorOf(id);   // a room on another floor: go there first
   if (moveCamera) focusProject(id);
   paintScopeButtons();
   refreshNow();
