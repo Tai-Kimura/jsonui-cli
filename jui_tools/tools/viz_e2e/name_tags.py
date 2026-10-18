@@ -140,7 +140,25 @@ async def run_name_tags(pw, out, failures, jt=None, shots_only=False):
         rects = await page.evaluate(RECTS_JS)
         res["play"] = {"rects": rects, "cross": crossings(rects)}
         check(failures, not res["play"]["cross"], f"at play: {res['play']['cross']}")
+        playing = [x for x in rects if any(w in x["text"] for w in ("キャッチボール中", "ハイタッチ中", "じゃんけん中"))]
+        check(failures, len(playing) == 2, f"at play: both players' tags say the game (and still cross none): {[x['text'][:30] for x in rects]}")
         await page.screenshot(path=str(out / "after-play-light.png"))
+        # two in the smoking booth (2.3.3): their タバコ休憩 tags cross none either
+        await page.evaluate("() => window.__dbg.play({ p: 0, solo: { p: 0 }, endAll: true, idleMs: 0, restMinSec: 0, restMaxSec: 0 })")
+        for i in range(4):
+            hook(SID.format(i), hook_event_name="Stop")
+        await page.click(f".tag.room[data-set-project='{room_id}']")
+        await wait(page, f"() => window.__dbg.solo() === '{room_id}'", label="one room for the booth")
+        await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="settled for the booth")
+        await page.evaluate("() => window.__dbg.brk({ p: { smoke: 1, vend: 0 }, joinP: 1, smokeMinSec: 50, smokeMaxSec: 50, restMinSec: 0, restMaxSec: 0 })")
+        await wait(page, "() => window.__dbg.brk().robots.filter((x) => x.kind === 'smoke' && x.at).length >= 2", timeout=40000, label="two in the booth")
+        await page.wait_for_timeout(1200)
+        rects = await page.evaluate(RECTS_JS)
+        res["booth"] = {"rects": rects, "cross": crossings(rects)}
+        smokers = [x for x in rects if "タバコ休憩" in x["text"]]
+        check(failures, len(smokers) == 2 and not res["booth"]["cross"], f"two in the booth: タバコ休憩 on both, no crossing: {res['booth']['cross']} {[x['text'][:30] for x in rects]}")
+        await page.screenshot(path=str(out / "after-booth-light.png"))
+        await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true })")
         # the cost
         await page.evaluate("() => window.__dbg.tagStats(true)")
         await page.wait_for_timeout(3000)
