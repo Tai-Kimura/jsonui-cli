@@ -40,6 +40,7 @@ MESSAGE_MAX = 300
 SUBAGENT_LINGER_MS = 5_000
 DONE_TO_IDLE_MS = 3_000
 CARRY_MS = 3_000
+DELETING_KEPT = 64   # Bash deletions waiting for their PostToolUse (the shredder, 10-19)
 THINKING_AFTER_MS = 30_000
 # "Heavy" work (requester, 10-18): any one of these, while the session works.
 HEAVY_TOKENS_PER_MIN = 2_000          # output tokens a minute over the last HEAVY_WINDOW_MS (the transcript)
@@ -129,6 +130,7 @@ class World:
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
+        self._deleting: dict[str, dict] = {}  # tool_use_id -> what its Bash command deletes (robots.deletions)
         self._until: dict[str, tuple[int, str]] = {}  # agent id -> (time, state to go to)
         # The tool_use_id an agent was asking permission for. PermissionRequest
         # carries no tool_use_id and a refusal may send no PostToolUse (nor
@@ -417,6 +419,7 @@ class World:
             self._status(session, "busy", at)
             # A new prompt: whatever the last turn left open was interrupted (Esc).
             self._clear_open(agent["id"])
+            agent["promptAt"] = at   # the page ends an errand (the shredder, 10-19) that a new instruction overtakes
             self._set(agent, at, "idle", "指示を受けた")
             text = f"指示 {session['lastPrompt'] or ''}".strip()
         elif kind == "PreToolUse" and tool:
@@ -451,6 +454,12 @@ class World:
                 self._dirty.add("tasks")
             if tool == "SendMessage" and _s(tool_input.get("to")):
                 self._dial(session, agent, tool_input["to"], use_id, at)
+            if tool in ("Bash",) and use_id:   # a deletion (10-19): what it deletes, kept until it has run
+                gone = robots.deletions(str(tool_input.get("command", "")))
+                if gone is not None:
+                    self._deleting[use_id] = gone
+                    for old in list(self._deleting)[:-DELETING_KEPT]:   # a PostToolUse that never came
+                        del self._deleting[old]
             platform = robots.test_platform(str(tool_input.get("command", ""))) if state == "phone" else None
             if platform is not None and use_id:  # a test run only when it runs tests, not when it holds a device
                 command = str(tool_input.get("command", ""))
@@ -513,6 +522,9 @@ class World:
                 run["endedAt"] = at
                 self._dirty |= {"tests", "devices", "specs"}
             text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
+            gone = self._deleting.pop(use_id, None) if use_id else None
+            if gone is not None:
+                text = self._shred(agent, gone, failed, payload.get("tool_response"), at)
         elif kind == "PermissionRequest" and tool == QUESTION_TOOL:
             # A question, not a permission (permissions.NOT_PERMISSIONS): the robot stays "質問に回答待ち" from its
             # PreToolUse, and nothing goes on the permission board.
@@ -944,6 +956,17 @@ class World:
         done = [c for c in target["cases"] if c["status"] in ("passed", "failed")]
         if runs or saved:
             target["summary"] = f"{sum(c['status'] == 'passed' for c in done)} passed, {sum(c['status'] == 'failed' for c in done)} failed"
+
+    def _shred(self, agent: dict, gone: dict, failed: bool, response, at: int) -> str:
+        """A deletion has run (10-19): the robot's shred (the page walks it to the shredder), its act and the log line.
+        ok is False when the hook says it failed or rm / git say there was nothing there: no paper, a puzzled robot."""
+        output = f"{response.get('stdout') or ''}\n{response.get('stderr') or ''}" if isinstance(response, dict) else str(response or "")
+        ok = not failed and not robots.deletion_failed(output[-20_000:])
+        label = robots.deletion_label(gone)
+        agent["shred"] = {"at": at, "ok": ok, "label": label, "count": len(gone["targets"]), "folder": gone["folder"], "how": gone["how"]}
+        self._set(agent, at, act=robots._clip(f"シュレッダー {label}" if ok else f"削除できず {label}"))
+        self._dirty.add("agents")
+        return f"{'削除' if ok else '削除できず'} {label}（{gone['how']}）"
 
     def apply_saved_results(self, rows: list[dict]) -> None:
         """The rows of every saved result file (sources/test_results.py), replacing the previous scan.

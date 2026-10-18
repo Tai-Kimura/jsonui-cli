@@ -218,6 +218,114 @@ def drives_a_device(command: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------- which Bash commands delete files (10-19)
+
+# Claude Code has no delete tool: a deletion is a Bash command. Judged like test runs (above): per simple command, by
+# its program and subcommand, never by a word in the text — `echo rm`, `grep -r rm`, a heredoc that mentions rm and
+# `git rm -n` delete nothing. The targets are the arguments as written (a glob before the shell expands it; a folder
+# removed with -r is one target, how many files were in it is not known). Not seen: a script that deletes from inside
+# (Python's os.remove, a Makefile), and anything the user deletes by hand.
+_DELETERS = {"rm", "rmdir", "unlink", "trash", "trash-put"}
+_RECURSIVE = re.compile(r"^-[A-Za-z]*[rR]")
+
+
+def _strip_sudo(words: list[str]) -> list[str]:
+    """`sudo [-u user] [-E] …`, `command …`, and a leading backslash (`\\rm`) are the same program."""
+    words = _head(words)
+    while words and os.path.basename(words[0]) in ("sudo", "doas"):
+        i = 1
+        while i < len(words) and words[i].startswith("-"):
+            i += 2 if words[i] in ("-u", "-g", "-h", "-p", "-C", "-U") else 1
+        words = _head(words[i:])
+    if words and words[0].startswith("\\"):
+        words = [words[0][1:], *words[1:]]
+    return words
+
+
+def _options(args: list[str]) -> list[str]:
+    """Options before `--` (after it, `-weird` is a file name)."""
+    return args[:args.index("--")] if "--" in args else [a for a in args if a.startswith("-")]
+
+
+def _operands(args: list[str]) -> list[str]:
+    """Arguments that are not options (everything after `--`)."""
+    out, rest = [], False
+    for a in args:
+        if rest or not a.startswith("-") or a == "-":
+            out.append(a)
+        elif a == "--":
+            rest = True
+    return out
+
+
+def _deletes(words: list[str]) -> dict | None:
+    """{"targets", "folder", "how"} when this simple command deletes, else None."""
+    words = _strip_sudo(words)
+    if not words:
+        return None
+    exe, args = os.path.basename(words[0]), words[1:]
+    if exe in _DELETERS:
+        targets = _operands(args)
+        if not targets:
+            return None
+        folder = exe == "rmdir" or any(t.endswith("/") for t in targets) \
+            or any(_RECURSIVE.match(a) or a in ("--recursive", "--dir", "-d") for a in _options(args) if a.startswith("-") and a != "--")
+        return {"targets": targets, "folder": folder, "how": exe}
+    if exe == "git":
+        i = 0
+        while i < len(args) and args[i].startswith("-"):   # git's own options: -C <dir>, -c <k=v>, --git-dir=…
+            i += 2 if args[i] in ("-C", "-c") else 1
+        sub, rest = (args[i], args[i + 1:]) if i < len(args) else ("", [])
+        if sub == "rm":
+            if {"-n", "--dry-run", "--cached"} & set(rest):
+                return None   # deletes nothing (a dry run), or only from the index
+            targets = _operands(rest)
+            return {"targets": targets, "folder": any(_RECURSIVE.match(a) for a in _options(rest) if a != "--"), "how": "git rm"} if targets else None
+        if sub == "worktree" and rest[:1] == ["remove"]:
+            targets = _operands(rest[1:])
+            return {"targets": targets[:1], "folder": True, "how": "git worktree remove"} if targets else None
+        return None
+    if exe == "find":
+        k = next((j for j, a in enumerate(args) if a.startswith("-") or a in ("(", "!")), len(args))
+        roots, expr = args[:k] or ["."], args[k:]
+        by_exec = any(a in ("-exec", "-execdir") and j + 1 < len(expr) and os.path.basename(expr[j + 1]) in _DELETERS
+                      for j, a in enumerate(expr))
+        if "-delete" not in expr and not by_exec:
+            return None
+        names = [expr[j + 1] for j, a in enumerate(expr) if a in ("-name", "-iname", "-path") and j + 1 < len(expr)]
+        targets = [f"{r.rstrip('/')}/{n}" for r in roots for n in names] if names else roots
+        files_only = any(a == "-type" and j + 1 < len(expr) and expr[j + 1] == "f" for j, a in enumerate(expr))
+        return {"targets": targets, "folder": not names and not files_only, "how": "find -delete" if "-delete" in expr else "find -exec rm"}
+    return None
+
+
+def deletions(command: str) -> dict | None:
+    """What a Bash command deletes: {"targets": [as written], "folder": bool, "how": the program}, or None."""
+    targets, folder, hows = [], False, []
+    for words in simple_commands(command):
+        d = _deletes(words)
+        if d is not None:
+            targets += [t for t in d["targets"] if t not in targets]
+            folder = folder or d["folder"]
+            hows.append(d["how"])
+    return {"targets": targets, "folder": folder, "how": hows[0]} if targets else None
+
+
+def deletion_label(d: dict, n: int = 2) -> str:
+    """a.txt、b.txt ほか 3 件 — the names (last path segment) of what was deleted, short."""
+    names = [os.path.basename(t.rstrip("/")) or t for t in d["targets"]]
+    head = "、".join(names[:n])
+    return _clip(f"{head} ほか {len(names) - n} 件" if len(names) > n else head, 60)
+
+
+_NOTHING_THERE = re.compile(r"No such file or directory|did not match any files|is not a working tree|cannot remove", re.I)
+
+
+def deletion_failed(output: str) -> bool:
+    """The command ran but deleted nothing it was asked to (rm's and git's own words)."""
+    return bool(_NOTHING_THERE.search(output or ""))
+
+
 def test_summary(output: str) -> tuple[str, int | None, int | None]:
     """(text, passed, failed) read from a test command's output; unknown counts are None."""
     for pattern, counts in _SUMMARY_PATTERNS:

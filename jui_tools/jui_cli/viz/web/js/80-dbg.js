@@ -40,6 +40,12 @@ window.__dbg = {
     const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; }),
   tagStats: (reset) => { const S0 = TAGS.stats, out = { n: S0.n, frames: S0.frames, meanMs: S0.frames ? S0.sumMs / S0.frames : 0, maxMs: S0.maxMs };
     if (reset) Object.assign(S0, { sumMs: 0, maxMs: 0, frames: 0 }); return out; },
+  // the shredder (10-19): where it is and its box, the bits in flight, and each robot's errand
+  shred: () => ({ shredder: PROPS.shredder ? { x: PROPS.shredder.x, z: PROPS.shredder.z, spot: PROPS.shredder.spot, box: PROPS.shredder.box } : null,
+    bits: (PROPS.bits || []).length, boxes: PROPS.boxes,
+    robots: robots.map((R) => ({ id: R.def.id, room: R.def.room, phase: R.shred ? R.shred.phase : null, held: !!(R.shred && R.shred.held),
+      back: !!R.playBack, tilt: !!R.tiltUntil, x: +R.robot.root.position.x.toFixed(2), z: +R.robot.root.position.z.toFixed(2), seat: R.def.pos,
+      path: R.path.length, act: R.act, tag: R.text.textContent })) }),
   // the room up close (10-18): what is placed, where the vacuum is, the boxes it keeps clear of, and three's counts
   props: () => {
     const R = PROPS.room ? LIVE3D.rooms[PROPS.room] : null, v = PROPS.vac, sv = PROPS.server;

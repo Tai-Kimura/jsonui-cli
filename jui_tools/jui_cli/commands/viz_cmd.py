@@ -1433,6 +1433,9 @@ def _doctor_checks() -> list[dict]:
     add("usage", True, ("statusLine: 入っています" if line.get("installed") else "statusLine: 入っていません（jui viz statusline install）")
         + (f"。最後の値 {when}" if when else "。値はまだありません") + f"。{STATUSLINE_NOTE}")
 
+    add("shredder", True, "削除の見分け: Bash の rm・rmdir・unlink・trash・git rm・git worktree remove・find -delete / -exec rm だけ。"
+        "スクリプトの中の削除（Python の os.remove など）と、利用者自身の削除は見えません")
+
     if claude is not None:
         registered = _relay_registered(claude)
         add("relay", True, "許可の中継: " + ("登録済み" if registered else "未登録（jui viz relay install）" if registered is False else "確かめられません"))

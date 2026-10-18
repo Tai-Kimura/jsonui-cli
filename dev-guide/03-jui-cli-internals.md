@@ -182,6 +182,13 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   viz_home/usage.json に残す（再起動しても最後の値）。`jui viz statusline install` が settings.json に書き、既存の
   statusLine は `--wrap <base64>` で包む（出力はそのまま、uninstall で元の値に戻す）。⚠️ statusLine を走らせるのは
   ターミナルの claude だけで、VS Code 拡張（2.1.301 で確認）とデスクトップアプリ（10-19 に確認）は走らせないので、ヘッダは 15 分を超えると「◯分前」（10-19 まで「◯分前の値」）。
+- **シュレッダー（削除）**: Claude Code に削除の道具は無く、削除は Bash。`robots.deletions` がテストの見分けと同じく
+  単純コマンドごとに「実行ファイル＋サブコマンド」で読む（rm・rmdir・unlink・trash・git rm・git worktree remove・
+  find -delete / -exec rm。sudo・command・`\rm`・`git -C` も。git rm の -n / --dry-run / --cached と、文字列の中の rm は
+  数えない）。対象は書かれた形のまま（glob は展開前、-r のフォルダは 1 件）。PostToolUse でエージェントに `shred`
+  （成否・名前・件数・フォルダか・時刻）を付け、拡大した部屋（小物の条件）ではロボットが書類を持って奥の壁の
+  シュレッダーへ行く。新しい指示（`promptAt`）・道具・電話で即やめる。終わったターン（done）は続ける。
+  見えないもの: スクリプトの中の削除、利用者自身の削除（doctor に出す）。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 

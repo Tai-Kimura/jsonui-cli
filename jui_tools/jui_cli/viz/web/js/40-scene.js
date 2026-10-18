@@ -731,7 +731,7 @@ function livePlan(R) {
   const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
   const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
   R.rect = rect;
-  if (R.play || R.brk) {   // a break (10-19) keeps its path the same way: brkStop walks it to this seat
+  if (R.shred || R.play || R.brk) {   // the shredder's errand and a break (10-19) keep their path as play does: shredStop / brkStop walk it to this seat
     // At play (2.3.1): the path is the game's. Taking it sent a player to its new desk, and there liveWalk read the
     // empty path as "at the spot" and it played from its desk (e2e, 1 run in 3). The game ends on its own reasons;
     // playStop then walks it to this seat (through the doors when the room changed).
@@ -768,6 +768,12 @@ function liveWalk(R, dt, nowMs) {
     return 'playing';
   }
   if (!next && R.brk) return brkAt(R, dt);                        // at the smoking booth or the vending machine (10-19)
+  if (!next && R.shred) {                                         // at the shredder: no desk, facing it
+    if (R.robot.desk) R.robot.desk.visible = false;
+    const P = PROPS.shredder, ry = P ? Math.atan2(P.x - root.position.x, P.z - root.position.z) : Math.PI;
+    root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * 6);
+    return 'shredding';
+  }
   if (!next && R.playBack) R.playBack = false;                    // back at its desk
   if (!next) {
     if (R.robot.desk) R.robot.desk.visible = !d.standing;
@@ -894,7 +900,7 @@ function playMove(G, left, nowSec) {
   }
 }
 const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
-  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo && !R.brk;
+  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo && !R.brk && !R.shred;   // nothing starts on the way to the shredder
 /* Why a robot stops (null: it does not): the reasons the requester's "walked up and went back" can be told by. Only a
    desk in another room stops it now; a desk that moves within the room (another session came or went and the room
    was laid out again — common with many sessions) no longer does: it walks back to the new desk afterwards. */
@@ -1043,16 +1049,26 @@ function liveUpdateRobots(nowSec, dt) {
     liveCallTag(R, calls[R.def.id] || null);
     setRobotTired(R.robot, R.def.kind === 'main' && isTired(sinceOf(R.def.id), now));
     R.robot.heavy = heavyOf(R.def.id);   // fast typing and sweat while it works (the robot decides when)
+    shredTick(R, st, nowSec);
     const how = liveWalk(R, walkDt, nowMs);
     if (how === 'gone') continue;
-    const playing = !!(R.play || R.playBack || R.brk);
+    if (how === 'shredding') shredAt(R, nowSec);
+    const playing = !!(R.play || R.playBack || R.brk || R.shred);
     R.robot.lampState = playing ? st.state : null;   // to, at and back from play: the real state's lamp
-    const vis = how === 'walking' ? (playing ? 'stroll' : 'carry') : how === 'playing' ? 'idle' : st.state;
+    const vis = how === 'walking' ? (playing ? 'stroll' : 'carry') : how === 'playing' || how === 'shredding' ? 'idle' : st.state;
     if (vis !== R.robot.state) setRobotState(R.robot, vis);
-    if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
+    // what it deleted stays over its head through the errand and SHRED.labelMs after (the turn's end replaces the act)
+    const act = st.shred && (R.shred || vizNow() - st.shred.at < SHRED.labelMs) ? `${st.shred.ok ? 'シュレッダー' : '削除できず'} ${st.shred.label}` : st.act;
+    if (act !== R.act) { R.act = act; R.text.textContent = act; }
     updateRobot(R.robot, nowSec, dt);
+    if (R.tiltUntil && R.robot.head) {   // a deletion that found nothing: a puzzled tilt of the head
+      const left = R.tiltUntil - nowSec;
+      R.robot.head.rotation.z = left > 0 ? Math.sin(Math.min(1, (1.6 - left) / 0.3) * Math.PI / 2) * 0.32 * Math.min(1, left / 0.3) : 0;
+      if (left <= 0) R.tiltUntil = 0;
+    }
   }
   propsTick(nowSec, dt);
+  shredBits(nowSec, dt);
 }
 /* One room at a time (requester, 10-18): a project picked (its room's tag, its floor in 3D, the menu) lays out only
    that room, wider (layoutRooms, SOLO_GROW), with the way back at the top left. The other rooms' robots keep their
@@ -1078,9 +1094,9 @@ function liveSoloSync() {
    view, PROPS.max robots or fewer); robots on a break walk to them (BRK below). Where the three stand: propsPlace. */
 const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
   boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9,   // the robots' scale (they stand about 1 m)
-  place: null, booth: null, vend: null, fan: null, smoke: [] };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [] };
 const PROPS_EMPTY = { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0,
-  place: null, booth: null, vend: null, fan: null, smoke: [] };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [] };
 function woodTexture(dark) {
   const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
   const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
@@ -1109,12 +1125,14 @@ function propsWanted() {
 }
 function propsClear() {
   if (!PROPS.room) return;
+  for (const Q of robots) if (Q.shred) shredStop(Q);   // an errand to a shredder that is going away ends here
   const R = LIVE3D.rooms[PROPS.room];
   if (R && PROPS.floorMat && R.floor.material === PROPS.woodMat) R.floor.material = PROPS.floorMat;
   if (PROPS.group) { scene.remove(PROPS.group); disposeTree(PROPS.group); }
   if (PROPS.woodMat) PROPS.woodMat.dispose();
   if (PROPS.woodTex) PROPS.woodTex.dispose();
-  Object.assign(PROPS, PROPS_EMPTY, { boxes: [], smoke: [] });
+  if (PROPS.shredder) { PROPS.shredder.bit.geo.dispose(); PROPS.shredder.bit.mat.dispose(); }   // shared by bits that may all be gone
+  Object.assign(PROPS, PROPS_EMPTY, { boxes: [], smoke: [], bits: [] });
 }
 function propsBuild(id) {
   const r = PROJECT[id], R = LIVE3D.rooms[id], g = new THREE.Group();
@@ -1144,6 +1162,7 @@ function propsBuild(id) {
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), toon('#52e08a')); lamp.position.set(0, 0.145, PROPS.radius * 0.5); vac.add(lamp);
   vac.userData.heading = PROPS.rng() * Math.PI * 2;
   g.add(vac); PROPS.vac = vac;
+  PROPS.shredder = shredderBuild(r, g);
   propsBoxes(0, true);
   const start = propsSpot();
   vac.position.set(start[0], 0, start[1]);
@@ -1161,6 +1180,7 @@ function propsBoxes(nowSec, force) {
   const box = new THREE.Box3();
   PROPS.boxes = robots.filter((R) => R.robot.root.visible && (R.def.room === PROPS.room || roomAtPoint([R.robot.root.position.x, R.robot.root.position.z]) === PROPS.room))
     .map((R) => { box.setFromObject(R.robot.root); return [box.min.x, box.max.x, box.min.z, box.max.z]; });
+  if (PROPS.shredder) PROPS.boxes.push(PROPS.shredder.box);
   const s = PROPS.server.position;
   const half = 0.42 * PROPS.serverScale;
   PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
@@ -1422,6 +1442,94 @@ function brkSmoke(nowSec) {
     Object.assign(q, { age: 0, life: exhale ? 2.8 : 2.2, size: exhale ? 0.8 : 0.4, alpha: exhale ? 0.95 : 0.8,
       vx: Math.sin(ry) * fw + (BRK.rng() - 0.5) * 0.08, vy: 0.35, vz: Math.cos(ry) * fw + (BRK.rng() - 0.5) * 0.08 });
     q.s.position.copy(brkV); q.s.scale.setScalar(q.size); q.s.material.opacity = q.alpha; q.s.visible = true;
+  }
+}
+/* ---------- the shredder: a robot that deleted files feeds them to it (requester, 10-19) ----------
+   Claude Code deletes with Bash (rm, git rm, find -delete …); ingest reads which files from the command (robots.py
+   deletions) and gives the robot a shred. In a room up close with its props (propsWanted) the robot carries the papers
+   (a stack as thick as the count, a box for a folder) to the shredder against the back wall, feeds them, paper bits
+   fall into the bin, and it goes back to its desk; a new instruction, a call or a question ends it at once. A deletion
+   that found nothing: no errand, a puzzled tilt of the head. The name of what went is the robot's act (over its head,
+   in its card and in the log). Not seen: a script that deletes from inside, or the user by hand. */
+const SHRED = { w: 0.8, d: 0.55, h: 1.1, bitsMax: 24, feedSec: 1.2, bitsSec: 2.0, doneSec: 3.6, tiltSec: 1.6, labelMs: 8000, every: 0.07, scale: 1.35 };   // built at 1, shown at the robots' size (as the other props)
+function shredderBuild(r, g) {
+  const k = SHRED.scale, W = SHRED.w * k, D = SHRED.d * k;
+  const cx = (r.x0 + r.x1) / 2, x = Math.min(cx + 1.6, r.x1 - SEAT.aisleR - W), z = r.z0 + 0.12 + D / 2;
+  const sg = new THREE.Group(), body = toon('#4a515c'), lid = toon('#6b7480'), bin = toon('#c7cdd6');
+  const box = new THREE.Mesh(new RoundedBoxGeometry(SHRED.w, SHRED.h - 0.08, SHRED.d, 2, 0.03), body); box.position.y = (SHRED.h - 0.08) / 2; sg.add(box);
+  const top = new THREE.Mesh(new RoundedBoxGeometry(SHRED.w + 0.02, 0.08, SHRED.d + 0.02, 2, 0.02), lid); top.position.y = SHRED.h - 0.04; sg.add(top);
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(SHRED.w * 0.7, 0.012, 0.03), toon('#1d2127')); slot.position.set(0, SHRED.h + 0.001, 0.02); sg.add(slot);
+  const pane = new THREE.Mesh(new THREE.PlaneGeometry(SHRED.w * 0.72, SHRED.h * 0.42), bin); pane.position.set(0, SHRED.h * 0.3, SHRED.d / 2 + 0.002); sg.add(pane);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), toon('#52e08a')); led.position.set(SHRED.w * 0.36, SHRED.h - 0.04, SHRED.d / 2 + 0.01); sg.add(led);
+  sg.position.set(x, 0, z); sg.scale.setScalar(k); g.add(sg);
+  const bit = { geo: new THREE.PlaneGeometry(0.07, 0.022), mat: toon('#ffffff', { side: THREE.DoubleSide }) };
+  // the robot stands at its left side, so the usual view from the front sees the machine and the bits (in front of
+  // it, the robot hid both, 10-19)
+  return { group: sg, x, z, k, spot: [x - W / 2 - 0.45, z + 0.2], box: [x - W / 2, x + W / 2, z - D / 2, z + D / 2], bit, led };
+}
+function shredHeld(folder, count) {
+  if (folder) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26, 0.26), toon('#b98a56'));
+    m.position.set(0, 0.58, 0.34); return m;
+  }
+  const t = 0.012 * Math.min(12, Math.max(1, count));   // as thick as the count, up to a dozen sheets' worth
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.24, t, 0.32), toon('#fbfaf6'));
+  m.position.set(0, 0.6, 0.34); return m;
+}
+function shredTick(R, st, nowSec) {
+  const sh = st.shred;
+  if (sh && sh.at !== R.shredAt) {
+    const first = R.shredAt === undefined;
+    R.shredAt = sh.at;
+    if (first && vizNow() - sh.at > 30_000) return;   // a deletion from before the page opened: not acted out now
+    if (!sh.ok) { R.tiltUntil = nowSec + SHRED.tiltSec; return; }
+    const P = PROPS.shredder;
+    if (P && PROPS.room === R.def.room && R.robot.root.visible && !R.play && !R.playBack && !R.shred && !R.brk && !R.solo && !LIVE.leaving[R.def.id] && !R.robot.call) {   // not from a break, a nap or a bento
+      R.shred = { phase: 'going', at: sh.at, t0: 0, held: shredHeld(sh.folder, sh.count), count: sh.count };
+      R.robot.root.add(R.shred.held);
+      R.path = [P.spot];
+    }
+  }
+  // stop at once: a new instruction (promptAt after the deletion), a tool, a wait or a question (any state but idle and
+  // done), a call, leaving. The turn ending (done, and back to idle 3 s later) is not one: a deletion is often the last
+  // thing a turn does, so the errand goes on through it.
+  if (R.shred && ((st.state !== 'idle' && st.state !== 'done') || (st.promptAt || 0) > R.shred.at || R.robot.call || LIVE.leaving[R.def.id])) shredStop(R);
+}
+function shredAt(R, nowSec) {
+  const S0 = R.shred;
+  if (!S0) return;
+  if (!S0.t0) { S0.t0 = nowSec; S0.phase = 'feeding'; }
+  const t = nowSec - S0.t0;
+  if (S0.held) {   // fed into the slot: forward and down, then gone
+    const k = Math.min(1, t / SHRED.feedSec);
+    S0.held.position.z = 0.34 + 0.18 * k; S0.held.position.y = 0.6 + 0.3 * k; S0.held.scale.z = Math.max(0.02, 1 - k);
+    if (k >= 1) { R.robot.root.remove(S0.held); S0.held.geometry.dispose(); S0.held.material.dispose(); S0.held = null; }
+  }
+  const P = PROPS.shredder;
+  if (P && !reduceMotion && t > 0.4 && t < SHRED.feedSec + SHRED.bitsSec && PROPS.bits.length < SHRED.bitsMax && t - (S0.lastBit || 0) >= SHRED.every) {
+    S0.lastBit = t;
+    const m = new THREE.Mesh(P.bit.geo, P.bit.mat);
+    m.position.set(P.x + (Math.random() - 0.5) * SHRED.w * P.k * 0.6, SHRED.h * P.k * 0.5, P.z + SHRED.d * P.k / 2 + 0.01);
+    m.rotation.set(0, 0, Math.random() * Math.PI);
+    m.userData.v = -0.18 - Math.random() * 0.14;
+    PROPS.group.add(m); PROPS.bits.push(m);
+  }
+  if (P) P.led.material.color.set(t < SHRED.feedSec + SHRED.bitsSec ? '#ff9b3d' : '#52e08a');
+  if (t >= SHRED.doneSec) shredStop(R);
+}
+function shredStop(R) {
+  const S0 = R.shred;
+  if (!S0) return;
+  if (S0.held) { R.robot.root.remove(S0.held); S0.held.geometry.dispose(); S0.held.material.dispose(); }
+  if (PROPS.shredder) PROPS.shredder.led.material.color.set('#52e08a');
+  R.shred = null; R.playBack = true;
+  const p = R.robot.root.position, from = roomAtPoint([p.x, p.z]);
+  R.path = from && from !== R.def.room ? [...liveRoute(from, R.def.room), R.def.pos] : [R.def.pos];
+}
+function shredBits(nowSec, dt) {   // the bits fall into the bin behind its window and are gone
+  for (const m of [...(PROPS.bits || [])]) {
+    m.position.y += m.userData.v * Math.min(dt, 0.1); m.rotation.z += 3 * Math.min(dt, 0.1);
+    if (m.position.y < 0.06) { PROPS.group.remove(m); PROPS.bits.splice(PROPS.bits.indexOf(m), 1); }
   }
 }
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
