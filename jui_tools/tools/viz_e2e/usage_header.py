@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, new_page, ready
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 
@@ -84,6 +84,21 @@ async def run_usage(pw, out, failures):
         subprocess.run([sys.executable, "-I", "-S", str(script)], input=body, capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
 
     usage = "() => window.__dbg.usage()"
+
+    async def chips_hold(page, tag: str, width: int) -> None:
+        """A stale note (20 minutes on) leaves every header chip as tall as a fresh one, its text in the middle
+        (10-19: the note took the sticky-note card's .note style and the whole row swelled)."""
+        fresh = await page.evaluate("() => window.__dbg.chipBoxes()")
+        stale = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 20 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.chipBoxes()), 1500)); }")
+        res[f"chips-{tag}"] = {"fresh": fresh, "stale": stale}
+        await page.screenshot(path=str(out / f"header-stale-{tag}.png"), clip={"x": 0, "y": 0, "width": width, "height": 120})
+        await page.evaluate("() => window.__dbg.setClock(null)")
+        await wait(page, "() => window.__dbg.usage()[0].note === ''", label=f"{tag}: fresh again")
+        h = max(c["h"] for c in fresh)
+        check(failures, len(stale) == len(fresh) and all(c["h"] <= h + 0.5 for c in stale),
+              f"{tag}: a stale note keeps every chip at {h}px: {[(c['name'], c['h']) for c in stale]}")
+        check(failures, all(abs(c["mid"] - c["textMid"]) <= 2 for c in stale),
+              f"{tag}: each chip's text sits in its middle: {[(c['name'], c['mid'], c['textMid']) for c in stale]}")
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     t0 = time.monotonic()
     try:
@@ -162,6 +177,7 @@ async def run_usage(pw, out, failures):
               f"20 minutes on: the time counts down and the value says its age: {later}")
         await page.evaluate("() => window.__dbg.setClock(null)")
         await wait(page, "() => window.__dbg.usage()[0].note === ''", label="fresh again")
+        await chips_hold(page, "light", 1440)
         # past a window's reset with no newer value: no share (it is not this window's any more)
         feed(42, 18, five_reset=int(time.time()) + 60)
         await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42%, resets in a minute")
@@ -176,6 +192,15 @@ async def run_usage(pw, out, failures):
         dark = res["dark"] = await page.evaluate(usage)
         check(failures, dark[0]["num"] == dark[0]["pc"] and 50 < hue(dark[0]["num"]) < 90, f"dark: the same hue rule: {dark}")
         await page.screenshot(path=str(out / "header-dark.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
+        await chips_hold(page, "dark", 1440)
+        for scheme in ("light", "dark"):                             # and on a phone, where the chips wrap
+            phone = await new_page(browser, watch, f"usage-phone-{scheme}", **PHONE)
+            await phone.emulate_media(color_scheme=scheme)
+            await phone.goto(url + "/")
+            await ready(phone)
+            await wait(phone, "() => window.__dbg.usage().length === 2", label=f"phone {scheme}: the chips")
+            await chips_hold(phone, f"phone-{scheme}", 390)
+            await phone.close()
         check(failures, not watch.console and not watch.foreign and not watch.csp, f"no console error, nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
         await page.close()
     finally:

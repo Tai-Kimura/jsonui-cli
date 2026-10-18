@@ -879,7 +879,8 @@ function renderUsage(now) {
     // floored: 99.5 is not 100, and 100 only ever means the limit
     else box.append(span('num', String(Math.floor(r.pct)), usageColor(r.pct)), span('pc', '%', usageColor(r.pct)));
     if (!r.over) box.append(`（${r.left}）`);
-    if (stale) { box.append(span('note', ` · ${stale}`)); box.title = `${stale}（ターミナルの claude が動いていると更新されます）`; }
+    if (stale) { box.append(span('stale', ` · ${stale}`));   // not .note: that is the board's sticky-note card (10-19)
+      box.title = `${stale}（ターミナルの claude が動いていると更新されます）`; }
     return box;
   });
   if (!out.length) {

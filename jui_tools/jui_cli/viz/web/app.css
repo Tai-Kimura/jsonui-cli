@@ -940,5 +940,5 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .usage .uw { padding: 2px 9px; border-radius: 999px; background: var(--chip); color: var(--ink-soft); font: 500 12px/1.6 var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .usage .uw b { font-weight: 700; }
 .usage .uw .limit { color: var(--ink-soft); opacity: 0.75; font-weight: 700; }
-.usage .uw .note { opacity: 0.8; }
+.usage .uw .stale { opacity: 0.8; }   /* not .note: the board's sticky-note card took it and swelled the header (10-19) */
 .usage .none { opacity: 0.7; }

@@ -65,7 +65,15 @@ window.__dbg = {
     num: e.querySelector('.num') ? getComputedStyle(e.querySelector('.num')).color : null,
     pc: e.querySelector('.pc') ? getComputedStyle(e.querySelector('.pc')).color : null,
     limit: !!e.querySelector('.limit'), limitColor: e.querySelector('.limit') ? getComputedStyle(e.querySelector('.limit')).color : null,
-    note: e.querySelector('.note') ? e.querySelector('.note').textContent : '' })),
+    note: e.querySelector('.stale') ? e.querySelector('.stale').textContent : '' })),
+  // every header chip as laid out (10-19): its box and its text's box — a stale note must not swell the row
+  chipBoxes: () => [...document.querySelectorAll('.chips > :not(.usage), .chips > .usage > *')].filter((e) => e.offsetParent !== null).map((e) => {
+    const b = e.getBoundingClientRect(), r = document.createRange();
+    r.selectNodeContents(e);
+    const t = r.getBoundingClientRect();
+    return { name: e.id || e.className, h: +b.height.toFixed(1), top: +b.top.toFixed(1), bottom: +b.bottom.toFixed(1),
+             mid: +((b.top + b.bottom) / 2).toFixed(1), textMid: +((t.top + t.bottom) / 2).toFixed(1) };
+  }),
   usageHue: SOURCE.mode === 'live' ? usageHue : null,
   usageColor: SOURCE.mode === 'live' ? usageColor : null,   // (pct, dark) → the colour the header would use
   inkSoft: () => { const e = document.createElement('span'); e.style.color = 'var(--ink-soft)'; document.body.append(e); const c = getComputedStyle(e).color; e.remove(); return c; },
