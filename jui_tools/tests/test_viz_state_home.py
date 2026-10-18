@@ -405,3 +405,24 @@ def test_the_copy_is_never_moved_into_the_new_folder(home):
     (old / "server.json").write_text(json.dumps({"pid": 999999, "port": 1, "token": "t", "mirrorOf": "x"}))
     assert main(["viz", "status"]) == 0
     assert not paths.server_json().exists() and (old / "server.json").exists()
+
+
+def test_a_server_removes_only_the_copy_that_names_it(home):
+    """The copy another server wrote (another pid) outlives this one's stop; this one's own copy does not.
+
+    Called directly: a running server rewrites a copy that names someone else within LEGACY_MIRROR_SEC, so a stop
+    could not be timed to meet one. This is the function _cmd_serve's last step calls.
+    """
+    from jui_cli.commands import viz_cmd
+
+    old = home / ".jsonui-cli" / "viz"
+    old.mkdir(parents=True)
+    other = {"pid": 999999, "port": 1, "token": "t", "mirrorOf": str(paths.server_json())}
+    (old / "server.json").write_text(json.dumps(other))
+
+    viz_cmd._legacy_mirror_clear(os.getpid())
+    assert json.loads((old / "server.json").read_text()) == other
+
+    (old / "server.json").write_text(json.dumps(dict(other, pid=os.getpid())))
+    viz_cmd._legacy_mirror_clear(os.getpid())
+    assert not old.exists()
