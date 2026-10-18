@@ -75,12 +75,14 @@ async def run_play(pw, out, failures):
     t0 = time.monotonic()
     try:
         import urllib.request
-        for _ in range(100):
+        for _ in range(400):   # 40 s: under a load average of 30-40 the server took longer than the 10 s this waited (e1, 10-18)
             try:
                 urllib.request.urlopen(f"{url}/health", timeout=1).read()
                 break
             except OSError:
                 time.sleep(0.1)
+        else:
+            raise RuntimeError(f"the server did not answer /health in 40 s: {(out / 'serve.log').read_text()[-400:]}")
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "play", **DESKTOP)
         await page.goto(url + "/")
@@ -184,7 +186,7 @@ async def run_play(pw, out, failures):
         res["relaidGame"] = e
         check(failures, any(x["reason"] == "done" for x in e), f"it ended by itself, not by the move: {e}")
         hook(THIRD, hook_event_name="SessionEnd", reason="exit", cwd="/work/play-third")
-        await wait(page, "() => window.__dbg.play().robots.length === 2 && window.__dbg.play().robots.every((x) => !x.back && x.path === 0)",
+        await wait(page, "() => window.__dbg.play().robots.length === 2 && window.__dbg.play().robots.every((x) => !x.play && !x.back && x.path === 0)",
                    timeout=60000, label="the third robot gone, both at their desks")
         # the same, while they are still walking to the spot: they still arrive there and play (the desks' move must
         # not take their path: in one run in three they walked to their new desks and "played" from there)
@@ -201,7 +203,7 @@ async def run_play(pw, out, failures):
               f"they met at the spot, not at their desks: {res['goingMove']}")
         await wait(page, "() => window.__dbg.play().list.length === 0", timeout=30000, label="that game ends")
         hook(THIRD, hook_event_name="SessionEnd", reason="exit", cwd="/work/play-third")
-        await wait(page, "() => window.__dbg.play().robots.length === 2 && window.__dbg.play().robots.every((x) => !x.back && x.path === 0)",
+        await wait(page, "() => window.__dbg.play().robots.length === 2 && window.__dbg.play().robots.every((x) => !x.play && !x.back && x.path === 0)",
                    timeout=60000, label="the third robot gone again, both at their desks")
         # its desk moves to another room in the middle of a game (cd): it walks back through the doors, never a wall
         await settle(page)
@@ -220,7 +222,12 @@ async def run_play(pw, out, failures):
         # playStop's own (an instruction first would stop it in the old room and leave the route to livePlan)
         hook(A, hook_event_name="CwdChanged", cwd="/work/play-other")
         await wait(page, "() => window.__dbg.play().robots.filter((x) => x.room === '" + a_room + "').length === 1", timeout=10000, label="A's desk in another room")
-        await wait(page, "() => window.__dbg.play().robots.every((x) => !x.back && x.path === 0)", timeout=30000, label="both at their desks again")
+        # not playing, at the desk's coordinates: a robot still at play has an empty path and no walk back either, so the
+        # looser test passed in the frame before playTick stopped the game (1 run in 4, read as a robot that never moved)
+        # the two of the game only: the seven in the other room may be at a game of their own
+        pair = json.dumps(res["moveStart"]["list"][0]["players"])
+        await wait(page, "() => window.__dbg.play().robots.filter((x) => " + pair + ".includes(x.id)).every((x) => !x.play && !x.back && x.path === 0 && x.x === x.seat[0] && x.z === x.seat[1])",
+                   timeout=30000, label="both at their desks again")
         walk = res["move"] = await page.evaluate("() => ({ hits: window.__walk.hits.length, rooms: window.__walk.rooms, steps: window.__walk.steps })")
         res["moveRobots"] = (await page.evaluate(play))["robots"]
         res["moveEnds"] = (await page.evaluate(play))["ends"][-3:]
@@ -241,6 +248,35 @@ async def run_play(pw, out, failures):
         await wait(page, "() => !window.__dbg.play().robots.some((x) => x.room === '" + a_room + "' && (x.solo || x.zzz || x.bento))", timeout=5000, label="it stops on the instruction")
         res["soloStopSec"] = round(time.monotonic() - t3, 1)
         hook(B, hook_event_name="Stop")
+        # both alone kinds, up close, light and dark (96, 10-18: the zzz was all but lost on the dark floor, the bento a few
+        # pixels): the sprite and the box are there and big enough; the pictures are for the eye
+        await wait(page, "() => window.__dbg.play().robots.every((x) => !x.solo && x.path === 0)", timeout=20000, label="B at rest")
+        res["soloLook"] = {}
+        for kind in ("nap", "bento"):
+            await page.evaluate("() => window.__dbg.play({ restMinSec: 0, restMaxSec: 0, solo: { p: 1, minSec: 60, maxSec: 60, kinds: ['" + kind + "'] } })")
+            await wait(page, "() => window.__dbg.play().robots.some((x) => x.room === '" + a_room + "' && x.solo === '" + kind + "')", timeout=30000, label=f"alone: {kind}")
+            await page.click(f".tag.room[data-set-project='{a_room}']")
+            await wait(page, f"() => window.__dbg.solo() === '{a_room}'", label="up close")
+            for scheme in ("light", "dark"):
+                await page.emulate_media(color_scheme=scheme)
+                await page.wait_for_timeout(1200)
+                await page.screenshot(path=str(out / f"solo-{kind}-{scheme}.png"))
+            res.setdefault("soloTags", {})[kind] = next((x["tag"] for x in (await page.evaluate(play))["robots"] if x["solo"] == kind), None)
+            res["soloLook"][kind] = await page.evaluate("""() => { const R = window.__dbg.robots.find((x) => x.solo); if (!R) return null;
+              const o = R.robot.zzz && R.robot.zzz.visible ? R.robot.zzz : R.robot.bento; const b = new window.__dbg.THREE.Box3().setFromObject(o);
+              const s = new window.__dbg.THREE.Vector3(); b.getSize(s); return { w: +s.x.toFixed(2), h: +s.y.toFixed(2), d: +s.z.toFixed(2) }; }""")
+            await page.emulate_media(color_scheme="light")
+            await page.click("#room-back")
+            await wait(page, "() => window.__dbg.solo() === null", label="back")
+            hook(B, hook_event_name="UserPromptSubmit", prompt="起きて")
+            await wait(page, "() => !window.__dbg.play().robots.some((x) => x.solo)", timeout=5000, label="stops")
+            hook(B, hook_event_name="Stop")
+            await page.wait_for_timeout(1500)
+        look = res["soloLook"]
+        check(failures, look.get("nap") and look["nap"]["w"] >= 1.0 and look.get("bento") and look["bento"]["w"] >= 0.55,
+              f"the zzz and the bento are big enough to see: {look}")
+        check(failures, res.get("soloTags") == {"nap": "zzz 居眠り", "bento": "弁当"}, f"the name tag says it too: {res.get('soloTags')}")
+        await page.evaluate("() => window.__dbg.play({ solo: { p: 0, kinds: ['nap', 'bento'] } })")
         # the one change the server makes without moving updatedAt: a busy session quiet for THINKING_AFTER_MS (30 s)
         # turns 考え中. Every robot in the other room gets an instruction (busy, still idle), a pair plays, and the
         # state alone must stop it when they turn 考え中.

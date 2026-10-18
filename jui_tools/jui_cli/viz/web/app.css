@@ -918,3 +918,4 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 /* a phone call on a robot's name tag (SendMessage, 10-18): a mark and the other robot's number */
 .tag .call-mark { flex: none; padding: 0 6px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font: 700 10px/1.6 var(--font-body); }
 .tag .call-mark[hidden] { display: none; }
+.tag .call-mark.solo-mark { background: var(--info-bg); color: var(--info); }   /* alone at its desk: a nap or a bento (2.3.1) */

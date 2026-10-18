@@ -8,7 +8,7 @@ window.__dbg = {
   play: (opts) => { if (opts) { if (opts.solo) Object.assign(SOLO, opts.solo, { next: 0 }); Object.assign(PLAY, opts, { next: 0 }); if ('restMaxSec' in opts) robots.forEach((R) => { R.restUntil = 0; }); if (opts.endAll) [...PLAY.list].forEach(playEnd); } return { ends: PLAY.ends.slice(), list: PLAY.list.map((G) => ({ room: G.room, kind: G.kind, players: G.players.map((R) => R.def.id), started: !!G.t0,
     ball: G.ball ? [+G.ball.position.x.toFixed(2), +G.ball.position.y.toFixed(2)] : null })),
     robots: robots.map((R) => ({ id: R.def.id, play: R.play ? R.play.phase : null, back: !!R.playBack, vis: R.robot.state, lamp: R.robot.lampState || R.robot.state, pose: R.robot.play ? R.robot.play.kind : null, rps: !!(R.robot.rps && R.robot.rps.visible),
-      solo: R.solo ? R.solo.kind : null, zzz: !!(R.robot.zzz && R.robot.zzz.visible), bento: !!(R.robot.bento && R.robot.bento.visible), desk: !!(R.robot.desk && R.robot.desk.visible), seatKey: R.seatKey,
+      solo: R.solo ? R.solo.kind : null, zzz: !!(R.robot.zzz && R.robot.zzz.visible), bento: !!(R.robot.bento && R.robot.bento.visible), desk: !!(R.robot.desk && R.robot.desk.visible), seatKey: R.seatKey, tag: R.callText || '',
       x: +R.robot.root.position.x.toFixed(2), z: +R.robot.root.position.z.toFixed(2), seat: R.def.pos, room: R.def.room, path: R.path.length })) }; },
   calls: () => robots.map((R) => ({ id: R.def.id, call: R.robot.call ? { role: R.robot.call.role, state: R.robot.call.state, peer: R.robot.call.peer } : null,
     handset: !!R.robot.handset, ring: !!(R.robot.ring && R.robot.ring.visible), tag: R.callText || '', state: R.robot.state })),   // phone calls (10-18)

@@ -676,27 +676,36 @@ function soloPose(r, p, t) {
     p.aLx = -1.1; p.aLz = -0.35; p.aRx = -1.35 - bite * 0.45; p.aRz = 0.3; p.headX = 0.22 - bite * 0.06;
   }
 }
+/* White letters with a dark rim: readable on the light floor and on the dark one (jsonuidocument-96, 10-18: the blue zzz
+   all but vanished on the dark floor and walls). */
 function zzzCanvas() {
-  const c = makeCanvas(160, 120), ctx = c.getContext('2d');
-  ctx.fillStyle = '#5b7bd8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  [[44, 88, 30], [86, 58, 40], [124, 26, 50]].forEach(([x, y, size]) => { ctx.font = `700 ${size}px ${FONT_DISPLAY}`; ctx.fillText('z', x, y); });
+  const c = makeCanvas(200, 150), ctx = c.getContext('2d');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  [[50, 112, 38], [104, 74, 50], [156, 34, 62]].forEach(([x, y, size]) => {
+    ctx.font = `700 ${size}px ${FONT_DISPLAY}`;
+    ctx.lineWidth = 9; ctx.strokeStyle = '#1f2a44'; ctx.strokeText('z', x, y);
+    ctx.fillStyle = '#ffffff'; ctx.fillText('z', x, y);
+  });
   return c;
 }
 function bentoBox() {
   const g = new THREE.Group();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.26), toon('#c0392b'));
-  const rice = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.22), toon('#fffaf0')); rice.position.set(-0.08, 0.05, 0);
-  const side = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.22), toon('#e6a23c')); side.position.set(0.09, 0.05, 0);
-  g.add(box, rice, side);
-  g.position.set(0, 0.6, 0.42);
+  // big enough to read from the usual view (96, 10-18: a few pixels even up close): a red box, rice, a side dish, a lid
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.12, 0.44), toon('#c0392b'));
+  const rice = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.38), toon('#fffaf0')); rice.position.set(-0.14, 0.07, 0);
+  const plum = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), toon('#d63a5a')); plum.position.set(-0.14, 0.1, 0);
+  const side = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.04, 0.38), toon('#e6a23c')); side.position.set(0.15, 0.07, 0);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.03, 0.44), toon('#2b2f36')); lid.position.set(0.5, 0.0, 0.05); lid.rotation.z = 0.35;
+  g.add(box, rice, plum, side, lid);
+  g.position.set(0, 0.62, 0.48);
   return g;
 }
 function soloProps(r, S, t) {
   const nap = !!S && S.kind === 'nap', bento = !!S && S.kind === 'bento';
-  if (nap && !r.zzz) { r.zzz = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(zzzCanvas()), transparent: true })); r.zzz.scale.set(0.5, 0.38, 1); r.root.add(r.zzz); }
+  if (nap && !r.zzz) { r.zzz = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(zzzCanvas()), transparent: true, depthTest: false })); r.zzz.renderOrder = 5; r.zzz.scale.set(1.1, 0.82, 1); r.root.add(r.zzz); }
   if (r.zzz) {
     r.zzz.visible = nap;
-    if (nap) { const k = reduceMotion ? 0.4 : ((t - S.t0) * 0.4) % 1; r.zzz.position.set(0.5, 1.9 + k * 0.5, 0.1); r.zzz.material.opacity = 1 - k * 0.7; }
+    if (nap) { const k = reduceMotion ? 0.4 : ((t - S.t0) * 0.4) % 1; r.zzz.position.set(0.55, 2.0 + k * 0.5, 0.1); r.zzz.material.opacity = 1 - k * 0.5; }
   }
   if (bento && !r.bento) { r.bento = bentoBox(); r.root.add(r.bento); }
   if (r.bento) r.bento.visible = bento;

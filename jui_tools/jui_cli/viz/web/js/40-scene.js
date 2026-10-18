@@ -802,16 +802,21 @@ function snackTick(t) {
 }
 /* A call on the robot and on its name tag: a phone mark and the other robot's number, never the message. */
 const CALL_TAG_TEXT = { dialing: '発信中', ringing: '呼び出し中', answered: '通話中' };
+/* Alone at its desk (2.3.1): the name tag says so too — the robot is small in any view, so the zzz and the bento alone
+   were hard to see (jsonuidocument-96, 10-18). The call mark wins; a call stops a nap anyway. */
+const SOLO_TAG_TEXT = { nap: 'zzz 居眠り', bento: '弁当' };
 function liveCallTag(R, call) {
   R.robot.call = call && CALL_ON_LINE.has(call.state) ? call : null;
   const c = R.robot.call;
-  const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}` : '';
+  const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}`
+    : R.solo ? SOLO_TAG_TEXT[R.solo.kind] || '' : '';
   if (text === (R.callText || '')) return;
   R.callText = text;
   if (!R.callEl) { R.callEl = document.createElement('span'); R.callEl.className = 'call-mark'; R.tag.insertBefore(R.callEl, R.text); }
   R.callEl.textContent = text;
   R.callEl.hidden = !text;
-  R.tag.classList.toggle('on-call', !!text);
+  R.callEl.classList.toggle('solo-mark', !c && !!text);
+  R.tag.classList.toggle('on-call', !!c);
 }
 /* Play (requester, 10-18): "同じ部屋で待機が長いロボットが複数いたらロボット同士で遊ぶ", "動きはランダムでいい",
    "遊んだらまた元の場所に戻る", "指示が来たら遊ぶのやめて作業始めて". Looks only: the server, the panel and the tasks
