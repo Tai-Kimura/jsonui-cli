@@ -581,15 +581,16 @@ class World:
                         peer_name(to)[:120], to_sid, at)
         self._dirty.add("calls")
 
-    def _call_records(self, sid: str, records: list) -> None:
-        """What the receiver's transcript said about cross-session messages (calls.record_event)."""
+    def _call_records(self, sid: str, records: list, at: int) -> None:
+        """What the receiver's transcript said about cross-session messages (calls.record_event). The call moves
+        when the server reads it (``at``): a record's own time can be behind this clock, and the ring limit and how
+        long a picked-up call shows must not start in the past. The record's time is kept as information."""
         for kind, name, when in records:
-            at = when or self._now
             if kind == "ring":
                 from_sid = self._peer_names.get(name)
-                changed = self.calls.ring(sid, name, from_sid, from_sid, at)
+                changed = self.calls.ring(sid, name, from_sid, from_sid, at, when)
             elif kind == "answer":
-                changed = self.calls.pick_up(sid, name, at)
+                changed = self.calls.pick_up(sid, name, at, when)
             else:
                 changed = self.calls.hang_up(sid, name, at)
             if changed:
@@ -916,7 +917,7 @@ class World:
                 total[k] += got[k]
             total["usage"] += len(got["usage"])
             if got.get("calls"):
-                self._call_records(sid, got["calls"])
+                self._call_records(sid, got["calls"], at)
             seen = self._usage_seen.setdefault(sid, {})
             for mid, tokens, when in got["usage"]:
                 delta = tokens - seen.get(mid, 0)

@@ -131,22 +131,23 @@ class CallBook:
         found.sort(key=lambda c: c["startedAt"])
         return found[-1] if newest else found[0]
 
-    def ring(self, to_session: str, from_name: str, from_session: str | None, from_agent: str | None, at: int) -> bool:
+    def ring(self, to_session: str, from_name: str, from_session: str | None, from_agent: str | None, at: int,
+             written: int | None = None) -> bool:
         call = self._open_to(to_session, from_name, newest=True)
         if call is None:   # the sender's hook was not seen (a hookless sender): the receiver rings anyway
             call = self._new(at, **{"from": from_agent, "fromSession": from_session, "fromName": from_name,
                                     "toName": None, "toSession": to_session})
         changed = call.get("toSession") != to_session or call["state"] != "ringing" or not call.get("arrived")
-        call["toSession"], call["arrived"] = to_session, at
+        call["toSession"], call["arrived"] = to_session, written or at
         if call["state"] == "dialing":
             call["state"], call["ringAt"] = "ringing", at
         return changed
 
-    def pick_up(self, to_session: str, from_name: str, at: int) -> bool:
+    def pick_up(self, to_session: str, from_name: str, at: int, written: int | None = None) -> bool:
         call = self._open_to(to_session, from_name, newest=False)
         if call is None:
             return False
-        call["toSession"] = to_session
+        call["toSession"], call["read"] = to_session, written or at
         self._end(call, "answered", at)
         return True
 

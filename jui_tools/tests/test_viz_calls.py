@@ -96,8 +96,9 @@ def test_a_named_receiver_rings_at_once_and_picks_up_when_it_reads_idle(tmp_path
     assert c["state"] == "ringing" and c["arrived"] == T + 2_000   # arrived, not read yet
     _append(f[B], _meta(A, T + 2_010))
     [c] = _calls(world, T + 4_000)
-    assert c["state"] == "answered" and c["endedAt"] == T + 2_010
-    assert _calls(world, T + 2_010 + calls_mod.ANSWERED_SHOW_MS) == []   # both back to work
+    assert c["state"] == "answered" and c["read"] == T + 2_010 and c["endedAt"] == T + 4_000   # moved when it was read here
+    assert _calls(world, T + 4_000 + calls_mod.ANSWERED_SHOW_MS - 1)[0]["state"] == "answered"
+    assert _calls(world, T + 4_000 + calls_mod.ANSWERED_SHOW_MS) == []   # both back to work
 
 
 def test_a_busy_receiver_picks_up_at_its_next_tool_boundary(tmp_path):
@@ -200,3 +201,13 @@ def test_the_receivers_records_as_claude_code_writes_them(tmp_path):
                 "content": enqueue["content"]}
     assert [calls_mod.record_event(r) for r in (enqueue, meta, absorbed)] == [
         ("ring", "jsonui-agents-for-claude-cd"), ("answer", "jsonui-agents-for-claude-cd"), ("answer", "jsonui-agents-for-claude-cd")]
+
+
+def test_a_record_written_long_ago_still_rings_and_shows_the_pick_up(tmp_path):
+    """The receiver's clock or a slow read: the record's time is behind the server's. The call moves at the read."""
+    world, f = _setup(tmp_path)
+    _send(world, A, NAMES[B])
+    late = T + 1_000 + calls_mod.RING_MAX_MS + 60_000                # read long after the records were written
+    _append(f[B], _enqueue(A, T + 2_000), _meta(A, T + 2_010))
+    [c] = _calls(world, late)
+    assert c["state"] == "answered" and c["endedAt"] == late         # not missed, not hidden at once

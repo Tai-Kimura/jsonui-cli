@@ -782,6 +782,19 @@ function snackTick(t) {
     if (SNACK.rng() < SNACK.p && startGesture(R.robot, SNACK.rng() < 0.5 ? 'coffee' : 'meal', t)) busy += 1;
   }
 }
+/* A call on the robot and on its name tag: a phone mark and the other robot's number, never the message. */
+const CALL_TAG_TEXT = { dialing: '発信中', ringing: '呼び出し中', answered: '通話中' };
+function liveCallTag(R, call) {
+  R.robot.call = call && CALL_ON_LINE.has(call.state) ? call : null;
+  const c = R.robot.call;
+  const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}` : '';
+  if (text === (R.callText || '')) return;
+  R.callText = text;
+  if (!R.callEl) { R.callEl = document.createElement('span'); R.callEl.className = 'call-mark'; R.tag.insertBefore(R.callEl, R.text); }
+  R.callEl.textContent = text;
+  R.callEl.hidden = !text;
+  R.tag.classList.toggle('on-call', !!text);
+}
 function liveUpdateRobots(nowSec, dt) {
   if (SOURCE.layoutRev !== LIVE3D.rev) liveSync();
   liveLinks(latestModel, nowSec);
@@ -792,8 +805,10 @@ function liveUpdateRobots(nowSec, dt) {
   LIVE3D.lastWalk = nowMs;
   snackTick(nowSec);
   const now = vizNow();
+  const calls = callsByLabel();
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
+    liveCallTag(R, calls[R.def.id] || null);
     setRobotTired(R.robot, R.def.kind === 'main' && isTired(sinceOf(R.def.id), now));
     R.robot.heavy = heavyOf(R.def.id);   // fast typing and sweat while it works (the robot decides when)
     const how = liveWalk(R, walkDt, nowMs);
