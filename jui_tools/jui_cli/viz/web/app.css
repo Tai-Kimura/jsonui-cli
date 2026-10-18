@@ -470,6 +470,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .wb-side { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; min-height: 0; padding: 10px 6px 10px 10px; border-right: 1px solid var(--wb-line); background: var(--wb-chip); }
 .wb-search { width: 100%; padding: 4px 9px; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-card); color: var(--wb-ink); font: 500 12.5px/1.5 var(--font-body); }
 .wb-side-list { display: grid; align-content: start; gap: 2px; min-height: 0; padding-right: 4px; overflow-y: auto; }
+.wb-side-list .ws-apps { margin: 2px 4px 8px; }
 .ws-group { display: flex; justify-content: space-between; margin: 10px 4px 2px; color: var(--wb-soft); font: 700 11.5px/1.5 var(--font-body); }
 .ws-group b { font-family: var(--font-mono); }
 .ws-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 0 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--wb-ink); font: inherit; text-align: left; cursor: pointer; }

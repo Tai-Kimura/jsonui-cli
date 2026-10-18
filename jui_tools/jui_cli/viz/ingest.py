@@ -269,7 +269,7 @@ class World:
         if project is None:
             return
         target = Path(path)
-        in_artifacts = any(target.is_relative_to(d) for d in (project.spec_dir, project.layouts_dir, project.tests_dir))
+        in_artifacts = any(target.is_relative_to(d) for d in project.artifact_dirs())
         if not after and in_artifacts and use_id and not target.exists():
             self._new_files.add(use_id)  # a new spec / layout / test is being written
         if after:
