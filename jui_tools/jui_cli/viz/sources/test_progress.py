@@ -243,7 +243,8 @@ async def follow(argv: list[str], parse: Callable[[str], object], on_record: Cal
         if proc.returncode is None:
             try:
                 os.killpg(proc.pid, 15)  # the group started above
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
+                # gone, or (macOS) its leader exited and is not reaped yet: EPERM, nothing left to stop
                 pass
             transport = getattr(proc, "_transport", None)
             if transport is not None:

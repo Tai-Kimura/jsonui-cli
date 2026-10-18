@@ -97,6 +97,35 @@ def test_follow_hands_on_each_record_of_a_reader_process(tmp_path):
     assert [r["event"] for r in got] == ["run_start", "run_end"]
 
 
+def test_follow_ends_quietly_when_the_reader_group_answers_eperm(tmp_path, monkeypatch):
+    """A reader that ended on its own but is not reaped yet: macOS answers killpg with EPERM (seen in a full run,
+    10-19). follow must end quietly, as it does for ESRCH."""
+    script = tmp_path / "reader.sh"
+    script.write_text("#!/bin/sh\nsleep 5\n")
+    script.chmod(0o755)
+    sent = []
+
+    def killpg(pid, sig):
+        sent.append(sig)
+        real_killpg(pid, 9)   # stop the real reader, then answer as macOS may
+        raise PermissionError(1, "Operation not permitted")
+
+    real_killpg = os.killpg
+
+    async def go():
+        task = asyncio.ensure_future(tp.follow([str(script)], tp.parse_logcat_line, lambda r: None))
+        await asyncio.sleep(0.3)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    monkeypatch.setattr(tp.os, "killpg", killpg)
+    asyncio.run(go())
+    assert sent == [15]
+
+
 def test_devices_parse_and_name_the_device_a_command_drives():
     simctl = json.dumps({"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
         {"udid": "11111111-2222-3333-4444-555555555555", "name": "iPhone 16", "state": "Booted"},
