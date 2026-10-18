@@ -1072,6 +1072,36 @@ function closeRobot(keepZoom) {
   histSync();
   if (!keepZoom) zoomBack();
 }
+/* ← → on the robot card (requester, 10-18: "この画面の時に左右キーとかでロボットを切り替えれるようにできる？"): the
+   robots in view — the project picked, or the rooms of the floor shown — room by room in the rooms' order, then by
+   label; robots leaving are skipped; the ends wrap. The card keeps its tab (55-history.js holds it), and the camera
+   flies with the existing zoomTo (the camera itself is 40-scene.js's). */
+function robotCycle() {
+  const live = SOURCE.mode === 'live';
+  const rooms = ROOMS.filter((r) => inScope(r.id) && (!live || UI.project !== 'all' || !LIVE.shown.length || LIVE.shown.includes(r.id))).map((r) => r.id);
+  return ROBOT_DEFS.filter((d) => rooms.includes(projectOfRobot(d.id)) && !(live && LIVE.leaving[d.id]))
+    .sort((a, b) => rooms.indexOf(projectOfRobot(a.id)) - rooms.indexOf(projectOfRobot(b.id)) || a.id.localeCompare(b.id, 'ja', { numeric: true }))
+    .map((d) => d.id);
+}
+function stepRobot(dir) {
+  const list = robotCycle();
+  if (!rbState.id || list.length < 2) return;
+  const i = list.indexOf(rbState.id);
+  const next = list[i < 0 ? 0 : (i + dir + list.length) % list.length];
+  if (next === rbState.id) return;
+  rbState.id = next;
+  renderRobot(latestModel);
+  if (has3D && robots.some((x) => x.def.id === next)) zoomTo(robotPose(next), null, () => {});
+}
+rbEl.addEventListener('click', (e) => { const b = e.target.closest('[data-rb-step]'); if (b) stepRobot(Number(b.dataset.rbStep)); });
+document.addEventListener('keydown', (e) => {
+  if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!rbState.id || rbEl.hidden || !popEl.hidden || logState.open || alwaysDlg) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select')))) return;   // typing keeps its keys
+  e.preventDefault();
+  stepRobot(e.key === 'ArrowRight' ? 1 : -1);
+});
 function renderRobot(model) {
   const id = rbState.id;
   if (!id || rbEl.hidden) return;
@@ -1087,7 +1117,7 @@ function renderRobot(model) {
       const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
       return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
     }).join('')}</ul>` : `<p class="rb-none">${isMain ? 'このセッションのタスク一覧は空' : '担当しているタスクはない'}</p>`;
-    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div>
+    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div>
 <div class="rb-tabs" role="tablist" aria-label="表示"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">今の様子</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">応答の履歴</button></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴"></div>
 <div class="rb-body">
