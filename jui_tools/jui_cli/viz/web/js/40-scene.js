@@ -808,9 +808,12 @@ function liveCallTag(R, call) {
    still say 待機. Main robots only (a subagent idle for long has usually left). Once a second a room with two robots
    idle for PLAY.idleMs or more may start a game (probability PLAY.p, a seeded generator): the two walk to the front
    aisle of their room, play one of PLAY_KINDS for a random while, and walk back to their desks. Any reason to stop —
-   the robot is no longer idle, its phone rings, it leaves, its seat moves — stops it at once: it walks back with its
-   real lamp, and a partner left alone walks back too. A robot that played rests a while before the next game; at most
-   PLAY.games at a time, one to a room. None under reduced motion. The e2e build can shorten the times (80-dbg.js). */
+   anything the server sets on the robot (an instruction keeps the state idle and changes only its act and updatedAt:
+   jsonuidocument-96, 10-18), the robot no longer idle, its phone rings, it leaves, its seat moves — stops it at once: it
+   walks back with its real lamp (through the doors when its desk is in another room now), and a partner left alone
+   walks back too. A robot that played rests a while before the next game; at most PLAY.games at a time, one to a room,
+   and none in a room with standing robots (a full room: they stand along the front wall, where the game would be).
+   None under reduced motion. The e2e build can shorten the times (80-dbg.js). */
 const PLAY_KINDS = ['ball', 'highfive', 'rps'];
 const PLAY = { seed: 20261019, kinds: PLAY_KINDS, idleMs: 180_000, p: 1 / 30, games: 2, minSec: 15, maxSec: 35, restMinSec: 60, restMaxSec: 180,
   next: 0, rng: null, list: [] };
@@ -819,7 +822,8 @@ const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' &&
 function playStop(R) {
   if (!R.play) return;
   R.play = null; R.robot.play = null; R.playBack = true;
-  R.path = [R.def.pos];
+  const p = R.robot.root.position, from = roomAtPoint([p.x, p.z]);
+  R.path = from && from !== R.def.room ? [...liveRoute(from, R.def.room), R.def.pos] : [R.def.pos];   // never through a wall
 }
 function playEnd(G) {
   for (const R of G.players) playStop(R);
@@ -832,7 +836,8 @@ function playTick(nowSec, now) {
     for (const R of G.players) {
       const st = robotState[R.def.id] || { state: 'idle' };
       if (!R.play) continue;
-      if (st.state !== 'idle' || R.robot.call || LIVE.leaving[R.def.id] || R.seatKey !== R.play.seatKey || !robots.includes(R)) playStop(R);
+      if (st.state !== 'idle' || st.since !== R.play.since || R.robot.call || LIVE.leaving[R.def.id] || R.seatKey !== R.play.seatKey
+        || !robots.includes(R)) playStop(R);
     }
     const left = G.players.filter((R) => R.play);
     if (left.length < 2 || nowSec >= G.until) { G.players = left; playEnd(G); continue; }
@@ -860,6 +865,7 @@ function playTick(nowSec, now) {
   }
   for (const [room, idle] of Object.entries(byRoom)) {
     if (PLAY.list.length >= PLAY.games || idle.length < 2 || PLAY.list.some((G) => G.room === room) || !PROJECT[room]) continue;
+    if (robots.some((R) => R.def.room === room && R.def.standing)) continue;   // a full room: no aisle to play in
     if (PLAY.rng() >= PLAY.p) continue;
     const a = idle.splice(Math.floor(PLAY.rng() * idle.length), 1)[0], b = idle[Math.floor(PLAY.rng() * idle.length)];
     const rm = PROJECT[room], cx = (rm.x0 + rm.x1) / 2, cz = rm.z1 - 0.9;
@@ -868,7 +874,7 @@ function playTick(nowSec, now) {
     const G = { room, kind, players: [a, b], t0: 0, until: nowSec + len + 20, ball: null };   // +20: the walk there
     [a, b].forEach((R, i) => {
       const spot = [cx + (i ? 0.8 : -0.8), cz];
-      R.play = { phase: 'going', spot, partner: i ? a : b, seatKey: R.seatKey, len };
+      R.play = { phase: 'going', spot, partner: i ? a : b, seatKey: R.seatKey, since: robotState[R.def.id].since, len };
       R.path = [spot];
       R.restUntil = nowSec + len + 20 + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
     });
