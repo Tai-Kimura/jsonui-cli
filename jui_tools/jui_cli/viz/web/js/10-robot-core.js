@@ -425,7 +425,7 @@ function faceToward(obj, target) {
 function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, furnished = false }) {
   const g = S.geo, m = S.mat;
   const r = { label, role, state, prev: state, blend: 1, seed, props: {}, faceMode: '', nextBlink: 1 + (seed % 2), blinkEnd: 0, termAt: 0, phoneAt: 0,
-    tired: false, needDrink: false, drinks: 0, gesture: null, hand: null };
+    tired: false, needDrink: false, drinks: 0, gesture: null, hand: null, heavy: false, sweat: null };
   r.furnished = furnished;
   r.accent = toon(ROLES[role].color);
   r.lampMat = new THREE.MeshBasicMaterial({ color: LAMP.idle });
@@ -516,9 +516,9 @@ function handThing(kind) {
     const band = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.07, 12), toon('#ffe14d')); band.position.y = 0.02;
     g.add(can, band);
   } else if (kind === 'coffee') {                           // a mug with a handle
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.15, 12), toon('#ffffff'));
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.15, 12), toon('#ff8a3d'));   // not white on a white robot
     const coffee = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.01, 12), toon('#6b4226')); coffee.position.y = 0.07;
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 6, 10), toon('#ffffff')); handle.position.x = 0.1;
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 6, 10), toon('#ff8a3d')); handle.position.x = 0.1;
     g.add(mug, coffee, handle);
   } else {                                                  // a rice bowl and chopsticks
     const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), toon('#e8554e'));
@@ -526,7 +526,7 @@ function handThing(kind) {
     const rice = new THREE.Mesh(new THREE.CircleGeometry(0.11, 12), toon('#fffaf0')); rice.rotation.x = -Math.PI / 2; rice.position.y = 0.0;
     g.add(bowl, rice);
   }
-  g.position.set(0, -0.46, 0.06);
+  g.position.set(0, -0.44, 0.2); g.scale.setScalar(1.4);   // in front of the hand: the face is 0.46 in front of the neck
   return g;
 }
 function startGesture(r, kind, t) {
@@ -543,6 +543,29 @@ function endGesture(r) {
   r.hand = null; r.gesture = null;
 }
 /* Tired after 8 hours of its session (the page decides; the robot only shows it): the first time, a drink. */
+/* Heavy work (requester, 10-18: many output tokens, a long tool call, three subagents — the server decides): while
+   the robot works it types fast and sweats. The lamp and the label stay 作業中; never while waiting, thinking or done;
+   under reduced motion the drops stay where they are. */
+const HEAVY_OK = new Set(['typing', 'reading', 'command']);
+function sweatDrops(r) {
+  const g = new THREE.Group(), mat = new THREE.MeshBasicMaterial({ color: 0x7fd3ff, transparent: true, opacity: 0.9 });
+  const geo = new THREE.SphereGeometry(0.05, 8, 6);
+  for (let k = 0; k < 4; k++) { const d = new THREE.Mesh(geo, mat); d.scale.set(1, 1.5, 1); d.userData.k = k; g.add(d); }
+  r.head.add(g);
+  return g;
+}
+function sweatUpdate(r, s, on) {
+  if (on && !r.sweat) r.sweat = sweatDrops(r);
+  if (!r.sweat) return;
+  r.sweat.visible = on;
+  if (!on) return;
+  for (const d of r.sweat.children) {
+    const k = d.userData.k, side = k % 2 ? 1 : -1;
+    const ph = reduceMotion ? 0.35 + k * 0.1 : (s * 1.7 + k / 4) % 1;
+    d.position.set(side * (0.62 + ph * 0.45), 0.85 + Math.sin(ph * Math.PI) * 0.35 - ph * 0.2, 0.15);
+    d.scale.setScalar(Math.max(0.2, 1 - ph * 0.8)); d.scale.y *= 1.5;
+  }
+}
 function setRobotTired(r, on) {
   if (on && !r.tired) r.needDrink = true;
   if (!on) r.needDrink = false;
@@ -552,10 +575,11 @@ function gesturePose(r, p, t) {
   const G = r.gesture, k = Math.min(1, (t - G.t0) / 0.35, (G.t1 - t) / 0.35);   // ease in and out
   const sip = 0.5 + 0.5 * Math.sin((t - G.t0) * (G.kind === 'meal' ? 5 : 2.6));
   const mix = (key, v) => { p[key] += (v - p[key]) * k; };
+  // Arms forward (not up: a raised hand ends inside the head), the thing lifted toward the face and back.
   if (G.kind === 'meal') {                                  // the bowl in the left hand, chopsticks to the mouth
-    mix('aLx', -1.25); mix('aLz', -0.45); mix('aRx', -1.7 - sip * 0.45); mix('aRz', 0.25); mix('headX', 0.18);
+    mix('aLx', -1.35); mix('aLz', -0.4); mix('aRx', -1.45 - sip * 0.35); mix('aRz', 0.3); mix('headX', 0.18);
   } else {                                                  // a can or a mug to the mouth, head back for the drink
-    mix('aRx', -2.05 - sip * 0.35); mix('aRz', 0.5); mix('headX', G.kind === 'drink' ? -0.28 : -0.1 - sip * 0.06);
+    mix('aRx', -1.5 - sip * 0.3); mix('aRz', 0.45); mix('headX', G.kind === 'drink' ? -0.3 : -0.08 - sip * 0.08);
   }
 }
 
@@ -761,7 +785,9 @@ function updateRobot(r, t, dt) {
   const s = t * SPEED * (r.tired ? 0.7 : 1) + r.seed;    // tired: a little slower
   r.blend = Math.min(1, r.blend + dt / 0.4);
   const e = r.blend * r.blend * (3 - 2 * r.blend);
-  const a = poseFor(r.prev, s), b = poseFor(r.state, s);
+  const heavy = r.heavy && HEAVY_OK.has(r.state);
+  const a = poseFor(r.prev, s), b = heavy ? poseFor('typing', s * 2.4) : poseFor(r.state, s);   // heavy: fast typing
+  sweatUpdate(r, s, heavy);
   const p = {};
   for (const k in b) p[k] = a[k] + (b[k] - a[k]) * e;
   if (r.tired) { p.headX += 0.2; p.torsoX += 0.08; p.hipsY -= 0.012; p.aLz *= 0.5; p.aRz *= 0.5; }   // head and shoulders down

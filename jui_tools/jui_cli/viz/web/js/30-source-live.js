@@ -385,6 +385,7 @@ function layoutRooms() {
    first saw it, not when it began. */
 const TIRED_MS = 8 * 3600 * 1000;
 const isTired = (since, now) => Number.isFinite(since) && since > 0 && now - since >= TIRED_MS;
+const heavyOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return !!(s && s.heavy && s.heavy.length); };
 const sinceOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return s ? s.since : null; };
 
 /* Another floor, from the floor buttons, the building view or a project picked in the menu. */
@@ -522,7 +523,8 @@ function rebuildSessions() {
       .sort((a, b) => (a.kind === 'main' ? -1 : 0) - (b.kind === 'main' ? -1 : 0) || a.id.localeCompare(b.id)).map((d) => d.id);
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
-      since: Number.isFinite(s.since) && s.since > 0 ? s.since : null });   // the transcript's first record; none: not guessed
+      since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
+      heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [] });   // tokens / tool / subagents   // the transcript's first record; none: not guessed
   }
   SESSIONS.splice(0, SESSIONS.length, ...next);
 }

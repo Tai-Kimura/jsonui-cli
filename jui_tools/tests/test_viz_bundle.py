@@ -639,7 +639,7 @@ LIVE_ONLY = {
     "liveWantSheet",                              # 50-panel: the live branch of the sheet
     "netConnect", "secOfDay",                     # 70-main: the live branches
     "liveGoToFloor", "liveFloorOf",               # 40-scene: the building and the floor steps (live only)
-    "isTired", "sinceOf",                         # 40-scene: liveUpdateRobots (the 8-hour tiredness of a live session)
+    "isTired", "sinceOf", "heavyOf",              # 40-scene: liveUpdateRobots (tiredness and heavy work of a live session)
 }
 
 

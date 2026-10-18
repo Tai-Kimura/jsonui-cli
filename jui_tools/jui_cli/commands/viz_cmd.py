@@ -341,6 +341,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..viz.paths import claude_home
     from ..viz.sources import transcripts
     world = World(ctx.state, config.toolInputMaxChars, session_start=transcripts.session_start(claude_home() / "projects"))
+    world.transcript_path = transcripts.transcript_path(claude_home() / "projects")
     started_at = now_ms()
     sources: dict[str, dict] = {}
 
@@ -506,12 +507,27 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                         readers.pop(key).cancel()
                         reader_idle.pop(key, None)
 
+            usage_ticks = {"n": 0, "dry": 0}
+
+            def poll_usage(at: int) -> None:
+                """Every 2 s: the transcripts' new usage (heavy work). Assistant lines without a readable usage for a
+                while mean Claude Code changed the shape: the source says so; nothing else depends on it."""
+                got = world.poll_usage(at)
+                usage_ticks["dry"] = usage_ticks["dry"] + 1 if got["assistant"] and not got["usage"] else 0 if got["usage"] else usage_ticks["dry"]
+                if usage_ticks["dry"] >= 5:
+                    set_source("transcripts", "error", "記録の usage が読めない（形が変わった可能性）")
+                elif sources.get("transcripts", {}).get("status") != "running":
+                    set_source("transcripts", "running")
+
             async def tick_loop() -> None:
                 while True:
                     await asyncio.sleep(0.5)
                     at = now_ms()
                     for rec in tail.read_new():
                         world.apply_progress(rec, "web", None, at)
+                    usage_ticks["n"] += 1
+                    if usage_ticks["n"] % 4 == 0:
+                        poll_usage(at)
                     manage_readers(at)
                     world.tick(at)
                     world.publish()

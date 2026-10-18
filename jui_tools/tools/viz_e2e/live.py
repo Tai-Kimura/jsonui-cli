@@ -545,15 +545,30 @@ async def scenario_building(browser, srv, out, failures, res):
           and all(g[k]["drinks"] >= 1 for k in g if g[k]["tired"] and g[k]["state"] in ("idle", "typing", "reading", "command"))
           and all(g[k]["drinks"] == 0 for k in g if not g[k]["tired"]),
           f"building: a drink when it got tired, none again while it stays tired, none if never tired {res['tired']}")
+    hv = {k: (v["heavy"], v["sweat"], v["state"]) for k, v in g2.items()}
+    res["heavy"] = hv
+    check(failures, hv.get("b1", (0, 0, 0))[:2] == (True, True) and hv.get("b6", (0, 0, 0))[:2] == (True, False)
+          and not any(v[1] for k, v in hv.items() if k not in ("b1",)),
+          f"building: a heavy session's working robot types fast and sweats; a heavy one waiting does not {hv}")
+    empty = [k for k, v in g2.items() if not v["act"] and v["actShown"]]
+    check(failures, empty == [], f"building: a robot with nothing to say shows no empty bubble {empty}")
     # coffee and meals: a fixed seed, never on a robot waiting / thinking / done, at most half of them at once
+    # first with no cap at all, so every robot gets its turn — a waiting or thinking one included (with a cap the
+    # first robots filled it and the waiting one was never asked: a mutation letting it eat passed)
+    await page.evaluate("() => window.__dbg.snack({ seed: 7, p: 1, share: 1 })")
+    wrong = []
+    for _ in range(8):
+        await page.wait_for_timeout(300)
+        rows = await page.evaluate("() => window.__dbg.gestures()")
+        wrong += [x for x in rows if x["gesture"] and x["state"] in ("waiting", "thinking", "done")]
     await page.evaluate("() => window.__dbg.snack({ seed: 7, p: 1, share: 0.5 })")
-    worst, seen, wrong = 0, set(), []
+    await page.wait_for_timeout(5500)                      # the uncapped ones finish
+    worst, seen = 0, set()
     for _ in range(16):
         await page.wait_for_timeout(300)
         rows = await page.evaluate("() => window.__dbg.gestures()")
         snacks = [x for x in rows if x["gesture"] in ("coffee", "meal")]
         worst = max(worst, len(snacks)); seen |= {x["gesture"] for x in snacks}
-        wrong += [x for x in rows if x["gesture"] and x["state"] in ("waiting", "thinking", "done")]
     cap = max(1, len(rows) // 2)
     res["snacks"] = {"worst": worst, "cap": cap, "seen": sorted(seen), "wrong": wrong}
     check(failures, wrong == [] and 0 < worst <= cap and seen, f"building: coffee and meals within the cap, never while waiting or thinking {res['snacks']}")
@@ -570,7 +585,13 @@ async def scenario_building(browser, srv, out, failures, res):
     await vp.evaluate("() => { window.__dbg.tower(false); window.__dbg.snack({ seed: 3, p: 0.35, share: 0.5 }); }")
     await vp.click("#scope-top")
     await vp.click('[data-pick-project="b01"]')        # a tired robot at work
-    await vp.wait_for_timeout(7000)
+    await vp.wait_for_timeout(3000)
+    # close up: the tired robot working hard (fast typing, sweat), then a tired idle one; snacks come often here
+    await vp.evaluate("() => { window.__dbg.snack({ seed: 11, p: 1, share: 0.5 }); window.__dbg.openRobot('b1'); }")
+    await vp.wait_for_timeout(4500)
+    await vp.keyboard.press("Escape")
+    await vp.evaluate("() => window.__dbg.openRobot('b0')")
+    await vp.wait_for_timeout(4500)
     video = vp.video
     await ctx.close()
     res["buildingVideo"] = str(await video.path()) if video else None

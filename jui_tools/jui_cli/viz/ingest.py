@@ -36,6 +36,11 @@ SUBAGENT_LINGER_MS = 5_000
 DONE_TO_IDLE_MS = 3_000
 CARRY_MS = 3_000
 THINKING_AFTER_MS = 30_000
+# "Heavy" work (requester, 10-18): any one of these, while the session works.
+HEAVY_TOKENS_PER_MIN = 2_000          # output tokens a minute over the last HEAVY_WINDOW_MS (the transcript)
+HEAVY_WINDOW_MS = 120_000
+HEAVY_TOOL_MS = 60_000                # one tool call running this long (hooks)
+HEAVY_SUBAGENTS = 3                   # subagents at work at once (hooks)
 ENDED_LINGER_MS = 60_000
 TEST_RUNS_KEPT = 50
 EDIT_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
@@ -71,6 +76,13 @@ class World:
         # A session gets ``since`` only from it; never the time the server first saw the session.
         self.session_start = session_start
         self._since_tries: dict[str, int] = {}
+        # session id -> (cwd, transcript path from a hook); the transcript's usage tail; tokens per message id
+        self.transcript_path = None
+        self._paths: dict[str, tuple[str | None, str | None]] = {}
+        self._tails: dict = {}
+        self._usage_seen: dict[str, dict[str, int]] = {}
+        self._tokens: dict[str, list[tuple[int, int]]] = {}
+        self._tool_started: dict[str, int] = {}
         self.rooms = Rooms()
         self.sessions: dict[str, dict] = {}
         self.agents: dict[str, dict] = {}
@@ -133,6 +145,9 @@ class World:
     def _find_since(self, session: dict, cwd: str | None, transcript: str | None) -> None:
         """The session's real start, once (a new session's transcript appears with its first prompt: retried)."""
         sid = session["id"]
+        if cwd or transcript:
+            old = self._paths.get(sid, (None, None))
+            self._paths[sid] = (cwd or old[0], transcript or old[1])
         if self.session_start is None or session.get("sinceFrom") == "transcript" or self._since_tries.get(sid, 0) >= self.SINCE_TRIES:
             return
         self._since_tries[sid] = self._since_tries.get(sid, 0) + 1
@@ -324,6 +339,7 @@ class World:
             if use_id:
                 self._open.setdefault(agent["id"], []).append(use_id)
                 self._open_tool[use_id] = tool
+                self._tool_started[use_id] = at
             target = {"file": robots._rel(str(tool_input["file_path"]), root)} if _s(tool_input.get("file_path")) else None
             self._set(agent, at, state, act, target=target)
             if state == "carry":
@@ -669,6 +685,64 @@ class World:
                 agent = self.agents.get(sid)
                 if agent and agent["state"] == "thinking":
                     self._set(agent, at, "idle", "待機")
+        self._heavy(at)
+
+    # ---------------------------------------------------------------- heavy work (10-18)
+
+    def poll_usage(self, at: int) -> dict:
+        """Read what each live session's transcript added (the usage of its assistant records).
+        Returns {'bytes', 'assistant', 'usage', 'bad'} over all of them, for the source's status."""
+        total = {"bytes": 0, "assistant": 0, "usage": 0, "bad": 0}
+        if self.transcript_path is None:
+            return total
+        from .sources.transcripts import UsageTail
+        for sid, session in self.sessions.items():
+            if session["status"] == "ended":
+                self._tails.pop(sid, None)
+                continue
+            tail = self._tails.get(sid)
+            if tail is None:
+                cwd, given = self._paths.get(sid, (None, None))
+                path = self.transcript_path(sid, cwd, given)
+                if path is None:
+                    continue
+                tail = self._tails[sid] = UsageTail(path)
+            got = tail.read()
+            for k in ("bytes", "assistant", "bad"):
+                total[k] += got[k]
+            total["usage"] += len(got["usage"])
+            seen = self._usage_seen.setdefault(sid, {})
+            for mid, tokens, when in got["usage"]:
+                delta = tokens - seen.get(mid, 0)
+                if delta > 0:
+                    seen[mid] = tokens
+                    self._tokens.setdefault(sid, []).append((when or at, delta))
+            if len(seen) > 2_000:                                     # old ids: keep the newest
+                for mid in list(seen)[:-1_000]:
+                    del seen[mid]
+        return total
+
+    def _heavy(self, at: int) -> None:
+        for sid, session in self.sessions.items():
+            window = [x for x in self._tokens.get(sid, []) if x[0] > at - HEAVY_WINDOW_MS]
+            self._tokens[sid] = window
+            reasons = []
+            if sum(t for _, t in window) >= HEAVY_TOKENS_PER_MIN * HEAVY_WINDOW_MS / 60_000:
+                reasons.append("tokens")
+            mine = [aid for aid, ag in self.agents.items() if ag["sessionId"] == sid]
+            if any(at - self._tool_started.get(u, at) >= HEAVY_TOOL_MS for aid in mine for u in self._open.get(aid, [])):
+                reasons.append("tool")
+            subs = sum(1 for aid in mine if self.agents[aid]["kind"] == "sub" and not self.agents[aid].get("leftAt"))
+            if subs >= HEAVY_SUBAGENTS:
+                reasons.append("subagents")
+            if session["status"] == "ended":
+                reasons = []
+            if reasons != session.get("heavy", []):
+                if reasons:
+                    session["heavy"] = reasons
+                else:
+                    session.pop("heavy", None)
+                self._dirty.add("sessions")
 
     # ---------------------------------------------------------------- publish
 
