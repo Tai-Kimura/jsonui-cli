@@ -636,6 +636,7 @@ JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "t
 # a live-only path such as the building) and never runs in the demo.
 LIVE_ONLY = {
     "labelOf", "liveTestsFor",                    # 40-scene: liveUpdateRobots / drawLivePhone / liveSync
+    "callsByLabel",                               # 40-scene: liveUpdateRobots (phone calls, 10-18)
     "doorAt", "liveWalls", "liveRoute",           # 40-scene: liveBuildRoom / livePlan / liveWalk (doors, 10-18)
     "roomAtPoint", "roomById", "soloRoomId",      # 40-scene: livePlan / liveSolo (behind SOURCE.mode === 'live')
     "liveRelayout",                               # 50-panel: setProject's live branch (one room at a time)

@@ -500,6 +500,19 @@ function liveRelayout() {
 /* Eight hours into its session a main robot gets tired (requester, 10-18). The start is the session's own
    (sessions[].since, from its transcript); a session without one is never tired — startedAt is when the server
    first saw it, not when it began. */
+/* Phone calls (SendMessage, 10-18): the server's calls slice, per robot label. A robot in two calls shows the newest
+   (the slice is sorted by start). The peer is the other robot's label, or null when it is not a robot here. */
+function callsByLabel() {
+  const list = Array.isArray(LIVE.slices.calls) ? LIVE.slices.calls : [];
+  const out = {};
+  for (const c of list) {
+    if (!c || typeof c.state !== 'string') continue;
+    const from = c.from ? LIVE.labelOfReal[c.from] : null, to = c.toSession ? LIVE.labelOfReal[c.toSession] : null;
+    if (from) out[from] = { role: 'caller', state: c.state, peer: to };
+    if (to) out[to] = { role: 'callee', state: c.state, peer: from };
+  }
+  return out;
+}
 const heavyOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return !!(s && s.heavy && s.heavy.length); };
 /* What the robot card says under 今やっていること: hours of a tired session, the reasons of heavy work. */
 function robotCondition(label) {
@@ -672,7 +685,8 @@ function rebuildRobots(initial) {
     if (gone && !isNew) { if (!LIVE.leaving[label]) LIVE.leaving[label] = { since: now }; }
     else if (!gone && isNew) { ROBOT_DEFS.push(def); def.enter = !initial; }   // robots already there sit down at once
     else if (!gone) delete LIVE.leaving[label];
-    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), asking: a.state === 'waiting' && a.waitingOn === 'question' };
+    // since: when the server last set this robot (its idle began then, for play: 10-18)
+    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), asking: a.state === 'waiting' && a.waitingOn === 'question', since: Number(a.updatedAt) || 0 };
     if (LIVE.leaving[label]) st.state = 'done';
     robotState[label] = st;
     seen.add(label);

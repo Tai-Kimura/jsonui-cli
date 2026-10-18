@@ -4,6 +4,13 @@
 window.__dbg = {
   camera, sbTile, sbPoint, SB, KB, THREE, robots,
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
+  // play (10-18): the arms shorten the times; the real defaults stay in 40-scene.js
+  play: (opts) => { if (opts) { Object.assign(PLAY, opts, { next: 0 }); if ('restMaxSec' in opts) robots.forEach((R) => { R.restUntil = 0; }); } return { list: PLAY.list.map((G) => ({ room: G.room, kind: G.kind, players: G.players.map((R) => R.def.id), started: !!G.t0,
+    ball: G.ball ? [+G.ball.position.x.toFixed(2), +G.ball.position.y.toFixed(2)] : null })),
+    robots: robots.map((R) => ({ id: R.def.id, play: R.play ? R.play.phase : null, back: !!R.playBack, vis: R.robot.state, lamp: R.robot.lampState || R.robot.state, pose: R.robot.play ? R.robot.play.kind : null, rps: !!(R.robot.rps && R.robot.rps.visible),
+      x: +R.robot.root.position.x.toFixed(2), z: +R.robot.root.position.z.toFixed(2), seat: R.def.pos })) }; },
+  calls: () => robots.map((R) => ({ id: R.def.id, call: R.robot.call ? { role: R.robot.call.role, state: R.robot.call.state, peer: R.robot.call.peer } : null,
+    handset: !!R.robot.handset, ring: !!(R.robot.ring && R.robot.ring.visible), tag: R.callText || '', state: R.robot.state })),   // phone calls (10-18)
   model: () => latestModel,       // what the panels and boards draw from
   live3d: () => (SOURCE.mode === 'live' ? LIVE3D : null),   // the live rooms' boards
   links: () => links,             // the robot → board lines

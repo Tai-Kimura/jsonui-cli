@@ -914,3 +914,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-cond[hidden] { display: none; }
 .demo-clock { position: absolute; left: 12px; bottom: 10px; z-index: 5; margin: 0; padding: 2px 8px; border-radius: 6px; background: var(--tag-bg); color: var(--ink-soft); font: 600 11.5px/1.6 var(--font-body); }
 .demo-clock[hidden] { display: none; }
+
+/* a phone call on a robot's name tag (SendMessage, 10-18): a mark and the other robot's number */
+.tag .call-mark { flex: none; padding: 0 6px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font: 700 10px/1.6 var(--font-body); }
+.tag .call-mark[hidden] { display: none; }

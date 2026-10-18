@@ -35,6 +35,7 @@ const STATES = {
   phone: { name: 'スマホ', lamp: 'busy', face: 'focus' },
   waiting: { name: '許可待ち', lamp: 'waiting', face: 'wide' },
   carry: { name: '運ぶ', lamp: 'busy', face: 'normal' },
+  stroll: { name: '歩く', lamp: 'idle', face: 'normal' },   // to and from play (10-18): no papers; the lamp is the real state's
   done: { name: '完了', lamp: 'done', face: 'happy' },
 };
 const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', think: '淡い緑のゆっくり点滅（考え中）', waiting: '黄（許可待ち）', done: '緑の点滅（完了）', bg: '水色（裏で作業中）' };
@@ -536,7 +537,7 @@ function handThing(kind) {
   return g;
 }
 function startGesture(r, kind, t) {
-  if (reduceMotion || !GESTURE_OK.has(r.state)) return false;
+  if (reduceMotion || !GESTURE_OK.has(r.state) || r.play || (r.call && CALL_ON_LINE.has(r.call.state))) return false;
   endGesture(r);
   if (kind !== 'cheer') { r.hand = handThing(kind); (kind === 'meal' ? r.armL : r.armR).add(r.hand); }
   r.gesture = { kind, t0: t, t1: t + GESTURE_LEN[kind] };
@@ -575,6 +576,92 @@ function setRobotTired(r, on) {
   if (on && !r.tired) r.needDrink = true;
   if (!on) r.needDrink = false;
   r.tired = on;
+}
+/* Phone calls (requester, 10-18: SendMessage between two sessions — the server's calls slice decides). r.call is
+   { role: 'caller' | 'callee', state } or null; like sweat, the state, its lamp and its label stay as they are.
+   The caller holds a handset to its ear while it rings and on the line; the callee's phone rings over its head until
+   it picks up (it reads the message), then it holds the handset too. A call puts a gesture away. Under reduced
+   motion nothing shakes. */
+const CALL_ON_LINE = new Set(['dialing', 'ringing', 'answered']);
+function handset() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.26, 4, 8), toon('#1f2532'));
+  for (const y of [-0.16, 0.16]) { const cup = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), toon('#1f2532')); cup.position.y = y; g.add(cup); }
+  g.add(body);
+  g.position.set(0, -0.46, 0.14); g.rotation.x = 0.3;
+  return g;
+}
+function ringBubble() {
+  const canvas = makeCanvas(160, 160), ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f2532'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(80, 80, 52, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#2f9e5b';   // a handset, tilted
+  ctx.save(); ctx.translate(80, 84); ctx.rotate(-0.6);
+  rr(ctx, -30, -9, 60, 18, 9); ctx.fill();
+  rr(ctx, -34, -9, 18, 28, 7); ctx.fill(); rr(ctx, 16, -9, 18, 28, 7); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = '#2f9e5b'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  for (const rad of [64, 76]) { ctx.beginPath(); ctx.arc(80, 80, rad, -1.2, -0.4); ctx.stroke(); ctx.beginPath(); ctx.arc(80, 80, rad, Math.PI + 0.4, Math.PI + 1.2); ctx.stroke(); }
+  const mat = new THREE.SpriteMaterial({ map: texFrom(canvas), transparent: true });
+  const s = new THREE.Sprite(mat); s.position.set(0, 2.3, 0.1); s.scale.set(0.5, 0.5, 1);
+  return s;
+}
+function callUpdate(r, t) {
+  const c = r.call;
+  const ringing = !!c && c.role === 'callee' && (c.state === 'ringing' || c.state === 'dialing');
+  const onLine = !!c && CALL_ON_LINE.has(c.state) && !ringing;
+  if (ringing && !r.ring) { r.ring = ringBubble(); r.root.add(r.ring); }
+  if (r.ring) {
+    r.ring.visible = ringing;
+    if (ringing && !reduceMotion) { r.ring.material.rotation = Math.sin(t * 38) * 0.22; r.ring.position.y = 2.3 + Math.abs(Math.sin(t * 9)) * 0.06; }
+  }
+  if (onLine && !r.handset) { if (r.gesture) endGesture(r); r.handset = handset(); r.armR.add(r.handset); }
+  if (!onLine && r.handset) { r.handset.parent.remove(r.handset); r.handset.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); r.handset = null; }
+  return onLine;
+}
+function callPose(p, t) {   // the right hand at the ear, the head toward it
+  p.aRx = -2.25; p.aRz = -1.2; p.headZ = 0.16; p.headX = -0.04;
+  if (!reduceMotion) p.headY = Math.sin(t * 1.3) * 0.12;
+}
+/* Play (requester, 10-18: robots idle for long in one room play together; the scene decides who, where and how
+   long). r.play is { kind: 'ball' | 'highfive' | 'rps', t0, side: 0 | 1 } while at the spot; the state stays idle.
+   ball: a throw from the right hand, the two in turn (the ball itself is the scene's); highfive: both hands up,
+   meeting now and then; rps (じゃんけん): three pumps, then a hand over the head. */
+const RPS_HANDS = ['グー', 'チョキ', 'パー'];
+function playPose(r, p, t) {
+  const P = r.play, u = t - P.t0;
+  if (P.kind === 'ball') {
+    const turn = ((u / 1.6) + P.side * 0.5) % 1;           // the two throw half a period apart
+    const throwing = turn < 0.25;
+    p.aRx = throwing ? -2.4 + turn * 6 : -0.9; p.aRz = -0.25; p.aLx = -0.7; p.aLz = 0.3; p.headX = -0.18;
+  } else if (P.kind === 'highfive') {
+    const meet = Math.max(0, Math.sin(u * 2.6));
+    p.aRz = -2.4 - meet * 0.3; p.aRx = -0.2 - meet * 0.4; p.aLz = 0.4; p.rootY = meet * 0.08; p.headX = -0.12;
+  } else {
+    const round = u % 3, pump = round < 1.8 ? Math.abs(Math.sin(round * Math.PI * 1.67)) : 0;
+    p.aRx = -1.2 - pump * 0.5; p.aRz = -0.3; p.aLx = -0.4; p.headX = 0.05;
+  }
+}
+function playBubble(r, P, t) {
+  const show = !!P && P.kind === 'rps' && (t - P.t0) % 3 >= 1.8;
+  if (show && !r.rps) {
+    r.rpsCanvas = makeCanvas(200, 120);
+    r.rps = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(r.rpsCanvas), transparent: true }));
+    r.rps.position.set(0, 2.25, 0.1); r.rps.scale.set(0.6, 0.36, 1); r.root.add(r.rps); r.rpsShown = '';
+  }
+  if (!r.rps) return;
+  r.rps.visible = show;
+  if (!show) return;
+  const hand = RPS_HANDS[(Math.floor((t - P.t0) / 3) * 7 + P.side * 5 + (r.seed | 0)) % 3];
+  if (hand === r.rpsShown) return;
+  r.rpsShown = hand;
+  const ctx = r.rpsCanvas.getContext('2d');
+  ctx.clearRect(0, 0, 200, 120);
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f2532'; ctx.lineWidth = 5;
+  rr(ctx, 6, 6, 188, 108, 26); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#1f2532'; ctx.font = `700 46px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(hand, 100, 62);
+  r.rps.material.map.needsUpdate = true;
 }
 function gesturePose(r, p, t) {
   const G = r.gesture, k = Math.min(1, (t - G.t0) / 0.35, (G.t1 - t) / 0.35);   // ease in and out
@@ -777,6 +864,12 @@ function poseFor(state, s) {
       p.aRz = -2.7 + Math.sin(s * 7) * 0.2; p.aRx = -0.1; p.aLz = 0.2;
       p.headX = -0.12; p.headZ = Math.sin(s * 1.6) * 0.06; p.hipsY = Math.abs(Math.sin(s * 3.5)) * 0.02;
       break;
+    case 'stroll': {
+      const w = s * 7;
+      p.lLx = Math.sin(w) * 0.5; p.lRx = -Math.sin(w) * 0.5; p.hipsY = Math.abs(Math.cos(w)) * 0.03;
+      p.aLx = -Math.sin(w) * 0.4; p.aRx = Math.sin(w) * 0.4; p.headX = -0.02;
+      break;
+    }
     case 'carry': {
       const w = s * 7;
       p.lLx = Math.sin(w) * 0.5; p.lRx = -Math.sin(w) * 0.5; p.hipsY = Math.abs(Math.cos(w)) * 0.03; p.torsoY = Math.sin(w) * 0.05;
@@ -805,8 +898,12 @@ function updateRobot(r, t, dt) {
   for (const k in b) p[k] = a[k] + (b[k] - a[k]) * e;
   if (r.tired) { p.headX += 0.2; p.torsoX += 0.08; p.hipsY -= 0.012; p.aLz *= 0.5; p.aRz *= 0.5; }   // head and shoulders down
   if (r.gesture && (!GESTURE_OK.has(r.state) || t >= r.gesture.t1)) endGesture(r);
-  if (!r.gesture && r.needDrink && GESTURE_OK.has(r.state) && startGesture(r, 'drink', t)) r.needDrink = false;
-  if (r.gesture) gesturePose(r, p, t);
+  const onCall = callUpdate(r, t);
+  if (!onCall && !r.gesture && r.needDrink && GESTURE_OK.has(r.state) && startGesture(r, 'drink', t)) r.needDrink = false;
+  if (onCall) callPose(p, t);
+  else if (r.play) playPose(r, p, t);
+  else if (r.gesture) gesturePose(r, p, t);
+  playBubble(r, onCall ? null : r.play, t);
   r.antenna.rotation.x += ((r.tired ? 1.0 : 0) - r.antenna.rotation.x) * Math.min(1, dt * 3);
   r.root.position.y = p.rootY;
   r.hips.position.y = HIPS_Y + p.hipsY;
@@ -818,7 +915,7 @@ function updateRobot(r, t, dt) {
   r.legR.rotation.x = p.lRx;
   r.tails.forEach((tail, i) => tail.rotation.set(0.5 + Math.sin(s * 6.5 + i * 1.3) * 0.12, 0, tail.userData.spread));
 
-  const lampKey = STATES[r.state].lamp;
+  const lampKey = STATES[r.lampState && STATES[r.lampState] ? r.lampState : r.state].lamp;   // play: the real state's lamp
   const lampOn = lampKey === 'think' ? (reduceMotion || Math.sin(s * 1.6) > -0.4)   // thinking: a slow blink
     : lampKey !== 'done' || Math.floor(s * 3) % 2 === 0;
   r.lampMat.color.set(lampOn ? LAMP[lampKey] : LAMP.off);
