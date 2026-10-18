@@ -18,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from ..calls import record_event
+
 HEAD_BYTES = 65_536
 
 
@@ -114,6 +116,15 @@ def usage_of(rec) -> tuple[str, int, int | None] | None:
     return mid, out, at
 
 
+def _epoch_ms(ts) -> int | None:
+    if not isinstance(ts, str):
+        return None
+    try:
+        return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return None
+
+
 class UsageTail:
     """The new complete lines of one transcript, from the end it had when first seen."""
 
@@ -124,8 +135,9 @@ class UsageTail:
         self.skipping = False
 
     def read(self) -> dict:
-        """{'usage': [(id, tokens, at)], 'bytes': n, 'assistant': n, 'bad': n} for what was added."""
-        out = {"usage": [], "bytes": 0, "assistant": 0, "bad": 0}
+        """{'usage': [(id, tokens, at)], 'calls': [(kind, sender name, at)], 'bytes': n, 'assistant': n, 'bad': n}
+        for what was added. ``calls``: the receiver's records of a cross-session message (calls.record_event)."""
+        out = {"usage": [], "calls": [], "bytes": 0, "assistant": 0, "bad": 0}
         try:
             fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
@@ -166,6 +178,9 @@ class UsageTail:
             u = usage_of(rec)
             if u:
                 out["usage"].append(u)
+            c = record_event(rec)
+            if c:
+                out["calls"].append((c[0], c[1], _epoch_ms(rec.get("timestamp"))))
         return out
 
 

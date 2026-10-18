@@ -15,6 +15,7 @@ from pathlib import Path
 from . import robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject
+from .calls import CallBook, peer_name
 from .permissions import PermissionBook
 from .questions import QuestionBook
 from .sources import devices as devices_mod
@@ -118,6 +119,11 @@ class World:
         self.tasks = TaskBook()
         self.perms = PermissionBook()
         self.questions = QuestionBook()
+        # SendMessage between two sessions here (calls.py): a session's messaging name and socket -> its id
+        self.calls = CallBook()
+        self._peer_names: dict[str, str] = {}
+        self._peer_socks: dict[str, str] = {}
+        self._session_names: dict[str, str] = {}
         self.devices: list[dict] = []
         self.progress = ProgressBook()
         self.tests: dict[str, dict] = {}
@@ -347,6 +353,8 @@ class World:
             self._dirty.add("perms")
             if self.questions.session_stopped(sid, at):
                 self._dirty.add("questions")
+            if self.calls.session_ended(sid, at):
+                self._dirty.add("calls")
             self._status(session, "ended", at)
             self._set(agent, at, "idle", "退勤", leftAt=at)
             text = f"退勤 {payload.get('reason') or ''}".strip()
@@ -387,6 +395,8 @@ class World:
             if tool == "TodoWrite":
                 self.tasks.from_todowrite(sid, agent["id"], tool_input.get("todos"), at)
                 self._dirty.add("tasks")
+            if tool == "SendMessage" and _s(tool_input.get("to")):
+                self._dial(session, agent, tool_input["to"], use_id, at)
             if state == "phone" and use_id:
                 command = str(tool_input.get("command", ""))
                 self.tests[use_id] = {
@@ -428,6 +438,9 @@ class World:
                     act = act[len("許可待ち "):]
                 self._set(agent, at, "idle", act)
             failed = kind == "PostToolUseFailure"
+            if tool == "SendMessage":
+                self.calls.sent(use_id, failed, at)
+                self._dirty.add("calls")
             if tool in EDIT_TOOLS and not failed:
                 self._touch_files(session, agent, tool_input, at, after=True, use_id=use_id)
             run = self.tests.get(use_id) if use_id else None
@@ -552,6 +565,36 @@ class World:
             event["detail"] = clip_strings(tool_input, self.tool_input_max)
         return self.state.add_event(event)
 
+    # ---------------------------------------------------------------- calls (SendMessage, 10-18)
+
+    def _resolve_peer(self, to: str) -> str | None:
+        """A SendMessage's `to` -> a session id here: a name (`name [ref]`) or a `uds:` socket address."""
+        if to.startswith("uds:"):
+            return self._peer_socks.get(to[len("uds:"):])
+        return self._peer_names.get(peer_name(to))
+
+    def _dial(self, session: dict, agent: dict, to: str, use_id: str | None, at: int) -> None:
+        to_sid = self._resolve_peer(to)
+        if to_sid == session["id"] or (to_sid and to_sid not in self.sessions):
+            to_sid = None
+        self.calls.dial(use_id, agent["id"], session["id"], self._session_names.get(session["id"]),
+                        peer_name(to)[:120], to_sid, at)
+        self._dirty.add("calls")
+
+    def _call_records(self, sid: str, records: list) -> None:
+        """What the receiver's transcript said about cross-session messages (calls.record_event)."""
+        for kind, name, when in records:
+            at = when or self._now
+            if kind == "ring":
+                from_sid = self._peer_names.get(name)
+                changed = self.calls.ring(sid, name, from_sid, from_sid, at)
+            elif kind == "answer":
+                changed = self.calls.pick_up(sid, name, at)
+            else:
+                changed = self.calls.hang_up(sid, name, at)
+            if changed:
+                self._dirty.add("calls")
+
     def _clear_open(self, aid: str) -> None:
         for use_id in self._open.pop(aid, []):
             self._open_tool.pop(use_id, None)
@@ -582,6 +625,15 @@ class World:
                 self._status(session, status, at, waiting_for)
             if isinstance(row.get("pid"), int):
                 self.pid_to_session[row["pid"]] = sid
+            name = _s(row.get("name"))
+            if name:   # the name a SendMessage's `to` uses (changes on a restart: the newest row wins)
+                old = self._session_names.get(sid)
+                if old and old != name and self._peer_names.get(old) == sid:
+                    del self._peer_names[old]
+                self._peer_names[name], self._session_names[sid] = sid, name
+            sock = _s(row.get("messagingSocketPath"))
+            if sock:
+                self._peer_socks[sock] = sid
             if _s(row.get("name")) and not session.get("title"):
                 session["title"] = _head(row["name"], 120)
                 self._dirty.add("sessions")
@@ -794,6 +846,8 @@ class World:
             self._dirty |= {"perms", "sessions"}
         if self.questions.tick(at):
             self._dirty.add("questions")
+        if self.calls.tick(at):
+            self._dirty.add("calls")
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]
@@ -861,6 +915,8 @@ class World:
             for k in ("bytes", "assistant", "bad"):
                 total[k] += got[k]
             total["usage"] += len(got["usage"])
+            if got.get("calls"):
+                self._call_records(sid, got["calls"])
             seen = self._usage_seen.setdefault(sid, {})
             for mid, tokens, when in got["usage"]:
                 delta = tokens - seen.get(mid, 0)
@@ -915,6 +971,8 @@ class World:
             self.state.set_slice("perms", self.perms.items())
         if "questions" in self._dirty:
             self.state.set_slice("questions", self.questions.items())
+        if "calls" in self._dirty:
+            self.state.set_slice("calls", self.calls.items())
         if "sessions" in self._dirty:
             self.state.set_slice("sessions", sorted((dict(s) for s in self.sessions.values()), key=lambda s: s["startedAt"]))
         if "agents" in self._dirty:
