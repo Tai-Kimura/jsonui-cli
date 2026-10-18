@@ -378,9 +378,11 @@ function addFrame(cx, cy, z, w, h, mat) {
 
 /* The demo office: three fixed rooms with their boards, the test stand, the document tray and the robots of
    the script (the prototype as it was). The live view builds its rooms from the slices instead (liveSync). */
+// The walls' colour is the --wall token (app.css, light and dark); this is only what a page without the stylesheet gets.
+const WALL_FALLBACK = '#ebe4d9';
 function buildDemoOffice() {
-  const wallMat = toon(readToken('--wall', '#f7f9fc'));
-  roomMats.push([wallMat, '--wall', '#f7f9fc']);
+  const wallMat = toon(readToken('--wall', WALL_FALLBACK));
+  roomMats.push([wallMat, '--wall', WALL_FALLBACK]);
   for (const room of ROOMS) {
     const w = room.x1 - room.x0, d = room.z1 - room.z0, cx = (room.x0 + room.x1) / 2, cz = (room.z0 + room.z1) / 2;
     const floorMat = toon(readToken(room.floor, '#e9eef6'));
@@ -589,8 +591,8 @@ function disposeTree(root) {
 function liveBuildRoom(room) {
   const g = new THREE.Group();
   const w = room.x1 - room.x0, d = room.z1 - room.z0, cx = (room.x0 + room.x1) / 2, cz = (room.z0 + room.z1) / 2;
-  const wallMat = toon(readToken('--wall', '#f7f9fc')), floorMat = toon(readToken(room.floor, '#e9eef6'));
-  const mats = [[wallMat, '--wall', '#f7f9fc'], [floorMat, room.floor, '#e9eef6']];
+  const wallMat = toon(readToken('--wall', WALL_FALLBACK)), floorMat = toon(readToken(room.floor, '#e9eef6'));
+  const mats = [[wallMat, '--wall', WALL_FALLBACK], [floorMat, room.floor, '#e9eef6']];
   roomMats.push(...mats);
   const floor = new THREE.Mesh(new RoundedBoxGeometry(w, 0.16, d, 2, 0.05), floorMat); floor.position.set(cx, -0.08, cz); g.add(floor);
   const frameMat = toon('#7a5a3c');
@@ -661,6 +663,7 @@ function liveBuildRoom(room) {
 function liveDropRoom(id) {
   const R = LIVE3D.rooms[id];
   if (!R) return;
+  if (PROPS.room === id) propsClear();   // the floor's own material goes back before the room is disposed
   scene.remove(R.group); disposeTree(R.group);
   R.rt.el.remove();
   roomTags.splice(roomTags.indexOf(R.rt), 1);
@@ -727,6 +730,13 @@ function livePlan(R) {
   const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
   const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
   R.rect = rect;
+  if (R.play) {
+    // At play (2.3.1): the path is the game's. Taking it sent a player to its new desk, and there liveWalk read the
+    // empty path as "at the spot" and it played from its desk (e2e, 1 run in 3). The game ends on its own reasons;
+    // playStop then walks it to this seat (through the doors when the room changed).
+    R.room = d.room; R.seatKey = key;
+    return;
+  }
   if (moved) { root.position.x = d.pos[0]; root.position.z = d.pos[1]; R.path = []; R.jumps = (R.jumps || 0) + 1; }
   else if (R.seatKey && R.room !== d.room) {
     // to another room: finish the step it is on, then through the doors (never a straight line through a wall)
@@ -792,16 +802,21 @@ function snackTick(t) {
 }
 /* A call on the robot and on its name tag: a phone mark and the other robot's number, never the message. */
 const CALL_TAG_TEXT = { dialing: '発信中', ringing: '呼び出し中', answered: '通話中' };
+/* Alone at its desk (2.3.1): the name tag says so too — the robot is small in any view, so the zzz and the bento alone
+   were hard to see (jsonuidocument-96, 10-18). The call mark wins; a call stops a nap anyway. */
+const SOLO_TAG_TEXT = { nap: 'zzz 居眠り', bento: '弁当' };
 function liveCallTag(R, call) {
   R.robot.call = call && CALL_ON_LINE.has(call.state) ? call : null;
   const c = R.robot.call;
-  const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}` : '';
+  const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}`
+    : R.solo ? SOLO_TAG_TEXT[R.solo.kind] || '' : '';
   if (text === (R.callText || '')) return;
   R.callText = text;
   if (!R.callEl) { R.callEl = document.createElement('span'); R.callEl.className = 'call-mark'; R.tag.insertBefore(R.callEl, R.text); }
   R.callEl.textContent = text;
   R.callEl.hidden = !text;
-  R.tag.classList.toggle('on-call', !!text);
+  R.callEl.classList.toggle('solo-mark', !c && !!text);
+  R.tag.classList.toggle('on-call', !!c);
 }
 /* Play (requester, 10-18): "同じ部屋で待機が長いロボットが複数いたらロボット同士で遊ぶ", "動きはランダムでいい",
    "遊んだらまた元の場所に戻る", "指示が来たら遊ぶのやめて作業始めて". Looks only: the server, the panel and the tasks
@@ -815,13 +830,36 @@ function liveCallTag(R, call) {
    and none in a room with standing robots (a full room: they stand along the front wall, where the game would be).
    None under reduced motion. The e2e build can shorten the times (80-dbg.js). */
 const PLAY_KINDS = ['ball', 'highfive', 'rps'];
-const PLAY = { seed: 20261019, kinds: PLAY_KINDS, idleMs: 180_000, p: 1 / 30, games: 2, minSec: 15, maxSec: 35, restMinSec: 60, restMaxSec: 180,
-  next: 0, rng: null, list: [] };
+/* 2.3.1 (requester, 10-18: "完了とか待機でもあんまり遊ばない"): idle for a minute, about 15 s to start once two are there,
+   shorter rests, three games at a time. A robot that finished (完了) is idle again three seconds later and counts from
+   then. Robots alone in their room nap or eat a bento at their desks (SOLO). Every end is kept with its reason in
+   PLAY.ends (80-dbg.js shows them): the requester saw two walk up and go back without playing. */
+const PLAY = { seed: 20261019, kinds: PLAY_KINDS, idleMs: 60_000, p: 1 / 15, games: 3, minSec: 15, maxSec: 35, restMinSec: 45, restMaxSec: 120,
+  walkSec: 30, next: 0, rng: null, list: [], ends: [] };
+const SOLO_KINDS = ['nap', 'bento'];
+const SOLO = { p: 1 / 20, minSec: 20, maxSec: 60, kinds: SOLO_KINDS };
 const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
-  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play;
+  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo;
+/* Why a robot stops (null: it does not): the reasons the requester's "walked up and went back" can be told by. Only a
+   desk in another room stops it now; a desk that moves within the room (another session came or went and the room
+   was laid out again — common with many sessions) no longer does: it walks back to the new desk afterwards. */
+function playStopReason(R, st, room, since) {
+  if (!robots.includes(R)) return 'gone';
+  if (LIVE.leaving[R.def.id]) return 'leaving';
+  if (R.robot.call) return 'call';
+  if (st.state !== 'idle') return `state:${st.state}`;
+  if (st.since !== since) return 'updated';
+  if (R.def.room !== room) return 'room';
+  return null;
+}
+function playLog(G, reason, nowSec) {
+  PLAY.ends.push({ room: G.room, kind: G.kind, players: G.players.map((R) => R.def.id), reason, playedSec: G.t0 ? +(nowSec - G.t0).toFixed(1) : 0 });
+  if (PLAY.ends.length > 30) PLAY.ends.shift();
+}
 function playStop(R) {
   if (!R.play) return;
   R.play = null; R.robot.play = null; R.playBack = true;
+  if (R.robot.desk) R.robot.desk.visible = false;
   const p = R.robot.root.position, from = roomAtPoint([p.x, p.z]);
   R.path = from && from !== R.def.room ? [...liveRoute(from, R.def.room), R.def.pos] : [R.def.pos];   // never through a wall
 }
@@ -830,22 +868,45 @@ function playEnd(G) {
   if (G.ball) { scene.remove(G.ball); G.ball.geometry.dispose(); G.ball.material.dispose(); }
   PLAY.list.splice(PLAY.list.indexOf(G), 1);
 }
+/* The game's room laid out again (another room came or went, its robot count changed its size): the spot and the
+   players move with it, as a jump (the e2e wall check skips jumps, as it does for livePlan's), and the game goes on.
+   Without it the spot and the players stayed where the room had been — inside a wall of the new layout. */
+const playSpotOf = (rm, side) => [(rm.x0 + rm.x1) / 2 + (side ? 0.8 : -0.8), rm.z1 - 0.9];
+function playFollowRoom(G) {
+  const rm = PROJECT[G.room];
+  if (!rm) return;
+  const rect = `${rm.x0},${rm.z0},${rm.x1},${rm.z1}`;
+  if (rect === G.rect) return;
+  G.rect = rect;
+  G.players.forEach((R, i) => {
+    if (!R.play) return;
+    const to = playSpotOf(rm, i), dx = to[0] - R.play.spot[0], dz = to[1] - R.play.spot[1];
+    const root = R.robot.root;
+    root.position.x += dx; root.position.z += dz;
+    R.path = R.path.map((p) => [p[0] + dx, p[1] + dz]);
+    R.play.spot = to;
+    R.jumps = (R.jumps || 0) + 1;
+  });
+}
 function playTick(nowSec, now) {
   // stop at once: every frame
   for (const G of [...PLAY.list]) {
+    playFollowRoom(G);
+    let why = null;
     for (const R of G.players) {
-      const st = robotState[R.def.id] || { state: 'idle' };
       if (!R.play) continue;
-      if (st.state !== 'idle' || st.since !== R.play.since || R.robot.call || LIVE.leaving[R.def.id] || R.seatKey !== R.play.seatKey
-        || !robots.includes(R)) playStop(R);
+      const reason = playStopReason(R, robotState[R.def.id] || { state: 'idle' }, G.room, R.play.since);
+      if (reason) { playStop(R); why = why || `${R.def.id} ${reason}`; }
     }
     const left = G.players.filter((R) => R.play);
-    if (left.length < 2 || nowSec >= G.until) { G.players = left; playEnd(G); continue; }
     const at = left.filter((R) => R.play.phase === 'playing');
-    if (at.length === left.length && !G.t0) {                      // both there: face each other and start
-      G.t0 = nowSec;
+    if (at.length === left.length && left.length >= 2 && !G.t0) {   // all there: the game's clock starts now
+      G.t0 = nowSec; G.until = nowSec + G.len;
       left.forEach((R, i) => { R.robot.play = { kind: G.kind, t0: nowSec, side: i }; });
     }
+    const end = left.length < 2 ? `alone (${why || 'partner stopped'})` : G.t0 && nowSec >= G.until ? 'done'
+      : !G.t0 && nowSec >= G.walkUntil ? 'walk too long' : null;
+    if (end) { playLog(G, end, nowSec); G.players = left; playEnd(G); continue; }
     if (G.t0 && G.kind === 'ball') {
       if (!G.ball) { G.ball = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), toon('#ff7a3d')); scene.add(G.ball); }
       const [a, b] = left.map((R) => R.robot.root.position), u = ((nowSec - G.t0) / 1.6) % 1;
@@ -868,17 +929,47 @@ function playTick(nowSec, now) {
     if (robots.some((R) => R.def.room === room && R.def.standing)) continue;   // a full room: no aisle to play in
     if (PLAY.rng() >= PLAY.p) continue;
     const a = idle.splice(Math.floor(PLAY.rng() * idle.length), 1)[0], b = idle[Math.floor(PLAY.rng() * idle.length)];
-    const rm = PROJECT[room], cx = (rm.x0 + rm.x1) / 2, cz = rm.z1 - 0.9;
+    const rm = PROJECT[room];
     const kind = PLAY.kinds[Math.floor(PLAY.rng() * PLAY.kinds.length)];
     const len = PLAY.minSec + PLAY.rng() * (PLAY.maxSec - PLAY.minSec);
-    const G = { room, kind, players: [a, b], t0: 0, until: nowSec + len + 20, ball: null };   // +20: the walk there
+    const G = { room, kind, players: [a, b], t0: 0, len, until: 0, walkUntil: nowSec + PLAY.walkSec, ball: null, rect: `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` };
     [a, b].forEach((R, i) => {
-      const spot = [cx + (i ? 0.8 : -0.8), cz];
-      R.play = { phase: 'going', spot, partner: i ? a : b, seatKey: R.seatKey, since: robotState[R.def.id].since, len };
+      const spot = playSpotOf(rm, i);
+      R.play = { phase: 'going', spot, partner: i ? a : b, since: robotState[R.def.id].since, len };
       R.path = [spot];
-      R.restUntil = nowSec + len + 20 + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
+      R.restUntil = nowSec + PLAY.walkSec + len + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
     });
     PLAY.list.push(G);
+  }
+  soloTick(nowSec, now);
+}
+/* Alone (requester, 10-18: "一人の部屋のやつはzzzで居眠りしたり弁当食べたりさせてほしい"): a robot idle for long that has
+   no one to play with in its room naps (its head nods, zzz) or eats a bento at its desk, for a while. It stops on the
+   same reasons as a game. The state, its lamp and its label stay as they are; it never leaves its desk. */
+function soloStop(R) { R.solo = null; R.robot.solo = null; }
+function soloTick(nowSec, now) {
+  for (const R of robots) {
+    if (!R.solo) continue;
+    const st = robotState[R.def.id] || { state: 'idle' };
+    const reason = playStopReason(R, st, R.solo.room, R.solo.since) || (nowSec >= R.solo.until ? 'done' : null) || (R.path.length ? 'walking' : null);
+    if (reason) { PLAY.ends.push({ room: R.solo.room, kind: R.solo.kind, players: [R.def.id], reason, playedSec: +(nowSec - R.solo.t0).toFixed(1) }); soloStop(R); }
+  }
+  if (reduceMotion || nowSec < (SOLO.next || 0)) return;
+  SOLO.next = nowSec + 1;
+  const byRoom = {};
+  for (const R of robots) {
+    const st = robotState[R.def.id];
+    if (st && playIdle(R, st, now)) (byRoom[R.def.room] = byRoom[R.def.room] || []).push(R);
+  }
+  for (const [room, idle] of Object.entries(byRoom)) {
+    // with two or more a game comes first; one left over (or alone) may nap or eat
+    if (idle.length !== 1) continue;
+    const R = idle[0];
+    if ((R.restUntil || 0) > nowSec || PLAY.rng() >= SOLO.p) continue;
+    const kind = SOLO.kinds[Math.floor(PLAY.rng() * SOLO.kinds.length)], len = SOLO.minSec + PLAY.rng() * (SOLO.maxSec - SOLO.minSec);
+    R.solo = { kind, room, t0: nowSec, until: nowSec + len, since: robotState[R.def.id].since };
+    R.robot.solo = { kind, t0: nowSec };
+    R.restUntil = nowSec + len + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
   }
 }
 function liveUpdateRobots(nowSec, dt) {
@@ -907,6 +998,7 @@ function liveUpdateRobots(nowSec, dt) {
     if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
     updateRobot(R.robot, nowSec, dt);
   }
+  propsTick(nowSec, dt);
 }
 /* One room at a time (requester, 10-18): a project picked (its room's tag, its floor in 3D, the menu) lays out only
    that room, wider (layoutRooms, SOLO_GROW), with the way back at the top left. The other rooms' robots keep their
@@ -923,6 +1015,123 @@ function liveSoloSync() {
   if (!box) return;
   box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed;
   if (solo) setText(document.getElementById('room-solo-name'), PROJECT[solo].name);
+}
+/* ---------- the room up close: a water server, a robot vacuum and a wooden floor (requester, 10-18) ----------
+   Only in the one-room view (room-solo) and only while that room has 10 robots or fewer; built when it is wanted and
+   disposed as soon as it is not (back to the floor, the building, an 11th robot). The floor's own material is swapped
+   for a toon material with a canvas plank texture (512 px, repeated; no image, no light, no shadow) and put back. */
+const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
+  boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9 };   // the robots' scale (they stand about 1 m)
+function woodTexture(dark) {
+  const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
+  const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
+  for (let r = 0; r < rows; r++) {
+    let x = -Math.floor(W.rng() * N);
+    while (x < N) {
+      const len = N * (0.45 + W.rng() * 0.5), k = (W.rng() - 0.5) * (dark ? 14 : 22);
+      ctx.fillStyle = `rgb(${base.map((c) => Math.round(c + k)).join(',')})`;
+      ctx.fillRect(x, r * h, len, h);
+      ctx.globalAlpha = dark ? 0.10 : 0.12;   // a few faint grain lines along the plank
+      ctx.strokeStyle = dark ? '#2b2018' : '#8a6a45'; ctx.lineWidth = 1;
+      for (let g = 0; g < 4; g++) { const y = r * h + 6 + W.rng() * (h - 12); ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x + len / 3, y + (W.rng() - 0.5) * 6, x + len * 2 / 3, y + (W.rng() - 0.5) * 6, x + len, y); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = dark ? '#2a1f17' : '#9c7b55'; ctx.fillRect(x, r * h, 2, h);   // the joint at the plank's end
+      x += len;
+    }
+    ctx.fillStyle = dark ? '#2a1f17' : '#a5845c'; ctx.fillRect(0, r * h, N, 2);       // the seam between rows
+  }
+  const t = texFrom(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function propsWanted() {
+  const solo = liveSolo();
+  if (!solo || !has3D || TOWER.on || !LIVE3D.rooms[solo]) return null;
+  return robots.filter((R) => R.def.room === solo).length <= PROPS.max ? solo : null;
+}
+function propsClear() {
+  if (!PROPS.room) return;
+  const R = LIVE3D.rooms[PROPS.room];
+  if (R && PROPS.floorMat && R.floor.material === PROPS.woodMat) R.floor.material = PROPS.floorMat;
+  if (PROPS.group) { scene.remove(PROPS.group); disposeTree(PROPS.group); }
+  if (PROPS.woodMat) PROPS.woodMat.dispose();
+  if (PROPS.woodTex) PROPS.woodTex.dispose();
+  Object.assign(PROPS, { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0 });
+}
+function propsBuild(id) {
+  const r = PROJECT[id], R = LIVE3D.rooms[id], g = new THREE.Group();
+  PROPS.room = id; PROPS.geo = R.geo; PROPS.dark = isDark(); PROPS.group = g; PROPS.rng = snackRandom(PROPS.seed);
+  // the floor: the same mesh, a wooden material while the room is up close
+  PROPS.woodTex = woodTexture(PROPS.dark); PROPS.woodTex.repeat.set((r.x1 - r.x0) / 2.4, (r.z1 - r.z0) / 2.4);
+  PROPS.woodMat = toon('#ffffff', { map: PROPS.woodTex }); PROPS.floorMat = R.floor.material; R.floor.material = PROPS.woodMat;
+  // the water server: the back-right corner, in sight from the usual view; the back-left one when a back door opens
+  // near the right (doorAt). No desk takes either corner (SEAT.left / SEAT.back / SEAT.aisleR).
+  const sv = new THREE.Group(), body = toon('#eef1f4'), dark = toon('#5b6573');
+  const cab = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.95, 0.38, 2, 0.04), body); cab.position.y = 0.475; sv.add(cab);
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.02), dark); panel.position.set(0, 0.72, 0.2); sv.add(panel);
+  for (const [x, c] of [[-0.07, '#4aa3ff'], [0.07, '#ff6b5b']]) { const tap = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.06), toon(c)); tap.position.set(x, 0.66, 0.22); sv.add(tap); }
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.12), dark); tray.position.set(0, 0.5, 0.2); sv.add(tray);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.42, 20), toon('#8fd0f2', { transparent: true, opacity: 0.82 }));
+  tank.position.y = 0.95 + 0.21; sv.add(tank);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 12), toon('#2f7fd1')); cap.position.y = 1.39; sv.add(cap);
+  const right = !(r.doors && r.doors.back);
+  const k = PROPS.serverScale, off = 0.42 * k;   // built at 1, shown bigger (requester, 10-18: the robots' size)
+  sv.scale.setScalar(k);
+  sv.position.set(right ? r.x1 - off : r.x0 + off, 0, r.z0 + 0.38 * k); sv.rotation.y = right ? -Math.PI / 4 : Math.PI / 4; g.add(sv); PROPS.server = sv;
+  // the robot vacuum: a flat disc with a bumper and a light, on the floor clear of desks, robots and the front aisle
+  const vac = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(PROPS.radius, PROPS.radius, 0.11, 32), toon('#3a3f47')); shell.position.y = 0.065; vac.add(shell);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(PROPS.radius * 0.74, PROPS.radius * 0.74, 0.02, 28), toon('#5d6470')); top.position.y = 0.13; vac.add(top);
+  const bumper = new THREE.Mesh(new THREE.CylinderGeometry(PROPS.radius * 1.02, PROPS.radius * 1.02, 0.04, 32, 1, true, -Math.PI / 2, Math.PI), toon('#9aa3ad')); bumper.position.y = 0.05; vac.add(bumper);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), toon('#52e08a')); lamp.position.set(0, 0.145, PROPS.radius * 0.5); vac.add(lamp);
+  vac.userData.heading = PROPS.rng() * Math.PI * 2;
+  g.add(vac); PROPS.vac = vac;
+  propsBoxes(0, true);
+  const start = propsSpot();
+  vac.position.set(start[0], 0, start[1]);
+  scene.add(g);
+}
+// Where the vacuum may go: the room's floor less the front aisle (doors, the play spot, the easel) and the corner of the
+// water server; and never into a robot or its desk (their boxes, kept current while robots come and go).
+function propsArea() {
+  const r = PROJECT[PROPS.room];
+  return { x0: r.x0 + 0.3, x1: r.x1 - 0.3, z0: r.z0 + 0.3, z1: r.z1 - SEAT.aisleF - 0.1 };
+}
+function propsBoxes(nowSec, force) {
+  if (!force && nowSec - PROPS.boxesAt < 0.25) return;
+  PROPS.boxesAt = nowSec;
+  const box = new THREE.Box3();
+  PROPS.boxes = robots.filter((R) => R.robot.root.visible && (R.def.room === PROPS.room || roomAtPoint([R.robot.root.position.x, R.robot.root.position.z]) === PROPS.room))
+    .map((R) => { box.setFromObject(R.robot.root); return [box.min.x, box.max.x, box.min.z, box.max.z]; });
+  const s = PROPS.server.position;
+  const half = 0.42 * PROPS.serverScale;
+  PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
+}
+function propsClearAt(x, z) {
+  const a = propsArea(), m = PROPS.radius + 0.06;
+  if (x < a.x0 || x > a.x1 || z < a.z0 || z > a.z1) return false;
+  return !PROPS.boxes.some(([x0, x1, z0, z1]) => x > x0 - m && x < x1 + m && z > z0 - m && z < z1 + m);
+}
+function propsSpot() {
+  const a = propsArea();
+  for (let i = 0; i < 200; i++) {
+    const x = a.x0 + PROPS.rng() * (a.x1 - a.x0), z = a.z0 + PROPS.rng() * (a.z1 - a.z0);
+    if (propsClearAt(x, z)) return [x, z];
+  }
+  return [a.x1, a.z1];
+}
+function propsTick(nowSec, dt) {
+  const want = propsWanted();
+  if (PROPS.room && (want !== PROPS.room || LIVE3D.rooms[PROPS.room].geo !== PROPS.geo || isDark() !== PROPS.dark)) propsClear();
+  if (!want) return;
+  if (!PROPS.room) propsBuild(want);
+  propsBoxes(nowSec, false);
+  if (reduceMotion) return;   // placed, not driven
+  const v = PROPS.vac, p = v.position;
+  if (!propsClearAt(p.x, p.z)) { const s = propsSpot(); p.set(s[0], 0, s[1]); return; }   // a robot sat down on it: start elsewhere
+  const step = PROPS.speed * Math.min(dt, 0.1), h = v.userData.heading;
+  const nx = p.x + Math.sin(h) * step, nz = p.z + Math.cos(h) * step;
+  if (propsClearAt(nx, nz)) { p.x = nx; p.z = nz; v.rotation.y = h; }
+  else v.userData.heading = h + Math.PI * (0.5 + PROPS.rng());   // a bump: turn away and try again next frame
 }
 /* A board press in the live office: the project board opens that project's spec board (overview), its lower
    part and the cork board the task board, a robot its card. */

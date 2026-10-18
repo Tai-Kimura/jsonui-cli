@@ -29,7 +29,7 @@ body { margin: 0; }
   --floor-a: #efe8da;
   --floor-b: #e3ebf5;
   --floor-c: #e6efe3;
-  --wall: #f7f9fc;
+  --wall: #ebe4d9;
   --cloth: #fffdf7;
   --cloth-ink: #d62839;
   /* Boards seen up close (the spec whiteboard and the task board) follow the theme like the rest of the page. */
@@ -93,7 +93,7 @@ body { margin: 0; }
     --floor-a: #3a3a40;
     --floor-b: #24324a;
     --floor-c: #263a33;
-    --wall: #2c384b;
+    --wall: #48423d;
     --wb-bg: #0f1b2c;
     --wb-card: #15243a;
     --wb-rim: #2b3c55;
@@ -152,7 +152,7 @@ body { margin: 0; }
   --floor-a: #3a3a40;
   --floor-b: #24324a;
   --floor-c: #263a33;
-  --wall: #2c384b;
+  --wall: #48423d;
   --wb-bg: #0f1b2c;
   --wb-card: #15243a;
   --wb-rim: #2b3c55;
@@ -918,3 +918,4 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 /* a phone call on a robot's name tag (SendMessage, 10-18): a mark and the other robot's number */
 .tag .call-mark { flex: none; padding: 0 6px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font: 700 10px/1.6 var(--font-body); }
 .tag .call-mark[hidden] { display: none; }
+.tag .call-mark.solo-mark { background: var(--info-bg); color: var(--info); }   /* alone at its desk: a nap or a bento (2.3.1) */

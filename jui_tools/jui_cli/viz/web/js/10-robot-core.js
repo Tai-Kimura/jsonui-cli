@@ -537,7 +537,7 @@ function handThing(kind) {
   return g;
 }
 function startGesture(r, kind, t) {
-  if (reduceMotion || !GESTURE_OK.has(r.state) || r.play || (r.call && CALL_ON_LINE.has(r.call.state))) return false;
+  if (reduceMotion || !GESTURE_OK.has(r.state) || r.play || r.solo || (r.call && CALL_ON_LINE.has(r.call.state))) return false;
   endGesture(r);
   if (kind !== 'cheer') { r.hand = handThing(kind); (kind === 'meal' ? r.armL : r.armR).add(r.hand); }
   r.gesture = { kind, t0: t, t1: t + GESTURE_LEN[kind] };
@@ -662,6 +662,53 @@ function playBubble(r, P, t) {
   ctx.fillStyle = '#1f2532'; ctx.font = `700 46px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(hand, 100, 62);
   r.rps.material.map.needsUpdate = true;
+}
+/* Alone in its room (requester, 10-18): r.solo is { kind: 'nap' | 'bento', t0 } while the scene says so. nap: the head
+   sinks and nods, the arms rest, a zzz drifts up; bento: a box on the desk, chopsticks to the mouth. */
+function soloPose(r, p, t) {
+  const u = t - r.solo.t0;
+  if (r.solo.kind === 'nap') {
+    const nod = reduceMotion ? 0 : Math.sin(u * 1.1);
+    p.headX = 0.42 + nod * 0.06; p.headZ = 0.12; p.torsoX = 0.1; p.hipsY = -0.01;
+    p.aLx = -0.9; p.aLz = -0.3; p.aRx = -0.9; p.aRz = 0.3;
+  } else {
+    const bite = 0.5 + 0.5 * Math.sin(u * 4.2);
+    p.aLx = -1.1; p.aLz = -0.35; p.aRx = -1.35 - bite * 0.45; p.aRz = 0.3; p.headX = 0.22 - bite * 0.06;
+  }
+}
+/* White letters with a dark rim: readable on the light floor and on the dark one (jsonuidocument-96, 10-18: the blue zzz
+   all but vanished on the dark floor and walls). */
+function zzzCanvas() {
+  const c = makeCanvas(200, 150), ctx = c.getContext('2d');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  [[50, 112, 38], [104, 74, 50], [156, 34, 62]].forEach(([x, y, size]) => {
+    ctx.font = `700 ${size}px ${FONT_DISPLAY}`;
+    ctx.lineWidth = 9; ctx.strokeStyle = '#1f2a44'; ctx.strokeText('z', x, y);
+    ctx.fillStyle = '#ffffff'; ctx.fillText('z', x, y);
+  });
+  return c;
+}
+function bentoBox() {
+  const g = new THREE.Group();
+  // big enough to read from the usual view (96, 10-18: a few pixels even up close): a red box, rice, a side dish, a lid
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.12, 0.44), toon('#c0392b'));
+  const rice = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.38), toon('#fffaf0')); rice.position.set(-0.14, 0.07, 0);
+  const plum = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), toon('#d63a5a')); plum.position.set(-0.14, 0.1, 0);
+  const side = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.04, 0.38), toon('#e6a23c')); side.position.set(0.15, 0.07, 0);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.03, 0.44), toon('#2b2f36')); lid.position.set(0.5, 0.0, 0.05); lid.rotation.z = 0.35;
+  g.add(box, rice, plum, side, lid);
+  g.position.set(0, 0.62, 0.48);
+  return g;
+}
+function soloProps(r, S, t) {
+  const nap = !!S && S.kind === 'nap', bento = !!S && S.kind === 'bento';
+  if (nap && !r.zzz) { r.zzz = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(zzzCanvas()), transparent: true, depthTest: false })); r.zzz.renderOrder = 5; r.zzz.scale.set(1.1, 0.82, 1); r.root.add(r.zzz); }
+  if (r.zzz) {
+    r.zzz.visible = nap;
+    if (nap) { const k = reduceMotion ? 0.4 : ((t - S.t0) * 0.4) % 1; r.zzz.position.set(0.55, 2.0 + k * 0.5, 0.1); r.zzz.material.opacity = 1 - k * 0.5; }
+  }
+  if (bento && !r.bento) { r.bento = bentoBox(); r.root.add(r.bento); }
+  if (r.bento) r.bento.visible = bento;
 }
 function gesturePose(r, p, t) {
   const G = r.gesture, k = Math.min(1, (t - G.t0) / 0.35, (G.t1 - t) / 0.35);   // ease in and out
@@ -902,7 +949,9 @@ function updateRobot(r, t, dt) {
   if (!onCall && !r.gesture && r.needDrink && GESTURE_OK.has(r.state) && startGesture(r, 'drink', t)) r.needDrink = false;
   if (onCall) callPose(p, t);
   else if (r.play) playPose(r, p, t);
+  else if (r.solo) soloPose(r, p, t);
   else if (r.gesture) gesturePose(r, p, t);
+  soloProps(r, onCall ? null : r.solo, t);
   playBubble(r, onCall ? null : r.play, t);
   r.antenna.rotation.x += ((r.tired ? 1.0 : 0) - r.antenna.rotation.x) * Math.min(1, dt * 3);
   r.root.position.y = p.rootY;

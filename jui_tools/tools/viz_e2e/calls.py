@@ -88,12 +88,14 @@ async def run_calls(pw, out, failures):
     t0 = time.monotonic()
     try:
         import urllib.request
-        for _ in range(100):
+        for _ in range(400):   # 40 s: under a load average of 30-40 the server took longer than the 10 s this waited (e1, 10-18)
             try:
                 urllib.request.urlopen(f"{url}/health", timeout=1).read()
                 break
             except OSError:
                 time.sleep(0.1)
+        else:
+            raise RuntimeError(f"the server did not answer /health in 40 s: {(out / 'serve.log').read_text()[-400:]}")
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "calls", **DESKTOP)
         await page.goto(url + "/")
