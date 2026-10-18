@@ -132,3 +132,24 @@ def test_background_shells_counts_shell_snapshot_shells_at_any_depth_only():
     assert processes.background_shells(rows, 10) == 2
     assert processes.background_shells(rows, 11) == 0
     assert processes.background_shells(rows, 99) is None
+
+
+def _turn(world):
+    return next(t for t in world.tasks.tasks.values() if t["sessionId"] == SID and t.get("source") == "turn")
+
+
+def test_when_the_light_goes_off_the_turn_card_is_done_too():
+    """The lamp and the card agree: the work ending (ps), the cap or SessionEnd closes the turn left working."""
+    for end in ("ps", "cap", "end"):
+        world, _ = _world()
+        _start(world, pid=None if end == "cap" else PID)
+        assert _turn(world)["status"] == "in_progress" and _turn(world).get("background") is True
+        if end == "ps":
+            world.check_background(_ps(SHELL), 10_000)
+            world.check_background(_ps(), 15_000)
+        elif end == "cap":
+            world.tick(2_000 + ingest.BACKGROUND_CAP_MS)
+        else:
+            world.apply_hook(_hook("SessionEnd", reason="exit"), 5_000)
+        card = _turn(world)
+        assert (end, card["status"], "background" in card, "background" in world.sessions[SID]) == (end, "completed", False, False)

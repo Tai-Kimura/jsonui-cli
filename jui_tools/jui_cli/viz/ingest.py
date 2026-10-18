@@ -560,6 +560,9 @@ class World:
         if session.pop("background", None) is None:
             return
         self._dirty.add("sessions")
+        # the turn that was waiting on the work is done with it (the card and the lamp agree; 4d's review, 10-18)
+        self.tasks.turn_ended(session["id"], at, background=False, failed=False)
+        self._dirty.add("tasks")
         agent = self.agents.get(session["id"])
         if touch_agent and agent and agent["state"] == "background":
             self._set(agent, at, "idle", "待機")

@@ -454,8 +454,9 @@ function stepTween(ms) {
   viewTarget.lerpVectors(camTween.t0, camTween.t1, e);
   if (k >= 1) { const done = camTween.done; camTween = null; if (done) done(); }
 }
-function showOverlay(el) { el.hidden = false; requestAnimationFrame(() => el.classList.add('show')); }
-function hideOverlay(el) { el.classList.remove('show'); setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, reduceMotion ? 0 : 240); }
+// The show class lands a frame later; a hide in between cancels it (an Escape in that frame used to reopen the card).
+function showOverlay(el) { el.hidden = false; el._showing = true; requestAnimationFrame(() => { if (el._showing) el.classList.add('show'); }); }
+function hideOverlay(el) { el._showing = false; el.classList.remove('show'); setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, reduceMotion ? 0 : 240); }
 function zoomTo(pose, opener, arrive) {
   if (opener) zoom.opener = opener;
   if (!has3D) { arrive(); return; }
