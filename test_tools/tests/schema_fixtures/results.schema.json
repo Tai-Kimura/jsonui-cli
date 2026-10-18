@@ -16,12 +16,25 @@
       "type": "string",
       "format": "date-time"
     },
+    "run": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "The progress run id (progress.schema.json `run`) of the run this file records, so a reader can tell this file and the live progress lines of the same run apart from two runs. Written only in files at the default location (a run with no resultsPath); absent in a resultsPath file, where readers that predate it would reject the key."
+    },
+    "app": {
+      "type": "string",
+      "description": "Which app wrote this file: the Android target package, the iOS UI-test runner's bundle id (<ui test bundle id>.xctrunner), or the web project's package.json name (else the folder name). Names the default-location folder. Written only in default-location files."
+    },
     "suites": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "suiteName": { "type": "string" },
+          "file": {
+            "type": "string",
+            "description": "The test file this suite came from, the same string the progress records carry as `file` (e.g. screens/login.test.json, or `inline`). Lets a reader tie a result to a spec by path rather than by name. Written only in default-location files."
+          },
           "totalDurationMs": { "type": "number", "minimum": 0 },
           "results": {
             "type": "array",

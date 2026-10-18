@@ -193,3 +193,29 @@ class TestReportOutput:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# --- default-location keys (run / app / suites[].file) -----------------------
+
+def _default_location_results(**top):
+    data = {"format": "jsonui-test-results", "version": 1, "platform": "android",
+            "generatedAt": "2026-10-18T09:00:00Z",
+            "run": "3f2a1b4c-0d5e-4f60-8a71-92b3c4d5e6f7", "app": "com.example.app",
+            "suites": [{"suiteName": "Login", "file": "screens/login.test.json",
+                        "results": [{"testName": "Login", "caseName": "ok", "status": "passed", "durationMs": 1}]}]}
+    data.update(top)
+    return data
+
+
+def test_default_location_keys_are_accepted():
+    from jsonui_test_cli.report import validate_results_data
+    assert validate_results_data(_default_location_results(), "f") == []
+
+
+def test_default_location_keys_are_type_checked():
+    from jsonui_test_cli.report import validate_results_data
+    assert any("'run'" in e for e in validate_results_data(_default_location_results(run="RUN-1"), "f"))
+    assert any("'app'" in e for e in validate_results_data(_default_location_results(app=3), "f"))
+    bad = _default_location_results()
+    bad["suites"][0]["file"] = ["screens/login.test.json"]
+    assert any("'file'" in e for e in validate_results_data(bad, "f"))

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html as html_module
 import json
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -27,8 +28,10 @@ VALID_FAILURE_REASONS = [
     "element-not-found", "timeout", "assertion", "invalid-test",
     "mock", "setup", "teardown", "launch", "action", "other",
 ]
-VALID_RESULTS_TOP_LEVEL_KEYS = ["format", "version", "platform", "generatedAt", "suites"]
-VALID_SUITE_KEYS = ["suiteName", "totalDurationMs", "results"]
+#: `run` / `app` (top level) and `file` (suite) appear only in a file a driver
+#: wrote to its default location (no resultsPath); jui viz reads them.
+VALID_RESULTS_TOP_LEVEL_KEYS = ["format", "version", "platform", "generatedAt", "run", "app", "suites"]
+VALID_SUITE_KEYS = ["suiteName", "file", "totalDurationMs", "results"]
 #: Per-case keys a driver may report. `declaredOrientation` /
 #: `observedOrientation` are a PAIR on purpose: 'portrait' resolves to
 #: `setOrientationNatural()` on Android, and a tablet whose natural
@@ -37,6 +40,8 @@ VALID_SUITE_KEYS = ["suiteName", "totalDurationMs", "results"]
 #: field would record the request and assume it was honoured, which is the
 #: agreement the pair exists to measure. Both optional: a driver that does
 #: not report orientation stays valid.
+#: results.schema.json `run`: the progress run id.
+RUN_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "failureReason", "error", "warnings", "durationMs", "attempts", "flaky", "declaredOrientation", "observedOrientation"]
 
 #: Values either orientation field may hold. Mirrors
@@ -62,6 +67,10 @@ def validate_results_data(data, source: str) -> list[str]:
     for key in data.keys():
         if key not in VALID_RESULTS_TOP_LEVEL_KEYS:
             errors.append(f"{source}: Unknown top-level key: {key}")
+    if "run" in data and not (isinstance(data["run"], str) and RUN_ID.match(data["run"])):
+        errors.append(f"{source}: 'run' must be a lowercase uuid, got: {data['run']!r}")
+    if "app" in data and not isinstance(data["app"], str):
+        errors.append(f"{source}: 'app' must be a string")
 
     suites = data.get("suites")
     if not isinstance(suites, list):
@@ -78,6 +87,8 @@ def validate_results_data(data, source: str) -> list[str]:
                 errors.append(f"{suite_path}: Unknown suite key: {key}")
         if not isinstance(suite.get("suiteName"), str):
             errors.append(f"{suite_path}: 'suiteName' must be a string")
+        if "file" in suite and not isinstance(suite["file"], str):
+            errors.append(f"{suite_path}: 'file' must be a string")
         if "totalDurationMs" in suite:
             total = suite["totalDurationMs"]
             if not isinstance(total, (int, float)) or isinstance(total, bool) or total < 0:

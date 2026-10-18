@@ -423,3 +423,18 @@ def test_two_floors_for_one_key_are_refused():
     case_props["initialState"]["x-requires-driver"] = {"ios": "9.9.9"}
     with pytest.raises(AssertionError, match="different x-requires-driver floors"):
         _schema_driver_requirements({"screen-test": screen, "flow-test": _load("flow-test")})
+
+
+def test_results_suite_keys_match():
+    schema = _load("results")
+    suite = set(schema["properties"]["suites"]["items"]["properties"].keys())
+    assert suite == set(rp.VALID_SUITE_KEYS), (
+        "results.schema.json suite props drifted from report.VALID_SUITE_KEYS.\n"
+        f"  only in schema: {sorted(suite - set(rp.VALID_SUITE_KEYS))}\n"
+        f"  only in const : {sorted(set(rp.VALID_SUITE_KEYS) - suite)}"
+    )
+
+
+def test_results_run_pattern_matches():
+    schema = _load("results")
+    assert schema["properties"]["run"]["pattern"] == rp.RUN_ID.pattern
