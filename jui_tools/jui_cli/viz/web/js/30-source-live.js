@@ -670,7 +670,8 @@ function rebuildRobots(initial) {
     if (gone && !isNew) { if (!LIVE.leaving[label]) LIVE.leaving[label] = { since: now }; }
     else if (!gone && isNew) { ROBOT_DEFS.push(def); def.enter = !initial; }   // robots already there sit down at once
     else if (!gone) delete LIVE.leaving[label];
-    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || '') };
+    // since: when the server last set this robot (its idle began then, for play: 10-18)
+    const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), since: Number(a.updatedAt) || 0 };
     if (LIVE.leaving[label]) st.state = 'done';
     robotState[label] = st;
     seen.add(label);

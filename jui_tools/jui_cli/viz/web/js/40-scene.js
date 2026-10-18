@@ -749,6 +749,14 @@ function liveWalk(R, dt, nowMs) {
   }
   if (R.out && !R.path.length) { SOURCE.robotGone(d.id); return 'gone'; }
   const next = R.path[0];
+  if (!next && R.play) {                                          // at the play spot: no desk, facing the partner
+    if (R.robot.desk) R.robot.desk.visible = false;
+    R.play.phase = 'playing';
+    const q = R.play.partner.robot.root.position, ry = Math.atan2(q.x - root.position.x, q.z - root.position.z);
+    root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * 6);
+    return 'playing';
+  }
+  if (!next && R.playBack) R.playBack = false;                    // back at its desk
   if (!next) {
     if (R.robot.desk) R.robot.desk.visible = !d.standing;
     if (Math.abs(root.rotation.y - (d.ry || 0)) > 1e-3) root.rotation.y += ((d.ry || 0) - root.rotation.y) * Math.min(1, dt * 6);
@@ -765,8 +773,8 @@ function liveWalk(R, dt, nowMs) {
    one (probability SNACK.p, a seeded generator so a test can repeat it), while at most SNACK.share of the robots
    (at least one) are at it. Never while waiting, thinking or done (startGesture refuses), none under reduced motion. */
 const SNACK = { seed: 20261018, p: 1 / 90, share: 0.15, next: 0, rng: null };
-function snackRandom() {
-  let a = SNACK.seed >>> 0;
+function snackRandom(seed = SNACK.seed) {
+  let a = seed >>> 0;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 function snackTick(t) {
@@ -795,6 +803,78 @@ function liveCallTag(R, call) {
   R.callEl.hidden = !text;
   R.tag.classList.toggle('on-call', !!text);
 }
+/* Play (requester, 10-18): "同じ部屋で待機が長いロボットが複数いたらロボット同士で遊ぶ", "動きはランダムでいい",
+   "遊んだらまた元の場所に戻る", "指示が来たら遊ぶのやめて作業始めて". Looks only: the server, the panel and the tasks
+   still say 待機. Main robots only (a subagent idle for long has usually left). Once a second a room with two robots
+   idle for PLAY.idleMs or more may start a game (probability PLAY.p, a seeded generator): the two walk to the front
+   aisle of their room, play one of PLAY_KINDS for a random while, and walk back to their desks. Any reason to stop —
+   the robot is no longer idle, its phone rings, it leaves, its seat moves — stops it at once: it walks back with its
+   real lamp, and a partner left alone walks back too. A robot that played rests a while before the next game; at most
+   PLAY.games at a time, one to a room. None under reduced motion. The e2e build can shorten the times (80-dbg.js). */
+const PLAY_KINDS = ['ball', 'highfive', 'rps'];
+const PLAY = { seed: 20261019, kinds: PLAY_KINDS, idleMs: 180_000, p: 1 / 30, games: 2, minSec: 15, maxSec: 35, restMinSec: 60, restMaxSec: 180,
+  next: 0, rng: null, list: [] };
+const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
+  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play;
+function playStop(R) {
+  if (!R.play) return;
+  R.play = null; R.robot.play = null; R.playBack = true;
+  R.path = [R.def.pos];
+}
+function playEnd(G) {
+  for (const R of G.players) playStop(R);
+  if (G.ball) { scene.remove(G.ball); G.ball.geometry.dispose(); G.ball.material.dispose(); }
+  PLAY.list.splice(PLAY.list.indexOf(G), 1);
+}
+function playTick(nowSec, now) {
+  // stop at once: every frame
+  for (const G of [...PLAY.list]) {
+    for (const R of G.players) {
+      const st = robotState[R.def.id] || { state: 'idle' };
+      if (!R.play) continue;
+      if (st.state !== 'idle' || R.robot.call || LIVE.leaving[R.def.id] || R.seatKey !== R.play.seatKey || !robots.includes(R)) playStop(R);
+    }
+    const left = G.players.filter((R) => R.play);
+    if (left.length < 2 || nowSec >= G.until) { G.players = left; playEnd(G); continue; }
+    const at = left.filter((R) => R.play.phase === 'playing');
+    if (at.length === left.length && !G.t0) {                      // both there: face each other and start
+      G.t0 = nowSec;
+      left.forEach((R, i) => { R.robot.play = { kind: G.kind, t0: nowSec, side: i }; });
+    }
+    if (G.t0 && G.kind === 'ball') {
+      if (!G.ball) { G.ball = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), toon('#ff7a3d')); scene.add(G.ball); }
+      const [a, b] = left.map((R) => R.robot.root.position), u = ((nowSec - G.t0) / 1.6) % 1;
+      const k = u < 0.5 ? u * 2 : 2 - u * 2;                          // there and back
+      G.ball.position.set(a.x + (b.x - a.x) * k, 1.25 + Math.sin(Math.PI * (u < 0.5 ? u * 2 : u * 2 - 1)) * 0.9, a.z + (b.z - a.z) * k);
+    }
+  }
+  if (reduceMotion || nowSec < PLAY.next) return;
+  PLAY.next = nowSec + 1;
+  if (!PLAY.rng) PLAY.rng = snackRandom.call(null, PLAY.seed);
+  if (PLAY.list.length >= PLAY.games) return;
+  const byRoom = {};
+  for (const R of robots) {
+    const st = robotState[R.def.id];
+    if (!st || !playIdle(R, st, now) || (R.restUntil || 0) > nowSec) continue;
+    (byRoom[R.def.room] = byRoom[R.def.room] || []).push(R);
+  }
+  for (const [room, idle] of Object.entries(byRoom)) {
+    if (PLAY.list.length >= PLAY.games || idle.length < 2 || PLAY.list.some((G) => G.room === room) || !PROJECT[room]) continue;
+    if (PLAY.rng() >= PLAY.p) continue;
+    const a = idle.splice(Math.floor(PLAY.rng() * idle.length), 1)[0], b = idle[Math.floor(PLAY.rng() * idle.length)];
+    const rm = PROJECT[room], cx = (rm.x0 + rm.x1) / 2, cz = rm.z1 - 0.9;
+    const kind = PLAY.kinds[Math.floor(PLAY.rng() * PLAY.kinds.length)];
+    const len = PLAY.minSec + PLAY.rng() * (PLAY.maxSec - PLAY.minSec);
+    const G = { room, kind, players: [a, b], t0: 0, until: nowSec + len + 20, ball: null };   // +20: the walk there
+    [a, b].forEach((R, i) => {
+      const spot = [cx + (i ? 0.8 : -0.8), cz];
+      R.play = { phase: 'going', spot, partner: i ? a : b, seatKey: R.seatKey, len };
+      R.path = [spot];
+      R.restUntil = nowSec + len + 20 + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
+    });
+    PLAY.list.push(G);
+  }
+}
 function liveUpdateRobots(nowSec, dt) {
   if (SOURCE.layoutRev !== LIVE3D.rev) liveSync();
   liveLinks(latestModel, nowSec);
@@ -805,6 +885,7 @@ function liveUpdateRobots(nowSec, dt) {
   LIVE3D.lastWalk = nowMs;
   snackTick(nowSec);
   const now = vizNow();
+  playTick(nowSec, now);
   const calls = callsByLabel();
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
@@ -813,7 +894,9 @@ function liveUpdateRobots(nowSec, dt) {
     R.robot.heavy = heavyOf(R.def.id);   // fast typing and sweat while it works (the robot decides when)
     const how = liveWalk(R, walkDt, nowMs);
     if (how === 'gone') continue;
-    const vis = how === 'walking' ? 'carry' : st.state;
+    const playing = !!(R.play || R.playBack);
+    R.robot.lampState = playing ? st.state : null;   // to, at and back from play: the real state's lamp
+    const vis = how === 'walking' ? (playing ? 'stroll' : 'carry') : how === 'playing' ? 'idle' : st.state;
     if (vis !== R.robot.state) setRobotState(R.robot, vis);
     if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
     updateRobot(R.robot, nowSec, dt);
