@@ -33,6 +33,16 @@ window.__dbg = {
       open: ds.open, tab: ds.tab, loading: ds.loading, error: ds.error, api: ds.doc ? ds.doc.api.length : null, db: ds.doc ? ds.doc.db.length : null };
   },
   mermaidSafeText: (t) => mermaidSafeText(t),   // the text as it is handed to Mermaid (2.3.5)
+  mermaidSafeSvg: (svg) => mermaidSafeSvg(svg),  // the drawn SVG as it goes into the page
+  // the `secure` lock alone: the text drawn WITHOUT mermaidSafeText (this test hook only; the page never does)
+  mermaidRenderUnsanitized: async (text) => {
+    let box = document.getElementById('e2e-mermaid-raw');
+    if (!box) { box = document.createElement('div'); box.id = 'e2e-mermaid-raw'; document.body.appendChild(box); }
+    let svg = null, error = null;
+    try { svg = await mermaidDraw(box, text, false); } catch (err) { error = String(err && err.message || err); }
+    return { svg: !!svg, error, foreignObjects: box.querySelectorAll('foreignObject').length, imgs: box.querySelectorAll('img, image').length,
+      htmlLabels: window.mermaid ? window.mermaid.mermaidAPI.getConfig().htmlLabels : null };
+  },
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
   // the outside (10-18): the arms force a season ('spring' …) or a weather ({ kind, isDay }); null gives it back
   outside: (opts) => {

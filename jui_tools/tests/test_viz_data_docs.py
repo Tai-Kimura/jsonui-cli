@@ -428,18 +428,15 @@ def test_a_held_read_takes_its_own_executor_not_the_shared_one(tmp_path, monkeyp
 
 # ---- what is not a regular file (cd, 10-19) -------------------------------------------------------------------------
 
-def test_a_directory_or_a_socket_named_like_a_document_is_neither_counted_nor_read_nor_holds(tmp_path):
+def test_a_directory_or_a_socket_named_like_a_document_is_neither_counted_nor_read_nor_holds(tmp_path, monkeypatch):
     import socket as _socket
     import time as _t
     root = _room(tmp_path / "app", db=False)
     (root / "docs/api/folder.json").mkdir()
     sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
-    here = os.getcwd()
-    os.chdir(root / "docs/api")   # an AF_UNIX path is short: bind by a name relative to the folder, then back
-    try:
+    with monkeypatch.context() as m:   # an AF_UNIX path is short: bind by a name relative to the folder; back after
+        m.chdir(root / "docs/api")
         sock.bind("sock.json")
-    finally:
-        os.chdir(here)
     try:
         t = _t.monotonic()
         n = data_docs.counts(_project(root))
@@ -485,3 +482,25 @@ def test_only_a_regular_file_is_read_whatever_its_name(tmp_path):
         assert got is None, got
     finally:
         os.close(w)
+
+
+# ---- each guard on its own (dd / c2, 10-19: the guards are doubled; an arm per layer, so dropping one shows) --------
+
+def test_layer_regular_file_check_refuses_a_fifo_whose_writer_wrote_and_left(tmp_path, monkeypatch):
+    """S_ISREG alone: a FIFO opened for reading, then a writer writes a document and closes. Its bytes are there, then
+    EOF, so O_NONBLOCK does not stop the read: only the fstat check does."""
+    fifo = tmp_path / "pipe.json"
+    os.mkfifo(fifo)
+    r = os.open(str(fifo), os.O_RDONLY | os.O_NONBLOCK)
+    w = os.open(str(fifo), os.O_WRONLY | os.O_NONBLOCK)
+    os.write(w, json.dumps({"openapi": "3.0.0", "info": {"title": "FROM A PIPE", "version": "1"}, "paths": {"/p": {"get": {}}}}).encode())
+    os.close(w)
+    monkeypatch.setattr(data_docs, "_open_inside", lambda root, rel: r)   # _read_capped closes it
+    assert data_docs._read_capped(tmp_path, Path("pipe.json"), data_docs.MAX_FILE_BYTES) is None
+
+
+def test_layer_the_rack_reads_in_two_threads_of_their_own():
+    """The data server's executor: two threads, its own (a held read never fills the shared one)."""
+    from jui_cli.viz import server
+    pool = server._data_docs_pool()
+    assert pool._max_workers == 2 and pool is server._data_docs_pool()

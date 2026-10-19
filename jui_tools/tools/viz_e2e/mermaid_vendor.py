@@ -124,6 +124,21 @@ async def run_mermaid(pw, out, failures):
         handed = res["handed"] = await page.evaluate("(t) => window.__dbg.mermaidSafeText(t)", UNLOCKS["directive-then-front-matter"])
         check(failures, "%%{" not in handed and not handed.lstrip(" \t").startswith("---") and "htmlLabels" not in handed,
               f"directive then front matter: neither is left in what Mermaid is handed: {handed[:160]!r}")
+        # each lock on its own (dd / c2, 10-19): the drawn SVG's cleaning, given an SVG straight; `secure`, given the
+        # texts with mermaidSafeText skipped
+        svg_in = ('<svg xmlns="http://www.w3.org/2000/svg"><style>@import "/ds-probe-10.css"; .a { fill: url(/ds-probe-11.png) }</style>'
+                  '<rect style="fill:url( \'/ds-probe-12.png\')" marker-end="url(#arrow)"/></svg>')
+        cleaned = res["svgCleaned"] = await page.evaluate("(s) => window.__dbg.mermaidSafeSvg(s)", svg_in)
+        import re as _re
+        left = _re.findall(r"url\(\s*(?![\'\"]?\s*#)[^)]*\)", cleaned) + _re.findall(r"@import", cleaned)
+        check(failures, not left and "url(#arrow)" in cleaned, f"the SVG's cleaning alone: no url() out and no @import left, url(#…) kept: {left} {cleaned[:200]}")
+        for name, text in UNLOCKS.items():
+            before = len(asked)
+            u = res[f"secureOnly-{name}"] = await page.evaluate("(t) => window.__dbg.mermaidRenderUnsanitized(t)", text)
+            await page.wait_for_timeout(400)
+            got = [x for x in asked[before:] if "mermaid.min.js" not in x]
+            check(failures, u["foreignObjects"] == 0 and u["imgs"] == 0 and u["htmlLabels"] is False and not got,
+                  f"secure alone, {name} drawn unsanitized: {u} {got}")
         plain = res["plainAfter"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
         check(failures, plain["svg"] and plain["nodes"] == 2, f"a diagram without directives still draws: {plain}")
 

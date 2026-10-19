@@ -138,6 +138,18 @@ def test_mermaid_is_read_from_the_vendored_copy_only_when_drawn_and_strict():
     assert inits and all("securityLevel: 'strict'" in body for body in inits), inits
 
 
+
+def test_the_unsanitized_mermaid_hook_is_the_tests_only():
+    """The arm for the `secure` lock alone draws a text without mermaidSafeText (2.3.5). That hook lives in 80-dbg.js,
+    which only the e2e bundle has: the page as served and the exported demo carry neither its name nor a way to it."""
+    for mode in bundle.MODES:
+        assert "mermaidRenderUnsanitized" not in bundle.build(mode, e2e=False), mode
+        assert "mermaidRenderUnsanitized" in bundle.build(mode, e2e=True), mode
+    core = web_text("js", "20-core.js")
+    assert core.count("mermaidDraw(el, text, true)") == 1 and "mermaidDraw(" in web_text("js", "80-dbg.js")
+    for name in ("20-core.js", "50-panel.js", "52-data-docs.js", "30-source-live.js", "40-scene.js"):
+        assert "mermaidDraw(" not in web_text("js", name) or name == "20-core.js", name
+
 # ---- nothing reaches the HTML unescaped (plan 07 §6) -----------------------------------------------------------
 # The page builds HTML from template literals. A value the server sent that lands in that HTML must go through esc(),
 # or a crafted id / name / command breaks the markup (dd's P3 review). This arm is an allow-list: every ${…} in HTML is

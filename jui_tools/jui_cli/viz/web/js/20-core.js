@@ -70,7 +70,9 @@ function mermaidNoUrl(t) {
   return String(t).replace(/url\(\s*(?!['"]?\s*#)/gi, 'url(#blocked-').replace(/@import/gi, '@blocked');
 }
 function mermaidSafeSvg(svg) { return mermaidNoUrl(svg); }
-async function renderMermaid(el, text) {
+async function renderMermaid(el, text) { return mermaidDraw(el, text, true); }
+/* cleanText false only for the arm that checks the `secure` lock on its own (the test hook, never the page). */
+async function mermaidDraw(el, text, cleanText) {
   const mm = await loadMermaid();
   const theme = isDark() ? 'dark' : 'default';
   if (MERMAID.theme !== theme) {
@@ -81,7 +83,7 @@ async function renderMermaid(el, text) {
     MERMAID.theme = theme;
   }
   MERMAID.n += 1;
-  const svg = mermaidSafeSvg((await mm.render(`mmd-${MERMAID.n}`, mermaidSafeText(text))).svg);
+  const svg = mermaidSafeSvg((await mm.render(`mmd-${MERMAID.n}`, cleanText ? mermaidSafeText(text) : String(text))).svg);
   el.innerHTML = svg;   // Mermaid's own SVG, its labels sanitized (securityLevel 'strict')
   el.dataset.theme = theme;
   if (MERMAID.drawn.size >= 40) MERMAID.drawn.clear();
