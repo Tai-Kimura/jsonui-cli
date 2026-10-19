@@ -191,9 +191,10 @@ def test_check_infra_from_the_cli(tmp_path):
 # ---------------------------------------------------------------- one table with seed (ticket 2026-10-20-jui-infra-seed-and-check-tables-disagree)
 
 def test_check_has_no_table_of_its_own():
-    from jsonui_doc_cli.infra import iac_tables as T
-    assert set(C.TF_CATEGORY) == set(T.TF_TYPES) and C.TF_PROVIDER is T.TF_PROVIDER and C.COMPOSE_IMAGE is T.COMPOSE_IMAGE
-    assert not hasattr(C, "IGNORED")
+    """The old names (check's own tables, then views of the shared one while seed moved) are gone: one coming back
+    is a second table again."""
+    for old in ("TF_CATEGORY", "TF_PROVIDER", "CFN_CATEGORY", "K8S_CATEGORY", "COMPOSE_IMAGE", "IGNORED"):
+        assert not hasattr(C, old), old
     src = Path(C.__file__).read_text()
     assert '"aws_db_instance"' not in src and '"AWS::S3::Bucket"' not in src     # no type is spelled in check itself
 

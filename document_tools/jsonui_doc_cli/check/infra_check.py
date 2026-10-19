@@ -74,13 +74,8 @@ def _rel(p: Path, root: Path) -> str:
 
 # ---------------------------------------------------------------- reading the IaC (tables: infra/iac_tables.py)
 
-# The tables live in infra/iac_tables.py, shared with seed (ticket 2026-10-20-jui-infra-seed-and-check-tables-disagree).
-# These names stay for code that imported them from here; new code imports iac_tables.
-TF_PROVIDER = T.TF_PROVIDER
-TF_CATEGORY = {t: (None if c.startswith("group:") else c) for t, (c, _s) in T.TF_TYPES.items()}
-CFN_CATEGORY = {t: c for t, (c, _s) in T.CFN_TYPES.items() if not c.startswith("group:")}
-K8S_CATEGORY = {k: T.k8s_mapping(k)[0] for k in (*T.K8S_WORKLOAD, "CronJob", "Ingress", "PersistentVolumeClaim")}
-COMPOSE_IMAGE = T.COMPOSE_IMAGE
+# The tables live in infra/iac_tables.py, shared with seed (ticket 2026-10-20-jui-infra-seed-and-check-tables-disagree);
+# check spells no IaC type of its own.
 COMPOSE_NAMES = re.compile(r"^(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$")
 WRANGLER = re.compile(r"^wrangler\.(?:toml|json|jsonc)$")
 # settings files seed reads and check does not compare (yet): file name -> provider
