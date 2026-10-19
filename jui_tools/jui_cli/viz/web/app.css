@@ -1074,3 +1074,59 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-light-box img { display: block; max-width: calc(100vw - 56px); max-height: calc(100vh - 120px); margin: 0 auto; object-fit: contain; }
 .h-light-note { margin: 0; color: var(--ink-soft); font: 700 12px/1.5 var(--font-body); }
 .h-light-note:empty { display: none; }
+
+/* The spec sheet's colours (2.3.5): a transition's tag by its kind, a state variable's type by its type (50-panel.js,
+   TRANSITION_KINDS / TYPE_KINDS, the same source as the legend in the 「?」). Each pair is 4.5:1 or more against where it
+   is drawn — the tag's text against its own ground, a type against the card, the highlighted rows and the dialog — in
+   light and in dark (measured by tools/viz_e2e/spec_colors.py from the computed colours). */
+:root {
+  --tk-push-fg: #0a4a85; --tk-push-bg: #e2effc;
+  --tk-modal-fg: #62288a; --tk-modal-bg: #f1e6fa;
+  --tk-back-fg: #5f4300; --tk-back-bg: #fbefcf;
+  --tk-replace-fg: #8a280a; --tk-replace-bg: #fde6dd;
+  --tk-external-fg: #0a5a3b; --tk-external-bg: #ddf4e8;
+  --tk-none-fg: #3f4957; --tk-none-bg: #eaedf2;
+  --tk-other-fg: #1a2433; --tk-other-bg: #ffffff;
+  --ty-string: #a8281f; --ty-bool: #6f35a8; --ty-number: #0b6b4b; --ty-color: #9a4a12; --ty-array: #1d5aa0; --ty-optional: #7d5500; --ty-custom: #454f5e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --tk-push-fg: #b3d9ff; --tk-push-bg: #183a60;
+    --tk-modal-fg: #e5c9ff; --tk-modal-bg: #3b2655;
+    --tk-back-fg: #f7dc8f; --tk-back-bg: #463711;
+    --tk-replace-fg: #ffbaa6; --tk-replace-bg: #4b2317;
+    --tk-external-fg: #93f2c8; --tk-external-bg: #123f2e;
+    --tk-none-fg: #cdd5e0; --tk-none-bg: #2a3547;
+    --tk-other-fg: #e4ecf8; --tk-other-bg: #15243a;
+    --ty-string: #ff9a8f; --ty-bool: #d7b4ff; --ty-number: #7ce8bd; --ty-color: #ffbc85; --ty-array: #9ccbff; --ty-optional: #f2d27e; --ty-custom: #c6d1de;
+  }
+}
+:root[data-theme="dark"] {
+  --tk-push-fg: #b3d9ff; --tk-push-bg: #183a60;
+  --tk-modal-fg: #e5c9ff; --tk-modal-bg: #3b2655;
+  --tk-back-fg: #f7dc8f; --tk-back-bg: #463711;
+  --tk-replace-fg: #ffbaa6; --tk-replace-bg: #4b2317;
+  --tk-external-fg: #93f2c8; --tk-external-bg: #123f2e;
+  --tk-none-fg: #cdd5e0; --tk-none-bg: #2a3547;
+  --tk-other-fg: #e4ecf8; --tk-other-bg: #15243a;
+  --ty-string: #ff9a8f; --ty-bool: #d7b4ff; --ty-number: #7ce8bd; --ty-color: #ffbc85; --ty-array: #9ccbff; --ty-optional: #f2d27e; --ty-custom: #c6d1de;
+}
+.scr.tk { border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-weight: 600; }
+.tk .tk-k { margin-right: 6px; padding-right: 6px; border-right: 1px solid color-mix(in srgb, currentColor 35%, transparent); font: 700 10.5px/1.5 var(--font-body); }
+.scr.tk-push { color: var(--tk-push-fg); background: var(--tk-push-bg); }
+.scr.tk-modal { color: var(--tk-modal-fg); background: var(--tk-modal-bg); }
+.scr.tk-back { color: var(--tk-back-fg); background: var(--tk-back-bg); }
+.scr.tk-replace { color: var(--tk-replace-fg); background: var(--tk-replace-bg); }
+.scr.tk-external { color: var(--tk-external-fg); background: var(--tk-external-bg); }
+.scr.tk-none { color: var(--tk-none-fg); background: var(--tk-none-bg); }
+.scr.tk-other { color: var(--tk-other-fg); background: var(--tk-other-bg); }
+.ty.ty-string { color: var(--ty-string); }
+.ty.ty-bool { color: var(--ty-bool); }
+.ty.ty-number { color: var(--ty-number); }
+.ty.ty-color { color: var(--ty-color); }
+.ty.ty-array { color: var(--ty-array); }
+.ty.ty-optional { color: var(--ty-optional); }
+.ty.ty-custom { color: var(--ty-custom); }
+.sh-body .sh-kinds { gap: 6px 8px; }
+.tk.tk-solo .tk-k { margin-right: 0; padding-right: 0; border-right: 0; }
+.sh-body .sh-types code { font: 600 12px/1.5 var(--font-mono); }

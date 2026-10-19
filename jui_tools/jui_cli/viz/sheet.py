@@ -12,7 +12,7 @@ object; this builds it from a real spec so the renderer ports unchanged:
   vmMethods       [name]      vmVars [name]   repositories [name]
   apis            [[operation, method, path]]
   userActions     [[action, processing]]
-  transitions     [[trigger or condition, destination]]
+  transitions     [[trigger or condition, destination, type or method]]
   branches        [[method, when, then]]      ("note" entries: [method, "note", text])
   related         [[type, path, exists]]
   impl            {total, done}
@@ -107,7 +107,8 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
         "apis": apis,
         "userActions": [[_t(a.get("action")), _t(a.get("processing"))]
                         for a in _list(spec.get("userActions")) if isinstance(a, dict)],
-        "transitions": [[_t(t.get("trigger") or t.get("condition")), _t(t.get("destination"))]
+        # the third: how it moves (type / method: push, sheet, dismiss …), for the page's colours (2.3.5)
+        "transitions": [[_t(t.get("trigger") or t.get("condition")), _t(t.get("destination")), _t(t.get("type") or t.get("method") or "")]
                         for t in _list(spec.get("transitions")) if isinstance(t, dict)],
         "branches": branches,
         "related": related,

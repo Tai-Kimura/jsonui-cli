@@ -692,6 +692,44 @@ function renderWbSide(model) {
   wbSideList.querySelectorAll('.ws-item:not(.ws-all)').forEach((b) => { const x = model.specs[+b.dataset.idx]; setText(b.lastElementChild, UI.project === 'all' ? `${PROJECT[x.project].name} · ${x.status.text}` : x.status.text); });
 }
 
+/* Colours of the spec sheet (2.3.5, requester 10-19: "遷移のところの遷移先が白の太字見にくい 色少しつけてみやすくしてほしい。
+   あと状態変数の型も型ごとに色分けできない？"). One source for three things: a transition's tag (its kind, from the spec's
+   type / method and the destination's words; the kind is written in the tag too, so the colour is never the only cue),
+   a state variable's type text, and their legend in the 「?」 dialog (SPEC_HELP_HTML). The colours themselves are CSS
+   variables (app.css, light and dark), each at least 4.5:1 against where it is drawn. */
+const TRANSITION_KINDS = [   // [key, label, what it is told by] — the first that matches wins
+  ['none', '遷移なし', /遷移なし|画面内|no transition|\bnone\b|alert|confirmationdialog|ダイアログ|toast|トースト/i],
+  ['external', '外部（URL・tel・地図）', /外部|ブラウザ|browser|https?:|\burl\b|tel:|mailto:|地図|\bmaps?\b|safari|openurl|linking/i],
+  ['back', 'pop / dismiss（戻る）', /\bpop|dismiss|戻る|\bback\b|閉じる/i],
+  ['replace', 'replace / root（入れ替え）', /replace|\broot|navigatetoscreen|置き換|入れ替/i],
+  ['modal', 'sheet / modal（重ねる）', /sheet|modal|present|fullscreen|cover|シート|モーダル/i],
+  ['push', 'push（進む）', /push|navigat|router|遷移/i],
+];
+const TRANSITION_OTHER = ['other', '種類が書かれていない'];
+function transitionKind(type, dest) {
+  const text = `${type || ''} ${dest || ''}`;
+  return TRANSITION_KINDS.find((k) => k[2].test(text)) || TRANSITION_OTHER;
+}
+const transitionTag = (dest, type) => {
+  const [key, label] = transitionKind(type, dest);
+  return `<span class="scr tk tk-${esc(key)}" data-tk="${esc(key)}" title="${esc(dest)}"><span class="tk-k">${esc(label.split('（')[0])}</span>${esc(SCREEN_JA[dest] || dest)}</span>`;
+};
+const TYPE_KINDS = [   // [key, label, sample, test] — Optional first: String? is an Optional
+  ['optional', 'Optional（T?）', 'String?', (t) => /\?\s*$/.test(t)],
+  ['array', '配列・辞書（[T]・{K: V}）', '[Item]', (t) => /^\s*[[{]|^\s*(array|dictionary|set|list|map)\b/i.test(t)],
+  ['string', 'String', 'String', (t) => /^\s*string\s*$/i.test(t)],
+  ['bool', 'Bool', 'Bool', (t) => /^\s*(bool|boolean)\s*$/i.test(t)],
+  ['number', '数（Int・Double・Float）', 'Int', (t) => /^\s*(u?int\d*|double|float|cgfloat|number|decimal|long)\s*$/i.test(t)],
+  ['color', 'Color', 'Color', (t) => /^\s*(color|uicolor|cgcolor)\s*$/i.test(t)],
+];
+const TYPE_OTHER = ['custom', 'そのほか（自作の型など）', 'Visibility'];
+const typeKind = (t) => TYPE_KINDS.find((k) => k[3](String(t || ''))) || TYPE_OTHER;
+const typeCell = (t) => { const k = esc(typeKind(t)[0]); return `<td class="mono ty ty-${k}" data-ty="${k}">${esc(t)}</td>`; };
+const COLOR_LEGEND_HTML = `<p>遷移先の札は、遷移の種類で色を分ける（札の頭に種類も書く）。</p>
+<p class="seg-legend sh-legend sh-kinds">${[...TRANSITION_KINDS, TRANSITION_OTHER].map(([key, label]) => { const more = label.includes('（') ? label.slice(label.indexOf('（')) : '';
+  return `<span class="scr tk tk-${esc(key)}${more ? '' : ' tk-solo'}" data-tk="${esc(key)}"><span class="tk-k">${esc(label.split('（')[0])}</span>${esc(more)}</span>`; }).join('')}</p>
+<p>状態の型は、型で文字の色を分ける。</p>
+<p class="seg-legend sh-legend sh-types">${[...TYPE_KINDS, TYPE_OTHER].map(([key, label, sample]) => `<span><code class="mono ty ty-${esc(key)}" data-ty="${esc(key)}">${esc(sample)}</code> ${esc(label)}</span>`).join('')}</p>`;
 const SWATCHES = '<span><i class="sw sw-writing"></i>書き込み中</span><span><i class="sw sw-written"></i>記入済み</span><span><i class="sw sw-impl"></i>実装済み</span><span><i class="sw sw-tested"></i>テスト済み</span><span><i class="sw sw-empty"></i>未記入</span>';
 /* The explanation of 「spec の進み具合」 (2.3.4, requester 10-19: "specの進み具合の説明をボードから消してその代わりに？
    ボタンおいて押したらモーダルで説明出して", for the panel and the overview alike: "同じで"). It used to sit under the
@@ -700,7 +738,8 @@ const SWATCHES = '<span><i class="sw sw-writing"></i>書き込み中</span><span
 const SPEC_HELP_HTML = `<p>spec ファイルの書き込みをファイル監視で追い、今どのセクションが実装・テストされているかを relatedFiles から割り出す。</p>
 <p>バーは左から 概要・構造・状態・データ・操作・遷移・分岐 の 7 区分。色は次のとおり。</p>
 <p class="seg-legend sh-legend">${SWATCHES}</p>
-<p>右のパネルでは行を押すとホワイトボードに寄ってその spec を開く。「ボードで全部見る」の一覧では、カードを押すとその spec を開く。</p>`;
+<p>右のパネルでは行を押すとホワイトボードに寄ってその spec を開く。「ボードで全部見る」の一覧では、カードを押すとその spec を開く。</p>
+${COLOR_LEGEND_HTML}`;
 let specHelp = null;
 function openSpecHelp(opener) {
   closeSpecHelp(false);
@@ -864,7 +903,7 @@ function renderSheet(model, force) {
       return `<div class="st-grid"><div class="wf-phone" role="img" aria-label="${esc((d.components[0] || [])[1] || '')} の中に並ぶ部品の配置図">${wfHTML}</div><ul class="rows">${rowsHTML}</ul></div>${moreHTML}`;
     },
     (w, writing) => {
-      const rowsHTML = pick(2, d.uiVariables, reveal(d.uiVariables.length, w), writing).map(([[name, type, init], i, m]) => tr(m, `v${i}`, `<td class="mono">${esc(name)}</td><td class="mono">${esc(type)}</td><td class="mono">${esc(init)}</td>`)).join('');
+      const rowsHTML = pick(2, d.uiVariables, reveal(d.uiVariables.length, w), writing).map(([[name, type, init], i, m]) => tr(m, `v${i}`, `<td class="mono">${esc(name)}</td>${typeCell(type)}<td class="mono">${esc(init)}</td>`)).join('');
       const evHTML = !writing || w >= 0.6 ? `<p class="sub-h">イベント</p><ul class="rows">${d.eventHandlers.map(([name, desc]) => `<li class="rw"><span class="mk"></span><span><span class="id">${esc(name)}</span> <span class="desc">${esc(desc)}</span></span></li>`).join('')}</ul>` : '';
       return `<table class="vt"><thead><tr><th><span class="sr">状態</span></th><th>変数</th><th>型</th><th>初期値</th></tr></thead><tbody>${rowsHTML}</tbody></table>${evHTML}`;
     },
@@ -880,7 +919,7 @@ function renderSheet(model, force) {
       return `<div class="flow"><div class="fbox"><p class="fb-h">ViewModel</p><ul class="rows">${methodsHTML}</ul>${varsHTML}</div>${reposHTML}${apisHTML}</div>`;
     },
     (w, writing) => `<ul class="rows">${pick(4, d.userActions, reveal(d.userActions.length, w), writing).map(([[a, p], i, m]) => li(m, `a${i}`, `${esc(a)}<span class="to">→</span><code>${esc(p)}</code>`)).join('')}</ul>`,
-    (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest], i, m]) => li(m, `t${i}`, `${esc(trig)}<span class="to">→</span><span class="scr" title="${esc(dest)}">${esc(SCREEN_JA[dest] || dest)}</span>`)).join('')}</ul>`,
+    (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest, how], i, m]) => li(m, `t${i}`, `${esc(trig)}<span class="to">→</span>${transitionTag(dest, how)}`)).join('')}</ul>`,
     (w, writing) => {
       const rowsHTML = pick(6, d.branches, reveal(d.branches.length, w), writing).map(([[method, when, then], i, m]) => tr(m, `b${i}`, `<td class="mono">${esc(method)}</td><td>${esc(when)}</td><td>${esc(then)}</td>`)).join('');
       const sheetNoteHTML = s.id === 'cart' && model.t >= 18 ? `<p class="sc-note">tests/screens/cart.test.json の 8 ケースと 1 対 1（${T.passed}/8 通過）</p>` : '';

@@ -150,6 +150,7 @@ BUILDERS = {
         "permButtons", "permButtonsLive", "permButtonsDemo", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
         "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
         "liveTestsHTML", "questionHTML", "robotTestsHTML", "robotRunHTML",
+        "transitionTag", "typeCell",   # 2.3.5: a transition's tag and a type's cell (their templates are checked here too)
     },
 }
 # Builders a part may call that another part defines (each checked where it is defined).
