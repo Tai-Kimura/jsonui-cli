@@ -202,6 +202,18 @@ def test_references_across_files():
     ('"password":"hunter2"', {"password"}),
     ("release-1.2.3.4", set()), ("pkg@1.2.3.4", set()), ("::ffff", set()), ("listen [::]:80", set()),
     ("127.1.2.3", set()), ("password rotation monthly", set()),
+    # dd's third verification, 10-20 (P1, P2, P3, W1, O03, O04, and the HCL "secret =")
+    ("DB password: stored in Secrets Manager", set()), ("Password: rotated monthly", set()), ("Forgot password: link", set()),
+    ("Password: ********", set()), ("password: ${DB_PASSWORD}", set()), ("pwd: /home/app", set()),
+    ("passwd: hunter2", {"password"}), ("pwd: hunter2", {"password"}), ("password: correcthorsebatterystaple", {"password"}),
+    ("docs/infra/icons/Database/Relational01ab", set()), ("path/to/some/Folder1/AnotherFolderName2X", set()),
+    ("x=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", {"token"}),
+    ('"SecretAccessKey": "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0"', {"token"}),
+    ("aws_secret_access_key: A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0", {"token"}),
+    ('secret = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0"', {"token"}),
+    ("ec2-user@10.0.0.5", {"ip_address"}), ("bastion-10.0.0.5", {"ip_address"}), ("ip-10-0-0-5.ec2.internal", {"ip_address"}),
+    ("10_0_0_5", {"ip_address"}), ("64:ff9b::a00:5", {"ip_address"}), ("::a00:5", {"ip_address"}),
+    ("release_2026_10_20", set()), ("v1_2_3_4", set()),
 ])
 def test_the_secret_shapes(text, kinds):
     assert set(M.secret_findings(text)) == kinds
@@ -343,3 +355,12 @@ def test_a_bom_is_not_an_error():
     """N5: some editors write one."""
     raw = "\ufeff".encode() + json.dumps({"version": 0}).encode()
     assert M.check_file("a.json", raw)[1] == []
+
+
+
+def test_a_sentence_about_a_password_keeps_its_file():
+    """P1: a description that says how a password is kept took the whole file out."""
+    raw = json.dumps({"version": 0, "description": "DB password: stored in Secrets Manager",
+                      "nodes": [{"id": "db", "category": "database.relational", "label": "Password: rotated monthly"}]}).encode()
+    m, problems = M.merge([("a.json", raw)])
+    assert problems == [] and [n["id"] for n in m["nodes"]] == ["db"]

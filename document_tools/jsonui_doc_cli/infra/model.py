@@ -68,20 +68,33 @@ SECRET_SHAPES: tuple[tuple[str, re.Pattern], ...] = (
         r"|\bxox[abprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{30,}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
         # an AWS secret key: 40 base64 characters in mixed case with a digit and a "/" or "+" (a hex hash is
         # lowercase; a CDK logical id — a name and 8 hex characters, often exactly 40 long — has neither "/" nor "+")
+        # (three or more "/" make it a path: docs/infra/icons/Database/Relational01ab, not a key)
         r"|(?<![A-Za-z0-9/+])(?=[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+]))(?=[A-Za-z0-9/+]{0,39}[A-Z])"
-        r"(?=[A-Za-z0-9/+]{0,39}[a-z])(?=[A-Za-z0-9/+]{0,39}\d)(?=[A-Za-z0-9/+]{0,39}[/+])[A-Za-z0-9/+]{40}"
+        r"(?=[A-Za-z0-9/+]{0,39}[a-z])(?=[A-Za-z0-9/+]{0,39}\d)(?=[A-Za-z0-9/+]{0,39}[/+])"
+        r"(?![A-Za-z0-9+]*/[A-Za-z0-9+]*/[A-Za-z0-9+]*/)[A-Za-z0-9/+]{40}"
         # ... or 40 of them after a secret key's name, whatever they hold (AWS_SECRET_ACCESS_KEY=..., .env's own form)
-        r"|(?i:secret[_ ]?(?:access[_ ]?)?key)[\"']?\s*[=:]\s*[\"']?[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])")),
-    # a password written with its value (Password=..., password: ..., "password": "...")
-    ("password", re.compile(r"(?i)\b(?:password|passwd|pwd)\b[\"']?\s*:\s*[\"']?[^\s\"',;]{1,}")),
+        r"|(?i:secret[_ ]?(?:access[_ ]?)?key|\bsecret)[\"']?\s*[=:]\s*[\"']?[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])")),
+    # a password written with its value: "password: hunter2", "pwd": "s3cr3t!" — one word after the colon that has a
+    # digit or a sign, or is 16 or more long. Not a sentence ("password: stored in Secrets Manager", "Password:
+    # rotated monthly"), not a word ("Forgot password: link"), not a mask (********), a placeholder (${DB_PASSWORD},
+    # {{ .pw }}, <pw>) or a path (pwd: /home/app). (Password=value is the connection-string shape above.)
+    ("password", re.compile(
+        r"(?i)\b(?:password|passwd|pwd)\b[\"']?\s*:\s*[\"']?(?![$*{<\\/])"
+        r"(?=[^\s\"',;]*(?:\d|[^\w\s\"',;])|[^\s\"',;]{16})[^\s\"',;]+(?=[\"',;]|\s*$|\s*[\r\n])")),
     ("account_id", re.compile(r"(?<![\d-])(?:\d{12}|\d{4}-\d{4}-\d{4})(?![\d-])")),
 )
 # an IPv4 address. A version is not one: four numbers right after a letter (v1.25.3.1), or after a letter and "-" or
-# "@" (release-1.2.3.4, pkg@1.2.3.4). After ".", "_", ":", "=" or a space it is an address (db.10.0.0.5, db_10.0.0.5,
-# host:10.0.0.1). Not inside a longer run of numbers (1.2.3.4.5), and a dot after it ends a sentence. 0.0.0.0 and
-# 127.0.0.0/8 (any interface, this machine) are no one's address.
-_IPV4 = re.compile(r"(?<![A-Za-z0-9])(?<!\d\.)(?<![A-Za-z][-@])"
+# "@" when the first number is under 10 (release-1.2.3.4, pkg@1.2.3.4; bastion-10.0.0.5 and ec2-user@10.0.0.5 are
+# addresses). After ".", "_", ":", "=" or a space it is an address (db.10.0.0.5, db_10.0.0.5, host:10.0.0.1). Not
+# inside a longer run of numbers (1.2.3.4.5), and a dot after it ends a sentence. 0.0.0.0 and 127.0.0.0/8 (any
+# interface, this machine) are no one's address.
+_IPV4 = re.compile(r"(?<![A-Za-z0-9])(?<!\d\.)(?<![A-Za-z][-@](?=\d\.))"
                    r"((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?!\.?\d)")
+# the same address written with "-" or "_" (AWS's internal host names ip-10-0-0-5, a name like db_10_0_0_5)
+_OCTET = r"(?:25[0-5]|2[0-4]\d|1?\d?\d)"
+_IPV4_OTHER = re.compile(rf"(?i)\bip-{_OCTET}(?:-{_OCTET}){{3}}(?![\d-])|(?<![\dA-Za-z]){_OCTET}(?:_{_OCTET}){{3}}(?![\d_])")
+# no one's IPv6 addresses: :: (any) and ::1 (this machine), and ::ffff alone (the IPv4-mapped prefix, no address in it)
+_IPV6_NO_ONES = {"::", "::1", "::ffff"}
 _IPV6 = re.compile(r"(?<![\w:.])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])")
 _INVISIBLE = re.compile(r"[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]")
 
@@ -92,12 +105,16 @@ def _ip_found(text: str) -> bool:
         ip = m.group(1)
         if ip != "0.0.0.0" and not ip.startswith("127."):
             return True
+    for m in _IPV4_OTHER.finditer(text):
+        nums = re.findall(r"\d+", m.group(0))
+        if not (nums[0] == "127" or set(nums) == {"0"}):
+            return True
     for m in _IPV6.finditer(text):
         try:
             ip = ipaddress.IPv6Address(m.group(1))
         except ValueError:
             continue
-        if not ip.is_reserved:      # ::/8 holds :: (any), ::1 (this machine), ::ffff and the like: no one's address
+        if ip.compressed not in _IPV6_NO_ONES:   # NAT64 64:ff9b::a00:5 and ::a00:5 carry an IPv4 address
             return True
     return False
 
@@ -137,7 +154,8 @@ def field_names() -> set[str]:
 
 
 def _seg(key: str) -> str:
-    """A key as a JSON Pointer segment: a field the schema has, as it is; any other key masked (it may be a value)."""
+    """A key as a JSON Pointer segment: a field the schema has, as it is; any other key masked (it may be a value).
+    No field name has a secret's shape today, so the second test never decides yet: it guards a field added later."""
     return key if key in field_names() and not secret_findings(key) else "<key>"
 
 
@@ -244,7 +262,8 @@ def check_file(name: str, raw: bytes) -> tuple[dict | None, list[dict]]:
 
 
 def _parents_cycle(groups: dict[str, dict]) -> list[str]:
-    """The groups on a parent cycle (not those that only lead into one), in the order they were declared."""
+    """The groups on a parent cycle (not those that only lead into one), in the order they were declared. Stopping at
+    a group already known to be on a cycle only saves time: the answer is the same without it."""
     on_cycle: set[str] = set()
     for gid in groups:
         path, cur = [], gid
