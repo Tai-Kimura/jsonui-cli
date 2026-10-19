@@ -1,0 +1,192 @@
+{
+ "$schema": "https://jsonui.dev/schemas/infra-model/v0.json",
+ "version": 0,
+ "description": "Front on Vercel, API on Cloudflare Workers, data on Cloudflare and GCP, backups on AWS",
+ "environments": [
+  {
+   "id": "production",
+   "kind": "production"
+  },
+  {
+   "id": "preview",
+   "kind": "preview"
+  }
+ ],
+ "groups": [
+  {
+   "id": "shop",
+   "kind": "logical",
+   "label": "ショップ（製品の全体）"
+  },
+  {
+   "id": "vercel",
+   "kind": "project",
+   "provider": "vercel",
+   "parent": "shop",
+   "label": "Vercel のプロジェクト"
+  },
+  {
+   "id": "cf",
+   "kind": "account",
+   "provider": "cloudflare",
+   "parent": "shop",
+   "label": "Cloudflare のアカウント"
+  },
+  {
+   "id": "gcp",
+   "kind": "project",
+   "provider": "gcp",
+   "parent": "shop",
+   "label": "GCP のプロジェクト"
+  },
+  {
+   "id": "gcp-tokyo",
+   "kind": "region",
+   "region": "asia-northeast1",
+   "parent": "gcp"
+  },
+  {
+   "id": "aws",
+   "kind": "account",
+   "provider": "aws",
+   "label": "バックアップ用の AWS"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "browser",
+   "category": "client",
+   "label": "ブラウザ"
+  },
+  {
+   "id": "dns",
+   "category": "edge.dns",
+   "service": "dns",
+   "group": "cf"
+  },
+  {
+   "id": "web",
+   "category": "compute.paas",
+   "service": "nextjs",
+   "group": "vercel",
+   "app": "web"
+  },
+  {
+   "id": "api",
+   "category": "compute.function",
+   "service": "workers",
+   "group": "cf",
+   "app": "api",
+   "iac": [
+    "wrangler.toml"
+   ]
+  },
+  {
+   "id": "kv",
+   "category": "database.kv",
+   "service": "kv",
+   "group": "cf"
+  },
+  {
+   "id": "d1",
+   "category": "database.relational",
+   "service": "d1",
+   "group": "cf",
+   "data_doc": "docs/db"
+  },
+  {
+   "id": "r2",
+   "category": "storage.object",
+   "service": "r2",
+   "group": "cf"
+  },
+  {
+   "id": "search",
+   "category": "database.search",
+   "service": "vertex-ai-search",
+   "group": "gcp-tokyo",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "queue",
+   "category": "queue",
+   "service": "pubsub",
+   "group": "gcp-tokyo"
+  },
+  {
+   "id": "backup",
+   "category": "storage.object",
+   "service": "s3",
+   "group": "aws",
+   "label": "R2 の写し"
+  },
+  {
+   "id": "auth0",
+   "category": "auth",
+   "provider": "auth0",
+   "label": "Auth0",
+   "managed_by": "external"
+  }
+ ],
+ "edges": [
+  {
+   "from": "browser",
+   "to": "dns",
+   "protocol": "dns"
+  },
+  {
+   "from": "browser",
+   "to": "web",
+   "protocol": "https"
+  },
+  {
+   "from": "web",
+   "to": "api",
+   "protocol": "https"
+  },
+  {
+   "from": "web",
+   "to": "auth0",
+   "protocol": "https"
+  },
+  {
+   "from": "api",
+   "to": "kv",
+   "protocol": "binding"
+  },
+  {
+   "from": "api",
+   "to": "d1",
+   "protocol": "binding"
+  },
+  {
+   "from": "api",
+   "to": "r2",
+   "protocol": "binding"
+  },
+  {
+   "from": "api",
+   "to": "search",
+   "protocol": "https",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "from": "api",
+   "to": "queue",
+   "protocol": "https"
+  },
+  {
+   "from": "r2",
+   "to": "backup",
+   "protocol": "s3",
+   "label": "毎晩の写し",
+   "environments": [
+    "production"
+   ]
+  }
+ ]
+}

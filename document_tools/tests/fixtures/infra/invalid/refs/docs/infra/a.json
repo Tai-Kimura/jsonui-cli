@@ -1,0 +1,41 @@
+{
+ "version": 0,
+ "environments": [
+  {
+   "id": "production",
+   "kind": "production"
+  }
+ ],
+ "groups": [
+  {
+   "id": "g1",
+   "kind": "region",
+   "parent": "g2"
+  },
+  {
+   "id": "g2",
+   "kind": "region",
+   "parent": "g1"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "api",
+   "category": "compute.container",
+   "group": "nowhere"
+  },
+  {
+   "id": "db",
+   "category": "database.relational",
+   "environments": [
+    "qa"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "api",
+   "to": "ghost"
+  }
+ ]
+}

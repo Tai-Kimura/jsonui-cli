@@ -1,0 +1,238 @@
+{
+ "$schema": "https://jsonui.dev/schemas/infra-model/v0.json",
+ "version": 0,
+ "description": "A web API on AWS: load balancer, containers, MySQL, a bucket",
+ "environments": [
+  {
+   "id": "production",
+   "label": "本番",
+   "kind": "production"
+  },
+  {
+   "id": "staging",
+   "label": "ステージング",
+   "kind": "staging"
+  }
+ ],
+ "groups": [
+  {
+   "id": "aws-prod",
+   "kind": "account",
+   "provider": "aws",
+   "label": "本番アカウント",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "aws-stg",
+   "kind": "account",
+   "provider": "aws",
+   "label": "ステージングアカウント",
+   "environments": [
+    "staging"
+   ]
+  },
+  {
+   "id": "apne1-prod",
+   "kind": "region",
+   "region": "ap-northeast-1",
+   "parent": "aws-prod",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "apne1-stg",
+   "kind": "region",
+   "region": "ap-northeast-1",
+   "parent": "aws-stg",
+   "environments": [
+    "staging"
+   ]
+  },
+  {
+   "id": "vpc-prod",
+   "kind": "network",
+   "parent": "apne1-prod",
+   "label": "VPC (2 AZ)",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "vpc-stg",
+   "kind": "network",
+   "parent": "apne1-stg",
+   "label": "VPC (1 AZ)",
+   "environments": [
+    "staging"
+   ]
+  },
+  {
+   "id": "private-prod",
+   "kind": "subnet",
+   "parent": "vpc-prod",
+   "visibility": "private",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "private-stg",
+   "kind": "subnet",
+   "parent": "vpc-stg",
+   "visibility": "private",
+   "environments": [
+    "staging"
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "id": "cdn",
+   "category": "edge.cdn",
+   "service": "cloudfront",
+   "provider": "aws",
+   "label": "CloudFront"
+  },
+  {
+   "id": "alb-prod",
+   "category": "load_balancer",
+   "service": "elb.alb",
+   "group": "vpc-prod",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "alb-stg",
+   "category": "load_balancer",
+   "service": "elb.alb",
+   "group": "vpc-stg",
+   "environments": [
+    "staging"
+   ]
+  },
+  {
+   "id": "api-prod",
+   "category": "compute.container",
+   "service": "ecs.fargate",
+   "group": "private-prod",
+   "count": 3,
+   "app": "backend",
+   "iac": [
+    "module.api.aws_ecs_service.this"
+   ],
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "api-stg",
+   "category": "compute.container",
+   "service": "ecs.fargate",
+   "group": "private-stg",
+   "app": "backend",
+   "environments": [
+    "staging"
+   ]
+  },
+  {
+   "id": "db-prod",
+   "category": "database.relational",
+   "service": "rds.mysql",
+   "group": "private-prod",
+   "engine": "mysql 8.4",
+   "ha": "multi-az",
+   "data_doc": "docs/db",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "db-stg",
+   "category": "database.relational",
+   "service": "rds.mysql",
+   "group": "private-stg",
+   "engine": "mysql 8.4",
+   "data_doc": "docs/db",
+   "environments": [
+    "staging"
+   ]
+  },
+  {
+   "id": "assets",
+   "category": "storage.object",
+   "service": "s3",
+   "provider": "aws",
+   "label": "アセットのバケツ"
+  },
+  {
+   "id": "api-role",
+   "category": "security.iam",
+   "service": "iam.role",
+   "provider": "aws",
+   "label": "API の実行ロール"
+  },
+  {
+   "id": "api-5xx",
+   "category": "monitoring.alarm",
+   "service": "cloudwatch.alarm",
+   "provider": "aws",
+   "label": "API の 5xx",
+   "environments": [
+    "production"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "cdn",
+   "to": "alb-prod",
+   "protocol": "https",
+   "port": 443,
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "from": "cdn",
+   "to": "alb-stg",
+   "protocol": "https",
+   "port": 443,
+   "environments": [
+    "staging"
+   ]
+  },
+  {
+   "from": "alb-prod",
+   "to": "api-prod",
+   "protocol": "http",
+   "port": 8000
+  },
+  {
+   "from": "alb-stg",
+   "to": "api-stg",
+   "protocol": "http",
+   "port": 8000
+  },
+  {
+   "from": "api-prod",
+   "to": "db-prod",
+   "protocol": "mysql",
+   "port": 3306
+  },
+  {
+   "from": "api-stg",
+   "to": "db-stg",
+   "protocol": "mysql",
+   "port": 3306
+  },
+  {
+   "from": "cdn",
+   "to": "assets",
+   "protocol": "https"
+  }
+ ]
+}

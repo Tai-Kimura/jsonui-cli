@@ -29,6 +29,10 @@ coverage/
 # Local-only docs — bug reports / plans / design notes often quote
 # consumer-app names and local paths; keep them off the public repo.
 docs/
+# ...except a test fixture's own docs/: a fixture room has the shape of a project root (<room>/docs/infra,
+# docs/api, docs/db), and that docs/ is the test's input, written by the repo (ticket
+# 2026-10-20-jui-infra-fixtures-under-docs-not-committed).
+!**/tests/fixtures/**/docs/
 
 # Conformance screenshot artifacts — PNGs stay local / CI artifacts; the
 # committed regression signal is baselines/<platform>.hashes.json (plan 12).

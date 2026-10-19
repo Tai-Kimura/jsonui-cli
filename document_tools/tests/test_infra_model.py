@@ -39,6 +39,25 @@ def test_the_examples_are_what_the_generator_writes():
         assert (FIX / rel).read_text(encoding="utf-8") == want, rel
 
 
+def test_every_example_file_is_in_the_repository():
+    """A fixture room has a project root's shape (<room>/docs/infra), and the root .gitignore drops docs/ at any
+    depth: the examples were on disk and green here, and missing from a fresh checkout (ticket
+    2026-10-20-jui-infra-fixtures-under-docs-not-committed). Every file make_examples.py writes must be tracked and not
+    ignored; nothing generated (__pycache__) may be."""
+    import shutil
+    import subprocess
+    repo = FIX.parents[3]
+    if shutil.which("git") is None or not (repo / ".git").exists():
+        pytest.skip("not a git checkout")
+    rels = [f"document_tools/tests/fixtures/infra/{rel}" for rel in _make().all_examples()]
+    ignored = subprocess.run(["git", "check-ignore", "--no-index", *rels], cwd=repo, capture_output=True, text=True).stdout.split()
+    assert ignored == [], f"ignored by .gitignore: {ignored}"
+    tracked = set(subprocess.run(["git", "ls-files", "document_tools/tests/fixtures/infra"], cwd=repo,
+                                 capture_output=True, text=True, check=True).stdout.split())
+    assert sorted(set(rels) - tracked) == [], "written by make_examples.py but not in the repository"
+    assert [t for t in tracked if "__pycache__" in t or t.endswith(".pyc")] == []
+
+
 @pytest.mark.parametrize("room, folder, envs, nodes, edges, cross", [
     ("aws-three-tier", "docs/infra", ["production", "staging"], 12, 10, 3),
     ("multi-provider", "docs/infra", ["production", "preview"], 11, 10, 5),
