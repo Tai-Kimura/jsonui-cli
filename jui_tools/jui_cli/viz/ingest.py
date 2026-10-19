@@ -8,6 +8,7 @@ Design: 03 (fields), 04 §1–§4 (slices, robot states, rooms).
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -785,9 +786,14 @@ class World:
     # ---------------------------------------------------------------- calls (SendMessage, 10-18)
 
     def _resolve_peer(self, to: str) -> str | None:
-        """A SendMessage's `to` -> a session id here: a name (`name [ref]`) or a `uds:` socket address."""
+        """A SendMessage's `to` -> a session id here: a name (`name [ref]`) or a `uds:` socket address. A socket
+        no list row named (an old row, a list not read yet) is tried by the pid in its file name
+        (``/tmp/cc-socks/<pid>.sock``) against the pids the agents list and the session files gave."""
         if to.startswith("uds:"):
-            return self._peer_socks.get(to[len("uds:"):])
+            path = to[len("uds:"):]
+            sid = self._peer_socks.get(path)
+            m = None if sid else re.search(r"/([0-9]{1,9})\.sock$", path)
+            return sid or (self.pid_to_session.get(int(m.group(1))) if m else None)
         return self._peer_names.get(peer_name(to))
 
     def _dial(self, session: dict, agent: dict, to: str, use_id: str | None, at: int) -> None:
@@ -1388,8 +1394,30 @@ class World:
         sid = agent["sessionId"]
         cwd, given = self._paths.get(sid, (None, None))
         if agent["kind"] == "sub":
-            return self.history_reader(sid, cwd, given, agent_id, self._agent_paths.get(agent_id))
-        return self.history_reader(sid, cwd, given)
+            got = self.history_reader(sid, cwd, given, agent_id, self._agent_paths.get(agent_id))
+        else:
+            got = self.history_reader(sid, cwd, given)
+        return self._history_peers(got, sid)
+
+    def _history_peers(self, got: dict | None, own: str) -> dict | None:
+        """The session on the other end of a SendMessage (its `to`) and of a received message (its sender), when it
+        is a session here: the page links the name to that robot (2.3.6). Another machine, the cloud, a session
+        that ended, ``main`` and this session itself stay unlinked."""
+        if not isinstance(got, dict):
+            return got
+        for item in got.get("items") or []:
+            if item.get("kind") == "tool" and isinstance(item.get("to"), str):
+                key, names = "toSession", [item["to"]]
+            elif item.get("kind") == "peer":
+                key, names = "fromSession", [x for x in (item.get("from"), item.get("fromAddr")) if isinstance(x, str)]
+            else:
+                continue
+            for name in names:
+                peer = self._resolve_peer(name)
+                if peer and peer != own and peer in self.sessions and self.sessions[peer].get("status") != "ended":
+                    item[key] = peer
+                    break
+        return got
 
     def history_image(self, agent_id, off, n) -> tuple[int, object]:
         """One picture of the transcript history() reads for this robot (sources/history.image_at): (200, (media,

@@ -850,6 +850,11 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
    three lines folded — the whole text is in the opened item. */
 .h-peer summary { flex-direction: column; align-items: stretch; gap: 2px; }
 .h-peer summary > b { max-width: none; }
+/* SendMessage's recipient and a received message's sender (2.3.6): a robot here is a link-like button */
+.h-tool summary > .h-to { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); }
+.h-peerlink { padding: 0; border: 0; background: none; font: inherit; color: var(--info); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.h-peerlink:hover { text-decoration-thickness: 2px; }
+.h-peerlink:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 3px; }
 .h-peer summary > .h-head { flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; white-space: normal; overflow-wrap: anywhere; }
 .h-peer summary > .h-at { align-self: flex-end; margin-top: 4px; }   /* the time at the right end, a little apart from the body (issue #37) */
 .h-err { color: var(--warn); font-weight: 700; }

@@ -97,7 +97,8 @@ def harness_label(text) -> str | None:
 
 
 def peer_of(text) -> tuple[str, str] | None:
-    """(from-name, the message) when the text is another session's message, else None."""
+    """(from-name, the message) when the text is another session's message, else None. peer_addr() gives the
+    ``from="uds:…"`` address too."""
     if not isinstance(text, str):
         return None
     head = text.lstrip()
@@ -110,6 +111,13 @@ def peer_of(text) -> tuple[str, str] | None:
         return None
     name = re.search(r'\bfrom-name="([^"]*)"', m.group(1)) or re.search(r'\bfrom="([^"]*)"', m.group(1))
     return (name.group(1) if name else "別のセッション"), m.group(2).strip()
+
+
+def peer_addr(text) -> str | None:
+    """The ``from`` address (``uds:/tmp/cc-socks/<pid>.sock``) of another session's message, else None."""
+    head = text.lstrip() if isinstance(text, str) else ""
+    m = re.search(r'<cross-session-message\b[^>]*\bfrom="(uds:[^"]{1,300})"', head[:2000])
+    return m.group(1) if m else None
 
 
 def _cut(text: str, n: int) -> tuple[str, bool]:
@@ -140,7 +148,11 @@ def _text_item(text: str, at, meta: bool) -> dict:
     peer = peer_of(text)
     if peer:
         body, cut = _cut(peer[1], TEXT_MAX)
-        return {"kind": "peer", "from": peer[0][:200], "text": body, "cut": cut, "at": at}
+        item = {"kind": "peer", "from": peer[0][:200], "text": body, "cut": cut, "at": at}
+        addr = peer_addr(text)
+        if addr:
+            item["fromAddr"] = addr   # the reply address: the sender found by its socket or its pid (2.3.6)
+        return item
     label = harness_label(text) or ("ハーネスの文" if meta else None)
     body, cut = _cut(text, TEXT_MAX)
     if label:
@@ -271,6 +283,11 @@ def items_of(rec, results: dict, off: int | None = None) -> list[dict]:
             desc = inp.get("description") if isinstance(inp.get("description"), str) else ""
             item = {"kind": "tool", "id": str(b.get("id") or ""), "name": str(b.get("name") or "?")[:120],
                     "description": desc[:300], "in": text, "inCut": cut, "at": at}
+            if item["name"] == "SendMessage" and isinstance(inp.get("to"), str):
+                # the folded row says who it went to and what about (2.3.6): input.summary, else the message's first line
+                first = next((ln.strip() for ln in str(inp.get("message") or "").splitlines() if ln.strip()), "")
+                item["to"] = inp["to"][:200]
+                item["summary"] = (inp["summary"] if isinstance(inp.get("summary"), str) and inp["summary"].strip() else first)[:300]
             out.append(item)
         elif b.get("type") in ("thinking", "redacted_thinking"):
             out.append({"kind": "thought", "at": at})     # a mark: its text is never sent

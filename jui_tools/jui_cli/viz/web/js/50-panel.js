@@ -1364,8 +1364,11 @@ function stepRobot(dir) {
   const list = robotCycle();
   if (!rbState.id || list.length < 2) return;
   const i = list.indexOf(rbState.id);
-  const next = list[i < 0 ? 0 : (i + dir + list.length) % list.length];
-  if (next === rbState.id) return;
+  goRobot(list[i < 0 ? 0 : (i + dir + list.length) % list.length]);
+}
+/* The card on another robot, as ← → do it (the camera flies, the tab stays): also a linked name in the history. */
+function goRobot(next) {
+  if (!rbState.id || !next || next === rbState.id) return;
   rbState.id = next;
   renderRobot(latestModel);
   if (has3D && robots.some((x) => x.def.id === next)) zoomTo(robotPose(next), null, () => {});

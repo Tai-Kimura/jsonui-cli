@@ -190,6 +190,23 @@ function histFolded(cls, title, body, open) {
   });
   return d;
 }
+/* The other end of a SendMessage, or the sender of a received message (2.3.6, requester 10-20: 「閉じた状態でも誰宛か
+   わかるようにして、その宛先クリックでそのロボットの表示に切り替え」). The server links it to a session here
+   (World._history_peers: an agents-list name, `name [ref]`, a uds socket or the pid in it); a session with a robot on
+   this page is a button that switches the card to that robot (the same way as ← →: the camera follows, the tab
+   stays). Anything else is plain text, not focusable, with a title that says it is not here. */
+function histPeerName(text, session) {
+  const label = session && typeof labelOf === 'function' ? labelOf(session) : null;
+  if (label && robots.some((R) => R.def.id === label)) {
+    const b = hNode('button', 'h-peerlink', text);
+    b.type = 'button'; b.dataset.hGo = label;
+    b.title = `${label} のロボットに切り替える`;
+    return b;
+  }
+  const s = hNode('span', 'h-peername', text);
+  s.title = 'この viz にいないセッション';
+  return s;
+}
 function histItem(item) {
   const at = hNode('time', 'h-at', HIST_TIME(item.at));
   if (item.kind === 'user') {
@@ -215,7 +232,8 @@ function histItem(item) {
     return n;
   }
   if (item.kind === 'peer') {
-    return histFolded('h-item h-peer', [hNode('b', '', `${item.from} から`), hNode('span', 'h-head', String(item.text).split('\n').find((l) => l.trim()) || ''), at],
+    const who = hNode('b', 'h-from'); who.append(histPeerName(item.from, item.fromSession), ' から');
+    return histFolded('h-item h-peer', [who, hNode('span', 'h-head', String(item.text).split('\n').find((l) => l.trim()) || ''), at],
       [hNode('p', 'h-plain', item.text), histCutNote(item)], false);
   }
   if (item.kind === 'harness') {
@@ -225,6 +243,10 @@ function histItem(item) {
   if (item.kind === 'tool') {
     const first = String(item.in || '').split('\n')[0];
     const title = [hNode('b', 'h-tname', item.name), hNode('span', 'h-head', item.description || first)];
+    if (item.name === 'SendMessage' && typeof item.to === 'string') {   // who it went to and what about, folded too
+      const to = hNode('span', 'h-to'); to.append('→ ', histPeerName(item.to, item.toSession));
+      title.splice(1, 1, to, hNode('span', 'h-head', item.summary || first));
+    }
     if (item.error) title.push(hNode('span', 'h-err', 'エラー'));
     if (item.out === undefined) title.push(hNode('span', 'h-run', '結果待ち'));
     const io = hNode('div', 'h-io');
@@ -706,3 +728,12 @@ function histWideSync(id) {
 rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rb-wide]')) histSetWide(!HIST.wide); });
 window.addEventListener('resize', () => { if (HIST.wide) { histWidePaint(); histWideFly(); } });
 
+
+/* A linked name: switch the card to that robot. Inside a summary: the fold does not toggle. */
+document.addEventListener('click', (e) => {
+  const b = e.target instanceof Element ? e.target.closest('[data-rb-hist] [data-h-go]') : null;
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  goRobot(b.dataset.hGo);
+});
