@@ -699,16 +699,25 @@ function renderWbSide(model) {
    variables (app.css, light and dark), each at least 4.5:1 against where it is drawn. */
 const TRANSITION_KINDS = [   // [key, label, what it is told by] — the first that matches wins
   ['none', '遷移なし', /遷移なし|画面内|no transition|\bnone\b|alert|confirmationdialog|ダイアログ|toast|トースト/i],
-  ['external', '外部（URL・tel・地図）', /外部|ブラウザ|browser|https?:|\burl\b|tel:|mailto:|地図|\bmaps?\b|safari|openurl|linking/i],
+  ['external', '外部（URL・tel・地図）', /外部|ブラウザ|browser|https?:|\burl\b|tel:|mailto:|地図アプリ|マップアプリ|\bmaps? app|google ?maps|apple ?maps|safari|openurl|linking/i],   // a screen named …MAP… is not an app
   ['back', 'pop / dismiss（戻る）', /\bpop|dismiss|戻る|\bback\b|閉じる/i],
   ['replace', 'replace / root（入れ替え）', /replace|\broot|navigatetoscreen|置き換|入れ替/i],
   ['modal', 'sheet / modal（重ねる）', /sheet|modal|present|fullscreen|cover|シート|モーダル/i],
   ['push', 'push（進む）', /push|navigat|router|遷移/i],
 ];
-const TRANSITION_OTHER = ['other', '種類が書かれていない'];
+// No kind written (requester's ruling 10-19): a destination that names a screen (or a path) is 「画面へ」 in a colour
+// of its own — never shown as push, the page does not guess what the spec does not say. Grey only when the destination
+// names nothing either: empty, blank, or a placeholder (TRANSITION_PLACEHOLDER: 未定・未設定・不明・TBD・TBA・TODO・N/A・
+// null・undefined, or only ? / - / — / ー / … / ・ / . characters).
+const TRANSITION_SCREEN = ['screen', '画面へ（種類の指定なし）'];
+const TRANSITION_OTHER = ['other', '行き先も種類も不明'];
+const TRANSITION_PLACEHOLDER = /^(?:未定|未設定|不明|tbd|tba|todo|n\/a|null|undefined|[?？\-—―ー…・.]+)$/i;
+// The type / method decides when it is written and names a kind; only then the destination's words (a word in the
+// destination — 「sheet 表示」, 「MAP」, 「…Sheet」 — must not beat what the spec says the transition is).
+const kindOf = (text) => (text ? TRANSITION_KINDS.find((k) => k[2].test(text)) : null);
 function transitionKind(type, dest) {
-  const text = `${type || ''} ${dest || ''}`;
-  return TRANSITION_KINDS.find((k) => k[2].test(text)) || TRANSITION_OTHER;
+  const d = String(dest || '').trim();
+  return kindOf(String(type || '').trim()) || kindOf(d) || (d && !TRANSITION_PLACEHOLDER.test(d) ? TRANSITION_SCREEN : TRANSITION_OTHER);
 }
 const transitionTag = (dest, type) => {
   const [key, label] = transitionKind(type, dest);
@@ -726,7 +735,7 @@ const TYPE_OTHER = ['custom', 'そのほか（自作の型など）', 'Visibilit
 const typeKind = (t) => TYPE_KINDS.find((k) => k[3](String(t || ''))) || TYPE_OTHER;
 const typeCell = (t) => { const k = esc(typeKind(t)[0]); return `<td class="mono ty ty-${k}" data-ty="${k}">${esc(t)}</td>`; };
 const COLOR_LEGEND_HTML = `<p>遷移先の札は、遷移の種類で色を分ける（札の頭に種類も書く）。</p>
-<p class="seg-legend sh-legend sh-kinds">${[...TRANSITION_KINDS, TRANSITION_OTHER].map(([key, label]) => { const more = label.includes('（') ? label.slice(label.indexOf('（')) : '';
+<p class="seg-legend sh-legend sh-kinds">${[...TRANSITION_KINDS, TRANSITION_SCREEN, TRANSITION_OTHER].map(([key, label]) => { const more = label.includes('（') ? label.slice(label.indexOf('（')) : '';
   return `<span class="scr tk tk-${esc(key)}${more ? '' : ' tk-solo'}" data-tk="${esc(key)}"><span class="tk-k">${esc(label.split('（')[0])}</span>${esc(more)}</span>`; }).join('')}</p>
 <p>状態の型は、型で文字の色を分ける。</p>
 <p class="seg-legend sh-legend sh-types">${[...TYPE_KINDS, TYPE_OTHER].map(([key, label, sample]) => `<span><code class="mono ty ty-${esc(key)}" data-ty="${esc(key)}">${esc(sample)}</code> ${esc(label)}</span>`).join('')}</p>`;

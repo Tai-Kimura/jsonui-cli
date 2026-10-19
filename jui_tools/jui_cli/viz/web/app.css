@@ -1086,6 +1086,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
   --tk-replace-fg: #8a280a; --tk-replace-bg: #fde6dd;
   --tk-external-fg: #0a5a3b; --tk-external-bg: #ddf4e8;
   --tk-none-fg: #3f4957; --tk-none-bg: #eaedf2;
+  --tk-screen-fg: #8c1d5a; --tk-screen-bg: #fbe4f0;
   --tk-other-fg: #1a2433; --tk-other-bg: #ffffff;
   --ty-string: #a8281f; --ty-bool: #6f35a8; --ty-number: #0b6b4b; --ty-color: #9a4a12; --ty-array: #1d5aa0; --ty-optional: #7d5500; --ty-custom: #454f5e;
 }
@@ -1097,6 +1098,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
     --tk-replace-fg: #ffbaa6; --tk-replace-bg: #4b2317;
     --tk-external-fg: #93f2c8; --tk-external-bg: #123f2e;
     --tk-none-fg: #cdd5e0; --tk-none-bg: #2a3547;
+    --tk-screen-fg: #ffb3d9; --tk-screen-bg: #4a1a36;
     --tk-other-fg: #e4ecf8; --tk-other-bg: #15243a;
     --ty-string: #ff9a8f; --ty-bool: #d7b4ff; --ty-number: #7ce8bd; --ty-color: #ffbc85; --ty-array: #9ccbff; --ty-optional: #f2d27e; --ty-custom: #c6d1de;
   }
@@ -1108,7 +1110,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
   --tk-replace-fg: #ffbaa6; --tk-replace-bg: #4b2317;
   --tk-external-fg: #93f2c8; --tk-external-bg: #123f2e;
   --tk-none-fg: #cdd5e0; --tk-none-bg: #2a3547;
-  --tk-other-fg: #e4ecf8; --tk-other-bg: #15243a;
+  --tk-screen-fg: #ffb3d9; --tk-screen-bg: #4a1a36;
+    --tk-other-fg: #e4ecf8; --tk-other-bg: #15243a;
   --ty-string: #ff9a8f; --ty-bool: #d7b4ff; --ty-number: #7ce8bd; --ty-color: #ffbc85; --ty-array: #9ccbff; --ty-optional: #f2d27e; --ty-custom: #c6d1de;
 }
 .scr.tk { border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-weight: 600; }
@@ -1119,6 +1122,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .scr.tk-replace { color: var(--tk-replace-fg); background: var(--tk-replace-bg); }
 .scr.tk-external { color: var(--tk-external-fg); background: var(--tk-external-bg); }
 .scr.tk-none { color: var(--tk-none-fg); background: var(--tk-none-bg); }
+.scr.tk-screen { color: var(--tk-screen-fg); background: var(--tk-screen-bg); }
 .scr.tk-other { color: var(--tk-other-fg); background: var(--tk-other-bg); }
 .ty.ty-string { color: var(--ty-string); }
 .ty.ty-bool { color: var(--ty-bool); }
