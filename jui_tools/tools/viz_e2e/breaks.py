@@ -29,7 +29,7 @@ import subprocess
 import sys
 import time
 
-from waits import until
+from waits import settled, until
 from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -136,6 +136,17 @@ def check(failures, cond, text):
         failures.append(f"breaks: {text}")
 
 
+# Frames SLOW_MS apart (the e2e's own requestAnimationFrame wrapper): a busy machine, made sure. "ten again" waits for a
+# robot to walk out of the room; that walk must take about its real time however far apart the frames are (2.3.5,
+# ticket 2026-10-19-jui-viz-walk-stretches-with-frame-gaps: 30.6 s at 3 s a frame before, ~9.5 s normally).
+SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (cb) => { const ms = window.__slowFrameMs || 0; return ms ? setTimeout(() => raf(cb), ms) : raf(cb); }; })()"""
+SLOW_MS = 3000
+# The way out of this room is longer than props' (about 17 m: 2.5 s at the desk, then about 10 s of walking); with frames
+# 3 s apart a hand-off or two between frames adds up to two gaps: 18-21 s measured. The old walk took 30 s and more.
+TEN_MAX_SEC = 25
+
+
 # What the page looked like when a wait ran out (waits.py): which robots had not arrived, and why.
 WHY = "() => { const b = window.__dbg.brk(); return { built: b.built, place: !!b.place, onBreak: b.robots.filter((x) => x.kind).map((x) => [x.id, x.kind, x.phase]), robots: window.__dbg.settleInfo() }; }"
 
@@ -196,6 +207,7 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
             raise RuntimeError(f"the server did not answer /health in 40 s: {(out / 'serve.log').read_text()[-400:]}")
         watch = Watch(origin=url)
         page = await new_page(browser, watch, name, **DESKTOP)
+        await page.add_init_script(SLOW_RAF)
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
@@ -413,8 +425,16 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
               f"eleven robots: no booth, no machine, nobody on a break: {b['built']} {[x for x in b['robots'] if x['kind']]}")
         e = [x for x in b["ends"] if x["reason"] in ("relaid", "props")]
         check(failures, bool(e), f"the smoker went back when the room filled: {b['ends'][-3:]}")
+        # everyone at the seat the eleven-robot layout gave it first (a robot leaves only from its desk; measured: the
+        # robots were still crossing the room to their new desks when the wait began, and that walk used 12 s of it)
+        await settled(page, "eleven seated before one leaves", timeout=60000)
+        await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # the walk out, with frames 3 s apart
+        t_ten = time.monotonic()
         hook(EXTRA[-1], CWD_MANY, hook_event_name="SessionEnd", reason="exit")
         await wait(page, "() => window.__dbg.brk().built.booth && window.__dbg.brk().built.vend", timeout=30000, label="ten again: booth and machine back")
+        res["tenSec"] = round(time.monotonic() - t_ten, 1)
+        await page.evaluate("() => { window.__slowFrameMs = 0; }")
+        check(failures, res["tenSec"] < TEN_MAX_SEC, f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenSec']} s")
         r = res["realTen"] = await page.evaluate(REAL_JS)
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true })")
         await back()

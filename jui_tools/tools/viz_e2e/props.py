@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from waits import until
+from waits import settled, until
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
 
 CWD = "/work/props-app"
@@ -55,6 +55,17 @@ FRAMES_JS = """(ms) => new Promise((done) => {
 def check(failures, cond, text):
     if not cond:
         failures.append(f"props: {text}")
+
+
+# Frames SLOW_MS apart (the e2e's own requestAnimationFrame wrapper): a busy machine, made sure. "ten again" waits for a
+# robot to walk out of the room; that walk must take about its real time however far apart the frames are (2.3.5,
+# ticket 2026-10-19-jui-viz-walk-stretches-with-frame-gaps: 30.6 s at 3 s a frame before, ~9.5 s normally).
+SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (cb) => { const ms = window.__slowFrameMs || 0; return ms ? setTimeout(() => raf(cb), ms) : raf(cb); }; })()"""
+SLOW_MS = 3000
+TEN_MAX_SEC = 20
+# Two animation frames: the page's own frame has run once after this was called.
+NEXT_FRAME = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
 
 # What the page looked like when a wait ran out (waits.py): which robots had not arrived, and why.
@@ -101,6 +112,7 @@ async def run_props(pw, out, failures, jt=None, shots_only=False):
                 time.sleep(0.1)
         watch = Watch(origin=url)
         page = await new_page(browser, watch, name, **DESKTOP)
+        await page.add_init_script(SLOW_RAF)
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
@@ -177,13 +189,40 @@ async def run_props(pw, out, failures, jt=None, shots_only=False):
         await page.wait_for_timeout(1500)
         many = res["eleven"] = await page.evaluate("() => window.__dbg.props()")
         check(failures, many["room"] is None and not many["floorMap"], f"eleven robots: no props, no wood: {many}")
+        # everyone at the seat the eleven-robot layout gave it first (a robot leaves only from its desk): the wait below then
+        # covers the exit and the walk out alone
+        await settled(page, "eleven seated before one leaves", timeout=60000)
+        await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # the walk out, with frames 3 s apart
+        t_ten = time.monotonic()
         hook(SID.format(10), hook_event_name="SessionEnd", reason="exit")
         await wait(page, f"() => window.__dbg.props().room === '{room_id}'", timeout=30000, label="ten again: props back")
+        res["tenSec"] = round(time.monotonic() - t_ten, 1)
+        await page.evaluate("() => { window.__slowFrameMs = 0; }")
+        check(failures, res["tenSec"] < TEN_MAX_SEC, f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenSec']} s")
         await page.click("#room-back")
         await wait(page, "() => window.__dbg.props().room === null", label="out")
         for i in range(3, 10):
             hook(SID.format(i), hook_event_name="SessionEnd", reason="exit")
         await wait(page, "() => window.__dbg.robots.length <= 3", timeout=30000, label="back to three")
+        # a hidden tab (rAF stopped, then minutes between two frames): a robot walking in is at its desk on the next
+        # frame, along its path (no jump), and one walking out is gone
+        hook(SID.format(11), hook_event_name="SessionStart", source="startup")
+        await wait(page, "() => window.__dbg.robots.length === 4 && window.__dbg.robots.some((R) => R.path.length > 1)", label="a robot walking in")
+        jumps0 = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.id, R.jumps || 0]))")
+        await page.evaluate("() => window.__dbg.walkGap(300)")
+        await page.evaluate(NEXT_FRAME)   # the frame after the gap: everyone has arrived in it
+        res["arrivedInOneFrame"] = await page.evaluate("() => window.__dbg.robots.every((R) => !R.path.length)")
+        check(failures, res["arrivedInOneFrame"], "after a gap of minutes, every walk ends in the next frame")
+        gap = res["gapIn"] = await page.evaluate("() => window.__dbg.robots.map((R) => ({ id: R.def.id, at: [+R.robot.root.position.x.toFixed(3), +R.robot.root.position.z.toFixed(3)], seat: R.def.pos, jumps: R.jumps || 0 }))")
+        check(failures, all(abs(g["at"][0] - g["seat"][0]) < 1e-3 and abs(g["at"][1] - g["seat"][1]) < 1e-3 and g["jumps"] == jumps0.get(g["id"], 0) for g in gap),
+              f"after a gap of minutes: every robot at its seat, walked there (no jump): {gap}")
+        hook(SID.format(11), hook_event_name="SessionEnd", reason="exit")
+        await wait(page, "() => window.__dbg.robots.some((R) => R.path.length > 0)", label="the robot walking out")
+        await page.evaluate("() => window.__dbg.walkGap(300)")
+        await page.evaluate(NEXT_FRAME)
+        res["goneInOneFrame"] = await page.evaluate("() => window.__dbg.robots.length === 3")
+        check(failures, res["goneInOneFrame"], "after a gap of minutes, the robot walking out is gone in the next frame")
+        await wait(page, "() => window.__dbg.robots.length === 3", label="the robot walking out gone")
         await page.wait_for_timeout(1500)
         await shots("after")
         # reduced motion: placed, not driven

@@ -262,5 +262,9 @@ window.__dbg.promptWait = PROMPT_WAIT;
 // blending, it has no path left and is not leaving, and its tag stands where it was going.
 window.__dbg.settleInfo = (ids) => robots.filter((R) => !ids || ids.includes(R.def.id)).map((R) => ({
   id: R.def.id, state: R.robot.state, blend: +R.robot.blend.toFixed(3), path: (R.path || []).length, leaving: !!(typeof LIVE !== 'undefined' && LIVE.leaving[R.def.id]),
-  tag: R.tagTarget === undefined || R.tag.style.visibility === 'hidden' ? null : +(R.tagDy - R.tagTarget).toFixed(2) }));
+  tag: R.tagTarget === undefined || R.tag.style.visibility === 'hidden' ? null : +(R.tagDy - R.tagTarget).toFixed(2),
+  out: !!R.out, exitIn: R.exitAt ? Math.round(R.exitAt - performance.now()) : null }));
 window.__dbg.settle = (ids) => window.__dbg.settleInfo(ids).every((x) => x.blend >= 1 && !x.path && !x.leaving && (x.tag === null || x.tag === 0));
+// A gap between frames, as a hidden tab makes (rAF stops; minutes later it resumes): the next frame walks with `sec`
+// more of real time (liveUpdateRobots' walkDt), and nothing else is touched.
+window.__dbg.walkGap = (sec) => { LIVE3D.lastWalk -= sec * 1000; return true; };
