@@ -1,0 +1,153 @@
+{
+ "$schema": "https://jsonui.dev/schemas/infra-model/v0.json",
+ "version": 0,
+ "description": "docker compose on the desk, Cloud Run in production",
+ "environments": [
+  {
+   "id": "local",
+   "label": "手元（docker compose）",
+   "kind": "local"
+  },
+  {
+   "id": "production",
+   "label": "本番",
+   "kind": "production"
+  }
+ ],
+ "groups": [
+  {
+   "id": "compose",
+   "kind": "host",
+   "provider": "docker",
+   "label": "compose.yaml",
+   "environments": [
+    "local"
+   ]
+  },
+  {
+   "id": "gcp",
+   "kind": "project",
+   "provider": "gcp",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "tokyo",
+   "kind": "region",
+   "region": "asia-northeast1",
+   "parent": "gcp",
+   "environments": [
+    "production"
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "id": "app-local",
+   "category": "compute.container",
+   "service": "compose.service",
+   "group": "compose",
+   "app": "backend",
+   "iac": [
+    "compose.yaml#services.app"
+   ],
+   "environments": [
+    "local"
+   ]
+  },
+  {
+   "id": "db-local",
+   "category": "database.relational",
+   "service": "postgres",
+   "group": "compose",
+   "engine": "postgres 17",
+   "iac": [
+    "compose.yaml#services.db"
+   ],
+   "environments": [
+    "local"
+   ]
+  },
+  {
+   "id": "cache-local",
+   "category": "cache",
+   "service": "redis",
+   "group": "compose",
+   "environments": [
+    "local"
+   ]
+  },
+  {
+   "id": "app",
+   "category": "compute.container",
+   "service": "run",
+   "group": "tokyo",
+   "app": "backend",
+   "count": 2,
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "db",
+   "category": "database.relational",
+   "service": "cloudsql.postgres",
+   "group": "tokyo",
+   "engine": "postgres 17",
+   "ha": "regional",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "cache",
+   "category": "cache",
+   "service": "memorystore.redis",
+   "group": "tokyo",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "id": "secrets",
+   "category": "secrets",
+   "service": "secret-manager",
+   "group": "gcp",
+   "environments": [
+    "production"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "app-local",
+   "to": "db-local",
+   "protocol": "postgres",
+   "port": 5432
+  },
+  {
+   "from": "app-local",
+   "to": "cache-local",
+   "protocol": "redis",
+   "port": 6379
+  },
+  {
+   "from": "app",
+   "to": "db",
+   "protocol": "postgres",
+   "port": 5432
+  },
+  {
+   "from": "app",
+   "to": "cache",
+   "protocol": "redis",
+   "port": 6379
+  },
+  {
+   "from": "app",
+   "to": "secrets",
+   "protocol": "https"
+  }
+ ]
+}

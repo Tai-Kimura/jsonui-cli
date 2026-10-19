@@ -1,0 +1,337 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jsonui.dev/schemas/infra-model/v0.json",
+  "title": "JsonUI infra model v0",
+  "description": "One file of a room's declared infrastructure (docs/infra/*.json, or the folder jui.config.json's infra.dir names). Every file of the folder together is the room's model. The display's only source (jui viz's server room); seed drafts it, check compares it with IaC and code. Boundary: docs/plans/2026-10-20-jui-viz-server-room-boundary.md. Holds no values: no ARN, IP address, account id, connection string or key (validate refuses their shapes anywhere in the file).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 0
+    },
+    "description": {
+      "$ref": "#/$defs/text"
+    },
+    "environments": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/environment"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "description": "Per file and for the room's model together: at most 5,000 (the target size is 2,000)."
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/edge"
+      },
+      "description": "Per file and for the room's model together: at most 10,000 (the target size is 5,000)."
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "envRefs": {
+      "description": "The environments this belongs to (ids of environments[]). Left out: every environment.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "kind": {
+          "enum": [
+            "production",
+            "staging",
+            "development",
+            "preview",
+            "local",
+            "other"
+          ],
+          "default": "other"
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "account",
+            "project",
+            "subscription",
+            "region",
+            "zone",
+            "network",
+            "subnet",
+            "cluster",
+            "namespace",
+            "host",
+            "logical"
+          ],
+          "description": "Nesting by parent: provider-side kinds (account, project, subscription, region, zone, network, subnet, cluster, namespace, host) and 'logical' — a group of the system's own (a product, a tier) that may hold groups and nodes of several providers. A group's provider is inherited by what it holds unless they name their own; a logical group has none."
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "provider": {
+          "$ref": "#/$defs/provider"
+        },
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+        },
+        "parent": {
+          "$ref": "#/$defs/id"
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private"
+          ]
+        },
+        "environments": {
+          "$ref": "#/$defs/envRefs"
+        }
+      }
+    },
+    "provider": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,39}$"
+    },
+    "category": {
+      "enum": [
+        "client",
+        "compute.vm",
+        "compute.container",
+        "compute.function",
+        "compute.k8s",
+        "compute.paas",
+        "edge.cdn",
+        "edge.dns",
+        "edge.waf",
+        "load_balancer",
+        "gateway.api",
+        "database.relational",
+        "database.document",
+        "database.kv",
+        "database.search",
+        "cache",
+        "storage.object",
+        "storage.file",
+        "storage.block",
+        "queue",
+        "stream",
+        "scheduler",
+        "mail",
+        "auth",
+        "secrets",
+        "monitoring",
+        "ci",
+        "external.saas",
+        "security.iam",
+        "security.policy",
+        "monitoring.alarm"
+      ]
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "category"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "category": {
+          "$ref": "#/$defs/category"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "provider": {
+          "$ref": "#/$defs/provider",
+          "description": "The provider this node runs on or is (aws, gcp, azure, cloudflare, vercel, stripe, ...). Left out: the nearest enclosing group's provider. Nodes of one model may name different providers."
+        },
+        "service": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._/-]{0,63}$"
+        },
+        "group": {
+          "$ref": "#/$defs/id"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 1
+        },
+        "app": {
+          "$ref": "#/$defs/text"
+        },
+        "engine": {
+          "$ref": "#/$defs/text"
+        },
+        "ha": {
+          "$ref": "#/$defs/text"
+        },
+        "managed_by": {
+          "enum": [
+            "iac",
+            "manual",
+            "external"
+          ],
+          "default": "iac"
+        },
+        "fold": {
+          "type": "boolean",
+          "description": "Folded (hidden until opened) on the display. Default: true for security.iam, security.policy and monitoring.alarm, false for the rest."
+        },
+        "data_doc": {
+          "enum": [
+            "docs/api",
+            "docs/db"
+          ]
+        },
+        "iac": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "environments": {
+          "$ref": "#/$defs/envRefs"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/relPath"
+        },
+        "pattern": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "relPath": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\\\:*?\"<>|]+$"
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/id"
+        },
+        "to": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9+.-]{0,23}$"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "direction": {
+          "enum": [
+            "out",
+            "in",
+            "both"
+          ],
+          "default": "out"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "environments": {
+          "$ref": "#/$defs/envRefs"
+        }
+      },
+      "description": "A connection between two nodes. It may join nodes of different providers; whether it crosses providers is not written here: the merged model says it (crossProvider), from the two nodes' providers."
+    }
+  }
+}
