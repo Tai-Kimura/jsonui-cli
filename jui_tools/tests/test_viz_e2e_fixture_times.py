@@ -24,6 +24,9 @@ ALLOWED = {
     ("hooks.py", "T0 = 1_760_000_000_000"): "the replay record's clock: the server replays the gaps between records, and "
                                              "the replayed sessions have no transcript, so no start",
     ("common.py", '("2026-10-19T09:47:10Z")'): "stamp()'s own docstring, the example of a time it moves",
+    ("talk_demo_gen.py", "BASE = 1_792_300_000_000"): "the talk view's demo data's base: the demo page moves every time by "
+                                                       "(its clock - base) (30-source-demo.js talkStandIn), and the file must "
+                                                       "be the same each time it is generated; no session, no transcript",
 }
 
 
