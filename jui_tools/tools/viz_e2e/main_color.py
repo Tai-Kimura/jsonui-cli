@@ -4,7 +4,10 @@ The real `jui viz serve` in a throwaway HOME on a free port, the real forward.py
 subagent (the two blues side by side in the panel), and a second main session in another room. Measured from the page:
 
   - the main robot's accent (ears, hands, feet, antenna) is MAIN (#0ea5e9); a subagent's is its role's colour;
-  - the main pill in the panel and over the robot: its background MAIN, its text dark enough (contrast ≥ 4.5:1);
+  - the main pill in the panel and over the robot: its background MAIN_PILL (#0369a1, one step darker than the body;
+    2.3.6, ticket 2026-10-20-jui-viz-main-pill-text-contrast), its text white, never the old dark ink OLD_INK;
+  - every role's pill as drawn (pill() with the page's CSS, and drawRolePill on a canvas): main's MAIN_PILL / white,
+    and each pair's contrast ≥ 4.5:1 unless the role is one of KNOWN_BELOW (listed in the ticket, not changed here);
   - the robot card of a main robot: its head's colour MAIN;
   - nothing on the page is drawn in the old orange (#ff7a3d) any more (every element's colour, background and border);
   - the main blue and implement's blue stay apart (ΔE2000 ≥ DE_IMPLEMENT).
@@ -24,6 +27,10 @@ from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
 from workwear import contrast, de2000
 
 MAIN = "#0ea5e9"
+MAIN_PILL = "#0369a1"
+WHITE = "#ffffff"
+OLD_INK = "#082f49"
+KNOWN_BELOW = {"define", "ground", "navigation", "test", "other"}
 OLD = "rgb(255, 122, 61)"
 DE_IMPLEMENT = 20.0
 INK_CONTRAST = 4.5
@@ -117,12 +124,27 @@ async def run_main_color(pw, out, failures):
             want = MAIN if r["role"] == "main" else None
             if want:
                 check(failures, r["accent"] == want, f"a main robot's accent is {MAIN}: {r}")
-        mains = [p for p in got["pills"] if rgb_hex(p["bg"]) == MAIN]
-        check(failures, len(mains) >= 2, f"the main sessions' pills are {MAIN}: {got['pills']}")
-        for p in mains + [t for t in got["tagPills"] if rgb_hex(t["bg"]) == MAIN]:
-            c = contrast(rgb_hex(p["fg"]), rgb_hex(p["bg"]))
-            check(failures, c >= INK_CONTRAST, f"the main pill's text reads on {MAIN}: {c:.2f}:1 {p}")
-        res["inkContrast"] = round(contrast(rgb_hex(mains[0]["fg"]), MAIN), 2) if mains else None
+        main_ids = {r["id"] for r in got["robots"] if r["role"] == "main"}
+        mains = [p for p in got["pills"] if p["text"] in main_ids]
+        main_tags = [t for t in got["tagPills"] if t["text"] in main_ids]
+        check(failures, len(mains) >= 2 and len(main_tags) >= 2, f"the main sessions' pills, in the panel and over the robots: {got['pills']} {got['tagPills']}")
+        for p in mains + main_tags:
+            check(failures, rgb_hex(p["bg"]) == MAIN_PILL and rgb_hex(p["fg"]) == WHITE, f"a main pill is {MAIN_PILL} with white text: {p}")
+        check(failures, all(rgb_hex(p[k]) not in (MAIN, OLD_INK) for p in got["pills"] + got["tagPills"] if p["text"] in main_ids for k in ("bg", "fg")),
+              f"no main pill in the old {MAIN} / {OLD_INK}: {mains + main_tags}")
+        res["inkContrast"] = round(contrast(rgb_hex(mains[0]["fg"]), rgb_hex(mains[0]["bg"])), 2) if mains else None
+        rp = res["rolePills"] = await page.evaluate("() => window.__dbg.rolePills()")
+        res["pillContrast"] = {}
+        for role in rp["body"]:
+            h, cv = rp["html"].get(role), rp["canvas"].get(role)
+            hbg, hfg = rgb_hex(h["bg"]), rgb_hex(h["fg"])
+            check(failures, (cv["bg"], cv["fg"]) == (hbg, hfg), f"{role}: the canvas pill is drawn as the HTML one: {cv} vs {hbg}/{hfg}")
+            c = res["pillContrast"][role] = round(contrast(hfg, hbg), 2)
+            check(failures, c >= INK_CONTRAST or role in KNOWN_BELOW, f"{role}'s pill reads: {c}:1 ({hfg} on {hbg})")
+        check(failures, (rgb_hex(rp["html"]["main"]["bg"]), rgb_hex(rp["html"]["main"]["fg"])) == (MAIN_PILL, WHITE)
+              and (rp["canvas"]["main"]["bg"], rp["canvas"]["main"]["fg"]) == (MAIN_PILL, WHITE),
+              f"the main pill (HTML and canvas) is {MAIN_PILL} with white text: {rp['html']['main']} {rp['canvas']['main']}")
+        check(failures, rp["body"]["main"] == MAIN, f"the main robot's body stays {MAIN}: {rp['body']['main']}")
         check(failures, not got["old"], f"nothing drawn in the old orange: {got['old']}")
         colors = await page.evaluate("() => window.__dbg.wearColors()")
         res["deImplement"] = round(de2000(colors["roles"]["main"], colors["roles"]["implement"]), 2)

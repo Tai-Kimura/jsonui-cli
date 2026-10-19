@@ -104,6 +104,11 @@ function drawSpecBoard(model, now) {
   SHOP_IDX.forEach((i, pos) => { const t = sbTile(pos); drawSpecTile(ctx, P, ST, model.specs[i], t.x, t.y, SB.tw, SB.th, now, SBG); });
   sbTex.needsUpdate = true;
 }
+/* A role's pill on a canvas (the spec board's tiles, the task board's notes): pillBg / pillInk, as the HTML pills. */
+function drawRolePill(ctx, role, label, x, y, w, h, font, baseline) {
+  rr(ctx, x, y, w, h, h / 2); ctx.fillStyle = pillBg(role); ctx.fill();
+  ctx.fillStyle = pillInk(role); ctx.font = `700 ${font}px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.fillText(label, x + w / 2, y + baseline); ctx.textAlign = 'left';
+}
 function drawSpecTile(ctx, P, ST, s, x, y, w, h, now, g) {
   const todo = s.bucket === 'todo', role = s.by ? DEF[s.by].role : null, sw = segW(w, g);
   rr(ctx, x, y, w, h, 14);
@@ -115,8 +120,7 @@ function drawSpecTile(ctx, P, ST, s, x, y, w, h, now, g) {
   fitText(ctx, s.name, x + g.pad, y + g.nameY, w - g.pad * 2 - (role ? g.pillW + 8 : 0));
   if (role) {
     const px = x + w - g.pad - g.pillW, py = y + g.nameY - g.pillH + 6;
-    rr(ctx, px, py, g.pillW, g.pillH, g.pillH / 2); ctx.fillStyle = ROLES[role].color; ctx.fill();
-    ctx.fillStyle = ROLE_INK[role] || '#ffffff'; ctx.font = `700 ${g.pillFont}px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.fillText(s.by, px + g.pillW / 2, py + g.pillH * 0.72); ctx.textAlign = 'left';
+    drawRolePill(ctx, role, s.by, px, py, g.pillW, g.pillH, g.pillFont, g.pillH * 0.72);
   }
   ctx.font = `700 ${g.status}px ${FONT_BODY}`; ctx.fillStyle = todo ? P.todoInk : ST[s.status.kind][1];
   fitText(ctx, s.status.text, x + g.pad, y + g.statusY, w - g.pad * 2);
@@ -233,8 +237,7 @@ function drawTaskBoard(full, project = 'shop', board = null) {
         ctx.fillStyle = P.warnInk; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('許可待ち', nx + nw - 43, ny + 26); ctx.textAlign = 'left';
       } else if (task.owner) {
         const role = DEF[task.owner].role;
-        rr(ctx, nx + nw - 50, ny + 11, 40, 20, 10); ctx.fillStyle = ROLES[role].color; ctx.fill();
-        ctx.fillStyle = ROLE_INK[role] || '#ffffff'; ctx.font = `700 13px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.fillText(task.owner, nx + nw - 30, ny + 26); ctx.textAlign = 'left';
+        drawRolePill(ctx, role, task.owner, nx + nw - 50, ny + 11, 40, 20, 13, 15);
       }
       ctx.fillStyle = P.ink; ctx.font = `700 16px ${FONT_BODY}`;
       wrapText(ctx, task.subject, nx + 10, ny + 49, nw - 20, 20, 2);

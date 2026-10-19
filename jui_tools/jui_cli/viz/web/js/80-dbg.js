@@ -360,3 +360,25 @@ window.__dbg.talkFrame = (type, fields) => talkFrame(type, fields);
 window.__dbg.talkDemo = SOURCE.talkDemo || null;
 window.__dbg.talkAgentId = (label) => SOURCE.talkAgentId(label);
 window.__dbg.talkPage = (n) => { TALK.page = n; };   // a smaller page, so paging shows on a short talk
+// every role's pill as drawn (2.3.6, ticket 2026-10-20-jui-viz-main-pill-text-contrast): pill() in the page with its CSS
+// (the computed background and text), and drawRolePill on a canvas (a pixel of the background, and the text's colour:
+// the commonest opaque colour other than the background, a large glyph so its inside is solid)
+window.__dbg.rolePills = () => {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:absolute;left:-9999px;top:0';
+  box.innerHTML = Object.keys(ROLES).map((r) => pill(r, r)).join('');
+  document.body.append(box);
+  const html = Object.fromEntries([...box.children].map((p) => [p.textContent, { bg: getComputedStyle(p).backgroundColor, fg: getComputedStyle(p).color }]));
+  box.remove();
+  const W = 240, H = 120, cv = makeCanvas(W, H), ctx = cv.getContext('2d', { willReadFrequently: true });
+  const hx = (d, i) => '#' + [d[i], d[i + 1], d[i + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+  const canvas = Object.fromEntries(Object.keys(ROLES).map((r) => {
+    ctx.clearRect(0, 0, W, H);
+    drawRolePill(ctx, r, 'M', 0, 0, W, H, 96, 100);
+    const d = ctx.getImageData(0, 0, W, H).data, bg = hx(d, ((H >> 1) * W + 30) * 4), n = {};
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] === 255) { const c = hx(d, i); if (c !== bg) n[c] = (n[c] || 0) + 1; }
+    const fg = Object.entries(n).sort((a, b) => b[1] - a[1])[0];
+    return [r, { bg, fg: fg ? fg[0] : null }];
+  }));
+  return { html, canvas, body: Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [k, v.color])) };
+};
