@@ -268,6 +268,9 @@ def _race(path: Path, a: Path, b: Path, stop: threading.Event):
         try:
             tmp_a.write_bytes(a.read_bytes())
             os.replace(tmp_a, path)
+            # a moment on the good side, the GIL let go: on the CI runner the swapping thread could keep the path on
+            # the b side for every read for 15 s (2.3.5 PR #38, twice); the b side is still swapped in on every turn
+            time.sleep(0.001)
             if b.is_symlink():
                 if tmp_b.exists() or tmp_b.is_symlink():
                     tmp_b.unlink()
