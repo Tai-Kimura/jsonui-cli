@@ -40,6 +40,14 @@ UNLOCKS = {
     # dd's review 2 (B): a directive taken out left a front matter at the start, which Mermaid then read
     "directive-then-front-matter": '%%{x}%%---\nconfig:\n  htmlLabels: true\n  class:\n    htmlLabels: true\n  flowchart:\n    htmlLabels: true\n---\nflowchart LR\n' + LABEL.format(n=8),
 }
+# Keys not in 3f340439's fourteen secure names (c2's fourth check). sequence.mirrorActors is the one that shows: with
+# only the fourteen secure the directive turns it off (2 actor boxes, measured), with every key secure the diagram
+# keeps Mermaid's 4. class.htmlLabels (asked for) draws no foreignObject either way in 11.17.2 — its class diagrams
+# read the top-level htmlLabels, which the fourteen hold — so it guards the key without telling the two apart.
+BEYOND_LIST = {
+    "sequence.mirrorActors": ('%%{init: {"sequence": {"mirrorActors": false}}}%%\nsequenceDiagram\n    Alice->>Bob: hi', 4),
+    "class.htmlLabels": ('%%{init: {"class": {"htmlLabels": true}}}%%\nclassDiagram\n    class U["<img src=/ds-probe-13.png>u"]\n    class V\n    U --> V', None),
+}
 # dd's review 2 (A): a style in the diagram's own syntax, kept by Mermaid as written: a url() fetched from the origin
 URL_STYLES = {
     "classDiagram style": 'classDiagram\n    class U\n    class V\n    U --> V\n    style U fill:url(/ds-probe-6.png)',
@@ -139,6 +147,16 @@ async def run_mermaid(pw, out, failures):
             got = [x for x in asked[before:] if "mermaid.min.js" not in x]
             check(failures, u["foreignObjects"] == 0 and u["imgs"] == 0 and u["htmlLabels"] is False and not got,
                   f"secure alone, {name} drawn unsanitized: {u} {got}")
+        # keys outside 3f340439's fourteen (c2's fourth check): only `secure` = every key of Mermaid's config stops these
+        for name, (text, actors) in BEYOND_LIST.items():
+            before = len(asked)
+            u = res[f"secureAll-{name}"] = await page.evaluate("(t) => window.__dbg.mermaidRenderUnsanitized(t)", text)
+            await page.wait_for_timeout(400)
+            got = [x for x in asked[before:] if "mermaid.min.js" not in x]
+            u["actors"] = await page.evaluate("() => document.querySelectorAll('#e2e-mermaid-raw rect.actor').length")
+            check(failures, u["svg"] and u["foreignObjects"] == 0 and u["imgs"] == 0 and u["htmlLabels"] is False and not got
+                  and (actors is None or u["actors"] == actors),
+                  f"secure (every key), {name} drawn unsanitized: the directive changes nothing: {u} {got}")
         plain = res["plainAfter"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
         check(failures, plain["svg"] and plain["nodes"] == 2, f"a diagram without directives still draws: {plain}")
 
