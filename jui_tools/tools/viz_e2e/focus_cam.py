@@ -25,6 +25,18 @@ DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
 PHONE = {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 2, "is_mobile": True, "has_touch": True}
 FOCUS = "() => window.__dbg.focus()"
 SETTLED = "() => { const f = window.__dbg.focus(); return f.zoomed && !f.tween; }"
+# The camera is at its pose for the direction asked, and what is faint is exactly what stands between it and the robot
+# there (the fade is synced with the card's refresh, a frame at most 4 times a second): the state the specimen search
+# reads. It once waited 900 ms instead: the follow is a lerp a frame, so on a busy machine (frames slow) the camera was
+# still 0.8–1.9 away from the pose asked and the search read the faint meshes of wherever it had got to — no specimen
+# in 24 turns (focus-cam flake, 10-19: 2 runs in 8 under load).
+AT_POSE = """() => { const d = window.__dbg.focusAt(), f = window.__dbg.focus();
+  return d !== null && d < 1e-3 && f.blockersFaded === f.blockersNow && f.faded === f.blockersNow; }"""
+# Frames SLOW_MS apart during the search (the e2e's own requestAnimationFrame wrapper; a busy machine, made sure): a
+# search that reads before the camera is at its pose finds no specimen every time instead of now and then.
+SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (cb) => { const ms = window.__slowFrameMs || 0; return ms ? setTimeout(() => raf(cb), ms) : raf(cb); }; })()"""
+SLOW_MS = 600
 
 
 def check(failures, cond, text):
@@ -81,6 +93,7 @@ async def run_focus_cam(pw, out, failures):
                 hook({"session_id": sid, "cwd": cwd, "hook_event_name": "SubagentStart", "agent_id": f"a{i}{j}0000000000", "agent_type": "Explore"})
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "focus-cam", **DESKTOP)
+        await page.add_init_script(SLOW_RAF)
         await page.goto(url + "/")
         await ready(page)
         await wait(page, "() => Object.keys(window.__dbg.robotState()).length >= 24", timeout=30000, label="24 robots")
@@ -121,7 +134,8 @@ async def run_focus_cam(pw, out, failures):
         # 4. turned back to the usual direction: what stands in the way is faint; Esc gives every material back
         base = await page.evaluate("() => window.__dbg.focusBase()")
         await page.evaluate("(b) => window.__dbg.focusSet({ az: b.az, el: b.el, dist: 8 })", base)
-        await page.wait_for_timeout(3000)
+        await page.evaluate("() => window.__dbg.focusSnap()")
+        await wait(page, AT_POSE, label="the camera back at the usual direction and the fade synced to it")
         u = res["usualView"] = await page.evaluate(FOCUS)
         check(failures, u["blockersNow"] >= 1 and u["blockersFaded"] == u["blockersNow"] and u["fadedOpacity"] and max(u["fadedOpacity"]) < 0.5,
               f"what blocks the usual view is drawn faint: {u}")
@@ -135,15 +149,20 @@ async def run_focus_cam(pw, out, failures):
         # room, their own materials are disposed (a shared one is not), and nothing faint is left out of the scene
         # the specimen: a faint mesh whose own material no other mesh uses (shared with another wall, taking the room
         # down disposes it anyway through that wall, and nothing could leak); turn the camera until one is faint
+        # Each direction is read with the camera put at its pose (focusSnap) and the fade synced to it (AT_POSE), and the
+        # frames are slow during the search, so what is read is the direction asked, however fast the machine draws.
+        await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")
         info = await page.evaluate("() => window.__dbg.fadedInfo()")
         tried = []
         for step in range(24):
             if any(x["room"] and x["exclusive"] and not x["shared"] for x in info):
                 break
             await page.evaluate("(a) => window.__dbg.focusSet({ az: a.az + a.k * Math.PI / 12, el: a.el })", {**base, "k": step + 1})
-            await page.wait_for_timeout(900)
+            await page.evaluate("() => window.__dbg.focusSnap()")
+            await wait(page, AT_POSE, label=f"the camera at turn {step + 1} and the fade synced to it")
             info = await page.evaluate("() => window.__dbg.fadedInfo()")
             tried.append(len(info))
+        await page.evaluate("() => { window.__slowFrameMs = 0; }")
         res["specimenTurns"] = tried
         room = next((x["room"] for x in info if x["room"] and x["exclusive"] and not x["shared"]), None)
         path = await page.evaluate("(r) => window.__dbg.projectPath(r)", room) if room else None

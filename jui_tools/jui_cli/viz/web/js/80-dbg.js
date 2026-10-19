@@ -138,6 +138,17 @@ window.__dbg = {
   // the arm turns the camera back to the usual direction, as a drag would (to see the faint walls)
   focusSet: (o) => { if ('az' in o) FOCUS.az = o.az; if ('el' in o) FOCUS.el = o.el; if ('dist' in o) FOCUS.dist = o.dist; return { az: FOCUS.az, el: FOCUS.el }; },
   focusBase: () => ({ ...FOCUS_BASE }),
+  // the camera put at its pose for FOCUS now, as the follow (a lerp a frame) would end up: the arm's specimen search reads
+  // the faint meshes of exact directions, not of wherever the follow had got to (frame-rate dependent: focus-cam flake, 10-19)
+  focusSnap: () => {
+    const R = rbState.id ? robots.find((x) => x.def.id === rbState.id) : null;
+    if (!R || camTween || !zoom.zoomed) return false;
+    const pose = focusPose(R, FOCUS.az, FOCUS.el, FOCUS.dist);
+    camera.position.copy(pose.p); viewTarget.copy(pose.t); camera.lookAt(viewTarget);
+    return true;
+  },
+  // how far the camera is from its pose for FOCUS now (0 once the follow has arrived)
+  focusAt: () => { const R = rbState.id ? robots.find((x) => x.def.id === rbState.id) : null; return R ? camera.position.distanceTo(focusPose(R, FOCUS.az, FOCUS.el, FOCUS.dist).p) : null; },
   // the faint meshes: whether still in the scene, their room, whether their own material is a shared one; and a mark
   // on each own material's dispose (the arm sees whether taking a room down disposes it)
   fadedInfo: () => (liveShared(), [...FOCUS.faded.entries()]).map(([o, mat]) => {
