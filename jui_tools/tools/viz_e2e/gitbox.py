@@ -251,6 +251,47 @@ async def run_gitbox(pw, out, failures):
                    timeout=30000, label="home from the box and the booth")
         await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated again")
 
+        # 5c. a trip and the shredder's errand never share the robot either (2.3.4 on feat/viz-shredder). A deletion at the
+        # box waits for the trip to end, then goes (within SHRED.waitSec). A trip that comes on the way to the shredder
+        # (poked on the page: a real Bash call would end the errand first) waits for the errand to end, then goes.
+        SAMPLE2 = """([id, ms, until]) => new Promise((done) => {
+          const out = { samples: 0, both: [], shred: 0, trip: 0, shredAfterTrip: 0, tripAfterShred: 0 }, t0 = performance.now();
+          const tick = () => {
+            const r = window.__dbg.shred().robots.find((x) => x.id === id) || {}, t = window.__dbg.gitBox().trips[id];
+            out.samples++;
+            if (r.phase && t) out.both.push([r.phase, t.phase, Math.round(performance.now() - t0)]);
+            if (r.phase) out.shred++;
+            if (t) out.trip++;
+            if (r.phase && out.trip && !t) out.shredAfterTrip++;
+            if (t && out.shred && !r.phase) out.tripAfterShred++;
+            if (performance.now() - t0 < ms && !(until && out[until])) setTimeout(tick, 100); else done(out);
+          };
+          tick();
+        })"""
+        bash("git push", stderr=f"To example.invalid:team/box-app.git\n   {revs['base']}..{revs['small']}  main -> main\n")
+        hook({"hook_event_name": "Stop"})
+        await wait(page, "(id) => (window.__dbg.gitBox().trips[id] || {}).phase === 'at'", arg=rid, timeout=30000, label="at the box")
+        bash("rm -f old-notes.txt")
+        hook({"hook_event_name": "Stop"})
+        ts = res["tripThenShred"] = await page.evaluate(SAMPLE2, [rid, 25000, "shredAfterTrip"])
+        check(failures, not ts["both"] and ts["trip"] > 0 and ts["shredAfterTrip"] > 0,
+              f"a deletion at the box waits for the trip, then goes to the shredder: {ts}")
+        await wait(page, "(id) => { const x = window.__dbg.shred().robots.find((y) => y.id === id); return x.phase === null && x.path === 0; }",
+                   arg=rid, timeout=30000, label="back from the shredder")
+        bash("rm -f older-notes.txt")
+        hook({"hook_event_name": "Stop"})
+        # once the turn's done -> idle has come (a state from the server rebuilds the page's robot state, poke and all),
+        # still on the errand
+        await wait(page, "(id) => window.__dbg.robotState()[id].state === 'idle' && window.__dbg.shred().robots.find((y) => y.id === id).phase !== null",
+                   arg=rid, timeout=20000, label="idle, on the errand to the shredder")
+        await page.evaluate("(id) => window.__dbg.gitPoke(id, { id: 'poke-2', branch: 'main', label: '↑ push main' })", rid)
+        st2 = res["shredThenTrip"] = await page.evaluate(SAMPLE2, [rid, 30000, "tripAfterShred"])
+        check(failures, not st2["both"] and st2["shred"] > 0 and st2["tripAfterShred"] > 0,
+              f"a trip on the way to the shredder waits for the errand, then goes: {st2}")
+        await wait(page, "(id) => !window.__dbg.gitBox().trips[id] && window.__dbg.shred().robots.find((y) => y.id === id).phase === null", arg=rid,
+                   timeout=30000, label="home from the box")
+        await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated again")
+
         # 6. the card and the log
         await page.evaluate("(id) => window.__dbg.openRobot(id)", rid)
         await wait(page, "() => { const el = document.querySelector('[data-rb-git]'); return !!el && !el.hidden; }",
