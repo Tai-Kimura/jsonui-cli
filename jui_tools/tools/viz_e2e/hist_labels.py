@@ -9,7 +9,8 @@ one line high, and a Range over its text on one line):
 
   time (.h-at), tool (the tool's name), harness (its label), sender, err (エラー), run (結果待ち), who (依頼者 and time).
 
-A long sender is cut with … rather than folded. Then the same in a squeezed pane (130 px wide), where the labels
+A long sender is cut with … rather than folded. A message from another session stacks its sender, its body and its
+time top to bottom (issue #34), the body wrapping instead of cut to one line. Then the same in a squeezed pane (130 px wide), where the labels
 together are wider than the row: without the guard on a kind, that kind folds there whatever the layout.
 """
 
@@ -40,6 +41,15 @@ LABELS = """(kinds) => {
   }
   return out;
 }"""
+PEER_STACK = """() => {
+  const s = document.querySelector('[data-rb-hist] .h-peer summary');
+  if (!s) return null;
+  const box = (sel) => { const e = s.querySelector(sel); return e ? e.getBoundingClientRect() : null; };
+  const who = box(':scope > b'), head = box(':scope > .h-head'), at = box(':scope > .h-at');
+  const lh = parseFloat(getComputedStyle(s.querySelector(':scope > .h-head')).lineHeight) || 18;
+  return who && head && at && { whoBottom: Math.round(who.bottom), headTop: Math.round(head.top), headBottom: Math.round(head.bottom),
+    atTop: Math.round(at.top), headLines: Math.round(head.height / lh) };
+}"""
 SQUEEZE = "(on) => { const p = document.querySelector('[data-rb-hist]'); p.style.width = on ? '130px' : ''; p.style.justifySelf = on ? 'start' : ''; }"
 
 
@@ -59,6 +69,9 @@ def judge(failures, where, got):
 async def measure(page, failures, where, res):
     res[where] = got = await page.evaluate(LABELS, KINDS)
     judge(failures, where, got)
+    res[f"{where}-peer"] = st = await page.evaluate(PEER_STACK)
+    check(failures, st and st["whoBottom"] <= st["headTop"] + 1 and st["headBottom"] <= st["atTop"] + 1 and st["headLines"] >= 2,
+          f"{where}: another session's message reads sender, body (wrapped), time top to bottom: {st}")
     await page.evaluate(SQUEEZE, True)
     await page.wait_for_timeout(150)
     res[f"{where}-squeezed"] = got = await page.evaluate(LABELS, KINDS)
