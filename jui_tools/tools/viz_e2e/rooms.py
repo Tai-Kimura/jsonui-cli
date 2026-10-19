@@ -128,11 +128,16 @@ async def run_rooms(pw, out, failures, RealServer):
         check(failures, {"04", "05"} <= set(moved), f"04 and 05 changed rooms on foot: {moved}")
         # shop-app/ (back row, left end) has no entrance of its own: leaving and coming in pass through a room next to
         # it that has one (the room in front or the one to the right; both are two doors away)
-        home_room = walk["rooms"].get("08", [None])[0]
+        # 08's home is the room it sat in before it left (the last but one it was seen in). Not the first room seen: 08
+        # starts 0.8 s into the record, and a page that connected before that rightly walks it in from the corridor —
+        # through the room next door — so the first room seen was the neighbour in some runs (ticket
+        # 2026-10-19-jui-viz-e2e-rooms-08-entered-before-the-watch). Whether it walked in or was there is not this arm.
         entr = await page.evaluate("""() => Object.fromEntries(Object.keys(window.__dbg.live3d().rooms).map((k) => [k, !!(window.__dbg.room(k).doors || {}).front]))""")
         t08, t0a = walk["rooms"].get("08", []), walk["rooms"].get("0a", [])
-        res["throughNext"] = {"home": home_room, "hasEntrance": entr, "08": t08, "0a": t0a}
-        check(failures, home_room and not entr.get(home_room) and len(t08) == 2 and entr.get(t08[-1]) and len(t0a) == 2 and t0a[-1] == home_room and entr.get(t0a[0]),
+        home_room = t08[-2] if len(t08) >= 2 else None
+        res["throughNext"] = {"home": home_room, "hasEntrance": entr, "08": t08, "0a": t0a, "08walkedIn": len(t08) > 2}
+        check(failures, home_room and not entr.get(home_room) and entr.get(t08[-1]) and len(t0a) == 2 and t0a[-1] == home_room and entr.get(t0a[0])
+              and (len(t08) == 2 or (len(t08) == 3 and entr.get(t08[0]) and t08[0] != home_room)),
               f"08 went out and 0a came in through the room next door: {res['throughNext']}")
         # the controls: the same test on a line through a wall, and on a line through a door
         ctl = await page.evaluate("""() => {
