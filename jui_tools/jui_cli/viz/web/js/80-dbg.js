@@ -122,6 +122,8 @@ window.__dbg = {
     said: Object.fromEntries(robots.map((R) => [R.def.id, R.text.textContent])),
     why: Object.fromEntries(robots.map((R) => { const st = robotState[R.def.id] || {}; return [R.def.id, { trip: st.git ? { id: st.git.id, pending: st.git.pending, at: st.git.at, kind: st.git.kind } : null,
       seen: R.gitSeen || null, git: R.git ? R.git.phase : null, path: R.path.length, pos: R.robot.root.position.toArray().map((v) => +v.toFixed(2)), desk: R.def.pos, play: !!(R.play || R.playBack || R.solo), standing: !!R.def.standing, room: R.def.room, propsRoom: PROPS.room, state: st.state }]; })) }),
+  // a fresh trip on the page alone, as if the server had sent it (the trip-vs-break arm: a trip that comes during a break)
+  gitPoke: (id, trip) => { const st = robotState[id]; if (st) st.git = { at: vizNow(), pending: false, kind: 'push', status: 'pushed', ...trip }; return !!st; },
   gitLog: () => logItems.filter((e) => e.kind === 'GitPush' || e.kind === 'GitPull').map((e) => `${e.kind} ${e.what}`),
   gitSet: (o) => { Object.assign(GITBOX, o || {}); return { ...GITBOX, ends: undefined }; },
   // the camera on a robot (10-18): its orbit, how its view was chosen, and what stands in the way now

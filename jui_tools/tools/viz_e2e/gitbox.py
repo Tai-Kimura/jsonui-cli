@@ -137,6 +137,9 @@ async def run_gitbox(pw, out, failures):
         check(failures, floor["phase"] is None and not (await page.evaluate("() => window.__dbg.gitBox().desk")),
               f"on the floor: no desk and no trip, the line only: {floor}")
 
+        # no game, nap, bento or break unless an arm asks (2.3.3's breaks start on their own after a while idle)
+        await page.evaluate("() => { window.__dbg.play({ p: 0, solo: { p: 0 } }); window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); }")
+
         # the room up close
         await page.click("#scope-top")
         await page.evaluate("() => [...document.querySelectorAll('#pop [data-pick-project]')].find((x) => x.textContent.includes('box-app')).click()")
@@ -207,6 +210,46 @@ async def run_gitbox(pw, out, failures):
                   f"a trip stops at once on {name}: {ends[-1]}")
             await wait(page, "(id) => !window.__dbg.gitBox().trips[id]", arg=rid, timeout=15000, label="home again")
             hook({"hook_event_name": "UserPromptSubmit", "prompt": "go on"})
+
+        # 5b. a trip and a break never share the robot (2.3.4 on 2.3.3). A push during a cigarette: the Bash call ends the
+        # break, the trip follows. A break that would start on the way to the box (its rest reset at once) waits for the
+        # trip to end. A trip that comes during a break (poked on the page) waits for the break to end.
+        SAMPLE = """([id, ms, stopOn]) => new Promise((done) => {
+          const out = { samples: 0, both: [], brk: 0, trip: 0, brkAfter: 0 }, t0 = performance.now();
+          const tick = () => {
+            const r = window.__dbg.brk().robots.find((x) => x.id === id) || {}, t = window.__dbg.gitBox().trips[id];
+            out.samples++;
+            if (r.kind && t) out.both.push([r.kind, t.phase, Math.round(performance.now() - t0)]);
+            if (r.kind && !out.trip) out.brk++;
+            if (t) out.trip++;
+            if (r.kind && out.trip && !t) out.brkAfter++;
+            if (performance.now() - t0 < ms && !(stopOn && out.brkAfter)) setTimeout(tick, 100); else done(out);
+          };
+          tick();
+        })"""
+        smoking = "(id) => { const r = window.__dbg.brk().robots.find((x) => x.id === id); return r && r.kind === 'smoke' && r.at; }"
+        await page.evaluate("() => { window.__dbg.play({ idleMs: 500 }); window.__dbg.brk({ p: { smoke: 1, vend: 0 }, smokeMinSec: 30, smokeMaxSec: 30, restMinSec: 0, restMaxSec: 0 }); }")
+        await wait(page, smoking, arg=rid, timeout=40000, label="a cigarette in the booth")
+        bash("git push", stderr=f"To example.invalid:team/box-app.git\n   {revs['base']}..{revs['small']}  main -> main\n")
+        hook({"hook_event_name": "Stop"})   # the turn ends: idle again (else the session goes on thinking and ends any break)
+        await wait(page, "(id) => !!window.__dbg.gitBox().trips[id]", arg=rid, timeout=30000, label="the trip after the break")
+        await page.evaluate("() => window.__dbg.brk({ restMinSec: 0, restMaxSec: 0 })")   # rested: a break would start now
+        tb = res["tripThenBreak"] = await page.evaluate(SAMPLE, [rid, 40000, True])
+        check(failures, not tb["both"] and tb["trip"] > 0 and tb["brkAfter"] > 0,
+              f"no break starts on the way to the box; one starts after it: {tb}")
+        try:
+            await wait(page, smoking, arg=rid, timeout=40000, label="the cigarette after the trip")
+        except RuntimeError:
+            res["brkWhy"] = await page.evaluate("(id) => { const b = window.__dbg.brk(); return { ends: b.ends, me: b.robots.find((x) => x.id === id) }; }", rid)
+            raise
+        await page.evaluate("(id) => window.__dbg.gitPoke(id, { id: 'poke-1', branch: 'main', label: '↑ push main' })", rid)
+        bt = res["breakThenTrip"] = await page.evaluate(SAMPLE, [rid, 4000, False])
+        check(failures, not bt["both"] and bt["trip"] == 0 and bt["brk"] > 30, f"a trip that comes during a break waits: {bt}")
+        await page.evaluate("() => { window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true }); window.__dbg.play({ idleMs: 60000 }); }")
+        await wait(page, "(id) => !!window.__dbg.gitBox().trips[id]", arg=rid, timeout=30000, label="the waiting trip goes once the break ends")
+        await wait(page, "(id) => !window.__dbg.gitBox().trips[id] && !(window.__dbg.brk().robots.find((x) => x.id === id) || {}).kind", arg=rid,
+                   timeout=30000, label="home from the box and the booth")
+        await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated again")
 
         # 6. the card and the log
         await page.evaluate("(id) => window.__dbg.openRobot(id)", rid)
