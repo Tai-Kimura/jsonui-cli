@@ -13,6 +13,7 @@ import json
 import os
 import re
 import socket
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -84,7 +85,7 @@ def test_the_files_are_document_tools_own_choice(tmp_path):
     mods = data_docs._doc()
     theirs = [(("db/" + f.relative_to(root / "docs/db").parts[0]) if k == "db" and len(f.relative_to(root / f"docs/{k}").parts) > 1 else k, f)
               for k in ("api", "db") for f in sorted((root / "docs" / k).rglob("*.json")) if mods["swagger"].is_swagger_file(f)]
-    ours = [(c, f) for c, f, _d in data_docs._files(_project(root)) if mods["swagger"].is_swagger_file(f)]
+    ours = [(c, f) for c, f, _d, _r in data_docs._files(_project(root)) if mods["swagger"].is_swagger_file(f)]
     assert ours == theirs
     doc = data_docs.read(_project(root))
     assert [d["category"] for d in doc["db"]] == ["db/analytics", "db"] or sorted(d["category"] for d in doc["db"]) == ["db", "db/analytics"]
@@ -232,3 +233,75 @@ def test_the_route_gives_the_documents_to_the_page_and_nothing_to_anyone_else(tm
     assert got[10][2] == got[0][2]                       # a path in the body changes nothing
     for st, _ct, b, _h in got[1:10] + got[11:]:
         assert b"Users API" not in b                      # a refusal carries no document
+
+
+# ---- the open is the check (dd's review, 10-19) --------------------------------------------------------------------
+
+@pytest.mark.parametrize("body", [json.dumps(API), json.dumps({"swagger": "2.0", "paths": {}}), json.dumps({"not": "openapi"}),
+                                  json.dumps([1, 2]), "{broken", b"\xff\xfe"])
+def test_the_bytes_rule_is_is_swagger_files(tmp_path, body):
+    f = tmp_path / "x.json"
+    f.write_bytes(body if isinstance(body, bytes) else body.encode())
+    mods = data_docs._doc()
+    assert (data_docs._swagger(f.read_bytes()) is not None) == mods["swagger"].is_swagger_file(f)
+
+
+def _race(path: Path, a: Path, b: Path, stop: threading.Event):
+    """Swap ``path`` between a copy of ``a`` (a regular file) and ``b`` (a symlink, or a big file) as fast as it can."""
+    tmp_a, tmp_b = path.with_name(".a.tmp"), path.with_name(".b.tmp")
+    while not stop.is_set():
+        try:
+            tmp_a.write_bytes(a.read_bytes())
+            os.replace(tmp_a, path)
+            if b.is_symlink():
+                if tmp_b.exists() or tmp_b.is_symlink():
+                    tmp_b.unlink()
+                os.symlink(os.readlink(b), tmp_b)
+            else:
+                tmp_b.write_bytes(b.read_bytes())
+            os.replace(tmp_b, path)
+        except OSError:
+            pass
+
+
+def test_a_symlink_swapped_in_never_lets_outside_through(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.json").write_text(json.dumps({**API, "info": {"title": "SECRET", "version": "1"}}))
+    root = _room(tmp_path / "app", db=False)
+    target = root / "docs/api/users.json"
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps(API))
+    link = tmp_path / "link.json"
+    os.symlink(outside / "secret.json", link)
+    stop = threading.Event()
+    t = threading.Thread(target=_race, args=(target, good, link, stop), daemon=True)
+    t.start()
+    try:
+        seen = [json.dumps(data_docs.read(_project(root)), ensure_ascii=False) for _ in range(300)]
+        counted = [data_docs.counts(_project(root)) for _ in range(100)]
+    finally:
+        stop.set()
+        t.join()
+    assert not any("SECRET" in x for x in seen)
+    assert any("Users API" in x for x in seen)                       # the race was run: the good file was read too
+    assert all(c["api"] <= 1 for c in counted)
+
+
+def test_a_big_file_swapped_in_never_passes_the_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(data_docs, "MAX_FILE_BYTES", 4000)
+    root = _room(tmp_path / "app", db=False)
+    target = root / "docs/api/users.json"
+    small, big = tmp_path / "small.json", tmp_path / "big.json"
+    small.write_text(json.dumps(API))
+    big.write_text(json.dumps({**API, "info": {"title": "BIG", "version": "1", "description": "x" * 10_000}}))
+    stop = threading.Event()
+    t = threading.Thread(target=_race, args=(target, small, big, stop), daemon=True)
+    t.start()
+    try:
+        seen = [json.dumps(data_docs.read(_project(root)), ensure_ascii=False) for _ in range(300)]
+    finally:
+        stop.set()
+        t.join()
+    assert not any("BIG" in x for x in seen)
+    assert any("Users API" in x for x in seen)
