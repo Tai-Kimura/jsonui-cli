@@ -8,6 +8,7 @@ Design: 03 (fields), 04 §1–§4 (slices, robot states, rooms).
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from pathlib import Path
@@ -36,6 +37,9 @@ TOOL_EVENTS = frozenset({"PreToolUse", "PostToolUse", "PostToolUseFailure", "Per
 PROMPT_MAX = 200
 #: How much of a prompt sent from the page goes into the event log (the rest is never stored).
 PROMPT_HEAD = 40
+#: A session process whose argv could not be read is tried again after 1 s, then 2, 4 … up to 30 s apart.
+ARGV_RETRY_FIRST = 1.0
+ARGV_RETRY_MAX = 30.0
 MESSAGE_MAX = 300
 SUBAGENT_LINGER_MS = 5_000
 DONE_TO_IDLE_MS = 3_000
@@ -142,8 +146,10 @@ class World:
         # A session's process as its newest agents-list row / session file names it: (pid, procStart, entrypoint),
         # and that process's argv as read once (sources/launch.py) — only the classification is ever published.
         self.session_proc: dict[str, tuple] = {}
-        self._argv: dict[tuple, list | None] = {}
+        self._argv: dict[tuple, list] = {}            # argv read, per process: only successful reads are kept
+        self._argv_retry: dict[tuple, tuple] = {}     # a failed read: (when to try again, the wait after that), monotonic s
         self.read_argv = launch.read_argv   # a test puts its own reader here
+        self.clock = time.monotonic         # and its own clock here
         self.tasks = TaskBook()
         self.perms = PermissionBook()
         self.questions = QuestionBook()
@@ -792,10 +798,29 @@ class World:
         proc = self.session_proc.get(sid)
         if proc is None:
             return "unreadable"
-        if proc not in self._argv:
-            self._argv[proc] = None if proc[2] in launch.IDE_ENTRYPOINTS else self.read_argv(proc[0])
         channel = self.perms.prompt_channel(sid)
-        return launch.classify(self._argv[proc], proc[2], channel.via if channel else None)
+        return launch.classify(self._argv_of(proc), proc[2], channel.via if channel else None)
+
+    def _argv_of(self, proc: tuple) -> list | None:
+        """The argv of a session's process, read once and kept while (pid, procStart) is the same. A read that failed is
+        not kept: it is tried again at a later publish or send, ARGV_RETRY_FIRST s after, the wait doubling up to
+        ARGV_RETRY_MAX s (never every frame). Once a failure was kept, and the session stayed "unreadable" — prompts
+        refused — until viz restarted (dd's review, 10-19)."""
+        if proc[2] in launch.IDE_ENTRYPOINTS:
+            return None                      # told by its entrypoint; nothing to read
+        if proc in self._argv:
+            return self._argv[proc]
+        now = self.clock()
+        due, wait = self._argv_retry.get(proc, (now, ARGV_RETRY_FIRST))
+        if now < due:
+            return None
+        argv = self.read_argv(proc[0])
+        if argv is None:
+            self._argv_retry[proc] = (now + wait, min(wait * 2, ARGV_RETRY_MAX))
+            return None
+        self._argv_retry.pop(proc, None)
+        self._argv[proc] = argv
+        return argv
 
     def send_prompt(self, sid: str, text: str, at: int) -> tuple[int, str] | None:
         """A prompt typed in the page for this session (POST /api/prompt, after its checks): queued for that session's

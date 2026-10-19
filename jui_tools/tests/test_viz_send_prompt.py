@@ -574,3 +574,36 @@ def test_the_launch_is_told_from_the_command_line_alone():
     assert c(REAL_VSCODE) == "vscode"
     assert c(REAL_DESKTOP) == "desktop"
     assert not any(launch.REASONS[k][0] for k in ("no-flag", "vscode", "desktop"))
+
+
+def test_a_failed_read_of_the_argv_is_tried_again_and_a_good_one_kept():
+    """dd's repro (10-19): a reader that fails once and then reads. The failure is not kept — the session was
+    "unreadable" (prompts refused) until viz restarted — the next read comes after a wait (never every frame), and the
+    argv read is kept for the process."""
+    world = World(VizState())
+    world.apply_hook({"hook_event_name": "SessionStart", "session_id": "s1", "cwd": "/w"}, 1)
+    world.channel_hello(None, None, "s1", 2, ["prompt"], "plugin")
+    calls = []
+
+    def reader(pid):
+        calls.append(pid)
+        return None if len(calls) == 1 else ["claude", DEV, "plugin:jui-viz@jsonui"]
+
+    now = [100.0]
+    world.read_argv, world.clock = reader, (lambda: now[0])
+    world.apply_agents_list([{"sessionId": "s1", "pid": 4242, "procStart": "a", "cwd": "/w", "entrypoint": "cli"}], 3)
+    assert world.launch_of("s1") == "unreadable" and len(calls) == 1          # the first read fails
+    now[0] += 0.2
+    assert world.launch_of("s1") == "unreadable" and len(calls) == 1          # not again at once
+    now[0] += 1.0
+    assert world.launch_of("s1") == "dev" and len(calls) == 2                 # read again after the wait: dev
+    now[0] += 100
+    assert world.launch_of("s1") == "dev" and world.send_prompt("s1", "x", 4) is None and len(calls) == 2   # kept
+    # a process that keeps failing is read at most with the wait doubling (1, 2, 4 … 30 s), not on every call
+    world.read_argv = lambda pid: (calls.append(pid), None)[1]
+    world.apply_agents_list([{"sessionId": "s1", "pid": 4243, "procStart": "b", "cwd": "/w", "entrypoint": "cli"}], 5)
+    before, t0 = len(calls), now[0]
+    while now[0] < t0 + 60:
+        world.launch_of("s1")
+        now[0] += 0.5
+    assert len(calls) - before == 6, len(calls) - before                      # read at 0, 1, 3, 7, 15 and 31 s: 6 in a minute
