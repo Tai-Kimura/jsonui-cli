@@ -168,9 +168,11 @@ async def run_play(pw, out, failures):
         hook(A, hook_event_name="PostToolUse", tool_name="Read", tool_use_id="ta1", tool_input={"file_path": "/work/play-app/a.txt"})
         hook(A, hook_event_name="Stop")
         for kind in ("ball", "rps"):
-            # long enough for the players to settle first on a busy machine (8 frames of blending at a frame or two a
-            # second took the whole of an 8 s game, measured): it is ended here once it has been seen
-            await page.evaluate(f"() => window.__dbg.play({{ kinds: ['{kind}'], restMinSec: 0, restMaxSec: 0, minSec: 60, maxSec: 60 }})")
+            # an 8 s game, shorter than the wait for it (30 s): a game that ends before what the arm looks for shows is
+            # red by its own branch ("ended"), never by a timeout. The players' pose takes its real time on a busy
+            # machine since 8748dc3e (it took the whole of an 8 s game before, at a frame or two a second); the game is
+            # ended here once it has been seen
+            await page.evaluate(f"() => window.__dbg.play({{ kinds: ['{kind}'], restMinSec: 0, restMaxSec: 0, minSec: 8, maxSec: 8 }})")
             g = await wait(page, f"() => window.__dbg.play().list.find((g) => g.kind === '{kind}' && g.started) || false", timeout=20000, label=f"a {kind} game")
             await settled(page, f"the {kind} players at their spot", ids=g["players"])
             await page.evaluate("() => { window.__playYs = []; }")
