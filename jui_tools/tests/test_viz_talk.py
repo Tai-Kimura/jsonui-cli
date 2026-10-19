@@ -375,6 +375,18 @@ def test_a_peer_not_on_this_machine_is_kept_for_the_grace_after_its_last_message
     assert [m["id"] for m in box.messages(A, nobody)] == ["u-toolu_2"]
 
 
+def test_a_live_peer_on_this_machine_is_never_removed_for_an_old_last_message(box):
+    """The 1 h since the last message is only for peers whose liveness cannot be known (x:): a session in the registry
+    stays however old its talk is."""
+    _talk(box, at=T0 - 5 * GRACE)
+    ops = [op for at in (T0, T0 + 1_000, T0 + 3 * GRACE) for o in box.step(at)["ops"].values() for op in o]
+    assert not [op for op in ops if op["op"] == "remove"], ops
+    assert not any(op["op"] == "conv" and not op["conv"]["peer"]["alive"] for op in ops)
+    [conv] = box.convs(A)
+    assert conv["peer"]["key"] == B and conv["peer"]["alive"] is True and conv["peer"]["removeAt"] is None
+    assert len(box.messages(A, B)) == 1
+
+
 def test_the_grace_comes_from_the_config(tmp_path, monkeypatch):
     from jui_cli.viz import config as config_mod
     monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
