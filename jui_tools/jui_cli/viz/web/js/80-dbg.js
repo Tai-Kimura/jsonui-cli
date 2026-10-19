@@ -274,6 +274,8 @@ window.__dbg.settle = (ids) => window.__dbg.settleInfo(ids).every((x) => x.blend
 // A gap between frames, as a hidden tab makes (rAF stops; minutes later it resumes): the next frame walks with `sec`
 // more of real time (liveUpdateRobots' walkDt), and nothing else is touched.
 window.__dbg.walkGap = (sec) => { LIVE3D.lastWalk -= sec * 1000; return true; };
+// The walking speed now (m/s): liveWalk's WALK_SPEED, faster in a fast replay (the e2e's lower bound on a walk's time)
+window.__dbg.walkSpeed = () => WALK_SPEED * (SOURCE.replaySpeed > 1 ? Math.min(4, SOURCE.replaySpeed) : 1);
 // One call at the end of each frame's update of the robots (a recorder of what the frame did; null: none)
 window.__dbg.afterFrame = (fn) => { LIVE3D.afterFrame = fn || null; return true; };
 // Send robot `id` on foot from its room to the middle of room `to`, through the doors (liveRoute, as every walk goes):

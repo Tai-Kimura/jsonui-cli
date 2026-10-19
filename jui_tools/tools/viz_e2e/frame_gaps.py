@@ -10,6 +10,11 @@ frames, not after the dozens of frames a per-frame step needed:
     'playing', one for the game's clock; ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames), counted in
     frames (waits.frame_log_js).
 
+And never faster than its real time either (dd, 10-20: a walk that skipped every point closer than the frame's step
+went green in every arm, which bounded walks only from above): a walk along a zigzag of short pieces, at frames as they
+come and at frames 3 s apart, takes at least 0.8 x its length / the walking speed (both read from the page), counted in
+the walk's own time - the real time its frames gave it (LIVE3D.lastWalk from the frame before to the frame it arrived).
+
 The walk is measured in props.py and breaks.py ("ten again").
 """
 
@@ -34,6 +39,21 @@ SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
 SLOW_MS = int(os.environ.get("FG_SLOW_MS", "3000"))   # the arm runs at 3 s; set FG_SLOW_MS to measure at other gaps
 MAX_SEC = 12          # a few frames at 3 s; the per-frame steps took 24 s and more
 READY = "() => !!(window.__dbg && window.__dbg.robots && document.body.dataset.mode === 'live')"
+# A zigzag of 0.5 m pieces through the robot's room, 16 m in all, from where it stands; the last point is its desk.
+ZIGZAG_JS = """(id) => { const R = window.__dbg.robots.find((x) => x.def.id === id), r = window.__dbg.room(R.def.room), p = R.robot.root.position;
+  const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, pts = [];
+  for (let i = 0; i < 32; i++) pts.push([cx - 2 + (i % 8) * 0.5, cz + (Math.floor(i / 8) % 2 ? 0.25 : -0.25) + (i % 2 ? 0.2 : -0.2)]);
+  pts.push([R.def.pos[0], R.def.pos[1]]);
+  let len = 0, at = [p.x, p.z];
+  for (const q of pts) { len += Math.hypot(q[0] - at[0], q[1] - at[1]); at = q; }
+  const from = window.__dbg.live3d().lastWalk;
+  R.path = pts;
+  return { len: +len.toFixed(2), speed: window.__dbg.walkSpeed(), from, pieces: pts.length }; }"""
+# The frame it arrives in (at the end of that frame's update): its LIVE3D.lastWalk, the end of the walk's own time.
+WALK_END_JS = """(id) => { window.__walkEnd = null; window.__walkFrames = 0;
+  window.__dbg.afterFrame(() => { const R = window.__dbg.robots.find((x) => x.def.id === id); window.__walkFrames += 1;
+    if (!R || !R.path.length) { window.__walkEnd = window.__dbg.live3d().lastWalk; window.__dbg.afterFrame(null); } }); }"""
+WALK_MIN = 0.8   # of length / speed: the walk's own time may not be shorter
 PLAY_LOG_JS = frame_log_js(
     "() => { const p = window.__dbg.play(), g = p.list[0]; return { started: !!(g && g.started),"
     " paths: g ? g.players.map((id) => (p.robots.find((x) => x.id === id) || {}).path) : null }; }",
@@ -139,6 +159,23 @@ async def run_frame_gaps(pw, out, failures):
         check(failures, walked and not waited and rows[-1]["started"],
               f"with frames {SLOW_MS} ms apart, the game starts in the frame the players arrive: {len(waited)} frames between, {len(walked)} walking")
         await page.evaluate("() => window.__dbg.play({ p: 0, endAll: true })")
+
+        # 5. never faster than real time: a zigzag of short pieces, at frames as they come and 3 s apart
+        await settled(page, "everyone back at a desk", timeout=60000)
+        for gap in (0, SLOW_MS):
+            await page.evaluate(f"() => {{ window.__slowFrameMs = {gap}; }}")
+            z = await page.evaluate(ZIGZAG_JS, rid)
+            await page.evaluate(WALK_END_JS, rid)
+            await until(page, "(id) => !window.__dbg.robots.find((x) => x.def.id === id).path.length", f"the zigzag walked ({gap} ms frames)",
+                        arg=rid, timeout=60000, why=WHY)
+            await page.evaluate("() => { window.__slowFrameMs = 0; }")
+            end, frames = await page.evaluate("() => [window.__walkEnd, window.__walkFrames]")
+            z["walkSec"] = round((end - z["from"]) / 1000, 2) if end is not None and z["from"] else None
+            z["realSec"] = round(z["len"] / z["speed"], 2)
+            z["frames"] = frames
+            res[f"zigzag{gap}"] = z
+            check(failures, z["walkSec"] is not None and z["walkSec"] >= WALK_MIN * z["realSec"],
+                  f"with frames {gap} ms apart, a {z['len']} m walk takes its real time, never less: {z['walkSec']} s of walking for {z['realSec']} s at {z['speed']} m/s ({z['frames']} frames)")
         await page.close()
         for line in watch.console:
             failures.append(f"frame-gaps: console: {line}")
