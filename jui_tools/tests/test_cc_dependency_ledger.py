@@ -232,11 +232,15 @@ def test_session_probes_read_a_recorded_session(tmp_path):
     assert P.transcript_shape(P.Context(run=fake_cli()))["skipped"]
 
 
-def test_the_launch_agent_runs_the_watch_daily_and_the_session_is_opt_in(tmp_path):
-    plain = plistlib.loads(W.plist(tmp_path / "repo", tmp_path / "state"))
-    assert plain["Label"] == W.LABEL and "Hour" in plain["StartCalendarInterval"]
-    assert plain["ProgramArguments"][2:4] == ["run", "--repo"] and "--live" not in plain["ProgramArguments"]
-    assert "--live" in plistlib.loads(W.plist(tmp_path / "repo", tmp_path / "state", live=True))["ProgramArguments"]
+def test_the_launch_agent_runs_the_watch_daily_with_the_live_session(tmp_path):
+    out = subprocess.run([sys.executable, str(W.HERE / "watch.py"), "print-plist", "--repo", str(tmp_path / "repo"),
+                          "--state", str(tmp_path / "state")], capture_output=True, timeout=30, check=True).stdout
+    agent = plistlib.loads(out)
+    assert agent["Label"] == W.LABEL and "Hour" in agent["StartCalendarInterval"]
+    assert agent["ProgramArguments"][2:4] == ["run", "--repo"] and agent["ProgramArguments"][-1] == "--live"
+    out = subprocess.run([sys.executable, str(W.HERE / "watch.py"), "print-plist", "--repo", str(tmp_path / "repo"),
+                          "--no-live"], capture_output=True, timeout=30, check=True).stdout
+    assert "--live" not in plistlib.loads(out)["ProgramArguments"]
 
 
 def test_changelog_lines_keep_only_the_range_and_the_ledger_words():
@@ -528,3 +532,76 @@ def test_an_untracked_plant_in_a_facing_area_is_red(tmp_path):
     assert "jui_tools/jui_cli/viz/cache.pyc" not in M.tracked_files(tmp_path)
     problems = L.check(tmp_path, ledger={"entries": []})
     assert any("planted_helper.py" in p and "not_relying with a reason" in p for p in problems), problems
+
+
+# ------------------------------------------------------------------ install: the installed copy, state outside it
+class FakeLaunchctl:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, argv):
+        self.calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+
+@pytest.fixture
+def installed(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("JSONUI_CLI_DIR", raising=False)
+    monkeypatch.delenv("JSONUI_INSTALL_DIR", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    home = tmp_path / "home" / ".jsonui-cli"
+    here = home / "jui_tools" / "tools" / "cc_watch"
+    here.mkdir(parents=True)
+    work = tmp_path / "resource" / "jsonui-cli"
+    work.mkdir(parents=True)
+    return home, here, work
+
+
+def test_install_from_a_worktree_is_refused(installed, tmp_path, capsys):
+    home, _here, work = installed
+    worktree = tmp_path / "resource" / "wt" / "some-branch" / "jui_tools" / "tools" / "cc_watch"
+    worktree.mkdir(parents=True)
+    fake = FakeLaunchctl()
+    rc = W.install(work, W.default_state(), True, here=worktree, target=tmp_path / "agent.plist", launchctl=fake)
+    assert rc == 2 and fake.calls == [] and not (tmp_path / "agent.plist").exists()
+    assert "run the one bootstrap installed" in capsys.readouterr().err
+
+
+def test_install_from_the_installed_copy_runs_it_with_live(installed, tmp_path):
+    home, here, work = installed
+    fake = FakeLaunchctl()
+    target = tmp_path / "agent.plist"
+    assert W.install(work, W.default_state(), True, here=here, target=target, launchctl=fake) == 0
+    agent = plistlib.loads(target.read_bytes())
+    args = agent["ProgramArguments"]
+    assert args[1] == str(here / "watch.py") and args[args.index("--repo") + 1] == str(work) and args[-1] == "--live"
+    assert fake.calls and fake.calls[0][:2] == ["launchctl", "bootstrap"]
+
+
+def test_the_install_dir_follows_bootstrap(installed, tmp_path, monkeypatch):
+    home, _here, _work = installed
+    assert W.install_dir() == home
+    monkeypatch.setenv("JSONUI_INSTALL_DIR", str(tmp_path / "base"))
+    assert W.install_dir() == tmp_path / "base" / "jsonui-cli"
+    monkeypatch.setenv("JSONUI_CLI_DIR", str(tmp_path / "exact"))
+    assert W.install_dir() == tmp_path / "exact"
+
+
+def test_the_default_state_is_outside_the_install_dir(installed, tmp_path, monkeypatch):
+    home, here, work = installed
+    assert not W._under(W.default_state(), home)
+    assert W.default_state() == tmp_path / "home" / ".local" / "state" / "cc-dependency-watch"
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
+    assert W.default_state() == tmp_path / "xdg" / "cc-dependency-watch"
+    fake = FakeLaunchctl()
+    assert W.install(work, home / "state", True, here=here, target=tmp_path / "a.plist", launchctl=fake) == 2
+
+
+def test_the_repo_must_be_given_and_is_not_the_install_dir(installed, tmp_path):
+    home, here, _work = installed
+    fake = FakeLaunchctl()
+    assert W.install(home, W.default_state(), True, here=here, target=tmp_path / "a.plist", launchctl=fake) == 2
+    p = subprocess.run([sys.executable, str(W.HERE / "watch.py"), "print-plist"], capture_output=True, text=True,
+                       timeout=30)
+    assert p.returncode == 2 and "--repo" in p.stderr

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """The daily watch over what we rely on in Claude Code (ticket 2026-10-19-claude-dependency-watch).
 
-    python3 jui_tools/tools/cc_watch/watch.py run --repo ~/resource/jsonui-cli [--live]
-    python3 jui_tools/tools/cc_watch/watch.py print-plist --repo ~/resource/jsonui-cli
-    python3 jui_tools/tools/cc_watch/watch.py install --repo ~/resource/jsonui-cli      # the user runs this
-    python3 jui_tools/tools/cc_watch/watch.py uninstall
+    W=~/.jsonui-cli/jui_tools/tools/cc_watch/watch.py      # the installed copy (installer/bootstrap.sh)
+    python3 $W run --repo <jsonui-cli work tree> [--live]
+    python3 $W print-plist --repo <jsonui-cli work tree> [--no-live]
+    python3 $W install --repo <jsonui-cli work tree> [--no-live]   # refuses any copy but the installed one
+    python3 $W uninstall
+    python3 $W print-hook --repo <jsonui-cli work tree>
+    python3 $W add-hook --repo <jsonui-cli work tree> --settings <jsonui-cli work tree>/.claude/settings.local.json
 
 One run:
   1. versions: the installed CLI's (`claude --version`) and the newest published one (the npm registry). Only when they
@@ -48,7 +51,31 @@ CHANGELOG = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANG
 WORDS = re.compile(r"hook|SessionStart|SessionEnd|PreToolUse|PostToolUse|UserPromptSubmit|PermissionRequest|channel"
                    r"|transcript|jsonl|statusLine|status line|plugin|marketplace|\bmcp\b|--name|\B-n\b|--resume|settings\.json"
                    r"|SIGTERM|CLAUDE_|setting-sources|--print", re.I)
-DEFAULT_STATE = Path("~/.local/state/cc-dependency-watch").expanduser()
+def default_state() -> Path:
+    """Where shapes.json and watch.log live: outside the install folder, which bootstrap re-clones (that would wipe
+    the saved shapes and make every day look changed). The house rule of viz: $XDG_STATE_HOME when absolute, else
+    ~/.local/state."""
+    xdg = os.environ.get("XDG_STATE_HOME", "")
+    base = Path(xdg) if os.path.isabs(xdg) else Path.home() / ".local" / "state"
+    return base / "cc-dependency-watch"
+
+
+def install_dir() -> Path:
+    """Where installer/bootstrap.sh clones jsonui-cli, by its own rules: $JSONUI_CLI_DIR, else
+    $JSONUI_INSTALL_DIR/jsonui-cli, else ~/.jsonui-cli."""
+    if os.environ.get("JSONUI_CLI_DIR"):
+        return Path(os.environ["JSONUI_CLI_DIR"]).expanduser()
+    if os.environ.get("JSONUI_INSTALL_DIR"):
+        return Path(os.environ["JSONUI_INSTALL_DIR"]).expanduser() / "jsonui-cli"
+    return Path.home() / ".jsonui-cli"
+
+
+def _under(path: Path, folder: Path) -> bool:
+    try:
+        path.resolve().relative_to(folder.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def _version(text: str) -> str | None:
@@ -391,11 +418,14 @@ def add_hook(settings_file: Path, repo: Path) -> bool:
 
 
 # ------------------------------------------------------------------ launchd
-def plist(repo: Path, state: Path, live: bool = False, python: str = sys.executable, hour: int = 8, minute: int = 30) -> bytes:
-    """The LaunchAgent. --live (the throwaway session) is opt-in: it has not been run for real yet (ticket: 未測定)."""
+def plist(repo: Path, state: Path, live: bool = True, python: str = sys.executable, hour: int = 8, minute: int = 30,
+          here: Path = HERE) -> bytes:
+    """The LaunchAgent. It runs with --live (the throwaway session) by default: measured green twice on 10-19 and
+    verified by dd; the requester wants the checks against the real thing and accepted the cost (~0.03 USD a day).
+    `--no-live` leaves only the version compare and the help probes."""
     return plistlib.dumps({
         "Label": LABEL,
-        "ProgramArguments": [python, str(HERE / "watch.py"), "run", "--repo", str(repo), "--state", str(state),
+        "ProgramArguments": [python, str(here / "watch.py"), "run", "--repo", str(repo), "--state", str(state),
                              *(["--live"] if live else [])],
         "StartCalendarInterval": {"Hour": hour, "Minute": minute},
         "StandardOutPath": str(state / "launchd.out.log"), "StandardErrorPath": str(state / "launchd.err.log"),
@@ -407,14 +437,49 @@ def plist_path() -> Path:
     return Path("~/Library/LaunchAgents").expanduser() / f"{LABEL}.plist"
 
 
+def install_problems(repo: Path, state: Path, here: Path = HERE) -> list[str]:
+    """Why install must refuse: the agent would run a copy that goes away (a worktree is deleted, a work tree
+    switches branches), keep its state where bootstrap re-clones, or file tickets where cd does not read."""
+    home, out = install_dir(), []
+    if not _under(here, home):
+        out.append(f"this is not the installed copy ({here}); run the one bootstrap installed: "
+                   f"python3 {home}/jui_tools/tools/cc_watch/watch.py install --repo <jsonui-cli work tree>")
+    if _under(state, home):
+        out.append(f"--state {state} is inside the install folder {home}, which bootstrap re-clones; keep the default")
+    if _under(repo, home):
+        out.append(f"--repo {repo} is the install folder; give the jsonui-cli work tree whose docs/bugs cd reads")
+    return out
+
+
+def install(repo: Path, state: Path, live: bool, here: Path = HERE, any_copy: bool = False,
+            target: Path | None = None, launchctl=subprocess.run) -> int:
+    problems = [p for p in install_problems(repo, state, here) if not (any_copy and p.startswith("this is not"))]
+    if problems:
+        for p in problems:
+            print(f"refused: {p}", file=sys.stderr)
+        return 2
+    state.mkdir(parents=True, exist_ok=True)
+    path = target or plist_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(plist(repo, state, live, here=here))
+    return launchctl(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)]).returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="the daily watch over what we rely on in Claude Code")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("run", "print-plist", "install"):
         s = sub.add_parser(name)
         s.add_argument("--repo", required=True, type=lambda p: Path(p).expanduser().resolve())
-        s.add_argument("--state", default=DEFAULT_STATE, type=lambda p: Path(p).expanduser())
-        s.add_argument("--live", action="store_true", help="also run the throwaway session (uses a little quota)")
+        s.add_argument("--state", default=None, type=lambda p: Path(p).expanduser(),
+                       help="default: $XDG_STATE_HOME or ~/.local/state, /cc-dependency-watch")
+        if name == "install":
+            s.add_argument("--any-copy", action="store_true", help=argparse.SUPPRESS)   # tests only
+        if name == "run":
+            s.add_argument("--live", action="store_true", help="also run the throwaway session (uses a little quota)")
+        else:
+            s.add_argument("--no-live", dest="live", action="store_false",
+                           help="the LaunchAgent without the throwaway session (version and help probes only)")
         if name == "run":
             s.add_argument("--cli", default="claude")
     sub.add_parser("uninstall")
@@ -427,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
         if name == "add-hook":
             s.add_argument("--settings", required=True, type=lambda p: Path(p).expanduser())
     a = ap.parse_args(argv)
+    if getattr(a, "state", "unset") is None:
+        a.state = default_state()
     if a.cmd == "token-help":
         print(TOKEN_HELP)
         return 0
@@ -444,15 +511,10 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "print-plist":
         sys.stdout.write(plist(a.repo, a.state, a.live).decode())
         return 0
-    uid = os.getuid()
     if a.cmd == "install":
-        a.state.mkdir(parents=True, exist_ok=True)
-        path = plist_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(plist(a.repo, a.state, a.live))
-        return subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(path)]).returncode
+        return install(a.repo, a.state, a.live, any_copy=a.any_copy)
     path = plist_path()
-    rc = subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"]).returncode
+    rc = subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"]).returncode
     if path.exists():
         path.unlink()
     return rc
