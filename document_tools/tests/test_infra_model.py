@@ -105,6 +105,11 @@ def test_providers_are_inherited_and_a_logical_group_gives_none():
     assert groups["shop"]["providerResolved"] == "" and groups["gcp-tokyo"]["providerResolved"] == "gcp"
     assert nodes["api"]["providerResolved"] == "cloudflare" and nodes["search"]["providerResolved"] == "gcp"
     assert nodes["browser"]["providerResolved"] == ""                      # no provider, no group
+    # a logical group inside a provider's account still gives what it holds no provider
+    m2, _ = M.merge([("a.json", json.dumps({"version": 0, "groups": [
+        {"id": "acct", "kind": "account", "provider": "aws"}, {"id": "tier", "kind": "logical", "parent": "acct"}],
+        "nodes": [{"id": "n", "category": "cache", "group": "tier"}]}).encode())])
+    assert m2["nodes"][0]["providerResolved"] == ""
     edges = {(e["from"], e["to"]): e["crossProvider"] for e in model["edges"]}
     assert edges[("api", "kv")] is False and edges[("web", "api")] is True and edges[("r2", "backup")] is True
     assert edges[("browser", "web")] is False                              # an end with no provider is not a crossing
@@ -179,6 +184,15 @@ def test_references_across_files():
     ("-----BEGIN PRIVATE KEY-----", {"private_key"}), ("998877665544", {"account_id"}),
     ("mysql 8.4", set()), ("v1.2.3", set()), ("ap-northeast-1", set()), ("https://example.com/docs", set()),
     ("postgres 17", set()), ("Cloud SQL (Postgres)", set()), ("port 5432", set()), ("1.2.3.4.5", set()),
+    # dd's verification, 10-20: what slipped through ...
+    ("host 10.0.0.5.", {"ip_address"}), ("2001:db8::1", {"ip_address"}), ("fe80::1ff:fe23:4567:890a", {"ip_address"}),
+    ("1234-5678-9012", {"account_id"}), ("github_pat_" + "a1" * 11, {"token"}), ("glpat-" + "x" * 20, {"token"}),
+    ("-----begin rsa private key-----", {"private_key"}), ("arn\u200b:aws:s3:::b", {"arn"}),
+    ("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", {"token"}),
+    # ... and what an ordinary model writes, which is no secret
+    ("0.0.0.0:8080", set()), ("127.0.0.1", set()), ("::1", set()), ("postgresql://", set()), ("redis://", set()),
+    ("Password=", set()), ("Server=", set()), ("Data Source=", set()), ("v1.25.3.1", set()), ("12:30:45", set()),
+    ("da39a3ee5e6b4b0d3255bfef95601890afd80709", set()), ("docs/infra/icons/database-relational-01.svg", set()),
 ])
 def test_the_secret_shapes(text, kinds):
     assert set(M.secret_findings(text)) == kinds
@@ -202,3 +216,95 @@ def test_the_room_keeps_the_limits_across_files():
                                                                for k in range(cap // 2 + 1)]}).encode()) for i in range(2)]
     model, problems = M.merge(files)
     assert len(model["nodes"]) == cap and [p["code"] for p in problems] == ["model.too_big"]
+
+
+
+# ---------------------------------------------------------------- dd's verification (10-20): environments, groups, limits
+
+def _all_rooms():
+    for room, folder in (("aws-three-tier", "docs/infra"), ("multi-provider", "docs/infra"),
+                         ("compose-and-cloud", "infra/model"), ("large-multi-provider", "docs/infra")):
+        yield room, _room(FIX / room / folder)[0]
+
+
+def test_nothing_is_drawn_in_an_environment_what_holds_it_is_not_in():
+    """D1: an edge with no environments of its own was put in every environment, so switching to one drew a cable
+    with no end (alb-prod→api-prod in staging; 5 in compose-and-cloud, 105 in the large one)."""
+    for room, m in _all_rooms():
+        nodes = {n["id"]: n for n in m["nodes"]}
+        groups = {g["id"]: g for g in m["groups"]}
+        for e in m["edges"]:
+            assert set(e["environments"]) <= set(nodes[e["from"]]["environments"]) & set(nodes[e["to"]]["environments"]), (room, e)
+        for n in m["nodes"]:
+            if n.get("group"):
+                assert set(n["environments"]) <= set(groups[n["group"]]["environments"]), (room, n["id"])
+        for g in m["groups"]:
+            if g.get("parent"):
+                assert set(g["environments"]) <= set(groups[g["parent"]]["environments"]), (room, g["id"])
+    m = dict(_all_rooms())["aws-three-tier"]
+    assert next(e for e in m["edges"] if (e["from"], e["to"]) == ("alb-prod", "api-prod"))["environments"] == ["production"]
+
+
+def test_naming_an_environment_the_container_is_not_in():
+    raw = json.dumps({"version": 0, "environments": [{"id": "p"}, {"id": "s"}],
+                      "groups": [{"id": "g", "kind": "account", "environments": ["p"]}],
+                      "nodes": [{"id": "a", "category": "cache", "group": "g", "environments": ["p", "s"]},
+                                {"id": "b", "category": "cache", "group": "g", "environments": ["s"]},
+                                {"id": "c", "category": "cache", "environments": ["s"]}],
+                      "edges": [{"from": "a", "to": "c"}]}).encode()
+    m, problems = M.merge([("a.json", raw)])
+    codes = sorted(p["code"] for p in problems)
+    assert codes == ["environment.none", "environment.none", "environment.outside", "environment.outside"], codes
+    assert {n["id"]: n["environments"] for n in m["nodes"]} == {"a": ["p"], "c": ["s"]} and m["edges"] == []
+
+
+def test_a_group_left_out_is_no_one_s_parent():
+    """D5: a group left out (here for an environment not declared) was still named as its child's parent."""
+    raw = json.dumps({"version": 0, "environments": [{"id": "p"}], "groups": [
+        {"id": "pa", "kind": "account", "environments": ["nope"]}, {"id": "ch", "kind": "network", "parent": "pa"}]}).encode()
+    m, problems = M.merge([("a.json", raw)])
+    assert [g["id"] for g in m["groups"]] == ["ch"] and "parent" not in m["groups"][0]
+    assert "group.missing" in {p["code"] for p in problems}
+
+
+def test_only_the_groups_on_a_cycle_are_said_to_be_on_it():
+    raw = json.dumps({"version": 0, "groups": [{"id": "d", "kind": "region", "parent": "a"},
+                                               {"id": "a", "kind": "region", "parent": "b"},
+                                               {"id": "b", "kind": "region", "parent": "a"}]}).encode()
+    m, problems = M.merge([("a.json", raw)])
+    assert sorted(p["path"] for p in problems if p["code"] == "group.cycle") == ["/groups/1/parent", "/groups/2/parent"]
+    assert {g["id"]: g.get("parent") for g in m["groups"]}["d"] == "a"
+
+
+def test_the_limits_cut_and_the_rest_is_drawn():
+    cap = M.schema()["properties"]["groups"]["maxItems"]
+    files = [(f"f{i}.json", json.dumps({"version": 0, "groups": [{"id": f"g{i}-{k}", "kind": "region"}
+                                                                for k in range(cap // 2 + 100)]}).encode()) for i in range(2)]
+    m, problems = M.merge(files)
+    assert len(m["groups"]) == cap and [p["code"] for p in problems] == ["model.too_big"]
+    ncap = M.schema()["properties"]["nodes"]["maxItems"]
+    one = json.dumps({"version": 0, "nodes": [{"id": f"n{k}", "category": "cache"} for k in range(ncap + 1)]}).encode()
+    m, problems = M.merge([("one.json", one)])                    # one file past the limit is cut, not thrown away
+    assert len(m["nodes"]) == ncap and [p["code"] for p in problems] == ["model.too_big"]
+
+
+@pytest.mark.parametrize("version", [False, 0.0, "0", None])
+def test_version_is_the_integer_zero(version):
+    assert [p["code"] for p in M.check_file("a.json", json.dumps({"version": version}).encode())[1]] == ["schema"]
+
+
+@pytest.mark.parametrize("key", ["10.9.8.7", "arn:aws:iam::123456789012:role/x", "998877665544", "anything-else"])
+def test_a_key_is_never_shown_in_a_path(key):
+    """D2: a key that is not a field of the model may be a value: a path shows it as <key>."""
+    raw = json.dumps({"version": 0, "nodes": [{"id": "a", "category": "cache", key: "x"}]}).encode()
+    _d, problems = M.check_file("a.json", raw)
+    assert problems and all(key not in json.dumps(p, ensure_ascii=False) for p in problems)
+    assert {p["path"] for p in problems} == {"/nodes/0/<key>"}
+
+
+def test_deep_nesting_is_a_json_problem_not_an_exception():
+    raw = ('{"version": 0, "description": ' + "[" * 1100 + "]" * 1100 + "}").encode()
+    data, problems = M.check_file("deep.json", raw)
+    assert data is None and [p["code"] for p in problems] == ["json"]
+    m, _ = M.merge([("deep.json", raw)])
+    assert m["nodes"] == []
