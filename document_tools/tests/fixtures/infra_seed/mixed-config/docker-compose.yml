@@ -1,0 +1,23 @@
+services:
+  api:
+    build: ./backend
+    depends_on:
+      - db
+      - cache
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+  worker:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16
+  cache:
+    image: redis:7
+  mail:
+    image: axllent/mailpit:latest
+  auth:
+    image: quay.io/keycloak/keycloak:25.0
+volumes:
+  pgdata: {}

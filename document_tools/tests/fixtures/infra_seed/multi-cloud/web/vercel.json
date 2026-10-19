@@ -1,0 +1,5 @@
+{
+  // a comment, as vercel.json may not have; seed reads JSON with comments
+  "name": "web",
+  "crons": [{ "path": "/api/cleanup", "schedule": "0 0 * * *" }]
+}

@@ -2524,6 +2524,29 @@ def main():
     )
     validate_infra_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
 
+    # Seed command: draft the infra model from IaC, config files and code (the server room, 2.3.6)
+    seed_parser = subparsers.add_parser(
+        "seed",
+        help="Draft a model from what the project already says (a starting point to edit; never the display source)"
+    )
+    seed_subparsers = seed_parser.add_subparsers(dest="seed_type", help="What to draft")
+    seed_infra_parser = seed_subparsers.add_parser(
+        "infra",
+        help="Draft docs/infra from Compose, Terraform, Kubernetes, CloudFormation/CDK, wrangler, PaaS files and code "
+             "(SDK imports, environment variable names). Never reads Terraform state or .env values."
+    )
+    seed_infra_parser.add_argument(
+        "root", nargs="?", default=".",
+        help="The project root (the folder with jui.config.json); default: the current folder"
+    )
+    seed_infra_parser.add_argument(
+        "-o", "--out",
+        help="Where to write draft.json and seed-report.json (default: <infra.dir>/seed, below the model's folder)"
+    )
+    seed_infra_parser.add_argument("--stdout", action="store_true",
+                                   help="Print the draft instead of writing it (the summary goes to stderr)")
+    seed_infra_parser.add_argument("--force", action="store_true", help="Replace a draft already in the output folder")
+
     # Rules command
     rules_parser = subparsers.add_parser(
         "rules",
@@ -2916,6 +2939,12 @@ def main():
         else:
             validate_parser.print_help()
             return 0
+    elif args.command == "seed":
+        if getattr(args, "seed_type", None) == "infra":
+            from .infra import seed as infra_seed
+            return infra_seed.run(Path(args.root), Path(args.out) if args.out else None, args.stdout, args.force)
+        seed_parser.print_help()
+        return 0
     elif args.command in ["rules", "r"]:
         if hasattr(args, 'rules_type') and args.rules_type:
             if args.rules_type == "init":
