@@ -531,6 +531,7 @@ function build3D() {
     if (h.kind === 'floor') { if (SOURCE.mode === 'live') towerLeave(h.k, h.project); else towerLeave(0); }   // the demo has one office
     else if (h.kind === 'room') setProject(h.project);
     else if (h.kind === 'robot') openRobot(h.id, canvas);
+    else if (h.kind === 'call') openCall(h.project, canvas);
     else if (h.kind === 'tasks') { fit(h.project); openTaskBoard(canvas, undefined, h.project); }
     else if (h.kind === 'spec') { fit(SPECS[h.i].project); openWhiteboard(h.i, canvas); }
     else { fit(h.project); openWhiteboard(-1, canvas, h.project); }
@@ -539,7 +540,7 @@ function build3D() {
     if (ev.buttons || (zoom.zoomed && !rbState.id)) return;
     const h = hitAt(ev);
     canvas.style.cursor = h ? 'pointer' : '';
-    canvas.title = h && (h.kind === 'floor' || h.kind === 'room') ? h.title : '';
+    canvas.title = h && (h.kind === 'floor' || h.kind === 'room' || h.kind === 'call') ? h.title : '';
   });
 
   sceneEl.addEventListener('pointerdown', () => { DIRECTOR.userAt = performance.now(); });
@@ -1107,6 +1108,8 @@ function liveSoloSync() {
   if (!box) return;
   box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed;
   if (solo) setText(document.getElementById('room-solo-name'), PROJECT[solo].name);
+  const call = document.getElementById('room-call');
+  if (call) call.hidden = SOURCE.mode !== 'live';   // the call bell's keyboard way in (2.3.5); the demo has no folder
 }
 /* ---------- the room up close: a water server, a robot vacuum and a wooden floor (requester, 10-18) ----------
    Only in the one-room view (room-solo) and only while that room has 10 robots or fewer; built when it is wanted and
@@ -1116,9 +1119,9 @@ function liveSoloSync() {
    view, PROPS.max robots or fewer); robots on a break walk to them (BRK below). Where the three stand: propsPlace. */
 const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
   boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9,   // the robots' scale (they stand about 1 m)
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null };
 const PROPS_EMPTY = { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0,
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null };
 function woodTexture(dark) {
   const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
   const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
@@ -1186,6 +1189,7 @@ function propsBuild(id) {
   g.add(vac); PROPS.vac = vac;
   PROPS.shredder = shredderBuild(r, g);
   gitDeskBuild(id, g);   // the cardboard box on its desk (2.3.4)
+  PROPS.bell = bellBuild(P.callButton); g.add(PROPS.bell);   // the call bell (2.3.5)
   propsBoxes(0, true);
   const start = propsSpot();
   vac.position.set(start[0], 0, start[1]);
@@ -1208,7 +1212,7 @@ function propsBoxes(nowSec, force) {
   const half = 0.42 * PROPS.serverScale;
   PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
   const P = PROPS.place;   // the booth and the machine with the spot in front of it (10-19), the box's desk (2.3.4)
-  PROPS.boxes.push([P.booth.x0, P.booth.x1, P.booth.z0, P.booth.z1], [P.vend.x0, P.vend.x1, P.vend.z0, P.vend.spot[1] + 0.3], P.git.rect);
+  PROPS.boxes.push([P.booth.x0, P.booth.x1, P.booth.z0, P.booth.z1], [P.vend.x0, P.vend.x1, P.vend.z0, P.vend.spot[1] + 0.3], P.git.rect, P.callButton.rect);
 }
 function propsClearAt(x, z) {
   const a = propsArea(), m = PROPS.radius + 0.06;
@@ -1222,6 +1226,31 @@ function propsSpot() {
     if (propsClearAt(x, z)) return [x, z];
   }
   return [a.x1, a.z1];
+}
+/* ---------- the call bell (2.3.5, requester 10-19: 「ロボット呼び出しボタンを部屋に置いて、そのボタン押したらそのプロジェクトで
+   新規セッション呼び出すためのスクリプトコピーできるダイアログ出してほしい」) ----------
+   A desk bell on a slim stand, one of PROPS (the one-room view only), in the strip along the back wall that no desk
+   takes (z0 to z0 + SEAT.back): BELL.x from the back-left corner, past the smoking booth (BOOTH.w) and short of the
+   shredder near the middle. No robot walks to it: a click (or the header's button, 50-panel.js) opens the dialog with
+   the command to copy; viz runs nothing (callcmd.py). Its footprint is propsPlace's bell row, in the breaks arm's 12
+   room configs with the others (row callButton; b8's data server, row dataServer, stands just to its right), and the vacuum keeps off it (propsBoxes). */
+const BELL = { x: 3.3, z: 0.5, w: 0.36, h: 1.0 };
+function bellSpot(r) {
+  const x = r.x0 + BELL.x, z = r.z0 + BELL.z, h = BELL.w / 2;
+  return { x, z, rect: [x - h, x + h, z - h, z + h] };
+}
+function bellBuild(B) {
+  const g = new THREE.Group(), metal = toon('#5b6370'), brass = toon('#d9a53a'), red = toon('#e5484d');
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.18, 0.04, 20), metal); base.position.y = 0.02; g.add(base);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, BELL.h - 0.1, 12), metal); pole.position.y = (BELL.h - 0.1) / 2; g.add(pole);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.04, 20), metal); top.position.y = BELL.h - 0.08; g.add(top);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), brass); dome.position.y = BELL.h - 0.06; g.add(dome);
+  const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.05, 10), red); knob.position.y = BELL.h + 0.08; g.add(knob);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.18), new THREE.MeshBasicMaterial({ map: signTexture('呼び出し', '#e5484d', '#ffffff'), toneMapped: false }));
+  sign.position.set(0, BELL.h - 0.32, 0.035); g.add(sign);
+  g.position.set(B.x, 0, B.z);
+  g.traverse((o) => { o.userData.callBell = true; });
+  return g;
 }
 /* ---------- the cardboard box: git push / pull (2.3.4, requester 10-19) ----------
    "部屋拡大の時に…机おいてその上にダンボール箱を設置 Gitのプッシュとかの場合はダンボールにコミットしたコード量に応じて書類をロボットが
@@ -1440,7 +1469,7 @@ function propsPlace(r) {
   vend.cx = (vend.x0 + vend.x1) / 2;
   vend.spot = [vend.cx, vend.z1 + 0.55, Math.PI];   // in front of it, facing it
   vend.way = [[vend.cx, vend.z1 + 1.3]];              // from the front: never round its corner
-  return { booth, server, vend, backDoor, git: gitDeskSpot(r), shredder: shredderSpot(r) };   // the git box's desk (2.3.4, GITBOX) and the shredder (10-19)   // the git box's desk (2.3.4, GITBOX)
+  return { booth, server, vend, backDoor, git: gitDeskSpot(r), shredder: shredderSpot(r), callButton: bellSpot(r) };   // the call bell (2.3.5, BELL)   // the git box's desk (2.3.4, GITBOX) and the shredder (10-19)   // the git box's desk (2.3.4, GITBOX)
 }
 function signTexture(text, bg, ink, w = 256, h = 96) {
   const cv = makeCanvas(w, h), ctx = cv.getContext('2d');
@@ -1763,7 +1792,8 @@ function towerHit(ray) {
 }
 function liveHit(ray) {
   const solo = liveSolo(), rooms = Object.entries(LIVE3D.rooms).filter(([id]) => !solo || id === solo).map(([, R]) => R);
-  const targets = [...rooms.flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.filter((R) => R.robot.root.visible).map((R) => R.robot.root)];
+  const targets = [...rooms.flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.filter((R) => R.robot.root.visible).map((R) => R.robot.root),
+    ...(PROPS.bell && PROPS.room === solo ? [PROPS.bell] : [])];
   const hit = ray.intersectObjects(targets, true)[0];
   if (!hit) {
     // a room's floor picks the room (the floor view only)
@@ -1774,6 +1804,7 @@ function liveHit(ray) {
   let o = hit.object;
   while (o && o.userData.robotId === undefined && o.parent) o = o.parent;
   if (o && o.userData.robotId !== undefined) return { kind: 'robot', id: o.userData.robotId };
+  for (let q = hit.object; q; q = q.parent) if (q.userData.callBell) return { kind: 'call', project: PROPS.room, title: 'ロボットを呼ぶ（起動のコマンドをコピー）' };
   for (const [id, R] of Object.entries(LIVE3D.rooms)) {
     if (hit.object === R.kb.mesh) return { kind: 'tasks', project: id };
     if (R.tb && hit.object === R.tb.mesh) return { kind: 'board', project: id };

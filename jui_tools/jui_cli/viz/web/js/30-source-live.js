@@ -92,6 +92,22 @@ const SOURCE = {
       return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
     } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
   },
+  /* The call bell (2.3.5, 50-panel.js): the line to paste, made by the server (callcmd.py) from the project's own folder,
+     under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. */
+  async callCommand(project, name, role) {
+    try {
+      const res = await fetch('/api/call-command', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ projectId: project, name, role }),
+      });
+      const text = await res.text();
+      let body = null;
+      try { body = JSON.parse(text); } catch (err) { body = null; }
+      if (res.ok && body && body.ok) return { ok: true, command: body.command, flag: body.flag };
+      return { ok: false, why: (body && body.why) || `作れなかった（${res.status} ${text.trim()}）` };
+    } catch (err) { return { ok: false, why: 'サーバーにつながらない' }; }
+  },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
   /* One picture of that history (2.3.4): the robot and the picture's place, under the same checks as a prompt

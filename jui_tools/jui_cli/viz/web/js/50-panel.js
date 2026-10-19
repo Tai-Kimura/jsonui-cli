@@ -1632,3 +1632,71 @@ function closeAlwaysConfirm(back) {
   alwaysDlg = null; el.remove();
   if (back && opener && document.contains(opener)) opener.focus({ preventScroll: true });
 }
+
+/* ---------- the call bell's dialog (2.3.5, ticket 2026-10-19-jui-viz-call-a-robot-button) ----------
+   The bell in the room up close (40-scene.js) or the header's 呼び出し opens it for that project: a name (required, one
+   line), a role text (optional), the command the server makes from them (SOURCE.callCommand -> /api/call-command,
+   callcmd.py) and a copy button. Each edit asks again; only the latest answer is shown (CALL.seq), and the copy button
+   is off whenever the shown line is not the one for what is typed now. Copy: the clipboard API (127.0.0.1 is a secure
+   context); when that fails, the line is selected for a manual copy. viz runs nothing. */
+const CALL = { project: null, opener: null, seq: 0, command: '', timer: 0 };
+const callEl = $('call');
+function openCall(project, opener) {
+  if (!project || !PROJECT[project]) return;
+  CALL.project = project; CALL.opener = opener || document.activeElement; CALL.command = '';
+  const p = PROJECT[project];
+  setText($('call-lead'), `${p.name}（${p.path || ''}）に、担当名つきの新しいセッションを起動するコマンド`);
+  $('call-cmd').value = ''; setText($('call-why'), '担当名を入れてください'); $('call-copy').disabled = true;
+  callEl.hidden = false;
+  $('call-name').focus();
+  callAsk();
+}
+function closeCall() {
+  if (callEl.hidden) return;
+  callEl.hidden = true; CALL.seq++; clearTimeout(CALL.timer);
+  const back = CALL.opener;
+  CALL.project = null; CALL.opener = null;
+  if (back && document.contains(back) && back.focus) back.focus({ preventScroll: true });
+}
+function callAsk() {
+  clearTimeout(CALL.timer);
+  const seq = ++CALL.seq, project = CALL.project, name = $('call-name').value, role = $('call-role').value;
+  CALL.command = ''; $('call-copy').disabled = true;
+  if (!name.trim()) { $('call-cmd').value = ''; setText($('call-why'), '担当名を入れてください'); return; }
+  CALL.timer = setTimeout(async () => {
+    const got = await SOURCE.callCommand(project, name, role);
+    if (seq !== CALL.seq || callEl.hidden) return;   // typed again (or closed) meanwhile: a newer answer comes
+    if (!got.ok) { $('call-cmd').value = ''; setText($('call-why'), got.why || '作れなかった'); return; }
+    CALL.command = got.command; $('call-cmd').value = got.command; $('call-copy').disabled = false;
+    setText($('call-why'), got.flag === '--channels' ? '貼って実行すると、このプロジェクトで新しいセッションが始まります'
+      : '貼って実行すると、このプロジェクトで新しいセッションが始まります（起動時に development channels の警告が 1 回出ます）');
+  }, 150);
+}
+async function callCopy() {
+  const line = CALL.command;
+  if (!line) return;
+  try {
+    await navigator.clipboard.writeText(line);
+    showToast('コマンドをコピーした（ターミナルに貼って実行）');
+    setText($('call-why'), 'コピーした。ターミナルに貼って実行してください');
+  } catch (err) {
+    const t = $('call-cmd'); t.focus(); t.select();
+    showToast('コピーできなかった。選択したので ⌘C でコピーしてください');
+    setText($('call-why'), 'コピーできなかった。コマンドを選択したので ⌘C でコピーしてください');
+  }
+}
+$('call-name').addEventListener('input', callAsk);
+$('call-role').addEventListener('input', callAsk);
+$('call-copy').addEventListener('click', callCopy);
+$('call-close').addEventListener('click', closeCall);
+$('room-call').addEventListener('click', (e) => openCall(liveSolo(), e.currentTarget));
+callEl.addEventListener('click', (e) => { if (e.target === callEl) closeCall(); });
+callEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCall(); return; }
+  if (e.key === 'Tab') {   // the focus stays in the dialog
+    const f = [...callEl.querySelectorAll('input, textarea, button')].filter((x) => !x.disabled);
+    const i = f.indexOf(document.activeElement);
+    e.preventDefault();
+    f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+  }
+});

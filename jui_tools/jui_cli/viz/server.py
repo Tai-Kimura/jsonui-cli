@@ -29,7 +29,7 @@ from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import clockout, paths, security
+from . import callcmd, clockout, paths, security
 from .config import VizConfig
 from .state import VizState, now_ms
 
@@ -39,6 +39,7 @@ USAGE_MAX_BODY = 64_000
 PROMPT_MAX_BODY = 8_192
 #: POST /api/session/end: {"sessionId", "agentId"} and nothing more.
 END_MAX_BODY = 1_024
+CALL_MAX_BODY = 32_768   # the call button: a role text of callcmd.ROLE_MAX characters, JSON-escaped
 AUTH_TIMEOUT_SEC = 2.0
 POLL_SEC = 25.0
 PRESENCE_MS = 12_000
@@ -443,6 +444,34 @@ def make_app(ctx: ServerContext) -> web.Application:
             ctx.publish()
         return web.json_response({"ok": True})
 
+    async def api_call_command(request: web.Request) -> web.Response:
+        """The call button's command (2.3.5, callcmd.py): {"projectId", "name", "role"} -> {"command", "flag", "root"}.
+        Nothing is run and nothing is written: the line is made here so its quoting is one piece of Python with its own
+        arms (tests/test_viz_callcmd.py: zsh and bash, run and pasted). The checks of /api/prompt (prompt_checks: POST,
+        the page's own Host and Origin, the token, JSON, a capped body); the folder is the server's own record of the
+        project (rooms.root_of), never a path from the client; the channels flag is read from the managed settings."""
+        refused = prompt_checks(request, ctx, CALL_MAX_BODY)
+        if refused is not None:
+            log(f"拒否: /api/call-command（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, CALL_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        if not isinstance(body, dict) or not isinstance(body.get("projectId"), str):
+            return web.Response(status=400, text="projectId is required\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        root = ctx.world.rooms.root_of(body["projectId"])
+        if not root:
+            return web.Response(status=404, text="no such project\n")
+        name, role = body.get("name", ""), body.get("role", "")
+        why = callcmd.check(name, role)
+        if why:
+            return web.json_response({"ok": False, "why": why}, status=400)
+        flag = callcmd.channels_flag()
+        return web.json_response({"ok": True, "command": callcmd.command(root, name, role, flag), "flag": flag, "root": root},
+                                 headers={"Cache-Control": "no-store"})
+
     async def api_history_image(request: web.Request) -> web.Response:
         """One picture of the 応答の履歴 (2.3.4): {"agentId", "off", "n"} names the robot (so its transcript) and the
         picture in it (sources/history.image_at). The same checks as /api/prompt (prompt_checks: POST, the page's own
@@ -522,6 +551,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/prompt", api_prompt)
     app.router.add_route("*", "/api/history-image", api_history_image)
     app.router.add_route("*", "/api/session/end", api_session_end)
+    app.router.add_route("*", "/api/call-command", api_call_command)
     app.router.add_post("/channel/hello", channel_hello)
     app.router.add_post("/channel/request", channel_request)
     app.router.add_get("/channel/poll", channel_poll)

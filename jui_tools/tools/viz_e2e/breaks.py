@@ -56,7 +56,8 @@ GEOM_JS = """() => {
         vend: [P.vend.x0, P.vend.x1, P.vend.z0, P.vend.z1], customer: box(P.vend.spot[0], P.vend.spot[1], 0.5),
         boothWay: box(P.booth.way[0][0], P.booth.way[0][1], 0.5), vendWay: box(P.vend.way[0][0], P.vend.way[0][1], 0.5),
         gitDesk: P.git.rect, gitStand: box(P.git.stand[0], P.git.stand[1], 0.5),
-        shredder: P.shredder.box, shredSpot: box(P.shredder.spot[0], P.shredder.spot[1], 0.5) };   // the shredder and its feeder's spot (10-19)   // the git box's desk and its stand (2.3.4)
+        shredder: P.shredder.box, shredSpot: box(P.shredder.spot[0], P.shredder.spot[1], 0.5),
+        callButton: P.callButton.rect };   // the call bell (2.3.5): no robot walks to it, so no spot   // the shredder and its feeder's spot (10-19)   // the git box's desk and its stand (2.3.4)
       const sx0 = r.x0 + S.left + F.l + G.SEAT_SOLO.left, sx1 = r.x1 - S.aisleR - F.r - G.SEAT_SOLO.right, sz0 = r.z0 + S.back + F.b, sz1 = r.z1 - S.aisleF - F.f;
       const da = { leftZ: r.z1 + G.doorAt.leftZ, backX: r.x1 + G.doorAt.backX, frontX: r.x1 + G.doorAt.frontX }, h = G.DOOR_W / 2;
       const zones = { desks: [sx0 - Math.max(F.l, 0.5), sx1 + Math.max(F.r, 0.5), sz0 - F.b, sz1 + F.f], frontAisle: [r.x0, r.x1, r.z1 - S.aisleF, r.z1],
@@ -98,7 +99,8 @@ REAL_JS = """() => {
   const b = window.__dbg.brk(), M = b.meshBoxes, out = { bad: [], desks: b.deskBoxes.length, boxes: M, backDoor: b.place && b.place.backDoor };
   const hit = (a, c) => a && c && a[0] < c[1] && c[0] < a[1] && a[2] < c[3] && c[2] < a[3];
   for (const [n, m] of Object.entries(M)) { if (!m) out.bad.push(`${n} not built`); for (const [id, d] of b.deskBoxes) if (hit(m, d)) out.bad.push(`${n} x desk of ${id}`); }
-  if (hit(M.booth, M.vend) || hit(M.booth, M.server) || hit(M.vend, M.server)) out.bad.push('props overlap each other');
+  const names = Object.keys(M);   // every pair of the built props (the call bell too, 2.3.5)
+  for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (hit(M[names[i]], M[names[j]])) out.bad.push(`props overlap each other: ${names[i]} x ${names[j]}`);
   // the ruling on the built meshes: the booth at the room's back-left corner, the machine beside the server, same back line
   const r = window.__dbg.room(window.__dbg.props().room);
   if (M.booth && (Math.abs(M.booth[0] - r.x0) > 0.01 || Math.abs(M.booth[2] - r.z0) > 0.01)) out.bad.push(`the booth is not in the back-left corner: ${M.booth} room ${r.x0},${r.z0}`);
