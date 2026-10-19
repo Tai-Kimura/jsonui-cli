@@ -24,7 +24,8 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page
+from waits import settled, until
 
 MAIN = "e2e00000-0000-4000-8000-0000000003a1"
 SUBS = [("a3sub000000000000impl", "jsonui-implement"), ("a3sub000000000000test", "jsonui-test")]
@@ -40,11 +41,12 @@ def check(failures, cond, text):
         failures.append(f"workwear: {text}")
 
 
+WHY = "() => ({ wear: window.__dbg.wear().map((x) => [x.id, x.size, x.handY, x.deskY]), settle: window.__dbg.settleInfo() })"
+
+
 async def wait(page, js, timeout=20000, label="", arg=None):
-    try:
-        await page.wait_for_function(js, arg=arg, timeout=timeout, polling=100)
-    except Exception as e:
-        raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
+    """Checked every animation frame and named (waits.until); a timeout carries the robots' state."""
+    await until(page, js, label or js[:90], arg=arg, timeout=timeout, why=WHY)
 
 
 def _lin(c):
@@ -126,16 +128,15 @@ async def run_workwear(pw, out, failures):
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "workwear", **DESKTOP)
         await page.goto(url + "/")
-        await ready(page)
+        await until(page, "() => !!(window.__dbg && window.__dbg.robots && document.body.dataset.mode === 'live')", "the page is up", timeout=30000)
         await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
         hook(hook_event_name="SessionStart", source="startup")
         hook(hook_event_name="UserPromptSubmit", prompt="二人に頼む")
         for aid, atype in SUBS:
             hook(hook_event_name="SubagentStart", agent_id=aid, agent_type=atype)
         await wait(page, "() => window.__dbg.wear().length >= 3", label="three robots")
-        await wait(page, "() => window.__dbg.play().robots.every((x) => x.path === 0)", timeout=30000, label="seated")
+        await settled(page, "the three seated", timeout=30000)
         await page.evaluate("() => { window.__dbg.play({ p: 0, solo: { p: 0 } }); window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); }")
-        await page.wait_for_timeout(800)
         wear = res["wear"] = await page.evaluate(WEAR)
         main = next(x for x in wear if x["kind"] == "main")
         subs = [x for x in wear if x["kind"] == "sub"]
@@ -160,7 +161,7 @@ async def run_workwear(pw, out, failures):
             hook(hook_event_name="PreToolUse", agent_id=aid, agent_type=atype, tool_name="Edit", tool_use_id=f"toolu_w_{aid}",
                  tool_input={"file_path": f"{CWD}/{aid}.py", "old_string": "a", "new_string": "b"})
         await wait(page, "() => window.__dbg.bgLook().every((x) => x.state === 'typing')", label="all three typing")
-        await page.wait_for_timeout(1200)
+        await settled(page, "the three in their typing pose")   # the pose blends in over 8 frames: read it once it has
         typing = res["typing"] = await page.evaluate(WEAR)
         for x in typing:
             size = x["size"]
@@ -171,10 +172,9 @@ async def run_workwear(pw, out, failures):
         room = await page.evaluate("() => window.__dbg.robots[0].def.room")
         await page.click(f".tag.room[data-set-project='{room}']")
         await wait(page, f"() => window.__dbg.solo() === '{room}'", label="the room up close")
-        await page.wait_for_timeout(1500)
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
-            await page.wait_for_timeout(700)
+            await settled(page, f"the room up close, {scheme}")
             await page.screenshot(path=str(out / f"room-{scheme}.png"))
         await page.emulate_media(color_scheme="light")
         # each name tag as placed on the screen: its bottom just above the robot's head (the top of its drawn body)
@@ -206,10 +206,9 @@ async def run_workwear(pw, out, failures):
         check(failures, fit and fit["arcTop"] - fit["crownTop"] >= 0.03 and fit["cupInnerX"] - fit["crownHalfW"] >= 0.03 and not fit["overlapCrownCups"],
               f"the headset's band goes over the cap and its cups clear the cap's sides: {fit}")
         await wait(page, "() => { const f = window.__dbg.focus(); return f.zoomed && !f.tween; }", label="the camera on the subagent")
-        await page.wait_for_timeout(2500)
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
-            await page.wait_for_timeout(700)
+            await settled(page, f"the subagent up close, {scheme}", ids=[sub_id])
             await page.screenshot(path=str(out / f"sub-headset-{scheme}.png"))
         await page.emulate_media(color_scheme="light")
         await page.close()
