@@ -35,7 +35,7 @@ from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import attachments, callcmd, clockout, paths, security
+from . import attachments, callcmd, clockout, infra_docs, paths, security
 from .config import ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec, save_setting
 from .state import VizState, now_ms
 
@@ -778,6 +778,55 @@ def make_app(ctx: ServerContext) -> web.Application:
         return web.Response(body=got, content_type="application/json",
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
+    async def _infra_room(request: web.Request, route: str):
+        """The checks of /api/prompt, then {"projectId", …}: (body, the room's root) or a refusal."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: {route}（{refused.text.strip()}）")
+            return refused, None
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body, None
+        project_id = body.get("projectId") if isinstance(body, dict) else None
+        if not isinstance(project_id, str) or not project_id or len(project_id) > 64:
+            return web.Response(status=400, text="projectId is required\n"), None
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n"), None
+        root = ctx.world.infra_root(project_id)
+        if root is None:
+            return web.Response(status=404, text="no such room\n"), None
+        return body, root
+
+    async def api_infra_docs(request: web.Request) -> web.Response:
+        """The server room's model (infra_docs.read → document_tools' infra.room, the boundary's §5.2): {"projectId",
+        "seq"} names a room; its declared infrastructure is read now from its infra folder (inside the room, no symlink,
+        capped, merged and validated), when the room's door is pressed and never before. The reply carries the page's
+        seq back; a refusal is {ok: false, seq, reason, message} with the boundary's HTTP status. The checks of
+        /api/prompt; never a path from the client; off the event loop; JSON, no-store."""
+        body, root = await _infra_room(request, "/api/infra-docs")
+        if root is None:
+            return body
+        seq = body.get("seq") if isinstance(body.get("seq"), int) and not isinstance(body.get("seq"), bool) else None
+        status, model = await asyncio.get_running_loop().run_in_executor(_data_docs_pool(), infra_docs.read, root, seq)
+        return web.json_response(model, status=status, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+    async def api_infra_icon(request: web.Request) -> web.Response:
+        """One icon the room's settings name ({"projectId", "key": "category:…" | "service:<provider>/<service>"}): an
+        image file in the room, read as the model is (infra_docs.icon), its own media type, nosniff, no-store. A key
+        that is not configured, or a file that cannot be read: 404 (the page draws the neutral shape)."""
+        body, root = await _infra_room(request, "/api/infra-icon")
+        if root is None:
+            return body
+        key = body.get("key")
+        if not isinstance(key, str) or not key or len(key) > 200:
+            return web.Response(status=400, text="key is required\n")
+        got = await asyncio.get_running_loop().run_in_executor(_data_docs_pool(), infra_docs.icon, root, key)
+        if got is None:
+            return web.Response(status=404, text="no such icon\n")
+        data, media = got
+        # POST only (no link opens it as a page); the page shows it through <img>, where an SVG runs no script
+        return web.Response(body=data, content_type=media, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
     async def api_prices(request: web.Request) -> web.Response:
         """The page's 単価 sheet (2.3.6): {"op": set | remove | reset, "model", "row"?} changes the user's price
         table (prices.apply_op) — the checks of /api/prompt (prompt_checks) first. Written in the price table's own
@@ -851,6 +900,8 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/attach-image", api_attach_image)
     app.router.add_route("*", "/api/history-image", api_history_image)
     app.router.add_route("*", "/api/data-docs", api_data_docs)
+    app.router.add_route("*", "/api/infra-docs", api_infra_docs)
+    app.router.add_route("*", "/api/infra-icon", api_infra_icon)
     app.router.add_route("*", "/api/prices", api_prices)
     app.router.add_route("*", "/api/session/end", api_session_end)
     app.router.add_route("*", "/api/call-command", api_call_command)

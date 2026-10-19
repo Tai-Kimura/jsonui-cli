@@ -14,7 +14,7 @@ from typing import Any
 
 from pathlib import Path
 
-from . import clockout, data_docs, gitbox, prices, robots
+from . import clockout, data_docs, gitbox, infra_docs, prices, robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .attachments import Attachments
@@ -139,6 +139,9 @@ def _settled_act(act: str, failed: bool) -> str:
 #: Every DATA_DOCS_EVERY_MS every room is marked (the watcher misses a docs/api or docs/db moved whole).
 DATA_DOCS_EVERY_MS = 5_000
 DATA_DOCS_QUIET_MS = 500
+#: The server room's door (2.3.6+, infra_docs.py): every room's model files are counted (a listing, nothing opened)
+#: this often, in a worker thread of their own; the model itself is read only when the door is pressed.
+INFRA_EVERY_MS = 5_000
 
 
 def attachment_line(record: dict) -> str:
@@ -237,6 +240,10 @@ class World:
         self._data_docs_dirs: dict[str, tuple] = {}  # project id -> its docs/api and docs/db (for file_changed)
         self._data_docs_job = None                   # the worker's future: {project id: (counts, dirs)}
         self._data_docs_pool = None
+        self._infra_cache: dict[str, dict] = {}   # project id -> infra_docs.counts' cache (the worker's only)
+        self._infra_at = -INFRA_EVERY_MS
+        self._infra_job = None
+        self._infra_pool = None
         self._dirty: set[str] = set()
         self._now = 0
         # Called with each JsonUIProject once it is loaded (serve starts its file watcher).
@@ -463,6 +470,47 @@ class World:
         def count() -> dict:
             return {pid: (data_docs.counts(p, caches[pid]), tuple(d for _k, d, _r in data_docs.doc_dirs(p))) for pid, p in quiet.items()}
         self._data_docs_job = self._data_docs_pool.submit(count)
+
+    def _infra_tick(self, at: int) -> None:
+        """The server room's door: every INFRA_EVERY_MS, each room's model files counted in a worker thread (a listing of
+        its infra folder, infra_docs.counts); a room's row gets ``infraDocs`` {files, dir} and the page puts the door
+        where files > 0. Any room, JsonUI or not: the folder is found from the room's own root."""
+        job = self._infra_job
+        if job is not None:
+            if not job.done():
+                return
+            self._infra_job = None
+            try:
+                found = job.result()
+            except Exception:  # noqa: BLE001 — taken again on the next round
+                found = {}
+            for pid, n in found.items():
+                room = self.rooms.projects.get(pid)
+                if room is not None and room.get("infraDocs") != n:
+                    room["infraDocs"] = n
+                    self._dirty.add("projects")
+        if at - self._infra_at < INFRA_EVERY_MS:
+            return
+        self._infra_at = at
+        roots = {pid: self.rooms.root_of(pid) for pid in self.rooms.projects}
+        roots = {pid: r for pid, r in roots.items() if r}
+        if not roots:
+            return
+        if self._infra_pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._infra_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jui-viz-infra")
+        caches = {pid: self._infra_cache.setdefault(pid, {}) for pid in roots}
+
+        def count() -> dict:
+            return {pid: infra_docs.counts(root, caches[pid]) for pid, root in roots.items()}
+        self._infra_job = self._infra_pool.submit(count)
+
+    def infra_root(self, project_id) -> str | None:
+        """The room's root the server room reads (POST /api/infra-docs, /api/infra-icon): a room this server knows, by
+        its id only; None otherwise."""
+        if not isinstance(project_id, str) or project_id not in self.rooms.projects:
+            return None
+        return self.rooms.root_of(project_id)
 
     def data_docs_room(self, project_id):
         """The loaded JsonUI room the rack's sheet reads (POST /api/data-docs), its count marked to be taken again;
@@ -1352,6 +1400,7 @@ class World:
                 self.attachments.drop(sid)
             except OSError:
                 pass
+        self._infra_tick(at)
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]
