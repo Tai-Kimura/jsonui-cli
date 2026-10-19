@@ -381,11 +381,14 @@ def test_the_live_session_runs_twice_isolated_and_sigterms_its_own_child(fake_cl
         # the token reaches the CLI through the child's environment only, never its argv
         assert r["token"] == "SECRET-TOKEN-123" and not any("SECRET-TOKEN" in a for a in r["argv"])
         assert r["argv"][:4] == ["--setting-sources", "", "--settings", str(work / "settings.json")]
+    assert "CLAUDE_CODE_OAUTH_TOKEN" in s.hook_env                  # the hooks saw it, by name only
+    on_disk = [f for f in work.rglob("*") if f.is_file() and b"SECRET-TOKEN" in f.read_bytes()]
+    assert on_disk == []
     assert s.result["ok"] and s.result["cost_usd"] == 0.01 and s.result["usage"]["input_tokens"] == 5
     assert s.sigterm_exit == 143 and s.sigterm_session_end is True
     events = {h["hook_event_name"] for h in s.hook_inputs}
     assert events == {"SessionStart", "UserPromptSubmit", "SessionEnd"}
-    assert s.hook_env.get("CLAUDE_PROJECT_DIR") == str(work / "cwd")
+    assert "CLAUDE_PROJECT_DIR" in s.hook_env
     assert P.session_ran(P.Context(run=fake_cli(), session=s)) == {"ok": True}
 
 

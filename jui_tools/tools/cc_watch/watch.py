@@ -91,7 +91,8 @@ d = sys.argv[1]; kind = sys.argv[2]
 data = sys.stdin.read()
 name = f"{kind}-{time.time_ns()}.json"
 with open(os.path.join(d, name), "w") as f:
-    json.dump({"kind": kind, "stdin": data, "env": {k: v for k, v in os.environ.items() if k.startswith("CLAUDE_")}}, f)
+    # names only: the values include the login token and the CLI's own secrets, which must never reach a file
+    json.dump({"kind": kind, "stdin": data, "env": {k: "" for k in os.environ if k.startswith("CLAUDE_")}}, f)
 if kind == "statusline":
     print("ok")
 '''
