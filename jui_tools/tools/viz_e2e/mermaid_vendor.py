@@ -29,6 +29,17 @@ HOSTILE = ("flowchart LR\n"
            '    click B "javascript:window.__pwned = 4"\n')
 
 
+# A diagram may not set its own config (dd's review, 10-19): each of these turned htmlLabels back on (a foreignObject
+# with the <img>, fetched) or put a url() in the CSS (fetched) before mermaidSafeText and the extra secure keys.
+LABEL = '    A["<img src=/ds-probe-{n}.png>a"] --> B'
+UNLOCKS = {
+    "init": '%%{init: {"htmlLabels": true, "flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n' + LABEL.format(n=1),
+    "secure-emptied": '%%{init: {"secure": [], "htmlLabels": true, "flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n' + LABEL.format(n=2),
+    "front-matter": '---\nconfig:\n  htmlLabels: true\n  flowchart:\n    htmlLabels: true\n---\nflowchart LR\n' + LABEL.format(n=3),
+    "themeCSS": '%%{init: {"themeCSS": ".node rect { fill: url(/ds-probe-4.png); } .label { background: url(/ds-probe-4b.png); }"}}%%\nflowchart LR\n    A --> B',
+}
+
+
 def check(failures, cond, text):
     if not cond:
         failures.append(f"mermaid: {text}")
@@ -86,6 +97,17 @@ async def run_mermaid(pw, out, failures):
         await page.wait_for_timeout(300)
         pwned = await page.evaluate("() => window.__pwned === undefined ? null : window.__pwned")
         check(failures, pwned is None, f"clicking the nodes runs nothing: {pwned}")
+
+        for name, text in UNLOCKS.items():
+            before = len(asked)
+            u = res[f"unlock-{name}"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", text)
+            await page.wait_for_timeout(400)
+            got = [x for x in asked[before:] if "mermaid.min.js" not in x]
+            u["asked"] = got
+            check(failures, u["foreignObjects"] == 0 and u["imgs"] == 0 and not got and u["htmlLabels"] is False,
+                  f"{name}: the diagram cannot set its own config (no foreignObject, no img, nothing fetched): {u['foreignObjects']} {u['imgs']} {got} htmlLabels={u['htmlLabels']}")
+        plain = res["plainAfter"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
+        check(failures, plain["svg"] and plain["nodes"] == 2, f"a diagram without directives still draws: {plain}")
 
         await page.emulate_media(color_scheme="dark")
         dark = res["dark"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)

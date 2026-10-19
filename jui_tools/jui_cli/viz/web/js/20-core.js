@@ -45,15 +45,30 @@ function loadMermaid() {
   }
   return MERMAID.loading;
 }
+/* What a diagram may not set for itself (dd's review, 10-19): Mermaid reads an init / config directive (%%{…}%%) and a
+   front-matter config (--- config: … ---) from the text and lets them change everything but its six `secure` keys —
+   htmlLabels back on (an <img> in a label, fetched), themeCSS with url() (fetched). The text is the spec's: both are
+   taken out before it is drawn, with Mermaid's own patterns (11.17.2), and anything left of a directive is broken
+   up; the keys below are made secure as well, in case one gets through. */
+const MERMAID_FRONT = /^([^\S\n\r]*)-{3}\s*[\n\r](.*?)[\n\r]\1-{3}\s*[\n\r]+/s;
+const MERMAID_DIRECTIVE = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
+const MERMAID_SECURE = ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges', 'htmlLabels', 'flowchart', 'er',
+  'theme', 'themeCSS', 'themeVariables', 'darkMode', 'fontFamily', 'altFontFamily', 'look', 'layout', 'markdownAutoWrap', 'dompurifyConfig', 'deterministicIds'];
+function mermaidSafeText(text) {
+  let t = String(text).replace(MERMAID_FRONT, '');
+  if (/^[^\S\n\r]*-{3}\s*[\n\r]/.test(t)) return '';   // an unclosed front matter: no diagram
+  for (let k = 0; k < 20 && t.includes('%%{'); k++) t = t.replace(MERMAID_DIRECTIVE, '');
+  return t.split('%%{').join('%% {');   // never a directive
+}
 async function renderMermaid(el, text) {
   const mm = await loadMermaid();
   const theme = isDark() ? 'dark' : 'default';
   if (MERMAID.theme !== theme) {
-    mm.initialize({ startOnLoad: false, securityLevel: 'strict', theme, fontFamily: 'var(--font-body)', htmlLabels: false, flowchart: { htmlLabels: false }, er: { useMaxWidth: false } });
+    mm.initialize({ startOnLoad: false, securityLevel: 'strict', theme, fontFamily: 'var(--font-body)', htmlLabels: false, flowchart: { htmlLabels: false }, er: { useMaxWidth: false }, secure: MERMAID_SECURE });
     MERMAID.theme = theme;
   }
   MERMAID.n += 1;
-  const { svg } = await mm.render(`mmd-${MERMAID.n}`, String(text));
+  const { svg } = await mm.render(`mmd-${MERMAID.n}`, mermaidSafeText(text));
   el.innerHTML = svg;   // Mermaid's own SVG, its labels sanitized (securityLevel 'strict')
   el.dataset.theme = theme;
   if (MERMAID.drawn.size >= 40) MERMAID.drawn.clear();

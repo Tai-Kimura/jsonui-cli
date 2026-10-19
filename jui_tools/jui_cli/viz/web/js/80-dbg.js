@@ -15,7 +15,8 @@ window.__dbg = {
     return { loadedBefore: before, error, svg: !!svg, nodes: box.querySelectorAll('g.node').length, text: box.textContent,
       scripts: box.querySelectorAll('script').length, onAttrs: all.filter((e) => [...e.attributes].some((a) => /^on/i.test(a.name))).length,
       jsLinks: all.filter((e) => /^\s*javascript:/i.test(e.getAttribute('href') || e.getAttribute('xlink:href') || '')).length,
-      securityLevel: window.mermaid ? window.mermaid.mermaidAPI.getConfig().securityLevel : null, theme: box.dataset.theme || null,
+      foreignObjects: box.querySelectorAll('foreignObject').length, imgs: box.querySelectorAll('img, image').length,
+      securityLevel: window.mermaid ? window.mermaid.mermaidAPI.getConfig().securityLevel : null, htmlLabels: window.mermaid ? window.mermaid.mermaidAPI.getConfig().htmlLabels : null, theme: box.dataset.theme || null,
       src: [...document.scripts].map((x) => x.getAttribute('src')).filter((x) => x && x.includes('mermaid')) };
   },
   // the data server (2.3.5): its rack (built, its box, where it is on the screen) and its sheet (open, tab, what shows)
