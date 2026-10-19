@@ -1820,17 +1820,21 @@ callEl.addEventListener('keydown', (e) => {
      4 s and whenever the server asks (notify.ping): then a question waits for an answer though the page is hidden
      (cd's ruling 10-19; it lapses notifyPresenceSec after the last word, a closed tab included). */
 const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask', 'chime'];
-const NOTIFY = { on: { done: true, perm: true, ask: true, chime: true }, audio: null, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0 };
+// the chime's loudness (requester 10-20: 「音が少し小さいね」): the tones' peak gain, 中 by default (0.08 before)
+const NOTIFY_VOLUMES = { low: 0.1, mid: 0.2, high: 0.35 };
+const NOTIFY = { on: { done: true, perm: true, ask: true, chime: true }, volume: 'mid', audio: null, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0,
+  tab: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, peers: new Map(), yieldMs: 1500 };
 function notifyLoadPrefs() {
   try {
     const v = JSON.parse(localStorage.getItem(NOTIFY_PREFS) || 'null');
     if (v && typeof v === 'object') for (const k of NOTIFY_KINDS) if (typeof v[k] === 'boolean') NOTIFY.on[k] = v[k];
+    if (v && Object.hasOwn(NOTIFY_VOLUMES, v.volume)) NOTIFY.volume = v.volume;
   } catch (err) { /* no storage: the defaults */ }
 }
 notifyLoadPrefs();
 // a switch turned in another tab holds here too (a kind turned off there must not ring from this one)
 window.addEventListener('storage', (e) => { if (e.key === NOTIFY_PREFS) { notifyLoadPrefs(); notifySettingsShow(); notifyPresenceSay(); } });
-function notifySavePrefs() { try { localStorage.setItem(NOTIFY_PREFS, JSON.stringify(NOTIFY.on)); } catch (err) { /* kept for this page only */ } }
+function notifySavePrefs() { try { localStorage.setItem(NOTIFY_PREFS, JSON.stringify({ ...NOTIFY.on, volume: NOTIFY.volume })); } catch (err) { /* kept for this page only */ } }
 const notifyCan = () => typeof Notification !== 'undefined';
 const notifyGranted = () => notifyCan() && Notification.permission === 'granted';
 const notifyName = (who) => String((DEF[who] && (DEF[who].title || DEF[who].agent)) || who).slice(0, 40);
@@ -1861,7 +1865,7 @@ function notifyOut(key, body, onClick) {
 function notifyAudioMake() {
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC && !NOTIFY.audio) { NOTIFY.audio = new AC(); NOTIFY.audio.onstatechange = () => notifySettingsShow(); }
+    if (AC && !NOTIFY.audio) { NOTIFY.audio = new AC(); NOTIFY.audio.onstatechange = () => { notifySettingsShow(); notifyAudioSay(); }; }
   } catch (err) { /* no sound: the notification still shows */ }
   return NOTIFY.audio;
 }
@@ -1885,22 +1889,56 @@ async function notifyChime(kind) {
     if (ac && ac.state !== 'running') await Promise.race([ac.resume().catch(() => {}), new Promise((done) => setTimeout(done, NOTIFY_RESUME_MS))]);
     rec.after = notifyAudioState();
     rec.t = ac ? +Number(ac.currentTime || 0).toFixed(2) : null;
-    if (ac && ac.state === 'running') { notifyTones(ac, kind); rec.played = true; }
+    if (ac && ac.state === 'running') { rec.peak = notifyTones(ac, kind); rec.played = true; }
   } catch (err) { rec.error = String((err && err.message) || err); }
+  rec.noTab = !rec.played && !notifyPeerCanSound();   // no tab of this browser could make it (the settings say so)
   NOTIFY.lastChime = rec;
   try { console.info('jui viz: chime', JSON.stringify(rec)); } catch (err) { /* the console is for the eye only */ }
   notifySettingsShow();
 }
 function notifyTones(ac, kind) {
+  const peak = NOTIFY_VOLUMES[NOTIFY.volume] || NOTIFY_VOLUMES.mid;
   try {
     const t = ac.currentTime, notes = kind === 'done' ? [880, 660] : [660, 988];
     notes.forEach((hz, i) => {
       const o = ac.createOscillator(), g = ac.createGain(), at = t + i * 0.16;
       o.type = 'sine'; o.frequency.setValueAtTime(hz, at);
-      g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(0.08, at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
+      g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
       o.connect(g); g.connect(ac.destination); o.start(at); o.stop(at + 0.32);
     });
   } catch (err) { /* no sound: the notification has shown */ }
+  return peak;
+}
+/* Which tab rings (the real check 2, 10-20): two old tabs of an earlier check, their sound never started, took the
+   one-time key first and showed the notification silently, while the tab in front could sound. Each tab says on a
+   BroadcastChannel whether its sound runs (when it changes, every NOTIFY_SAY_MS, and good-bye when it goes); a tab
+   that cannot sound leaves an event to a tab that says it can (heard within NOTIFY_PEER_MS), and takes it itself
+   only if, NOTIFY.yieldMs later, nobody has (the notification is never lost, and still shows once). When no tab can
+   sound, the notification shows without it and the settings say so. */
+const NOTIFY_SAY_MS = 2000, NOTIFY_PEER_MS = 6000;
+const notifyBus = typeof BroadcastChannel === 'function' ? new BroadcastChannel('jui-viz-notify-audio') : null;
+function notifyAudioSay(bye = false) {
+  if (!notifyBus) return;
+  try { notifyBus.postMessage({ tab: NOTIFY.tab, running: !bye && notifyAudioReady(), bye }); } catch (err) { /* a closed channel */ }
+}
+if (notifyBus) {
+  notifyBus.onmessage = (e) => {
+    const m = e.data || {};
+    if (typeof m.tab !== 'string' || m.tab === NOTIFY.tab) return;
+    if (m.bye) NOTIFY.peers.delete(m.tab); else NOTIFY.peers.set(m.tab, { running: !!m.running, at: Date.now() });
+    notifySettingsShow();
+  };
+  setInterval(() => notifyAudioSay(), NOTIFY_SAY_MS);
+  window.addEventListener('pagehide', () => notifyAudioSay(true));
+  notifyAudioSay();
+}
+function notifyPeerCanSound() {
+  const now = Date.now();
+  for (const [id, p] of NOTIFY.peers) {
+    if (now - p.at > NOTIFY_PEER_MS) { NOTIFY.peers.delete(id); continue; }
+    if (p.running) return true;
+  }
+  return false;
 }
 // every press until the sound runs (not the first only: a context can go back to suspended)
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { if (!notifyAudioReady()) notifyAudioWake(); }, { capture: true });
@@ -1921,8 +1959,12 @@ function notifyEvent(kind, key, ref, body) {
   // not ring it either (tabs take an event in no fixed order: one that came first may already have rung it)
   const quiet = notifyViewing(kind, ref);
   const ring = () => { if (notifyRungTake(key) && !quiet) { notifyOut(key, body, () => notifyOpen(kind, ref)); notifyChime(kind); } };   // the sound: the same one tab
-  if (navigator.locks && navigator.locks.request) navigator.locks.request('jui-viz-notify', ring).catch(() => {});
-  else ring();
+  const locked = (fn) => (navigator.locks && navigator.locks.request ? navigator.locks.request('jui-viz-notify', fn).catch(() => {}) : fn());
+  locked(() => {
+    // this tab cannot sound and another says it can: that one rings it; this one only if nobody has, a moment later
+    if (!quiet && NOTIFY.on.chime && !notifyAudioReady() && notifyPeerCanSound()) { setTimeout(() => locked(ring), NOTIFY.yieldMs); return; }
+    ring();
+  });
 }
 /* From the live source: a turn's end, the permissions and the questions as they are now. */
 const notifyServer = () => (typeof LIVE !== 'undefined' && LIVE.slices.server && LIVE.slices.server.startedAt) || 0;
@@ -1987,8 +2029,12 @@ function notifySettingsShow(settings) {
   $('notify-ask-perm').hidden = !notifyCan() || Notification.permission !== 'default';
   for (const el of notifyEl.querySelectorAll('[data-notify-kind]')) el.checked = !!NOTIFY.on[el.dataset.notifyKind];
   const st = notifyAudioState(), lc = NOTIFY.lastChime;
+  $('notify-volume').value = NOTIFY.volume;
+  $('notify-volume').disabled = !NOTIFY.on.chime;
   setText($('notify-chime-note'), !NOTIFY.on.chime ? '' : `音の状態: ${st === 'running' ? '鳴らせる' : st === 'none' ? 'まだ作られていない（ページを一度クリックすると鳴ります）' : '止まっている（ページを一度クリックすると鳴ります）'}（${st}）`
-    + (lc ? ` · 最後のチャイム ${new Date(lc.at).toTimeString().slice(0, 8)}: ${lc.before} → ${lc.after}、currentTime ${lc.t}、${lc.played ? '鳴らした' : '鳴らせなかった'}` : ''));
+    + (st !== 'running' && notifyPeerCanSound() ? ' · ほかのタブが鳴らします' : '')
+    + (lc ? ` · 最後のチャイム ${new Date(lc.at).toTimeString().slice(0, 8)}: ${lc.before} → ${lc.after}、currentTime ${lc.t}、${lc.played ? '鳴らした' : '鳴らせなかった'}` : '')
+    + (lc && lc.noTab ? ' · このブラウザのどのタブも音を鳴らせません（どれかのタブをクリックすると鳴ります）' : ''));
   const sel = $('ask-wait');
   if (s) {
     const label = (sec) => (sec < 60 ? `${sec} 秒` : `${sec / 60} 分`);
@@ -2025,7 +2071,8 @@ $('notify-ask-perm').addEventListener('click', async () => {
 });
 notifyEl.addEventListener('change', async (e) => {
   const k = e.target.closest('[data-notify-kind]');
-  if (k) { NOTIFY.on[k.dataset.notifyKind] = k.checked; notifySavePrefs(); notifyPresenceSay(); return; }
+  if (k) { NOTIFY.on[k.dataset.notifyKind] = k.checked; notifySavePrefs(); notifyPresenceSay(); notifySettingsShow(); return; }
+  if (e.target.id === 'notify-volume') { if (Object.hasOwn(NOTIFY_VOLUMES, e.target.value)) NOTIFY.volume = e.target.value; notifySavePrefs(); return; }
   if (e.target.id === 'ask-wait') {
     const got = SOURCE.setAskWait ? await SOURCE.setAskWait(Number(e.target.value)) : { ok: false, why: 'デモでは変えられません' };
     setText($('ask-wait-note'), got.ok ? '保存した。次の質問から使います' : `変えられなかった（${got.why || '?'}）`);

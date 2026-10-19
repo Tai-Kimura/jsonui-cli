@@ -56,13 +56,14 @@ STUB = r"""(() => {
     // 'gesture': a stricter browser's rule — resume only while the page is being pressed (transient activation, read
     // at the call), so only a press can bring a context back
     resume() {
-      const mode = localStorage.getItem('e2e-ac') || 'running', ua = navigator.userActivation;
+      const mode = window.__acMode || localStorage.getItem('e2e-ac') || 'running', ua = navigator.userActivation;   // __acMode: this tab only
       const may = mode === 'running' ? !!(ua && ua.hasBeenActive) : mode === 'gesture' ? !!(ua && ua.isActive) : false;
       return new Promise((done) => setTimeout(() => { if (may) this.state = 'running'; done(); }, 20));
     }
     createOscillator() { return { type: '', frequency: { setValueAtTime() {} }, connect() {}, stop() {},
       start() { try { localStorage.setItem('e2e-tones', String(Number(localStorage.getItem('e2e-tones') || 0) + 1)); } catch (e) {} } }; }
-    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    // the peak a chime's tones reach (the volume setting), kept shared
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime(v) { if (v > 0.001) try { localStorage.setItem('e2e-peak', String(v)); } catch (e) {} } }, connect() {} }; }
   }
   window.AudioContext = FakeAudioContext;
 })();"""
@@ -244,10 +245,22 @@ async def run_notify(pw, out, failures):
         n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
         for p in (a, b):
             await p.evaluate("() => { localStorage.setItem('e2e-ac', 'suspended'); window.__ac.state = 'suspended'; }")
+        for p, name in ((a, "a"), (b, "b")):   # each has heard the other say its sound no longer runs
+            await wait(p, "() => !window.__dbg.notifyPeers().includes(true)", timeout=8000, label=f"tab {name} hears no tab can sound")
         turn()
         await shown_after(n0 + 1, "a turn end with the sound suspended")
         res["suspended"] = [len(await a.evaluate(SHOWN)) - n0, await a.evaluate(CHIMES) - c0]
         check(failures, res["suspended"] == [1, 0], f"a suspended sound: the notification, no sound: {res['suspended']}")
+        owner = await owner_of((await a.evaluate(SHOWN))[-1]["tag"])
+        if owner:   # the try is kept once the resume has had its time (NOTIFY_RESUME_MS)
+            await wait(owner, "() => (window.__dbg.notifyLastChime() || {}).noTab !== undefined && window.__dbg.notifyLastChime().before === 'suspended'",
+                       timeout=5000, label="the chime's try kept")
+            await owner.evaluate("() => window.__dbg.notifyPanel()")
+            res["noTab"] = [await owner.evaluate("() => (window.__dbg.notifyLastChime() || {}).noTab"),
+                            await owner.evaluate("() => document.getElementById('notify-chime-note').textContent")]
+            await owner.keyboard.press("Escape")
+        check(failures, bool(res.get("noTab")) and res["noTab"][0] is True and "どのタブも音を鳴らせません" in res["noTab"][1],
+              f"no tab can sound: the settings say so: {res.get('noTab')}")
         for p in (a, b):
             await p.evaluate("() => { localStorage.setItem('e2e-ac', 'running'); window.__ac.state = 'running'; }")
 
@@ -277,6 +290,51 @@ async def run_notify(pw, out, failures):
             res["pressWakes"] = await a.evaluate("() => window.__dbg.notifyAudio()")
         check(failures, res["pressWakes"] == "running", f"a later press wakes a context gone back to suspended: {res['pressWakes']}")
         await a.evaluate("() => localStorage.setItem('e2e-ac', 'running')")
+        for p in (a, b):
+            await p.evaluate("() => { window.__ac.state = 'running'; }")
+
+        # 3g. the volume (requester 10-20: 「音が少し小さいね」): 中 by default, and 小・中・大 reach the tones' peak
+        res["volume"] = {"default": await a.evaluate("() => window.__dbg.notifyVolume()")}
+        for vol in ("mid", "low", "high"):
+            if vol != "mid":
+                await b.click("#btn-notify")
+                await b.select_option("#notify-volume", vol)
+                await b.keyboard.press("Escape")
+                await wait(a, "(v) => window.__dbg.notifyVolume() === v", arg=vol, label=f"the volume {vol} reaches tab a")
+            n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+            await a.evaluate("() => localStorage.removeItem('e2e-peak')")
+            turn()
+            await shown_after(n0 + 1, f"a turn end at volume {vol}")
+            await wait(a, f"() => Number(localStorage.getItem('e2e-tones') || 0) / 2 >= {c0 + 1}", timeout=5000, label=f"the chime at {vol}")
+            owner = await owner_of((await a.evaluate(SHOWN))[-1]["tag"])
+            res["volume"][vol] = [float(await a.evaluate("() => localStorage.getItem('e2e-peak')") or 0),
+                                  await owner.evaluate("() => (window.__dbg.notifyLastChime() || {}).peak") if owner else None]
+        v = res["volume"]
+        check(failures, v["default"] == "mid" and v["mid"] == [0.2, 0.2] and v["low"] == [0.1, 0.1] and v["high"] == [0.35, 0.35],
+              f"the volume: 中 by default, each setting the peak the tones reach: {v}")
+        await b.click("#btn-notify")
+        await b.select_option("#notify-volume", "mid")
+        await b.keyboard.press("Escape")
+        await wait(a, "() => window.__dbg.notifyVolume() === 'mid'", label="the volume back to 中")
+
+        # 3f. the real check 2 (10-20): a tab whose sound never started took the event first and showed it silently,
+        # while another tab could sound. Here tab a cannot sound and takes events first (tab b is held back 800 ms):
+        # it leaves the event to b, which shows it once and sounds; a shows nothing
+        await a.evaluate("() => { window.__acMode = 'suspended'; window.__ac.state = 'suspended'; }")
+        await b.evaluate("() => window.__dbg.notifyDelay(800)")
+        await wait(a, "() => window.__dbg.notifyPeers().includes(true)", timeout=8000, label="tab a hears that tab b can sound")
+        n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+        a0, b0 = len(await a.evaluate("() => window.__shown")), len(await b.evaluate("() => window.__shown"))
+        turn()
+        await shown_after(n0 + 1, "a turn end, only tab b can sound")
+        try:
+            await wait(a, f"() => Number(localStorage.getItem('e2e-tones') || 0) / 2 >= {c0 + 1}", timeout=5000, label="the chime from tab b")
+        except RuntimeError:
+            pass
+        res["yield"] = {"a": len(await a.evaluate("() => window.__shown")) - a0, "b": len(await b.evaluate("() => window.__shown")) - b0,
+                        "shown": len(await a.evaluate(SHOWN)) - n0, "chimes": await a.evaluate(CHIMES) - c0}
+        check(failures, res["yield"] == {"a": 0, "b": 1, "shown": 1, "chimes": 1},
+              f"the tab that can sound rings it, the one that cannot leaves it: {res['yield']}")
 
         # 4. a reload rings nothing again — with the list of rung keys cleared first (a fresh profile), so it is the
         # page's own "nothing from before it was loaded" that holds, not the other tabs' record
@@ -296,10 +354,13 @@ async def run_notify(pw, out, failures):
         await b.keyboard.press("Escape")
         await wait(a, "() => window.__dbg.notifyOn().done === false", label="the switch reaches the other tab")
         n0 = len(await a.evaluate(SHOWN))
+        seen5 = {name: await p.evaluate("() => window.__dbg.notifySeen()") for p, name in ((a, "a"), (b, "b"))}
         turn()
-        for p in (a, b):   # each tab has looked at the second turn end (a key other than the first's)
-            await wait(p, "(first) => window.__dbg.notifySeen().some((k) => k.includes(':done:') && k !== first)", arg=res["done"]["tag"],
-                       label="the second turn end seen")
+        # each tab has looked at this turn end: a done key it had not seen (after a reload the replayed keys are seen
+        # already — waiting for "any other done key" let this event reach tab a later, once done was on again)
+        for p, name in ((a, "a"), (b, "b")):
+            await wait(p, "(before) => window.__dbg.notifySeen().some((k) => k.includes(':done:') && !before.includes(k))", arg=seen5[name],
+                       label=f"the turn end with done off seen by tab {name}")
         res["offDone"] = len(await a.evaluate(SHOWN)) - n0
         check(failures, res["offDone"] == 0, f"a kind turned off rings from neither tab: {res['offDone']}")
 

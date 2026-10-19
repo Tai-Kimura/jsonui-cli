@@ -10,6 +10,10 @@ window.__dbg = {
   notifyLastChime: () => NOTIFY.lastChime || null,
   notifyPanel: () => { notifyOpenPanel(null); return !notifyEl.hidden; },   // opened without a press (a press would wake the sound)
   notifyOn: () => ({ ...NOTIFY.on }),
+  notifyVolume: () => NOTIFY.volume,
+  notifyPeers: () => [...NOTIFY.peers.values()].map((p) => p.running),
+  // a test's way to make this tab take events later than the others (which tab takes one first is not fixed)
+  notifyDelay: (ms) => { const orig = notifyEvent; notifyEvent = (...a) => setTimeout(() => orig(...a), ms); return true; },
   notifyPresenceSay: () => notifyPresenceSay(),
   notifySet: (o) => { Object.assign(NOTIFY.on, o || {}); notifySavePrefs(); notifyPresenceSay(); return { ...NOTIFY.on }; },
   board: () => ({ open: !!tb.open, detail: tb.detail || null, waitView: !!tb.waitView, robot: rbState.id || null }),
