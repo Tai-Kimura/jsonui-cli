@@ -2607,7 +2607,8 @@ function placeTag(el, p) {
    robot showing じゃんけん lifts its tag clear of the hand. Cost per frame: TAGS.stats (the e2e reads it). */
 const TAGS = { gap: 3, ease: 0.35, measureMs: 500, maxPasses: 12, rpsLift: 0.55, stats: { n: 0, sumMs: 0, maxMs: 0, frames: 0 } };
 const tagNdc = new THREE.Vector3();
-function placeRobotTags() {
+function placeRobotTags(dt = 1 / 60) {
+  const ease = 1 - Math.pow(1 - TAGS.ease, dt * 60);   // TAGS.ease of the way each 1/60 s, in real time (it was per frame)
   const t0 = performance.now(), W = canvas.clientWidth, H = canvas.clientHeight, list = [];
   for (const R of robots) {
     tagNdc.copy(R.robot.root.position).add(TAG_UP);
@@ -2634,7 +2635,7 @@ function placeRobotTags() {
     const el = it.R.tag;
     if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; continue; }
     el.style.visibility = 'visible';
-    const dy = it.R.tagDy === undefined ? it.target : it.R.tagDy + (it.target - it.R.tagDy) * TAGS.ease;
+    const dy = it.R.tagDy === undefined ? it.target : it.R.tagDy + (it.target - it.R.tagDy) * ease;
     it.R.tagDy = Math.abs(dy - it.target) < 0.5 ? it.target : dy;
     it.R.tagTarget = it.target;   // where the tag is going (the e2e reads a tag once tagDy has reached it: the settle hook of 80-dbg.js)
     el.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy).toFixed(1)}px) translate(-50%, -100%)`;
@@ -2701,7 +2702,8 @@ function update3D(model, nowSec, dt) {
     selRing.material.color.set(ROLES[sel.def.role].color);
     selRing.scale.setScalar(1 + 0.06 * Math.sin(nowSec * 3));
     // keep the robot framed, also while it walks or after switching to another robot
-    if (!camTween && zoom.zoomed) { const pose = robotPose(rbState.id); camera.position.lerp(pose.p, 0.08); viewTarget.lerp(pose.t, 0.08); }
+    // 8% of the way each 1/60 s, in real time (it was 8% a frame: the camera crawled on a busy machine)
+    if (!camTween && zoom.zoomed) { const pose = robotPose(rbState.id), k = 1 - Math.pow(1 - 0.08, dt * 60); camera.position.lerp(pose.p, k); viewTarget.lerp(pose.t, k); }
   }
   stepTween(performance.now());
   if (camTween || zoom.zoomed) camera.lookAt(viewTarget); else controls.update();
@@ -2709,7 +2711,7 @@ function update3D(model, nowSec, dt) {
   if (TOWER.on) { towerSync(); towerAnimate(nowSec, dt); }
   skySync();
   tagsEl.hidden = zoom.zoomed || TOWER.on;
-  placeRobotTags();
+  placeRobotTags(dt);
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }
   if (trayTag) placeTag(trayTag.el, trayTag.p);   // the demo's document tray
 }

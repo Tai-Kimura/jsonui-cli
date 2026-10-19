@@ -268,3 +268,5 @@ window.__dbg.settle = (ids) => window.__dbg.settleInfo(ids).every((x) => x.blend
 // A gap between frames, as a hidden tab makes (rAF stops; minutes later it resumes): the next frame walks with `sec`
 // more of real time (liveUpdateRobots' walkDt), and nothing else is touched.
 window.__dbg.walkGap = (sec) => { LIVE3D.lastWalk -= sec * 1000; return true; };
+// how far the camera following a robot is from where it is going (0 once it has arrived)
+window.__dbg.camFollowGap = () => (rbState.id && zoom.zoomed ? camera.position.distanceTo(robotPose(rbState.id).p) : null);

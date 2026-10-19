@@ -9,8 +9,16 @@ $('btn-speed').addEventListener('click', (e) => { speed = speed === 1 ? 3 : 1; e
 const fpsMeter = new URLSearchParams(location.search).get('fps') === '1' ? { el: document.createElement('p'), n: 0, from: performance.now() } : null;
 if (fpsMeter) { fpsMeter.el.className = 'fps-meter'; fpsMeter.el.setAttribute('aria-hidden', 'true'); document.body.append(fpsMeter.el); }
 
+/* The real time between two frames drives what animates (a pose blending into the next, eases, the camera following),
+   up to FRAME_DT_MAX: on a busy machine the page draws a frame every second or more, and a step capped at 0.05 s made
+   all of it crawl (a 0.4 s pose blend took 8 frames however far apart; ticket 2026-10-19-jui-viz-walk-stretches-with-
+   frame-gaps). Past 1 s everything that eases has arrived anyway; what steps physics (the vacuum's collisions, falling
+   petals, smoke, the shredder's bits) keeps its own 0.1 s step. The demo's script clock keeps the 0.05 s step: it
+   plays its script frame by frame and must not jump. */
+const FRAME_DT_MAX = 1;
 function frame(ms) {
-  const dt = Math.min(0.05, Math.max(0, (ms - lastMs) / 1000));
+  const rawDt = Math.max(0, (ms - lastMs) / 1000);
+  const dt = Math.min(0.05, rawDt);
   lastMs = ms;
   if (SOURCE.mode === 'demo') {
     if (playing) simT += dt * speed;
@@ -25,7 +33,7 @@ function frame(ms) {
   }
   if (has3D) {
     if (ms - lastBoard > 200 && !TOWER.on) { redrawBoards(latestModel, ms / 1000); lastBoard = ms; }   // the building hides the boards
-    update3D(latestModel, ms / 1000, dt);
+    update3D(latestModel, ms / 1000, Math.min(FRAME_DT_MAX, rawDt));
   }
   if (ms - lastPanel > 250) {
     renderPanel(latestModel);
