@@ -993,3 +993,18 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .sh-head h3 { margin: 0; font: 700 16px/1.5 var(--font-body); }
 .sh-body p { margin: 0 0 10px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .sh-body .sh-legend { gap: 4px 14px; font-size: 12.5px; color: var(--ink); }
+/* The wide 応答の履歴 (2.3.4): the card from the left margin (one robot's width, --wide-left) to the right edge, over the
+   side panel; the whole screen at 900 px or narrower. */
+.rb.rb-wide { position: fixed; top: calc(var(--wide-top, 0px) + 14px); left: var(--wide-left, 0px); right: 14px; bottom: 14px; z-index: 30; width: auto; max-height: none; }
+.rb.rb-wide-full { inset: 0; border-radius: 0; }
+.rb-wide-btn[hidden] { display: none; }
+/* the tab row holds the tabs (the tablist) and, on its right, 広げる: the card's head keeps its width for the title.
+   広げる comes first in the DOM (Tab: 広げる, 今の様子, 応答の履歴, then the panel) and is drawn on the right. */
+.rb-tablist { display: flex; gap: 4px; order: 1; }
+.rb-tabs .rb-wide-btn { order: 2; margin: 0 0 4px auto; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
+.rb-tabs .rb-wide-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+.rb.rb-wide .rb-hist { font-size: 14px; padding-inline: clamp(14px, 3vw, 40px); }
+.rb.rb-wide .h-compose { padding-inline: clamp(14px, 3vw, 40px); }
+.rb.rb-wide .h-code { white-space: pre; }
+.rb.rb-wide .h-table { font-size: 13px; }
+.rb.rb-wide .h-table th, .rb.rb-wide .h-table td { min-width: 6em; }

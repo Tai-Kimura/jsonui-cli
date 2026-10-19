@@ -13,7 +13,7 @@ const HIST_POLL_MS = 3000;
    whole card (keyed) whenever its key changes, and the new pane starts at scrollTop 0 (measured 10-19: every new turn of
    a working session sent the reader to the top). newer: answers came while the reader was above (the 新しい応答 marker). */
 const HIST = { tab: 'now', id: null, data: null, error: '', timer: 0, busy: false, node: null, sig: '',
-  atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null };
+  atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null, wide: false };
 
 function hNode(tag, cls, text) {
   const n = document.createElement(tag);
@@ -311,6 +311,7 @@ function histSync() {
   if (body) body.hidden = HIST.tab !== 'now';
   if (pane) pane.hidden = HIST.tab !== 'history';
   composePlace(pane, id);
+  histWideSync(id);
   if (!id || HIST.tab !== 'history') { histStop(); return; }
   histShow();
   if (!HIST.timer) { histFetch(); HIST.timer = setInterval(() => { if (document.visibilityState === 'visible') { histFetch(); composePaint(); } }, HIST_POLL_MS); }
@@ -497,3 +498,55 @@ function composeArrived(items) {
   const ours = (x) => x.kind === 'channel' && /(^|:)jui-viz$/.test(String(x.server || ''));
   if (items.some((x) => ours(x) && fresh(x) && composeNorm(x.text).startsWith(want))) { sent.arrivedAt = Date.now(); composePaint(); }
 }
+
+/* ---------- the wide history (2.3.4, requester 10-19: "チャットが狭いから見づらい 左にロボット一人分くらいの余裕を残して残りを
+   チャットの表示にしてほしい"; "チャット広げた時はカメラの位置移動もしてね 選んでるボットが左の余白の部分に来るように") ----------
+   広げる on the card's head (the 応答の履歴 tab only): the card covers everything right of histWideMargin(), the side
+   panel too, and the camera flies (focusPose, 50-panel.js) so the robot stands in the middle of that margin; ← → keep
+   it there for the next robot. 元の幅に戻す / Esc: the card's width and the view before. 900 px or narrower: the whole
+   screen. The choice is kept in localStorage (readPref / writePref: a blocked storage only forgets it). */
+const HIST_WIDE_PREF = 'hist-wide';
+let histWidePref = readPref(HIST_WIDE_PREF, 'off') === 'on';   // read once: a blocked storage still keeps it for this page
+function histWideMargin() {
+  if (!HIST.wide) return 0;
+  const w = window.innerWidth;
+  return w <= 900 ? 0 : Math.round(Math.min(440, Math.max(320, w * 0.28)));
+}
+function histWideFly() {
+  if (!has3D || !zoom.zoomed || !rbState.id || !robots.some((x) => x.def.id === rbState.id)) return;
+  const pose = robotPose(rbState.id);
+  flyTo(pose.p, pose.t, viewTarget, reduceMotion ? 0 : 0.6, null);
+}
+function histSetWide(on, remember = true) {
+  on = !!on && HIST.tab === 'history' && !!rbState.id;
+  if (remember) { histWidePref = on; writePref(HIST_WIDE_PREF, on ? 'on' : 'off'); }
+  if (HIST.wide === on) { histWidePaint(); return; }
+  HIST.wide = on;
+  histWidePaint();
+  histWideFly();
+  const pane = histPane();
+  if (pane && HIST.atEnd) histToEnd(pane);   // the newest stays in view across the change of width
+}
+function histWidePaint() {
+  const m = histWideMargin();
+  rbEl.classList.toggle('rb-wide', HIST.wide);
+  rbEl.classList.toggle('rb-wide-full', HIST.wide && !m);
+  rbEl.style.setProperty('--wide-left', `${m}px`);
+  rbEl.style.setProperty('--wide-top', `${HIST.wide && m ? Math.round(sceneEl.getBoundingClientRect().top) : 0}px`);
+  const b = rbEl.querySelector('[data-rb-wide]');
+  if (b) {
+    b.hidden = HIST.tab !== 'history';
+    b.setAttribute('aria-pressed', String(HIST.wide));
+    b.textContent = HIST.wide ? '元の幅に戻す' : '広げる';
+    b.title = HIST.wide ? '元の幅に戻す（Esc）' : '応答の履歴を画面いっぱいに広げる';
+  }
+}
+/* After every histSync: the tab and the card decide whether it is wide (the kept choice applies to the history tab). */
+function histWideSync(id) {
+  const want = !!id && HIST.tab === 'history' && histWidePref;
+  if (want !== HIST.wide) histSetWide(want, false);
+  else histWidePaint();
+}
+rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rb-wide]')) histSetWide(!HIST.wide); });
+window.addEventListener('resize', () => { if (HIST.wide) { histWidePaint(); histWideFly(); } });
+

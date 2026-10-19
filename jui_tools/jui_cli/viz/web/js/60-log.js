@@ -101,6 +101,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!popEl.hidden) { e.preventDefault(); closePop(); return; }
   if (logState.open) { e.preventDefault(); closeLog(); }
+  else if (rbState.id && HIST.wide) { e.preventDefault(); histSetWide(false); }   // the wide history: back to the card's width first
   else if (rbState.id) { e.preventDefault(); closeRobot(); }
   else if (wb.open) {
     e.preventDefault();
