@@ -3,6 +3,8 @@
 const $ = (id) => document.getElementById(id);
 const setHTML = (el, html) => { if (el._html !== html) { el.innerHTML = html; el._html = html; } };
 const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
+/* The legend of heavy work's three looks (2.3.6), under the card's 重い作業 line. */
+const HEAVY_LEGEND = '見た目: 赤い顔＝出力が多い · 青い顔＝ツールが長く走っている · 笛＝サブエージェント 3 体以上（重なると交互）';
 const STATUS_CLASS = { idle: 'st-idle', write: 'st-write', written: 'st-idle', impl: 'st-impl', verify: 'st-verify', 'impl-done': 'st-idle', paused: 'st-paused', test: 'st-test', done: 'st-complete' };
 function robotBadge(id) {
   const s = robotState[id].state;
@@ -1454,7 +1456,7 @@ function renderRobot(model) {
 <div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" hidden>広げる</button><div class="rb-tablist" role="tablist" aria-label="表示"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">今の様子</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">応答の履歴</button></div></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴" tabindex="0"></div>
 <div class="rb-body" tabindex="0" aria-label="今の様子">
-<section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">今やっていること</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">ランプ: <span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p><p class="rb-git" data-rb-git hidden title="Claude のセッションが Bash で撃った git push / pull だけが見える（自分のターミナル、エディタの git、GitHub での merge は見えない）"></p><p class="rb-cond" data-rb-cond></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(spec.name)}（${esc(spec.screen)}）の spec</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>
+<section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">今やっていること</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">ランプ: <span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p><p class="rb-git" data-rb-git hidden title="Claude のセッションが Bash で撃った git push / pull だけが見える（自分のターミナル、エディタの git、GitHub での merge は見えない）"></p><p class="rb-cond" data-rb-cond></p><p class="rb-looks" data-rb-looks hidden></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(spec.name)}（${esc(spec.screen)}）の spec</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>
 ${pending ? `<section class="rb-sec" aria-label="許可">${permDetail(pending, 'rb')}</section>` : ''}
 ${SOURCE.mode === 'live' ? '<section class="rb-sec" aria-labelledby="rb-h-tests"><h3 id="rb-h-tests">テスト実行</h3><div data-rb-tests></div></section>' : ''}
 <section class="rb-sec" aria-labelledby="rb-h-tasks"><h3 id="rb-h-tasks">${isMain ? 'このセッションのタスク' : '担当しているタスク'}<small>${owned.length} 件</small></h3>${tasksHTML}</section>
@@ -1485,6 +1487,10 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   if (brk) parts.push(brk);
   const condEl = rbEl.querySelector('[data-rb-cond]');
   if (condEl) { setText(condEl, parts.join(' / ')); condEl.hidden = !parts.length; }
+  // what the three looks of heavy work mean (2.3.6), only while the robot works hard
+  const looksEl = rbEl.querySelector('[data-rb-looks]');
+  const RB = robots.find((x) => x.def.id === id), causes = RB ? heavyCauses(RB.robot) : [];   // what the robot shows
+  if (looksEl) { looksEl.hidden = !causes.length; if (causes.length) setText(looksEl, HEAVY_LEGEND); }
   if (spec) {
     const k = activeSec(spec);
     setText(rbEl.querySelector('[data-rb-specnow]'), `${spec.status.text}${k >= 0 ? ` · ${SECTIONS[k]}` : ''}`);

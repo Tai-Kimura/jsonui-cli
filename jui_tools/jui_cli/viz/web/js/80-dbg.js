@@ -168,7 +168,30 @@ window.__dbg = {
   sky: () => ({ phase: (sceneEl.dataset.sky || '').split(':')[0], background: sceneEl.style.background }),
   snack: SOURCE.mode === 'live' ? (o) => { Object.assign(SNACK, o || {}); SNACK.rng = null; SNACK.next = 0; } : null,
   gestures: () => robots.map((R) => ({ id: R.def.id, state: R.robot.state, gesture: R.robot.gesture ? R.robot.gesture.kind : null, tired: !!R.robot.tired, drinks: R.robot.drinks || 0,
-    heavy: !!R.robot.heavy, sweat: !!(R.robot.sweat && R.robot.sweat.visible), act: R.text ? R.text.textContent : '', actShown: R.text ? getComputedStyle(R.text).display !== 'none' : false })),
+    heavy: heavyCauses(R.robot).length > 0, sweat: !!(R.robot.sweat && R.robot.sweat.visible), act: R.text ? R.text.textContent : '', actShown: R.text ? getComputedStyle(R.text).display !== 'none' : false })),
+  // heavy work's three looks (2.3.6): force a robot's causes or tiredness (null gives them back), and read each look
+  // from the robot itself: its causes, the look now, the screen's colour (a pixel of the face canvas, below the
+  // mouth, clear of the eyes and the lines), the face drawn, the whistle, the sweat, the arm and the antenna
+  force: (id, o) => { const R = robots.find((x) => x.def.id === id); if (!R) return false; R.robot.force = o ? { ...(R.robot.force || {}), ...o } : null; return true; },
+  looks: (ids) => robots.filter((R) => !ids || ids.includes(R.def.id)).map((R) => {
+    const r = R.robot, probe = makeCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    probe.drawImage(r.faceCanvas, 60, 112, 1, 1, 0, 0, 1, 1);
+    const px = probe.getImageData(0, 0, 1, 1).data;
+    return { id: R.def.id, role: r.role, state: r.state, tired: !!r.tired, looks: heavyCauses(r), look: r.look,
+      tint: r.tint ? r.tint.map((v, i) => (i < 3 ? Math.round(v) : +v.toFixed(3))) : null, face: String(r.faceMode).split('|')[0],
+      screen: [px[0], px[1], px[2]], whistle: !!(r.whistle && r.whistle.visible), pipi: !!(r.pipi && r.pipi.visible), sweat: !!(r.sweat && r.sweat.visible),
+      armRz: +r.armR.rotation.z.toFixed(3), antenna: +r.antenna.rotation.x.toFixed(3), period: LOOK_PERIOD, reduced: reduceMotion,
+      eased: !r.tint || (r.look ? LOOK_TINT[r.look] : [r.tint[0], r.tint[1], r.tint[2], 0]).every((v, i) => Math.abs(v - r.tint[i]) < (i < 3 ? 3 : 0.01)) };
+  }),
+  // a close look at one robot's face, from in front of it (for the pictures of the looks)
+  faceCam: (id, dist = 3.6) => {
+    const R = robots.find((x) => x.def.id === id); if (!R) return false;
+    const head = R.robot.head.localToWorld(new THREE.Vector3(0, 0.3, 0)), ry = R.robot.root.rotation.y;
+    const eye = head.clone().add(new THREE.Vector3(Math.sin(ry) * dist, 1.4, Math.cos(ry) * dist));   // within maxPolarAngle
+    controls.minDistance = Math.min(controls.minDistance, dist);   // the orbit's floor (8) would push it back out
+    flyTo(eye, head, controls.target, 0, () => { controls.target.copy(head); controls.update(); });
+    return true;
+  },
   towerLines: (text) => { const f = towerNameFit(makeCanvas(8, 8).getContext('2d'), text, towerBays()[0].w - 8); return [f.size, ...f.lines]; },
   openRobot: (id) => openRobot(id, document.getElementById('scene-canvas')),
   // the box (2.3.4): its desk, what it overlaps, the papers in it, each robot's trip and the trips' ends

@@ -686,11 +686,11 @@ function demoBuilding(t) {
   LIVE.rank = rank;
 }
 const demoTired = (id) => id === DEMO_BEATS.tired.session && isTired(demoDayMs() + DEMO_BEATS.tired.since * 3600000, vizNow());
-const demoHeavy = (id, t) => id === DEMO_BEATS.heavy[2] && t >= DEMO_BEATS.heavy[0] && t < DEMO_BEATS.heavy[1];
+const demoHeavy = (id, t) => (id === DEMO_BEATS.heavy[2] && t >= DEMO_BEATS.heavy[0] && t < DEMO_BEATS.heavy[1] ? ['tokens'] : []);
 function robotCondition(id) {
   const t = latestModel ? latestModel.t : 0;
   return { tired: demoTired(id), hours: (vizNow() - demoDayMs()) / 3600000 - DEMO_BEATS.tired.since,
-    heavy: demoHeavy(id, t) ? { reasons: ['tokens'], tokensPerMin: 3200 } : null };
+    heavy: demoHeavy(id, t).length ? { reasons: ['tokens'], tokensPerMin: 3200 } : null };
 }
 
 /* ---------- the source's face to the rest of the view (plan 07 §2) ---------- */

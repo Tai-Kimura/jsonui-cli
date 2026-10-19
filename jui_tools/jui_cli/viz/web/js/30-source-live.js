@@ -603,7 +603,8 @@ function callsByLabel() {
   }
   return out;
 }
-const heavyOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return !!(s && s.heavy && s.heavy.length); };
+// the causes of heavy work (tokens / tool / subagents), [] when none: the robot shows one look per cause (2.3.6)
+const heavyOf = (label) => { const s = SESSIONS.find((x) => x.id === SESSION_OF[label]); return s && Array.isArray(s.heavy) ? s.heavy : []; };
 /* What the robot card says under 今やっていること: hours of a tired session, the reasons of heavy work. */
 function robotCondition(label) {
   const s = SESSIONS.find((x) => x.id === SESSION_OF[label]);

@@ -1065,6 +1065,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .tag > span:empty { display: none; }
 .rb-cond { margin: 4px 0 0; font: 700 12.5px/1.5 var(--font-body); color: var(--warn); }
 .rb-cond[hidden] { display: none; }
+.rb-looks { margin: 2px 0 0; font: 12px/1.5 var(--font-body); color: var(--ink-soft); }
+.rb-looks[hidden] { display: none; }
 .demo-clock { position: absolute; left: 12px; bottom: 10px; z-index: 5; margin: 0; padding: 2px 8px; border-radius: 6px; background: var(--tag-bg); color: var(--ink-soft); font: 600 11.5px/1.6 var(--font-body); }
 .demo-clock[hidden] { display: none; }
 

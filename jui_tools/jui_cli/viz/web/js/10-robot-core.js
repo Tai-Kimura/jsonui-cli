@@ -205,10 +205,11 @@ function drawCover(c) {
 }
 
 /* ---------- per-robot drawings ---------- */
-function drawFace(ctx, mode) {
+function drawFace(ctx, mode, tint = null) {
   const W = ctx.canvas.width, H = ctx.canvas.height;
   ctx.clearRect(0, 0, W, H);
   rr(ctx, 3, 3, W - 6, H - 6, 34); ctx.fillStyle = COL.screen; ctx.fill();
+  if (tint && tint[3] > 0) { ctx.fillStyle = `rgba(${tint[0]}, ${tint[1]}, ${tint[2]}, ${tint[3]})`; ctx.fill(); }   // heavy work: red or blue
   const sheen = ctx.createLinearGradient(0, 0, 0, H);
   sheen.addColorStop(0, 'rgba(120, 230, 255, 0.14)'); sheen.addColorStop(0.55, 'rgba(120, 230, 255, 0)');
   ctx.fillStyle = sheen; ctx.fill();
@@ -224,9 +225,21 @@ function drawFace(ctx, mode) {
     else if (mode === 'happy') { ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(x, ey + 12, 17, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
     else if (mode === 'wide') { ctx.beginPath(); ctx.arc(x, ey, 22, 0, Math.PI * 2); ctx.fill(); }
     else if (mode === 'tired') { rr(ctx, x - 16, ey - 2, 32, 22, 9); ctx.fill(); ctx.fillStyle = COL.screen; ctx.fillRect(x - 18, ey - 6, 36, 9); ctx.fillStyle = COL.eye; }
+    else if (mode === 'fired') {                          // fired up: narrowed eyes under brows slanted to the middle
+      rr(ctx, x - 19, ey - 4, 38, 17, 8); ctx.fill();
+      ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(x - side * 22, ey - 24); ctx.lineTo(x + side * 20, ey - 12); ctx.stroke();
+    } else if (mode === 'drained') {                      // drained: small eyes sunk low, looking down
+      ctx.beginPath(); ctx.arc(x, ey + 12, 8, 0, Math.PI * 2); ctx.fill();
+    } else if (mode === 'whistle') {                      // blowing the whistle: eyes squeezed shut with the effort
+      ctx.lineWidth = 9; ctx.beginPath();                 // > <
+      ctx.moveTo(x + side * 17, ey - 12); ctx.lineTo(x - side * 5, ey); ctx.lineTo(x + side * 17, ey + 12); ctx.stroke();
+    }
   }
   ctx.lineWidth = 6; ctx.beginPath();
-  if (mode === 'happy') ctx.arc(cx, 86, 14, Math.PI * 0.1, Math.PI * 0.9);
+  if (mode === 'whistle') { /* the whistle covers the mouth */ }
+  else if (mode === 'fired') { ctx.moveTo(cx - 14, 96); ctx.lineTo(cx + 14, 96); }   // a set jaw
+  else if (mode === 'drained') { ctx.moveTo(cx - 16, 98); ctx.quadraticCurveTo(cx - 8, 90, cx, 98); ctx.quadraticCurveTo(cx + 8, 106, cx + 16, 98); }   // a wobbly mouth
+  else if (mode === 'happy') ctx.arc(cx, 86, 14, Math.PI * 0.1, Math.PI * 0.9);
   else if (mode === 'wide') ctx.arc(cx, 98, 7, 0, Math.PI * 2);
   else if (mode === 'focus') { ctx.moveTo(cx - 9, 97); ctx.lineTo(cx + 9, 97); }
   else ctx.arc(cx, 86, 10, Math.PI * 0.2, Math.PI * 0.8);
@@ -235,6 +248,10 @@ function drawFace(ctx, mode) {
   if (mode === 'tired') {                                  // bags under the eyes
     ctx.strokeStyle = 'rgba(170, 120, 255, 0.85)'; ctx.lineWidth = 4;
     for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + side * dx, ey + 26, 15, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
+  }
+  if (mode === 'drained') {                              // gloom lines down the top of the screen (青ざめ), not the bags of 8 hours
+    ctx.strokeStyle = 'rgba(150, 200, 255, 0.85)'; ctx.lineWidth = 4;
+    for (let i = 0; i < 7; i++) { const x = cx - 78 + i * 26; ctx.beginPath(); ctx.moveTo(x, 12); ctx.lineTo(x, 12 + (i % 2 ? 22 : 30)); ctx.stroke(); }
   }
   if (mode === 'wide') { ctx.fillStyle = COL.screen; for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + side * dx + 7, ey - 8, 6, 0, Math.PI * 2); ctx.fill(); } }
   ctx.fillStyle = 'rgba(255, 120, 160, 0.42)';
@@ -427,7 +444,8 @@ function faceToward(obj, target) {
 function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, furnished = false }) {
   const g = S.geo, m = S.mat;
   const r = { label, role, state, prev: state, blend: 1, seed, props: {}, faceMode: '', nextBlink: 1 + (seed % 2), blinkEnd: 0, termAt: 0, phoneAt: 0,
-    tired: false, needDrink: false, drinks: 0, gesture: null, hand: null, heavy: false, sweat: null };
+    tired: false, needDrink: false, drinks: 0, gesture: null, hand: null, heavy: false, sweat: null,
+    look: null, tint: null, whistle: null, pipi: null };
   r.furnished = furnished;
   r.accent = toon(ROLES[role].color);
   r.lampMat = new THREE.MeshBasicMaterial({ color: LAMP.idle });
@@ -572,6 +590,75 @@ function sweatUpdate(r, s, on) {
     d.scale.setScalar(Math.max(0.2, 1 - ph * 0.8)); d.scale.y *= 1.5;
   }
 }
+/* Heavy work in three looks, one per cause (requester, 10-19; 2.3.6). r.heavy is the server's list of causes
+   (ingest.py _heavy: 'tokens', 'tool', 'subagents'); the causes are decided there, only the look is decided here:
+     tokens    -> 'fired':   the screen glows red, brows slanted down to the middle, a set jaw; fast typing
+     tool      -> 'drained': the screen goes blue, small eyes sunk low, a wobbly mouth, gloom lines down its top;
+                             slower typing. Not the 8-hour tiredness: that keeps the dark screen, half-shut eyes with
+                             purple bags, a drooping antenna and the energy drink.
+     subagents -> 'whistle': a whistle at the mouth, eyes squeezed > <, 「ピッ！」 over the head, one arm waving the
+                             team on (main robots only: a subagent has no team)
+   Sweat drops stay with all three (heavy work). Two or more causes take turns every LOOK_PERIOD seconds, the colour
+   easing over LOOK_EASE seconds. Reduced motion: colour and face only, no waving and no turns: the first of
+   LOOK_ORDER that holds (blue > whistle > red), the colour set at once. */
+const HEAVY_LOOK = { tokens: 'fired', tool: 'drained', subagents: 'whistle' };
+const LOOK_ORDER = ['drained', 'whistle', 'fired'];
+const LOOK_PERIOD = 4, LOOK_EASE = 0.6;
+const LOOK_TINT = { fired: [255, 64, 64, 0.42], drained: [64, 140, 255, 0.42], whistle: [0, 0, 0, 0] };
+function heavyCauses(r) {
+  const h = r.heavy === true ? ['tokens'] : Array.isArray(r.heavy) ? r.heavy : [];
+  return LOOK_ORDER.filter((look) => h.some((c) => HEAVY_LOOK[c] === look) && (look !== 'whistle' || r.role === 'main'));
+}
+function heavyLook(r, t) {
+  if (!HEAVY_OK.has(r.state)) return null;
+  const looks = heavyCauses(r);
+  if (!looks.length) return null;
+  if (reduceMotion || looks.length === 1) return looks[0];
+  return looks[Math.floor(t / LOOK_PERIOD) % looks.length];
+}
+function whistleProp() {
+  const g = new THREE.Group(), metal = toon('#ffc928');
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.1, 12), metal); body.rotation.z = Math.PI / 2;
+  const tube = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.09), metal); tube.position.set(-0.05, 0.01, 0.04);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.009, 6, 10), toon('#1f2532')); ring.position.set(0.06, 0.02, 0);
+  g.add(body, tube, ring);
+  g.rotation.y = Math.PI / 2;
+  g.position.set(0.02, 0.27, HEAD.d / 2 + 0.06);           // at the mouth, in front of the screen
+  g.scale.setScalar(1.6);
+  g.userData.whistle = true;
+  return g;
+}
+function pipiBubble() {                                    // 「ピッ」 over the head while the whistle blows
+  const canvas = makeCanvas(192, 112), ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f2532'; ctx.lineWidth = 6;
+  rr(ctx, 6, 6, 180, 78, 30); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(132, 82); ctx.lineTo(148, 106); ctx.lineTo(108, 82); ctx.closePath(); ctx.fill(); ctx.stroke();   // the tail toward the head
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(104, 76, 30, 8);
+  ctx.fillStyle = '#e8590c'; ctx.font = `46px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('ピッ！', 96, 46);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(canvas), transparent: true }));
+  s.position.set(-1.0, 2.1, 0.3); s.scale.set(0.72, 0.42, 1); s.userData.pipi = true;   // beside the head, by the waving (right, -x) arm
+  return s;
+}
+function lookUpdate(r, t, dt) {
+  const look = heavyLook(r, t);
+  r.look = look;
+  const want = look ? LOOK_TINT[look] : [0, 0, 0, 0];
+  const cur = r.tint || (r.tint = [0, 0, 0, 0]);
+  if (!cur[3]) { cur[0] = want[0]; cur[1] = want[1]; cur[2] = want[2]; }   // from nothing: the hue at once, the alpha eases
+  const k = reduceMotion ? 1 : Math.min(1, dt / LOOK_EASE * 3);
+  for (let i = 0; i < 4; i++) cur[i] += (want[i] - cur[i]) * k;
+  if (look === 'whistle' && !r.whistle) { r.whistle = whistleProp(); r.head.add(r.whistle); }
+  if (r.whistle) r.whistle.visible = look === 'whistle';
+  if (look === 'whistle' && !r.pipi) { r.pipi = pipiBubble(); r.root.add(r.pipi); }
+  if (r.pipi) {
+    r.pipi.visible = look === 'whistle';
+    if (r.pipi.visible && !reduceMotion) r.pipi.position.y = 2.1 + Math.abs(Math.sin(t * 7)) * 0.08;   // in time with the arm
+  }
+  return look;
+}
+/* The browser tests' hook (80-dbg.js, force) sets a robot's causes or its tiredness; the page never does. */
+const forced = (r, key, value) => (r.force && key in r.force ? r.force[key] : value);
 function setRobotTired(r, on) {
   if (on && !r.tired) r.needDrink = true;
   if (!on) r.needDrink = false;
@@ -1072,11 +1159,17 @@ function updateRobot(r, t, dt) {
   const s = t * SPEED * (r.tired ? 0.7 : 1) + r.seed;    // tired: a little slower
   r.blend = Math.min(1, r.blend + dt / 0.4);
   const e = r.blend * r.blend * (3 - 2 * r.blend);
-  const heavy = r.heavy && HEAVY_OK.has(r.state);
-  const a = poseFor(r.prev, s), b = heavy ? poseFor('typing', s * 2.4) : poseFor(r.state, s);   // heavy: fast typing
+  const look = lookUpdate(r, t, dt), heavy = !!look;
+  // heavy: fast typing (drained: slower than fired)
+  const a = poseFor(r.prev, s), b = heavy ? poseFor('typing', s * (look === 'drained' ? 1.5 : 2.4)) : poseFor(r.state, s);
   sweatUpdate(r, s, heavy);
   const p = {};
   for (const k in b) p[k] = a[k] + (b[k] - a[k]) * e;
+  if (look === 'drained') { p.headX += 0.12; }             // head a little down over the long wait
+  if (look === 'whistle' && !reduceMotion) {               // one arm up waving the team on, the other pointing
+    // the right arm up beside the head (as the done cheer, so the head does not hide it), waving; the left pointing
+    p.aRx = Math.sin(t * 7) * 0.25; p.aRz = -2.85 + Math.sin(t * 7) * 0.3; p.aLx = -1.35; p.aLz = 0.15; p.headY = Math.sin(t * 3.5) * 0.15;
+  }
   if (r.tired) { p.headX += 0.2; p.torsoX += 0.08; p.hipsY -= 0.012; p.aLz *= 0.5; p.aRz *= 0.5; }   // head and shoulders down
   if (r.gesture && (!GESTURE_OK.has(r.state) || t >= r.gesture.t1)) endGesture(r);
   const onCall = callUpdate(r, t);
@@ -1107,11 +1200,14 @@ function updateRobot(r, t, dt) {
 
   let mode = STATES[r.blend < 0.5 ? r.prev : r.state].face;
   if (r.tired && mode === 'normal') mode = 'tired';
-  if (mode === 'normal' || mode === 'focus' || mode === 'tired') {
+  if (look) mode = look;                                     // heavy work's face over the state's and the tired one
+  if (mode === 'normal' || mode === 'focus' || mode === 'tired' || mode === 'fired') {
     if (s > r.nextBlink) { r.blinkEnd = s + 0.12; r.nextBlink = s + 2.4 + Math.random() * 3.2; }
     if (s < r.blinkEnd) mode = 'blink';
   }
-  if (mode !== r.faceMode) { drawFace(r.faceCtx, mode); r.faceTex.needsUpdate = true; r.faceMode = mode; }
+  const tint = r.tint && r.tint[3] > 0.01 ? r.tint.map((v, i) => (i < 3 ? Math.round(v / 8) * 8 : Math.round(v * 40) / 40)) : null;
+  const faceKey = `${mode}|${tint ? tint.join(',') : ''}`;   // the colour in steps: redrawn a few times while it eases
+  if (faceKey !== r.faceMode) { drawFace(r.faceCtx, mode, tint); r.faceTex.needsUpdate = true; r.faceMode = faceKey; }
 
   for (const key in r.props) {
     const pr = r.props[key];

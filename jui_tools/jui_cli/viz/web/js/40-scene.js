@@ -1067,8 +1067,8 @@ function liveUpdateRobots(nowSec, dt) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
     liveTagName(R);
     liveCallTag(R, calls[R.def.id] || null);
-    setRobotTired(R.robot, R.def.kind === 'main' && isTired(sinceOf(R.def.id), now));
-    R.robot.heavy = heavyOf(R.def.id);   // fast typing and sweat while it works (the robot decides when)
+    setRobotTired(R.robot, forced(R.robot, 'tired', R.def.kind === 'main' && isTired(sinceOf(R.def.id), now)));
+    R.robot.heavy = forced(R.robot, 'heavy', heavyOf(R.def.id));   // one look per cause while it works (the robot decides when)
     shredTick(R, st, nowSec);
     const how = liveWalk(R, walkDt, nowMs);
     if (how === 'gone') continue;
@@ -2638,8 +2638,8 @@ function update3D(model, nowSec, dt) {
     demoDirector(model, nowSec);
     for (const R of robots) {
       const st = robotState[R.def.id];
-      setRobotTired(R.robot, demoTired(R.def.id));
-      R.robot.heavy = demoHeavy(R.def.id, model.t);
+      setRobotTired(R.robot, forced(R.robot, 'tired', demoTired(R.def.id)));
+      R.robot.heavy = forced(R.robot, 'heavy', demoHeavy(R.def.id, model.t));
       if (st.walk) { R.robot.root.position.x = st.walk.x; R.robot.root.position.z = st.walk.z; R.robot.root.rotation.y = st.walk.ry; }
       if (st.state !== R.robot.state) setRobotState(R.robot, st.state);
       if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
