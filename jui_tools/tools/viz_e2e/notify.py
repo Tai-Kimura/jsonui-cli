@@ -129,6 +129,10 @@ async def run_notify(pw, out, failures):
         check(failures, await a.evaluate("() => window.__asked") == 0, "nothing is asked on load")
         await a.click("#btn-notify")
         await wait(a, "() => !document.getElementById('notify-ask-perm').hidden", label="the permission button")
+        # the OS's own switch (cd and the requester, 10-19: off, nothing showed, and the question still waited in viz)
+        res["osNote"] = await a.evaluate("() => { const e = document.getElementById('notify-os-note'); return e && e.offsetParent !== null ? e.textContent : null; }")
+        check(failures, bool(res["osNote"]) and "システム設定 → 通知 → Google Chrome" in res["osNote"] and "質問は viz で待ちます" in res["osNote"],
+              f"the settings say the Mac's own switch for Chrome: {res['osNote']!r}")
         await a.screenshot(path=str(out / "settings-light.png"))
         await a.click("#notify-ask-perm")
         await wait(a, "() => document.getElementById('notify-perm-state').textContent.includes('許可済み')", label="granted")
@@ -144,7 +148,11 @@ async def run_notify(pw, out, failures):
         async def shown_after(n, label):
             await wait(a, f"() => JSON.parse(localStorage.getItem('e2e-shown') || '[]').length >= {n}", label=label)
             for p in (a, b):   # every tab has taken its look at the event (none rings late)
-                await wait(p, f"() => window.__dbg.notifySeen().length >= {n}", label=f"{label}: every tab saw it")
+                try:
+                    await wait(p, f"() => window.__dbg.notifySeen().length >= {n}", label=f"{label}: every tab saw it")
+                except RuntimeError:
+                    seen = [await q.evaluate("() => ({ seen: window.__dbg.notifySeen(), based: window.__dbg.notifyBased(), qs: window.__dbg.questions() })") for q in (a, b)]
+                    raise RuntimeError(f"{label}: a tab did not see it: a={seen[0]} b={seen[1]}") from None
             return await a.evaluate(SHOWN)
 
         async def owner_of(tag):

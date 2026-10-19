@@ -1811,7 +1811,8 @@ function notifyEvent(kind, key, ref, body) {
 }
 /* From the live source: a turn's end, the permissions and the questions as they are now. */
 const notifyServer = () => (typeof LIVE !== 'undefined' && LIVE.slices.server && LIVE.slices.server.startedAt) || 0;
-function notifyStop(raw, item) {
+function notifyStop(raw, item, replay = false) {
+  if (replay) { NOTIFY.seen.add(`${notifyServer()}:done:${raw.seq}`); return; }   // sent again after a snapshot: seen, not rung
   if (!item || !DEF[item.who] || DEF[item.who].kind !== 'main' || !(Date.now() - (Number(raw.at) || 0) < 120_000)) return;
   notifyEvent('done', `${notifyServer()}:done:${raw.seq}`, { who: item.who }, `${notifyName(item.who)} が完了${raw.kind === 'StopFailure' ? '（失敗で止まった）' : ''}`);
 }

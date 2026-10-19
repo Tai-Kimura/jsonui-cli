@@ -891,7 +891,7 @@ function liveEvents(items, older, replay = false) {
     if (!older && Number(raw.seq) <= LIVE.seenSeq) continue;
     const item = liveEvent(raw);
     if (item) add.push(item);
-    if (!older && !replay && item && (raw.kind === 'Stop' || raw.kind === 'StopFailure')) notifyStop(raw, item);   // 2.3.6: never the replay
+    if (!older && item && (raw.kind === 'Stop' || raw.kind === 'StopFailure')) notifyStop(raw, item, replay);   // 2.3.6: the replay is seen, never rung
     if (!older) LIVE.seenSeq = Math.max(LIVE.seenSeq, Number(raw.seq) || 0);
   }
   add.sort((a, b) => a.srvSeq - b.srvSeq);
