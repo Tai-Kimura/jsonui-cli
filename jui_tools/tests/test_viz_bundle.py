@@ -210,7 +210,15 @@ _HTML_NAME = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*HTML)\s*(?:\+?=(?!=)|\.pus
 # Calls that put an argument into the DOM as HTML: name -> which argument (0-based). Their own definitions are not
 # checked (what they are given is).
 SINK_CALLS = {"setHTML": 1, "addTag": 1, "keyed": 2}
-_SINK = re.compile(r"\.innerHTML\s*=(?!=)")
+# The DOM's own ways to read a string as HTML (2.3.5, ticket 2026-10-20-jui-viz-escape-gate-misses-insertadjacenthtml):
+# the properties set (=, +=) and the methods called — method name -> which argument (0-based). Element.setHTML (the
+# Sanitizer API) sanitizes and is not one; the page's own setHTML helper is SINK_CALLS (a bare call, never `.setHTML(`).
+_SINK = re.compile(r"\.(?:innerHTML|outerHTML|srcdoc)\s*\+?=(?!=)")
+SINK_METHODS = {"insertAdjacentHTML": 1, "createContextualFragment": 0, "parseFromString": 0, "setHTMLUnsafe": 0,
+                "parseHTMLUnsafe": 0, "write": 0, "writeln": 0, "setAttribute": 1}
+# write / writeln only on document; setAttribute only for srcdoc (an iframe's whole document)
+_SINK_METHOD = re.compile(r"(?:\.(insertAdjacentHTML|createContextualFragment|parseFromString|setHTMLUnsafe|parseHTMLUnsafe)"
+                          r"|(?<![\w$.])document\s*\.\s*(write|writeln)|\.(setAttribute)(?=\(\s*['\"`]srcdoc['\"`]))\s*\(")
 
 _ESCAPES = re.compile(r"(?:esc|CSS\.escape)\((?s:.*)\)$")
 
@@ -566,6 +574,11 @@ def html_checks(name: str, src: str) -> list[str]:
     for m in _SINK.finditer(src):
         if not inside(m.start()):
             rhs.append(src[m.end():_extent(src, m.end())])
+    for m in _SINK_METHOD.finditer(src):
+        meth, i = next(g for g in m.groups() if g), m.end()
+        for _ in range(SINK_METHODS[meth]):        # to the argument that is read as HTML
+            i = _extent(src, i) + 1
+        rhs.append(src[i:_extent(src, i)])
     for m in re.finditer(rf"(?<![\w$.])({'|'.join(SINK_CALLS)})\(", src):
         if inside(m.start()):
             continue
@@ -620,18 +633,30 @@ CAUGHT = [
     "`<b>${xs.map((x) => { return x.name; }).join('')}</b>`", "`<b>${x.at.name}</b>`",
     "const fooHTML = x.name;", "el.innerHTML = x.name;", "setHTML($('a'), x.name);", "const lHTML = `#${x.id}`;",
     "`<b>${'a' + x.name}</b>`", "`<b>${barHTML}</b>`",
+    # the DOM's other HTML sinks (2.3.5): a value put into each is red
+    "el.insertAdjacentHTML('beforeend', x.name);", "el.insertAdjacentHTML('beforeend', `<p>${x.name}</p>`);",
+    "el.outerHTML = x.name;", "el.innerHTML += x.name;", "frame.srcdoc = `<p>${x.name}</p>`;",
+    "frame.setAttribute('srcdoc', x.name);", "document.write(x.name);", "document.writeln(`<p>${x.name}</p>`);",
+    "document.createRange().createContextualFragment(x.name);", "new DOMParser().parseFromString(x.name, 'text/html');",
+    "el.setHTMLUnsafe(x.name);", "Document.parseHTMLUnsafe(x.name);",
 ]
 PASSED = [
     "`<b>${esc(x.name)}</b>`", "`<b>${esc(DEF[x.id].agent)}</b>`", "`<b>${x.items.length} 件</b>`", "`<b>${i + 1}</b>`",
     "`<b>${ROLES[r].color}</b>`", "`<b>${ok ? esc(a) : ''}</b>`", "`<b>${xs.map((x) => `<i>${esc(x)}</i>`).join('')}</b>`",
     "`<b>${a === b}</b>`", "const fooHTML = `<i></i>`; const z = `<b>${fooHTML}</b>`;", "`<b>${pill(id, 'main')}</b>`", "`<b>${'<i></i>'.repeat(7)}</b>`",
     "const fooHTML = `<i>${esc(x.name)}</i>`;", "el.innerHTML = `<i>${esc(a)}</i>`;",
+    # a fixed string (40-scene.js's no-WebGL note) and escaped values pass the other sinks too
+    "sceneEl.insertAdjacentHTML('beforeend', '<p class=\"nogl\">この環境では WebGL を使えない</p>');",
+    "el.insertAdjacentHTML('afterbegin', `<i>${esc(x.name)}</i>`);", "document.write(`<p>${esc(a)}</p>`);",
+    "new DOMParser().parseFromString(`<p>${esc(a)}</p>`, 'text/html');", "frame.setAttribute('title', x.name);",
+    "frame.srcdoc = '<p>fixed</p>';", "el.setAttribute('srcdoc', `<p>${esc(a)}</p>`);",
 ]
 
 
 @pytest.mark.parametrize("snippet", CAUGHT)
 def test_the_arm_catches(snippet):
-    assert html_checks("probe.js", snippet), snippet
+    problems = html_checks("probe.js", snippet)
+    assert problems and all(p.startswith("probe.js: ") for p in problems), (snippet, problems)
 
 
 @pytest.mark.parametrize("snippet", PASSED)
