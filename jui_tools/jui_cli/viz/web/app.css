@@ -693,7 +693,14 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .kb-frame { border-color: var(--kb-rim); background: radial-gradient(var(--kb-speck) 1px, transparent 1.6px) 0 0 / 10px 10px, var(--kb-bg); }
 .kb-frame .wb-head { border-bottom-color: transparent; }
 .kb-frame .wb-head h2, .kb-frame .wb-head code { text-shadow: 0 1px 0 var(--kb-col); }
-.kb-body { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+/* The board's body: the question strip, the permission strip, then the columns — each in its own row, so the columns start
+   below whatever strips show (2.3.5: with the question strip added the columns fell into an auto row after a squeezed
+   1fr one and their headers covered the permission strip's buttons; ticket 2026-10-20-jui-viz-board-kanban-header-covers-perm-strip).
+   A hidden strip leaves an empty row of no height. */
+.kb-body { position: relative; display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
+.kb-body > #q-strip { grid-row: 1; }
+.kb-body > #perm-strip { grid-row: 2; }
+.kb-body > .kanban { grid-row: 3; }
 .kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 12px; min-height: 0; overflow: auto; padding: 2px 14px 16px; }
 .perm-strip { display: grid; gap: 8px; max-height: 42vh; margin: 0 14px 10px; padding: 10px 12px; overflow-y: auto; border: 2px solid var(--wb-amber); border-radius: 12px; background: var(--wb-card); color: var(--wb-ink); }
 .ps-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font: 700 14px/1.4 var(--font-body); }

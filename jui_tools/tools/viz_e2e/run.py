@@ -244,6 +244,7 @@ def main(argv=None) -> int:
                         for k, v in r.items():
                             if isinstance(v, dict) and isinstance(v.get("sw"), int) and v["sw"] > 390:
                                 failures.append(f"demo/{key}/{k}: horizontal scroll at 390 px (scrollWidth {v['sw']})")
+                failures.extend(demo.CHECKS)   # the port's own checks, beside the prototype's recording (also when the suite stopped)
             if want("live", "spec-colors"):
                 with suite_guard("spec-colors", failures, out):
                     import spec_colors

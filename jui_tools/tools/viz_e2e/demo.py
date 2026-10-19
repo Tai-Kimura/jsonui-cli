@@ -117,6 +117,29 @@ async def shots(browser, url, watch, out):
     return res
 
 
+# Checks of the port's own (not in expect_demo.json, which the prototype recorded): run.py adds these to its failures.
+CHECKS: list[str] = []
+# Each of the permission strip's buttons, hit at its centre: the button itself (or what is inside it) takes the pointer
+# (ticket 2026-10-20-jui-viz-board-kanban-header-covers-perm-strip: the columns' headers lay over 拒否 in 2.3.5).
+STRIP_HITS = """() => [...document.querySelectorAll('#perm-strip [data-do]')].filter((b) => b.offsetParent).map((b) => {
+  const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
+  return { do: b.dataset.do, perm: b.dataset.perm, ok: !!hit && (hit === b || b.contains(hit)),
+           hit: hit ? hit.tagName.toLowerCase() + (hit.className ? '.' + String(hit.className).split(' ')[0] : '') : null }; })"""
+
+
+async def strip_hits(page, label):
+    """Every strip button hit-testable, with the question strip as it is and with it absent (hidden for the check, in the
+    same call, so no redraw comes in between)."""
+    for absent in (False, True):
+        got = await page.evaluate("""(absent) => { const q = document.getElementById('q-strip'), was = q.hidden;
+          if (absent) q.hidden = true;
+          const out = { q: !q.hidden, hits: (""" + STRIP_HITS + """)() };
+          q.hidden = was; return out; }""", absent)
+        bad = [h for h in got["hits"] if not h["ok"]]
+        if not got["hits"] or bad or not {"allow", "deny"} <= {h["do"] for h in got["hits"]}:
+            CHECKS.append(f"demo/perm/{label}: the permission strip's buttons are hit at their centre (question strip shown: {got['q']}): {bad or got['hits']}")
+
+
 async def perm(browser, url, watch, out):
     """perm.js: permission chip, strip, notes, detail, always / deny, robot card from a 3D click; 390 px sheet."""
     res = {}
@@ -138,6 +161,7 @@ async def perm(browser, url, watch, out):
           strip: [...document.querySelectorAll('#perm-strip .pcard')].map((c) => c.textContent.replace(/\\s+/g, ' ').slice(0, 80)),
           permNotes: [...document.querySelectorAll('#kanban .note.n-perm')].map((n) => n.querySelector('.n-subj').textContent) })""")
         await page.screenshot(path=f"{out}/q-board-{scheme}.png")
+        await strip_hits(page, f"board-{scheme}")
         await page.click("#kanban .note.n-perm .note-open")
         await page.wait_for_timeout(900)
         await page.screenshot(path=f"{out}/q-detail-{scheme}.png")

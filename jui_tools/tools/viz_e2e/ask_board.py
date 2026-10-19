@@ -23,6 +23,7 @@ import sys
 import time
 
 from common import ISOLATE, DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from demo import STRIP_HITS
 
 Q = {"questions": [{"question": "どちらにしますか", "header": "選択", "multiSelect": False,
                     "options": [{"label": "左", "description": "左にする"}, {"label": "右", "description": "右にする"}]}]}
@@ -68,6 +69,19 @@ async def run_ask_board(pw, out, failures):
                            env=dict(base_env, HOME=str(home), JUI_VIZ_E2E="1"))
     url = f"http://127.0.0.1:{port}"
     res: dict = {}
+
+    async def strip_hits_here(label):
+        """The permission strip's buttons hit at their centre, with the question strip as shown and absent (ticket
+        2026-10-20-jui-viz-board-kanban-header-covers-perm-strip)."""
+        for absent in (False, True):
+            got = await page.evaluate("""(absent) => { const q = document.getElementById('q-strip'), was = q.hidden;
+              if (absent) q.hidden = true;
+              const out = { q: !q.hidden, hits: (""" + STRIP_HITS + """)() };
+              q.hidden = was; return out; }""", absent)
+            res.setdefault("stripHits", {})[f"{label}-{'absent' if absent else 'shown'}"] = got
+            bad = [h for h in got["hits"] if not h["ok"]]
+            check(failures, got["hits"] and not bad and {"allow", "deny"} <= {h["do"] for h in got["hits"]},
+                  f"{label}: the permission strip's buttons are hit at their centre (question strip shown: {got['q']}): {bad or got['hits']}")
     waiting: list = []
 
     def body(k, **payload):
@@ -134,6 +148,7 @@ async def run_ask_board(pw, out, failures):
               f"the board's counts are the chips': {b}")
         check(failures, set(b["pend"]) == set(b["panelPend"]), f"the board's questions are the panel's: {b['pend']} vs {b['panelPend']}")
         await page.screenshot(path=str(out / "board-light.png"))
+        await strip_hits_here("opened")
         await page.emulate_media(color_scheme="dark")
         await page.wait_for_timeout(500)
         await page.screenshot(path=str(out / "board-dark.png"))
@@ -221,6 +236,7 @@ async def run_ask_board(pw, out, failures):
         await wait(page, "() => { const tb = document.getElementById('tb'); return !tb.hidden && tb.classList.contains('show'); }", label="Space opens the board")
         b5 = res["space"] = await page.evaluate(BOARD)
         check(failures, b5["open"] and len(b5["perms"]) == 1, f"Space on the 許可待ち chip opens the board with the permission: {b5}")
+        await strip_hits_here("space")
         await page.click(f"#perm-strip [data-do='deny'][data-perm='{b5['perms'][0]}']")
         try:
             pc2.communicate(timeout=30)
