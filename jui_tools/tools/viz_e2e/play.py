@@ -33,12 +33,24 @@ def check(failures, cond, text):
         failures.append(f"play: {text}")
 
 
-async def wait(page, js, timeout=20000, label=""):
+async def wait(page, js, timeout=20000, label="", arg=None):
     try:
-        await page.wait_for_function(js, timeout=timeout, polling=200)
+        await page.wait_for_function(js, arg=arg, timeout=timeout, polling=200)
     except Exception as e:
         raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
 
+
+
+async def turn_over(page, rid, send_stop):
+    """Send the turn's Stop and wait until the page has seen it end: done, then idle again (done -> idle comes 3 s
+    later). A nap or a bento started before that done reaches the page ends at once ('state:done'): under load the
+    done came late and the nap was gone before it was measured (docs/bugs/2026-10-19-jui-viz-e2e-play-nap-sometimes-
+    never-starts.md). Waits on the states the page has seen, not on time."""
+    await page.evaluate("""(id) => { clearInterval(window.__turnRec); window.__turnSeen = [];
+      window.__turnRec = setInterval(() => { const st = window.__dbg.robotState()[id]; if (st && window.__turnSeen[window.__turnSeen.length - 1] !== st.state) window.__turnSeen.push(st.state); }, 20); }""", rid)
+    send_stop()
+    await wait(page, "(id) => window.__turnSeen.includes('done') && window.__dbg.robotState()[id].state === 'idle'", arg=rid, timeout=20000, label="the turn over: done, then idle")
+    await page.evaluate("() => clearInterval(window.__turnRec)")
 
 
 async def run_play(pw, out, failures):
@@ -247,7 +259,7 @@ async def run_play(pw, out, failures):
         t3 = time.monotonic()
         await wait(page, "() => !window.__dbg.play().robots.some((x) => x.room === '" + a_room + "' && (x.solo || x.zzz || x.bento))", timeout=5000, label="it stops on the instruction")
         res["soloStopSec"] = round(time.monotonic() - t3, 1)
-        hook(B, hook_event_name="Stop")
+        await turn_over(page, lone["id"], lambda: hook(B, hook_event_name="Stop"))
         # both alone kinds, up close, light and dark (96, 10-18: the zzz was all but lost on the dark floor, the bento a few
         # pixels): the sprite and the box are there and big enough; the pictures are for the eye
         await wait(page, "() => window.__dbg.play().robots.every((x) => !x.solo && x.path === 0)", timeout=20000, label="B at rest")
@@ -265,13 +277,14 @@ async def run_play(pw, out, failures):
             res["soloLook"][kind] = await page.evaluate("""() => { const R = window.__dbg.robots.find((x) => x.solo); if (!R) return null;
               const o = R.robot.zzz && R.robot.zzz.visible ? R.robot.zzz : R.robot.bento; const b = new window.__dbg.THREE.Box3().setFromObject(o);
               const s = new window.__dbg.THREE.Vector3(); b.getSize(s); return { w: +s.x.toFixed(2), h: +s.y.toFixed(2), d: +s.z.toFixed(2) }; }""")
+            if res["soloLook"][kind] is None:   # gone before it was measured: how it ended (docs/bugs/2026-10-19-jui-viz-e2e-play-nap-sometimes-never-starts.md)
+                res.setdefault("soloGone", {})[kind] = (await page.evaluate(play))["ends"][-3:]
             await page.emulate_media(color_scheme="light")
             await page.click("#room-back")
             await wait(page, "() => window.__dbg.solo() === null", label="back")
             hook(B, hook_event_name="UserPromptSubmit", prompt="起きて")
             await wait(page, "() => !window.__dbg.play().robots.some((x) => x.solo)", timeout=5000, label="stops")
-            hook(B, hook_event_name="Stop")
-            await page.wait_for_timeout(1500)
+            await turn_over(page, lone["id"], lambda: hook(B, hook_event_name="Stop"))
         look = res["soloLook"]
         check(failures, look.get("nap") and look["nap"]["w"] >= 1.0 and look.get("bento") and look["bento"]["w"] >= 0.55,
               f"the zzz and the bento are big enough to see: {look}")
