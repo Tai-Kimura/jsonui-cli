@@ -29,7 +29,7 @@ import subprocess
 import sys
 import time
 
-from waits import settled, until
+from waits import frame_log_js, settled, until
 from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -145,6 +145,24 @@ SLOW_MS = 3000
 # The way out of this room is longer than props' (about 17 m: 2.5 s at the desk, then about 10 s of walking); with frames
 # 3 s apart a hand-off or two between frames adds up to two gaps: 18-21 s measured. The old walk took 30 s and more.
 TEN_MAX_SEC = 25
+
+
+# One row a frame (waits.frame_log_js, at the end of each frame's update), frames SLOW_MS apart:
+# - from the SessionEnd until the booth and the machine are back: the leaving robot's way (2.5 s at its desk counted from
+#   the event, the walk, gone and the room counted out, the props built in that same frame);
+# - from the roll until the callee smokes: it arrives at the booth and its cigarette starts in that same frame.
+# Frames are counted, not seconds, so the arms hold however slow the machine (ticket
+# 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames: the arrivals waited one or two frames each).
+CHAIN_JS = frame_log_js(
+    "() => { const b = window.__dbg.brk(); return { n: window.__dbg.robots.length, booth: b.built.booth, vend: b.built.vend,"
+    " leaving: window.__dbg.settleInfo().filter((x) => x.leaving || x.out).map((x) => [x.id, x.out, x.path, x.exitAfter, x.leftAgo]) }; }",
+    "() => { const b = window.__dbg.brk(); return b.built.booth && b.built.vend; }")
+SMOKE_JS = frame_log_js(
+    "(c) => { const b = window.__dbg.brk(), me = b.robots.find((x) => x.id === c) || {}; return { me: [me.kind, me.phase, me.at, me.path],"
+    " others: b.robots.filter((x) => x.kind && x.id !== c).map((x) => [x.id, x.kind, x.phase]) }; }",
+    "(c) => { const me = window.__dbg.brk().robots.find((x) => x.id === c); return !!(me && me.kind === 'smoke' && me.at); }")
+# frames a hand-off may take: none (the arrival and what follows in one frame)
+SMOKE_IDLE_ROWS_MAX = 0
 
 
 # What the page looked like when a wait ran out (waits.py): which robots had not arrived, and why.
@@ -398,8 +416,23 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         if not callee:
             callee = await page.evaluate("(room) => window.__dbg.robots.filter((R) => R.def.room === room).map((R) => R.def.id).sort()[0]", many_room)
         res["callee"] = callee
+        # the callee and nobody else may go (the others resting): with joinP 0 another robot in the booth first kept it
+        # out for 60 s, and its own rest from an earlier break could outlast the wait (dd, 10-20: timed out at 60 s)
+        await page.evaluate("(c) => window.__dbg.robots.forEach((R) => { R.restUntil = R.def.id === c ? 0 : 1e12; })", callee)
+        await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # to the booth, with frames 3 s apart
+        await page.evaluate(SMOKE_JS, callee)
+        t_smoke = time.monotonic()
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 1, vend: 0 }, joinP: 0, smokeMinSec: 60, smokeMaxSec: 60 })")
-        await wait(page, f"() => window.__dbg.brk().robots.some((x) => x.id === '{callee}' && x.kind === 'smoke' && x.at)", timeout=60000, label="the callee smokes")
+        try:
+            await wait(page, f"() => window.__dbg.brk().robots.some((x) => x.id === '{callee}' && x.kind === 'smoke' && x.at)", timeout=60000, label="the callee smokes")
+        finally:
+            res["smokeChain"] = await page.evaluate("() => window.__frameRows")
+        res["smokeSec"] = round(time.monotonic() - t_smoke, 1)
+        await page.evaluate("() => { window.__slowFrameMs = 0; }")
+        await page.evaluate("() => window.__dbg.robots.forEach((R) => { if (R.restUntil > 1e11) R.restUntil = 0; })")
+        idle = [r for r in res["smokeChain"] if r["me"][0] == "smoke" and r["me"][3] == 0 and not r["me"][2]]
+        check(failures, len(idle) <= SMOKE_IDLE_ROWS_MAX and res["smokeChain"] and res["smokeChain"][-1]["me"][2],
+              f"with frames {SLOW_MS} ms apart, the cigarette starts in the frame it reaches the booth: {len(idle)} frames between ({res['smokeSec']} s)")
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 } })")
         await page.wait_for_timeout(2500)
         hook(ONE, CWD_ONE, hook_event_name="PreToolUse", tool_name="SendMessage", tool_use_id="toolu_brk1",
@@ -429,10 +462,22 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         # robots were still crossing the room to their new desks when the wait began, and that walk used 12 s of it)
         await settled(page, "eleven seated before one leaves", timeout=60000)
         await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # the walk out, with frames 3 s apart
+        await page.evaluate(CHAIN_JS, None)
         t_ten = time.monotonic()
         hook(EXTRA[-1], CWD_MANY, hook_event_name="SessionEnd", reason="exit")
-        await wait(page, "() => window.__dbg.brk().built.booth && window.__dbg.brk().built.vend", timeout=30000, label="ten again: booth and machine back")
+        try:
+            await wait(page, "() => window.__dbg.brk().built.booth && window.__dbg.brk().built.vend", timeout=30000, label="ten again: booth and machine back")
+        finally:
+            res["tenChain"] = await page.evaluate("() => window.__frameRows")
         res["tenSec"] = round(time.monotonic() - t_ten, 1)
+        rows = res["tenChain"] or []
+        # the first frame that saw it leave: its walk out set for 2.5 s after the event, or for that frame if it came later
+        # (the old count began at that frame: 2.5 s plus the gap)
+        first = next((r["leaving"][0] for r in rows if r["leaving"] and r["leaving"][0][3] is not None), None)
+        late = [r for r in rows if r["n"] <= 10 and not (r["booth"] and r["vend"])]
+        check(failures, first and first[3] <= max(2500, first[4]) + 150 and not late,
+              f"with frames {SLOW_MS} ms apart, the 2.5 s at the desk count from the event (walk out {first and first[3]} ms after it, first seen {first and first[4]} ms after)"
+              f" and the props are back in the frame it is gone ({len(late)} frames between)")
         await page.evaluate("() => { window.__slowFrameMs = 0; }")
         check(failures, res["tenSec"] < TEN_MAX_SEC, f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenSec']} s")
         r = res["realTen"] = await page.evaluate(REAL_JS)

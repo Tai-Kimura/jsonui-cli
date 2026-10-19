@@ -20,6 +20,16 @@ import sys
 import time
 
 from common import ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from waits import frame_log_js
+
+# Frames SLOW_MS apart (the e2e's own requestAnimationFrame wrapper) for one trip: its time at the box starts in the
+# frame it arrives (it waited a frame for gitTick: ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames).
+SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (cb) => { const ms = window.__slowFrameMs || 0; return ms ? setTimeout(() => raf(cb), ms) : raf(cb); }; })()"""
+SLOW_MS = 3000
+TRIP_LOG_JS = frame_log_js(
+    "(id) => { const w = window.__dbg.gitBox().why[id] || {}; return { git: w.git, path: w.path }; }",
+    "(id) => (window.__dbg.gitBox().why[id] || {}).git === 'at'")
 
 DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
 SID = "9b000000-0000-4000-8000-0000000000a1"
@@ -126,6 +136,7 @@ async def run_gitbox(pw, out, failures):
         hook({"hook_event_name": "SessionStart", "source": "startup"})
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "gitbox", **DESKTOP)
+        await page.add_init_script(SLOW_RAF)
         await page.goto(url + "/")
         await ready(page)
         await wait(page, "() => Object.keys(window.__dbg.robotState()).length >= 1", timeout=30000, label="the robot")
@@ -343,8 +354,15 @@ async def run_gitbox(pw, out, failures):
               f"the log has the pushes and the pulls: {res['log'][:6]}")
         await page.keyboard.press("Escape")
         await page.emulate_media(color_scheme="dark")
+        await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")
+        await page.evaluate(TRIP_LOG_JS, rid)
         bash("git push", stderr=f"   {revs['base']}..{revs['big']}  main -> main\n")
-        await wait(page, "(id) => window.__dbg.gitBox().trips[id] && window.__dbg.gitBox().trips[id].phase === 'at'", arg=rid, timeout=20000, label="at the box (dark)")
+        await wait(page, "(id) => window.__dbg.gitBox().trips[id] && window.__dbg.gitBox().trips[id].phase === 'at'", arg=rid, timeout=40000, label="at the box (dark)")
+        await page.evaluate("() => { window.__slowFrameMs = 0; }")
+        rows = res["tripRows"] = await page.evaluate("() => window.__frameRows")
+        waited = [r for r in rows if r.get("git") == "going" and r.get("path") == 0]
+        walked = [r for r in rows if r.get("git") == "going" and r.get("path")]
+        check(failures, walked and not waited, f"with frames {SLOW_MS} ms apart, the time at the box starts in the frame it arrives: {len(waited)} frames between, {len(walked)} walking")
         await page.screenshot(path=str(out / "at-box-dark.png"))
         await page.emulate_media(color_scheme="light")
         await wait(page, "(id) => window.__dbg.gitBox().trips[id] && window.__dbg.gitBox().trips[id].phase === 'back'", arg=rid, timeout=20000, label="back")

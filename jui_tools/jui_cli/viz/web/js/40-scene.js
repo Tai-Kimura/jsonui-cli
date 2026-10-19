@@ -752,63 +752,68 @@ function livePlan(R) {
   else R.path.push(d.pos);                // first seat: after the doors when it just came in
   R.room = d.room; R.seatKey = key;
 }
-function liveWalk(R, dt, nowMs) {
+function liveWalk(R, dt, nowMs, nowSec) {
   const root = R.robot.root, d = R.def;
-  // Leaving is a state, not a layout change: start the "done, then out of the door" here.
-  if (LIVE.leaving[d.id]) { if (!R.exitAt && !R.out) R.exitAt = nowMs + 2500; }
+  // Leaving is a state, not a layout change: start the "done, then out of the door" here. The 2.5 s count from when
+  // the page learned it left (LIVE.leaving's since), not from the first frame after: with frames seconds apart, that
+  // frame was a whole gap later (ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames).
+  const lv = LIVE.leaving[d.id];
+  if (lv) { if (!R.exitAt && !R.out) R.exitAt = nowMs + 2500 - Math.min(2500, Math.max(0, Date.now() - (lv.since || Date.now()))); }
   else if (R.exitAt && !R.out) R.exitAt = 0;   // it came back before walking out
   if (R.exitAt && nowMs >= R.exitAt && !R.path.length && !R.out) {
     R.path = liveRoute(roomAtPoint([root.position.x, root.position.z]), null);   // out to the corridor
     R.out = true;
   }
   if (R.out && !R.path.length) { SOURCE.robotGone(d.id); return 'gone'; }
-  const next = R.path[0];
-  if (!next && R.play) {                                          // at the play spot: no desk, facing the partner
+  if (R.path.length) {
+    // The frame's whole step, carried along the path through as many points as it reaches (a slow frame rate must
+    // not slow the walk: one point a frame, and the rest of the step dropped, made a walk out of a room take ~10
+    // frames however far apart they were - 30 s at 3 s a frame; ticket 2026-10-19-jui-viz-walk-stretches-with-frame-gaps).
+    // Always along the path, point by point, so never through a wall; never past its end.
+    let step = WALK_SPEED * (SOURCE.replaySpeed > 1 ? Math.min(4, SOURCE.replaySpeed) : 1) * dt;
+    if (R.robot.desk) R.robot.desk.visible = false;
+    // The points passed in this frame, in order (a new array each walking frame): what a watcher joins between two
+    // frames' positions, since the walk turns at them (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
+    const trail = R.walkTrail = [];
+    while (R.path.length) {
+      const q = R.path[0], dx = q[0] - root.position.x, dz = q[1] - root.position.z, dist = Math.hypot(dx, dz);
+      if (dist > 1e-3) root.rotation.y = Math.atan2(dx, dz);
+      if (dist <= step || dist < 1e-3) { root.position.x = q[0]; root.position.z = q[1]; R.path.shift(); trail.push([q[0], q[1]]); step -= dist; continue; }
+      root.position.x += (dx / dist) * step; root.position.z += (dz / dist) * step;
+      break;
+    }
+    // out of the door within this frame's step: gone now, not a frame later (with frames seconds apart, every hand-off
+    // from one frame to the next is seconds)
+    if (R.out && !R.path.length) { SOURCE.robotGone(d.id); return 'gone'; }
+    if (R.path.length) return 'walking';
+    // arrived in this frame: what it came for starts in this frame too, below (it used to wait a frame or two:
+    // ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames)
+  }
+  if (R.play) {                                          // at the play spot: no desk, facing the partner
     if (R.robot.desk) R.robot.desk.visible = false;
     R.play.phase = 'playing';
     const q = R.play.partner.robot.root.position, ry = Math.atan2(q.x - root.position.x, q.z - root.position.z) + (R.play.turn || 0);
     root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * (R.play.turn !== undefined ? 12 : 6));   // highfive: turns to slap
     return 'playing';
   }
-  if (!next && R.brk) return brkAt(R, dt);                        // at the smoking booth or the vending machine (10-19)
-  if (!next && R.shred) {                                         // at the shredder: no desk, facing it
+  if (R.brk) return brkAt(R, dt, nowSec);                        // at the smoking booth or the vending machine (10-19)
+  if (R.shred) {                                         // at the shredder: no desk, facing it
     if (R.robot.desk) R.robot.desk.visible = false;
     const P = PROPS.shredder, ry = P ? Math.atan2(P.x - root.position.x, P.z - root.position.z) : Math.PI;
     root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * 6);
     return 'shredding';
   }
-  if (!next && R.git && R.git.phase === 'at') {                  // at the box (2.3.4): no desk of its own, facing the box
+  if (R.git) gitArrive(R, nowSec);
+  if (R.git && R.git.phase === 'at') {                  // at the box (2.3.4): no desk of its own, facing the box
     if (R.robot.desk) R.robot.desk.visible = false;
     const q = R.git.desk, ry = Math.atan2(q[0] - root.position.x, q[1] - root.position.z);
     root.rotation.y += (ry - root.rotation.y) * Math.min(1, dt * 6);
     return 'gitbox';
   }
-  if (!next && R.playBack) R.playBack = false;                    // back at its desk
-  if (!next) {
-    if (R.robot.desk) R.robot.desk.visible = !d.standing;
-    if (Math.abs(root.rotation.y - (d.ry || 0)) > 1e-3) root.rotation.y += ((d.ry || 0) - root.rotation.y) * Math.min(1, dt * 6);
-    return 'still';
-  }
-  // The frame's whole step, carried along the path through as many points as it reaches (a slow frame rate must not
-  // slow the walk: one point a frame, and the rest of the step dropped, made a walk out of a room take ~10 frames
-  // however far apart they were - 30 s at 3 s a frame; ticket 2026-10-19-jui-viz-walk-stretches-with-frame-gaps).
-  // Always along the path, point by point, so never through a wall; never past its end.
-  let step = WALK_SPEED * (SOURCE.replaySpeed > 1 ? Math.min(4, SOURCE.replaySpeed) : 1) * dt;
-  if (R.robot.desk) R.robot.desk.visible = false;
-  // The points passed in this frame, in order (a new array each walking frame): what a watcher joins between two
-  // frames' positions, since the walk turns at them (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
-  const trail = R.walkTrail = [];
-  while (R.path.length) {
-    const q = R.path[0], dx = q[0] - root.position.x, dz = q[1] - root.position.z, dist = Math.hypot(dx, dz);
-    if (dist > 1e-3) root.rotation.y = Math.atan2(dx, dz);
-    if (dist <= step || dist < 1e-3) { root.position.x = q[0]; root.position.z = q[1]; R.path.shift(); trail.push([q[0], q[1]]); step -= dist; continue; }
-    root.position.x += (dx / dist) * step; root.position.z += (dz / dist) * step;
-    break;
-  }
-  // out of the door within this frame's step: gone now, not a frame later (with frames seconds apart, every hand-off
-  // from one frame to the next is seconds)
-  if (R.out && !R.path.length) { SOURCE.robotGone(d.id); return 'gone'; }
-  return 'walking';
+  if (R.playBack) R.playBack = false;                             // back at its desk
+  if (R.robot.desk) R.robot.desk.visible = !d.standing;
+  if (Math.abs(root.rotation.y - (d.ry || 0)) > 1e-3) root.rotation.y += ((d.ry || 0) - root.rotation.y) * Math.min(1, dt * 6);
+  return 'still';
 }
 /* Coffee and meals, now and then (requester, 10-18): once a second each robot that is idle or at work may start
    one (probability SNACK.p, a seeded generator so a test can repeat it), while at most SNACK.share of the robots
@@ -818,9 +823,21 @@ function snackRandom(seed = SNACK.seed) {
   let a = seed >>> 0;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+/* "Once a second" (snacks, games, naps, breaks): the rolls due since the last one - a frame seconds late owes several -
+   as one roll with the chance of all of them (it rolled once a frame: with frames 3 s apart, a third as often; ticket
+   2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames). At most ROLL_CATCHUP_SEC: a hidden tab's minutes are not
+   time anyone watched, and its return must not start everything at once. n = 1 (frames under a second apart) is the
+   old roll exactly: the same chance, the same seeded sequence. */
+const ROLL_CATCHUP_SEC = 10;
+function rollsDue(T, nowSec) {
+  const n = T.next ? Math.max(1, Math.min(ROLL_CATCHUP_SEC, 1 + Math.floor(nowSec - T.next))) : 1;
+  T.next = nowSec + 1;
+  return n;
+}
+const chanceIn = (p, n) => (n <= 1 ? p : 1 - Math.pow(1 - p, n));
 function snackTick(t) {
   if (reduceMotion || t < SNACK.next) return;
-  SNACK.next = t + 1;
+  const n = rollsDue(SNACK, t);
   if (!SNACK.rng) SNACK.rng = snackRandom();
   const here = robots.filter((R) => !LIVE.leaving[R.def.id]);
   const cap = Math.max(1, Math.floor(here.length * SNACK.share));
@@ -828,7 +845,7 @@ function snackTick(t) {
   for (const R of here) {
     if (busy >= cap) break;
     if (R.robot.gesture || !GESTURE_OK.has(R.robot.state)) continue;
-    if (SNACK.rng() < SNACK.p && startGesture(R.robot, SNACK.rng() < 0.5 ? 'coffee' : 'meal', t)) busy += 1;
+    if (SNACK.rng() < chanceIn(SNACK.p, n) && startGesture(R.robot, SNACK.rng() < 0.5 ? 'coffee' : 'meal', t)) busy += 1;
   }
 }
 /* A call on the robot and on its name tag: a phone mark and the other robot's number, never the message. */
@@ -995,18 +1012,14 @@ function playTick(nowSec, now) {
       if (reason) { playStop(R); why = why || `${R.def.id} ${reason}`; }
     }
     const left = G.players.filter((R) => R.play);
-    const at = left.filter((R) => R.play.phase === 'playing');
-    if (at.length === left.length && left.length >= 2 && !G.t0) {   // all there: the game's clock starts now
-      G.t0 = nowSec; G.until = nowSec + G.len;
-      left.forEach((R, i) => { R.robot.play = { kind: G.kind, t0: nowSec, side: i, seed: G.seed }; });
-    }
+    playClock(G, nowSec);
     const end = left.length < 2 ? `alone (${why || 'partner stopped'})` : G.t0 && nowSec >= G.until ? 'done'
       : !G.t0 && nowSec >= G.walkUntil ? 'walk too long' : null;
     if (end) { playLog(G, end, nowSec); G.players = left; playEnd(G); continue; }
     if (G.t0) playMove(G, left, nowSec);
   }
   if (reduceMotion || nowSec < PLAY.next) return;
-  PLAY.next = nowSec + 1;
+  const n = rollsDue(PLAY, nowSec);
   if (!PLAY.rng) PLAY.rng = snackRandom.call(null, PLAY.seed);
   if (PLAY.list.length >= PLAY.games) return;
   const byRoom = {};
@@ -1018,7 +1031,7 @@ function playTick(nowSec, now) {
   for (const [room, idle] of Object.entries(byRoom)) {
     if (PLAY.list.length >= PLAY.games || idle.length < 2 || PLAY.list.some((G) => G.room === room) || !PROJECT[room]) continue;
     if (robots.some((R) => R.def.room === room && R.def.standing)) continue;   // a full room: no aisle to play in
-    if (PLAY.rng() >= PLAY.p) continue;
+    if (PLAY.rng() >= chanceIn(PLAY.p, n)) continue;
     const a = idle.splice(Math.floor(PLAY.rng() * idle.length), 1)[0], b = idle[Math.floor(PLAY.rng() * idle.length)];
     const rm = PROJECT[room];
     const kind = PLAY.kinds[Math.floor(PLAY.rng() * PLAY.kinds.length)];
@@ -1047,7 +1060,7 @@ function soloTick(nowSec, now) {
     if (reason) { PLAY.ends.push({ room: R.solo.room, kind: R.solo.kind, players: [R.def.id], reason, playedSec: +(nowSec - R.solo.t0).toFixed(1) }); soloStop(R); }
   }
   if (reduceMotion || nowSec < (SOLO.next || 0)) return;
-  SOLO.next = nowSec + 1;
+  const n = rollsDue(SOLO, nowSec);
   const byRoom = {};
   for (const R of robots) {
     const st = robotState[R.def.id];
@@ -1057,11 +1070,19 @@ function soloTick(nowSec, now) {
     // with two or more a game comes first; one left over (or alone) may nap or eat
     if (idle.length !== 1) continue;
     const R = idle[0];
-    if ((R.restUntil || 0) > nowSec || PLAY.rng() >= SOLO.p) continue;
+    if ((R.restUntil || 0) > nowSec || PLAY.rng() >= chanceIn(SOLO.p, n)) continue;
     const kind = SOLO.kinds[Math.floor(PLAY.rng() * SOLO.kinds.length)], len = SOLO.minSec + PLAY.rng() * (SOLO.maxSec - SOLO.minSec);
     R.solo = { kind, room, t0: nowSec, until: nowSec + len, since: robotState[R.def.id].since };
     R.robot.solo = { kind, t0: nowSec };
     R.restUntil = nowSec + len + PLAY.restMinSec + PLAY.rng() * (PLAY.restMaxSec - PLAY.restMinSec);
+  }
+}
+// All the players there: the game's clock starts now (playTick; and in the frame the last one arrived, liveUpdateRobots).
+function playClock(G, nowSec) {
+  const left = G.players.filter((R) => R.play);
+  if (left.length >= 2 && !G.t0 && left.every((R) => R.play.phase === 'playing')) {
+    G.t0 = nowSec; G.until = nowSec + G.len;
+    left.forEach((R, i) => { R.robot.play = { kind: G.kind, t0: nowSec, side: i, seed: G.seed }; });
   }
 }
 function liveUpdateRobots(nowSec, dt) {
@@ -1087,7 +1108,7 @@ function liveUpdateRobots(nowSec, dt) {
     setRobotTired(R.robot, forced(R.robot, 'tired', R.def.kind === 'main' && isTired(sinceOf(R.def.id), now)));
     R.robot.heavy = forced(R.robot, 'heavy', heavyOf(R.def.id));   // one look per cause while it works (the robot decides when)
     shredTick(R, st, nowSec);
-    const how = liveWalk(R, walkDt, nowMs);
+    const how = liveWalk(R, walkDt, nowMs, nowSec);
     if (how === 'gone') continue;
     if (how === 'shredding') shredAt(R, nowSec);
     const playing = !!(R.play || R.playBack || R.brk || R.shred);
@@ -1108,9 +1129,11 @@ function liveUpdateRobots(nowSec, dt) {
       if (left <= 0) R.tiltUntil = 0;
     }
   }
+  for (const G of PLAY.list) playClock(G, nowSec);   // the last player arrived this frame: the game starts in it
   if (SOURCE.layoutRev !== LIVE3D.rev) liveSync();   // a robot walked out this frame: the room counts it out now
   propsTick(nowSec, dt);
   shredBits(nowSec, dt);
+  if (LIVE3D.afterFrame) LIVE3D.afterFrame(nowSec);   // a test's recorder of the frame's outcome (80-dbg.js), else none
 }
 /* One room at a time (requester, 10-18): a project picked (its room's tag, its floor in 3D, the menu) lays out only
    that room, wider (layoutRooms, SOLO_GROW), with the way back at the top left. The other rooms' robots keep their
@@ -1359,6 +1382,10 @@ function gitStop(R, why, nowSec) {
 // back through the doors. So livePlan need not keep a trip's path: whatever it does to it, gitTick stops the trip in
 // the same frame (measured 10-19: with or without that, the same jump to the same seat).
 const gitLaid = (R) => { const rm = PROJECT[R.def.room]; return `${rm ? rectOf(rm) : ''}|${R.def.pos ? R.def.pos.join() : ''}`; };
+// At the box: its time there starts (in the frame it arrived: liveWalk; gitTick for one that was there already).
+function gitArrive(R, nowSec) {
+  if (R.git && R.git.phase === 'going' && !R.path.length && nowSec !== undefined) { R.git.phase = 'at'; R.git.until = nowSec + GITBOX.atSec; }
+}
 function gitTick(nowSec) {
   for (const R of robots) {
     const st = robotState[R.def.id] || { state: 'idle' }, trip = st.git;
@@ -1368,7 +1395,7 @@ function gitTick(nowSec) {
         : LIVE.leaving[R.def.id] ? 'leaving' : R.def.room === R.git.room && gitLaid(R) !== R.git.laid ? 'relaid' : PROPS.room !== R.def.room ? 'props' : null;   // props: the box went away (the floor, a bigger room)
       if (why) gitStop(R, why, nowSec);
       if (!R.git) continue;   // relaid: at its new desk already
-      if (R.git.phase === 'going' && !R.path.length) { R.git.phase = 'at'; R.git.until = nowSec + GITBOX.atSec; }
+      gitArrive(R, nowSec);
       if (R.git.phase === 'at' && nowSec >= R.git.until) {
         const k = R.git.trip.kind, rejected = R.git.trip.status === 'rejected';
         if (k === 'push' && !rejected) { PROPS.gitFill = Math.min(1, (PROPS.gitFill || 0) + R.git.sheets / 30); R.git.sheets = 0; }
@@ -1608,15 +1635,21 @@ function brkStop(R, reason, nowSec) {
   if (R.robot.desk) R.robot.desk.visible = false;
   R.path = from && from !== R.def.room ? [...out, ...liveRoute(from, R.def.room), R.def.pos] : [...out, R.def.pos];   // never through a wall
 }
-function brkAt(R, dt) {
+function brkAt(R, dt, nowSec) {
   const B = R.brk, root = R.robot.root;
   if (R.robot.desk) R.robot.desk.visible = false;
   if (B.phase === 'going') B.phase = 'at';
+  brkClock(R, nowSec);   // in the frame it arrived (brkTick did it a frame later)
   // bought: it turns round to the room with the can (its back hid the can and the machine's panel from the usual view)
   const ry = B.kind === 'vend' && R.robot.brkHandKind === 'vend' ? 0 : B.spot[2];
   const turn = ((ry - root.rotation.y) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;   // the short way round
   root.rotation.y += turn * Math.min(1, dt * 6);
   return 'playing';
+}
+// At the booth or the machine: its clock starts (the cigarette, the can), once.
+function brkClock(R, nowSec) {
+  const B = R.brk;
+  if (B && B.phase === 'at' && !B.t0 && nowSec !== undefined) { B.t0 = nowSec; B.until = nowSec + B.len; R.robot.brk = { kind: B.kind, t0: nowSec, buySec: BRK.buySec }; }
 }
 function brkTick(nowSec, now) {
   if (!BRK.rng) BRK.rng = snackRandom(BRK.seed);
@@ -1628,11 +1661,11 @@ function brkTick(nowSec, now) {
     const reason = playStopReason(R, st, B.room, B.since) || (!rm || !rm.shown || rectOf(rm) !== B.rect ? 'relaid' : null) || (PROPS.room !== B.room ? 'props' : null)
       || (B.phase === 'going' && nowSec >= B.walkUntil ? 'walk too long' : null) || (B.t0 && nowSec >= B.until ? 'done' : null);
     if (reason) { brkStop(R, reason, nowSec); continue; }
-    if (B.phase === 'at' && !B.t0) { B.t0 = nowSec; B.until = nowSec + B.len; R.robot.brk = { kind: B.kind, t0: nowSec, buySec: BRK.buySec }; }
+    brkClock(R, nowSec);
   }
   brkSmoke(nowSec);
   if (reduceMotion || nowSec < BRK.next) return;
-  BRK.next = nowSec + 1;
+  const n = rollsDue(BRK, nowSec);
   const room = PROPS.room;
   if (!room || !PROPS.place || robots.some((R) => R.def.room === room && R.def.standing)) return;
   const here = robots.filter((R) => R.def.room === room);
@@ -1642,7 +1675,7 @@ function brkTick(nowSec, now) {
     for (const kind of BRK.kinds) {
       const on = here.filter((x) => x.brk && x.brk.kind === kind);
       if (on.length >= brkCap(kind)) continue;
-      if (BRK.rng() >= (kind === 'smoke' && on.length ? BRK.joinP : BRK.p[kind])) continue;
+      if (BRK.rng() >= chanceIn(kind === 'smoke' && on.length ? BRK.joinP : BRK.p[kind], n)) continue;
       const used = new Set(on.map((x) => x.brk.slot));
       brkStart(R, kind, kind === 'smoke' ? [0, 1].find((k) => !used.has(k)) : 0, nowSec);
       break;

@@ -894,3 +894,45 @@ def test_the_sky_has_four_hours_with_their_edges():
     hours = [(4, 59), (5, 0), (6, 59), (7, 0), (16, 29), (16, 30), (18, 59), (19, 0), (23, 30), (12, 0)]
     got = _run_js("40-scene.js", ["skyPhase"], "[" + ",".join(f"skyPhase(new Date(2026, 9, 18, {h}, {m}))" for h, m in hours) + "]")
     assert got == ["night", "dawn", "dawn", "day", "day", "dusk", "dusk", "night", "night", "day"]
+
+
+# ---- "once a second" with frames seconds apart (ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames) --------
+# Snacks, games, naps and breaks rolled once a frame: with frames 3 s apart, a third as often. rollsDue / chanceIn (cut
+# out of 40-scene.js, run in node) owe the seconds since the last roll, as one roll with the chance of all of them.
+def _rolls(script_tail: str):
+    import json as _json
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    assert node, "node is needed for the roll arms (the jui_tools job has it; a skip would hide the arms)"
+    src = web_text("js", "40-scene.js")
+    start = src.index("const ROLL_CATCHUP_SEC")
+    end = src.index("\n", src.index("const chanceIn"))
+    out = subprocess.run([node, "-e", src[start:end] + "\n" + script_tail], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return _json.loads(out.stdout)
+
+
+def test_the_rolls_owe_the_seconds_since_the_last_one_up_to_ten():
+    got = _rolls("""const T = { next: 0 }, ns = [];
+      for (const t of [100, 101, 104, 104.5, 105.2, 410]) { if (t >= T.next) ns.push([t, rollsDue(T, t)]); }
+      process.stdout.write(JSON.stringify(ns));""")
+    # the first roll; a second later; 3 s later (three owed); not due yet; 1.2 s later; a hidden tab's 305 s (ten at most)
+    assert got == [[100, 1], [101, 1], [104, 3], [105.2, 1], [410, 10]]
+
+
+def test_one_roll_owed_is_the_old_roll_exactly():
+    got = _rolls("process.stdout.write(JSON.stringify([chanceIn(1 / 40, 1), chanceIn(0, 5), chanceIn(1, 3), chanceIn(0.5, 3)]))")
+    assert got == [1 / 40, 0, 1, 0.875]
+
+
+def test_every_once_a_second_roll_goes_through_rolls_due():
+    import re
+    src = web_text("js", "40-scene.js")
+    body = src[src.index("function rollsDue("):]
+    body = body[:body.index("\n}\n")]
+    rest = src.replace(body, "")
+    assert re.findall(r"\.next = \w+ \+ 1", rest) == []                       # no site still sets its next roll itself
+    assert len(re.findall(r"= rollsDue\((SNACK|PLAY|SOLO|BRK), ", src)) == 4
+    assert re.findall(r"rng\(\) (?:<|>=) (?:SNACK|PLAY|SOLO)\.p\b", src) == []  # each chance through chanceIn
+    assert "chanceIn(kind === 'smoke' && on.length ? BRK.joinP : BRK.p[kind], n)" in src

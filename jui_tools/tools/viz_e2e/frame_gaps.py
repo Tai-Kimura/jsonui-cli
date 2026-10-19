@@ -5,7 +5,10 @@ frames, not after the dozens of frames a per-frame step needed:
 
   - a pose blending into the next (0.4 s): it took 8 frames, 24 s;
   - a name tag easing to its spot (35 % of the way each 1/60 s): about 10 frames, 30 s;
-  - the camera following a robot (8 % each 1/60 s): about 50 frames.
+  - the camera following a robot (8 % each 1/60 s): about 50 frames;
+  - a game: its clock starts in the frame the second player reaches its spot (it took two frames more: one to say
+    'playing', one for the game's clock; ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames), counted in
+    frames (waits.frame_log_js).
 
 The walk is measured in props.py and breaks.py ("ten again").
 """
@@ -20,9 +23,10 @@ import sys
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page
-from waits import settled, until
+from waits import frame_log_js, settled, until
 
 A = "e2e00000-0000-4000-8000-0000000005a1"
+PLAYERS = ("e2e00000-0000-4000-8000-0000000005a2", "e2e00000-0000-4000-8000-0000000005a3")
 CWD = "/work/frame-gaps"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
@@ -30,6 +34,10 @@ SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
 SLOW_MS = int(os.environ.get("FG_SLOW_MS", "3000"))   # the arm runs at 3 s; set FG_SLOW_MS to measure at other gaps
 MAX_SEC = 12          # a few frames at 3 s; the per-frame steps took 24 s and more
 READY = "() => !!(window.__dbg && window.__dbg.robots && document.body.dataset.mode === 'live')"
+PLAY_LOG_JS = frame_log_js(
+    "() => { const p = window.__dbg.play(), g = p.list[0]; return { started: !!(g && g.started),"
+    " paths: g ? g.players.map((id) => (p.robots.find((x) => x.id === id) || {}).path) : null }; }",
+    "() => window.__dbg.play().list.some((g) => g.started)")
 WHY = "() => ({ settle: window.__dbg.settleInfo(), cam: window.__dbg.camFollowGap() })"
 
 
@@ -55,8 +63,8 @@ async def run_frame_gaps(pw, out, failures):
     url = f"http://127.0.0.1:{port}"
     res: dict = {}
 
-    def hook(**payload):
-        body = {"session_id": A, "cwd": CWD, "permission_mode": "default", **payload}
+    def hook(sid=A, **payload):
+        body = {"session_id": sid, "cwd": CWD, "permission_mode": "default", **payload}
         subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(),
                        capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
 
@@ -114,6 +122,23 @@ async def run_frame_gaps(pw, out, failures):
         check(failures, res["gapBefore"] > 1 and res["camSec"] < MAX_SEC,
               f"with frames {SLOW_MS} ms apart, the camera follows in about its real time: {res['camSec']} s (from {res['gapBefore']})")
         await page.evaluate("() => { window.__slowFrameMs = 0; }")
+
+        # 4. a game: two idle robots walk to their spots; it starts in the frame the second arrives
+        for sid in PLAYERS:
+            hook(sid, hook_event_name="SessionStart", source="startup")
+        await until(page, "() => window.__dbg.robots.length === 3", "the two players", why=WHY)
+        await settled(page, "the players at their desks", timeout=30000)
+        await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")
+        await page.evaluate(PLAY_LOG_JS, None)
+        await page.evaluate("() => window.__dbg.play({ kinds: ['ball'], p: 1, idleMs: 0, restMinSec: 0, restMaxSec: 0, minSec: 60, maxSec: 60 })")
+        await until(page, "() => window.__dbg.play().list.some((g) => g.started)", "the game started", timeout=60000, why=WHY)
+        await page.evaluate("() => { window.__slowFrameMs = 0; }")
+        rows = res["playRows"] = await page.evaluate("() => window.__frameRows")
+        waited = [r for r in rows if r["paths"] and all(x == 0 for x in r["paths"]) and not r["started"]]
+        walked = [r for r in rows if r["paths"] and any(x for x in r["paths"])]
+        check(failures, walked and not waited and rows[-1]["started"],
+              f"with frames {SLOW_MS} ms apart, the game starts in the frame the players arrive: {len(waited)} frames between, {len(walked)} walking")
+        await page.evaluate("() => window.__dbg.play({ p: 0, endAll: true })")
         await page.close()
         for line in watch.console:
             failures.append(f"frame-gaps: console: {line}")

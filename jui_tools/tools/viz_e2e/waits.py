@@ -58,3 +58,14 @@ async def settled(page, name: str, ids=None, timeout: int = 30000):
     await until(page, "(ids) => window.__dbg.settle(ids)", f"{name} (settled)", arg=ids, timeout=timeout,
                 why="(ids) => window.__dbg.settleInfo(ids)")
     return await page.evaluate("(ids) => window.__dbg.settleInfo(ids)", ids)
+
+
+
+def frame_log_js(row: str, stop: str) -> str:
+    """A recorder of one row a frame, taken at the end of each frame's update of the robots (window.__dbg.afterFrame):
+    `row(arg)` (a JS function, as text) gives the row, `stop(arg)` ends it (at most 200 rows). Kept in
+    window.__frameRows, each with t (seconds since it started). For counting the frames a chain takes (ticket
+    2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames)."""
+    return f"""(arg) => {{ const log = window.__frameRows = [], t0 = performance.now(), row = {row}, stop = {stop};
+  window.__dbg.afterFrame(() => {{ const r = row(arg); r.t = +((performance.now() - t0) / 1000).toFixed(2); log.push(r);
+    if (stop(arg) || log.length >= 200) window.__dbg.afterFrame(null); }}); }}"""

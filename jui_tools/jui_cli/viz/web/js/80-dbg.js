@@ -265,11 +265,17 @@ window.__dbg.promptWait = PROMPT_WAIT;
 window.__dbg.settleInfo = (ids) => robots.filter((R) => !ids || ids.includes(R.def.id)).map((R) => ({
   id: R.def.id, state: R.robot.state, blend: +R.robot.blend.toFixed(3), path: (R.path || []).length, leaving: !!(typeof LIVE !== 'undefined' && LIVE.leaving[R.def.id]),
   tag: R.tagTarget === undefined || R.tag.style.visibility === 'hidden' ? null : +(R.tagDy - R.tagTarget).toFixed(2),
-  out: !!R.out, exitIn: R.exitAt ? Math.round(R.exitAt - performance.now()) : null }));
+  out: !!R.out, exitIn: R.exitAt ? Math.round(R.exitAt - performance.now()) : null,
+  // ms from the page learning it left (LIVE.leaving's since) to its walk out (exitAt): 2500 when counted from the event
+  exitAfter: R.exitAt && typeof LIVE !== 'undefined' && LIVE.leaving[R.def.id] && LIVE.leaving[R.def.id].since
+    ? Math.round(R.exitAt - (performance.now() - (Date.now() - LIVE.leaving[R.def.id].since))) : null,
+  leftAgo: typeof LIVE !== 'undefined' && LIVE.leaving[R.def.id] && LIVE.leaving[R.def.id].since ? Date.now() - LIVE.leaving[R.def.id].since : null }));
 window.__dbg.settle = (ids) => window.__dbg.settleInfo(ids).every((x) => x.blend >= 1 && !x.path && !x.leaving && (x.tag === null || x.tag === 0));
 // A gap between frames, as a hidden tab makes (rAF stops; minutes later it resumes): the next frame walks with `sec`
 // more of real time (liveUpdateRobots' walkDt), and nothing else is touched.
 window.__dbg.walkGap = (sec) => { LIVE3D.lastWalk -= sec * 1000; return true; };
+// One call at the end of each frame's update of the robots (a recorder of what the frame did; null: none)
+window.__dbg.afterFrame = (fn) => { LIVE3D.afterFrame = fn || null; return true; };
 // Send robot `id` on foot from its room to the middle of room `to`, through the doors (liveRoute, as every walk goes):
 // with walkGap, the whole route in one frame, around the doors' corners (rooms.py: the wall watcher follows the path)
 window.__dbg.walkRoute = (id, to) => {
