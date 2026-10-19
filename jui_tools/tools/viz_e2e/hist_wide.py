@@ -16,6 +16,7 @@ localStorage throwing; at 390 px it is the whole screen. Screenshots (light and 
 from __future__ import annotations
 
 import base64
+import datetime
 import json
 import os
 import pathlib
@@ -55,6 +56,20 @@ TABLE = "\n".join(["| " + " | ".join(f"列{i}" for i in range(14)) + " |", "|" +
                    "| " + " | ".join(f"値{i}-とても長いセルの中身" for i in range(14)) + " |"])
 CODE = "```\n" + "x = '" + "長い行" * 80 + "'\n```"
 
+# The transcript's times, written as if the sessions started at 09:00Z on 10-19, are moved to start an hour before the
+# run (ticket 2026-10-20-jui-viz-hist-wide-robot-margin-red-on-integrate): a session's start comes from its transcript,
+# and one that started 8 hours before is drawn tired (20-core.js isTired) — a slumped pose a few pixels wider. With the
+# fixed date the robots turned tired at 02:00 JST on 10-20 and the margin arms went red from then on: what was checked
+# depended on the clock. The order and the gaps between the records are kept.
+FIXTURE_T0 = datetime.datetime(2026, 10, 19, 9, 0, 0, tzinfo=datetime.timezone.utc)
+FIXTURE_BASE = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0) - datetime.timedelta(hours=1)
+
+
+def stamp(ts: str) -> str:
+    """A fixture time (as written, on 10-19) moved to the run's hour."""
+    t = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    return (FIXTURE_BASE + (t - FIXTURE_T0)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 def records(who):
     def user(content, ts):
@@ -84,6 +99,8 @@ def records(who):
     if who == "A":
         out.append(user([pic(PIC1), pic(PIC2), {"type": "text", "text": f"[Image: source: {GONE}, original 640x480]\nこの 2 枚を見て"}], "2026-10-19T09:01:00Z"))
         out.append(asst("## 表\n\n" + TABLE + "\n\n" + CODE, "m9", "2026-10-19T09:01:10Z"))
+    for r in out:
+        r["timestamp"] = stamp(r["timestamp"])
     return out
 
 
@@ -270,7 +287,7 @@ async def run_hist_wide(pw, out, failures):
         await page.emulate_media(color_scheme="light")
         # follows a new answer while wide (the reader at the bottom)
         with open(st.paths[A], "a") as f:
-            f.write(json.dumps({"type": "assistant", "timestamp": "2026-10-19T09:02:00Z",
+            f.write(json.dumps({"type": "assistant", "timestamp": stamp("2026-10-19T09:02:00Z"),
                                 "message": {"id": "m20", "role": "assistant", "content": [{"type": "text", "text": "広げたまま届いた応答"}]}}, ensure_ascii=False) + "\n")
         await wait(page, "() => document.querySelector('[data-rb-hist]').textContent.includes('広げたまま届いた応答')", timeout=10000, label="a new answer while wide")
         await page.wait_for_timeout(300)
