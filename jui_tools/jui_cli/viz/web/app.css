@@ -776,6 +776,14 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-tool summary, .h-peer summary, .h-harness summary { display: flex; gap: 8px; align-items: baseline; min-width: 0; padding: 5px 8px; cursor: pointer; font-size: 12.5px; }
 .h-head { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; }
 .h-tname { font-family: var(--font-mono); }
+/* The labels of an item never fold (2.3.4, requester 10-19: "時間の表示が崩れてる"): .h-item's overflow-wrap: anywhere is
+   inherited, which makes a label's min-content one character, and a flex item may shrink to it — beside a long body the
+   time, the tool's name and the sender went down one or two characters a line. The time and the marks keep their width; a
+   name (the tool's, the harness's, the sender's) is cut with … when it must narrow; the body is what narrows first. */
+.h-item .h-at, .h-who > *, .h-tool summary > .h-err, .h-tool summary > .h-run { flex: none; white-space: nowrap; overflow-wrap: normal; }
+.h-who { white-space: nowrap; overflow-wrap: normal; }   /* 依頼者 is a bare text node in the row: the row itself keeps it whole */
+.h-tool summary > b, .h-harness summary > b, .h-peer summary > b { flex: 0 1 auto; min-width: 3em; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.h-item summary > .h-head { flex: 1 1 0; }   /* the body narrows first: the labels get their own width before it */
 .h-err { color: var(--warn); font-weight: 700; }
 .h-run { color: var(--info); }
 .h-io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 0 8px 8px; }

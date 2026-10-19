@@ -63,6 +63,21 @@ def records(who):
         return {"type": "assistant", "timestamp": ts, "message": {"id": mid, "role": "assistant", "content": [{"type": "text", "text": text}]}}
     pic = lambda data: {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(data).decode()}}  # noqa: E731
     out = [user(f"{who} 最初の指示", "2026-10-19T09:00:00Z")]
+    if who == "A":   # long bodies next to the labels (hist_labels.py: the time and the names must not fold)
+        out.append(user("Another Claude session sent a message:\n<cross-session-message from=\"uds:/tmp/x.sock\" from-name=\"jsonui-agents-for-claude-dd\">\n"
+                        + "もう 1 本お願いします（dd から）。" + "とても長い知らせの本文。" * 30 + "\n</cross-session-message>", "2026-10-19T09:47:00Z"))
+        out.append({"type": "assistant", "timestamp": "2026-10-19T09:47:10Z", "message": {"id": "mt", "role": "assistant", "content": [
+            {"type": "tool_use", "id": "tu-long", "name": "Bash", "input": {"command": "cat " + "/very/long/path/segment" * 20 + " | head -n 200"}}]}})
+        out.append({"type": "user", "timestamp": "2026-10-19T09:47:11Z", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tu-long", "content": "ok"}]}})
+        out.append(user("依頼者の長い指示。" * 60, "2026-10-19T09:47:20Z"))
+        out.append({"type": "user", "timestamp": "2026-10-19T09:47:30Z", "isMeta": True, "message": {"role": "user", "content": "<system-reminder>\n" + "ハーネスの長い注記。" * 40 + "\n</system-reminder>"}})
+        out.append({"type": "assistant", "timestamp": "2026-10-19T09:47:40Z", "message": {"id": "mt2", "role": "assistant", "content": [
+            {"type": "tool_use", "id": "tu-err", "name": "mcp__long-tool-server__a_tool_with_a_rather_long_name_indeed", "input": {"description": "長い説明。" * 30}}]}})
+        out.append({"type": "user", "timestamp": "2026-10-19T09:47:41Z", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tu-err", "content": "failed", "is_error": True}]}})
+        out.append({"type": "assistant", "timestamp": "2026-10-19T09:47:50Z", "message": {"id": "mt3", "role": "assistant", "content": [
+            {"type": "tool_use", "id": "tu-run", "name": "Bash", "input": {"command": "sleep 100 && " + "echo running " * 40}}]}})
     for k in range(6):
         out.append(asst(f"応答 {k}: " + "本文。" * 40, f"m{k}", f"2026-10-19T09:00:{10 + k:02d}Z"))
     if who == "A":
