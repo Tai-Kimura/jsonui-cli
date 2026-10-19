@@ -36,6 +36,7 @@ SAMPLES = {
     "talk.list": {"type": "talk.list", "reqId": 7, "agentId": "s-owner", "items": [CONVERSATION, GONE], "more": False},
     "talk.messages": {"type": "talk.messages", "reqId": "r8", "agentId": "s-owner", "convId": CONV,
                       "items": [MSG_UNDELIVERED, MSG_SUB, MSG_OUT], "more": True},
+    "talk.badges": {"type": "talk.badges", "counts": {"s-owner": 2, "a1b2c3d4e5f6a7b8": 1}},
     "talk.update": {"type": "talk.update", "agentId": "s-owner", "ops": [
         {"op": "message", "convId": CONV, "message": MSG_OUT},
         {"op": "conv", "conv": GONE},
@@ -75,6 +76,11 @@ def _broken(kind, change):
     ("talk.update", lambda f: f["ops"][2].__setitem__("reason", "gone"), "of oneOf"),
     ("talk.update", lambda f: f.__setitem__("ops", []), "fewer than 1"),
     ("talk.get", lambda f: f.__setitem__("limit", 101), "> 100"),
+    ("talk.badges", lambda f: f["counts"].__setitem__("s-zero", 0), "< 1"),
+    ("talk.badges", lambda f: f["counts"].__setitem__("bad id/../x", 1), "(a key)"),
+    ("talk.badges", lambda f: f["counts"].__setitem__("s-text", "3"), "is not integer"),
+    ("talk.badges", lambda f: f.__setitem__("preview", "本文"), "unexpected key 'preview'"),
+    ("talk.badges", lambda f: f.__setitem__("counts", {f"s-{i}": 1 for i in range(501)}), "more than 500 keys"),
     ("talk.open", lambda f: f.pop("agentId"), "missing 'agentId'"),
     ("talk.seen", lambda f: f.__setitem__("upTo", -1), "< 0"),
 ])
@@ -92,6 +98,13 @@ def test_there_is_no_send_request_in_the_contract():
     root = C.load()
     assert not any("send" in k or "post" in k for k in root["requests"])
     assert not any("text" in s.get("properties", {}) for s in root["requests"].values())
+
+
+def test_badges_carry_counts_only():
+    """The badge frame has no place for a body, a summary, a name or a path: only robot ids and numbers."""
+    schema = C.load()["frames"]["talk.badges"]
+    assert set(schema["properties"]) == {"type", "counts"}
+    assert schema["properties"]["counts"]["additionalProperties"] == {"type": "integer", "minimum": 1}
 
 
 def test_limits_match_the_schema():

@@ -1,6 +1,6 @@
 {
   "$comment": "THE source of truth for the talk view's WebSocket frames (server <-> page). TALK_CONTRACT.md explains it; talk_contract.py validates against it (the subset of JSON Schema used here). A change here is a change for both the server (talk.py) and the page (web/js): bump 'version'.",
-  "version": 1,
+  "version": 2,
   "limits": {
     "textMax": 20000,
     "summaryMax": 200,
@@ -117,6 +117,12 @@
                      "convId": {"$ref": "#/$defs/convId"},
                      "items": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/message"}},
                      "more": {"type": "boolean"}}
+    },
+    "talk.badges": {
+      "type": "object", "additionalProperties": false, "required": ["type", "counts"],
+      "properties": {"type": {"const": "talk.badges"},
+                     "counts": {"type": "object", "maxProperties": 500, "propertyNames": {"$ref": "#/$defs/agentId"},
+                                "additionalProperties": {"type": "integer", "minimum": 1}}}
     },
     "talk.update": {
       "type": "object", "additionalProperties": false, "required": ["type", "agentId", "ops"],

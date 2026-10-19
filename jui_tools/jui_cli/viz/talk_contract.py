@@ -1,10 +1,11 @@
 """The talk view's WebSocket contract: talk_contract.json (the source of truth; TALK_CONTRACT.md explains it).
 
-``validate(frame)`` checks one frame (server -> page, ``talk.list`` / ``talk.messages`` / ``talk.update``) or one
+``validate(frame)`` checks one frame (server -> page, ``talk.list`` / ``talk.messages`` / ``talk.update`` /
+``talk.badges``) or one
 request (page -> server, ``talk.open`` / ``talk.close`` / ``talk.get`` / ``talk.seen``) against it and returns every
 problem, one line each (empty: it conforms). Only the part of JSON Schema the contract uses is understood: type,
-enum, const, required, properties, additionalProperties false, min/maxLength, minimum/maximum, pattern, items,
-min/maxItems, a local $ref, anyOf, oneOf. The server's own frames are checked with it in tests; the page's side
+enum, const, required, properties, additionalProperties (false or a schema), propertyNames, maxProperties,
+min/maxLength, minimum/maximum, pattern, items, min/maxItems, a local $ref, anyOf, oneOf. The server's own frames are checked with it in tests; the page's side
 can be checked the same way from a test that feeds a sample through it.
 """
 from __future__ import annotations
@@ -83,14 +84,21 @@ def _check(value: Any, schema: dict, where: str, root: dict) -> list[str]:
                 out += _check(item, schema["items"], f"{where}[{i}]", root)
     if isinstance(value, dict):
         props = schema.get("properties", {})
+        extra = schema.get("additionalProperties")
         for key in schema.get("required", []):
             if key not in value:
                 out.append(f"{where}: missing {key!r}")
+        if "maxProperties" in schema and len(value) > schema["maxProperties"]:
+            out.append(f"{where}: more than {schema['maxProperties']} keys ({len(value)})")
         for key, item in value.items():
+            if "propertyNames" in schema:
+                out += [f"{p} (a key)" for p in _check(key, schema["propertyNames"], f"{where}[{key!r}]", root)]
             if key in props:
                 out += _check(item, props[key], f"{where}.{key}", root)
-            elif schema.get("additionalProperties") is False:
+            elif extra is False:
                 out.append(f"{where}: unexpected key {key!r}")
+            elif isinstance(extra, dict):
+                out += _check(item, extra, f"{where}[{key!r}]", root)
     return out
 
 

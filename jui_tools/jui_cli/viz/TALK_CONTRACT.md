@@ -29,7 +29,7 @@
 | 欄 | 意味 |
 |---|---|
 | `at` | 送った時刻（送り手の tool_use の timestamp、ms）。送り手が見えない通は受け手の最初の記録の時刻 |
-| `deliveredAt` | 届いた（受け手の enqueue か、読んだ記録）。無ければ null |
+| `deliveredAt` | 届いた（受け手の enqueue の時刻。見えなければ、送りの結果が成功（msg_id あり）の時刻か、読んだ記録の時刻）。無ければ null |
 | `readAt` | 受け手が読んだ（受け手の isMeta / queued_command の記録）。LINE の「既読」はこれ。`dir: "out"` の通に出す |
 | `state` | `sent`（送った、結果待ち）・`delivered`・`read`・`undelivered`（「No agent named … is reachable」や失敗。印を付けて見せる。他の着信には付けない） |
 | `text` / `cut` | 本文（受け手の `origin.body`、無ければ送り手の `input.message`）。`textMax` 字で切り、切ったら `cut: true`。Markdown は履歴と同じく escape して描く。長い本文は折りたたみ、本文のクリックでも開閉 |
@@ -52,9 +52,11 @@
 - `talk.get {reqId, agentId, convId, before?, limit?}`: 詳細の通を新しい方から `limit`（既定・上限 `pageMax`）通、古い順に並べて返す（`talk.messages`）。`before` は `message.id`（それより古い通）。`more: true` ならさらに古い通がある。
 - `talk.seen {reqId, agentId, convId, upTo}`: 詳細を開いている間に見た通の最後の `at`。サーバーは未読を数え直し、`conv` op を送る。
 
-サーバー → ページ:
+サーバー → ページ（`talk.badges` 以外は、その socket が求めたか `talk.open` したロボットの分だけ）:
 - `talk.list {reqId?, agentId, items, more}`: 一覧（`listMax` 行まで、新しい順。超えたら `more: true`）。
 - `talk.messages {reqId, agentId, convId, items, more}`。
+- `talk.badges {counts}`: チャットのアイコンのバッジ。`counts` は ロボットの agentId → 未読の合計（そのロボットの全トークの `unread` の和）。**0 のロボットは入れない**（空の `{}` は「どこにも未読なし」）。毎回全体を送る（差分ではない。小さいので）。送る時: socket の認証の直後（snapshot の後）に 1 回、以後は合計が変わったとき（新着・`talk.seen`・トークの削除）に、`talk.open` していない socket も含む全部の socket へ。本文・要約・名前・path は入らない（数だけ）。
+  - `talk.seen` を受けたら、サーバーはそのトークの `unread` を数え直して `conv` op（open している socket へ）と、合計が変わったなら `talk.badges`（全 socket へ）を送る。
 - `talk.update {agentId, ops}`: 増分だけ（全部を送り直さない）。`ops` は `opsMax` 個まで、超える分は次の frame。
   - `{op: "message", convId, message}`: 新しい通、または状態が変わった通（届いた・読んだ）。`id` で上書き。
   - `{op: "conv", conv}`: 一覧の 1 行の新しい形（新着で `lastAt`・`unread` が変わった、相手が死んだ・戻った）。
