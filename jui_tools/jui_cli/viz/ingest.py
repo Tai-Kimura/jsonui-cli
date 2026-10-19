@@ -726,8 +726,8 @@ class World:
             sock = _s(row.get("messagingSocketPath"))
             if sock:
                 self._peer_socks[sock] = sid
-            if _s(row.get("name")) and not session.get("title"):
-                session["title"] = _head(row["name"], 120)
+            if name and session.get("title") != _head(name, 120):   # a /rename shows: the newest row's name wins
+                session["title"] = _head(name, 120)
                 self._dirty.add("sessions")
 
     # ---------------------------------------------------------------- waiting on background work (10-18)

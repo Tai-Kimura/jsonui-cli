@@ -685,8 +685,9 @@ function rebuildRooms() {
   for (const k of Object.keys(PROJECT)) delete PROJECT[k];
   for (const r of ROOMS) PROJECT[r.id] = r;
 }
+function sessionHead(a, sess) { return `セッション ${String((sess && sess.id) || a.sessionId || '').slice(0, 4)}…`; }
 function displayName(a, sess) {
-  if (a.kind === 'main') return `セッション ${String((sess && sess.id) || a.sessionId || '').slice(0, 4)}…`;
+  if (a.kind === 'main') return sessionName(sess && sess.title) || sessionHead(a, sess);
   return a.agentType ? String(a.agentType) : 'サブエージェント';
 }
 function rebuildRobots(initial) {
@@ -704,7 +705,10 @@ function rebuildRobots(initial) {
     let def = DEF[label];
     const isNew = !def || !ROBOT_DEFS.includes(def);
     if (!def) def = DEF[label] = { id: label };
+    const named = a.kind === 'sub' ? '' : sessionName(sess && sess.title);
+    if (def.agent !== displayName(a, sess) || (def.title || '') !== named) NAMES.rev += 1;
     Object.assign(def, {
+      title: named, head: a.kind === 'sub' ? '' : sessionHead(a, sess),   // the session's name (none: '') and its id's head
       realId: String(a.id || label), sessionId: String(a.sessionId || ''), kind: a.kind === 'sub' ? 'sub' : 'main',
       role: ROLE_OF(a), agent: displayName(a, sess), furnished: true, mainLabel,
       room: sess && sess.projectId ? sess.projectId : (def.room || ''),

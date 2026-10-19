@@ -8,6 +8,11 @@ const frac = (t, a, b) => clamp01((t - a) / (b - a));
 const pct = (v) => Math.round(v * 100);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const ROLE_INK = { debug: '#2a2000' };
+/* A session's name (/rename, `claude -n`; 10-19): the server's title, one line, at most NAME_MAX characters. Panels and
+   cards show all of it next to the two-letter mark; the tag over the robot shows it alone, cut at its end with "…". */
+const NAME_MAX = 80;
+const sessionName = (t) => (typeof t === 'string' ? t.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX) : '');
+const NAMES = { rev: 0 };   // bumped when a robot's name changes: the panels' keys carry it
 const pill = (label, role) => `<span class="pill" style="--c:${ROLES[role].color};--t:${ROLE_INK[role] || '#ffffff'}">${esc(label)}</span>`;
 /* The time the view shows (the sky, the 8-hour tiredness): the machine's clock, unless a test or the demo sets one. */
 const VIZ_CLOCK = { at: null };

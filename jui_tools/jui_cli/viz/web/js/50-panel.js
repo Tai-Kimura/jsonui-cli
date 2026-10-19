@@ -32,6 +32,8 @@ function sessionBadge(s) {
   return b.some((x) => x[0] === 'st-waiting') ? ['st-waiting', '許可待ち'] : b.some((x) => x[0] === 'st-asking') ? ['st-asking', '質問に回答待ち'] : b.some((x) => x[1] === '作業中') ? ['st-busy', '作業中']
     : b.some((x) => x[1] === '考え中') ? ['st-busy', '考え中'] : b.some((x) => x[0] === 'st-bg') ? ['st-bg', '裏で作業中'] : ['st-idle', '待機'];
 }
+/* A robot on the whiteboards (10-19): its mark, and its session's name when it has one. */
+const robotWho = (id) => `${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="who-name">${esc(DEF[id].title)}</span>` : ''}`;
 const roleVar = (s) => (s.by ? ` style="--c:${ROLES[DEF[s.by].role].color}"` : '');
 /* Lists of buttons are rebuilt only when their membership changes, so keyboard focus survives the
    four-times-a-second refresh; the changing text and bars inside are updated in place. */
@@ -108,7 +110,7 @@ function renderSessions() {
   [...sessFilterEl.children].forEach((b) => setText(b.lastElementChild, String(scoped.filter((s) => sessMatch(s, b.dataset.sf)).length)));
   // Sessions that need you come first: waiting for permission, then working, then idle.
   const groups = ROOMS.filter((r) => inScope(r.id)).map((r) => [r, scoped.filter((s) => s.project === r.id && sessMatch(s, UI.sessFilter)).sort((a, b) => SB_ORDER[sessionBadge(a)[0]] - SB_ORDER[sessionBadge(b)[0]] || a.id.localeCompare(b.id))]);
-  keyed(el, JSON.stringify([UI.project, UI.sessFilter, [...UI.collapsed], groups.map(([r, l]) => [r.id, l.map((x) => x.id)])]), () => groups.map(([r, list]) => {
+  keyed(el, JSON.stringify([UI.project, UI.sessFilter, [...UI.collapsed], groups.map(([r, l]) => [r.id, l.map((x) => x.id)]), NAMES.rev]), () => groups.map(([r, list]) => {
     const folded = UI.collapsed.has(r.id), any = scoped.some((x) => x.project === r.id);
     const itemsHTML = list.map((x) => {
       const subsHTML = x.robots.filter((id) => id !== x.id).map((id) => `<li><button type="button" class="who-btn" data-robot-open="${esc(id)}" data-fk="ss-${esc(id)}">${pill(id, DEF[id].role)}<span>${esc(DEF[id].agent)}</span></button><span class="state" data-st="${esc(id)}"></span><p class="act" data-sact="${esc(id)}"></p></li>`).join('');
@@ -164,7 +166,7 @@ function renderPanel(model) {
   const loose = scopedPend.filter((p) => !p.task);
   const projectTag = (list) => (UI.project === 'all' ? `<span class="ptag">${esc(PROJECT[PROJECT_OF[list]].name)}</span>` : '');
   setHTML($('task-sum'), KCOLS.map(([c, label]) => `<span class="state ${COL_STATE[c][0]}">${esc(label)} ${scopedTasks.filter((x) => x.col === c).length}</span>`).join('') + (scopedPend.length ? `<span class="state st-waiting">許可待ち ${scopedPend.length}</span>` : ''));
-  keyed($('tasks'), JSON.stringify([UI.project, loose.map(permSig), tasks.map((x) => `${x.key}:${x.col}:${permSig(x.perm)}:${x.subject}:${x.owner || ''}`)]), () => [
+  keyed($('tasks'), JSON.stringify([UI.project, NAMES.rev, loose.map(permSig), tasks.map((x) => `${x.key}:${x.col}:${permSig(x.perm)}:${x.subject}:${x.owner || ''}`)]), () => [
     ...loose.map((p) => `<li class="task has-perm perm-only"><button type="button" class="task-open" data-open="perm:${esc(p.id)}" data-fk="to-${esc(p.id)}"><span class="tid">${esc(SESSION_OF[p.who])} セッション</span><span class="subject">タスクの外で許可を求めている</span></button><span class="state st-waiting">許可待ち</span><span class="meta">${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)}${projectTag(SESSION_OF[p.who])}</span>${permBox(p)}</li>`),
     ...tasks.map((x) => {
       const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
@@ -337,7 +339,7 @@ function renderQuestions() {
   chip.hidden = waiting === 0;
   setText(chip, `質問 ${waiting}`);
   $('questions-sec').hidden = shown.length === 0;
-  keyed($('questions'), JSON.stringify(shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])), () => shown.map((q) => questionHTML(q)).join(''));
+  keyed($('questions'), JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])]), () => shown.map((q) => questionHTML(q)).join(''));
   for (const el of $('questions').querySelectorAll('[data-quntil]')) {   // the countdown, in place (inputs keep their state)
     const q = QUESTIONS.find((x) => x.id === el.dataset.quntil);
     setText(el, q && q.waitUntil ? `あと ${Math.max(0, Math.ceil((q.waitUntil - now) / 1000))} 秒でターミナルに戻す` : '');
@@ -769,7 +771,7 @@ function renderOverview(model) {
     const s = model.specs[+card.dataset.idx], st = card.querySelector('.state'), cls = `state ${STATUS_CLASS[s.status.kind]}`;
     if (st.className !== cls) st.className = cls;
     setText(st, s.status.text);
-    setHTML(card.querySelector('.ov-who'), s.by ? `${pill(s.by, DEF[s.by].role)}<span>${esc(robotState[s.by].act)}</span>` : `<span>${esc(s.note)}</span>`);
+    setHTML(card.querySelector('.ov-who'), s.by ? `${robotWho(s.by)}<span>${esc(robotState[s.by].act)}</span>` : `<span>${esc(s.note)}</span>`);
     paintSegs(card.querySelector('.segs'), s);
     setText(card.querySelector('.ov-sum'), specSummary(s));
   });
@@ -819,7 +821,7 @@ function renderSheet(model, force) {
   if (SOURCE.mode === 'live') {
     liveWantSheet(s);
     if (!d) {
-      setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
+      setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? robotWho(s.by) : '');
       wbNav.hidden = false; $('wb-follow-label').hidden = false;
       setHTML($('wb-legend'), SHEET_LEGEND_LIVE); wbHelpMode(false);
       renderNav(s);
@@ -829,7 +831,7 @@ function renderSheet(model, force) {
       return;
     }
   }
-  if (SOURCE.mode === 'live') setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
+  if (SOURCE.mode === 'live') setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? robotWho(s.by) : '');
   else setHead(`${s.name}（${s.screen}）`, `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
   wbNav.hidden = false; $('wb-follow-label').hidden = false;
   setHTML($('wb-legend'), SOURCE.mode === 'live' ? SHEET_LEGEND_LIVE : SHEET_LEGEND); wbHelpMode(false);
@@ -965,7 +967,7 @@ function renderTaskBoard(model) {
   setText($('tb-count'), `${tasks.length} 件`);
   setText($('tb-title'), UI.project === 'all' ? 'タスクボード' : `タスクボード · ${PROJECT[UI.project].name}`);
   stripEl.hidden = !pend.length && !alwaysRules.size && !elsewhere;
-  keyed(stripEl, JSON.stringify([pend.map(permSig), [...alwaysRules.keys()], elsewhere]), () => {
+  keyed(stripEl, JSON.stringify([NAMES.rev, pend.map(permSig), [...alwaysRules.keys()], elsewhere]), () => {
     const cardsHTML = pend.map((p) => {
       const x = p.task && TASK_BY_KEY[p.task];
       return `<li class="pcard"><div class="pc-who">${pill(p.who, DEF[p.who].role)}<span>${esc(DEF[p.who].agent)}</span><span class="pc-wait" data-since="${p.at}"></span></div><p class="pc-what"><b>${esc(p.tool)}</b> ${permSubject(p)}</p><button type="button" class="pc-task" data-open="${x ? esc(p.task) : `perm:${esc(p.id)}`}" data-fk="pt-${esc(p.id)}">${x ? `${esc(x.list)} ${esc(taskRef(x))} ${esc(x.subject)}` : `${esc(SESSION_OF[p.who])} セッション · タスクなし`} › 詳細</button><div class="perm-acts">${permButtons(p, 'p')}</div></li>`;
@@ -987,7 +989,7 @@ function renderTaskBoard(model) {
   };
   const sortCol = (col) => (a, b) => (b.perm ? 1 : 0) - (a.perm ? 1 : 0) || (col === 'done' ? b.end - a.end : 0) || a.list.localeCompare(b.list) || a.id - b.id;
   kanbanEl.classList.toggle('lanes', UI.lanes);
-  keyed(kanbanEl, JSON.stringify([UI.lanes, lists, KCOLS.map(([col]) => tasks.filter((x) => x.col === col).map((x) => `${x.key}:${permSig(x.perm)}:${x.fresh ? 1 : 0}:${x.subject}:${x.owner || ''}`))]), () => {
+  keyed(kanbanEl, JSON.stringify([UI.lanes, NAMES.rev, lists, KCOLS.map(([col]) => tasks.filter((x) => x.col === col).map((x) => `${x.key}:${permSig(x.perm)}:${x.fresh ? 1 : 0}:${x.subject}:${x.owner || ''}`))]), () => {
     if (!lists.length) return `<p class="k-none">表示するセッションがない。上の「セッション」で選ぶ</p>`;
     if (!UI.lanes) return KCOLS.map(([col, label]) => {
       const items = tasks.filter((x) => x.col === col).sort(sortCol(col));
@@ -1286,13 +1288,13 @@ function renderRobot(model) {
   const order = { doing: 0, wait: 1, todo: 2, done: 3 };
   const owned = model.tasks.filter((x) => (isMain ? x.list === id : x.owner === id)).sort((a, b) => order[a.col] - order[b.col] || a.id - b.id);
   const subs = isMain ? (SESSIONS.find((s) => s.id === id) || { robots: [] }).robots.filter((r) => r !== id) : [];
-  keyed(rbEl, JSON.stringify([id, permSig(pending), specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}:${x.subject}`)]), () => {
+  keyed(rbEl, JSON.stringify([id, NAMES.rev, permSig(pending), specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}:${x.subject}`)]), () => {
     const room = (SESSIONS.find((s) => s.id === sess) || { room: (PROJECT[projectOfRobot(id)] || {}).name || '' }).room;
     const tasksHTML = owned.length ? `<ul class="rb-tasks">${owned.map((x) => {
       const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
       return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
     }).join('')}</ul>` : `<p class="rb-none">${isMain ? 'このセッションのタスク一覧は空' : '担当しているタスクはない'}</p>`;
-    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div>
+    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? `${id} のメインセッション · ${d.head}` : d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div>
 <div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" hidden>広げる</button><div class="rb-tablist" role="tablist" aria-label="表示"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">今の様子</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">応答の履歴</button></div></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴" tabindex="0"></div>
 <div class="rb-body" tabindex="0" aria-label="今の様子">

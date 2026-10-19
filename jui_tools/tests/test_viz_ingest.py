@@ -107,6 +107,21 @@ def test_a_session_seen_only_by_the_agents_list_gets_a_room_and_a_robot():
     assert [p["name"] for p in state.slices["projects"]] == ["other/"]
 
 
+def test_a_rename_in_the_agents_list_renames_the_session():
+    """/rename (or `claude -n`) changes the row's name: the robot's tag and the panels follow the newest one (10-19)."""
+    world, state = _world()
+    world.apply_hook(_hook("SessionStart", sid="r1"), 1)
+    world.apply_agents_list([{"sessionId": "r1", "cwd": "/work/app", "status": "idle", "name": "最初の名前"}], 2)
+    world.publish()
+    assert state.slices["sessions"][0]["title"] == "最初の名前"
+    world.apply_agents_list([{"sessionId": "r1", "cwd": "/work/app", "status": "idle", "name": "  新しい\n名前  "}], 3)
+    world.publish()
+    assert state.slices["sessions"][0]["title"] == "新しい 名前"   # one line
+    world.apply_agents_list([{"sessionId": "r1", "cwd": "/work/app", "status": "idle"}], 4)   # a row without a name keeps it
+    world.publish()
+    assert state.slices["sessions"][0]["title"] == "新しい 名前"
+
+
 def test_stop_with_background_tasks_keeps_the_session_busy():
     world, state = _world()
     world.apply_hook(_hook("UserPromptSubmit", prompt="p" * 300), 1)

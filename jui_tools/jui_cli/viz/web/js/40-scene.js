@@ -460,7 +460,7 @@ function buildDemoOffice() {
     if (d.id === 'a2') { robot.drawPhone = drawCartUI; ensureProps(robot, 'phone'); }
     robot.root.userData.robotId = d.id;
     scene.add(robot.root);
-    const tag = addTag('', `${pill(d.id, d.role)}<span></span>`);
+    const tag = addTag('', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
     robots.push({ def: d, robot, tag, text: tag.lastElementChild, act: '' });
   }
 }
@@ -680,7 +680,7 @@ function liveAddRobot(d, i) {
   robot.root.position.set(start[0], 0, start[1]); robot.root.rotation.y = d.ry || 0;
   robot.root.userData.robotId = d.id;
   scene.add(robot.root);
-  const tag = addTag('', `${pill(d.id, d.role)}<span></span>`);
+  const tag = addTag('', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
   const R = { def: d, robot, tag, text: tag.lastElementChild, act: '', path: [], room: d.room, seatKey: '', exitAt: 0 };
   if (route.length) R.path = route.slice(1);
   d.enter = false;
@@ -819,6 +819,16 @@ const CALL_TAG_TEXT = { dialing: '発信中', ringing: '呼び出し中', answer
 /* Alone at its desk (2.3.1): the name tag says so too — the robot is small in any view, so the zzz and the bento alone
    were hard to see (jsonuidocument-96, 10-18). The call mark wins; a call stops a nap anyway. */
 const SOLO_TAG_TEXT = { nap: 'zzz 居眠り', bento: '弁当' };
+/* The tag's name (10-19): a session with a name (/rename, `claude -n`) shows it in place of the two-letter mark, cut at
+   its end by the CSS; none (and a subagent) keeps the mark. Text only (textContent), and a rename shows at once. */
+function liveTagName(R) {
+  const name = R.def.title || '';
+  if (name === (R.nameShown || '')) return;
+  R.nameShown = name;
+  R.tag.querySelector('.nm').textContent = name;
+  R.tag.firstElementChild.hidden = !!name;
+  R.tag.classList.toggle('named', !!name);
+}
 function liveCallTag(R, call) {
   R.robot.call = call && CALL_ON_LINE.has(call.state) ? call : null;
   const c = R.robot.call;
@@ -1053,6 +1063,7 @@ function liveUpdateRobots(nowSec, dt) {
   const calls = callsByLabel();
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
+    liveTagName(R);
     liveCallTag(R, calls[R.def.id] || null);
     setRobotTired(R.robot, R.def.kind === 'main' && isTired(sinceOf(R.def.id), now));
     R.robot.heavy = heavyOf(R.def.id);   // fast typing and sweat while it works (the robot decides when)

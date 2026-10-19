@@ -232,6 +232,10 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
   box-shadow: 0 1px 4px var(--shadow);
 }
 .tag > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+/* A session's name in place of its mark (10-19): bold, cut at its end; the act keeps the rest of the tag's width. */
+.tag > .nm { flex: none; max-width: 13em; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.tag > .pill[hidden] { display: none; }
+.tag.named { padding-left: 9px; }
 /* A room's name is a sign, not a robot's name tag (requester 10-18: the two blended in a crowded room): square corners,
    a frame and the info hue always on, an opaque ground, and in front of the tags (a later sibling would paint over it). */
 .tag.room { z-index: 1; padding: 2px 8px; border: 1.5px solid var(--info); border-radius: 3px; background: var(--panel); color: var(--info); font: 700 12px/1.5 var(--font-mono); box-shadow: 0 1px 4px var(--shadow); pointer-events: auto; cursor: pointer; }
@@ -297,6 +301,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .session { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .srow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .sname { overflow: hidden; font: 700 12.5px/1.5 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.srow .who-btn > .sname { overflow-wrap: anywhere; white-space: normal; }   /* a session's name, whole (10-19): it wraps */
+.srow .who-btn { align-items: flex-start; }
 .act { margin: 0; overflow: hidden; color: var(--ink-soft); font: 500 11.5px/1.5 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .subs { display: grid; gap: 3px; margin-left: 6px; padding-left: 10px; border-left: 2px solid var(--line); }
 .subs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; font-size: 12px; }
@@ -642,6 +648,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .ov-file { color: var(--wb-soft); font: 500 11px/1.4 var(--font-mono); overflow-wrap: anywhere; }
 .ov-who { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--wb-soft); font: 500 11.5px/1.5 var(--font-mono); }
 .ov-who > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-name { flex: none; margin-left: 6px; font-weight: 700; white-space: nowrap; }   /* a session's name, whole (10-19) */
 .ov-secs { display: grid; gap: 3px; }
 .ov-secs .segs i { height: 9px; }
 .ov-labels { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; color: var(--wb-soft); font: 500 10px/1.3 var(--font-body); text-align: center; }
@@ -720,8 +727,11 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb { position: absolute; top: 14px; right: 14px; bottom: 14px; z-index: 5; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: min(420px, calc(100% - 28px)); overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 30px var(--shadow); opacity: 0; transform: translateX(16px); transition: opacity 0.2s ease, transform 0.25s ease;
   --wb-ink: var(--ink); --wb-soft: var(--ink-soft); --wb-card: var(--bg); --wb-line: var(--line); --wb-blue: var(--info); }
 .rb.show { opacity: 1; transform: none; }
-.rb-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 12px 14px; border-top: 5px solid var(--c); border-bottom: 1px solid var(--line); }
-.rb-nav { display: flex; align-items: center; gap: 4px; }
+/* The mark and the name on top, the controls on a row of their own below (10-19, requester: a session's name gets the
+   card's width instead of sharing it with the buttons): ‹ › at the left, back to 3D at the right. */
+.rb-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; padding: 12px 14px; border-top: 5px solid var(--c); border-bottom: 1px solid var(--line); }
+.rb-nav { display: flex; grid-column: 1 / -1; align-items: center; gap: 4px; }
+.rb-nav #rb-close { margin-left: auto; }
 .rb-step { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 700 18px/1 var(--font-body); cursor: pointer; }
 .rb-step:hover { background: var(--chip); }
 .rb-badge { display: grid; place-items: center; min-width: 54px; height: 54px; padding: 0 6px; border: 3px solid var(--cloth-ink); border-radius: 12px; background: var(--cloth); color: var(--cloth-ink); font: 400 21px/1 var(--font-display); transform: rotate(-3deg); }

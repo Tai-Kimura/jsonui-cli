@@ -146,7 +146,7 @@ SAFE_CALLS = {
 BUILDERS = {
     "20-core.js": {"pill"},
     "50-panel.js": {
-        "roleVar", "actAttr", "chipCls", "wfElement", "li", "tr", "projectTag", "rowHTML", "noteHTML",
+        "roleVar", "robotWho", "actAttr", "chipCls", "wfElement", "li", "tr", "projectTag", "rowHTML", "noteHTML",
         "permButtons", "permButtonsLive", "permButtonsDemo", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
         "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
         "liveTestsHTML", "questionHTML", "robotTestsHTML", "robotRunHTML",
