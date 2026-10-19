@@ -335,7 +335,7 @@ if leak and "Count" not in " ".join(args):
         f.write(body)
 if mode == "nologin":
     fire("SessionEnd", {"reason": "other"})
-    print(json.dumps({"is_error": True, "result": "Not logged in · Please run /login", "terminal_reason": "api_error",
+    print(json.dumps({"type": "result", "is_error": True, "result": "Not logged in · Please run /login", "terminal_reason": "api_error",
                       "total_cost_usd": 0, "usage": {"input_tokens": 0, "output_tokens": 0}}))
     sys.exit(1)
 if "Count" in " ".join(args):
@@ -344,7 +344,11 @@ if "Count" in " ".join(args):
     sys.exit(0)
 fire("UserPromptSubmit", {"prompt": "p", "permission_mode": "default"})
 fire("SessionEnd", {"reason": "other"})
-print(json.dumps({"is_error": False, "result": "ok", "session_id": "s-123", "total_cost_usd": 0.01, "usage": {"input_tokens": 5, "output_tokens": 1}}))
+print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-123",
+                  "tools": ["Bash", "Edit", "AskUserQuestion", "mcp__srv__do"]}))
+print("not json: a stray line")
+print(json.dumps({"type": "result", "is_error": False, "result": "ok", "session_id": "s-123", "total_cost_usd": 0.01,
+                  "usage": {"input_tokens": 5, "output_tokens": 1}}))
 '''
 
 
@@ -390,6 +394,8 @@ def test_the_live_session_runs_twice_isolated_and_sigterms_its_own_child(fake_cl
     assert events == {"SessionStart", "UserPromptSubmit", "SessionEnd"}
     assert "CLAUDE_PROJECT_DIR" in s.hook_env
     assert P.session_ran(P.Context(run=fake_cli(), session=s)) == {"ok": True}
+    names = P.tool_names(P.Context(run=fake_cli(), session=s))
+    assert names["tools"]["AskUserQuestion"] and not names["tools"]["Write"] and names["mcp_prefix"] is True
 
 
 def test_a_lost_login_is_one_red_shape_and_no_second_run(fake_claude, monkeypatch):
@@ -444,3 +450,68 @@ def test_a_lost_login_ticket_carries_the_login_steps(world):
     t = W.write_ticket(repo, "2026-10-20", "2.1.303", "2.1.303",
                        {"session_ran": ({"ok": True}, {"ok": False, "result": "Not logged in"})}, [])
     assert W.TOKEN_HELP in t.read_text()
+
+
+# ------------------------------------------------------------------ the widened marks (dd's survey, 10-19)
+@pytest.mark.parametrize("line", M.SURVEY)
+def test_every_surveyed_shape_hits_a_mark(line):
+    assert [k for k, rx in M.COMPILED.items() if rx.search(line)], line
+
+
+@pytest.mark.parametrize("line", M.NOT_RELYING)
+def test_prose_and_our_own_generic_names_hit_nothing(line):
+    assert [k for k, rx in M.COMPILED.items() if rx.search(line)] == [], line
+
+
+# ------------------------------------------------------------------ default-deny in the areas that face the CLI
+def tree(tmp_path, files):
+    for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    return list(files)
+
+
+ENTRY = {"id": "x", "name": "x", "relies_on": "x", "probe": "cli_flags", "impact": "x", "files": []}
+
+
+def test_a_new_unmarked_file_in_a_facing_area_is_red(tmp_path):
+    files = tree(tmp_path, {"jui_tools/jui_cli/viz/new_part.py": "VALUE = 1\n"})
+    assert M.scan(tmp_path, files=files) == {}                             # the marks see nothing
+    problems = L.check(tmp_path, ledger={"entries": []}, files=files)
+    assert any("jui_tools/jui_cli/viz/new_part.py" in p and "not_relying with a reason" in p for p in problems), problems
+    assert L.check(tmp_path, ledger={"entries": [], "not_relying": {"jui_tools/jui_cli/viz/new_part.py": "a constant"}},
+                   files=files) == []
+    assert L.check(tmp_path, ledger={"entries": [dict(ENTRY, files=["jui_tools/jui_cli/viz/new_part.py"])]},
+                   files=files) == []
+
+
+def test_a_not_relying_entry_with_no_reason_is_red(tmp_path):
+    files = tree(tmp_path, {"plugins/jui-viz/README.txt": "hi\n"})
+    problems = L.check(tmp_path, ledger={"entries": [], "not_relying": {"plugins/jui-viz/README.txt": " "}}, files=files)
+    assert any("no reason" in p for p in problems), problems
+
+
+def test_a_stale_not_relying_path_is_red(tmp_path):
+    problems = L.check(tmp_path, ledger={"entries": [], "not_relying": {"jui_tools/jui_cli/viz/gone.py": "was a helper"}},
+                       files=[])
+    assert any("gone.py" in p and "does not exist" in p for p in problems), problems
+
+
+def test_a_file_in_both_lists_is_red(tmp_path):
+    files = tree(tmp_path, {"jui_tools/jui_cli/viz/web/vendor/lib.js": "x\n"})
+    led = {"entries": [dict(ENTRY, files=["jui_tools/jui_cli/viz/web/vendor/lib.js"])],
+           "not_relying": {"jui_tools/jui_cli/viz/web/vendor/": "third-party"}}
+    problems = L.check(tmp_path, ledger=led, files=files)
+    assert any("both in a ledger entry and in not_relying" in p for p in problems), problems
+
+
+def test_the_real_ledger_decides_every_facing_file():
+    led = L.load()
+    facing = [f for f in M.tracked_files(ROOT) if M.FACING.search(f)]
+    assert facing and all(f in L.listed(led) or any(f == p or (p.endswith("/") and f.startswith(p))
+                                                    for p in led["not_relying"]) for f in facing)
+
+
+def test_the_agents_probe_reads_the_json_option():
+    run = lambda argv: (0, "Options:\n  --json  print JSON\n") if argv == ["agents", "--help"] else (1, "")  # noqa: E731
+    assert P.agents_cli(P.Context(run=run)) == {"exit": 0, "json": True}

@@ -195,13 +195,19 @@ def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], s
     roots = watched()
     before = watched_state(roots)
     p = subprocess.run([*base, "-p", "Run the shell command `true`, then reply with the single word ok.",
-                        "--output-format", "json", "--allowedTools", "Bash(true)"],
+                        "--output-format", "stream-json", "--verbose", "--allowedTools", "Bash(true)"],
                        cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     session = P.Session(config_dir=config)
-    try:
-        out = json.loads(p.stdout)
-    except ValueError:
-        out = {"is_error": True, "result": (p.stdout + p.stderr).strip()[:200]}
+    out = {"is_error": True, "result": (p.stdout + p.stderr).strip()[-200:]}
+    for line in p.stdout.splitlines():   # stream-json: one record per line; system/init has the tools, result the outcome
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if rec.get("type") == "system" and rec.get("subtype") == "init":
+            session.init = rec
+        elif rec.get("type") == "result":
+            out = rec
     session.result = {"ok": not out.get("is_error", True), "result": str(out.get("result", ""))[:200],
                       "terminal_reason": out.get("terminal_reason"), "cost_usd": out.get("total_cost_usd"),
                       "usage": {k: (out.get("usage") or {}).get(k) for k in ("input_tokens", "output_tokens",

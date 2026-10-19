@@ -1,5 +1,5 @@
 {
-  "about": "What this repository (and the tools next to it) relies on in Claude Code. One entry per reliance: what it is, the files that use it, the probe that checks it (tools/cc_watch/probes.py), what breaks when it changes. Paths are repository-relative; files outside the repository are written from the home folder (~/...). The gate (tests/test_cc_dependency_ledger.py) fails when a file that matches a mark (marks.py) is in no entry, when an entry names a probe that does not exist, or when a listed repository file no longer exists or no longer matches.",
+  "about": "What this repository (and the tools next to it) relies on in Claude Code. One entry per reliance: what it is, the files that use it, the probe that checks it (tools/cc_watch/probes.py), what breaks when it changes. Paths are repository-relative; files outside the repository are written from the home folder (~/...). The gate (tests/test_cc_dependency_ledger.py) fails when a file in an area that faces the CLI (marks.FACING) is neither in an entry nor in not_relying with a reason (default-deny), when a file in both, when a not_relying path is gone or has no reason, a file that matches a mark (marks.py) is in no entry, when an entry names a probe that does not exist, or when a listed repository file no longer exists or no longer matches.",
   "entries": [
     {
       "id": "transcript",
@@ -41,6 +41,25 @@
         "plugins/jui-viz/scripts/session_env.sh",
         "~/.claude/session-recovery/",
         "~/.claude/agents/ (the agents' hooks)"
+      ]
+    },
+    {
+      "id": "tool-names",
+      "name": "ツールの名前（AskUserQuestion、Bash・Edit・Write ほか、mcp__<server>__<tool>）と AskUserQuestion の入力",
+      "relies_on": "the tool names viz keys on to pick a robot's pose, a question card, a permission card; the mcp__ prefix; AskUserQuestion's tool_input (questions, options)",
+      "probe": "tool_names",
+      "impact": "viz: ロボットの姿勢がずれる、質問のカードと許可のカードが出ない",
+      "files": [
+        "jui_tools/jui_cli/viz/config.py",
+        "jui_tools/jui_cli/viz/robots.py",
+        "jui_tools/jui_cli/viz/questions.py",
+        "jui_tools/jui_cli/viz/permissions.py",
+        "jui_tools/jui_cli/viz/forward.py",
+        "jui_tools/jui_cli/viz/ingest.py",
+        "jui_tools/jui_cli/viz/web/js/30-source-live.js",
+        "jui_tools/jui_cli/viz/web/js/50-panel.js",
+        "jui_tools/jui_cli/viz/web/js/60-log.js",
+        "plugins/jui-viz/scripts/forward.py"
       ]
     },
     {
@@ -107,7 +126,10 @@
       "probe": "statusline_input",
       "impact": "viz: ヘッダの上限の値が出ない",
       "files": [
-        "jui_tools/jui_cli/viz/statusline_installer.py"
+        "jui_tools/jui_cli/viz/statusline_installer.py",
+        "jui_tools/jui_cli/viz/statusline.py",
+        "jui_tools/jui_cli/viz/usage.py",
+        "jui_tools/jui_cli/viz/web/js/30-source-live.js"
       ]
     },
     {
@@ -119,7 +141,9 @@
       "files": [
         "installer/bootstrap.sh",
         "jui_tools/jui_cli/commands/viz_cmd.py",
-        "jui_tools/jui_cli/viz/channel.py"
+        "jui_tools/jui_cli/viz/channel.py",
+        "jui_tools/jui_cli/viz/robots.py",
+        "jui_tools/jui_cli/viz/web/js/30-source-live.js"
       ]
     },
     {
@@ -158,6 +182,58 @@
         "plugins/jui-viz/scripts/session_env.sh",
         "installer/bootstrap.sh"
       ]
+    },
+    {
+      "id": "agents-cli",
+      "name": "claude agents --json（走っているセッションの一覧）",
+      "relies_on": "the agents sub-command and its --json output (agents / sessions lists), which the page also tells the user to type",
+      "probe": "agents_cli",
+      "impact": "viz: hook より前に始まったセッションが見えない、空のときの案内が嘘になる",
+      "files": [
+        "jui_tools/jui_cli/viz/sources/agents_cli.py",
+        "jui_tools/jui_cli/viz/web/index.html"
+      ]
+    },
+    {
+      "id": "watch",
+      "name": "この見張り自身（cc_watch）",
+      "relies_on": "everything above: the CLI's help, its -p / stream-json output, the throwaway session's hooks and folders, the Keychain login, the hook for cd",
+      "probe": "session_ran",
+      "impact": "見張りが止まる、または赤を出せない（毎日の検知が無くなる）",
+      "files": [
+        "jui_tools/tools/cc_watch/__init__.py",
+        "jui_tools/tools/cc_watch/ledger.json",
+        "jui_tools/tools/cc_watch/ledger.py",
+        "jui_tools/tools/cc_watch/marks.py",
+        "jui_tools/tools/cc_watch/probes.py",
+        "jui_tools/tools/cc_watch/watch.py",
+        "jui_tools/tools/cc_watch/red_ticket_hook.sh"
+      ]
     }
-  ]
+  ],
+  "not_relying": {
+    "jui_tools/jui_cli/viz/bundle.py": "web/js を順に連結するだけ。CLI の形を読まない",
+    "jui_tools/jui_cli/viz/export_demo.py": "デモのページを静的に書き出すだけ（サーバーも CLI も無し）",
+    "jui_tools/jui_cli/viz/rooms.py": "cwd から JsonUI プロジェクトの根を探すだけ（jui.config.json / .git）",
+    "jui_tools/jui_cli/viz/security.py": "viz サーバー自身の Host・Origin・トークンの守り。CLI 側の形は読まない",
+    "jui_tools/jui_cli/viz/sheet.py": "JsonUI の spec からホワイトボードを作るだけ",
+    "jui_tools/jui_cli/viz/state.py": "サーバーの slice と rev の入れ物。中身の形は他のファイルが決める",
+    "jui_tools/jui_cli/viz/sources/__init__.py": "パッケージの印だけ",
+    "jui_tools/jui_cli/viz/sources/devices.py": "simctl と adb を読むだけ",
+    "jui_tools/jui_cli/viz/sources/jsonui_project.py": "JsonUI の spec・layout・テスト定義を読むだけ",
+    "jui_tools/jui_cli/viz/sources/mock_status.py": "jsonui-test の mock serve を見るだけ",
+    "jui_tools/jui_cli/viz/sources/test_progress.py": "jsonui-test-runner の進捗の jsonl を読むだけ（CLI の transcript ではない）",
+    "jui_tools/jui_cli/viz/sources/test_results.py": "jsonui-test-runner の結果を読むだけ",
+    "jui_tools/jui_cli/viz/sources/weather.py": "天気（Open-Meteo）を読むだけ",
+    "jui_tools/jui_cli/viz/web/app.css": "AskUserQuestion の名前は節のコメントにあるだけ。スタイルはツールの形に依らない（形は questions.py と 30-source-live.js が持つ）",
+    "jui_tools/jui_cli/viz/web/boot.js": "/app.js を読み込むだけ",
+    "jui_tools/jui_cli/viz/web/debug.html": "接続の確認ページ。サーバーの slice を表示するだけ",
+    "jui_tools/jui_cli/viz/web/debug.js": "同上",
+    "jui_tools/jui_cli/viz/web/fonts/": "フォントとそのライセンス",
+    "jui_tools/jui_cli/viz/web/vendor/": "three.js（第三者のライブラリ）",
+    "jui_tools/jui_cli/viz/web/js/10-robot-core.js": "ロボットの描画だけ。状態はサーバーの slice が決め、CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/25-net.js": "viz サーバーとの WebSocket だけ",
+    "jui_tools/jui_cli/viz/web/js/70-main.js": "ページの描画の回し方と接続の札だけ",
+    "jui_tools/jui_cli/viz/web/js/80-dbg.js": "ブラウザのテスト用のフック（JUI_VIZ_E2E=1 のときだけ）"
+  }
 }

@@ -39,6 +39,9 @@ HOOK_KEYS = {"*": ["session_id", "transcript_path", "cwd", "hook_event_name", "p
 ENV_NAMES = ["CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_CODE_ENTRYPOINT"]
 STATUSLINE_KEYS = ["session_id", "transcript_path", "cwd", "model", "workspace", "version"]
 CONFIG_PATHS = ["settings.json", "projects", "sessions", "plugins"]
+#: Tool names viz keys on (robots.py, questions.py, permissions.py, config.py, the page): present in the session's tools.
+TOOL_NAMES = ["AskUserQuestion", "Bash", "Edit", "Write", "Read", "NotebookEdit", "Agent", "SendMessage", "TodoWrite",
+              "WebFetch", "WebSearch", "Glob", "Grep"]
 
 
 @dataclass
@@ -51,6 +54,7 @@ class Session:
     sigterm_exit: int | None = None
     sigterm_session_end: bool | None = None
     result: dict | None = None          # the -p run's outcome: ok, result text, terminal_reason, cost, usage
+    init: dict | None = None            # the stream's system/init record: tools, mcp_servers, …
 
 
 @dataclass
@@ -162,6 +166,25 @@ def config_paths(ctx: Context):
     return {p: (ctx.session.config_dir / p).exists() for p in CONFIG_PATHS}
 
 
+def agents_cli(ctx: Context):
+    """`claude agents --json` (sources/agents_cli.py): the sub-command and its --json option."""
+    rc, text = ctx.run(["agents", "--help"])
+    return {"exit": rc, "json": "--json" in _help_options(text)}
+
+
+def tool_names(ctx: Context):
+    """The tools the session offers (the stream's init record), by the names viz keys on; and that MCP tools are still
+    named mcp__<server>__<tool> (only when the session has an MCP server: otherwise None)."""
+    if (s := _skipped(ctx)) is not None:
+        return s
+    tools = (ctx.session.init or {}).get("tools")
+    if not isinstance(tools, list):
+        return {"tools": None}
+    mcp = [t for t in tools if isinstance(t, str) and t.startswith("mcp__")]
+    return {"tools": {t: t in tools for t in TOOL_NAMES},
+            "mcp_prefix": (all(t.count("__") >= 2 for t in mcp) if mcp else None)}
+
+
 def session_ran(ctx: Context):
     """Whether the throwaway session ran at all (a lost login turns every session probe into an empty shape)."""
     if (s := _skipped(ctx)) is not None:
@@ -177,5 +200,5 @@ PROBES: dict[str, Callable[[Context], object]] = {
     "cli_flags": cli_flags, "plugin_cli": plugin_cli, "mcp_cli": mcp_cli, "channels_flags": channels_flags,
     "transcript_shape": transcript_shape, "hook_input_shape": hook_input_shape, "env_vars": env_vars,
     "statusline_input": statusline_input, "sigterm_session_end": sigterm_session_end, "config_paths": config_paths,
-    "session_ran": session_ran,
+    "session_ran": session_ran, "agents_cli": agents_cli, "tool_names": tool_names,
 }

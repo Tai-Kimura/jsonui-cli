@@ -38,16 +38,34 @@ def check(root: Path, ledger: dict | None = None, marks: dict[str, re.Pattern] |
                 problems.append(f"entry {e.get('id')!r}: {f!r} is an absolute path (write files outside the repository as ~/...)")
     if len(set(ids)) != len(ids):
         problems.append(f"duplicate entry ids: {sorted(i for i in set(ids) if ids.count(i) > 1)}")
-    hits = M.scan(root, marks, files)
+    tracked = M.tracked_files(root) if files is None else files
+    hits = M.scan(root, marks, tracked)
     known = listed(ledger)
+    excused = ledger.get("not_relying", {})
+    def is_excused(rel: str) -> str | None:
+        return next((p for p in excused if rel == p or (p.endswith("/") and rel.startswith(p))), None)
+    for path, reason in sorted(excused.items()):
+        if not isinstance(reason, str) or not reason.strip():
+            problems.append(f"not_relying {path!r}: no reason (say why it does not rely on Claude Code, or list it in an entry)")
+        if not (root / path).exists():
+            problems.append(f"not_relying {path!r}: the path does not exist any more (remove it from not_relying)")
+        both = sorted(k for k in known if k == path or (path.endswith("/") and k.startswith(path)))
+        for k in both:
+            problems.append(f"{k}: both in a ledger entry and in not_relying {path!r} (it cannot be both: keep one)")
+    # default-deny: in the areas that face the CLI, a human decides for every file, whatever the marks say
+    for rel in sorted(tracked):
+        if M.FACING.search(rel) and rel not in known and not is_excused(rel):
+            seen = "".join(f"; line {n} matches {mark!r}" for mark, n, _t in hits.get(rel, []))
+            problems.append(f"{rel}: a file in an area that faces Claude Code (marks.FACING{seen}) with no decision: add it to "
+                            "a ledger entry's files, or to not_relying with a reason (jui_tools/tools/cc_watch/ledger.json)")
     for rel, found in sorted(hits.items()):
-        if rel not in known:
+        if rel not in known and not is_excused(rel) and not M.FACING.search(rel):   # FACING: reported above
             where = "; ".join(f"line {n} matches {mark!r}: {text}" for mark, n, text in found)
             problems.append(f"{rel} relies on Claude Code ({where}) but no ledger entry lists it: add an entry to "
                             "jui_tools/tools/cc_watch/ledger.json, or add the file to an existing entry's files")
     for rel in sorted(known):
         if not (root / rel).exists():
             problems.append(f"{rel}: listed in the ledger but the file does not exist")
-        elif M.in_scope(rel) and rel not in hits:
+        elif M.in_scope(rel) and rel not in hits and not M.FACING.search(rel):
             problems.append(f"{rel}: listed in the ledger but no mark matches it any more (remove it, or extend the marks)")
     return problems
