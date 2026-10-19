@@ -2343,6 +2343,30 @@ def _fetch_specific_nodes(file_key, token, node_ids, output_path, depth):
     return 0, data
 
 
+def cmd_validate_infra(args):
+    """The room's infra model (docs/plans/2026-10-20-jui-viz-server-room-boundary.md): the files read as jui viz reads
+    them, each checked against the schema and the shapes of secrets, then merged. Exit 0: no error; 1: errors
+    (warnings alone are 0); 2: nothing could be read (the reason)."""
+    from .infra import room as infra_room
+    result = infra_room.read(Path(args.root))
+    if args.json:
+        out = {k: v for k, v in result.items() if k not in ("groups", "nodes", "edges")}
+        if result.get("ok"):
+            out["counts"] = {k: len(result[k]) for k in ("groups", "nodes", "edges")}
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    elif not result["ok"]:
+        print(f"infra: cannot read ({result['reason']}): {result['message']}", file=sys.stderr)
+    else:
+        for p in result["problems"]:
+            print(f"{p['severity'].upper()} {p['file'] or '(room)'}{p['path']}: {p['code']}: {p['message']}")
+        errs = sum(1 for p in result["problems"] if p["severity"] == "error")
+        print(f"infra: {result['dir']}: {len(result['files'])} file(s) used, {len(result['nodes'])} nodes, "
+              f"{len(result['edges'])} edges, {len(result['environments'])} environment(s); {errs} error(s)")
+    if not result["ok"]:
+        return 2
+    return 1 if any(p["severity"] == "error" for p in result["problems"]) else 0
+
+
 def cmd_check(args):
     """Run declared contract checks (docs ⇔ implementation).
 
@@ -2484,6 +2508,17 @@ def main():
         "file",
         help="Component specification file to validate (.component.json)"
     )
+
+    # Validate infra subcommand (the server room's declared infrastructure, 2.3.6)
+    validate_infra_parser = validate_subparsers.add_parser(
+        "infra",
+        help="Validate a room's declared infrastructure (docs/infra/*.json, or jui.config.json's infra.dir)"
+    )
+    validate_infra_parser.add_argument(
+        "root", nargs="?", default=".",
+        help="The project root (the folder with jui.config.json); default: the current folder"
+    )
+    validate_infra_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
 
     # Rules command
     rules_parser = subparsers.add_parser(
@@ -2872,6 +2907,8 @@ def main():
                 return cmd_validate_spec(args)
             elif args.validate_type == "component":
                 return cmd_validate_component(args)
+            elif args.validate_type == "infra":
+                return cmd_validate_infra(args)
         else:
             validate_parser.print_help()
             return 0
