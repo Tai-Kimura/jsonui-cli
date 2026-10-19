@@ -529,8 +529,10 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=503, text="no world\n")
         if ctx.world.data_docs_room(project_id) is None:
             return web.Response(status=404, text="no such JsonUI room\n")
-        # read off the event loop (up to 8 MB of JSON): the page, the hooks and /health go on meanwhile
-        status, got = await asyncio.get_running_loop().run_in_executor(None, ctx.world.data_docs, project_id)
+        # read off the event loop (up to 8 MB of JSON): the page, the hooks and /health go on meanwhile. In an executor of
+        # its own, two threads: a read that is held up (dd's review 2: a FIFO swapped in) never takes the default one,
+        # which processes, 退勤, the mock and the git box share
+        status, got = await asyncio.get_running_loop().run_in_executor(_data_docs_pool(), ctx.world.data_docs, project_id)
         if status != 200:
             return web.Response(status=status, text=f"{got}\n")
         return web.Response(body=got, content_type="application/json",
@@ -610,6 +612,17 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.on_startup.append(start_push)
     app.on_shutdown.append(stop_push)
     return app
+
+
+_DATA_DOCS_POOL: list = []
+
+
+def _data_docs_pool():
+    """The data server's reads' own executor (2 threads), made on first use."""
+    if not _DATA_DOCS_POOL:
+        from concurrent.futures import ThreadPoolExecutor
+        _DATA_DOCS_POOL.append(ThreadPoolExecutor(max_workers=2, thread_name_prefix="jui-viz-data-docs-read"))
+    return _DATA_DOCS_POOL[0]
 
 
 def prompt_checks(request: web.Request, ctx: ServerContext, max_body: int = PROMPT_MAX_BODY) -> web.Response | None:

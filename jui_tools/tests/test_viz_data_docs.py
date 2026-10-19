@@ -335,3 +335,92 @@ def test_the_counts_are_taken_off_the_calling_thread_and_once_for_a_burst(tmp_pa
     assert calls == []                                         # still changing: not counted yet
     _settle(world, at + 200)
     assert len(calls) == 1 and calls[0].startswith("jui-viz-data-docs"), calls
+
+
+# ---- a FIFO swapped in, and a held read (dd's review 2, 10-19) ---------------------------------------------------
+
+def _fifo_race(path: Path, good: Path, fifo_src: Path, stop: threading.Event):
+    tmp_a, tmp_b = path.with_name(".a.tmp"), path.with_name(".f.tmp")
+    while not stop.is_set():
+        try:
+            tmp_a.write_bytes(good.read_bytes())
+            os.replace(tmp_a, path)
+            if tmp_b.exists():
+                tmp_b.unlink()
+            os.mkfifo(tmp_b)
+            os.replace(tmp_b, path)
+        except OSError:
+            pass
+
+
+def _release_fifos(folder: Path):
+    """Open every FIFO under the folder for writing (non-blocking), so a reader held on one (the old open) lets go."""
+    for f in folder.rglob("*"):
+        try:
+            if f.is_fifo():
+                fd = os.open(str(f), os.O_WRONLY | os.O_NONBLOCK)
+                os.close(fd)
+        except OSError:
+            pass
+
+
+def test_a_fifo_swapped_in_never_holds_a_read(tmp_path):
+    root = _room(tmp_path / "app", db=False)
+    target = root / "docs/api/zz.json"
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps(API))
+    stop, done = threading.Event(), threading.Event()
+    racer = threading.Thread(target=_fifo_race, args=(target, good, tmp_path / "unused", stop), daemon=True)
+    racer.start()
+
+    def reads():
+        for _ in range(200):
+            data_docs.read(_project(root))
+            data_docs.counts(_project(root))
+        done.set()
+    reader = threading.Thread(target=reads, daemon=True)
+    reader.start()
+    ok = done.wait(20)
+    stop.set()
+    racer.join()
+    if not ok:
+        for _ in range(50):
+            _release_fifos(root / "docs/api")
+            if done.wait(0.1):
+                break
+    assert ok, "a read was held by a FIFO put in a document's place"
+
+
+def test_a_held_read_takes_its_own_executor_not_the_shared_one(tmp_path, monkeypatch):
+    """32 reads of the rack held at once (each waits on an event): the default executor, which processes, 退勤, the mock
+    and the git box share, still runs a job at once, and /health answers."""
+    world, root, pid = _world(tmp_path)
+    gate = threading.Event()
+    monkeypatch.setattr(world, "data_docs", lambda project_id: (gate.wait(30), (200, b"{}"))[1])
+    port = _free_port()
+    own = f"127.0.0.1:{port}"
+
+    async def run():
+        import time as _t
+        ctx = ServerContext(config=VizConfig(pushIntervalMs=50), port=port, token=TOKEN, state=world.state, world=world, publish=world.publish)
+        client = TestClient(TestServer(make_app(ctx), host="127.0.0.1", port=port))
+        await client.start_server()
+        try:
+            ok = {"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+            held = [asyncio.ensure_future(client.post("/api/data-docs", headers=ok, data=json.dumps({"projectId": pid}))) for _ in range(32)]
+            await asyncio.sleep(0.5)
+            t = _t.monotonic()
+            await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, lambda: 1), 2)
+            shared = _t.monotonic() - t
+            t = _t.monotonic()
+            r = await client.get("/health")
+            health = _t.monotonic() - t
+            gate.set()
+            for h in held:
+                (await h).release()
+            return shared, health, r.status
+        finally:
+            gate.set()
+            await client.close()
+    shared, health, status = asyncio.run(run())
+    assert shared < 1.0 and health < 1.0 and status == 200, (shared, health, status)

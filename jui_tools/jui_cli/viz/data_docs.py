@@ -56,7 +56,9 @@ def _open_inside(root: Path, rel: Path) -> int | None:
             if part in ("", ".", ".."):
                 return None
             last = k == len(parts) - 1
-            nxt = os.open(part, (os.O_RDONLY | os.O_NOFOLLOW) if last else flags_dir, dir_fd=fd)
+            # the file: O_NONBLOCK too, so a FIFO put in its place never holds the open (dd's review 2, 10-19); the
+            # caller fstats it before reading (a regular file only; O_NONBLOCK does not change how one is read)
+            nxt = os.open(part, (os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK) if last else flags_dir, dir_fd=fd)
             os.close(fd)
             fd = nxt
         out, fd = fd, None
