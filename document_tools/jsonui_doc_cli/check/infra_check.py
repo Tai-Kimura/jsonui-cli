@@ -92,6 +92,48 @@ def _iac_provider(name: str, rel: str) -> str:
     return "*"
 
 
+HEAD_BYTES = 65_536
+
+
+def _iac_by_head(p: Path) -> str | None:
+    """Whose IaC a file too big to read is, by its first bytes (a name like stack.yaml or app.yaml says nothing):
+    a CloudFormation template (aws), a Kubernetes manifest, a Terraform JSON configuration; None when it is none."""
+    if not p.name.endswith((".yaml", ".yml", ".json")):
+        return None
+    try:
+        with open(p, "rb") as f:
+            head = f.read(HEAD_BYTES).decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    if "AWSTemplateFormatVersion" in head or re.search(r"Type:\s*['\"]?AWS::", head) or '"Type": "AWS::' in head:
+        return "aws"
+    if re.search(r"^apiVersion:", head, re.M) and re.search(r"^kind:", head, re.M) or ('"apiVersion"' in head and '"kind"' in head):
+        return "kubernetes"
+    if p.name.endswith(".json") and '"resource"' in head and '"terraform"' in head:
+        return "*"
+    return None
+
+
+def _tf_json_modules(data) -> list[tuple[str, str]]:
+    blocks = data.get("module") if isinstance(data, dict) else None
+    out = []
+    for block in (blocks if isinstance(blocks, list) else [blocks]):
+        if isinstance(block, dict):
+            out.extend((n, str(b.get("source", ""))) for n, b in block.items() if isinstance(b, dict))
+    return out
+
+
+def _tf_json_counted(data) -> bool:
+    blocks = data.get("resource") if isinstance(data, dict) else None
+    for block in (blocks if isinstance(blocks, list) else [blocks]):
+        if isinstance(block, dict):
+            for by_name in block.values():
+                if isinstance(by_name, dict) and any(isinstance(b, dict) and ("count" in b or "for_each" in b)
+                                                     for b in by_name.values()):
+                    return True
+    return False
+
+
 def _iac_name(name: str) -> bool:
     return (name.endswith((".tf", ".tofu", ".tf.json", ".bicep", ".template.json")) or bool(COMPOSE_NAMES.match(name))
             or bool(WRANGLER.match(name)) or name in ("template.yaml", "template.yml", "template.json"))
@@ -173,6 +215,12 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
 
     def part(provider: str) -> None:
         parts[provider] = parts.get(provider, 0) + 1
+
+    def not_read(provider: str, why: str) -> None:
+        """A file of this provider's IaC that was not read (too big, unreadable, not parsed): said, and its nodes are
+        not asked for (run_infra_iac skips them rather than say "missing")."""
+        note(provider, why)
+        unread.add(provider)
     for p in files:
         rel, name = _rel(p, root), p.name
         if rel.startswith(R.DEFAULT_DIR + "/") or ".check-report" in name:
@@ -182,17 +230,18 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
             note(NOT_COMPARED[name], f"{rel}: settings check does not compare yet (seed reads them): its nodes are not compared")
             continue
         if text is None:
-            if _iac_name(name):            # an IaC file not read is a range not checked: said, never silent
-                who = _iac_provider(name, rel)
-                note(who, f"{rel}: {why}: not read")
-                unread.add(who)
+            # an IaC file not read is a range not checked: said, never silent — by its name, else by its head
+            who = _iac_provider(name, rel) if _iac_name(name) else _iac_by_head(p)
+            if who:
+                not_read(who, f"{rel}: {why}: not read")
             continue
         if name.endswith((".tf", ".tofu", ".tf.json")):
             if name.endswith(".tf.json"):
                 try:
-                    pairs = _tf_json_resources(json.loads(text))
+                    tfj = json.loads(text)
+                    pairs = _tf_json_resources(tfj)
                 except (ValueError, RecursionError):
-                    note("*", f"{rel}: not JSON: not read")
+                    not_read("*", f"{rel}: not JSON: not read")
                     continue
             else:
                 pairs = re.findall(r'^\s*resource\s+"([a-z0-9_]+)"\s+"([A-Za-z0-9_-]+)"', text, re.M)
@@ -211,6 +260,12 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                     continue
                 _node(found, T.tf_address(t, n), provider, m, rel, t)
             if name.endswith(".tf.json"):
+                for mname, src in _tf_json_modules(tfj):
+                    if not src.startswith(("./", "../")):
+                        note("*", f"{rel}: module \"{mname}\" comes from outside the project: its resources were not read")
+                if _tf_json_counted(tfj):
+                    who = next(iter(file_providers)) if len(file_providers) == 1 else "*"
+                    note(who, f"{rel}: count / for_each are not evaluated (a static read; no plan): how many is not checked")
                 continue
             for mname, body in re.findall(r'^\s*module\s+"([A-Za-z0-9_-]+)"\s*\{(.*?)^\}', text, re.M | re.S):
                 src = re.search(r'^\s*source\s*=\s*"([^"]+)"', body, re.M)
@@ -230,7 +285,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                     continue
                 _node(found, T.bicep_address(sym), "azure", m, rel, t)
         elif WRANGLER.match(name):
-            _wrangler(p, rel, text, found, note)
+            _wrangler(p, rel, text, found, not_read)
         elif COMPOSE_NAMES.match(name):
             if y is None:
                 note("docker", f"{rel}: PyYAML is not installed: not read")
@@ -238,7 +293,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
             try:
                 data = y[0].load(text, Loader=y[1])
             except Exception:   # noqa: BLE001 — a file that does not parse is said, not fatal
-                note("docker", f"{rel}: not YAML: not read")
+                not_read("docker", f"{rel}: not YAML: not read")
                 continue
             for svc, spec in ((data or {}).get("services") or {}).items():
                 image = str((spec or {}).get("image") or "") if isinstance(spec, dict) else ""
@@ -247,10 +302,10 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
         elif name.endswith((".yaml", ".yml", ".json")):
             if "/cdk.out/" in f"/{rel}" and name.endswith(".template.json") or "AWSTemplateFormatVersion" in text \
                     or "AWS::" in text:
-                _cfn(p, rel, text, y, found, note, unmapped, part)
+                _cfn(p, rel, text, y, found, not_read, unmapped, part)
             elif (re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M)) or \
                     (name.endswith(".json") and '"apiVersion"' in text and '"kind"' in text):
-                _k8s(rel, text, y, found, note, unmapped, part)
+                _k8s(rel, text, y, found, not_read, unmapped, part)
     for provider, n in sorted(parts.items()):
         note(provider, f"{n} resource(s) that are parts of another (attachments, rules, routes, records, ...): not nodes, "
                        "not compared")
@@ -437,8 +492,9 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
             else:
                 results.append(ResultItem(target, _status(decl, "mismatch"), "metadata", expected=n["category"],
                                           actual=", ".join(sorted(cats)), message=f"category differs from {hit[0]['source']}"))
-        elif provider in unread or "*" in unread:
-            # one of this provider's IaC files (or a Terraform file, anyone's) was not read: not there is not known
+        elif provider in unread or ("*" in unread and any(T.is_terraform_address(a) for a in n["iac"])):
+            # one of this provider's IaC files was not read, or a Terraform file (anyone's) and the node's address is
+            # a Terraform one: not there is not known. A compose or wrangler address cannot be in a Terraform file.
             results.append(ResultItem(target, "skipped", "metadata", expected=", ".join(n["iac"]),
                                       message="not found in what was read, and an IaC file was not read (see unverified)"))
         else:

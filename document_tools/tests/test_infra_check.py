@@ -321,3 +321,60 @@ def test_code_is_read_through_the_shared_hints_and_other_languages_are_said(tmp_
     from jsonui_doc_cli.infra import code_hints as H
     src = Path(C.__file__).read_text()
     assert "psycopg2" not in src and "SDK_HINTS" not in src and H.SDK_PY      # one table: code_hints
+
+
+
+# ---------------------------------------------------------------- dd's re-verification (10-20)
+
+def test_a_big_iac_file_named_like_anything_is_said_by_its_head(tmp_path, monkeypatch):
+    """N3 (a): stack.yaml over the limit: no name says it is CloudFormation; its head does."""
+    monkeypatch.setattr(C, "MAX_BYTES", 2_000)
+    big = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Q:\n    Type: AWS::SQS::Queue\n#" + "x" * 3_000 + "\n"
+    _r, rep = _mini(tmp_path, {"infra/stack.yaml": big, "infra/main.tf": 'resource "aws_s3_bucket" "b" {}\n'},
+                    [{"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]},
+                     {"id": "b", "category": "storage.object", "provider": "aws", "iac": ["aws_s3_bucket.b"]}])
+    assert any("infra/stack.yaml" in w and "not read" in w for w in rep.target_extra["unverified"]["aws"])
+    assert _by_target(rep)["aws/q"].status == "skipped" and not rep.has_mismatch
+
+
+def test_a_file_that_does_not_parse_never_gates(tmp_path):
+    """N3 (b): a broken template or cdk.tf.json is said, and its provider's nodes are not "missing"."""
+    _r, rep = _mini(tmp_path, {"cdk.out/App.template.json": "{ broken", "infra/main.tf": 'resource "aws_s3_bucket" "b" {}\n'},
+                    [{"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]},
+                     {"id": "b", "category": "storage.object", "provider": "aws", "iac": ["aws_s3_bucket.b"]}])
+    assert _by_target(rep)["aws/q"].status == "skipped" and not rep.has_mismatch
+    _r2, rep2 = _mini(tmp_path / "2", {"cdk.tf.json": "{ broken", "infra/main.tf": 'resource "aws_s3_bucket" "b" {}\n'},
+                      [{"id": "d", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.main"]}])
+    assert _by_target(rep2)["aws/d"].status == "skipped"
+
+
+def test_an_unread_terraform_file_hides_only_terraform_addresses(tmp_path, monkeypatch):
+    """N3 (c) and V17, V18: a big .tf / .tofu is said; a compose node is still compared."""
+    monkeypatch.setattr(C, "MAX_BYTES", 2_000)
+    big_tf = 'resource "aws_s3_bucket" "b" {}\n#' + "x" * 3_000 + "\n"
+    _r, rep = _mini(tmp_path, {"infra/big.tofu": big_tf, "compose.yaml": "services:\n  app:\n    build: .\n",
+                               "infra/small.tf": 'resource "aws_sqs_queue" "q" {}\n'},
+                    [{"id": "gone", "category": "compute.container", "provider": "docker", "iac": ["compose.yaml#services.gone"]},
+                     {"id": "b", "category": "storage.object", "provider": "aws", "iac": ["aws_s3_bucket.b"]}])
+    t = _by_target(rep)
+    assert any("infra/big.tofu" in w for w in rep.target_extra["unverified"]["*"])
+    assert t["aws/b"].status == "skipped" and t["docker/gone"].status == "missing_in_impl"
+
+
+def test_terraform_json_gets_the_notes_hcl_gets(tmp_path):
+    """N3 (d) and V19: count / for_each and a module from outside, and CDKTF's list form."""
+    tfj = json.dumps({"module": {"net": {"source": "terraform-aws-modules/vpc/aws"}},
+                      "resource": [{"aws_db_instance": {"main": {"count": 2}}}]})
+    _r, rep = _mini(tmp_path, {"cdk.tf.json": tfj},
+                    [{"id": "db", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.main"]}])
+    un = rep.target_extra["unverified"]
+    assert _by_target(rep)["aws/db"].status == "ok"
+    assert any('module "net"' in w for w in un["*"]) and any("count / for_each" in w for w in un["aws"])
+
+
+def test_every_field_of_the_report_is_masked(tmp_path):
+    """V20: not the target alone — a message that names the file carries it too."""
+    _r, rep = _mini(tmp_path, {"10.0.0.5/main.tf": 'resource "aws_sqs_queue" "q" {}\n'},
+                    [{"id": "q", "category": "storage.object", "provider": "aws", "iac": ["aws_sqs_queue.q"]}])
+    item = _by_target(rep)["aws/q"]
+    assert item.status == "mismatch" and "10.0.0.5" not in json.dumps(rep.to_dict())

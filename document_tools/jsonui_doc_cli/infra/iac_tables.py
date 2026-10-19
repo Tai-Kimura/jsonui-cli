@@ -375,3 +375,12 @@ def paas_platform(address: str) -> str | None:
 def matches(declared: str, read: str) -> bool:
     """A declared address answers a read one: the same, or the declared one ends with it after a dot (module paths)."""
     return declared == read or declared.endswith("." + read)
+
+
+_TF_ADDRESS = re.compile(r"(?:module\.[A-Za-z0-9_-]+(?:\[[^\]]*\])?\.)*(?:data\.)?[a-z][a-z0-9]*_[a-z0-9_]+\.[A-Za-z0-9_-]+(?:\[[^\]]*\])?")
+
+
+def is_terraform_address(address: str) -> bool:
+    """Whether an iac address has Terraform's form (<type>.<name>, with a module path or not): a Terraform file not
+    read can only hide resources of this form."""
+    return bool(_TF_ADDRESS.fullmatch(address))
