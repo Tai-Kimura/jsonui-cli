@@ -28,6 +28,7 @@ import json
 import os
 import plistlib
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -401,7 +402,11 @@ def mark_seen(ticket: Path, now: dt.datetime | None = None) -> bool:
 
 
 def hook_settings(repo: Path) -> dict:
-    return {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": f"{HOOK} {repo}"}]}]}}
+    """The hook finds the tickets through *repo*, never the session's working folder (cd's session starts in another
+    project): the path is made absolute here, and both paths are shell-quoted (a folder name may hold a space)."""
+    repo = Path(repo).expanduser().resolve()
+    return {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command",
+                                                       "command": f"{shlex.quote(str(HOOK))} {shlex.quote(str(repo))}"}]}]}}
 
 
 def add_hook(settings_file: Path, repo: Path) -> bool:
@@ -453,6 +458,7 @@ def install_problems(repo: Path, state: Path, here: Path = HERE) -> list[str]:
 
 def install(repo: Path, state: Path, live: bool, here: Path = HERE, any_copy: bool = False,
             target: Path | None = None, launchctl=subprocess.run) -> int:
+    repo, state = Path(repo).expanduser().resolve(), Path(state).expanduser().resolve()
     problems = [p for p in install_problems(repo, state, here) if not (any_copy and p.startswith("this is not"))]
     if problems:
         for p in problems:

@@ -65,7 +65,7 @@
     {
       "id": "channels",
       "name": "channels（--channels、--dangerously-load-development-channels、allowedChannelPlugins、通知の形）",
-      "relies_on": "the development-channels flag and the channel MCP server's notification (notifications/claude/channel), managed-settings allowedChannelPlugins / channelsEnabled",
+      "relies_on": "the development-channels flag and the channel MCP server's notification (notifications/claude/channel), managed-settings allowedChannelPlugins / channelsEnabled; viz/callcmd.py picks --channels or the development flag (channels_flag)",
       "probe": "channels_flags",
       "impact": "viz: ページからのプロンプトの送信と許可の中継（channel）が止まる",
       "files": [
@@ -75,13 +75,14 @@
         "jui_tools/jui_cli/viz/sources/history.py",
         "jui_tools/jui_cli/commands/viz_cmd.py",
         "jui_tools/jui_cli/viz/web/js/50-panel.js",
-        "jui_tools/jui_cli/viz/web/js/55-history.js"
+        "jui_tools/jui_cli/viz/web/js/55-history.js",
+        "jui_tools/jui_cli/viz/callcmd.py"
       ]
     },
     {
       "id": "cli-args",
       "name": "起動の引数（-n / --name、-p、--resume、--settings、--plugin-dir ほか）",
-      "relies_on": "the main command's options our launchers pass and our pages tell the user to type",
+      "relies_on": "the main command's options our launchers pass and our pages tell the user to type; the call bell's command line (viz/callcmd.py): `claude --channels plugin:jui-viz@jsonui --name=<name> <prompt>`, the --name=<value> form unmeasured on a real launch",
       "probe": "cli_flags",
       "impact": "viz の呼び出し・名札（-n）、session-recovery の起こし直し（--resume）が動かない",
       "files": [
@@ -94,7 +95,8 @@
         "jui_tools/jui_cli/viz/web/js/50-panel.js",
         "jui_tools/jui_cli/viz/web/js/55-history.js",
         "plugins/jui-viz/scripts/channel.py",
-        "~/.claude/session-recovery/"
+        "~/.claude/session-recovery/",
+        "jui_tools/jui_cli/viz/callcmd.py"
       ]
     },
     {
@@ -214,11 +216,11 @@
   ],
   "not_relying": {
     "jui_tools/jui_cli/viz/bundle.py": "web/js を順に連結するだけ。CLI の形を読まない",
+    "jui_tools/jui_cli/viz/data_docs.py": "JsonUI の room の docs/api・docs/db の仕様（OpenAPI・Swagger）を document_tools で読むだけ。CLI の形は読まない",
     "jui_tools/jui_cli/viz/export_demo.py": "デモのページを静的に書き出すだけ（サーバーも CLI も無し）",
     "jui_tools/jui_cli/viz/rooms.py": "cwd から JsonUI プロジェクトの根を探すだけ（jui.config.json / .git）",
     "jui_tools/jui_cli/viz/security.py": "viz サーバー自身の Host・Origin・トークンの守り。CLI 側の形は読まない",
     "jui_tools/jui_cli/viz/sheet.py": "JsonUI の spec からホワイトボードを作るだけ",
-    "jui_tools/jui_cli/viz/state.py": "サーバーの slice と rev の入れ物。中身の形は他のファイルが決める",
     "jui_tools/jui_cli/viz/sources/__init__.py": "パッケージの印だけ",
     "jui_tools/jui_cli/viz/sources/devices.py": "simctl と adb を読むだけ",
     "jui_tools/jui_cli/viz/sources/jsonui_project.py": "JsonUI の spec・layout・テスト定義を読むだけ",
@@ -226,15 +228,17 @@
     "jui_tools/jui_cli/viz/sources/test_progress.py": "jsonui-test-runner の進捗の jsonl を読むだけ（CLI の transcript ではない）",
     "jui_tools/jui_cli/viz/sources/test_results.py": "jsonui-test-runner の結果を読むだけ",
     "jui_tools/jui_cli/viz/sources/weather.py": "天気（Open-Meteo）を読むだけ",
+    "jui_tools/jui_cli/viz/state.py": "サーバーの slice と rev の入れ物。中身の形は他のファイルが決める",
     "jui_tools/jui_cli/viz/web/app.css": "AskUserQuestion の名前は節のコメントにあるだけ。スタイルはツールの形に依らない（形は questions.py と 30-source-live.js が持つ）",
     "jui_tools/jui_cli/viz/web/boot.js": "/app.js を読み込むだけ",
     "jui_tools/jui_cli/viz/web/debug.html": "接続の確認ページ。サーバーの slice を表示するだけ",
     "jui_tools/jui_cli/viz/web/debug.js": "同上",
     "jui_tools/jui_cli/viz/web/fonts/": "フォントとそのライセンス",
-    "jui_tools/jui_cli/viz/web/vendor/": "three.js（第三者のライブラリ）",
     "jui_tools/jui_cli/viz/web/js/10-robot-core.js": "ロボットの描画だけ。状態はサーバーの slice が決め、CLI の形は読まない",
     "jui_tools/jui_cli/viz/web/js/25-net.js": "viz サーバーとの WebSocket だけ",
+    "jui_tools/jui_cli/viz/web/js/52-data-docs.js": "データサーバーのラックのシート。viz サーバーの /api/data-docs の答えを描くだけ",
     "jui_tools/jui_cli/viz/web/js/70-main.js": "ページの描画の回し方と接続の札だけ",
-    "jui_tools/jui_cli/viz/web/js/80-dbg.js": "ブラウザのテスト用のフック（JUI_VIZ_E2E=1 のときだけ）"
+    "jui_tools/jui_cli/viz/web/js/80-dbg.js": "ブラウザのテスト用のフック（JUI_VIZ_E2E=1 のときだけ）",
+    "jui_tools/jui_cli/viz/web/vendor/": "three.js（第三者のライブラリ）"
   }
 }

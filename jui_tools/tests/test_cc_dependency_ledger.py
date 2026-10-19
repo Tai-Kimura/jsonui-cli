@@ -605,3 +605,23 @@ def test_the_repo_must_be_given_and_is_not_the_install_dir(installed, tmp_path):
     p = subprocess.run([sys.executable, str(W.HERE / "watch.py"), "print-plist"], capture_output=True, text=True,
                        timeout=30)
     assert p.returncode == 2 and "--repo" in p.stderr
+
+
+def test_the_hook_finds_the_repo_by_its_absolute_path_from_any_working_folder(tmp_path, monkeypatch):
+    """cd's session starts in another project: the written command must not depend on the working folder, and a
+    folder name with a space must survive the shell."""
+    repo = tmp_path / "my repo" / "jsonui-cli"
+    t = red_ticket(repo, "2026-10-20-cc-dependency-watch-red.md")
+    elsewhere = tmp_path / "JsonUI-Agents"
+    (elsewhere / ".claude").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path / "my repo")
+    settings = elsewhere / ".claude" / "settings.local.json"
+    assert W.add_hook(settings, Path("jsonui-cli"))                       # relative, from where cd stands
+    [entry] = json.loads(settings.read_text())["hooks"]["UserPromptSubmit"]
+    command = entry["hooks"][0]["command"]
+    assert str(repo.resolve()) in command.replace("'", "")
+    monkeypatch.chdir(elsewhere)
+    p = subprocess.run(command, shell=True, cwd=elsewhere, capture_output=True, text=True, timeout=10,
+                       env={k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"})
+    assert p.returncode == 0 and t.name in p.stdout, (p.stdout, p.stderr)
+    assert not W.add_hook(settings, repo)                                 # the same hook, absolute or relative
