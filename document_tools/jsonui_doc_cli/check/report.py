@@ -30,7 +30,7 @@ SCHEMA_VERSION = 1
 STATUSES = {"ok", "mismatch", "missing_in_impl", "missing_in_doc", "skipped",
             "warning"}
 CONFIDENCES = {"proof", "metadata", "sampled"}
-TARGET_KINDS = {"db", "api", "custom"}
+TARGET_KINDS = {"db", "api", "custom", "infra"}
 
 REPORT_BASENAME = ".check-report.json"
 
@@ -302,6 +302,14 @@ def report_path_for(target_kind: str, target_name: str, project_root: Path) -> P
         if target_name and target_name != "default":
             return base / target_name / REPORT_BASENAME
         return base / REPORT_BASENAME
+    if target_kind == "infra":
+        # beside the model (boundary §6), hidden so the model's reader never takes it for a model file
+        from ..infra import room as infra_room
+        try:
+            folder = infra_room.infra_config(project_root)[0]
+        except infra_room.Refused:
+            folder = infra_room.DEFAULT_DIR
+        return project_root / folder / f".check-report.{target_name}.json"
     # custom checkers: keep them under docs/ so generate html can find them
     return project_root / "docs" / f".check-report.{target_name}.json"
 

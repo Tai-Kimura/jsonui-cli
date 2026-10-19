@@ -21,7 +21,7 @@ from pathlib import Path
 
 CONFIG_FILENAME = "jui.config.json"
 
-KNOWN_CHECK_TYPES = {"builtin:db-schema", "builtin:openapi-diff", "checker"}
+KNOWN_CHECK_TYPES = {"builtin:db-schema", "builtin:openapi-diff", "builtin:infra-iac", "builtin:infra-code", "checker"}
 
 # Interpreters allowed as the first token of a declared command. The script
 # they run must still be a project-internal path (or a `-m` module resolved
@@ -68,6 +68,9 @@ class CheckDecl:
     downgrade_to_warning: list[str] = field(default_factory=list)
     scope: str = "all"           # "all" | "generated" (honor api.schemas paths)
     api_path_filters: tuple = ()  # (include_globs, exclude_globs) when scope=generated
+    # builtin:infra-iac / builtin:infra-code (the server room's model, docs/infra)
+    ignore_types: list[str] = field(default_factory=list)   # IaC resource types not compared (beyond the built-in fine-grained ones)
+    gate: bool = False                                       # findings gate CI (exit 1) only when true; else warnings
     # checker (full-checker plugin)
     command: list[str] | None = None
     # Raw declaration for display (`check --list`)
@@ -251,6 +254,12 @@ def load_checks(config: dict, project_root: Path) -> list[CheckDecl]:
             decl.ignore_tables = _str_list(
                 raw.get("ignore_tables"), f"{ctx}.ignore_tables"
             )
+        elif ctype in ("builtin:infra-iac", "builtin:infra-code"):
+            decl.ignore_types = _str_list(raw.get("ignore_types"), f"{ctx}.ignore_types")
+            gate = raw.get("gate", False)
+            if not isinstance(gate, bool):
+                raise ProjectConfigError(f"{ctx} ('{name}'): gate must be true or false")
+            decl.gate = gate
         elif ctype == "builtin:openapi-diff":
             if "impl_openapi_command" not in raw:
                 raise ProjectConfigError(

@@ -1,0 +1,186 @@
+"""check kind=infra (boundary §6): builtin:infra-iac and builtin:infra-code against a project built in tmp_path.
+
+Each provider's IaC is compared with that provider's declared nodes through their iac addresses: matched, a category
+that differs, declared but not in the IaC, in the IaC but not declared; fine-grained types dropped; and what could not
+be checked said per provider (no IaC for a provider, a module from outside, count/for_each, an unmapped type).
+infra-code: an evidence that went, an SDK the model does not name. Findings are warnings unless "gate": true.
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from jsonui_doc_cli.check import infra_check as C
+from jsonui_doc_cli.check.report import report_path_for
+from jsonui_doc_cli.check.runner import run_checks
+from jsonui_doc_cli.project_config import ProjectConfigError, load_checks
+
+MODEL = {
+    "version": 0,
+    "environments": [{"id": "production", "kind": "production"}, {"id": "local", "kind": "local"}],
+    "groups": [{"id": "aws", "kind": "account", "provider": "aws"}, {"id": "cf", "kind": "account", "provider": "cloudflare"},
+               {"id": "desk", "kind": "host", "provider": "docker", "environments": ["local"]}],
+    "nodes": [
+        {"id": "api", "category": "compute.container", "group": "aws", "iac": ["module.api.aws_ecs_service.api"]},
+        {"id": "db", "category": "database.relational", "group": "aws", "iac": ["aws_db_instance.main"]},
+        {"id": "cache", "category": "cache", "group": "aws", "iac": ["aws_elasticache_cluster.gone"]},
+        {"id": "jobs", "category": "storage.object", "group": "aws", "iac": ["aws_sqs_queue.jobs"]},
+        {"id": "role", "category": "security.iam", "group": "aws"},
+        {"id": "cf-q", "category": "queue", "provider": "cloudflare", "iac": ["aws_sqs_queue.jobs"]},
+        {"id": "worker", "category": "compute.function", "group": "cf", "iac": ["wrangler.toml"]},
+        {"id": "kv", "category": "database.kv", "group": "cf", "iac": ["wrangler.toml#kv_namespaces.CACHE"]},
+        {"id": "app-local", "category": "compute.container", "group": "desk", "iac": ["compose.yaml#services.app"], "environments": ["local"]},
+        {"id": "db-local", "category": "database.relational", "group": "desk", "iac": ["compose.yaml#services.db"], "environments": ["local"]},
+        {"id": "web", "category": "compute.paas", "provider": "vercel", "iac": ["vercel.json"]},
+        {"id": "stripe", "category": "external.saas", "provider": "stripe", "managed_by": "external",
+         "evidence": [{"file": "backend/pay.py", "pattern": "stripe.Charge"}, {"file": "backend/pay.py", "pattern": "stripe.Refund"}]},
+        {"id": "mailer", "category": "mail", "provider": "sendgrid", "managed_by": "external",
+         "evidence": [{"file": "backend/mail.py", "pattern": "sendgrid"}]},
+    ],
+}
+FILES = {
+    "infra/main.tf": '''
+module "api" {
+  source = "./modules/api"
+}
+module "net" {
+  source  = "terraform-aws-modules/vpc/aws"
+}
+resource "aws_db_instance" "main" {
+  engine = "mysql"
+}
+resource "aws_sqs_queue" "jobs" {}
+resource "aws_s3_bucket" "logs" {}
+resource "aws_iam_role" "api" {}
+resource "aws_cloudwatch_metric_alarm" "cpu" {}
+resource "aws_mystery_widget" "w" {}
+''',
+    "infra/modules/api/main.tf": 'resource "aws_ecs_service" "api" {\n  count = 2\n}\n',
+    "compose.yaml": "services:\n  app:\n    build: .\n  db:\n    image: postgres:17\n",
+    "wrangler.toml": 'name = "worker"\n[[kv_namespaces]]\nbinding = "CACHE"\nid = "x"\n',
+    "template.yaml": "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Fn:\n    Type: AWS::Serverless::Function\n"
+                     "    Properties:\n      Handler: !Ref Handler\n  FnRole:\n    Type: AWS::IAM::Role\n",
+    "k8s/deploy.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web-k8s\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n",
+    "backend/pay.py": "import stripe\n\nstripe.Charge.create()\n",
+    "backend/ai.py": "from openai import OpenAI\n",
+    ".env.example": "REDIS_URL=\nSTRIPE_KEY=\n",
+}
+
+
+def _project(tmp_path, checks=None) -> Path:
+    root = tmp_path / "proj"
+    (root / "docs" / "infra").mkdir(parents=True)
+    (root / "docs" / "infra" / "main.json").write_text(json.dumps(MODEL))
+    for rel, text in FILES.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    (root / "jui.config.json").write_text(json.dumps({"checks": checks or [
+        {"name": "infra-iac", "type": "builtin:infra-iac"}, {"name": "infra-code", "type": "builtin:infra-code"}]}))
+    return root
+
+
+def _decls(root):
+    return {d.name: d for d in load_checks(json.loads((root / "jui.config.json").read_text()), root)}
+
+
+def _by_target(report):
+    return {r.target: r for r in report.results}
+
+
+def test_iac_against_the_model_per_provider(tmp_path):
+    root = _project(tmp_path, [{"name": "iac", "type": "builtin:infra-iac", "gate": True}])
+    rep = C.run_infra_iac(_decls(root)["iac"], root)
+    t = _by_target(rep)
+    assert t["aws/api"].status == "ok" and t["aws/db"].status == "ok"          # module.api.<addr> ends with the address read
+    assert t["aws/cache"].status == "missing_in_impl"
+    assert t["aws/jobs"].status == "mismatch" and (t["aws/jobs"].expected, t["aws/jobs"].actual) == ("storage.object", "queue")
+    assert t["cloudflare/worker"].status == "ok" and t["cloudflare/kv"].status == "ok"
+    assert t["docker/app-local"].status == "ok" and t["docker/db-local"].status == "ok"
+    assert t["aws/role"].status == "skipped"                                   # no iac address: not compared
+    assert t["vercel/web"].status == "skipped"
+    assert t["cloudflare/cf-q"].status == "missing_in_impl"                    # an aws resource never answers a cloudflare node
+    for undeclared in ("aws/aws_s3_bucket.logs", "aws/Fn", "kubernetes/Deployment/web-k8s"):
+        assert t[undeclared].status == "missing_in_doc", undeclared
+    assert not any("iam" in k or "alarm" in k or "FnRole" in k or "ConfigMap" in k for k in t)   # fine-grained: dropped
+    assert "stripe" not in " ".join(t)                                        # external: not an IaC thing
+    assert rep.has_mismatch
+
+
+def test_what_could_not_be_checked_is_said_per_provider(tmp_path):
+    root = _project(tmp_path)
+    rep = C.run_infra_iac(_decls(root)["infra-iac"], root)
+    un = rep.target_extra["unverified"]
+    assert any("no IaC found" in w for w in un["vercel"])
+    assert any("aws_mystery_widget" in w for w in un["aws"])
+    assert not any("iam" in w or "alarm" in w for w in un["aws"])            # fine-grained types are dropped, not "unmapped"
+    assert any('module "net" comes from outside' in w for w in un["*"])
+    assert any("count / for_each are not evaluated" in w for w in un["*"])
+    assert all(w.startswith("[unverified] ") for w in rep.warnings) and len(rep.warnings) == sum(map(len, un.values()))
+
+
+def test_findings_are_warnings_unless_gate(tmp_path):
+    root = _project(tmp_path)
+    rep = C.run_infra_iac(_decls(root)["infra-iac"], root)
+    statuses = {r.status for r in rep.results}
+    assert statuses <= {"ok", "skipped", "warning"} and "warning" in statuses and not rep.has_mismatch
+    gated = _project(tmp_path / "g", [{"name": "iac", "type": "builtin:infra-iac", "gate": True}])
+    assert run_checks(list(_decls(gated).values()), gated, {}) == 1
+    assert run_checks(list(_decls(root).values()), root, {}) == 0
+
+
+def test_code_evidence_and_sdks(tmp_path):
+    root = _project(tmp_path, [{"name": "code", "type": "builtin:infra-code", "gate": True}])
+    rep = C.run_infra_code(_decls(root)["code"], root)
+    t = _by_target(rep)
+    assert t["stripe/stripe#evidence/0"].status == "ok"
+    assert t["stripe/stripe#evidence/1"].status == "missing_in_impl"         # the file is there, the pattern is not
+    assert t["sendgrid/mailer#evidence/0"].status == "missing_in_impl"        # backend/mail.py is not there
+    assert t["code/stripe"].status == "ok" and t["code/openai"].status == "missing_in_doc"
+    assert "backend/ai.py:1" in t["code/openai"].message
+    assert t["code/cache"].status == "ok"                                     # REDIS_URL, and a cache node exists
+    assert any("only import lines and environment variable names" in w for w in rep.warnings)
+
+
+def test_reports_go_beside_the_model_hidden_from_its_reader(tmp_path):
+    root = _project(tmp_path)
+    assert run_checks(list(_decls(root).values()), root, {}) == 0
+    for name in ("infra-iac", "infra-code"):
+        path = report_path_for("infra", name, root)
+        assert path == root / "docs" / "infra" / f".check-report.{name}.json" and path.is_file()
+        data = json.loads(path.read_text())
+        assert data["target"]["kind"] == "infra" and "unverified" in data["target"]
+    from jsonui_doc_cli.infra import room
+    assert room.read(root)["files"] == ["main.json"]                          # the reports are not model files
+
+
+def test_a_model_with_errors_is_an_execution_error(tmp_path):
+    root = _project(tmp_path)
+    (root / "docs" / "infra" / "bad.json").write_text(json.dumps({"version": 0, "nodes": [{"id": "x", "category": "nope"}]}))
+    assert run_checks(list(_decls(root).values()), root, {}) == 2
+
+
+@pytest.mark.parametrize("decl", [{"name": "x", "type": "builtin:infra-iac", "gate": "yes"},
+                                  {"name": "x", "type": "builtin:infra-iac", "ignore_types": "aws_s3_bucket"}])
+def test_the_declaration_is_checked(tmp_path, decl):
+    with pytest.raises(ProjectConfigError):
+        load_checks({"checks": [decl]}, tmp_path)
+
+
+def test_ignore_types(tmp_path):
+    root = _project(tmp_path, [{"name": "iac", "type": "builtin:infra-iac", "ignore_types": ["aws_s3_bucket"]}])
+    t = _by_target(C.run_infra_iac(_decls(root)["iac"], root))
+    assert "aws/aws_s3_bucket.logs" not in t and "aws/aws_sqs_queue.jobs" not in t
+
+
+def test_check_infra_from_the_cli(tmp_path):
+    root = _project(tmp_path)
+    tools = Path(__file__).resolve().parents[1]
+    import os
+    r = subprocess.run([sys.executable, "-m", "jsonui_doc_cli.cli", "check", "infra"], cwd=root, capture_output=True,
+                       text=True, env={**os.environ, "PYTHONPATH": os.pathsep.join([str(tools), *sys.path])})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "builtin:infra-iac" in r.stdout and "[unverified] vercel" in r.stdout

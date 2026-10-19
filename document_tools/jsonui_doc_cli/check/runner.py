@@ -67,6 +67,10 @@ def describe_decl(decl: CheckDecl) -> str:
         return (f"{decl.name}  [builtin:db-schema]  "
                 f"docs/db({decl.database}) ⇔ {source}  "
                 f"(timeout {decl.timeout_seconds}s)")
+    if decl.type in ("builtin:infra-iac", "builtin:infra-code"):
+        against = "IaC (compose, terraform, cloudformation, k8s, wrangler)" if decl.type.endswith("iac") else "the code (evidence, SDK imports, env names)"
+        return (f"{decl.name}  [{decl.type}]  infra model ⇔ {against}"
+                f"{'  gate' if decl.gate else '  (warnings only)'}")
     return (f"{decl.name}  [checker]  `{' '.join(decl.command or [])}`  "
             f"(timeout {decl.timeout_seconds}s)")
 
@@ -83,6 +87,8 @@ def matches_filter(decl: CheckDecl, expr: str | None) -> bool:
         return decl.type == "builtin:db-schema"
     if expr == "api":
         return decl.type == "builtin:openapi-diff"
+    if expr == "infra":
+        return decl.type in ("builtin:infra-iac", "builtin:infra-code")
     return decl.name == expr
 
 
@@ -115,6 +121,12 @@ def run_one(decl: CheckDecl, project_root: Path,
         try:
             return run_openapi_diff(decl, project_root, _cmd)
         except OpenApiDiffError as exc:
+            raise CheckExecutionError(str(exc))
+    if decl.type in ("builtin:infra-iac", "builtin:infra-code"):
+        from .infra_check import InfraCheckError, run_infra_code, run_infra_iac
+        try:
+            return (run_infra_iac if decl.type == "builtin:infra-iac" else run_infra_code)(decl, project_root)
+        except InfraCheckError as exc:
             raise CheckExecutionError(str(exc))
     if decl.type == "builtin:db-schema":
         from .db_schema import DbSchemaError, run_db_schema_check
