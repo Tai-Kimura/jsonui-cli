@@ -32,6 +32,7 @@ window.__dbg = {
     return { room: PROPS.room, docs: PROPS.room && PROJECT[PROPS.room] ? PROJECT[PROPS.room].dataDocs : null, built: !!S, box, screen, spot: PROPS.place ? PROPS.place.dataServer.rect : null, wanted: PROPS.room ? dataServerWanted(PROPS.room) : null,
       open: ds.open, tab: ds.tab, loading: ds.loading, error: ds.error, api: ds.doc ? ds.doc.api.length : null, db: ds.doc ? ds.doc.db.length : null };
   },
+  mermaidSafeText: (t) => mermaidSafeText(t),   // the text as it is handed to Mermaid (2.3.5)
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
   // the outside (10-18): the arms force a season ('spring' …) or a weather ({ kind, isDay }); null gives it back
   outside: (opts) => {

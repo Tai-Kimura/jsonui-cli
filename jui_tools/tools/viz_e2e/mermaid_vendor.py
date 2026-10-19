@@ -37,6 +37,13 @@ UNLOCKS = {
     "secure-emptied": '%%{init: {"secure": [], "htmlLabels": true, "flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n' + LABEL.format(n=2),
     "front-matter": '---\nconfig:\n  htmlLabels: true\n  flowchart:\n    htmlLabels: true\n---\nflowchart LR\n' + LABEL.format(n=3),
     "themeCSS": '%%{init: {"themeCSS": ".node rect { fill: url(/ds-probe-4.png); } .label { background: url(/ds-probe-4b.png); }"}}%%\nflowchart LR\n    A --> B',
+    # dd's review 2 (B): a directive taken out left a front matter at the start, which Mermaid then read
+    "directive-then-front-matter": '%%{x}%%---\nconfig:\n  htmlLabels: true\n  class:\n    htmlLabels: true\n  flowchart:\n    htmlLabels: true\n---\nflowchart LR\n' + LABEL.format(n=8),
+}
+# dd's review 2 (A): a style in the diagram's own syntax, kept by Mermaid as written: a url() fetched from the origin
+URL_STYLES = {
+    "classDiagram style": 'classDiagram\n    class U\n    class V\n    U --> V\n    style U fill:url(/ds-probe-6.png)',
+    "stateDiagram classDef": 'stateDiagram-v2\n    [*] --> S\n    S --> [*]\n    classDef c fill:url(/ds-probe-7.png)\n    class S c',
 }
 
 
@@ -106,6 +113,17 @@ async def run_mermaid(pw, out, failures):
             u["asked"] = got
             check(failures, u["foreignObjects"] == 0 and u["imgs"] == 0 and not got and u["htmlLabels"] is False,
                   f"{name}: the diagram cannot set its own config (no foreignObject, no img, nothing fetched): {u['foreignObjects']} {u['imgs']} {got} htmlLabels={u['htmlLabels']}")
+        for name, text in URL_STYLES.items():
+            before = len(asked)
+            u = res[f"style-{name}"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", text)
+            await page.wait_for_timeout(400)
+            got = [x for x in asked[before:] if "mermaid.min.js" not in x]
+            u["asked"] = got
+            check(failures, u["svg"] and not got, f"{name}: drawn, and its url() fetches nothing: svg={u['svg']} {got} {u['error']}")
+        # the first lock alone: what Mermaid is handed has no directive and no front matter left
+        handed = res["handed"] = await page.evaluate("(t) => window.__dbg.mermaidSafeText(t)", UNLOCKS["directive-then-front-matter"])
+        check(failures, "%%{" not in handed and not handed.lstrip(" \t").startswith("---") and "htmlLabels" not in handed,
+              f"directive then front matter: neither is left in what Mermaid is handed: {handed[:160]!r}")
         plain = res["plainAfter"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
         check(failures, plain["svg"] and plain["nodes"] == 2, f"a diagram without directives still draws: {plain}")
 

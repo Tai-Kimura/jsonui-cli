@@ -188,9 +188,10 @@ SAFE_EXCEPTIONS = {
     ("50-panel.js", "cellsHTML"): (2, "tr's third parameter: every call passes a template literal (checked as HTML)"),
     ("50-panel.js", "bHTML"): (2, "the second element of the overview rows, each built with esc() one line above"),
     ("50-panel.js", "whoHTML"): (2, "setHead's last parameter: every call passes pill(…) or ''"),
-    ("20-core.js", "svg"): (9, "renderMermaid / drawMermaid: Mermaid's own SVG (or the same SVG it drew before, kept by "
-                               "text and theme), its labels sanitized by securityLevel 'strict' (pinned by "
-                               "test_mermaid_is_read_from_the_vendored_copy_only_when_drawn_and_strict and the e2e)"),
+    ("20-core.js", "svg"): (11, "renderMermaid / drawMermaid / mermaidSafeSvg: Mermaid's own SVG (or the same SVG it drew "
+                                "before, kept by text and theme), its labels sanitized by securityLevel 'strict', its "
+                                "url()s and @imports made harmless (pinned by test_mermaid_is_read_from_the_vendored_copy_"
+                                "only_when_drawn_and_strict and the e2e)"),
 }
 _ID = r"[A-Za-z_$][\w$]*"
 _HTML_NAME = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*HTML)\s*(?:\+?=(?!=)|\.push\()")

@@ -55,20 +55,33 @@ const MERMAID_DIRECTIVE = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).
 const MERMAID_SECURE = ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges', 'htmlLabels', 'flowchart', 'er',
   'theme', 'themeCSS', 'themeVariables', 'darkMode', 'fontFamily', 'altFontFamily', 'look', 'layout', 'markdownAutoWrap', 'dompurifyConfig', 'deterministicIds'];
 function mermaidSafeText(text) {
-  let t = String(text).replace(MERMAID_FRONT, '');
+  // until nothing more comes off: a directive taken out can leave a front matter at the start, and the other way
+  // round (dd's review 2, 10-19: "%%{x}%%---\nconfig: …" passed one round of each)
+  let t = String(text), prev = null;
+  for (let k = 0; k < 50 && t !== prev; k++) { prev = t; t = t.replace(MERMAID_FRONT, '').replace(MERMAID_DIRECTIVE, ''); }
+  if (t !== prev) return '';                                  // still changing after 50 rounds: no diagram
   if (/^[^\S\n\r]*-{3}\s*[\n\r]/.test(t)) return '';   // an unclosed front matter: no diagram
-  for (let k = 0; k < 20 && t.includes('%%{'); k++) t = t.replace(MERMAID_DIRECTIVE, '');
-  return t.split('%%{').join('%% {');   // never a directive
+  return mermaidNoUrl(t.split('%%{').join('%% {'));   // never a directive; no url() out of the diagram
 }
+/* A url() that is not a reference inside the diagram (#…) becomes one to nothing, and @import goes: in the text before
+   it is drawn — Mermaid puts the SVG in the page to measure it, and a style or classDef of a class or state diagram
+   (fill:url(/x)) was fetched then (dd's review 2) — and in the SVG it gave back. Every kind of diagram goes through. */
+function mermaidNoUrl(t) {
+  return String(t).replace(/url\(\s*(?!['"]?\s*#)/gi, 'url(#blocked-').replace(/@import/gi, '@blocked');
+}
+function mermaidSafeSvg(svg) { return mermaidNoUrl(svg); }
 async function renderMermaid(el, text) {
   const mm = await loadMermaid();
   const theme = isDark() ? 'dark' : 'default';
   if (MERMAID.theme !== theme) {
-    mm.initialize({ startOnLoad: false, securityLevel: 'strict', theme, fontFamily: 'var(--font-body)', htmlLabels: false, flowchart: { htmlLabels: false }, er: { useMaxWidth: false }, secure: MERMAID_SECURE });
+    // every key of Mermaid's own config is secure (no diagram changes any: class.htmlLabels got through a list of names)
+    const secure = [...new Set([...MERMAID_SECURE, ...Object.keys(mm.mermaidAPI.getConfig())])];
+    mm.initialize({ startOnLoad: false, securityLevel: 'strict', theme, fontFamily: 'var(--font-body)', htmlLabels: false, flowchart: { htmlLabels: false },
+      class: { htmlLabels: false }, er: { useMaxWidth: false }, secure });
     MERMAID.theme = theme;
   }
   MERMAID.n += 1;
-  const { svg } = await mm.render(`mmd-${MERMAID.n}`, mermaidSafeText(text));
+  const svg = mermaidSafeSvg((await mm.render(`mmd-${MERMAID.n}`, mermaidSafeText(text))).svg);
   el.innerHTML = svg;   // Mermaid's own SVG, its labels sanitized (securityLevel 'strict')
   el.dataset.theme = theme;
   if (MERMAID.drawn.size >= 40) MERMAID.drawn.clear();
