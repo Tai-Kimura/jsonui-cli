@@ -1312,6 +1312,44 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   stepRobot(e.key === 'ArrowRight' ? 1 : -1);
 });
+/* 2.3.5 (requester 10-19: "部屋の状態で左右キー押したら左右の部屋に移動したい それと階全体表示で上下押したら上下の階に移動したい"):
+   with no card open, in the room close-up ← → go to the room before / after on this floor, and on the whole floor ↑ ↓ go
+   one floor up / down (the same as ▲ ▼). The card's own ← → (above) are untouched: this handler does nothing while a
+   card is open. Nothing either where text is typed, while an IME composes, with a modifier, while a dialog, a board,
+   the log or the building covers the floor, and in the demo (one office). Only a key that acts is taken
+   (preventDefault); the room's ↑ ↓ and the floor's ← → stay the page's (they do nothing here). */
+/* The rooms of the floor shown, in the order ← → walk them. The requester's rulings (10-19): the floor's own layout
+   (the scene's row and column of each room, layoutRooms), read like text — the back row left to right, then the front
+   row left to right; empty slots are skipped. Swap this one function to change the order. The walk wraps (ruling 2:
+   after the last room the first, before the first the last) and never leaves the floor (floors are ↑ ↓). */
+function arrowRoomOrder() {
+  const ids = (LIVE.floors[LIVE.floor] || []).filter((id) => PROJECT[id]);
+  return ids.sort((a, b) => (PROJECT[a].row - PROJECT[b].row) || (PROJECT[a].col - PROJECT[b].col));
+}
+function roomStep(dir) {
+  const list = arrowRoomOrder(), i = list.indexOf(UI.project);
+  if (i < 0 || list.length < 2) return false;
+  const next = list[(i + dir + list.length) % list.length];   // wraps, on this floor
+  setProject(next);                  // the room's tag, ← フロア全体に戻る, the project menu and the camera follow
+  return true;
+}
+const arrowsCovered = () => !!(rbState.id || !rbEl.hidden || !popEl.hidden || logState.open || wb.open || tb.open || alwaysDlg || clockDlg
+  || specHelp || LIGHT.el || document.querySelector('[aria-modal="true"]:not([hidden])'));
+document.addEventListener('keydown', (e) => {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select')))) return;
+  if (SOURCE.mode !== 'live' || !has3D || TOWER.on || zoom.zoomed || arrowsCovered()) return;
+  const room = UI.project !== 'all' && PROJECT[UI.project] && PROJECT[UI.project].shown;
+  if (room && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    roomStep(e.key === 'ArrowRight' ? 1 : -1);
+  } else if (UI.project === 'all' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    if (LIVE.floors.length > 1) liveFloorStep(e.key === 'ArrowUp' ? 1 : -1);
+  }
+});
 /* Tab on the card's tabs: 今の様子 → Tab selects 応答の履歴 and focuses it; 応答の履歴 → Tab goes on into the card (the
    browser's own order); Shift+Tab is the reverse (応答の履歴 → 今の様子 → what is before the tabs). Never a dead end. */
 rbEl.addEventListener('keydown', (e) => {
