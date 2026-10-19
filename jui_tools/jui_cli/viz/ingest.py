@@ -35,6 +35,9 @@ KNOWN_EVENTS = frozenset({
 TOOL_EVENTS = frozenset({"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied"})
 
 PROMPT_MAX = 200
+#: How a robot's act says it waits for the person (a permission / a question); _settled_act takes it off when the wait ends.
+PERM_WAIT = "許可待ち "
+QUESTION_WAIT = "質問に回答待ち"
 #: How much of a prompt sent from the page goes into the event log (the rest is never stored).
 PROMPT_HEAD = 40
 #: A session process whose argv could not be read is tried again after 1 s, then 2, 4 … up to 30 s apart.
@@ -108,6 +111,16 @@ def _file_key(project: JsonUIProject, file: str | None) -> str:
     the case key is (file, test, case), so two test files with the same test / case names stay two."""
     matched = project.test_file_matches(file) if file else []
     return matched[0][1] if matched else (file or "")
+
+
+def _settled_act(act: str, failed: bool) -> str:
+    """The act once the wait it names is over: a permission's act loses its 許可待ち (the call itself is what it did),
+    a question's says it got its answer — or none, when the call failed (declined, interrupted). Any other act stays."""
+    if act.startswith(PERM_WAIT):
+        return act[len(PERM_WAIT):]
+    if act.startswith(QUESTION_WAIT):
+        return "質問に回答なし" if failed else "質問の回答を受けた"
+    return act
 
 
 class World:
@@ -472,7 +485,7 @@ class World:
             if tool == QUESTION_TOOL:   # it waits for the person: a raised hand, the room lit as waiting
                 card = self.questions.cards.get(self.questions._by_use.get(use_id or "", ""))
                 heads = [q.get("header") or q["question"] for q in (card or {}).get("questions", [])]
-                state, act = "waiting", _head(f"質問に回答待ち {' / '.join(heads)}", 120) or "質問に回答待ち"
+                state, act = "waiting", _head(f"{QUESTION_WAIT} {' / '.join(heads)}", 120) or QUESTION_WAIT
             if use_id:
                 self._open.setdefault(agent["id"], []).append(use_id)
                 self._open_tool[use_id] = tool
@@ -535,14 +548,17 @@ class World:
                 self._dirty.add("perms")
             if session["status"] == "waiting":
                 self._status(session, "busy", at)  # the tool it asked for has run
+            # The call the robot waited on (its permission, or its question) has finished: the wait is over, even with
+            # another of its calls still open (ticket 2026-10-19-jui-viz-act-stays-question-waiting-after-answer).
+            waited_on = self._asking.get(agent["id"]) == use_id or (tool == QUESTION_TOOL and agent.get("waitingOn") == "question")
             if self._asking.get(agent["id"]) == use_id:
                 self._asking.pop(agent["id"], None)
-            if not opened and agent["state"] not in ("carry",):
-                act = agent["act"]
-                if act.startswith("許可待ち "):
-                    act = act[len("許可待ち "):]
-                self._set(agent, at, "idle", act)
             failed = kind == "PostToolUseFailure"
+            if not opened and agent["state"] not in ("carry",):
+                self._set(agent, at, "idle", _settled_act(agent["act"], failed))
+            elif opened and agent["state"] == "waiting" and waited_on:
+                still = self._open_tool.get(opened[-1]) or ""   # the newest call still open: what the robot does now
+                self._set(agent, at, robots.state_for_tool(still, {}) if still else "idle", _settled_act(agent["act"], failed))
             if tool == "SendMessage":
                 self.calls.sent(use_id, failed, at)
                 self._dirty.add("calls")
@@ -582,7 +598,7 @@ class World:
                                  payload.get("permission_suggestions"), at)
             self._dirty.add("perms")
             self._status(session, "waiting", at, "permission prompt")
-            self._set(agent, at, "waiting", f"許可待ち {robots.act_for_tool(tool or '?', tool_input, root)}")
+            self._set(agent, at, "waiting", f"{PERM_WAIT}{robots.act_for_tool(tool or '?', tool_input, root)}")
             cat = "perm"
             text = agent["act"]
         elif kind == "PermissionDenied":

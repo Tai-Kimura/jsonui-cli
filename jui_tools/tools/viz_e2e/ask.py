@@ -27,6 +27,10 @@ COLOR = {"question": "好きな色は？", "header": "色", "multiSelect": True,
 INPUT = {"questions": [FRUIT, COLOR]}
 
 
+# The session row's second line (its main robot's act), as the side panel shows it.
+ACT = "() => (document.querySelector('#sessions [data-sact]') || {}).textContent || ''"
+
+
 def check(failures, cond, text):
     if not cond:
         failures.append(f"ask: {text}")
@@ -111,6 +115,9 @@ async def run_ask(pw, out, failures):
           sum: (document.querySelector('#sessions [data-pgsum]') || {}).textContent || '' }; }""")
         check(failures, res["asking"]["waiting"] == "0" and res["asking"]["asking"] == "1" and res["asking"]["badge"] == "質問に回答待ち"
               and "許可待ち" not in res["asking"]["sum"] and "質問待ち 1" in res["asking"]["sum"], f"a question is not counted as a permission wait: {res['asking']}")
+        # the session row's second line says so while it waits (ticket 2026-10-19-jui-viz-act-stays-question-waiting-after-answer)
+        res["actWaiting"] = await page.evaluate(ACT)
+        check(failures, res["actWaiting"].startswith("質問に回答待ち"), f"while it waits, the row's act says so: {res['actWaiting']!r}")
         res["countdown"] = await page.evaluate("() => (document.querySelector('.qcard.q-open [data-quntil]') || {}).textContent || ''")
         check(failures, res["countdown"].startswith("あと ") and res["countdown"].endswith("秒でターミナルに戻す"), f"the time left shows: {res['countdown']!r}")
         send = ".qcard.q-open [data-qsend]"
@@ -138,6 +145,12 @@ async def run_ask(pw, out, failures):
         hook(dict(base, hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="ask-1",
                   tool_input={**INPUT, "answers": answers or {}}, tool_response={"answers": answers or {}}))
         await wait(page, "() => [...document.querySelectorAll('.qcard .qdone')].some((p) => p.textContent.includes('ブラウザの答えが届いた'))", label="the card confirmed")
+        try:
+            await wait(page, f"() => ({ACT})() === '質問の回答を受けた'", timeout=10000, label="the row's act after the page's answer")
+        except RuntimeError:
+            pass
+        res["actAfterPage"] = await page.evaluate(ACT)
+        check(failures, res["actAfterPage"] == "質問の回答を受けた", f"answered on the page and PostToolUse came: the row's act no longer waits: {res['actAfterPage']!r}")
         res["log"] = await page.evaluate("() => [...document.querySelectorAll('#ticker li')].map((l) => l.textContent).filter((t) => t.includes('質問に回答'))")
         check(failures, any("ブラウザで質問に回答" in t and "果物: みかん" in t for t in res["log"]), f"the answer is in the log: {res['log']}")
 
@@ -151,6 +164,12 @@ async def run_ask(pw, out, failures):
         res["terminalFirst"] = outp.decode()
         check(failures, res["terminalFirst"] == "", f"the terminal answered first: the hook printed {res['terminalFirst']!r}")
         await wait(page, "() => [...document.querySelectorAll('.qcard .qdone')].some((p) => p.textContent.includes('ターミナルで答えた'))", label="the terminal's answer shown")
+        try:
+            await wait(page, f"() => ({ACT})() === '質問の回答を受けた'", timeout=10000, label="the row's act after the terminal's answer")
+        except RuntimeError:
+            pass
+        res["actAfterTerminal"] = await page.evaluate(ACT)
+        check(failures, res["actAfterTerminal"] == "質問の回答を受けた", f"answered in the terminal: the row's act no longer waits: {res['actAfterTerminal']!r}")
 
         # 2b. 「ターミナルで答える」: the hook stops waiting at once and prints nothing
         hook(pre("ask-2b"))
