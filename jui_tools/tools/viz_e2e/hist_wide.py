@@ -5,7 +5,8 @@
 
 The real `jui viz serve` in a throwaway HOME with two sessions (two rooms); session A's transcript has a wide table, a
 long code line and two pictures (hist_images.py reads those). Arms: 広げる — the card runs from the left margin to the
-right edge over the side panel and the site's header (issue #35), and the camera flies so the robot's on-screen box (its visible meshes) is inside the
+right edge over the side panel and the site's header (issue #35), its head one row (the name left, the buttons right: issue
+#36), and the camera flies so the robot's on-screen box (its visible meshes) is inside the
 margin, waited on the camera tween's end, never on time; ← → bring the next robot into the margin too; the table
 scrolls sideways; the prompt box is there; the pane follows a new answer; Esc goes back to the card's width and to the
 camera's place before; the choice is kept in localStorage (a reload opens it wide) and the page works with
@@ -130,6 +131,9 @@ CARD = """() => { const rb = document.getElementById('rb'), r = rb.getBoundingCl
     headerBottom: Math.round(document.querySelector('.topbar').getBoundingClientRect().bottom),
     onTop: rb.contains(document.elementFromPoint(r.left + 40, r.top + 8)),
     titleLines: (() => { const t = document.getElementById('rb-title'); if (!t) return 0; const cs = getComputedStyle(t); return Math.round(t.getBoundingClientRect().height / (parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.3)); })() }; }"""
+HEAD = """() => { const rb = document.getElementById('rb');
+  const b = (sel) => { const e = rb.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom) }; };
+  return { name: b('#rb-title'), prev: b('[data-rb-step="-1"]'), next: b('[data-rb-step="1"]'), back: b('[data-rb-close]'), clock: b('[data-rb-clock]') }; }"""
 TO_END = """() => { const pane = document.querySelector('[data-rb-hist]'); pane.scrollTop = pane.scrollHeight; pane.dispatchEvent(new Event('scroll')); }"""
 
 
@@ -230,6 +234,7 @@ async def run_hist_wide(pw, out, failures):
         await page.emulate_media(color_scheme="light")
         before_cam = await page.evaluate("() => window.__dbg.camera.position.toArray().map((v) => +v.toFixed(2))")
         res["narrow"] = await page.evaluate(CARD)
+        res["headNarrow"] = await page.evaluate(HEAD)
         check(failures, (res["narrow"]["tableScroll"] or 0) > 0, f"at the card's width too, a many-column table scrolls sideways (cells keep their width): {res['narrow']['tableScroll']}")
         wbtn = page.locator("#rb [data-rb-wide]")
         if not (await wbtn.count() and await wbtn.is_visible()):
@@ -246,6 +251,13 @@ async def run_hist_wide(pw, out, failures):
               f"the robot is inside the left margin: {box} margin {margin}")
         check(failures, c["top"] < c["headerBottom"] and c["onTop"] and res["narrow"]["top"] >= res["narrow"]["headerBottom"],
               f"wide, the card goes over the site's header (issue #35); at the card's width it stays below: wide {c}, narrow {res['narrow']}")
+        hn, hw = res["headNarrow"], res["headWide"] = res.get("headNarrow"), await page.evaluate(HEAD)
+        mid = lambda x: (x["t"] + x["b"]) / 2
+        check(failures, all(hw.values()) and all(abs(mid(hw[k]) - mid(hw["back"])) < 12 for k in ("prev", "next", "clock"))
+              and hw["name"]["r"] <= hw["prev"]["l"] and hw["prev"]["r"] <= hw["next"]["l"] <= hw["back"]["l"] <= hw["clock"]["l"],
+              f"wide, the head is one row: the name left, then ‹ › 「← 3D に戻る」 退勤 on the right (issue #36): {hw}")
+        check(failures, hn and all(hn.values()) and hn["clock"]["b"] <= hn["back"]["t"] and hn["name"]["b"] <= hn["clock"]["t"],
+              f"at the card's width the head stays stacked: the name, 退勤, then ‹ › and 「← 3D に戻る」: {hn}")
         check(failures, c["compose"], f"the prompt box is in the wide card: {c}")
         check(failures, (c["tableScroll"] or 0) > 0, f"the wide table scrolls sideways: {c['tableScroll']}")
         check(failures, c["btn"] and c["btn"]["pressed"] == "true" and c["btn"]["text"] == "元の幅に戻す", f"the button says it is pressed: {c['btn']}")

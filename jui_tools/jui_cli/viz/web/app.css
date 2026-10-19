@@ -1044,6 +1044,13 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-tablist { display: flex; gap: 4px; order: 1; }
 .rb-tabs .rb-wide-btn { order: 2; margin: 0 0 4px auto; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
 .rb-tabs .rb-wide-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+/* Wide, the head is one row (requester 10-19, issue #36): the mark and the name on the left, ‹ › 「← 3D に戻る」 and 退勤
+   on the right; the name takes what the buttons leave. At the card's width it stays stacked, and so does the wide card
+   at 900 px or narrower (.rb-wide-full), where one row would leave the name a few characters. */
+.rb.rb-wide:not(.rb-wide-full) .rb-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+.rb.rb-wide:not(.rb-wide-full) .rb-side { display: flex; grid-column: auto; align-items: center; gap: 8px; }
+.rb.rb-wide:not(.rb-wide-full) .rb-nav { grid-column: auto; }
+.rb.rb-wide:not(.rb-wide-full) .rb-side .rb-clock { order: 1; }
 .rb.rb-wide .rb-hist { font-size: 14px; padding-inline: clamp(14px, 3vw, 40px); }
 .rb.rb-wide .h-compose { padding-inline: clamp(14px, 3vw, 40px); }
 .rb.rb-wide .h-code { white-space: pre; }
