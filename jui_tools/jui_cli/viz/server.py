@@ -11,6 +11,7 @@ Routes (design: dev-guide, 05 §3):
   POST /hook        hook payloads from forward.py (token; no Origin; 2 MB)
   GET  /api/snapshot  the whole state (token)
   POST /api/prompt    a prompt typed in the page for one session (prompt_checks: the page's own origin only)
+  POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
 """
 from __future__ import annotations
 
@@ -445,8 +446,46 @@ def make_app(ctx: ServerContext) -> web.Application:
             ctx.publish()
         return web.json_response({"ok": True})
 
+    async def api_history_image(request: web.Request) -> web.Response:
+        """One picture of the 応答の履歴 (2.3.4): {"agentId", "off", "n"} names the robot (so its transcript) and the
+        picture in it (sources/history.image_at). The same checks as /api/prompt (prompt_checks: POST, the page's own
+        Host and Origin, the token, JSON, a small body), and never a path from the client. Asked by the page only
+        while the tab shows the picture; nothing is kept. The bytes go back with their own media type, nosniff and
+        no-store; a refusal carries no picture."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: /api/history-image（{refused.text.strip()}）")
+            return refused
+        raw = b""
+        while len(raw) <= PROMPT_MAX_BODY:   # a chunked body has no Content-Length: stop reading past the cap
+            chunk = await request.content.read(PROMPT_MAX_BODY + 1 - len(raw))
+            if not chunk:
+                break
+            raw += chunk
+        if len(raw) > PROMPT_MAX_BODY:
+            return web.Response(status=413, text="too large\n")
+        try:
+            body = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            return web.Response(status=400, text="not json\n")
+        agent_id = body.get("agentId") if isinstance(body, dict) else None
+        off = body.get("off") if isinstance(body, dict) else None
+        n = body.get("n") if isinstance(body, dict) else None
+        if not isinstance(agent_id, str) or not agent_id or type(off) is not int or type(n) is not int:
+            return web.Response(status=400, text="agentId, off and n are required\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        status, got = ctx.world.history_image(agent_id, off, n)
+        if status != 200:
+            return web.Response(status=status, text=f"{got}\n")
+        media, data = got
+        return web.Response(body=data, content_type=media,
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+                                     "Content-Disposition": "inline"})
+
     # Before the static catch-all: every method reaches the handler, which answers 405 to all but POST.
     app.router.add_route("*", "/api/prompt", api_prompt)
+    app.router.add_route("*", "/api/history-image", api_history_image)
     app.router.add_post("/channel/hello", channel_hello)
     app.router.add_post("/channel/request", channel_request)
     app.router.add_get("/channel/poll", channel_poll)

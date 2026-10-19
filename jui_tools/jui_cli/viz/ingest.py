@@ -1231,6 +1231,19 @@ class World:
             return self.history_reader(sid, cwd, given, agent_id, self._agent_paths.get(agent_id))
         return self.history_reader(sid, cwd, given)
 
+    def history_image(self, agent_id, off, n) -> tuple[int, object]:
+        """One picture of the transcript history() reads for this robot (sources/history.image_at): (200, (media,
+        bytes)) or (status, reason). The robot names the transcript; off and n name the picture in it."""
+        agent = self.agents.get(agent_id) if isinstance(agent_id, str) else None
+        image = getattr(self.history_reader, "image", None)
+        if agent is None or image is None:
+            return 404, "no such image"
+        sid = agent["sessionId"]
+        cwd, given = self._paths.get(sid, (None, None))
+        if agent["kind"] == "sub":
+            return image(sid, cwd, given, agent_id, self._agent_paths.get(agent_id), off, n)
+        return image(sid, cwd, given, None, None, off, n)
+
     # ---------------------------------------------------------------- heavy work (10-18)
 
     def poll_usage(self, at: int) -> dict:

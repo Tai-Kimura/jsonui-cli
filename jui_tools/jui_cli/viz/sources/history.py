@@ -21,11 +21,20 @@ system-reminders and the tool definitions — and are not shown, nor any other t
   * ``tool`` — a tool call: its name, input.description, IN (a command as it is, else the input's JSON) and OUT
     (the tool_result with the same tool_use_id), each cut at IO_MAX;
   * ``thought`` — a mark only (the thinking text is empty in the transcript: 30 of 30, measured 10-18);
-  * ``image`` — a mark only.
+  * ``image`` — where a picture is, never the picture (2.3.4, requester 10-19: "画像ファイルが履歴にある場合は
+    サムネイル表示とクリックで拡大表示を実装してほしい"): ``img`` = {"off": the byte offset of its record's line in the
+    transcript, "n": which image of that record, "type": its media type}. A tool's OUT has the same in ``imgs``. The
+    page asks for the bytes one picture at a time (``image_at``, POST /api/history-image), only while the tab shows it;
+    the base64 itself never goes into an item, a slice, a snapshot, the event log or an export.
+  * a user text naming a picture file ("[Image: source: /path, …]", the harness's note next to a pasted picture)
+    gets ``gone``: the files named there that no longer exist (a temporary folder emptied). The file itself is never
+    read: the base64 in the transcript is the picture.
 Every text is cut at TEXT_MAX. Nothing is written.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -48,6 +57,14 @@ BYTES_MAX = 4 * 1_048_576
 #: A longer line (one huge tool result) is skipped, not parsed.
 LINE_MAX = 1_048_576
 COUNTED = frozenset({"user", "peer", "harness", "channel", "assistant", "tool"})
+#: The pictures handed to the page: these media types only, each checked against the bytes' own signature.
+IMAGE_TYPES = {"image/png": (b"\x89PNG\r\n\x1a\n",), "image/jpeg": (b"\xff\xd8\xff",), "image/gif": (b"GIF87a", b"GIF89a"),
+               "image/webp": (b"RIFF",)}
+#: One picture, decoded: larger ones are refused (413).
+IMAGE_MAX = 10 * 1_048_576
+#: The line a picture is read from: its base64 (4/3 of IMAGE_MAX) and the record around it.
+IMAGE_LINE_MAX = 16 * 1_048_576
+_IMAGE_NOTE = re.compile(r"\[Image: source: ([^\],\n]+?)(?:,|\])")
 
 # ---------------------------------------------------------------- text the harness put in the user's turn
 # The one place this is decided (the task board's turn titles use it too). Matched at the start of the text.
@@ -109,6 +126,16 @@ def _at(rec: dict) -> int | None:
         return None
 
 
+def gone_images(text: str) -> list[str]:
+    """The picture files a user text names ("[Image: source: /path, …]") that do not exist any more."""
+    out = []
+    for m in _IMAGE_NOTE.finditer(text):
+        path = m.group(1).strip()
+        if path.startswith("/") and "\0" not in path and not os.path.lexists(path):
+            out.append(path[:300])
+    return out[:20]
+
+
 def _text_item(text: str, at, meta: bool) -> dict:
     peer = peer_of(text)
     if peer:
@@ -118,7 +145,33 @@ def _text_item(text: str, at, meta: bool) -> dict:
     body, cut = _cut(text, TEXT_MAX)
     if label:
         return {"kind": "harness", "label": label, "text": body, "cut": cut, "at": at}
-    return {"kind": "user", "text": body, "cut": cut, "at": at}
+    item = {"kind": "user", "text": body, "cut": cut, "at": at}
+    gone = gone_images(text)
+    if gone:
+        item["gone"] = gone
+    return item
+
+
+def _image_blocks(content) -> list[dict]:
+    """The image blocks of a user record's content, in the order ``n`` counts them: its own, then those inside its
+    tool results (a Read of a picture)."""
+    out = []
+    for b in content if isinstance(content, list) else []:
+        if not isinstance(b, dict):
+            continue
+        if b.get("type") == "image":
+            out.append(b)
+        elif b.get("type") == "tool_result" and isinstance(b.get("content"), list):
+            out.extend(x for x in b["content"] if isinstance(x, dict) and x.get("type") == "image")
+    return out
+
+
+def _image_ref(block: dict, off, n: int) -> dict | None:
+    """Where one picture is, or None when it is not one the page may ask for (not base64, a media type not allowed)."""
+    src = block.get("source")
+    if off is None or not isinstance(src, dict) or src.get("type") != "base64" or src.get("media_type") not in IMAGE_TYPES:
+        return None
+    return {"off": off, "n": n, "type": src["media_type"]}
 
 
 def _result_text(content) -> str:
@@ -155,8 +208,9 @@ def _channel_item(rec: dict, content, at) -> dict:
     return {"kind": "channel", "server": server[:200] if isinstance(server, str) else "", "text": body, "cut": cut, "at": at}
 
 
-def items_of(rec, results: dict) -> list[dict]:
-    """The items of one record, in order. tool_result blocks go into ``results`` (tool_use_id -> OUT)."""
+def items_of(rec, results: dict, off: int | None = None) -> list[dict]:
+    """The items of one record, in order. tool_result blocks go into ``results`` (tool_use_id -> OUT). ``off`` is the
+    byte offset of the record's line in its transcript: a picture is named by it (and its place in the record)."""
     if not isinstance(rec, dict) or rec.get("type") not in ("user", "assistant"):
         return []
     msg = rec.get("message")
@@ -167,6 +221,7 @@ def items_of(rec, results: dict) -> list[dict]:
             return [_channel_item(rec, content, at)]
         if isinstance(content, str):
             return [_text_item(content, at, rec.get("isMeta") is True)] if content.strip() else []
+        n = 0
         for b in content if isinstance(content, list) else []:
             if not isinstance(b, dict):
                 continue
@@ -174,9 +229,23 @@ def items_of(rec, results: dict) -> list[dict]:
                 out.append(_text_item(b["text"], at, rec.get("isMeta") is True))
             elif b.get("type") == "tool_result" and isinstance(b.get("tool_use_id"), str):
                 text, cut = _cut(_result_text(b.get("content")), IO_MAX)
-                results[b["tool_use_id"]] = {"out": text, "outCut": cut, "error": b.get("is_error") is True}
+                got = {"out": text, "outCut": cut, "error": b.get("is_error") is True}
+                imgs = []
+                for x in _image_blocks([b]):
+                    ref = _image_ref(x, off, n)
+                    n += 1
+                    if ref:
+                        imgs.append(ref)
+                if imgs:
+                    got["imgs"] = imgs
+                results[b["tool_use_id"]] = got
             elif b.get("type") == "image":
-                out.append({"kind": "image", "at": at})
+                item = {"kind": "image", "at": at}
+                ref = _image_ref(b, off, n)
+                n += 1
+                if ref:
+                    item["img"] = ref
+                out.append(item)
         return out
     for b in content if isinstance(content, list) else []:
         if not isinstance(b, dict):
@@ -214,6 +283,56 @@ def safe_open(projects: Path, path: Path) -> int | None:
     return None
 
 
+def image_at(fd: int, off, n) -> tuple[int, str | bytes]:
+    """The n-th picture of the record whose line starts at byte off of the transcript open on fd.
+
+    (200, media type) with the bytes as a third value is returned as (200, (media, data)); otherwise (status, reason):
+    404 when off is not the start of a line, the line is not a user record, or it has no n-th picture; 415 when the
+    picture is not base64, its media type is not allowed, or its bytes do not start as that type does; 413 when the
+    line or the decoded picture is over the cap. Only this transcript, only this line: nothing else is read."""
+    if not isinstance(off, int) or isinstance(off, bool) or not isinstance(n, int) or isinstance(n, bool) or off < 0 or n < 0:
+        return 404, "no such image"
+    size = os.fstat(fd).st_size
+    if off >= size or (off > 0 and os.pread(fd, 1, off - 1) != b"\n"):
+        return 404, "no such image"
+    line, pos = b"", off
+    while True:
+        chunk = os.pread(fd, min(1_048_576, IMAGE_LINE_MAX + 1 - len(line)), pos)
+        if not chunk:
+            break
+        cut = chunk.find(b"\n")
+        if cut >= 0:
+            line += chunk[:cut]
+            break
+        line += chunk
+        pos += len(chunk)
+        if len(line) > IMAGE_LINE_MAX:
+            return 413, "too large"
+    try:
+        rec = json.loads(line)
+    except ValueError:
+        return 404, "no such image"
+    msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "user" else None
+    blocks = _image_blocks(msg.get("content") if isinstance(msg, dict) else None)
+    if n >= len(blocks):
+        return 404, "no such image"
+    src = blocks[n].get("source")
+    media = src.get("media_type") if isinstance(src, dict) else None
+    if not isinstance(src, dict) or src.get("type") != "base64" or media not in IMAGE_TYPES or not isinstance(src.get("data"), str):
+        return 415, "not an allowed image"
+    if len(src["data"]) > (IMAGE_MAX * 4) // 3 + 8:
+        return 413, "too large"
+    try:
+        data = base64.b64decode(src["data"], validate=True)
+    except (binascii.Error, ValueError):
+        return 415, "not an allowed image"
+    if len(data) > IMAGE_MAX:
+        return 413, "too large"
+    if not data.startswith(IMAGE_TYPES[media]) or (media == "image/webp" and data[8:12] != b"WEBP"):
+        return 415, "not an allowed image"
+    return 200, (media, data)
+
+
 def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -> dict:
     """The last items_max items of the transcript open on fd, oldest first, reading backwards from its end."""
     size = os.fstat(fd).st_size
@@ -229,13 +348,20 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -
         read += len(chunk)
         data = chunk + buf
         lines = data.split(b"\n")
+        starts, o = [], pos                              # where each line begins in the file (a picture is named by it)
+        for ln in lines:
+            starts.append(o)
+            o += len(ln) + 1
         buf = lines.pop(0) if pos > 0 else b""          # the start of a line whose beginning is further back
+        if pos > 0:
+            starts.pop(0)
         if skip_tail and lines:
             lines.pop()                                  # the rest of a line too long to keep
+            starts.pop()
             skip_tail = False
         if len(buf) > LINE_MAX:
             buf, skip_tail = b"", True
-        for line in reversed(lines):
+        for line, start in zip(reversed(lines), reversed(starts)):
             if not line or len(line) > LINE_MAX:
                 continue
             try:
@@ -244,7 +370,7 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -
                 bad += 1
                 continue
             records += 1
-            got = items_of(rec, results)
+            got = items_of(rec, results, start)
             msg = rec.get("message") if isinstance(rec, dict) else None
             mid = msg.get("id") if isinstance(msg, dict) else None
             for item in reversed(got):
@@ -311,4 +437,18 @@ def reader(projects: Path) -> Callable[..., dict | None]:
             return {**got, "cached": False}
         return None
 
+    def image(session_id: str, cwd: str | None, given: str | None, agent_id: str | None, agent_given: str | None,
+              off, n) -> tuple[int, object]:
+        """One picture of the same transcript read() would read (image_at), or (404, ...) when there is none."""
+        for path in paths(session_id, cwd, given, agent_id, agent_given):
+            fd = safe_open(projects, path)
+            if fd is None:
+                continue
+            try:
+                return image_at(fd, off, n)
+            finally:
+                os.close(fd)
+        return 404, "no transcript"
+
+    read.image = image
     return read
