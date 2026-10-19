@@ -89,7 +89,7 @@
               "${CLAUDE_PLUGIN_ROOT}/scripts/forward.py",
               "--ask"
             ],
-            "timeout": 600
+            "timeout": 86400
           }
         ]
       }

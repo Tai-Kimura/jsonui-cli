@@ -467,15 +467,24 @@ async def run_notify(pw, out, failures):
 
         # 7. the window chosen in the settings
         await a.click("#btn-notify")
-        # ticket 2026-10-20: the hook gives up at askMaxSec + 5, so no choice over 5 minutes (nor "until answered")
-        res["offered"] = await a.evaluate("() => [...document.querySelectorAll('#ask-wait option')].map((o) => Number(o.value))")
-        check(failures, res["offered"] == [20, 60, 180, 300] and all(0 < c <= 300 for c in res["offered"]),
-              f"no offered window is over 5 minutes: {res['offered']}")
+        # ticket 2026-10-20: every window offered ends before the hook's timeout; "until answered" says its longest
+        res["offered"] = await a.evaluate("() => [...document.querySelectorAll('#ask-wait option')].map((o) => [Number(o.value), o.textContent])")
+        check(failures, [v for v, _ in res["offered"]] == [20, 60, 180, 600, 1800, 0],
+              f"the offered windows: {res['offered']}")
+        check(failures, any(v == 0 and t == "答えるまで（最長 24 時間）" for v, t in res["offered"]),
+              f"until answered says how long at most: {res['offered']}")
+        # the hook (forward.py --ask) reads how long to wait from server.json, rewritten on every choice
+        await a.select_option("#ask-wait", "1800")
+        await wait(a, "() => document.getElementById('chip-askwait').textContent === '質問は viz で 30 分待つ'", label="the chip says 30 min")
+        res["hookWait1800"] = json.loads((state / "server.json").read_text()).get("askHookWaitSec")
+        check(failures, res["hookWait1800"] == 1800, f"30 min: server.json tells the hook 1800 s: {res['hookWait1800']}")
         await a.select_option("#ask-wait", "20")
         await wait(a, "() => document.getElementById('chip-askwait').textContent === '質問は viz で 20 秒待つ'", label="the chip follows the choice")
         res["chip20"] = await a.evaluate("() => document.getElementById('chip-askwait').textContent")
         res["saved"] = json.loads((state / "config.json").read_text()).get("askWaitSec")
         check(failures, res["saved"] == 20, f"the choice is saved in config.json: {res['saved']}")
+        res["hookWait20"] = json.loads((state / "server.json").read_text()).get("askHookWaitSec")
+        check(failures, res["hookWait20"] == 300, f"20 s: the hook still waits askMaxSec for holds: {res['hookWait20']}")
         await a.screenshot(path=str(out / "settings-chosen-light.png"))
         await a.emulate_media(color_scheme="dark")
         await a.wait_for_timeout(600)

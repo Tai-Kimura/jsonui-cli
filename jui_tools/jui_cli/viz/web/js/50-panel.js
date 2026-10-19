@@ -1996,18 +1996,10 @@ function notifyWaiting(kind, rows) {
     notifyEvent(kind, key, { id: x.id, who: x.who, task: x.task || null }, body);
   }
 }
-/* The question window as the page shows and offers it (ticket 2026-10-20): never over the server's cap (5 min, or
-   askMaxSec when shorter) — the --ask hook gives up there, so a longer choice cannot work; 2.3.5's 0 ("until
-   answered") and a saved 10 / 30 min are read as the cap. */
-const ASK_WAIT_CAP_SEC = 300;
-function askWaitCap(s) { return Math.min(ASK_WAIT_CAP_SEC, Number(s.askWaitCapSec) > 0 ? Number(s.askWaitCapSec) : ASK_WAIT_CAP_SEC); }
-function askWaitSecShown(s) { const cap = askWaitCap(s), v = Number(s.askWaitSec); return v > 0 && v <= cap ? v : cap; }
-function askWaitTextShown(s) { const v = askWaitSecShown(s); return v === Number(s.askWaitSec) ? s.askWaitText : (v < 60 ? `${v} 秒` : `${v / 60} 分`); }
-function askWaitChoicesShown(s) { const cap = askWaitCap(s); return (s.askWaitChoices || []).filter((c) => c > 0 && c <= cap); }
 function notifyAskLeft() {
   const s = NOTIFY.settings;
   if (!s) return 'viz で答えるか、ターミナルで';
-  return `viz で答えるか、${askWaitTextShown(s)}後にターミナルへ`;
+  return s.askWaitSec > 0 ? `viz で答えるか、${s.askWaitText}後にターミナルへ` : 'viz で答えるまで待ちます';
 }
 /* The page tells the server its question notifications are on (or no longer). */
 const notifyPresenceWanted = () => SOURCE.mode === 'live' && notifyGranted() && NOTIFY.on.ask;
@@ -2028,7 +2020,7 @@ function notifySettingsShow(settings) {
   $('btn-notify').hidden = !live;
   const chip = $('chip-askwait');
   chip.hidden = !live || !s;
-  if (s) setText(chip, `質問は viz で ${askWaitTextShown(s)}待つ`);
+  if (s) setText(chip, s.askWaitSec > 0 ? `質問は viz で ${s.askWaitText}待つ` : '質問は viz で答えるまで待つ');
   if (notifyEl.hidden) return;
   const state = !notifyCan() ? 'このブラウザは通知を出せません'
     : Notification.permission === 'granted' ? 'ブラウザの通知: 許可済み'
@@ -2046,12 +2038,14 @@ function notifySettingsShow(settings) {
     + (lc && lc.noTab ? ' · このブラウザのどのタブも音を鳴らせません（どれかのタブをクリックすると鳴ります）' : ''));
   const sel = $('ask-wait');
   if (s) {
-    const label = (sec) => (sec < 60 ? `${sec} 秒` : `${sec / 60} 分`);
-    const now = askWaitSecShown(s), offered = askWaitChoicesShown(s);
-    const choices = offered.includes(now) ? offered : [...offered, now];
+    // "until answered" is bounded by the hook's timeout (ticket 2026-10-20): the server says how long
+    const most = Number(s.askUntilAnsweredSec) > 0 ? Number(s.askUntilAnsweredSec) : 0;
+    const mostText = most >= 3600 ? `${Math.round(most / 3600)} 時間` : most >= 60 ? `${Math.round(most / 60)} 分` : '';
+    const label = (sec) => (sec <= 0 ? (mostText ? `答えるまで（最長 ${mostText}）` : '答えるまで') : sec < 60 ? `${sec} 秒` : `${sec / 60} 分`);
+    const choices = s.askWaitChoices.includes(s.askWaitSec) ? s.askWaitChoices : [...s.askWaitChoices, s.askWaitSec];
     const sig = JSON.stringify(choices);
     if (sel.dataset.sig !== sig) { sel.dataset.sig = sig; sel.innerHTML = choices.map((c) => `<option value="${esc(String(c))}">${esc(label(c))}</option>`).join(''); }
-    sel.value = String(now);
+    sel.value = String(s.askWaitSec);
   }
 }
 function notifyOpenPanel(opener) {

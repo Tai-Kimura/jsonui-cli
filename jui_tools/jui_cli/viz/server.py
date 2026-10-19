@@ -31,7 +31,7 @@ from typing import Awaitable, Callable
 from aiohttp import WSMsgType, web
 
 from . import callcmd, clockout, paths, security
-from .config import ASK_WAIT_CAP_SEC, ASK_WAIT_CHOICES, VizConfig, capped_ask_wait, save_setting
+from .config import ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec, save_setting
 from .state import VizState, now_ms
 
 MAX_HOOK_BODY = 2_000_000
@@ -127,6 +127,9 @@ class ServerContext:
     on_weather: Callable[[], None] | None = None
     # Called with each accepted POST /usage body (the statusLine's rate_limits, 10-18).
     on_usage: Callable[[dict], None] | None = None
+    # The question window changed (POST /api/ask-wait): serve rewrites server.json's askHookWaitSec, which
+    # forward.py --ask reads to know how long to wait (ticket 2026-10-20 question-window-over-5-min).
+    on_settings: Callable[[], None] | None = None
     # Until when a page reported itself visible (presence), epoch ms.
     present_until: int = 0
     # Until when a page said its question notifications are on (POST /api/notify-presence, 2.3.6), epoch ms.
@@ -158,16 +161,28 @@ def _page_html(ctx: ServerContext) -> str | None:
     return None
 
 
-#: 2.3.5's "until answered" (askWaitSec 0) — no longer used by ask_window (0 is read as the cap); a time no hook reaches (the card's ターミナルで答える, every page gone and the session
+#: "until answered" (askWaitSec 0): a time no hook reaches (the card's ターミナルで答える, every page gone and the session
 #: ending still end the wait)
 NEVER_MS = 2 ** 53 - 1
 
 
 def ask_window(config: VizConfig, start: int) -> tuple[int, int]:
-    """(until, latest) of a question's wait: askWaitSec from now, holds from the page up to askMaxSec in all. askWaitSec
-    is capped (capped_ask_wait: 5 min and askMaxSec; 0 is read as the cap), so the server never waits past the hook."""
-    wait = capped_ask_wait(config.askWaitSec, config.askMaxSec)
+    """(until, latest) of a question's wait: askWaitSec from now, holds from the page up to askMaxSec in all — or up
+    to askWaitSec when that is longer (a 10 or 30 minute choice is not cut at 5); 0: until answered."""
+    wait = float(config.askWaitSec)
+    if wait <= 0:
+        return NEVER_MS, NEVER_MS
     return start + int(wait * 1000), start + int(max(config.askMaxSec, wait) * 1000)
+
+
+def _hook_wait_sec(request: web.Request, config: VizConfig) -> float:
+    """How long the --ask hook that sent this waits: its X-Jui-Viz-Wait-Sec, else askMaxSec (an older forward.py
+    waits server.json's askMaxSec + 5)."""
+    try:
+        said = float(request.headers.get("X-Jui-Viz-Wait-Sec", ""))
+    except ValueError:
+        said = 0.0
+    return said if said > 0 and said == said and said != float("inf") else float(config.askMaxSec)
 
 
 def ask_wait_text(sec: float) -> str:
@@ -179,9 +194,8 @@ def ask_wait_text(sec: float) -> str:
 
 def settings_slice(config: VizConfig) -> dict:
     """What the page shows and changes (2.3.6): the question window, its choices, the notifications' presence."""
-    wait = capped_ask_wait(config.askWaitSec, config.askMaxSec)
-    return {"askWaitSec": wait, "askWaitText": ask_wait_text(wait), "askWaitChoices": list(ASK_WAIT_CHOICES),
-            "askWaitCapSec": min(float(ASK_WAIT_CAP_SEC), float(config.askMaxSec)),
+    return {"askWaitSec": config.askWaitSec, "askWaitText": ask_wait_text(config.askWaitSec), "askWaitChoices": list(ASK_WAIT_CHOICES),
+            "askUntilAnsweredSec": ASK_UNTIL_ANSWERED_SEC,
             "notifyPresenceSec": config.notifyPresenceSec}
 
 
@@ -409,6 +423,12 @@ def make_app(ctx: ServerContext) -> web.Application:
         future = asyncio.get_running_loop().create_future()
         start = now_ms()
         until, latest = ask_window(ctx.config, start)
+        # Never wait past the hook (ticket 2026-10-20 question-window-over-5-min): forward.py says how long it waits
+        # (X-Jui-Viz-Wait-Sec, from server.json askHookWaitSec); a forward.py that does not say (the plugin 1.2.1 and
+        # before) waits askMaxSec + 5. Past that the terminal has the question, so the card must not still wait.
+        hard = start + int(min(_hook_wait_sec(request, ctx.config), ask_hook_wait_sec(ctx.config)) * 1000)
+        if until != NEVER_MS or hard < start + ASK_UNTIL_ANSWERED_SEC * 1000:
+            until, latest = min(until, hard), min(latest, hard)
         ctx.world.question_waiting(card, future, until, latest)
         if ctx.publish:
             ctx.publish()
@@ -416,7 +436,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         try:
             while True:
                 now = now_ms()
-                left = (card.get("waitUntil", 0) - now) / 1000   # holds from the page move it
+                left = min(card.get("waitUntil", 0) - now, hard - now) / 1000   # holds from the page move it
                 if left <= 0:
                     reason = "timeout"
                     break
@@ -552,8 +572,8 @@ def make_app(ctx: ServerContext) -> web.Application:
         return web.json_response({"ok": True, "forSec": ctx.config.notifyPresenceSec if body["ask"] else 0})
 
     async def api_ask_wait(request: web.Request) -> web.Response:
-        """How long a question waits for the page (2.3.6, requester 10-19): {"sec": one of ASK_WAIT_CHOICES} (5 min
-        at most, ticket 2026-10-20). Saved in config.json (kept after a restart) and used from the next question on. The checks of
+        """How long a question waits for the page (2.3.6, requester 10-19): {"sec": one of ASK_WAIT_CHOICES}, 0 =
+        until answered. Saved in config.json (kept after a restart) and used from the next question on. The checks of
         /api/prompt (prompt_checks)."""
         refused = prompt_checks(request, ctx, NOTIFY_MAX_BODY)
         if refused is not None:
@@ -569,7 +589,9 @@ def make_app(ctx: ServerContext) -> web.Application:
             save_setting("askWaitSec", sec)
         except (OSError, ValueError) as exc:
             return web.json_response({"ok": False, "why": f"config.json に保存できなかった（{exc}）"}, status=500)
-        ctx.config.askWaitSec = capped_ask_wait(sec, ctx.config.askMaxSec)
+        ctx.config.askWaitSec = float(sec)
+        if ctx.on_settings:
+            ctx.on_settings()   # server.json's askHookWaitSec: forward.py --ask waits that long from the next question on
         ctx.state.set_slice("settings", settings_slice(ctx.config))
         if ctx.publish:
             ctx.publish()
@@ -908,7 +930,7 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         if ctx.world is None or not isinstance(card_id, str):
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "questionId is required"})
             return
-        error = (ctx.world.hold_question(card_id, now_ms(), int(capped_ask_wait(ctx.config.askWaitSec, ctx.config.askMaxSec) * 1000)) if kind == "question.hold"
+        error = (ctx.world.hold_question(card_id, now_ms(), int(ctx.config.askWaitSec * 1000)) if kind == "question.hold"
                  else ctx.world.release_question(card_id, now_ms()))
         if ctx.publish:
             ctx.publish()

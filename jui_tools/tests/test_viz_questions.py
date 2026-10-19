@@ -18,7 +18,7 @@ from pathlib import Path
 from aiohttp.test_utils import TestClient, TestServer
 
 from jui_cli.viz import questions as qmod
-from jui_cli.viz.config import VizConfig
+from jui_cli.viz.config import VizConfig, ask_server_info
 from jui_cli.viz.ingest import World
 from jui_cli.viz.server import ServerContext, make_app
 from jui_cli.viz.state import VizState, now_ms
@@ -156,9 +156,11 @@ async def _setup(tmp_path, wait_sec: float = 5, max_sec: float = 30):
     port = _free_port()
     viz = tmp_path / ".local" / "state" / "jui-viz"   # paths.viz_home() under the fake HOME
     viz.mkdir(parents=True, exist_ok=True)
-    (viz / "server.json").write_text(json.dumps({"pid": 1, "port": port, "token": TOKEN, "askMaxSec": max_sec}))
+    config = VizConfig(askWaitSec=wait_sec, askMaxSec=max_sec, pushIntervalMs=20)
+    # server.json as jui viz serve writes it (viz_cmd: ask_server_info)
+    (viz / "server.json").write_text(json.dumps({"pid": 1, "port": port, "token": TOKEN, **ask_server_info(config)}))
     world = World(VizState())
-    ctx = ServerContext(config=VizConfig(askWaitSec=wait_sec, askMaxSec=max_sec, pushIntervalMs=20), port=port, token=TOKEN,
+    ctx = ServerContext(config=config, port=port, token=TOKEN,
                         state=world.state, world=world, publish=world.publish)
     client = TestClient(TestServer(make_app(ctx), host="127.0.0.1", port=port))
     await client.start_server()
@@ -326,6 +328,34 @@ def test_holds_from_the_page_keep_the_hook_waiting_for_the_answer(tmp_path):
             await client.close()
     out = json.loads(asyncio.run(run()))
     assert out["hookSpecificOutput"]["updatedInput"]["answers"] == {FRUIT["question"]: "りんご", COLOR["question"]: "赤"}
+
+
+def test_a_window_longer_than_askmaxsec_keeps_the_hook_waiting_past_askmaxsec_plus_5(tmp_path):
+    """Ticket 2026-10-20 question-window-over-5-min, shrunk: askMaxSec 1 s and a 10 s window stand for 300 s and the
+    page's 10 min. forward.py --ask used to wait askMaxSec + 5 (6 s here, 305 s for real) and return nothing, so the
+    question went to the terminal while the card still waited; it now waits the server's own limit."""
+    async def run():
+        port, world, client = await _setup(tmp_path, wait_sec=10, max_sec=1)
+        try:
+            ws = await _page(client, port)
+            t0 = time.monotonic()
+            proc = _hook(tmp_path, _pre())
+            card = await _wait(lambda: next((c for c in world.questions.cards.values() if c["hookWaiting"]), None))
+            await asyncio.sleep(4)
+            await ws.send_json({"type": "presence", "visible": True})   # the page is still there
+            await asyncio.sleep(4)                                     # 8 s: past askMaxSec + 5
+            alive = proc.poll() is None and card["hookWaiting"]
+            await ws.send_json({"type": "question.answer", "reqId": 4, "questionId": card["id"],
+                                "answers": {FRUIT["question"]: {"labels": ["みかん"]}, COLOR["question"]: {"labels": ["緑"]}}})
+            out = await _finish(proc)
+            took = time.monotonic() - t0
+            await ws.close()
+            return alive, took, out
+        finally:
+            await client.close()
+    alive, took, out = asyncio.run(run())
+    assert alive, "forward.py --ask gave up at askMaxSec + 5 though the chosen window is longer"
+    assert took >= 8 and json.loads(out)["hookSpecificOutput"]["updatedInput"]["answers"] == {FRUIT["question"]: "みかん", COLOR["question"]: "緑"}
 
 
 def test_the_terminal_button_ends_the_hooks_wait_with_nothing(tmp_path):

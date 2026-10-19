@@ -13,6 +13,7 @@ import pytest
 
 from jui_cli.viz import hooks_installer as hi
 from jui_cli.viz import paths
+from jui_cli.viz.config import ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec
 
 REPO = Path(__file__).resolve().parents[2]
 PLUGIN = REPO / "plugins" / "jui-viz"
@@ -34,6 +35,12 @@ def test_the_plugin_hooks_cover_the_same_events_as_the_installer():
         assert handler["async"] is True and handler["args"][-1].endswith("/scripts/forward.py"), event
     decide = [h for g in hooks["PermissionRequest"] for h in g["hooks"] if h.get("args", [])[-1:] == ["--decide"]]
     assert len(decide) == 1 and "async" not in decide[0] and decide[0]["timeout"] == hi.DECIDE_TIMEOUT_SEC
+    ask = [h for g in hooks["PreToolUse"] if g.get("matcher") == "AskUserQuestion" for h in g["hooks"]]
+    assert len(ask) == 1 and ask[0]["args"][-1] == "--ask" and "async" not in ask[0]
+    # ticket 2026-10-20 question-window-over-5-min: the plugin's --ask timeout is the installer's, over every window
+    assert ask[0]["timeout"] == hi.ASK_TIMEOUT_SEC
+    longest = max(ask_hook_wait_sec(VizConfig(askWaitSec=c)) for c in ASK_WAIT_CHOICES)
+    assert ask[0]["timeout"] >= longest + 5 and hi.ASK_TIMEOUT_SEC >= longest + 5
     env = [h for g in hooks["SessionStart"] for h in g["hooks"] if "session_env.sh" in h.get("command", "")]
     assert len(env) == 1
     script = (PLUGIN / "scripts" / "session_env.sh").read_text()

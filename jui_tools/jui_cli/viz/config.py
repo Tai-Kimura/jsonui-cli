@@ -23,8 +23,8 @@ class VizConfig:
     # askWaitSec for someone to start answering on the page — every input on the card renews it — and never more than
     # askMaxSec in all, or askWaitSec when that is longer. 2.3.6 (requester 10-19: "時間をvizの設定で変えられるように
     # したら？ viz中心でやりたい時に1分は短い", "デフォルト3分にして"): 3 min, and chosen on the page from
-    # ASK_WAIT_CHOICES (POST /api/ask-wait, saved here). Never over ASK_WAIT_CAP_SEC (5 min) nor askMaxSec
-    # (capped_ask_wait): the hook gives up at askMaxSec + 5. 2.3.5's 0 ("until answered") is read as the cap.
+    # ASK_WAIT_CHOICES (POST /api/ask-wait, saved here); 0 is "until answered" — still ended by the card's ターミナルで
+    # 答える, by every page gone (presence, notifyPresenceSec) and by the session ending.
     askWaitSec: float = 180
     askMaxSec: float = 300
     # how long a page's "question notifications are on" lasts without being said again (POST /api/notify-presence):
@@ -38,21 +38,35 @@ class VizConfig:
     talkGraceSec: float = 3600
 
 
-#: The longest a question waits for the page (2.3.6, ticket 2026-10-20 question-window-over-5-min): the --ask hook
-#: (forward.py) gives up at askMaxSec + 5 (305 s by default) and the question goes to the terminal, so a longer window
-#: (the 10 min, 30 min and "until answered" choices of 2.3.5) only left the card waiting after the terminal had it.
-ASK_WAIT_CAP_SEC = 300
+#: the page's choices for askWaitSec: 20 s, 1, 3, 10, 30 min, and 0 = until answered
+ASK_WAIT_CHOICES = (20, 60, 180, 600, 1800, 0)
 
-#: the page's choices for askWaitSec: 20 s, 1, 3, 5 min — never over ASK_WAIT_CAP_SEC
-ASK_WAIT_CHOICES = (20, 60, 180, 300)
+#: The timeout of the synchronous AskUserQuestion hook (forward.py --ask), in the installer's hooks
+#: (hooks_installer.ASK_TIMEOUT_SEC) and the plugin's hooks.json alike: Claude Code cancels the hook there. Ticket
+#: 2026-10-20 question-window-over-5-min: it was 600 s, under the 30 min and "until answered" choices. Claude Code's
+#: hooks reference states no maximum for a command hook's timeout (default 600 s), and a timeout of 1800 / 3600 /
+#: 86400 s was measured not to be cut short (see the ticket's work note).
+ASK_HOOK_TIMEOUT_SEC = 86400
+#: The hook's own margin: forward.py waits the server's limit + 5 s, and the server ends its wait before that.
+ASK_HOOK_MARGIN_SEC = 60
+#: "until answered" (askWaitSec 0) is bounded by the hook's timeout: the server gives the question back to the
+#: terminal before Claude Code cancels the hook (23 h 59 min).
+ASK_UNTIL_ANSWERED_SEC = ASK_HOOK_TIMEOUT_SEC - ASK_HOOK_MARGIN_SEC
 
 
-def capped_ask_wait(sec: float, ask_max_sec: float) -> float:
-    """askWaitSec as it is used: never over ASK_WAIT_CAP_SEC nor askMaxSec (what the hook waits). A saved 600 / 1800
-    (2.3.5's 10 / 30 min) and a saved 0 (2.3.5's "until answered") are read as that cap."""
-    cap = min(float(ASK_WAIT_CAP_SEC), float(ask_max_sec))
-    sec = float(sec)
-    return cap if sec <= 0 or sec > cap else sec
+def ask_hook_wait_sec(config: "VizConfig") -> float:
+    """The longest the server waits for one question now — what forward.py --ask must wait (server.json
+    askHookWaitSec, and the X-Jui-Viz-Wait-Sec it sends back): askWaitSec, or askMaxSec when longer (holds), and
+    "until answered" (0) up to ASK_UNTIL_ANSWERED_SEC; never past the hook's timeout."""
+    wait = float(config.askWaitSec)
+    longest = ASK_UNTIL_ANSWERED_SEC if wait <= 0 else max(float(config.askMaxSec), wait)
+    return float(min(longest, ASK_UNTIL_ANSWERED_SEC))
+
+
+def ask_server_info(config: "VizConfig") -> dict:
+    """server.json's keys for forward.py --ask: askHookWaitSec is what it waits (askMaxSec stays for an older
+    forward.py, which waits askMaxSec + 5)."""
+    return {"askMaxSec": config.askMaxSec, "askHookWaitSec": ask_hook_wait_sec(config)}
 
 
 def save_setting(key: str, value) -> None:
@@ -100,5 +114,4 @@ def load_config() -> VizConfig:
             print(f"jui viz: config.json の {key} の型が違うため既定値 {default!r} を使います", file=sys.stderr)
             continue
         setattr(config, key, type(default)(value))
-    config.askWaitSec = capped_ask_wait(config.askWaitSec, config.askMaxSec)
     return config

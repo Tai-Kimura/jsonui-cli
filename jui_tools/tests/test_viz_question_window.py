@@ -16,9 +16,11 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from jui_cli.viz import config as config_mod
 from jui_cli.viz import paths
-from jui_cli.viz.config import ASK_WAIT_CAP_SEC, ASK_WAIT_CHOICES, VizConfig, capped_ask_wait, load_config
+from jui_cli.viz import hooks_installer as hi
+from jui_cli.viz.config import (ASK_HOOK_TIMEOUT_SEC, ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec,
+                                ask_server_info, load_config)
 from jui_cli.viz.ingest import World
-from jui_cli.viz.server import ServerContext, ask_window, make_app, settings_slice
+from jui_cli.viz.server import NEVER_MS, ServerContext, ask_window, make_app
 from jui_cli.viz.state import VizState, now_ms
 
 TOKEN = "t" * 43
@@ -55,10 +57,16 @@ class Rig:
         h.update(over)
         return {k: v for k, v in h.items() if v is not None}
 
-    async def ask(self, use_id: str):
-        """POST /hook/ask as forward.py --ask: (seconds it took, the answer)."""
+    async def ask(self, use_id: str, wait_sec="as forward.py"):
+        """POST /hook/ask as forward.py --ask: (seconds it took, the answer). It says how long it waits (server.json's
+        askHookWaitSec); wait_sec=None is an older forward.py that does not say."""
         t = time.monotonic()
-        r = await self.client.post("/hook/ask", headers={"X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"},
+        headers = {"X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+        if wait_sec == "as forward.py":
+            wait_sec = ask_hook_wait_sec(self.ctx.config)
+        if wait_sec is not None:
+            headers["X-Jui-Viz-Wait-Sec"] = f"{wait_sec:g}"
+        r = await self.client.post("/hook/ask", headers=headers,
                                    data=json.dumps(_hook("PreToolUse", tool_name="AskUserQuestion", tool_use_id=use_id, tool_input=Q)))
         return time.monotonic() - t, await r.json()
 
@@ -80,38 +88,76 @@ def _run(cfg: VizConfig, body):
 
 # ---- the window and its choices ----
 
-def test_the_default_window_is_three_minutes_and_no_choice_is_over_five_minutes():
-    # ticket 2026-10-20 question-window-over-5-min: the --ask hook gives up at askMaxSec + 5 (305 s), so 2.3.5's
-    # 10 min, 30 min and "until answered" (0) cannot work and are not offered
+def test_the_default_window_is_three_minutes_and_the_choices_are_the_rulings():
     assert VizConfig().askWaitSec == 180
-    assert ASK_WAIT_CAP_SEC == 300
-    assert ASK_WAIT_CHOICES == (20, 60, 180, 300)
-    assert all(0 < c <= ASK_WAIT_CAP_SEC for c in ASK_WAIT_CHOICES)
-    assert settings_slice(VizConfig())["askWaitChoices"] == [20, 60, 180, 300]
-    assert settings_slice(VizConfig())["askWaitCapSec"] == 300
+    assert ASK_WAIT_CHOICES == (20, 60, 180, 600, 1800, 0)
 
 
-def test_the_window_never_goes_past_what_the_hook_waits():
+def test_a_long_window_is_not_cut_at_askmaxsec_and_until_answered_never_runs_out():
     start = 1_000_000
-    # a saved 10 min, 30 min or 0 ("until answered") is read as 5 min: the server ends the wait before the hook does
-    assert ask_window(VizConfig(askWaitSec=600, askMaxSec=300), start) == (start + 300_000, start + 300_000)
-    assert ask_window(VizConfig(askWaitSec=1800, askMaxSec=300), start) == (start + 300_000, start + 300_000)
-    assert ask_window(VizConfig(askWaitSec=0, askMaxSec=300), start) == (start + 300_000, start + 300_000)
+    assert ask_window(VizConfig(askWaitSec=600, askMaxSec=300), start) == (start + 600_000, start + 600_000)
     assert ask_window(VizConfig(askWaitSec=60, askMaxSec=300), start) == (start + 60_000, start + 300_000)
-    # askMaxSec shorter than the window (the hook waits askMaxSec + 5): the window is cut there too
-    assert ask_window(VizConfig(askWaitSec=180, askMaxSec=60), start) == (start + 60_000, start + 60_000)
-    assert capped_ask_wait(300, 300) == 300 and capped_ask_wait(301, 300) == 300 and capped_ask_wait(-1, 300) == 300
+    assert ask_window(VizConfig(askWaitSec=0, askMaxSec=300), start) == (NEVER_MS, NEVER_MS)
 
 
-@pytest.mark.parametrize("saved, read", [(600, 300), (1800, 300), (0, 300), (300, 300), (180, 180), (20, 20)])
-def test_a_saved_window_over_five_minutes_or_until_answered_is_read_as_five_minutes(saved, read, tmp_path, monkeypatch):
+# ---- the hook waits as long as the server (ticket 2026-10-20 question-window-over-5-min) ----
+
+def test_the_hook_is_told_the_servers_real_limit_not_askmaxsec():
+    assert ask_hook_wait_sec(VizConfig(askWaitSec=600, askMaxSec=300)) == 600
+    assert ask_hook_wait_sec(VizConfig(askWaitSec=1800, askMaxSec=300)) == 1800
+    assert ask_hook_wait_sec(VizConfig(askWaitSec=60, askMaxSec=300)) == 300      # holds can go on to askMaxSec
+    assert ask_hook_wait_sec(VizConfig(askWaitSec=0, askMaxSec=300)) == ASK_UNTIL_ANSWERED_SEC
+    assert ask_server_info(VizConfig(askWaitSec=600, askMaxSec=300)) == {"askMaxSec": 300, "askHookWaitSec": 600}
+
+
+def test_every_offered_window_ends_before_the_hook_is_cut_off():
+    # the hook's timeout (installer and plugin alike, test_viz_plugin) is over the longest choice + forward.py's 5 s
+    longest = max(ask_hook_wait_sec(VizConfig(askWaitSec=c)) for c in ASK_WAIT_CHOICES)
+    assert longest + 5 <= ASK_HOOK_TIMEOUT_SEC == hi.ASK_TIMEOUT_SEC
+    assert max(c for c in ASK_WAIT_CHOICES if c > 0) + 5 <= hi.ASK_TIMEOUT_SEC
+
+
+def test_an_older_hook_that_does_not_say_is_waited_for_only_up_to_askmaxsec():
+    async def body(rig):
+        rig.ctx.present_until = now_ms() + 60_000
+        took, answer = await rig.ask("u20", wait_sec=None)
+        return took, answer, rig.card()
+    took, answer, card = _run(VizConfig(askWaitSec=30, askMaxSec=0.6), body)
+    assert 0.4 <= took < 2.0 and answer == {} and card["waitEndReason"] == "timeout"
+
+
+def test_the_server_never_waits_past_what_the_hook_said():
+    async def body(rig):
+        rig.ctx.present_until = now_ms() + 60_000
+        took, answer = await rig.ask("u21", wait_sec=0.7)
+        return took, answer, rig.card()
+    took, answer, card = _run(VizConfig(askWaitSec=0, askMaxSec=300), body)
+    assert 0.5 <= took < 2.0 and answer == {} and card["waitEndReason"] == "timeout"
+
+
+def test_a_new_choice_tells_serve_to_rewrite_server_json():
+    seen = []
+
+    async def body(rig):
+        rig.ctx.on_settings = lambda: seen.append(ask_hook_wait_sec(rig.ctx.config))
+        r = await rig.client.post("/api/ask-wait", headers=rig.page(), data=json.dumps({"sec": 1800}))
+        return r.status
+    assert _run(VizConfig(), body) == 200 and seen == [1800]
+
+
+def test_serve_rewrites_server_json_with_the_new_limit(tmp_path, monkeypatch):
+    from jui_cli.commands import viz_cmd
     monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
-    (tmp_path / "home").mkdir()
-    paths.config_json().write_text(json.dumps({"askWaitSec": saved}))
-    config = load_config()
-    assert config.askWaitSec == read
-    shown = settings_slice(config)
-    assert shown["askWaitSec"] == read and shown["askWaitSec"] in shown["askWaitChoices"]
+    monkeypatch.setattr(viz_cmd, "_legacy_mirror_write", lambda info: False)
+    config = VizConfig(askWaitSec=180)
+    info = {"pid": 1, "port": 7790, "token": TOKEN, **ask_server_info(config)}
+    viz_cmd._write_private_json(paths.server_json(), info)
+    assert json.loads(paths.server_json().read_text())["askHookWaitSec"] == 300
+    config.askWaitSec = 600
+    viz_cmd._rewrite_server_json(info, config)
+    data = json.loads(paths.server_json().read_text())
+    assert data["askHookWaitSec"] == 600 and data["askMaxSec"] == 300 and data["token"] == TOKEN
+    assert not paths.server_json().with_name("server.json.tmp").exists()
 
 
 # ---- who it waits for ----
@@ -190,29 +236,19 @@ def test_a_page_that_goes_hidden_without_notifications_ends_it():
     assert took < 2.0 and card["waitEndReason"] == "hidden"
 
 
-# ---- a saved 0 (2.3.5's "until answered"), and the ways out ----
+# ---- until answered, and the ways out ----
 
-def test_a_saved_until_answered_no_longer_waits_past_askmaxsec():
+def test_until_answered_waits_past_askmaxsec_and_the_terminal_button_ends_it():
     async def body(rig):
         rig.ctx.present_until = now_ms() + 60_000
-        took, answer = await rig.ask("u8")
-        return took, answer, rig.card()
-    took, answer, card = _run(VizConfig(askWaitSec=0, askMaxSec=0.5), body)
-    assert 0.3 <= took < 1.5 and answer == {}
-    assert not card["hookWaiting"]
-
-
-def test_the_terminal_button_ends_the_wait():
-    async def body(rig):
-        rig.ctx.present_until = now_ms() + 60_000
-        task = asyncio.ensure_future(rig.ask("u8b"))
-        await asyncio.sleep(0.4)
+        task = asyncio.ensure_future(rig.ask("u8"))
+        await asyncio.sleep(1.2)   # past askMaxSec (0.5)
         still = not task.done() and rig.card()["hookWaiting"]
         assert rig.world.release_question(rig.card()["id"], now_ms()) is None
         took, answer = await task
         return still, took, answer, rig.card()
-    still, took, answer, card = _run(VizConfig(askWaitSec=30), body)
-    assert still and took < 2.0 and answer == {}
+    still, took, answer, card = _run(VizConfig(askWaitSec=0, askMaxSec=0.5), body)
+    assert still and took >= 1.2 and answer == {}
     assert card["released"] and card["waitEndReason"] == "released"
 
 
@@ -274,7 +310,7 @@ def test_every_check_of_the_page_routes_refuses(route, ok_body, tmp_path, monkey
                    "big": 413, "ok": 200}, got
 
 
-@pytest.mark.parametrize("bad", [45, -1, "60", True, None, 60.5, 600, 1800, 0])
+@pytest.mark.parametrize("bad", [45, -1, "60", True, None, 60.5])
 def test_only_the_choices_are_taken(bad, tmp_path, monkeypatch):
     monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
 
@@ -313,7 +349,7 @@ def test_a_broken_config_json_is_not_overwritten(tmp_path, monkeypatch):
     paths.config_json().write_text("[not, an, object]")
 
     async def body(rig):
-        return (await rig.client.post("/api/ask-wait", headers=rig.page(), data=json.dumps({"sec": 300}))).status
+        return (await rig.client.post("/api/ask-wait", headers=rig.page(), data=json.dumps({"sec": 600}))).status
     assert _run(VizConfig(), body) == 500
     assert paths.config_json().read_text() == "[not, an, object]"
 

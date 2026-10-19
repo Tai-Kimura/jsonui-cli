@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import paths
+from .config import ASK_HOOK_TIMEOUT_SEC
 
 MARKER = "jui_cli/viz/forward.py"
 EVENTS = (
@@ -102,9 +103,10 @@ def our_decide_handler(python: str | None = None, forward: Path | None = None) -
     }
 
 
-#: The synchronous PreToolUse hook of AskUserQuestion (10-18): the server waits at most askMaxSec (300 by default)
-#: while someone answers on the page; Claude Code cuts the hook off after this, so it stays above it.
-ASK_TIMEOUT_SEC = 600
+#: The synchronous PreToolUse hook of AskUserQuestion (10-18): Claude Code cuts the hook off after this, so it stays
+#: above the longest question window (30 min, "until answered" up to config.ASK_UNTIL_ANSWERED_SEC). The plugin's
+#: hooks.json carries the same value (test_viz_plugin). Was 600: ticket 2026-10-20 question-window-over-5-min.
+ASK_TIMEOUT_SEC = ASK_HOOK_TIMEOUT_SEC
 
 
 def our_ask_handler(python: str | None = None, forward: Path | None = None) -> dict:

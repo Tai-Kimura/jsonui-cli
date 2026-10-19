@@ -26,11 +26,13 @@ def decide(body: bytes, info: dict, path: str = "/hook/decide", wait_key: str = 
     import socket
 
     port = int(info["port"])
-    wait = float(info.get(wait_key, 300 if wait_key == "askMaxSec" else 30))
+    wait = float(info.get(wait_key, 30))
+    if wait_key == "askHookWaitSec" and wait_key not in info:
+        wait = float(info.get("askMaxSec", 300))   # an older server (no askHookWaitSec) waits at most askMaxSec
     head = (
         f"POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
         f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
-        f"X-Jui-Viz-Token: {info['token']}\r\nConnection: close\r\n\r\n"
+        f"X-Jui-Viz-Token: {info['token']}\r\nX-Jui-Viz-Wait-Sec: {wait:g}\r\nConnection: close\r\n\r\n"
     )
     with socket.create_connection(("127.0.0.1", port), timeout=1.0) as s:
         s.sendall(head.encode("ascii") + body)
@@ -81,7 +83,10 @@ def main() -> int:
             decide(body, info)
             return 0
         if "--ask" in sys.argv[1:]:   # PreToolUse of AskUserQuestion: the page's answer, the same way (10-18)
-            decide(body, info, "/hook/ask", "askMaxSec")   # holds can keep it waiting up to the max
+            # how long the server waits for this question — the chosen window (10 min, 30 min, until answered), not
+            # askMaxSec: server.json's askHookWaitSec, rewritten when the page changes it (ticket 2026-10-20
+            # question-window-over-5-min); the server never waits past the X-Jui-Viz-Wait-Sec this sends
+            decide(body, info, "/hook/ask", "askHookWaitSec")
             return 0
         port = int(info["port"])
         head = (

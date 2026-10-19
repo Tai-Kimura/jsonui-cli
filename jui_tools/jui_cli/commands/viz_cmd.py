@@ -499,6 +499,22 @@ def _url(port: int) -> str:
     return f"http://127.0.0.1:{port}/"
 
 
+def _rewrite_server_json(info: dict, config) -> None:
+    """The page chose another question window: forward.py --ask reads askHookWaitSec from server.json (ticket
+    2026-10-20 question-window-over-5-min), so it is rewritten — whole, then moved into place, so a hook never reads
+    half of it — and the old plugins' mirror with it."""
+    from ..viz.config import ask_server_info
+
+    info.update(ask_server_info(config))
+    tmp = paths.server_json().with_name(paths.server_json().name + ".tmp")
+    _write_private_json(tmp, info)
+    os.replace(tmp, paths.server_json())
+    try:
+        _legacy_mirror_write(info)
+    except OSError:
+        pass
+
+
 def _write_private_json(path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -686,13 +702,17 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     tasks: list[asyncio.Task] = []
     reader_cleanup: list = []
     observer = None
+    from ..viz.config import ask_server_info
+
     try:
         info = {
             "pid": pid, "port": port, "token": ctx.token,
             "startedAt": started_at, "version": ctx.version, "decideWaitSec": config.decideWaitSec,
-            "askMaxSec": config.askMaxSec,
+            **ask_server_info(config),
         }
         _write_private_json(paths.server_json(), info)
+
+        ctx.on_settings = lambda: _rewrite_server_json(info, config)
         hooks_installer.progress_dir().mkdir(parents=True, exist_ok=True)
 
         _legacy_mirror_write(info)  # ⏳ for the plugin 1.0.0 (see _legacy_mirror_write); remove in 3.0.0
