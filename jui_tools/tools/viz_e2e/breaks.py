@@ -73,8 +73,10 @@ GEOM_JS = """() => {
         for (const [zn, zb] of Object.entries(zones)) if (hit(pb, zb)) out.bad.push(`${tag}: ${pn} x ${zn}`);
       }
       const names = Object.keys(props);
-      // the customer's spot and the point in front of it are one walk, by design: every other pair must be apart
-      for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (`${names[i]},${names[j]}` !== 'customer,vendWay' && hit(props[names[i]], props[names[j]])) out.bad.push(`${tag}: ${names[i]} x ${names[j]}`);
+      // the customer's spot and the point in front of it are one walk, by design, and the shredder's feeder stands at its
+      // side (10-19): every other pair must be apart
+      const together = new Set(['customer,vendWay', 'shredder,shredSpot']);
+      for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (!together.has(`${names[i]},${names[j]}`) && hit(props[names[i]], props[names[j]])) out.bad.push(`${tag}: ${names[i]} x ${names[j]}`);
       // a robot's walk to the git box (straight, from any desk corner) passes no solid prop (2.3.4)
       for (const [cx, cz] of [[sx0, sz0], [sx1, sz0], [sx0, sz1], [sx1, sz1]]) for (let k = 0; k <= 24; k++) {
         const q = box(cx + (P.git.stand[0] - cx) * k / 24, cz + (P.git.stand[1] - cz) * k / 24, 0.35);
