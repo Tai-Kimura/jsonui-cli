@@ -31,7 +31,7 @@ from typing import Awaitable, Callable
 from aiohttp import WSMsgType, web
 
 from . import callcmd, clockout, paths, security
-from .config import ASK_WAIT_CHOICES, VizConfig, save_setting
+from .config import ASK_WAIT_CAP_SEC, ASK_WAIT_CHOICES, VizConfig, capped_ask_wait, save_setting
 from .state import VizState, now_ms
 
 MAX_HOOK_BODY = 2_000_000
@@ -158,17 +158,15 @@ def _page_html(ctx: ServerContext) -> str | None:
     return None
 
 
-#: "until answered" (askWaitSec 0): a time no hook reaches (the card's ターミナルで答える, every page gone and the session
+#: 2.3.5's "until answered" (askWaitSec 0) — no longer used by ask_window (0 is read as the cap); a time no hook reaches (the card's ターミナルで答える, every page gone and the session
 #: ending still end the wait)
 NEVER_MS = 2 ** 53 - 1
 
 
 def ask_window(config: VizConfig, start: int) -> tuple[int, int]:
-    """(until, latest) of a question's wait: askWaitSec from now, holds from the page up to askMaxSec in all — or up
-    to askWaitSec when that is longer (a 10 or 30 minute choice is not cut at 5); 0: until answered."""
-    wait = float(config.askWaitSec)
-    if wait <= 0:
-        return NEVER_MS, NEVER_MS
+    """(until, latest) of a question's wait: askWaitSec from now, holds from the page up to askMaxSec in all. askWaitSec
+    is capped (capped_ask_wait: 5 min and askMaxSec; 0 is read as the cap), so the server never waits past the hook."""
+    wait = capped_ask_wait(config.askWaitSec, config.askMaxSec)
     return start + int(wait * 1000), start + int(max(config.askMaxSec, wait) * 1000)
 
 
@@ -181,7 +179,9 @@ def ask_wait_text(sec: float) -> str:
 
 def settings_slice(config: VizConfig) -> dict:
     """What the page shows and changes (2.3.6): the question window, its choices, the notifications' presence."""
-    return {"askWaitSec": config.askWaitSec, "askWaitText": ask_wait_text(config.askWaitSec), "askWaitChoices": list(ASK_WAIT_CHOICES),
+    wait = capped_ask_wait(config.askWaitSec, config.askMaxSec)
+    return {"askWaitSec": wait, "askWaitText": ask_wait_text(wait), "askWaitChoices": list(ASK_WAIT_CHOICES),
+            "askWaitCapSec": min(float(ASK_WAIT_CAP_SEC), float(config.askMaxSec)),
             "notifyPresenceSec": config.notifyPresenceSec}
 
 
@@ -552,8 +552,8 @@ def make_app(ctx: ServerContext) -> web.Application:
         return web.json_response({"ok": True, "forSec": ctx.config.notifyPresenceSec if body["ask"] else 0})
 
     async def api_ask_wait(request: web.Request) -> web.Response:
-        """How long a question waits for the page (2.3.6, requester 10-19): {"sec": one of ASK_WAIT_CHOICES}, 0 =
-        until answered. Saved in config.json (kept after a restart) and used from the next question on. The checks of
+        """How long a question waits for the page (2.3.6, requester 10-19): {"sec": one of ASK_WAIT_CHOICES} (5 min
+        at most, ticket 2026-10-20). Saved in config.json (kept after a restart) and used from the next question on. The checks of
         /api/prompt (prompt_checks)."""
         refused = prompt_checks(request, ctx, NOTIFY_MAX_BODY)
         if refused is not None:
@@ -569,7 +569,7 @@ def make_app(ctx: ServerContext) -> web.Application:
             save_setting("askWaitSec", sec)
         except (OSError, ValueError) as exc:
             return web.json_response({"ok": False, "why": f"config.json に保存できなかった（{exc}）"}, status=500)
-        ctx.config.askWaitSec = float(sec)
+        ctx.config.askWaitSec = capped_ask_wait(sec, ctx.config.askMaxSec)
         ctx.state.set_slice("settings", settings_slice(ctx.config))
         if ctx.publish:
             ctx.publish()
@@ -908,7 +908,7 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         if ctx.world is None or not isinstance(card_id, str):
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "questionId is required"})
             return
-        error = (ctx.world.hold_question(card_id, now_ms(), int(ctx.config.askWaitSec * 1000)) if kind == "question.hold"
+        error = (ctx.world.hold_question(card_id, now_ms(), int(capped_ask_wait(ctx.config.askWaitSec, ctx.config.askMaxSec) * 1000)) if kind == "question.hold"
                  else ctx.world.release_question(card_id, now_ms()))
         if ctx.publish:
             ctx.publish()

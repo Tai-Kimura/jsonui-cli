@@ -23,8 +23,8 @@ class VizConfig:
     # askWaitSec for someone to start answering on the page — every input on the card renews it — and never more than
     # askMaxSec in all, or askWaitSec when that is longer. 2.3.6 (requester 10-19: "時間をvizの設定で変えられるように
     # したら？ viz中心でやりたい時に1分は短い", "デフォルト3分にして"): 3 min, and chosen on the page from
-    # ASK_WAIT_CHOICES (POST /api/ask-wait, saved here); 0 is "until answered" — still ended by the card's ターミナルで
-    # 答える, by every page gone (presence, notifyPresenceSec) and by the session ending.
+    # ASK_WAIT_CHOICES (POST /api/ask-wait, saved here). Never over ASK_WAIT_CAP_SEC (5 min) nor askMaxSec
+    # (capped_ask_wait): the hook gives up at askMaxSec + 5. 2.3.5's 0 ("until answered") is read as the cap.
     askWaitSec: float = 180
     askMaxSec: float = 300
     # how long a page's "question notifications are on" lasts without being said again (POST /api/notify-presence):
@@ -38,8 +38,21 @@ class VizConfig:
     talkGraceSec: float = 3600
 
 
-#: the page's choices for askWaitSec: 20 s, 1, 3, 10, 30 min, and 0 = until answered
-ASK_WAIT_CHOICES = (20, 60, 180, 600, 1800, 0)
+#: The longest a question waits for the page (2.3.6, ticket 2026-10-20 question-window-over-5-min): the --ask hook
+#: (forward.py) gives up at askMaxSec + 5 (305 s by default) and the question goes to the terminal, so a longer window
+#: (the 10 min, 30 min and "until answered" choices of 2.3.5) only left the card waiting after the terminal had it.
+ASK_WAIT_CAP_SEC = 300
+
+#: the page's choices for askWaitSec: 20 s, 1, 3, 5 min — never over ASK_WAIT_CAP_SEC
+ASK_WAIT_CHOICES = (20, 60, 180, 300)
+
+
+def capped_ask_wait(sec: float, ask_max_sec: float) -> float:
+    """askWaitSec as it is used: never over ASK_WAIT_CAP_SEC nor askMaxSec (what the hook waits). A saved 600 / 1800
+    (2.3.5's 10 / 30 min) and a saved 0 (2.3.5's "until answered") are read as that cap."""
+    cap = min(float(ASK_WAIT_CAP_SEC), float(ask_max_sec))
+    sec = float(sec)
+    return cap if sec <= 0 or sec > cap else sec
 
 
 def save_setting(key: str, value) -> None:
@@ -87,4 +100,5 @@ def load_config() -> VizConfig:
             print(f"jui viz: config.json の {key} の型が違うため既定値 {default!r} を使います", file=sys.stderr)
             continue
         setattr(config, key, type(default)(value))
+    config.askWaitSec = capped_ask_wait(config.askWaitSec, config.askMaxSec)
     return config

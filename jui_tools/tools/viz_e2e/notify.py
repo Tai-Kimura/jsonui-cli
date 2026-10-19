@@ -256,6 +256,10 @@ async def run_notify(pw, out, failures):
 
         # 7. the window chosen in the settings
         await a.click("#btn-notify")
+        # ticket 2026-10-20: the hook gives up at askMaxSec + 5, so no choice over 5 minutes (nor "until answered")
+        res["offered"] = await a.evaluate("() => [...document.querySelectorAll('#ask-wait option')].map((o) => Number(o.value))")
+        check(failures, res["offered"] == [20, 60, 180, 300] and all(0 < c <= 300 for c in res["offered"]),
+              f"no offered window is over 5 minutes: {res['offered']}")
         await a.select_option("#ask-wait", "20")
         await wait(a, "() => document.getElementById('chip-askwait').textContent === '質問は viz で 20 秒待つ'", label="the chip follows the choice")
         res["chip20"] = await a.evaluate("() => document.getElementById('chip-askwait').textContent")

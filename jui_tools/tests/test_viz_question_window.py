@@ -16,9 +16,9 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from jui_cli.viz import config as config_mod
 from jui_cli.viz import paths
-from jui_cli.viz.config import ASK_WAIT_CHOICES, VizConfig, load_config
+from jui_cli.viz.config import ASK_WAIT_CAP_SEC, ASK_WAIT_CHOICES, VizConfig, capped_ask_wait, load_config
 from jui_cli.viz.ingest import World
-from jui_cli.viz.server import NEVER_MS, ServerContext, ask_window, make_app
+from jui_cli.viz.server import ServerContext, ask_window, make_app, settings_slice
 from jui_cli.viz.state import VizState, now_ms
 
 TOKEN = "t" * 43
@@ -80,16 +80,38 @@ def _run(cfg: VizConfig, body):
 
 # ---- the window and its choices ----
 
-def test_the_default_window_is_three_minutes_and_the_choices_are_the_rulings():
+def test_the_default_window_is_three_minutes_and_no_choice_is_over_five_minutes():
+    # ticket 2026-10-20 question-window-over-5-min: the --ask hook gives up at askMaxSec + 5 (305 s), so 2.3.5's
+    # 10 min, 30 min and "until answered" (0) cannot work and are not offered
     assert VizConfig().askWaitSec == 180
-    assert ASK_WAIT_CHOICES == (20, 60, 180, 600, 1800, 0)
+    assert ASK_WAIT_CAP_SEC == 300
+    assert ASK_WAIT_CHOICES == (20, 60, 180, 300)
+    assert all(0 < c <= ASK_WAIT_CAP_SEC for c in ASK_WAIT_CHOICES)
+    assert settings_slice(VizConfig())["askWaitChoices"] == [20, 60, 180, 300]
+    assert settings_slice(VizConfig())["askWaitCapSec"] == 300
 
 
-def test_a_long_window_is_not_cut_at_askmaxsec_and_until_answered_never_runs_out():
+def test_the_window_never_goes_past_what_the_hook_waits():
     start = 1_000_000
-    assert ask_window(VizConfig(askWaitSec=600, askMaxSec=300), start) == (start + 600_000, start + 600_000)
+    # a saved 10 min, 30 min or 0 ("until answered") is read as 5 min: the server ends the wait before the hook does
+    assert ask_window(VizConfig(askWaitSec=600, askMaxSec=300), start) == (start + 300_000, start + 300_000)
+    assert ask_window(VizConfig(askWaitSec=1800, askMaxSec=300), start) == (start + 300_000, start + 300_000)
+    assert ask_window(VizConfig(askWaitSec=0, askMaxSec=300), start) == (start + 300_000, start + 300_000)
     assert ask_window(VizConfig(askWaitSec=60, askMaxSec=300), start) == (start + 60_000, start + 300_000)
-    assert ask_window(VizConfig(askWaitSec=0, askMaxSec=300), start) == (NEVER_MS, NEVER_MS)
+    # askMaxSec shorter than the window (the hook waits askMaxSec + 5): the window is cut there too
+    assert ask_window(VizConfig(askWaitSec=180, askMaxSec=60), start) == (start + 60_000, start + 60_000)
+    assert capped_ask_wait(300, 300) == 300 and capped_ask_wait(301, 300) == 300 and capped_ask_wait(-1, 300) == 300
+
+
+@pytest.mark.parametrize("saved, read", [(600, 300), (1800, 300), (0, 300), (300, 300), (180, 180), (20, 20)])
+def test_a_saved_window_over_five_minutes_or_until_answered_is_read_as_five_minutes(saved, read, tmp_path, monkeypatch):
+    monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
+    paths.config_json().write_text(json.dumps({"askWaitSec": saved}))
+    config = load_config()
+    assert config.askWaitSec == read
+    shown = settings_slice(config)
+    assert shown["askWaitSec"] == read and shown["askWaitSec"] in shown["askWaitChoices"]
 
 
 # ---- who it waits for ----
@@ -168,19 +190,29 @@ def test_a_page_that_goes_hidden_without_notifications_ends_it():
     assert took < 2.0 and card["waitEndReason"] == "hidden"
 
 
-# ---- until answered, and the ways out ----
+# ---- a saved 0 (2.3.5's "until answered"), and the ways out ----
 
-def test_until_answered_waits_past_askmaxsec_and_the_terminal_button_ends_it():
+def test_a_saved_until_answered_no_longer_waits_past_askmaxsec():
     async def body(rig):
         rig.ctx.present_until = now_ms() + 60_000
-        task = asyncio.ensure_future(rig.ask("u8"))
-        await asyncio.sleep(1.2)   # past askMaxSec (0.5)
+        took, answer = await rig.ask("u8")
+        return took, answer, rig.card()
+    took, answer, card = _run(VizConfig(askWaitSec=0, askMaxSec=0.5), body)
+    assert 0.3 <= took < 1.5 and answer == {}
+    assert not card["hookWaiting"]
+
+
+def test_the_terminal_button_ends_the_wait():
+    async def body(rig):
+        rig.ctx.present_until = now_ms() + 60_000
+        task = asyncio.ensure_future(rig.ask("u8b"))
+        await asyncio.sleep(0.4)
         still = not task.done() and rig.card()["hookWaiting"]
         assert rig.world.release_question(rig.card()["id"], now_ms()) is None
         took, answer = await task
         return still, took, answer, rig.card()
-    still, took, answer, card = _run(VizConfig(askWaitSec=0, askMaxSec=0.5), body)
-    assert still and took >= 1.2 and answer == {}
+    still, took, answer, card = _run(VizConfig(askWaitSec=30), body)
+    assert still and took < 2.0 and answer == {}
     assert card["released"] and card["waitEndReason"] == "released"
 
 
@@ -242,7 +274,7 @@ def test_every_check_of_the_page_routes_refuses(route, ok_body, tmp_path, monkey
                    "big": 413, "ok": 200}, got
 
 
-@pytest.mark.parametrize("bad", [45, -1, "60", True, None, 60.5])
+@pytest.mark.parametrize("bad", [45, -1, "60", True, None, 60.5, 600, 1800, 0])
 def test_only_the_choices_are_taken(bad, tmp_path, monkeypatch):
     monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
 
@@ -281,7 +313,7 @@ def test_a_broken_config_json_is_not_overwritten(tmp_path, monkeypatch):
     paths.config_json().write_text("[not, an, object]")
 
     async def body(rig):
-        return (await rig.client.post("/api/ask-wait", headers=rig.page(), data=json.dumps({"sec": 600}))).status
+        return (await rig.client.post("/api/ask-wait", headers=rig.page(), data=json.dumps({"sec": 300}))).status
     assert _run(VizConfig(), body) == 500
     assert paths.config_json().read_text() == "[not, an, object]"
 
