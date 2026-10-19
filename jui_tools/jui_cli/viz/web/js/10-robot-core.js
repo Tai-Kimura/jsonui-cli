@@ -752,10 +752,16 @@ function bgUpdate(r, t, on) {
   r.headset.visible = on; r.notes.visible = on;
   if (!on) return;
   for (const sp of r.notes.children) {
-    const k = sp.userData.k, ph = reduceMotion ? 0.3 + k * 0.22 : (t * 0.42 + k / NOTE_MAX + r.seed * 0.13) % 1;
-    sp.position.set((k % 2 ? -1 : 1) * (0.42 + ph * 0.18) + Math.sin(ph * 6.3 + k) * 0.06, 1.95 + ph * 0.75, 0.1);
-    sp.material.opacity = reduceMotion ? 1 : Math.min(1, Math.sin(ph * Math.PI) * 1.6);
+    const n = notePose(r, sp.userData.k, t);
+    sp.position.set(n.x, n.y, 0.1);
+    sp.material.opacity = n.opacity;
   }
+}
+/* Where note k stands at time t (the e2e reads it at two times: still under reduced motion, rising otherwise). */
+function notePose(r, k, t) {
+  const ph = reduceMotion ? 0.3 + k * 0.22 : (t * 0.42 + k / NOTE_MAX + r.seed * 0.13) % 1;
+  return { x: (k % 2 ? -1 : 1) * (0.42 + ph * 0.18) + Math.sin(ph * 6.3 + k) * 0.06, y: 1.95 + ph * 0.75,
+    opacity: reduceMotion ? 1 : Math.min(1, Math.sin(ph * Math.PI) * 1.6) };
 }
 function setRobotTired(r, on) {
   if (on && !r.tired) r.needDrink = true;

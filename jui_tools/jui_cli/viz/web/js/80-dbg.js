@@ -294,8 +294,16 @@ window.__dbg.bgLook = () => robots.map((R) => {
   const r = R.robot, notes = r.notes ? r.notes.children : [], lap = r.props.background;
   return { id: R.def.id, state: r.state, kind: R.def.kind, headset: !!(r.headset && r.headset.visible && r.headset.parent),
     noteSprites: notes.length, notes: r.notes && r.notes.visible ? notes.map((n) => [+n.position.x.toFixed(3), +n.position.y.toFixed(3), +n.material.opacity.toFixed(2)]) : [],
-    laptop: !!(lap && lap.group.visible), armL: +r.armL.rotation.x.toFixed(4), play: !!R.play, brk: !!R.brk, solo: !!R.solo };
+    laptop: !!(lap && lap.group.visible), armL: +r.armL.rotation.x.toFixed(4), play: !!R.play, brk: !!R.brk, solo: !!R.solo,
+    call: r.call ? `${r.call.role}:${r.call.state}` : null, onLine: !!(r.call && CALL_ON_LINE.has(r.call.state) && !(r.call.role === 'callee' && (r.call.state === 'ringing' || r.call.state === 'dialing'))),
+    handset: !!r.handset };
 });
+// the notes' places at two pose times (still under reduced motion, rising otherwise): read without sampling frames
+window.__dbg.notesAt = (id, times) => { const R = robots.find((x) => x.def.id === id); return times.map((t) => [0, 1, 2].map((k) => { const n = notePose(R.robot, k, t); return [+n.x.toFixed(3), +n.y.toFixed(3)]; })); };
+// a robot that went to a game, a nap, a bento or a break, from now on, every frame (the arm reads it when it is done)
+window.__dbg.watchOuting = (ids) => { const seen = Object.fromEntries(ids.map((i) => [i, false])); window.__outing = seen;
+  const tick = () => { for (const R of robots) if (R.def.id in seen && (R.play || R.brk || R.solo)) seen[R.def.id] = true; if (window.__outing === seen) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick); return true; };
 window.__dbg.poseStats = (state) => {   // the left arm over 20 s of pose time: its swing and how many strokes a second
   let lo = Infinity, hi = -Infinity, strokes = 0, prev = null;
   for (let i = 0; i <= 4000; i++) {
