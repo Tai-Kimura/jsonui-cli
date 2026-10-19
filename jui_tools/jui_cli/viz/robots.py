@@ -21,6 +21,12 @@ WEB_READING_TOOLS = {
     "WebSearch",
 }
 COMMAND_TOOLS = {"Bash", "BashOutput"}
+# Calling a subagent blows a whistle (requester 10-20: "サブエージェント呼ぶのは笛鳴らそうか"): a short signal of a fixed
+# length from the moment the call starts, not the call's length (cd measured 3 days: a background Agent ends in
+# p50 0.5 s, a foreground one runs p50 74 s — it whistles only at its start, then waits as before). The page's demo
+# beats use the same length (30-source-demo.js, DEMO_BEATS.launchSec).
+LAUNCH_TOOLS = {"Agent", "Task"}
+LAUNCH_WHISTLE_MS = 2_500
 READING_MCP = re.compile(r"^mcp__jui-tools__(read_|lookup_|list_|search_|get_)")
 COMMAND_MCP = re.compile(r"^mcp__jui-tools__(jui_build|jui_verify|doc_|test_)")
 ROLE_BY_TYPE = (

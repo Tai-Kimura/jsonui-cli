@@ -708,7 +708,7 @@ LIVE_ONLY = {
 # Calls in the live bundle to functions only the demo script defines: each sits in a demo branch (the demo's update
 # in update3D, demoDirector, the demo clock in 70-main) and never runs live.
 DEMO_ONLY = {
-    "demoBuilding", "demoTired", "demoHeavy",      # 40-scene: demoDirector and the demo branch of update3D
+    "demoBuilding", "demoTired", "demoHeavy", "demoLaunch",   # 40-scene: demoDirector and the demo branch of update3D
     "demoClockMs", "demoHour",                     # 70-main: the demo clock
 }
 

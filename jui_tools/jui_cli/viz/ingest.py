@@ -591,6 +591,8 @@ class World:
                       readKind=robots.read_kind(tool) if state == "reading" else None)
             if state == "carry":
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
+            if tool in robots.LAUNCH_TOOLS:   # the whistle: from now for its fixed length, whatever the call's length
+                self._set(agent, at, whistle={"at": at, "until": at + robots.LAUNCH_WHISTLE_MS})
             if tool in EDIT_TOOLS:
                 self._touch_files(session, agent, tool_input, at, after=False, use_id=use_id)
             if tool == "TodoWrite":
@@ -1312,6 +1314,10 @@ class World:
                         entry.by, entry.by_until = None, 0
                     entry.writing_until = {k: t for k, t in entry.writing_until.items() if t > at}
                     self._dirty.add("specs")
+        for agent in self.agents.values():   # the whistle of a subagent call, over at its fixed length
+            if agent.get("whistle") and at >= agent["whistle"]["until"]:
+                agent.pop("whistle")
+                self._dirty.add("agents")
         for aid, (due, to) in list(self._until.items()):
             if at < due:
                 continue

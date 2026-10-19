@@ -664,6 +664,9 @@ const DEMO_BEATS = {
   nightOut: 70, nightIn: 78,                            // at night: the rooms working late lit, the sign aglow
   thinking: [34, 50, 'd8'],                             // a quiet busy session (d8's plan)
   heavy: [38, 58, '7c'],                                // heavy work: fast typing and sweat
+  // a subagent called (10-20): the whistle for launchSec (robots.py LAUNCH_WHISTLE_MS) from each [t, robot, how]:
+  // a0 calls one in the foreground at 20 (then waits for its report), b4 at 6, a0 one in the background at 76
+  launch: [[6, 'b4', 'fg'], [20, 'a0', 'fg'], [76, 'a0', 'bg']], launchSec: 2.5,
   tired: { session: 'b4', since: 9 },                   // the session began at 9:00 of the demo clock
   snacks: [[34, '4f', 'coffee'], [42, 'e1', 'coffee'], [64, 'c9', 'meal']],
 };
@@ -686,6 +689,7 @@ function demoBuilding(t) {
   LIVE.rank = rank;
 }
 const demoTired = (id) => id === DEMO_BEATS.tired.session && isTired(demoDayMs() + DEMO_BEATS.tired.since * 3600000, vizNow());
+const demoLaunch = (id, t) => DEMO_BEATS.launch.some(([at, who]) => who === id && t >= at && t < at + DEMO_BEATS.launchSec);
 const demoHeavy = (id, t) => (id === DEMO_BEATS.heavy[2] && t >= DEMO_BEATS.heavy[0] && t < DEMO_BEATS.heavy[1] ? ['tokens'] : []);
 function robotCondition(id) {
   const t = latestModel ? latestModel.t : 0;

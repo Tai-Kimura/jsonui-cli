@@ -408,3 +408,11 @@ window.__dbg.markDict = (id) => {
   });
   return seen.size;
 };
+// calling a subagent (10-20): the whistle of each robot read from the robot itself, and the script's time (demo)
+window.__dbg.launchLook = () => ({ t: latestModel ? +latestModel.t.toFixed(3) : null, now: vizNow(), robots: robots.map((R) => {
+  const r = R.robot;
+  return { id: R.def.id, state: r.state, launch: !!r.launch, whistle: !!(r.whistle && r.whistle.visible), pipi: !!(r.pipi && r.pipi.visible),
+    pipiLong: !!(r.pipiLong && r.pipiLong.visible), look: r.look || null, face: String(r.faceMode).split('|')[0], sweat: !!(r.sweat && r.sweat.visible),
+    armRz: +r.armR.rotation.z.toFixed(3), reduced: reduceMotion, until: (robotState[R.def.id] || {}).whistle ? robotState[R.def.id].whistle.until : null };
+}) });
+window.__dbg.launchBeats = () => (typeof DEMO_BEATS !== 'undefined' && DEMO_BEATS.launch ? { beats: DEMO_BEATS.launch, sec: DEMO_BEATS.launchSec } : null);

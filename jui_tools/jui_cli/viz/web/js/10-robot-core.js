@@ -667,18 +667,27 @@ function whistleProp() {
   g.userData.whistle = true;
   return g;
 }
-function pipiBubble() {                                    // 「ピッ」 over the head while the whistle blows
+function pipiBubble(text = 'ピッ！') {                        // 「ピッ」 over the head while the whistle blows
   const canvas = makeCanvas(192, 112), ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f2532'; ctx.lineWidth = 6;
   rr(ctx, 6, 6, 180, 78, 30); ctx.fill(); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(132, 82); ctx.lineTo(148, 106); ctx.lineTo(108, 82); ctx.closePath(); ctx.fill(); ctx.stroke();   // the tail toward the head
   ctx.fillStyle = '#ffffff'; ctx.fillRect(104, 76, 30, 8);
   ctx.fillStyle = '#e8590c'; ctx.font = `46px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('ピッ！', 96, 46);
+  ctx.font = `${text.length > 3 ? 40 : 46}px ${FONT_DISPLAY}`;
+  ctx.fillText(text, 96, 46);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFrom(canvas), transparent: true }));
   s.position.set(-1.0, 2.1, 0.3); s.scale.set(0.72, 0.42, 1); s.userData.pipi = true;   // beside the head, by the waving (right, -x) arm
   return s;
 }
+/* Calling a subagent (requester 10-20: "サブエージェント呼ぶのは笛鳴らそうか"; ticket 2026-10-20-jui-viz-agent-launch-whistle):
+   r.launch is true for a fixed length from the moment an Agent call starts (the server's agent.whistle, robots.py
+   LAUNCH_WHISTLE_MS; the page turns it off when vizNow passes its end, and never while the robot is away from its
+   desk). The same whistle and the same waving arm as heavy work's 'whistle', the face squeezed > <, and its own
+   bubble 「ピーッ！」 (a long blow) where heavy work says 「ピッ！」. Told apart: the launch is short (2.5 s), comes with
+   the call (the robot carries its papers, then waits, or works on), with no sweat and with 「ピーッ！」; heavy work's
+   directing of 3 or more subagents lasts as long as they run, with sweat and 「ピッ！」. Both at once: 「ピーッ！」 for
+   the launch's 2.5 s, then 「ピッ！」 and the sweat go on. Reduced motion: the whistle at the mouth only, no waving. */
 function lookUpdate(r, t, dt) {
   const look = heavyLook(r, t);
   r.look = look;
@@ -687,12 +696,15 @@ function lookUpdate(r, t, dt) {
   if (!cur[3]) { cur[0] = want[0]; cur[1] = want[1]; cur[2] = want[2]; }   // from nothing: the hue at once, the alpha eases
   const k = reduceMotion ? 1 : Math.min(1, dt / LOOK_EASE * 3);
   for (let i = 0; i < 4; i++) cur[i] += (want[i] - cur[i]) * k;
-  if (look === 'whistle' && !r.whistle) { r.whistle = whistleProp(); r.head.add(r.whistle); }
-  if (r.whistle) r.whistle.visible = look === 'whistle';
-  if (look === 'whistle' && !r.pipi) { r.pipi = pipiBubble(); r.root.add(r.pipi); }
-  if (r.pipi) {
-    r.pipi.visible = look === 'whistle';
-    if (r.pipi.visible && !reduceMotion) r.pipi.position.y = 2.1 + Math.abs(Math.sin(t * 7)) * 0.08;   // in time with the arm
+  const blow = look === 'whistle' || !!r.launch;
+  if (blow && !r.whistle) { r.whistle = whistleProp(); r.head.add(r.whistle); }
+  if (r.whistle) r.whistle.visible = blow;
+  if (look === 'whistle' && !r.launch && !r.pipi) { r.pipi = pipiBubble(); r.root.add(r.pipi); }
+  if (r.launch && !r.pipiLong) { r.pipiLong = pipiBubble('ピーッ！'); r.pipiLong.userData.launch = true; r.root.add(r.pipiLong); }
+  for (const [bubble, on] of [[r.pipi, look === 'whistle' && !r.launch], [r.pipiLong, !!r.launch]]) {
+    if (!bubble) continue;
+    bubble.visible = on;
+    if (on && !reduceMotion) bubble.position.y = 2.1 + Math.abs(Math.sin(t * 7)) * 0.08;   // in time with the arm
   }
   return look;
 }
@@ -1353,7 +1365,7 @@ function updateRobot(r, t, dt) {
   const p = {};
   for (const k in b) p[k] = a[k] + (b[k] - a[k]) * e;
   if (look === 'drained') { p.headX += 0.12; }             // head a little down over the long wait
-  if (look === 'whistle' && !reduceMotion) {               // one arm up waving the team on, the other pointing
+  if ((look === 'whistle' || r.launch) && !reduceMotion) { // one arm up waving the team on, the other pointing
     // the right arm up beside the head (as the done cheer, so the head does not hide it), waving; the left pointing
     p.aRx = Math.sin(t * 7) * 0.25; p.aRz = -2.85 + Math.sin(t * 7) * 0.3; p.aLx = -1.35; p.aLz = 0.15; p.headY = Math.sin(t * 3.5) * 0.15;
   }
@@ -1389,6 +1401,7 @@ function updateRobot(r, t, dt) {
   let mode = STATES[r.blend < 0.5 ? r.prev : r.state].face;
   if (r.tired && mode === 'normal') mode = 'tired';
   if (look) mode = look;                                     // heavy work's face over the state's and the tired one
+  if (r.launch) mode = 'whistle';                            // calling a subagent: the whistle's face for its moment
   if (mode === 'normal' || mode === 'focus' || mode === 'tired' || mode === 'fired') {
     if (s > r.nextBlink) { r.blinkEnd = s + 0.12; r.nextBlink = s + 2.4 + Math.random() * 3.2; }
     if (s < r.blinkEnd) mode = 'blink';

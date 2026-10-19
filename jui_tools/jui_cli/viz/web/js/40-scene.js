@@ -1118,6 +1118,8 @@ function liveUpdateRobots(nowSec, dt) {
     R.robot.lampState = playing || R.git ? st.state : null;   // to, at and back from play, a break, the shredder or the box: the real state's lamp
     const vis = R.git ? gitLook(R) : how === 'walking' ? (playing ? 'stroll' : 'carry') : how === 'playing' || how === 'shredding' ? 'idle' : st.state;
     if (vis !== R.robot.state) setRobotState(R.robot, vis);
+    // a subagent called: the whistle from the call's start until its fixed end, only at the desk (10-20)
+    R.robot.launch = forced(R.robot, 'launch', !!(st.whistle && vizNow() < st.whistle.until) && !playing && !R.git && how !== 'walking' && !R.path.length);
     if (vis === 'reading') R.robot.readKind = st.readKind || null;   // kept after it: the dictionary fades out as it came (10-20)
     // over its head: the errand under way says its own line (one robot never runs both, gitTick / shredTick); else, of
     // what it deleted (SHRED.labelMs after) and the box's line (GITBOX.showMs after), the newer one; else what it does
@@ -2707,6 +2709,7 @@ function update3D(model, nowSec, dt) {
       const st = robotState[R.def.id];
       setRobotTired(R.robot, forced(R.robot, 'tired', demoTired(R.def.id)));
       R.robot.heavy = forced(R.robot, 'heavy', demoHeavy(R.def.id, model.t));
+      R.robot.launch = forced(R.robot, 'launch', demoLaunch(R.def.id, model.t));   // a subagent called (10-20)
       if (st.walk) { R.robot.root.position.x = st.walk.x; R.robot.root.position.z = st.walk.z; R.robot.root.rotation.y = st.walk.ry; }
       if (st.state !== R.robot.state) setRobotState(R.robot, st.state);
       if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
