@@ -93,6 +93,14 @@ def _iac_provider(name: str, rel: str) -> str:
 
 
 HEAD_BYTES = 65_536
+_CFN_RESOURCES = re.compile(r'^Resources\s*:|"Resources"\s*:', re.M)
+_CFN_TYPE = re.compile(r"\"?Type\"?\s*:\s*[\"']?AWS::")
+
+
+def _is_cfn(text: str) -> bool:
+    """A CloudFormation / SAM template: its version line, or Resources with a Type of AWS:: (YAML or JSON, spaced or
+    compact). A note that only mentions "AWS::" somewhere is not one."""
+    return "AWSTemplateFormatVersion" in text or bool(_CFN_RESOURCES.search(text) and _CFN_TYPE.search(text))
 
 
 def _iac_by_head(p: Path) -> str | None:
@@ -105,7 +113,7 @@ def _iac_by_head(p: Path) -> str | None:
             head = f.read(HEAD_BYTES).decode("utf-8", errors="replace")
     except OSError:
         return None
-    if "AWSTemplateFormatVersion" in head or re.search(r"Type:\s*['\"]?AWS::", head) or '"Type": "AWS::' in head:
+    if _is_cfn(head):
         return "aws"
     if re.search(r"^apiVersion:", head, re.M) and re.search(r"^kind:", head, re.M) or ('"apiVersion"' in head and '"kind"' in head):
         return "kubernetes"
@@ -300,8 +308,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                 _node(found, T.compose_address(rel, svc), "docker", (T.compose_category(image), "compose.service"), rel,
                       "compose.service")
         elif name.endswith((".yaml", ".yml", ".json")):
-            if "/cdk.out/" in f"/{rel}" and name.endswith(".template.json") or "AWSTemplateFormatVersion" in text \
-                    or "AWS::" in text:
+            if "/cdk.out/" in f"/{rel}" and name.endswith(".template.json") or _is_cfn(text):
                 _cfn(p, rel, text, y, found, not_read, unmapped, part)
             elif (re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M)) or \
                     (name.endswith(".json") and '"apiVersion"' in text and '"kind"' in text):
@@ -463,7 +470,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
     for f in found:
         by_provider.setdefault(f["provider"], []).append(f)
     declared_providers = {n["providerResolved"] or "?" for n in nodes}
-    for provider in sorted(declared_providers - set(by_provider) - {"?"}):
+    for provider in sorted(declared_providers - set(by_provider) - {"?"} - unread):   # unread: its files are there
         unverified.setdefault(provider, []).append("no IaC found for this provider in the project: its nodes are not compared")
     for n in nodes:
         provider = n["providerResolved"] or "?"

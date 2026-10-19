@@ -378,3 +378,81 @@ def test_every_field_of_the_report_is_masked(tmp_path):
                     [{"id": "q", "category": "storage.object", "provider": "aws", "iac": ["aws_sqs_queue.q"]}])
     item = _by_target(rep)["aws/q"]
     assert item.status == "mismatch" and "10.0.0.5" not in json.dumps(rep.to_dict())
+
+
+
+# ---------------------------------------------------------------- dd's third verification (10-20)
+
+@pytest.mark.parametrize("rel, text, provider, node", [
+    ("k8s/big.yaml", "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n", "kubernetes",
+     {"id": "web", "category": "compute.container", "provider": "kubernetes", "iac": ["Deployment/web"]}),            # O09
+    ("k8s/big.yml", "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n", "kubernetes",
+     {"id": "web", "category": "compute.container", "provider": "kubernetes", "iac": ["Deployment/web"]}),            # O26
+    ("infra/stack.json", json.dumps({"terraform": {}, "resource": {"aws_s3_bucket": {"b": {}}}}), "*",
+     {"id": "b", "category": "storage.object", "provider": "aws", "iac": ["aws_s3_bucket.b"]}),                      # O10
+    ("infra/stack.yaml", "Resources:\n  Q:\n    Type: AWS::SQS::Queue\n", "aws",
+     {"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]}),                                              # O24
+    ("infra/stack.json", '{"Resources":{"Q":{"Type":"AWS::SQS::Queue"}}}', "aws",
+     {"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]}),                                              # P4 (a)
+])
+def test_each_kind_of_big_file_is_known_by_its_head(tmp_path, monkeypatch, rel, text, provider, node):
+    monkeypatch.setattr(C, "MAX_BYTES", 2_000)
+    pad = ("\n#" if not rel.endswith(".json") else "") + "x" * 3_000
+    big = text + pad if not rel.endswith(".json") else text[:-1] + ', "pad": "' + "x" * 3_000 + '"}'
+    readable = {"kubernetes": ("k8s/a.yaml", "apiVersion: v1\nkind: Service\nmetadata:\n  name: lb\nspec:\n  type: LoadBalancer\n"),
+                "*": ("infra/main.tf", 'resource "aws_sqs_queue" "q" {}\n'),
+                "aws": ("infra/main.tf", 'resource "aws_sqs_queue" "q" {}\n')}[provider]
+    _r, rep = _mini(tmp_path, {rel: big, readable[0]: readable[1]}, [node])
+    t = _by_target(rep)
+    assert t[f"{node['provider']}/{node['id']}"].status == "skipped"
+    assert any(rel in w and "not read" in w for w in rep.target_extra["unverified"][provider])
+
+
+@pytest.mark.parametrize("files, node", [
+    ({"compose.yaml": "services:\n  app:\n    build: .\n", "compose.override.yaml": "services: [broken"},
+     {"id": "w", "category": "compute.container", "provider": "docker", "iac": ["compose.override.yaml#services.w"]}),  # O14
+    ({"wrangler.toml": 'name = "a"\n', "api/wrangler.toml": "name = [broken"},
+     {"id": "w", "category": "compute.function", "provider": "cloudflare", "iac": ["api/wrangler.toml"]}),             # O15
+    ({"k8s/a.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: a\n", "k8s/b.yaml": "apiVersion: v1\nkind: [broken"},
+     {"id": "w", "category": "compute.container", "provider": "kubernetes", "iac": ["Deployment/b"]}),                 # O16
+])
+def test_a_broken_file_of_any_kind_never_gates(tmp_path, files, node):
+    _r, rep = _mini(tmp_path, files, [node])
+    assert _by_target(rep)[f"{node['provider']}/{node['id']}"].status == "skipped"
+
+
+def test_an_unread_terraform_file_hides_a_module_path_address_too(tmp_path, monkeypatch):
+    """O17: module.x.<type>.<name> is a Terraform address."""
+    monkeypatch.setattr(C, "MAX_BYTES", 2_000)
+    _r, rep = _mini(tmp_path, {"infra/big.tf": 'resource "aws_s3_bucket" "b" {}\n#' + "x" * 3_000 + "\n",
+                               "infra/small.tf": 'resource "aws_sqs_queue" "q" {}\n'},
+                    [{"id": "b", "category": "storage.object", "provider": "aws", "iac": ["module.x.aws_s3_bucket.b"]},
+                     {"id": "q", "category": "queue", "provider": "aws", "iac": ["aws_sqs_queue.q"]}])
+    assert _by_target(rep)["aws/b"].status == "skipped"
+
+
+def test_a_module_inside_the_project_is_not_said_to_come_from_outside(tmp_path):
+    """O12: the .tf.json module branch tells ./ from a registry source."""
+    tfj = json.dumps({"module": {"net": {"source": "./modules/net"}, "ext": {"source": "hashicorp/consul/aws"}},
+                      "resource": {"aws_s3_bucket": {"b": {}}}})
+    _r, rep = _mini(tmp_path, {"cdk.tf.json": tfj},
+                    [{"id": "b", "category": "storage.object", "provider": "aws", "iac": ["aws_s3_bucket.b"]}])
+    star = rep.target_extra["unverified"].get("*", [])
+    assert any('module "ext"' in w for w in star) and not any('module "net"' in w for w in star)
+
+
+def test_a_note_that_mentions_aws_types_is_not_a_template(tmp_path):
+    """P4 (b): a broken notes file with "AWS::" in prose made every aws node "not read"."""
+    _r, rep = _mini(tmp_path, {"docs-notes/notes.yaml": "body: we use AWS::SQS::Queue and: [broken",
+                               "infra/main.tf": 'resource "aws_sqs_queue" "q" {}\n'},
+                    [{"id": "gone", "category": "queue", "provider": "aws", "iac": ["aws_sqs_queue.gone"]},
+                     {"id": "q", "category": "queue", "provider": "aws", "iac": ["aws_sqs_queue.q"]}])
+    assert _by_target(rep)["aws/gone"].status == "missing_in_impl"
+
+
+def test_a_provider_whose_files_were_not_read_is_not_said_to_have_none(tmp_path):
+    """P4 (c): "not read" and "no IaC found" side by side for the same provider."""
+    _r, rep = _mini(tmp_path, {"k8s/b.yaml": "apiVersion: v1\nkind: [broken"},
+                    [{"id": "w", "category": "compute.container", "provider": "kubernetes", "iac": ["Deployment/b"]}])
+    un = rep.target_extra["unverified"]["kubernetes"]
+    assert any("not parsed" in w for w in un) and not any("no IaC found" in w for w in un)
