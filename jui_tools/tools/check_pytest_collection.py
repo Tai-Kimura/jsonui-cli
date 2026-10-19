@@ -144,6 +144,14 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # Added in 2.3.1 after its first candidate went red on this skip with the
     # copy compared nowhere in CI.
     "jsonui-test-runner specs/vectors not found",
+    # THE THIRD SHAPE: A TOOL THAT LIVES ONLY ON THE REQUESTER'S MACHINE.
+    # test_viz_clock_out's lock arm runs session-recovery's own common.sh
+    # (~/.claude/session-recovery, the requester's tool, in no repository) to
+    # prove jui viz's clock-out takes the same lock as its hooks. CI has no copy
+    # and must not vendor one (it is not ours to ship). Allowed only because
+    # the release's own full suite runs on that machine, where the arm executes
+    # (2.3.4: run there, passed) — the same place the clock-out is measured.
+    "session-recovery's common.sh (or jq) is not on this machine",
 )
 
 

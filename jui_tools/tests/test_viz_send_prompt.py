@@ -551,13 +551,13 @@ def test_a_channel_record_of_the_receivers_transcript_is_a_channel_item():
 # Real command lines read on this machine (10-19 09:2x, ps / sysctl, read only; nothing sent to those sessions),
 # anonymised: the home folder is /home/user, session ids are zeros, the desktop app's tool list is cut short.
 REAL_TERMINAL = ["claude"]                                   # pids 37357, 37799, 48134 (entrypoint cli), started as typed
-REAL_VSCODE = ["/home/user/.vscode/extensions/anthropic.claude-code-2.1.301-darwin-arm64/resources/native-binary/claude",
+REAL_VSCODE = ["/opt/u/.vscode/extensions/anthropic.claude-code-2.1.301-darwin-arm64/resources/native-binary/claude",
                "--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--max-thinking-tokens=31999",
                "--permission-prompt-tool=stdio", "--resume=00000000-0000-0000-0000-000000000000",
                "--setting-sources=user,project,local", "--permission-mode=auto", "--include-partial-messages",
-               "--add-dir=/home/user/resource/a", "--debug", "--debug-to-stderr", "--enable-auth-status", "--no-chrome",
+               "--add-dir=/opt/u/resource/a", "--debug", "--debug-to-stderr", "--enable-auth-status", "--no-chrome",
                "--replay-user-messages"]                       # pids 35927, 36312 (entrypoint claude-vscode)
-REAL_DESKTOP = ["/home/user/Library/Application Support/Claude/claude-code/2.1.299/4fa9694b7975/claude.app/Contents/MacOS/claude",
+REAL_DESKTOP = ["/opt/u/Library/Application Support/Claude/claude-code/2.1.299/4fa9694b7975/claude.app/Contents/MacOS/claude",
                 "--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--model=m",
                 "--permission-prompt-tool=stdio", "--allowedTools=mcp__computer-use,mcp__ccd_session__spawn_task"]   # pid 92944
 

@@ -585,8 +585,8 @@ def test_the_world_ends_a_clocked_out_session_and_logs_each_attempt():
 
 
 def test_which_command_lines_are_a_claude_cli():
-    yes = ["claude", "claude --resume x", "/home/a/.local/bin/claude --channels plugin:jui-viz@jsonui",
-           "/home/a/.local/share/claude/versions/2.1.303 --resume x"]
+    yes = ["claude", "claude --resume x", "/opt/a/.local/bin/claude --channels plugin:jui-viz@jsonui",
+           "/opt/a/.local/share/claude/versions/2.1.303 --resume x"]
     no = ["", "python3 -m claude", "/usr/bin/claude-helper", "sleep 600", "/x/notclaude", "/x/claude.sh", "/x/claude/versions/latest",
           "/opt/python /x/bin/jui viz serve --port 7788"]
     assert [c for c in yes if not clockout.is_claude_cli(c)] == []
