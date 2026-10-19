@@ -196,7 +196,7 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
         raise Refused("bad_config", f"{CONFIG_NAME} is larger than {LIMITS['config_bytes']} bytes",
                       f"{CONFIG_NAME} が大きすぎます（{LIMITS['config_bytes'] // 1_000_000} MB まで）")
     try:
-        cfg = json.loads(raw.decode("utf-8"))
+        cfg = json.loads(raw.decode("utf-8-sig"))        # a BOM some editors write is not an error
     except json.JSONDecodeError as exc:
         raise Refused("bad_config", f"{CONFIG_NAME} is not JSON (line {exc.lineno})",
                       f"{CONFIG_NAME}: {exc.lineno} 行目の JSON が壊れています") from None
@@ -206,7 +206,8 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
     if infra is None:
         return DEFAULT_DIR, {}, []
     if not isinstance(infra, dict):
-        raise Refused("bad_config", f'{CONFIG_NAME}: "infra" must be an object')
+        raise Refused("bad_config", f'{CONFIG_NAME}: "infra" must be an object',
+                      f'{CONFIG_NAME}: "infra" はオブジェクト（{{"dir": ..., "icons": {{...}}}}）で書いてください')
     folder = infra.get("dir", DEFAULT_DIR)
     if not _rel_ok(folder):
         raise Refused("bad_config", f'{CONFIG_NAME}: infra.dir must be a relative path inside the room (no "..", '
@@ -225,6 +226,8 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
         if not ICON_KEY.match(key):
             problems.append(M._problem(CONFIG_NAME, where, "config.icon",
                                        "the key must be service:<provider>/<service>, provider:<provider> or category:<category>"))
+        elif M.secret_findings(key):            # one of the forms, holding a secret's shape: never taken, never shown
+            problems.append(M._problem(CONFIG_NAME, where, "config.icon", "the key holds the shape of a secret"))
         elif isinstance(path, str) and "://" in path:
             problems.append(M._problem(CONFIG_NAME, where, "config.icon",
                                        "a URL is not read (only an image inside the room: jui viz loads nothing from outside)"))
@@ -278,7 +281,11 @@ def read(root: Path, is_room: bool = True) -> dict:
         for name, what in skipped:
             problems.append(M._problem(name, "/", "read.not_regular", f"{what}, not a regular file: not read", "warning"))
         if not listed:
-            raise Refused("no_infra", f"no model files in {folder} (*.json)")
+            refused = Refused("no_infra", f"no model files in {folder} (*.json)",
+                              f"{folder} に読める infra のファイル（*.json）がありません（普通のファイルでない物は読みません）"
+                              if skipped else None)
+            refused.problems = problems                 # the warnings say why: they go with the refusal
+            raise refused
         if len(listed) > LIMITS["files"]:
             raise Refused("too_many_files", f"{len(listed)} files in {folder}; at most {LIMITS['files']} are read")
         if sum(size for _n, size in listed) > LIMITS["total_bytes"]:
@@ -304,13 +311,18 @@ def read(root: Path, is_room: bool = True) -> dict:
                     "message": "no model file could be used", "short": first["short"] if first else folder,
                     "problems": problems}
         for key, path in list(icons.items()):
-            if read_icon(root, path) is None:
+            if read_icon(root, path) is None:      # only keys of the three forms with no secret's shape got here
                 problems.append(M._problem(CONFIG_NAME, f"/infra/icons/{key}", "read.icon",
                                            "the image is not there, not a regular file, or too big"))
                 del icons[key]
     except Refused as r:
         folder = locals().get("folder") or DEFAULT_DIR
-        return {"ok": False, "reason": r.reason, "message": r.message, "short": r.short or _short_refused(r.reason, folder)}
+        out = {"ok": False, "reason": r.reason, "message": r.message, "short": r.short or _short_refused(r.reason, folder)}
+        if getattr(r, "problems", None):
+            for p in r.problems:
+                p["short"] = short(p, folder)
+            out["problems"] = r.problems
+        return out
     except OSError as exc:
         folder = locals().get("folder") or DEFAULT_DIR
         return {"ok": False, "reason": "unreadable", "message": f"reading failed ({exc.strerror or type(exc).__name__})",

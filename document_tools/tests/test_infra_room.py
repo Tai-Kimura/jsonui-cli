@@ -259,3 +259,38 @@ def test_a_folder_or_fifo_named_json_is_said_not_read(tmp_path):
     assert sorted((p["file"], p["code"], p["severity"]) for p in got["problems"]) == [
         ("dir.json", "read.not_regular", "warning"), ("pipe.json", "read.not_regular", "warning")]
     assert all("普通のファイルでない" in p["short"] for p in got["problems"])
+
+
+
+# ---------------------------------------------------------------- dd's re-verification (10-20)
+
+@pytest.mark.parametrize("key", ["service:aws/10.0.0.1", "service:aws/123456789012", "provider:10.0.0.1"])
+def test_an_icon_key_of_the_forms_holding_a_secret_is_refused_and_masked(tmp_path, key):
+    """N1 and V13: a key of one of the three forms with a secret's shape was taken and shown as it was."""
+    root = _room(tmp_path, config={"infra": {"icons": {key: "x.svg"}}})
+    (root / "x.svg").write_text("<svg/>")
+    got = R.read(root)
+    text = json.dumps(got, ensure_ascii=False)
+    assert got["icons"] == {} and key.split(":", 1)[1].split("/")[-1] not in text
+    assert [(p["code"], p["path"]) for p in got["problems"]] == [("config.icon", "/infra/icons/<key>")]
+
+
+def test_a_config_that_is_not_utf8_or_has_infra_as_a_list_says_so(tmp_path):
+    """V16, and {"infra": []}: the short line says what is wrong, not "dir is a relative path"."""
+    a = _room(tmp_path / "a")
+    (a / "jui.config.json").write_bytes(b'{"infra": "\xff"}')
+    assert R.read(a)["short"] == "jui.config.json が JSON として読めません"
+    b = _room(tmp_path / "b", config={"infra": []})
+    assert "オブジェクト" in R.read(b)["short"]
+    c = _room(tmp_path / "c")
+    (c / "jui.config.json").write_bytes("\ufeff".encode() + json.dumps({"infra": {"dir": "docs/infra"}}).encode())
+    assert R.read(c)["ok"]                                                  # N5: a BOM
+
+
+def test_a_folder_with_only_non_regular_json_keeps_its_warnings(tmp_path):
+    root = tmp_path / "room"
+    (root / "docs" / "infra").mkdir(parents=True)
+    os.symlink("/etc/hosts", root / "docs" / "infra" / "b.json")
+    got = R.read(root)
+    assert got["reason"] == "no_infra" and [p["code"] for p in got["problems"]] == ["read.not_regular"]
+    assert "普通のファイルでない" in got["short"]
