@@ -652,7 +652,6 @@ function histWidePaint() {
   rbEl.classList.toggle('rb-wide', HIST.wide);
   rbEl.classList.toggle('rb-wide-full', HIST.wide && !m);
   rbEl.style.setProperty('--wide-left', `${m}px`);
-  rbEl.style.setProperty('--wide-top', `${HIST.wide && m ? Math.round(sceneEl.getBoundingClientRect().top) : 0}px`);
   const b = rbEl.querySelector('[data-rb-wide]');
   if (b) {
     b.hidden = HIST.tab !== 'history';

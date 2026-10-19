@@ -1034,8 +1034,9 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .sh-body p { margin: 0 0 10px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .sh-body .sh-legend { gap: 4px 14px; font-size: 12.5px; color: var(--ink); }
 /* The wide 応答の履歴 (2.3.4): the card from the left margin (one robot's width, --wide-left) to the right edge, over the
-   side panel; the whole screen at 900 px or narrower. Pictures in the history: thumbnails and a large view. */
-.rb.rb-wide { position: fixed; top: calc(var(--wide-top, 0px) + 14px); left: var(--wide-left, 0px); right: 14px; bottom: 14px; z-index: 30; width: auto; max-height: none; }
+   side panel and over the site's header too (requester 10-19, issue #35: the header's height goes to the history); the
+   whole screen at 900 px or narrower. Pictures in the history: thumbnails and a large view. */
+.rb.rb-wide { position: fixed; top: 14px; left: var(--wide-left, 0px); right: 14px; bottom: 14px; z-index: 30; width: auto; max-height: none; }
 .rb.rb-wide-full { inset: 0; border-radius: 0; }
 .rb-wide-btn[hidden] { display: none; }
 /* the tab row holds the tabs (the tablist) and, on its right, 広げる: the card's head keeps its width for the title.

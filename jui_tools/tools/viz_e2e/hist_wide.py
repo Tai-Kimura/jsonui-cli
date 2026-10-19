@@ -5,7 +5,7 @@
 
 The real `jui viz serve` in a throwaway HOME with two sessions (two rooms); session A's transcript has a wide table, a
 long code line and two pictures (hist_images.py reads those). Arms: 広げる — the card runs from the left margin to the
-right edge over the side panel, and the camera flies so the robot's on-screen box (its visible meshes) is inside the
+right edge over the side panel and the site's header (issue #35), and the camera flies so the robot's on-screen box (its visible meshes) is inside the
 margin, waited on the camera tween's end, never on time; ← → bring the next robot into the margin too; the table
 scrolls sideways; the prompt box is there; the pane follows a new answer; Esc goes back to the card's width and to the
 camera's place before; the choice is kept in localStorage (a reload opens it wide) and the page works with
@@ -127,6 +127,8 @@ CARD = """() => { const rb = document.getElementById('rb'), r = rb.getBoundingCl
     tableScroll: wrap ? wrap.scrollWidth - wrap.clientWidth : null,
     atEnd: pane ? pane.scrollHeight - pane.scrollTop - pane.clientHeight < 30 : null,
     title: (document.getElementById('rb-title') || {}).textContent || '', vw: innerWidth, vh: innerHeight,
+    headerBottom: Math.round(document.querySelector('.topbar').getBoundingClientRect().bottom),
+    onTop: rb.contains(document.elementFromPoint(r.left + 40, r.top + 8)),
     titleLines: (() => { const t = document.getElementById('rb-title'); if (!t) return 0; const cs = getComputedStyle(t); return Math.round(t.getBoundingClientRect().height / (parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.3)); })() }; }"""
 TO_END = """() => { const pane = document.querySelector('[data-rb-hist]'); pane.scrollTop = pane.scrollHeight; pane.dispatchEvent(new Event('scroll')); }"""
 
@@ -242,6 +244,8 @@ async def run_hist_wide(pw, out, failures):
         check(failures, 250 <= margin <= 460 and c["right"] >= c["vw"] - 20, f"the card runs from a margin of one robot to the right edge: {c}")
         check(failures, box and box["x0"] >= 0 and box["x1"] <= margin and box["y0"] >= c["top"] - 80 and box["y1"] <= c["bottom"],
               f"the robot is inside the left margin: {box} margin {margin}")
+        check(failures, c["top"] < c["headerBottom"] and c["onTop"] and res["narrow"]["top"] >= res["narrow"]["headerBottom"],
+              f"wide, the card goes over the site's header (issue #35); at the card's width it stays below: wide {c}, narrow {res['narrow']}")
         check(failures, c["compose"], f"the prompt box is in the wide card: {c}")
         check(failures, (c["tableScroll"] or 0) > 0, f"the wide table scrolls sideways: {c['tableScroll']}")
         check(failures, c["btn"] and c["btn"]["pressed"] == "true" and c["btn"]["text"] == "元の幅に戻す", f"the button says it is pressed: {c['btn']}")
