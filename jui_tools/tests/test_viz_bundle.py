@@ -115,13 +115,27 @@ def test_nothing_is_fetched_from_outside():
 def test_the_vendored_files_are_the_ones_vendor_md_records():
     md = web_text("vendor", "VENDOR.md")
     rows = re.findall(r"^\| `([^`]+)` \| `[^`]+` \| `([0-9a-f]{64})` \|$", md, re.M)
-    assert len(rows) == 7
+    assert len(rows) == 9
     for rel, digest in rows:
         parts = rel.split("/")
         f = WEB.joinpath(*(parts[1:] if parts[0] == ".." else ["vendor", *parts]))
         assert hashlib.sha256(f.read_bytes()).hexdigest() == digest, rel
     assert WEB.joinpath("vendor", "three-0.160.0", "LICENSE").is_file()
+    assert WEB.joinpath("vendor", "mermaid-11.17.2", "LICENSE").is_file()
     assert WEB.joinpath("fonts", "OFL.txt").is_file()
+
+
+def test_mermaid_is_read_from_the_vendored_copy_only_when_drawn_and_strict():
+    """2.3.5: Mermaid ships here (3.6 MB), is read by a script element the first time a diagram is drawn (never by
+    index.html), from the vendored copy (export-demo leaves it out), and always runs with securityLevel
+    'strict'. The e2e (`--only mermaid`) checks it in a browser; this pins the source."""
+    html = web_text("index.html")
+    assert "mermaid" not in html
+    core = web_text("js", "20-core.js")
+    assert "src: 'vendor/mermaid-11.17.2/mermaid.min.js'" in core
+    assert WEB.joinpath("vendor", "mermaid-11.17.2", "mermaid.min.js").is_file()
+    inits = re.findall(r"\.initialize\(\{([^}]*)", "\n".join(bundle.build(m, e2e=True) for m in bundle.MODES))
+    assert inits and all("securityLevel: 'strict'" in body for body in inits), inits
 
 
 # ---- nothing reaches the HTML unescaped (plan 07 §6) -----------------------------------------------------------
@@ -173,6 +187,8 @@ SAFE_EXCEPTIONS = {
     ("50-panel.js", "cellsHTML"): (2, "tr's third parameter: every call passes a template literal (checked as HTML)"),
     ("50-panel.js", "bHTML"): (2, "the second element of the overview rows, each built with esc() one line above"),
     ("50-panel.js", "whoHTML"): (2, "setHead's last parameter: every call passes pill(…) or ''"),
+    ("20-core.js", "svg"): (3, "renderMermaid: Mermaid's own SVG, its labels sanitized by securityLevel 'strict' (pinned "
+                               "by test_mermaid_is_read_from_the_vendored_copy_only_when_drawn_and_strict and the e2e)"),
 }
 _ID = r"[A-Za-z_$][\w$]*"
 _HTML_NAME = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*HTML)\s*(?:\+?=(?!=)|\.push\()")

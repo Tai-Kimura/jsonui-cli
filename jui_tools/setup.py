@@ -23,6 +23,7 @@ setup(
             "web/vendor/*.md", "web/vendor/three-0.160.0/*",
             "web/vendor/three-0.160.0/addons/controls/*.js",
             "web/vendor/three-0.160.0/addons/geometries/*.js",
+            "web/vendor/mermaid-11.17.2/*",
         ],
     },
     python_requires=">=3.11",

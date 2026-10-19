@@ -27,6 +27,37 @@ const isTired = (since, now) => Number.isFinite(since) && since > 0 && now - sin
 const isDark = () => { const th = document.documentElement.dataset.theme; return th === 'dark' || (th !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches); };
 const readPref = (key, fallback) => { try { return localStorage.getItem(`agent-view:${key}`) || fallback; } catch (err) { return fallback; } };
 const writePref = (key, value) => { try { localStorage.setItem(`agent-view:${key}`, value); } catch (err) { /* storage blocked: the choice lasts until reload */ } };
+/* Mermaid (2.3.5): vendored (vendor/VENDOR.md), read only when a diagram is first drawn, never at page load (3.6 MB).
+   export-demo leaves it out: the demo's hand-written sheets draw no diagram. securityLevel 'strict': the
+   text is a spec's, so labels are sanitized and no click / script in a diagram runs. htmlLabels off: a label is SVG
+   text, never HTML (with HTML labels, strict still lets an <img src> through and the page fetched it — measured
+   10-19). The theme follows the page's. */
+const MERMAID = { src: 'vendor/mermaid-11.17.2/mermaid.min.js', loading: null, theme: '', n: 0 };
+function loadMermaid() {
+  if (!MERMAID.loading) {
+    MERMAID.loading = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = MERMAID.src;
+      el.onload = () => (window.mermaid ? resolve(window.mermaid) : reject(new Error('mermaid did not load')));
+      el.onerror = () => { MERMAID.loading = null; reject(new Error('mermaid did not load')); };
+      document.head.appendChild(el);
+    });
+  }
+  return MERMAID.loading;
+}
+async function renderMermaid(el, text) {
+  const mm = await loadMermaid();
+  const theme = isDark() ? 'dark' : 'default';
+  if (MERMAID.theme !== theme) {
+    mm.initialize({ startOnLoad: false, securityLevel: 'strict', theme, fontFamily: 'var(--font-body)', htmlLabels: false, flowchart: { htmlLabels: false }, er: { useMaxWidth: false } });
+    MERMAID.theme = theme;
+  }
+  MERMAID.n += 1;
+  const { svg } = await mm.render(`mmd-${MERMAID.n}`, String(text));
+  el.innerHTML = svg;   // Mermaid's own SVG, its labels sanitized (securityLevel 'strict')
+  el.dataset.theme = theme;
+  return el.querySelector('svg');
+}
 const ROLE_JA = { main: 'メインセッション', define: 'spec を書く担当', ground: '初期設定の担当', implement: '実装の担当', navigation: '画面遷移の担当', test: 'テストの担当', debug: '調査の担当', other: 'その他' };
 const SECTIONS = ['概要', '構造', '状態', 'データ', '操作', '遷移', '分岐'];
 const sumImpl = (arr) => arr.slice(1, 6).reduce((a, b) => a + b, 0);

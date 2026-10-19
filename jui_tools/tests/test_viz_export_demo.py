@@ -20,6 +20,8 @@ def test_the_export_is_a_relative_static_demo_without_live_parts(tmp_path):
     assert {"index.html", "app.js", "app.css"} <= set(names)
     assert any(n.startswith("vendor/three-0.160.0/") and n.endswith("three.module.min.js") for n in names)
     assert any(n.startswith("fonts/") and n.endswith(".woff2") for n in names)
+    # Mermaid (2.3.5) stays out: the demo's hand-written sheets draw no diagram (export_demo.NOT_EXPORTED)
+    assert not any("mermaid" in n for n in names)
     assert result["files"] == len(names) and result["bytes"] < 3_000_000
     for name in ("index.html", "app.js", "app.css"):
         text = (out / name).read_text()

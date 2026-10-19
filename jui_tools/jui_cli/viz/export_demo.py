@@ -27,11 +27,16 @@ def _web():
     return resources.files("jui_cli.viz") / "web"
 
 
+#: Left out of the export: Mermaid (3.6 MB) draws the live view's diagrams from specs; the demo's sheets are written by
+#: hand, without the spec structure its diagrams are built from, and show the boxes instead (2.3.5).
+NOT_EXPORTED = ("mermaid-",)
+
+
 def _copy_tree(src, dst: Path) -> int:
     count = 0
     dst.mkdir(parents=True, exist_ok=True)
     for item in src.iterdir():
-        if item.name.startswith("."):
+        if item.name.startswith(".") or item.name.startswith(NOT_EXPORTED):
             continue
         if item.is_dir():
             count += _copy_tree(item, dst / item.name)

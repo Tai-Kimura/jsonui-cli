@@ -3,6 +3,21 @@
 // Demo: setSim(seconds) jumps the script. Live: setSim(factor) sets the replay speed instead (25-net.js).
 window.__dbg = {
   camera, sbTile, sbPoint, SB, KB, THREE, robots,
+  // Mermaid (2.3.5): draw a text into a box of its own and say what came out — whether it was read yet, the config it
+  // runs with, the svg's nodes, and anything that could run (a script, an on* attribute, a javascript: link)
+  mermaid: async (text) => {
+    const before = !!window.mermaid;
+    let box = document.getElementById('e2e-mermaid');
+    if (!box) { box = document.createElement('div'); box.id = 'e2e-mermaid'; document.body.appendChild(box); }
+    let svg = null, error = null;
+    try { svg = await renderMermaid(box, text); } catch (err) { error = String(err && err.message || err); }
+    const all = [...box.querySelectorAll('*')];
+    return { loadedBefore: before, error, svg: !!svg, nodes: box.querySelectorAll('g.node').length, text: box.textContent,
+      scripts: box.querySelectorAll('script').length, onAttrs: all.filter((e) => [...e.attributes].some((a) => /^on/i.test(a.name))).length,
+      jsLinks: all.filter((e) => /^\s*javascript:/i.test(e.getAttribute('href') || e.getAttribute('xlink:href') || '')).length,
+      securityLevel: window.mermaid ? window.mermaid.mermaidAPI.getConfig().securityLevel : null, theme: box.dataset.theme || null,
+      src: [...document.scripts].map((x) => x.getAttribute('src')).filter((x) => x && x.includes('mermaid')) };
+  },
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
   // the outside (10-18): the arms force a season ('spring' …) or a weather ({ kind, isDay }); null gives it back
   outside: (opts) => {

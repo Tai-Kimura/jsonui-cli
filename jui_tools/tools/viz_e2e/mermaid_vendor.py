@@ -1,0 +1,118 @@
+"""Mermaid vendored (2.3.5): the view draws diagrams with its own copy, strict, and asks nothing outside.
+
+The real `jui viz serve` in a throwaway HOME on a free port. Opening the page reads no Mermaid (3.6 MB, only when a
+diagram is first drawn). Drawing one reads /vendor/mermaid-11.17.2/mermaid.min.js from the server, once, and nothing
+from anywhere else; it runs with securityLevel 'strict'. A diagram whose labels carry a <script>, an <img onerror>
+and a javascript: link, and a click directive, comes out with none of them able to run: no script element, no on*
+attribute, no javascript: link, nothing set on window, the <img> never loaded (labels are SVG text: htmlLabels off). The theme follows the page (default / dark). No console error.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+
+ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
+PLAIN = 'flowchart LR\n    V_login["ログイン<br/>(View)"]\n    VM_login["loginViewModel<br/>3 methods"]\n    V_login --> VM_login'
+HOSTILE = ("flowchart LR\n"
+           '    A["<script>window.__pwned = 1</script>a"]\n'
+           '    B["<img src=x onerror=\'window.__pwned = 2\'>b"]\n'
+           '    C["<a href=\'javascript:window.__pwned = 3\'>c</a>"]\n'
+           "    A --> B --> C\n"
+           '    click A call window.alert("x")\n'
+           '    click B "javascript:window.__pwned = 4"\n')
+
+
+def check(failures, cond, text):
+    if not cond:
+        failures.append(f"mermaid: {text}")
+
+
+async def run_mermaid(pw, out, failures):
+    from run import free_port
+    out = pathlib.Path(out) / "mermaid"
+    out.mkdir(parents=True, exist_ok=True)
+    home = out / "home"
+    (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
+    jt = pathlib.Path(__file__).resolve().parents[2]
+    port = free_port()
+    env = dict({k: v for k, v in os.environ.items() if k not in ISOLATE}, HOME=str(home), JUI_VIZ_E2E="1")
+    log = open(out / "serve.log", "w")
+    srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
+    url = f"http://127.0.0.1:{port}"
+    res: dict = {}
+    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+    t0 = time.monotonic()
+    try:
+        import urllib.request
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"{url}/health", timeout=1).read()
+                break
+            except OSError:
+                time.sleep(0.1)
+        watch = Watch(origin=url)
+        page = await new_page(browser, watch, "mermaid", **DESKTOP)
+        asked = []
+        page.on("request", lambda r: asked.append(r.url))
+        await page.emulate_media(color_scheme="light")
+        await page.goto(url + "/")
+        await ready(page)
+        await page.wait_for_timeout(1500)
+        res["atOpen"] = [u for u in asked if "mermaid" in u]
+        check(failures, not res["atOpen"], f"opening the page reads no Mermaid: {res['atOpen']}")
+
+        light = res["light"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
+        check(failures, light["svg"] and light["nodes"] == 2 and not light["error"] and "ログイン" in light["text"],
+              f"a diagram is drawn (2 nodes, the spec's text): {light}")
+        check(failures, light["securityLevel"] == "strict", f"securityLevel strict: {light['securityLevel']}")
+        check(failures, light["theme"] == "default", f"light page: the default theme: {light['theme']}")
+        await page.screenshot(path=str(out / "drawn-light.png"))
+
+        hostile = res["hostile"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", HOSTILE)
+        await page.wait_for_timeout(500)
+        pwned = await page.evaluate("() => window.__pwned === undefined ? null : window.__pwned")
+        check(failures, hostile["svg"] and hostile["scripts"] == 0 and hostile["onAttrs"] == 0 and hostile["jsLinks"] == 0 and pwned is None,
+              f"labels with a script, an onerror, a javascript: link and click directives run nothing: {hostile} pwned={pwned}")
+        boxes = await page.evaluate("() => [...document.querySelectorAll('#e2e-mermaid g.node')].map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })")
+        for x, y in boxes:
+            await page.mouse.click(x, y)
+        await page.wait_for_timeout(300)
+        pwned = await page.evaluate("() => window.__pwned === undefined ? null : window.__pwned")
+        check(failures, pwned is None, f"clicking the nodes runs nothing: {pwned}")
+
+        await page.emulate_media(color_scheme="dark")
+        dark = res["dark"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
+        check(failures, dark["svg"] and dark["theme"] == "dark", f"dark page: the dark theme: {dark}")
+        await page.screenshot(path=str(out / "drawn-dark.png"))
+
+        res["mermaidAsked"] = [u for u in asked if "mermaid" in u]
+        check(failures, res["mermaidAsked"] == [f"{url}/vendor/mermaid-11.17.2/mermaid.min.js"],
+              f"Mermaid read once, from the server's vendored copy: {res['mermaidAsked']}")
+        # The sanitizer (DOMPurify inside Mermaid) parses the hostile label in an inert document, and Chromium reports
+        # the onerror there against the page's CSP: one report, from mermaid.min.js, nothing run, nothing loaded. Any
+        # other console line is a failure.
+        sanitizer = [c for c in watch.console if "Executing inline event handler violates" in c]
+        rest = [c for c in watch.console if c not in sanitizer]
+        res["sanitizerReports"] = len(sanitizer)
+        check(failures, not any(u.rstrip("/").endswith("/x") for u in asked), f"the <img src=x> in a label is never loaded: {[u for u in asked if u.endswith('/x')]}")
+        check(failures, len(sanitizer) <= 1 and not rest and not watch.foreign,
+              f"no console error (but the sanitizer's one report), nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
+        await page.close()
+    except Exception as e:
+        failures.append(f"mermaid: {type(e).__name__}: {str(e).splitlines()[0]}")
+    finally:
+        await browser.close()
+        srv.terminate()  # our own child (started above)
+        try:
+            srv.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            srv.kill()
+        (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1))
+    print(f"  mermaid: {time.monotonic() - t0:.0f}s", flush=True)

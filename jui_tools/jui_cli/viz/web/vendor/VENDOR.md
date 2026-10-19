@@ -19,6 +19,26 @@ and the sha512 integrity match the registry's `dist` record).
 
 The import map in `index.html` points `three` and `three/addons/` here. The two addons import only `three`.
 
+## Mermaid 11.17.2 (MIT)
+
+Source: the npm tarball `https://registry.npmjs.org/mermaid/-/mermaid-11.17.2.tgz` (published 2026-08-25; fetched
+2026-10-19; sha256 `6ad2f42c3fc26bbf9e45cbb6d11898972573ea52b33a5f4ff51952899f950ffd`; sha1
+`e3caf3717582c0e44e5d04cff043e025caec7cba` and the sha512 integrity match the registry's `dist` record). 11.x, not the
+newer 12.x: the diagrams document_tools draws are written for 10 / 11.
+
+| File here | From the tarball | sha256 |
+|---|---|---|
+| `mermaid-11.17.2/mermaid.min.js` | `package/dist/mermaid.min.js` | `581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8` |
+| `mermaid-11.17.2/LICENSE` | `package/LICENSE` | `ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80` |
+
+One file (3,572,661 bytes; it sets `globalThis.mermaid`), read by `loadMermaid()` (js/20-core.js) the first time a
+diagram is drawn — never when the page opens. `jui viz export-demo` leaves it out (export_demo.NOT_EXPORTED): the
+demo's sheets are written by hand and draw no diagram. It
+calls no `eval` / `new Function` (the CSP has no 'unsafe-eval'); its `fetch` calls are for icon packs, which the view
+never registers, and the CSP's `connect-src 'self'` would stop them anyway. The view always initializes it with
+`securityLevel: 'strict'` (labels sanitized; no click handlers, no scripts in a diagram) and `htmlLabels: false` (a
+label is SVG text: with HTML labels, strict still keeps an `<img src>` and the page fetched it).
+
 ## JetBrains Mono 2.304 (SIL OFL 1.1)
 
 Source: the official release `https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip`
