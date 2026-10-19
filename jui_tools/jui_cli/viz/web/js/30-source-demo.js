@@ -708,6 +708,7 @@ const SOURCE = {
     showToast(`${p.who} の ${p.tool} を${behavior === 'deny' ? '拒否' : behavior === 'always' ? '許可し、ルールを追加' : '許可'}した（デモ。実際は Claude Code へ答えを返す）`);
   },
   history() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no transcripts
+  historyImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   setWeather() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo asks nobody about the weather
 };
 const robotRuns = () => [];   // the demo's one test run is shown by the card's own a2 row

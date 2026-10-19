@@ -175,7 +175,7 @@ async def run_history(pw, out, failures):
         check(failures, r["harness"].startswith("システムの注記") and not r["harnessOpen"], f"the harness's text is folded: {r['harness']!r}")
         check(failures, r["tool"].startswith("Bash一覧を見る") and r["io"][0].startswith("ls -la ") and r["io"][1].startswith("total 0"),
               f"a tool call: its description folded, IN and OUT inside: {r['tool']!r} {r['io']}")
-        check(failures, r["marks"] == ["考えた", "画像 1 枚"] and "THINK-SECRET" not in r["text"], f"thinking and images are marks: {r['marks']}")
+        check(failures, r["marks"] == ["考えた", "画像 1 枚（表示できない形式）"] and "THINK-SECRET" not in r["text"], f"thinking and a picture that is not one are marks: {r['marks']}")
         # what must not be there
         check(failures, r["handlers"] == [] and r["pwned"] == 0, f"no handler from the transcript: {r['handlers']} pwned {r['pwned']}")
         check(failures, not ({"img", "script", "iframe"} & set(r["tags"])) and r["fromText"] == [], f"no element from the transcript: {r['tags']} {r['fromText']}")

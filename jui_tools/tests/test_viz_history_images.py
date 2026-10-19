@@ -98,7 +98,7 @@ def test_a_picture_is_named_by_its_place_and_its_base64_is_never_in_the_items(tm
     starts = _line_starts(_path(tmp_path))
     imgs = [i for i in got["items"] if i["kind"] == "image"]
     assert [i.get("img") for i in imgs] == [{"off": starts[1], "n": 0, "type": "image/png"}, {"off": starts[1], "n": 1, "type": "image/gif"},
-                                            None, {"off": starts[4], "n": 1, "type": "image/png"}]   # svg: a mark, no picture to ask for
+                                            None, None]   # svg, and a gif that says png: marks, nothing to ask for
     tool = next(i for i in got["items"] if i["kind"] == "tool")
     assert tool["imgs"] == [{"off": starts[3], "n": 0, "type": "image/png"}]
     dumped = json.dumps(got, ensure_ascii=False)

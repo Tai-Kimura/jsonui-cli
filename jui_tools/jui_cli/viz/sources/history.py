@@ -171,7 +171,18 @@ def _image_ref(block: dict, off, n: int) -> dict | None:
     src = block.get("source")
     if off is None or not isinstance(src, dict) or src.get("type") != "base64" or src.get("media_type") not in IMAGE_TYPES:
         return None
+    if not isinstance(src.get("data"), str) or not _looks_like(src["media_type"], src["data"][:24]):
+        return None                                      # its bytes are not what it says: nothing to ask for
     return {"off": off, "n": n, "type": src["media_type"]}
+
+
+def _looks_like(media: str, head64: str) -> bool:
+    """Whether the first bytes of a base64 picture start as its media type does (image_at checks the whole)."""
+    try:
+        head = base64.b64decode(head64[: len(head64) // 4 * 4], validate=True)
+    except (binascii.Error, ValueError):
+        return False
+    return head.startswith(IMAGE_TYPES[media]) and (media != "image/webp" or head[8:12] == b"WEBP")
 
 
 def _result_text(content) -> str:

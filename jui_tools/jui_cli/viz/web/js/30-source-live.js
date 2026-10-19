@@ -82,6 +82,19 @@ const SOURCE = {
   },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
+  /* One picture of that history (2.3.4): the robot and the picture's place, under the same checks as a prompt
+     (server.prompt_checks). The bytes come back as a Blob; nothing is kept but what the page holds. */
+  async historyImage(label, ref) {
+    try {
+      const res = await fetch('/api/history-image', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ agentId: (DEF[label] && DEF[label].realId) || label, off: ref.off, n: ref.n }),
+      });
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      return { ok: true, blob: await res.blob() };
+    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
   /* The near weather's switch (10-18): { on, lat, lon } with the position already rounded (40-scene.js). */
   setWeather(body) { return netRequest('weather.set', body); },
   /* question.answer (10-18): picks are question text -> { labels, other }; the card says "sent" when the slice does. */

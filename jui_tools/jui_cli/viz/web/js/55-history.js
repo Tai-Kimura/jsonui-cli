@@ -13,7 +13,7 @@ const HIST_POLL_MS = 3000;
    whole card (keyed) whenever its key changes, and the new pane starts at scrollTop 0 (measured 10-19: every new turn of
    a working session sent the reader to the top). newer: answers came while the reader was above (the 新しい応答 marker). */
 const HIST = { tab: 'now', id: null, data: null, error: '', timer: 0, busy: false, node: null, sig: '',
-  atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null, wide: false };
+  atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null, wide: false, imgs: new Map(), box: null };
 
 function hNode(tag, cls, text) {
   const n = document.createElement(tag);
@@ -160,6 +160,7 @@ function histItem(item) {
     const head = hNode('p', 'h-who', '依頼者'); head.appendChild(at); n.appendChild(head);
     n.appendChild(hNode('p', 'h-plain', item.text));
     const cut = histCutNote(item); if (cut) n.appendChild(cut);
+    for (const path of Array.isArray(item.gone) ? item.gone : []) n.appendChild(hNode('p', 'h-gone', `元の画像ファイルは消えている: ${path}`));
     return n;
   }
   if (item.kind === 'assistant') {
@@ -195,11 +196,17 @@ function histItem(item) {
     if (item.out !== undefined) {
       io.appendChild(hNode('span', 'h-io-k', 'OUT'));
       io.appendChild(hNode('pre', `h-code${item.error ? ' h-code-err' : ''}`, `${item.out}${item.outCut ? '\n…' : ''}`));
+      if (Array.isArray(item.imgs) && item.imgs.length) { const row = hNode('div', 'h-imgs'); for (const ref of item.imgs) row.appendChild(histThumb(ref)); io.appendChild(row); }
     }
     return histFolded('h-item h-tool', title, [io], false);
   }
   if (item.kind === 'thought') return hNode('p', 'h-item h-mark', '考えた');
-  if (item.kind === 'image') return hNode('p', 'h-item h-mark', '画像 1 枚');
+  if (item.kind === 'image') {
+    if (!item.img) return hNode('p', 'h-item h-mark', '画像 1 枚（表示できない形式）');
+    const row = hNode('div', 'h-item h-imgs');
+    row.appendChild(histThumb(item.img));
+    return row;
+  }
   return null;
 }
 function histBuild(data) {
@@ -210,6 +217,10 @@ function histBuild(data) {
   const seen = new Map();
   for (const item of items) {
     if (item.kind === 'thought' && prev === 'thought') continue;   // one mark for a run of thinking
+    if (item.kind === 'image' && item.img && prev === 'image' && box.lastChild && box.lastChild.classList.contains('h-imgs')) {
+      box.lastChild.appendChild(histThumb(item.img));               // pictures side by side
+      continue;
+    }
     const n = histItem(item);
     if (n) {
       // Which item this is, so the place read above survives a rebuild of the list (the oldest items leave the window).
@@ -304,7 +315,7 @@ function histStop() { clearInterval(HIST.timer); HIST.timer = 0; }
 /* After every renderRobot: which tab shows, and the polling that keeps an open history fresh. */
 function histSync() {
   const id = rbEl.hidden ? null : rbState.id;
-  if (id !== HIST.id) { HIST.id = id; HIST.data = null; HIST.node = null; HIST.sig = ''; HIST.error = ''; HIST.atEnd = true; HIST.newer = false; histStop(); }
+  if (id !== HIST.id) { HIST.id = id; HIST.data = null; HIST.node = null; HIST.sig = ''; HIST.error = ''; HIST.atEnd = true; HIST.newer = false; histStop(); histImgsDrop(); }
   const tabs = rbEl.querySelectorAll('[data-rb-tab]');
   tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.rbTab === HIST.tab)));
   const body = rbEl.querySelector('.rb-body:not([data-rb-hist])'), pane = histPane();
@@ -497,6 +508,115 @@ function composeArrived(items) {
   const fresh = (x) => !(Number(x.at) < sent.at - 60000);   // an older item with the same words is not this one
   const ours = (x) => x.kind === 'channel' && /(^|:)jui-viz$/.test(String(x.server || ''));
   if (items.some((x) => ours(x) && fresh(x) && composeNorm(x.text).startsWith(want))) { sent.arrivedAt = Date.now(); composePaint(); }
+}
+
+/* ---------- pictures (2.3.4, requester 10-19: "画像ファイルが履歴にある場合はサムネイル表示とクリックで拡大表示") ----------
+   An image item names a picture by its place (sources/history.py); the bytes are asked for one picture at a time
+   (SOURCE.historyImage, POST /api/history-image under the prompt's checks) when its thumbnail comes into view, and
+   kept as a blob URL only while this robot's tab is open. The browser scales the thumbnail. A press opens it large
+   in a dialog: ← → for the others in this history, Esc / the backdrop / 閉じる close it and give the focus back. */
+const histImgKey = (ref) => `${HIST.id}|${ref.off}|${ref.n}`;
+function histImgsDrop() {
+  for (const v of HIST.imgs.values()) v.then((g) => { if (g.url) URL.revokeObjectURL(g.url); });
+  HIST.imgs.clear();
+}
+function histImgGet(ref) {
+  const key = histImgKey(ref);
+  if (!HIST.imgs.has(key)) {
+    const id = HIST.id;
+    HIST.imgs.set(key, SOURCE.historyImage(id, ref).then((got) => (got.ok ? { url: URL.createObjectURL(got.blob) }
+      : { error: got.status === 413 ? '大きすぎて表示しない' : got.status === 415 ? '表示できない形式' : `画像を読めない（${got.status || got.error}）` })));
+  }
+  return HIST.imgs.get(key);
+}
+const histSeen = typeof IntersectionObserver === 'function' ? new IntersectionObserver((entries) => {
+  for (const e of entries) if (e.isIntersecting) { histSeen.unobserve(e.target); histThumbLoad(e.target); }
+}, { rootMargin: '200px' }) : null;
+function histThumbLoad(btn) {
+  if (btn._loading) return;
+  btn._loading = true;
+  histImgGet(btn._ref).then((g) => {
+    const img = btn.querySelector('img');
+    if (g.url) {
+      img.addEventListener('load', () => { const pane = histPane(); if (HIST.atEnd && pane && pane.contains(btn)) histToEnd(pane); }, { once: true });
+      img.src = g.url; btn.classList.remove('h-thumb-wait');
+    }
+    else { btn.classList.add('h-thumb-bad'); btn.querySelector('.h-thumb-note').textContent = g.error; }
+  });
+}
+function histThumb(ref) {
+  const b = hNode('button', 'h-thumb h-thumb-wait');
+  b.type = 'button';
+  b._ref = ref;
+  b.dataset.hImg = `${ref.off}:${ref.n}`;
+  b.setAttribute('aria-label', '画像を大きく表示');
+  const img = hNode('img');
+  img.alt = '履歴の画像';
+  img.decoding = 'async';
+  b.append(img, hNode('span', 'h-thumb-note', ''));
+  b.addEventListener('click', () => histLightOpen(b));
+  if (histSeen) histSeen.observe(b); else histThumbLoad(b);
+  return b;
+}
+const LIGHT = { el: null, list: [], k: 0, opener: null, onKey: null };
+function histLightShow() {
+  const ref = LIGHT.list[LIGHT.k], img = LIGHT.el.querySelector('img'), note = LIGHT.el.querySelector('.h-light-note');
+  LIGHT.el.querySelector('.h-light-count').textContent = `${LIGHT.k + 1} / ${LIGHT.list.length}`;
+  LIGHT.el.querySelectorAll('[data-h-light-step]').forEach((b) => { b.disabled = LIGHT.list.length < 2; });
+  img.removeAttribute('src'); note.textContent = '読み込み中…';
+  const want = LIGHT.k;
+  histImgGet(ref).then((g) => {
+    if (!LIGHT.el || LIGHT.k !== want) return;
+    if (g.url) { img.src = g.url; note.textContent = ''; } else note.textContent = g.error;
+  });
+}
+function histLightOpen(btn) {
+  histLightClose(false);
+  const all = HIST.node ? [...HIST.node.querySelectorAll('.h-thumb')] : [btn];
+  LIGHT.list = all.map((b) => b._ref);
+  LIGHT.k = Math.max(0, all.indexOf(btn));
+  LIGHT.opener = btn.dataset.hImg;
+  const el = hNode('div', 'h-light');
+  const box = hNode('div', 'h-light-box');
+  box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-labelledby', 'h-light-title'); box.tabIndex = -1;
+  const head = hNode('div', 'h-light-head');
+  const title = hNode('h3', '', '履歴の画像'); title.id = 'h-light-title';
+  const prev = hNode('button', 'wb-btn', '‹ 前'); prev.type = 'button'; prev.dataset.hLightStep = '-1'; prev.setAttribute('aria-label', '前の画像（←）');
+  const next = hNode('button', 'wb-btn', '次 ›'); next.type = 'button'; next.dataset.hLightStep = '1'; next.setAttribute('aria-label', '次の画像（→）');
+  const close = hNode('button', 'wb-btn', '閉じる'); close.type = 'button'; close.dataset.hLightClose = '';
+  head.append(title, hNode('span', 'h-light-count', ''), prev, next, close);
+  const img = hNode('img'); img.alt = '履歴の画像（拡大）';
+  box.append(head, img, hNode('p', 'h-light-note', ''));
+  el.appendChild(box);
+  document.body.appendChild(el);
+  LIGHT.el = el;
+  const step = (d) => { LIGHT.k = (LIGHT.k + d + LIGHT.list.length) % LIGHT.list.length; histLightShow(); };
+  el.addEventListener('click', (e) => {
+    if (e.target === el || e.target.closest('[data-h-light-close]')) { histLightClose(true); return; }
+    const s = e.target.closest('[data-h-light-step]');
+    if (s) step(Number(s.dataset.hLightStep));
+  });
+  LIGHT.onKey = (e) => {   // first (capture): these keys belong to the dialog, not to the card or the board under it
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); histLightClose(true); return; }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.altKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); if (LIGHT.list.length > 1) step(e.key === 'ArrowRight' ? 1 : -1); return; }
+    if (e.key !== 'Tab') return;
+    const list = [...box.querySelectorAll('button:not(:disabled)')], first = list[0], last = list[list.length - 1];
+    if (!box.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && (document.activeElement === first || document.activeElement === box)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener('keydown', LIGHT.onKey, true);
+  histLightShow();
+  close.focus();
+}
+function histLightClose(back) {
+  if (!LIGHT.el) return;
+  LIGHT.el.remove(); LIGHT.el = null;
+  document.removeEventListener('keydown', LIGHT.onKey, true);
+  if (!back) return;
+  // the thumbnail that opened it (the list may have been rebuilt meanwhile: the same picture's new button)
+  const again = HIST.node && [...HIST.node.querySelectorAll('.h-thumb')].find((b) => b.dataset.hImg === LIGHT.opener);
+  if (again) again.focus({ preventScroll: true });
 }
 
 /* ---------- the wide history (2.3.4, requester 10-19: "チャットが狭いから見づらい 左にロボット一人分くらいの余裕を残して残りを
