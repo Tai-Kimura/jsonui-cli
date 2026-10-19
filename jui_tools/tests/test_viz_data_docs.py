@@ -318,7 +318,10 @@ def test_a_big_file_swapped_in_never_passes_the_cap(tmp_path, monkeypatch):
     t = threading.Thread(target=_race, args=(target, small, big, stop), daemon=True)
     t.start()
     try:
-        seen = [json.dumps(data_docs.read(_project(root)), ensure_ascii=False) for _ in range(300)]
+        # As the symlink race above: at least 300 reads, on until one lands on the small file, 15 s at most.
+        seen, deadline = [], time.monotonic() + 15
+        while len(seen) < 300 or (not any("Users API" in x for x in seen) and time.monotonic() < deadline):
+            seen.append(json.dumps(data_docs.read(_project(root)), ensure_ascii=False))
     finally:
         stop.set()
         t.join()
