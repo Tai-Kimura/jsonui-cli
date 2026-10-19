@@ -25,6 +25,7 @@ setup(
             "web/vendor/three-0.160.0/addons/geometries/*.js",
             "web/vendor/mermaid-11.17.2/*",
             "prices.json",
+            "talk_contract.json",
         ],
     },
     python_requires=">=3.11",

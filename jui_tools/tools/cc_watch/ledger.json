@@ -252,6 +252,9 @@
     "jui_tools/jui_cli/viz/web/js/52-data-docs.js": "データサーバーのラックのシート。viz サーバーの /api/data-docs の答えを描くだけ",
     "jui_tools/jui_cli/viz/web/js/70-main.js": "ページの描画の回し方と接続の札だけ",
     "jui_tools/jui_cli/viz/web/js/80-dbg.js": "ブラウザのテスト用のフック（JUI_VIZ_E2E=1 のときだけ）",
-    "jui_tools/jui_cli/viz/web/vendor/": "three.js（第三者のライブラリ）"
+    "jui_tools/jui_cli/viz/web/vendor/": "three.js（第三者のライブラリ）",
+    "jui_tools/jui_cli/viz/TALK_CONTRACT.md": "トークの WebSocket の約束（viz のサーバーとページの間の形）の説明だけ。CLI の形を読むのは talk.py（台帳の talk_* の項目）",
+    "jui_tools/jui_cli/viz/talk_contract.json": "トークの WebSocket の約束の正（viz のサーバーとページの間の形）。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/talk_contract.py": "talk_contract.json に照らして frame を検査するだけ。CLI の形は読まない"
   }
 }

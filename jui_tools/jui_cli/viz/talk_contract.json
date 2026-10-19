@@ -1,0 +1,127 @@
+{
+  "$comment": "THE source of truth for the talk view's WebSocket frames (server <-> page). TALK_CONTRACT.md explains it; talk_contract.py validates against it (the subset of JSON Schema used here). A change here is a change for both the server (talk.py) and the page (web/js): bump 'version'.",
+  "version": 1,
+  "limits": {
+    "textMax": 20000,
+    "summaryMax": 200,
+    "nameMax": 200,
+    "previewMax": 120,
+    "listMax": 200,
+    "pageMax": 100,
+    "opsMax": 100,
+    "keptPerConversation": 5000,
+    "graceSecDefault": 3600
+  },
+  "$defs": {
+    "ms": {"type": "integer", "minimum": 0},
+    "msOrNull": {"type": ["integer", "null"], "minimum": 0},
+    "agentId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_.:@-]+$"},
+    "convId": {"type": "string", "pattern": "^t-[0-9a-f]{16}$"},
+    "messageId": {"type": "string", "minLength": 3, "maxLength": 200, "pattern": "^(m|u|r)-[A-Za-z0-9_.:@-]+$"},
+    "reqId": {"type": ["integer", "string"]},
+    "peer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "agentId", "sessionId", "name", "kind", "alive", "goneAt", "removeAt"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1, "maxLength": 220},
+        "agentId": {"anyOf": [{"$ref": "#/$defs/agentId"}, {"type": "null"}]},
+        "sessionId": {"type": ["string", "null"], "maxLength": 128},
+        "name": {"type": "string", "maxLength": 200},
+        "kind": {"enum": ["session", "subagent", "external"]},
+        "alive": {"type": "boolean"},
+        "goneAt": {"$ref": "#/$defs/msOrNull"},
+        "removeAt": {"$ref": "#/$defs/msOrNull"}
+      }
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "owner", "peer", "lastAt", "preview", "lastDir", "unread", "count"],
+      "properties": {
+        "id": {"$ref": "#/$defs/convId"},
+        "owner": {"$ref": "#/$defs/agentId"},
+        "peer": {"$ref": "#/$defs/peer"},
+        "lastAt": {"$ref": "#/$defs/ms"},
+        "preview": {"type": "string", "maxLength": 120},
+        "lastDir": {"enum": ["out", "in"]},
+        "unread": {"type": "integer", "minimum": 0},
+        "count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "msgId", "convId", "dir", "fromName", "toName", "at", "deliveredAt", "readAt", "state", "text", "cut", "summary", "seen", "via", "merged"],
+      "properties": {
+        "id": {"$ref": "#/$defs/messageId"},
+        "msgId": {"type": ["string", "null"], "maxLength": 128},
+        "convId": {"$ref": "#/$defs/convId"},
+        "dir": {"enum": ["out", "in"]},
+        "fromName": {"type": "string", "maxLength": 200},
+        "toName": {"type": "string", "maxLength": 200},
+        "at": {"$ref": "#/$defs/ms"},
+        "deliveredAt": {"$ref": "#/$defs/msOrNull"},
+        "readAt": {"$ref": "#/$defs/msOrNull"},
+        "state": {"enum": ["sent", "delivered", "read", "undelivered"]},
+        "text": {"type": "string", "maxLength": 20000},
+        "cut": {"type": "boolean"},
+        "summary": {"type": ["string", "null"], "maxLength": 200},
+        "seen": {"enum": ["both", "sender", "receiver"]},
+        "via": {"enum": ["session", "subagent", "parent", "external"]},
+        "merged": {"type": "boolean"}
+      }
+    },
+    "op": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["op", "convId", "message"],
+         "properties": {"op": {"const": "message"}, "convId": {"$ref": "#/$defs/convId"}, "message": {"$ref": "#/$defs/message"}}},
+        {"type": "object", "additionalProperties": false, "required": ["op", "conv"],
+         "properties": {"op": {"const": "conv"}, "conv": {"$ref": "#/$defs/conversation"}}},
+        {"type": "object", "additionalProperties": false, "required": ["op", "convId", "reason"],
+         "properties": {"op": {"const": "remove"}, "convId": {"$ref": "#/$defs/convId"}, "reason": {"enum": ["peer-ended", "owner-ended"]}}}
+      ]
+    }
+  },
+  "requests": {
+    "talk.open": {
+      "type": "object", "additionalProperties": false, "required": ["type", "reqId", "agentId"],
+      "properties": {"type": {"const": "talk.open"}, "reqId": {"$ref": "#/$defs/reqId"}, "agentId": {"$ref": "#/$defs/agentId"}}
+    },
+    "talk.close": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": {"type": {"const": "talk.close"}, "reqId": {"$ref": "#/$defs/reqId"}}
+    },
+    "talk.get": {
+      "type": "object", "additionalProperties": false, "required": ["type", "reqId", "agentId", "convId"],
+      "properties": {"type": {"const": "talk.get"}, "reqId": {"$ref": "#/$defs/reqId"}, "agentId": {"$ref": "#/$defs/agentId"},
+                     "convId": {"$ref": "#/$defs/convId"}, "before": {"$ref": "#/$defs/messageId"},
+                     "limit": {"type": "integer", "minimum": 1, "maximum": 100}}
+    },
+    "talk.seen": {
+      "type": "object", "additionalProperties": false, "required": ["type", "reqId", "agentId", "convId", "upTo"],
+      "properties": {"type": {"const": "talk.seen"}, "reqId": {"$ref": "#/$defs/reqId"}, "agentId": {"$ref": "#/$defs/agentId"},
+                     "convId": {"$ref": "#/$defs/convId"}, "upTo": {"$ref": "#/$defs/ms"}}
+    }
+  },
+  "frames": {
+    "talk.list": {
+      "type": "object", "additionalProperties": false, "required": ["type", "agentId", "items", "more"],
+      "properties": {"type": {"const": "talk.list"}, "reqId": {"$ref": "#/$defs/reqId"}, "agentId": {"$ref": "#/$defs/agentId"},
+                     "items": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/conversation"}},
+                     "more": {"type": "boolean"}}
+    },
+    "talk.messages": {
+      "type": "object", "additionalProperties": false, "required": ["type", "reqId", "agentId", "convId", "items", "more"],
+      "properties": {"type": {"const": "talk.messages"}, "reqId": {"$ref": "#/$defs/reqId"}, "agentId": {"$ref": "#/$defs/agentId"},
+                     "convId": {"$ref": "#/$defs/convId"},
+                     "items": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/message"}},
+                     "more": {"type": "boolean"}}
+    },
+    "talk.update": {
+      "type": "object", "additionalProperties": false, "required": ["type", "agentId", "ops"],
+      "properties": {"type": {"const": "talk.update"}, "agentId": {"$ref": "#/$defs/agentId"},
+                     "ops": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/op"}}}
+    }
+  }
+}
