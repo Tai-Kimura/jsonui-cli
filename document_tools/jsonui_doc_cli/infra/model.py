@@ -66,14 +66,22 @@ SECRET_SHAPES: tuple[tuple[str, re.Pattern], ...] = (
         r"\b(?:sk|rk|pk)_(?:live|test)_[0-9A-Za-z]{10,}|\bsk-[A-Za-z0-9_-]{20,}|\bgh[pousr]_[A-Za-z0-9]{30,}"
         r"|\bgithub_pat_[A-Za-z0-9_]{20,}|\bglpat-[A-Za-z0-9_-]{20,}"
         r"|\bxox[abprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{30,}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
-        r"|(?<![A-Za-z0-9/+=])(?=[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=]))(?=[A-Za-z0-9/+]{0,39}[A-Z])"
-        r"(?=[A-Za-z0-9/+]{0,39}[a-z])(?=[A-Za-z0-9/+]{0,39}\d)"
-        r"[A-Za-z0-9/+]{40}")),   # 40 characters in mixed case with a digit: an AWS secret key (a hex hash is lowercase)
+        # an AWS secret key: 40 base64 characters in mixed case with a digit and a "/" or "+" (a hex hash is
+        # lowercase; a CDK logical id — a name and 8 hex characters, often exactly 40 long — has neither "/" nor "+")
+        r"|(?<![A-Za-z0-9/+])(?=[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+]))(?=[A-Za-z0-9/+]{0,39}[A-Z])"
+        r"(?=[A-Za-z0-9/+]{0,39}[a-z])(?=[A-Za-z0-9/+]{0,39}\d)(?=[A-Za-z0-9/+]{0,39}[/+])[A-Za-z0-9/+]{40}"
+        # ... or 40 of them after a secret key's name, whatever they hold (AWS_SECRET_ACCESS_KEY=..., .env's own form)
+        r"|(?i:secret[_ ]?(?:access[_ ]?)?key)[\"']?\s*[=:]\s*[\"']?[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])")),
+    # a password written with its value (Password=..., password: ..., "password": "...")
+    ("password", re.compile(r"(?i)\b(?:password|passwd|pwd)\b[\"']?\s*:\s*[\"']?[^\s\"',;]{1,}")),
     ("account_id", re.compile(r"(?<![\d-])(?:\d{12}|\d{4}-\d{4}-\d{4})(?![\d-])")),
 )
-# an IPv4 address: not after a letter, a digit or a dot (v1.25.3.1 is a version), and not before ".<digit>" (1.2.3.4.5);
-# a dot after it ends a sentence. 0.0.0.0 and 127.0.0.0/8 (any interface, this machine) are no one's address.
-_IPV4 = re.compile(r"(?<![\w.])((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?!\.?\d)")
+# an IPv4 address. A version is not one: four numbers right after a letter (v1.25.3.1), or after a letter and "-" or
+# "@" (release-1.2.3.4, pkg@1.2.3.4). After ".", "_", ":", "=" or a space it is an address (db.10.0.0.5, db_10.0.0.5,
+# host:10.0.0.1). Not inside a longer run of numbers (1.2.3.4.5), and a dot after it ends a sentence. 0.0.0.0 and
+# 127.0.0.0/8 (any interface, this machine) are no one's address.
+_IPV4 = re.compile(r"(?<![A-Za-z0-9])(?<!\d\.)(?<![A-Za-z][-@])"
+                   r"((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?!\.?\d)")
 _IPV6 = re.compile(r"(?<![\w:.])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])")
 _INVISIBLE = re.compile(r"[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]")
 
@@ -89,7 +97,7 @@ def _ip_found(text: str) -> bool:
             ip = ipaddress.IPv6Address(m.group(1))
         except ValueError:
             continue
-        if not (ip.is_loopback or ip.is_unspecified):
+        if not ip.is_reserved:      # ::/8 holds :: (any), ::1 (this machine), ::ffff and the like: no one's address
             return True
     return False
 
@@ -208,8 +216,8 @@ def check_file(name: str, raw: bytes) -> tuple[dict | None, list[dict]]:
     """(the file's object, problems) — the object is None when the file has any error (it is left out whole)."""
     problems: list[dict] = []
     try:
-        data = json.loads(raw.decode("utf-8"))
-    except RecursionError:
+        data = json.loads(raw.decode("utf-8-sig"))     # a BOM some editors write is not an error
+    except RecursionError:          # older Pythons raise here; 3.14 reads deep JSON and _walk_strings raises below
         return None, [_problem(name, "/", "json", "nested too deeply to read")]
     except json.JSONDecodeError as exc:
         return None, [dict(_problem(name, "/", "json", f"not JSON (line {exc.lineno}, column {exc.colno})"), line=exc.lineno)]

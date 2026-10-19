@@ -193,6 +193,15 @@ def test_references_across_files():
     ("0.0.0.0:8080", set()), ("127.0.0.1", set()), ("::1", set()), ("postgresql://", set()), ("redis://", set()),
     ("Password=", set()), ("Server=", set()), ("Data Source=", set()), ("v1.25.3.1", set()), ("12:30:45", set()),
     ("da39a3ee5e6b4b0d3255bfef95601890afd80709", set()), ("docs/infra/icons/database-relational-01.svg", set()),
+    # dd's re-verification, 10-20 (N2, N4, V01, V02, V03, V12)
+    ("PaymentWebhookHandlerServiceRole3C1A9F2B", set()), ("OrderProcessingServiceProductionCluster1", set()),
+    ("AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", {"token"}),
+    ("aws_secret_access_key = A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0", {"token"}),
+    ("r2_buckets.10.0.0.9", {"ip_address"}), ("db.10.0.0.5", {"ip_address"}), ("db_10.0.0.5", {"ip_address"}),
+    ("host:10.0.0.1", {"ip_address"}), ("10.0\u00ad.0.5", {"ip_address"}), ("Password: hunter2", {"password"}),
+    ('"password":"hunter2"', {"password"}),
+    ("release-1.2.3.4", set()), ("pkg@1.2.3.4", set()), ("::ffff", set()), ("listen [::]:80", set()),
+    ("127.1.2.3", set()), ("password rotation monthly", set()),
 ])
 def test_the_secret_shapes(text, kinds):
     assert set(M.secret_findings(text)) == kinds
@@ -308,3 +317,29 @@ def test_deep_nesting_is_a_json_problem_not_an_exception():
     assert data is None and [p["code"] for p in problems] == ["json"]
     m, _ = M.merge([("deep.json", raw)])
     assert m["nodes"] == []
+
+
+
+# ---------------------------------------------------------------- dd's re-verification (10-20)
+
+def test_a_cdk_logical_id_in_iac_keeps_its_file():
+    """N2: an id of exactly 40 characters (a name and 8 hex) took the file out as a secret."""
+    raw = json.dumps({"version": 0, "nodes": [{"id": "role", "category": "security.iam", "provider": "aws",
+                                                "iac": ["PaymentWebhookHandlerServiceRole3C1A9F2B"]}]}).encode()
+    m, problems = M.merge([("a.json", raw)])
+    assert problems == [] and m["nodes"][0]["iac"] == ["PaymentWebhookHandlerServiceRole3C1A9F2B"]
+
+
+def test_a_group_is_drawn_only_where_its_parent_is():
+    """V08: the group step of D1 (a child that names no environment takes its parent's)."""
+    raw = json.dumps({"version": 0, "environments": [{"id": "p"}, {"id": "s"}],
+                      "groups": [{"id": "pa", "kind": "account", "environments": ["p"]},
+                                 {"id": "ch", "kind": "network", "parent": "pa"}]}).encode()
+    m, problems = M.merge([("a.json", raw)])
+    assert problems == [] and {g["id"]: g["environments"] for g in m["groups"]} == {"pa": ["p"], "ch": ["p"]}
+
+
+def test_a_bom_is_not_an_error():
+    """N5: some editors write one."""
+    raw = "\ufeff".encode() + json.dumps({"version": 0}).encode()
+    assert M.check_file("a.json", raw)[1] == []
