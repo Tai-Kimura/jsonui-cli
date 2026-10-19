@@ -1249,21 +1249,33 @@ function stepRobot(dir) {
   if (has3D && robots.some((x) => x.def.id === next)) zoomTo(robotPose(next), null, () => {});
 }
 rbEl.addEventListener('click', (e) => { const b = e.target.closest('[data-rb-step]'); if (b) stepRobot(Number(b.dataset.rbStep)); });
+/* 2.3.4 (requester 10-19: "タブ選択してる時左右キーがタブの移動になるのやめてほしい 左右はロボットの移動でタブの移動はtabキーに
+   できる？"): ← → switch robots wherever the focus is on the card, the tabs included (2.3.1 moved between the tabs there),
+   except where text is typed (an input, a textarea, a select, an editable element) and while an IME composes. The tabs
+   move with Tab instead (below). */
 document.addEventListener('keydown', (e) => {
   if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.isComposing || e.keyCode === 229) return;                                                   // an IME is composing
   if (!rbState.id || rbEl.hidden || !popEl.hidden || logState.open || alwaysDlg) return;
   const t = e.target;
   if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select')))) return;   // typing keeps its keys
   e.preventDefault();
-  const tab = t && t.closest && t.closest('[role="tablist"] [role="tab"]');
-  if (tab) {   // a tab has the focus: ← → move between the tabs (the ARIA tabs pattern), the robot stays
-    const tabs = [...tab.closest('[role="tablist"]').querySelectorAll('[role="tab"]')];
-    const next = tabs[(tabs.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
-    next.focus();
-    next.click();
-    return;
-  }
   stepRobot(e.key === 'ArrowRight' ? 1 : -1);
+});
+/* Tab on the card's tabs: 今の様子 → Tab selects 応答の履歴 and focuses it; 応答の履歴 → Tab goes on into the card (the
+   browser's own order); Shift+Tab is the reverse (応答の履歴 → 今の様子 → what is before the tabs). Never a dead end. */
+rbEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || e.altKey || e.ctrlKey || e.metaKey) return;
+  const tab = e.target && e.target.closest && e.target.closest('[role="tablist"] [role="tab"]');
+  if (!tab) return;
+  const tabs = [...tab.closest('[role="tablist"]').querySelectorAll('[role="tab"]')], k = tabs.indexOf(tab);
+  const next = tabs[k + (e.shiftKey ? -1 : 1)];
+  if (!next) return;                                  // the last tab forward, the first back: the browser's order
+  e.preventDefault();
+  next.click();
+  const want = next.dataset.rbTab;
+  const again = [...rbEl.querySelectorAll('[role="tab"]')].find((b) => b.dataset.rbTab === want);   // the card may have been rebuilt
+  if (again) again.focus();
 });
 function renderRobot(model) {
   const id = rbState.id;
@@ -1282,8 +1294,8 @@ function renderRobot(model) {
     }).join('')}</ul>` : `<p class="rb-none">${isMain ? 'このセッションのタスク一覧は空' : '担当しているタスクはない'}</p>`;
     return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div>
 <div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" hidden>広げる</button><div class="rb-tablist" role="tablist" aria-label="表示"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">今の様子</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">応答の履歴</button></div></div>
-<div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴"></div>
-<div class="rb-body">
+<div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴" tabindex="0"></div>
+<div class="rb-body" tabindex="0" aria-label="今の様子">
 <section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">今やっていること</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">ランプ: <span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p><p class="rb-git" data-rb-git hidden title="Claude のセッションが Bash で撃った git push / pull だけが見える（自分のターミナル、エディタの git、GitHub での merge は見えない）"></p><p class="rb-cond" data-rb-cond></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(spec.name)}（${esc(spec.screen)}）の spec</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>
 ${pending ? `<section class="rb-sec" aria-label="許可">${permDetail(pending, 'rb')}</section>` : ''}
 ${SOURCE.mode === 'live' ? '<section class="rb-sec" aria-labelledby="rb-h-tests"><h3 id="rb-h-tests">テスト実行</h3><div data-rb-tests></div></section>' : ''}

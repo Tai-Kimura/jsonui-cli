@@ -113,40 +113,95 @@ async def run_rb_arrows(pw, out, failures):
         check(failures, back_seen == [want[(i - k) % 3] for k in (1, 2, 3)], f"← goes the other way: {back_seen}")
         check(failures, not set(beta) & set(forward_seen + back_seen), f"never a robot outside the project picked: beta {beta}")
 
-        # a tab with the focus: ← → move between the tabs, the robot stays; off the tabs, → switches robots again
+        # 2.3.4 (requester 10-19: "タブ選択してる時左右キーがタブの移動になるのやめてほしい 左右はロボットの移動でタブの移動はtabキーに"):
+        # the 2.3.1 arm here said ← → on a focused tab move between the tabs and the robot stays. Inverted: on a tab,
+        # → switches the robot and the tab stays as it was; ← comes back.
         here = await page.evaluate(BADGE)
+        tab_state = "() => ({ badge: document.querySelector('#rb .rb-badge').textContent, tab: document.querySelector('#rb [data-rb-tab][aria-selected=\"true\"]').dataset.rbTab })"
         await page.focus('#rb [data-rb-tab="now"]')
         await page.keyboard.press("ArrowRight")
         await page.wait_for_timeout(300)
-        on_tab = await page.evaluate("() => ({ badge: document.querySelector('#rb .rb-badge').textContent, focused: document.activeElement.dataset.rbTab || '', tab: document.querySelector('#rb [data-rb-tab][aria-selected=\"true\"]').dataset.rbTab })")
+        on_tab = await page.evaluate(tab_state)
+        await page.focus('#rb [data-rb-tab="now"]')
         await page.keyboard.press("ArrowLeft")
         await page.wait_for_timeout(300)
-        back_tab = await page.evaluate("() => ({ badge: document.querySelector('#rb .rb-badge').textContent, focused: document.activeElement.dataset.rbTab || '', tab: document.querySelector('#rb [data-rb-tab][aria-selected=\"true\"]').dataset.rbTab })")
+        back_tab = await page.evaluate(tab_state)
+        res["tabKeys"] = {"here": here, "onTab": on_tab, "back": back_tab}
+        check(failures, on_tab == {"badge": want[(want.index(here) + 1) % 3], "tab": "now"} and back_tab == {"badge": here, "tab": "now"},
+              f"on a tab, ← → switch the robot and the tab stays: {res['tabKeys']}")
+        await page.focus('#rb [data-rb-tab="history"]')
+        await page.keyboard.press("ArrowRight")
+        await page.wait_for_timeout(300)
+        on_hist_tab = await page.evaluate(tab_state)
+        await page.focus('#rb [data-rb-tab="history"]')
+        await page.keyboard.press("ArrowLeft")
+        await page.wait_for_timeout(300)
+        res["histTabKeys"] = [on_hist_tab, await page.evaluate(tab_state)]
+        check(failures, on_hist_tab["badge"] == want[(want.index(here) + 1) % 3] and res["histTabKeys"][1]["badge"] == here,
+              f"on the 応答の履歴 tab too, ← → switch the robot: {res['histTabKeys']}")
+        # while an IME composes, nothing switches (isComposing, and the keyCode 229 some browsers send)
+        await page.focus('#rb [data-rb-tab="now"]')
+        for how in ("isComposing", "keyCode229"):
+            await page.evaluate("""(how) => { const ev = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true, isComposing: how === 'isComposing' });
+              if (how === 'keyCode229') Object.defineProperty(ev, 'keyCode', { get: () => 229 });
+              document.activeElement.dispatchEvent(ev); }""", how)
+            await page.wait_for_timeout(300)
+            res[f"ime-{how}"] = got = await page.evaluate(BADGE)
+            check(failures, got == here, f"an IME composing ({how}) switches nothing: {here} -> {got}")
+        # Tab moves the tabs: 今の様子 → Tab → 応答の履歴 (selected, focused) → Tab → into the card; Shift+Tab back
+        focus_state = "() => { const a = document.activeElement; return { tab: document.querySelector('#rb [data-rb-tab][aria-selected=\"true\"]').dataset.rbTab, focus: a.dataset.rbTab ? 'tab:' + a.dataset.rbTab : a.matches('#rb .rb-body') ? 'body' : (document.getElementById('rb').contains(a) ? 'card' : a.tagName) }; }"
+        await page.focus('#rb [data-rb-tab="now"]')
+        seq = []
+        for k in ("Tab", "Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab"):
+            await page.keyboard.press(k)
+            await page.wait_for_timeout(250)
+            seq.append(await page.evaluate(focus_state))
+        res["tabSeq"] = seq
+        check(failures, seq[0] == {"tab": "history", "focus": "tab:history"} and seq[1] == {"tab": "history", "focus": "body"}
+              and seq[2] == {"tab": "history", "focus": "tab:history"} and seq[3] == {"tab": "now", "focus": "tab:now"} and seq[4]["focus"] == "card",
+              f"Tab: 今の様子 → 応答の履歴 → into the card; Shift+Tab back to 今の様子 and out before the tabs: {seq}")
         await page.evaluate("() => document.activeElement.blur()")
         await page.keyboard.press("ArrowRight")
         await page.wait_for_timeout(300)
-        off_tab = await page.evaluate(BADGE)
-        res["tabKeys"] = {"here": here, "onTab": on_tab, "back": back_tab, "offTab": off_tab}
-        check(failures, on_tab == {"badge": here, "focused": "history", "tab": "history"} and back_tab == {"badge": here, "focused": "now", "tab": "now"},
-              f"on a tab, ← → move between the tabs and the robot stays: {res['tabKeys']}")
+        res["offTab"] = off_tab = await page.evaluate(BADGE)
         check(failures, off_tab == want[(want.index(here) + 1) % 3], f"off the tabs, → switches robots: {here} -> {off_tab}")
 
         # the tab stays across a switch
         await page.click('#rb [data-rb-tab="history"]')
         await page.wait_for_timeout(300)
-        await page.evaluate("() => document.activeElement.blur()")   # on the tab, → would move to the next tab
+        await page.evaluate("() => document.activeElement.blur()")
         await page.keyboard.press("ArrowRight")
         await page.wait_for_timeout(400)
         res["tabKept"] = st = await page.evaluate(STATE)
         check(failures, st["tab"] == "history" and st["histShown"], f"the 応答の履歴 tab stays open: {st}")
         await page.screenshot(path=str(out / "switched-history.png"))
 
+        # the prompt box under the history (a textarea): ← → move the caret, the robot stays
+        before = await page.evaluate(BADGE)
+        area = page.locator("#rb [data-h-text]")
+        if await area.count() and await area.is_visible() and await area.is_enabled():
+            await area.fill("abc")
+            await page.evaluate("() => { const a = document.querySelector('#rb [data-h-text]'); a.focus(); a.setSelectionRange(0, 0); }")
+            await page.keyboard.press("ArrowRight")
+            await page.wait_for_timeout(300)
+            # null when the box is gone (a robot switch rebuilt the card): that is the arm's red, not an exception
+            res["promptBox"] = [await page.evaluate("() => { const a = document.querySelector('#rb [data-h-text]'); return a ? a.selectionStart : null; }"), await page.evaluate(BADGE)]
+            check(failures, res["promptBox"] == [1, before], f"in the prompt box ← → move the caret and the robot stays: {res['promptBox']} (was {before})")
+            await area.fill("")
+        else:   # this suite's sessions have no relay: the box is disabled — the same check on a textarea of our own
+            await page.evaluate("() => { const t = document.createElement('textarea'); t.id = 'e2e-area'; t.value = 'abc'; document.getElementById('rb').append(t); t.focus(); t.setSelectionRange(0, 0); }")
+            await page.keyboard.press("ArrowRight")
+            await page.wait_for_timeout(300)
+            res["promptBox"] = [await page.evaluate("() => { const a = document.getElementById('e2e-area'); return a ? a.selectionStart : null; }"), await page.evaluate(BADGE)]
+            check(failures, res["promptBox"] == [1, before], f"in a textarea on the card ← → move the caret and the robot stays: {res['promptBox']} (was {before})")
+            await page.evaluate("() => { const a = document.getElementById('e2e-area'); if (a) a.remove(); }")
+
         # a focused text field keeps its arrow keys
         before = await page.evaluate(BADGE)
         await page.evaluate("() => { const i = document.createElement('input'); i.id = 'e2e-field'; i.value = 'abc'; document.body.append(i); i.focus(); i.setSelectionRange(0, 0); }")
         await page.keyboard.press("ArrowRight")   # one way only: → then ← would come back to the same robot either way
         await page.wait_for_timeout(300)
-        caret = await page.evaluate("() => document.getElementById('e2e-field').selectionStart")
+        caret = await page.evaluate("() => { const f = document.getElementById('e2e-field'); return f ? f.selectionStart : null; }")
         res["typing"] = after = await page.evaluate(BADGE)
         check(failures, after == before and caret == 1, f"typing in a field does not switch robots, the caret moves: {before} -> {after}, caret {caret}")
         await page.evaluate("() => document.getElementById('e2e-field').remove()")
