@@ -831,6 +831,7 @@ class TalkHub:
         self._last = -10**12
         self.caught_up = False
         self.error: str | None = None
+        self.closed = False
 
     async def run(self, fn, *args):
         return await asyncio.get_running_loop().run_in_executor(self.pool, fn, *args)
@@ -847,6 +848,8 @@ class TalkHub:
         """On the event loop, never blocking: take a finished step's result; start the next one when due (every
         STEP_EVERY_MS, or at once while the reading is behind). Returns whether frames were queued."""
         queued = False
+        if self.closed:
+            return False
         job = self._job
         if job is not None:
             if not job.done():
@@ -969,6 +972,7 @@ class TalkHub:
             self._set_badges(badges)          # sent by the push loop to every socket
 
     def close(self) -> None:
+        self.closed = True
         index = self.index
         if index is not None:
             self.pool.submit(index.close)
