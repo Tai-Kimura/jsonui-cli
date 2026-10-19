@@ -109,6 +109,9 @@ def test_the_shipped_table_says_where_its_prices_come_from_and_every_row_is_whol
     for model, row in d["models"].items():
         assert prices.MODEL_RE.fullmatch(model) and prices.check_row(row) is None, model
         assert row["cache_read"] < row["input"] < row["cache_write_5m"] < row["cache_write_1h"] < row["output"], model
+        # a price the source's table does not give (fast mode's cache) is marked as derived, with the rule quoted above
+        assert "fast" not in row or row["fast"].get("cache") == "derived", model
+    assert "Prompt caching multipliers apply on top of fast mode pricing" in d["derived"]
 
 
 # ---------------------------------------------------------------- the bills (World)
