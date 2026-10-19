@@ -731,7 +731,7 @@ function livePlan(R) {
   const rm = PROJECT[d.room], rect = rm ? `${rm.x0},${rm.z0},${rm.x1},${rm.z1}` : '';
   const moved = R.seatKey && R.room === d.room && R.rect && R.rect !== rect;   // its room was laid out again (another slot, the one-room view)
   R.rect = rect;
-  if (R.shred || R.play || R.brk || R.git) {   // the shredder's errand, a break (10-19) and a git trip (2.3.4) keep their path as play does: shredStop / brkStop / gitStop walk it to this seat
+  if (R.shred || R.play || R.brk) {   // the shredder's errand and a break (10-19) keep their path as play does: shredStop / brkStop walk it to this seat (a git trip need not: gitLaid)
     // At play (2.3.1): the path is the game's. Taking it sent a player to its new desk, and there liveWalk read the
     // empty path as "at the spot" and it played from its desk (e2e, 1 run in 3). The game ends on its own reasons;
     // playStop then walks it to this seat (through the doors when the room changed).
@@ -1280,20 +1280,33 @@ function gitEnd(entry) {
   if (GITBOX.ends.length > 30) GITBOX.ends.shift();
 }
 function gitStop(R, why, nowSec) {
-  if (!R.git || R.git.phase === 'back') return;
+  if (!R.git || (R.git.phase === 'back' && why !== 'relaid')) return;
   gitEnd({ id: R.def.id, kind: R.git.trip.kind, phase: R.git.phase, why, at: +nowSec.toFixed(1) });
+  if (why === 'relaid') {   // its room was laid out again (a bigger room): a jump to its new desk, as a break's and livePlan's
+    const root = R.robot.root;
+    root.position.x = R.def.pos[0]; root.position.z = R.def.pos[1]; R.path = []; R.jumps = (R.jumps || 0) + 1;
+    R.git = null;
+    return;
+  }
   R.git.phase = 'back'; R.git.stopped = why;
   const p = R.robot.root.position, from = roomAtPoint([p.x, p.z]);
   R.path = from && from !== R.def.room ? [...liveRoute(from, R.def.room), R.def.pos] : [R.def.pos];
 }
+// its room's rect and its seat: a change in the same room while on a trip is the room laid out again (a bigger room:
+// the box's desk moves with it, the trip's way would not), and the trip stops with a jump to the new desk
+// (docs/bugs/2026-10-19-jui-viz-git-trip-walks-to-the-old-box-when-the-room-grows.md). Another room is 'props': it walks
+// back through the doors. So livePlan need not keep a trip's path: whatever it does to it, gitTick stops the trip in
+// the same frame (measured 10-19: with or without that, the same jump to the same seat).
+const gitLaid = (R) => { const rm = PROJECT[R.def.room]; return `${rm ? rectOf(rm) : ''}|${R.def.pos ? R.def.pos.join() : ''}`; };
 function gitTick(nowSec) {
   for (const R of robots) {
     const st = robotState[R.def.id] || { state: 'idle' }, trip = st.git;
     if (R.git) {
       // stop at once: a call, waiting (a question or a permission), an instruction or another trip, leaving
       const why = R.robot.call ? 'call' : st.state === 'waiting' ? 'waiting' : !trip || trip.stopped ? 'cleared' : trip.id !== R.git.trip.id ? 'replaced'
-        : LIVE.leaving[R.def.id] ? 'leaving' : PROPS.room !== R.def.room ? 'props' : null;   // props: the box went away (the floor, a bigger room)
+        : LIVE.leaving[R.def.id] ? 'leaving' : R.def.room === R.git.room && gitLaid(R) !== R.git.laid ? 'relaid' : PROPS.room !== R.def.room ? 'props' : null;   // props: the box went away (the floor, a bigger room)
       if (why) gitStop(R, why, nowSec);
+      if (!R.git) continue;   // relaid: at its new desk already
       if (R.git.phase === 'going' && !R.path.length) { R.git.phase = 'at'; R.git.until = nowSec + GITBOX.atSec; }
       if (R.git.phase === 'at' && nowSec >= R.git.until) {
         const k = R.git.trip.kind, rejected = R.git.trip.status === 'rejected';
@@ -1315,7 +1328,7 @@ function gitTick(nowSec) {
     if (R.play || R.playBack || R.brk || R.shred || R.solo || R.path.length || LIVE.leaving[R.def.id] || R.robot.call || st.state === 'waiting') continue;
     R.gitSeen = trip.id;
     const sp = PROPS.place.git;
-    R.git = { trip, phase: 'going', desk: sp.desk, sheets: trip.kind === 'push' ? gitSheets(trip) : 0, t0: nowSec };
+    R.git = { trip, phase: 'going', desk: sp.desk, sheets: trip.kind === 'push' ? gitSheets(trip) : 0, t0: nowSec, room: R.def.room, laid: gitLaid(R) };
     R.path = [sp.stand];
   }
 }

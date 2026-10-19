@@ -117,7 +117,7 @@ window.__dbg = {
   // the box (2.3.4): its desk, what it overlaps, the papers in it, each robot's trip and the trips' ends
   gitBox: () => ({ room: PROPS.room, desk: !!PROPS.gitDesk, fill: PROPS.gitFill, spot: PROPS.place ? PROPS.place.git : null,
     overlaps: gitDeskOverlaps(), ends: GITBOX.ends.slice(),
-    trips: Object.fromEntries(robots.filter((R) => R.git).map((R) => [R.def.id, { phase: R.git.phase, kind: R.git.trip.kind, sheets: R.robot.carrySheets,
+    trips: Object.fromEntries(robots.filter((R) => R.git).map((R) => [R.def.id, { id: R.git.trip.id, phase: R.git.phase, kind: R.git.trip.kind, sheets: R.robot.carrySheets,
       look: R.robot.state, at: R.robot.root.position.toArray().map((v) => +v.toFixed(2)) }])),
     said: Object.fromEntries(robots.map((R) => [R.def.id, R.text.textContent])),
     why: Object.fromEntries(robots.map((R) => { const st = robotState[R.def.id] || {}; return [R.def.id, { trip: st.git ? { id: st.git.id, pending: st.git.pending, at: st.git.at, kind: st.git.kind } : null,

@@ -23,6 +23,7 @@ from common import ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
 
 DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
 SID = "9b000000-0000-4000-8000-0000000000a1"
+MORE = [f"9b000000-0000-4000-8000-0000000000{k:02x}" for k in range(0xa2, 0xa8)]   # six more sessions in the folder: the room grows
 
 
 def check(failures, cond, text):
@@ -282,6 +283,7 @@ async def run_gitbox(pw, out, failures):
         hook({"hook_event_name": "Stop"})
         # once the turn's done -> idle has come (a state from the server rebuilds the page's robot state, poke and all),
         # still on the errand
+        await wait(page, "(id) => window.__dbg.robotState()[id].state === 'done'", arg=rid, timeout=20000, label="the turn done")
         await wait(page, "(id) => window.__dbg.robotState()[id].state === 'idle' && window.__dbg.shred().robots.find((y) => y.id === id).phase !== null",
                    arg=rid, timeout=20000, label="idle, on the errand to the shredder")
         await page.evaluate("(id) => window.__dbg.gitPoke(id, { id: 'poke-2', branch: 'main', label: '↑ push main' })", rid)
@@ -291,6 +293,43 @@ async def run_gitbox(pw, out, failures):
         await wait(page, "(id) => !window.__dbg.gitBox().trips[id] && window.__dbg.shred().robots.find((y) => y.id === id).phase === null", arg=rid,
                    timeout=30000, label="home from the box")
         await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated again")
+
+        # 5d. the room grows on the way to the box (six more sessions in the folder: past roomSize's six, the one-room
+        # view is laid out again, the robot's seat and the box's desk move): the trip stops ('relaid', a jump to the new
+        # seat, as a break does) and never stands where the box was (docs/bugs/2026-10-19-jui-viz-git-trip-walks-to-the-
+        # old-box-when-the-room-grows.md). Measured 10-19: the seat moves only when the room grows, never with five or fewer.
+        POS = """(id) => { const b = window.__dbg.gitBox(), R = window.__dbg.robots.find((x) => x.def.id === id), p = R.robot.root.position;
+          return { phase: (b.trips[id] || {}).phase || null, pos: [+p.x.toFixed(2), +p.z.toFixed(2)], seat: R.def.pos, stand: b.spot && b.spot.stand,
+                   room: b.overlaps && b.overlaps.room, path: R.path.length, end: b.ends.filter((e) => e.id === id).slice(-1)[0] || null }; }"""
+        before = await page.evaluate(POS, rid)
+        bash("git push", stderr=f"To example.invalid:team/box-app.git\n   {revs['base']}..{revs['small']}  main -> main\n")
+        hook({"hook_event_name": "Stop"})
+        # this push's own trip (a poke above leaves an older real trip unseen: it may go first, and be replaced)
+        mine = f"toolu_box{n['use']}"
+        await wait(page, "([id, t]) => { const x = window.__dbg.gitBox().trips[id]; return !!x && x.id === t && x.phase === 'going'; }", arg=[rid, mine],
+                   timeout=30000, label="this push going to the box")
+        going = await page.evaluate(POS, rid)
+        n_ends = await page.evaluate("(id) => { window.__dbg.robots.find((x) => x.def.id === id).__mark = 1; return window.__dbg.gitBox().ends.length; }", rid)
+        for sid in MORE:
+            hook({"hook_event_name": "SessionStart", "source": "startup", "session_id": sid})
+        seen = res["relaidPhases"] = await page.evaluate("""(id) => new Promise((done) => {
+          const out = [], t0 = performance.now();
+          const tick = () => { const b = window.__dbg.gitBox(), t = b.trips[id], R = window.__dbg.robots.find((x) => x.def.id === id), p = R.robot.root.position;
+            const ph = t ? t.phase : null;
+            if (!out.length || out[out.length - 1][0] !== ph) out.push([ph, [+p.x.toFixed(2), +p.z.toFixed(2)], b.spot && b.spot.stand, Math.round(performance.now() - t0), R.def.room, b.room]);
+            if ((ph === null && out.length > 1) || performance.now() - t0 > 30000) done(out); else setTimeout(tick, 50); };
+          tick(); })""", rid)
+        await wait(page, "(id) => window.__dbg.robots.find((x) => x.def.id === id).path.length === 0", arg=rid, timeout=30000, label="settled after the room grew")
+        after = await page.evaluate(POS, rid)
+        res["relaidEnds"] = await page.evaluate("([id, n]) => ({ ends: window.__dbg.gitBox().ends.slice(n), same: window.__dbg.robots.find((x) => x.def.id === id).__mark === 1, seen: window.__dbg.robots.find((x) => x.def.id === id).gitSeen })", [rid, n_ends])
+        dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+        res["relaid"] = {"before": before, "going": going, "after": after}
+        check(failures, after["room"] != before["room"] and after["seat"] != before["seat"], f"the room grew and the seat moved (else this arm proves nothing): {res['relaid']}")
+        check(failures, (after["end"] or {}).get("why") == "relaid" and not any(p[0] == "at" for p in seen) and dist(after["pos"], after["seat"]) < 0.3,
+              f"the trip stops when the room grows, never at the old box, and it is at its new seat: {seen}, {after}")
+        for sid in MORE:
+            hook({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": sid})
+        await wait(page, "() => window.__dbg.robots.length === 1 && window.__dbg.robots.every((R) => !R.path.length)", timeout=90000, label="one robot again, seated")
 
         # 6. the card and the log
         await page.evaluate("(id) => window.__dbg.openRobot(id)", rid)
