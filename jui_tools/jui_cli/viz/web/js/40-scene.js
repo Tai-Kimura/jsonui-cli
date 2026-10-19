@@ -1622,11 +1622,13 @@ const SHRED = { w: 0.8, d: 0.55, h: 1.1, bitsMax: 24, feedSec: 1.2, bitsSec: 2.0
 function shredderSpot(r) {
   const k = SHRED.scale, W = SHRED.w * k, D = SHRED.d * k;
   const cx = (r.x0 + r.x1) / 2, x = Math.min(cx + 1.6, r.x1 - SEAT.aisleR - W), z = r.z0 + 0.12 + D / 2;
-  return { x, z, k, spot: [x - W / 2 - 0.45, z + 0.2], box: [x - W / 2, x + W / 2, z - D / 2, z + D / 2] };
+  // the feeder's spot 0.1 in front of the machine's middle: as the arms draw it (0.5 round it) it ends at z0 + 1.09, short of
+  // the back row of desks (z0 + SEAT.back); + 0.2 reached 0.09 into it (docs/bugs/2026-10-19-jui-viz-shredder-spot-in-desk-zone.md)
+  return { x, z, k, spot: [x - W / 2 - 0.45, z + 0.1], box: [x - W / 2, x + W / 2, z - D / 2, z + D / 2] };
 }
 function shredderBuild(r, g) {
   const k = SHRED.scale, W = SHRED.w * k, D = SHRED.d * k;
-  const { x, z } = shredderSpot(r);
+  const { x, z, spot } = shredderSpot(r);
   const sg = new THREE.Group(), body = toon('#4a515c'), lid = toon('#6b7480'), bin = toon('#c7cdd6');
   const box = new THREE.Mesh(new RoundedBoxGeometry(SHRED.w, SHRED.h - 0.08, SHRED.d, 2, 0.03), body); box.position.y = (SHRED.h - 0.08) / 2; sg.add(box);
   const top = new THREE.Mesh(new RoundedBoxGeometry(SHRED.w + 0.02, 0.08, SHRED.d + 0.02, 2, 0.02), lid); top.position.y = SHRED.h - 0.04; sg.add(top);
@@ -1637,7 +1639,7 @@ function shredderBuild(r, g) {
   const bit = { geo: new THREE.PlaneGeometry(0.07, 0.022), mat: toon('#ffffff', { side: THREE.DoubleSide }) };
   // the robot stands at its left side, so the usual view from the front sees the machine and the bits (in front of
   // it, the robot hid both, 10-19)
-  return { group: sg, x, z, k, spot: [x - W / 2 - 0.45, z + 0.2], box: [x - W / 2, x + W / 2, z - D / 2, z + D / 2], bit, led };
+  return { group: sg, x, z, k, spot, box: [x - W / 2, x + W / 2, z - D / 2, z + D / 2], bit, led };
 }
 function shredHeld(folder, count) {
   if (folder) {
