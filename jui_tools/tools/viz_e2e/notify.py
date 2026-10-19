@@ -51,7 +51,11 @@ STUB = r"""(() => {
   // logged to localStorage (shared by the tabs)
   class FakeAudioContext {
     constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; window.__ac = this; }
-    resume() { if ((localStorage.getItem('e2e-ac') || 'running') === 'running') this.state = 'running'; return Promise.resolve(); }
+    // Chromium's rule: a context runs only after a press on the page since it loaded (sticky user activation); the
+    // test can also hold it suspended ('e2e-ac'); it settles a moment later, as a real one does
+    resume() { return new Promise((done) => setTimeout(() => {
+      if ((localStorage.getItem('e2e-ac') || 'running') === 'running' && navigator.userActivation && navigator.userActivation.hasBeenActive) this.state = 'running';
+      done(); }, 20)); }
     createOscillator() { return { type: '', frequency: { setValueAtTime() {} }, connect() {}, stop() {},
       start() { try { localStorage.setItem('e2e-tones', String(Number(localStorage.getItem('e2e-tones') || 0) + 1)); } catch (e) {} } }; }
     createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
@@ -243,6 +247,21 @@ async def run_notify(pw, out, failures):
         for p in (a, b):
             await p.evaluate("() => { localStorage.setItem('e2e-ac', 'running'); window.__ac.state = 'running'; }")
 
+        # 3d. the context gone back to suspended (a press there was): the chime asks it to resume first and sounds —
+        # before 2.3.6's fix it gave up, and the real check heard nothing (10-20)
+        n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+        for p in (a, b):
+            await p.evaluate("() => { window.__ac.state = 'suspended'; }")
+        turn()
+        await shown_after(n0 + 1, "a turn end with the sound gone back to suspended")
+        await wait(a, f"() => Number(localStorage.getItem('e2e-tones') || 0) / 2 >= {c0 + 1}", timeout=5000, label="the chime after a resume")
+        owner = await owner_of((await a.evaluate(SHOWN))[-1]["tag"])
+        res["resumed"] = {"chimes": await a.evaluate(CHIMES) - c0, "last": await owner.evaluate("() => window.__dbg.notifyLastChime()") if owner else None,
+                          "note": await owner.evaluate("() => document.getElementById('notify-chime-note').textContent") if owner else None}
+        last = res["resumed"]["last"] or {}
+        check(failures, res["resumed"]["chimes"] == 1 and last.get("before") == "suspended" and last.get("after") == "running" and last.get("played") is True,
+              f"a suspended context is resumed before the chime, and the try is kept: {res['resumed']}")
+
         # 4. a reload rings nothing again — with the list of rung keys cleared first (a fresh profile), so it is the
         # page's own "nothing from before it was loaded" that holds, not the other tabs' record
         before = len(await a.evaluate(SHOWN))
@@ -273,6 +292,11 @@ async def run_notify(pw, out, failures):
         # 5b. quiet: the page in front, focused, showing that robot's card — no notification, no sound
         await a.bring_to_front()
         await a.evaluate("() => window.__dbg.notifySet({ done: true })")
+        # the reloaded tab, never pressed: no context yet, and the settings say so
+        await a.evaluate("() => window.__dbg.notifyPanel()")
+        res["noContext"] = await a.evaluate("() => [window.__dbg.notifyAudio(), document.getElementById('notify-chime-note').textContent]")
+        check(failures, res["noContext"][0] is None and "まだ作られていない" in res["noContext"][1], f"a reloaded tab never pressed: no sound yet, and it says so: {res['noContext']}")
+        await a.keyboard.press("Escape")
         await a.mouse.click(5, 880)   # wakes the reloaded tab's sound (a press), so a ring would sound
         await wait(a, "() => window.__dbg.notifyAudio() === 'running'", label="tab a's sound woken again")
         await a.evaluate("(id) => window.__dbg.openRobot(id)", rid)

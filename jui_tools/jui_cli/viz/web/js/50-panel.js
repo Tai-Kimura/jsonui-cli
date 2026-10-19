@@ -1820,7 +1820,7 @@ callEl.addEventListener('keydown', (e) => {
      4 s and whenever the server asks (notify.ping): then a question waits for an answer though the page is hidden
      (cd's ruling 10-19; it lapses notifyPresenceSec after the last word, a closed tab included). */
 const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask', 'chime'];
-const NOTIFY = { on: { done: true, perm: true, ask: true, chime: true }, audio: null, woke: false, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0 };
+const NOTIFY = { on: { done: true, perm: true, ask: true, chime: true }, audio: null, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0 };
 function notifyLoadPrefs() {
   try {
     const v = JSON.parse(localStorage.getItem(NOTIFY_PREFS) || 'null');
@@ -1858,19 +1858,42 @@ function notifyOut(key, body, onClick) {
    question rises. A browser starts an AudioContext only after the person has pressed something on the page: it is
    woken by the permission button and by the first press anywhere; until then the notification shows without sound
    and the settings say a press is needed. */
-function notifyAudioWake() {
+function notifyAudioMake() {
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    if (!NOTIFY.audio) NOTIFY.audio = new AC();
-    if (NOTIFY.audio.state !== 'running') NOTIFY.audio.resume().catch(() => {}).finally(() => notifySettingsShow());
+    if (AC && !NOTIFY.audio) { NOTIFY.audio = new AC(); NOTIFY.audio.onstatechange = () => notifySettingsShow(); }
   } catch (err) { /* no sound: the notification still shows */ }
+  return NOTIFY.audio;
+}
+function notifyAudioWake() {
+  const ac = notifyAudioMake();
+  if (ac && ac.state !== 'running') ac.resume().catch(() => {}).finally(() => notifySettingsShow());
 }
 const notifyAudioReady = () => !!(NOTIFY.audio && NOTIFY.audio.state === 'running');
-function notifyChime(kind) {
-  if (!NOTIFY.on.chime || !notifyAudioReady()) return;
+const notifyAudioState = () => (NOTIFY.audio ? NOTIFY.audio.state : 'none');
+/* The real check (10-20): the banner showed and no chime was heard, though the same tones from a new AudioContext in
+   the console were. A browser lets a context run only after a press on the page since it was loaded, and a context
+   can go back to suspended; so right before each chime the page asks it to resume (at most RESUME_MS) and sounds only
+   if it then runs. Each try is kept (NOTIFY.lastChime: the state before and after, the clock, played or not) and shown
+   in the settings and the console, to tell the two apart the next time. */
+const NOTIFY_RESUME_MS = 600;
+async function notifyChime(kind) {
+  if (!NOTIFY.on.chime) return;
+  const rec = { at: Date.now(), kind, before: notifyAudioState(), after: null, t: null, played: false };
   try {
-    const ac = NOTIFY.audio, t = ac.currentTime, notes = kind === 'done' ? [880, 660] : [660, 988];
+    const ac = notifyAudioMake();
+    if (ac && ac.state !== 'running') await Promise.race([ac.resume().catch(() => {}), new Promise((done) => setTimeout(done, NOTIFY_RESUME_MS))]);
+    rec.after = notifyAudioState();
+    rec.t = ac ? +Number(ac.currentTime || 0).toFixed(2) : null;
+    if (ac && ac.state === 'running') { notifyTones(ac, kind); rec.played = true; }
+  } catch (err) { rec.error = String((err && err.message) || err); }
+  NOTIFY.lastChime = rec;
+  try { console.info('jui viz: chime', JSON.stringify(rec)); } catch (err) { /* the console is for the eye only */ }
+  notifySettingsShow();
+}
+function notifyTones(ac, kind) {
+  try {
+    const t = ac.currentTime, notes = kind === 'done' ? [880, 660] : [660, 988];
     notes.forEach((hz, i) => {
       const o = ac.createOscillator(), g = ac.createGain(), at = t + i * 0.16;
       o.type = 'sine'; o.frequency.setValueAtTime(hz, at);
@@ -1879,7 +1902,8 @@ function notifyChime(kind) {
     });
   } catch (err) { /* no sound: the notification has shown */ }
 }
-for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { if (!NOTIFY.woke) { NOTIFY.woke = true; notifyAudioWake(); } }, { capture: true, once: true });
+// every press until the sound runs (not the first only: a context can go back to suspended)
+for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { if (!notifyAudioReady()) notifyAudioWake(); }, { capture: true });
 /* true: this tab rings it (the first to take the key); false: another tab (or this one) already did. */
 function notifyRungTake(key) {
   let rung;
@@ -1962,7 +1986,9 @@ function notifySettingsShow(settings) {
   setText($('notify-perm-state'), state);
   $('notify-ask-perm').hidden = !notifyCan() || Notification.permission !== 'default';
   for (const el of notifyEl.querySelectorAll('[data-notify-kind]')) el.checked = !!NOTIFY.on[el.dataset.notifyKind];
-  setText($('notify-chime-note'), NOTIFY.on.chime && !notifyAudioReady() ? 'ページを一度クリックすると鳴ります' : '');
+  const st = notifyAudioState(), lc = NOTIFY.lastChime;
+  setText($('notify-chime-note'), !NOTIFY.on.chime ? '' : `音の状態: ${st === 'running' ? '鳴らせる' : st === 'none' ? 'まだ作られていない（ページを一度クリックすると鳴ります）' : '止まっている（ページを一度クリックすると鳴ります）'}（${st}）`
+    + (lc ? ` · 最後のチャイム ${new Date(lc.at).toTimeString().slice(0, 8)}: ${lc.before} → ${lc.after}、currentTime ${lc.t}、${lc.played ? '鳴らした' : '鳴らせなかった'}` : ''));
   const sel = $('ask-wait');
   if (s) {
     const label = (sec) => (sec < 60 ? `${sec} 秒` : `${sec / 60} 分`);
