@@ -12,6 +12,14 @@ import shlex
 
 TYPING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 READING_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "ToolSearch"}
+# Reading the web (requester 10-20: "WebFetchの時は机で辞書をペラペラめくるアニメーションにして欲しい"; WebSearch too, the
+# requester's answer the same morning): still the state 'reading' (its lamp and its tag's 読む as they were), with the
+# sub-kind agent["readKind"] = "web", and the page opens a thick dictionary on the desk and flips its pages. One tool a
+# line: taking a tool out of the dictionary (or putting one in) is that one line.
+WEB_READING_TOOLS = {
+    "WebFetch",
+    "WebSearch",
+}
 COMMAND_TOOLS = {"Bash", "BashOutput"}
 READING_MCP = re.compile(r"^mcp__jui-tools__(read_|lookup_|list_|search_|get_)")
 COMMAND_MCP = re.compile(r"^mcp__jui-tools__(jui_build|jui_verify|doc_|test_)")
@@ -58,6 +66,11 @@ def state_for_tool(tool: str, tool_input: dict) -> str:
     if tool in ("Agent", "Task"):
         return "carry"
     return "command"
+
+
+def read_kind(tool: str) -> str | None:
+    """The kind of reading a tool is: "web" for the dictionary on the desk, None for the book in the hands."""
+    return "web" if tool in WEB_READING_TOOLS else None
 
 
 def act_for_tool(tool: str, tool_input: dict, root: str | None) -> str:

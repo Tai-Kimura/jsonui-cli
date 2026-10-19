@@ -805,7 +805,7 @@ function rebuildRobots(initial) {
     else if (!gone) delete LIVE.leaving[label];
     // since: when the server last set this robot (its idle began then, for play: 10-18)
     const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), asking: a.state === 'waiting' && a.waitingOn === 'question', since: Number(a.updatedAt) || 0,
-      promptAt: Number(a.promptAt) || 0,
+      promptAt: Number(a.promptAt) || 0, readKind: a.state === 'reading' && a.readKind === 'web' ? 'web' : null,   // the dictionary (10-20)
       git: a.git && typeof a.git === 'object' && a.git.id ? a.git : null };   // the box (2.3.4): its last push / pull
     // a deletion it ran (10-19): the page walks it to the shredder once per new at
     if (a.shred && typeof a.shred === 'object' && Number(a.shred.at) > 0) {

@@ -326,6 +326,8 @@ class World:
             self._until.pop(agent["id"], None)
             if "waitingOn" not in extra:
                 agent.pop("waitingOn", None)   # what it waits on belongs to the state it was set with
+            if "readKind" not in extra:
+                agent.pop("readKind", None)    # so does the kind of reading (the dictionary, robots.read_kind)
         if act is not None:
             agent["act"] = act
         for k, v in extra.items():
@@ -585,7 +587,8 @@ class World:
             asking = tool == QUESTION_TOOL
             if asking:
                 self._status(session, "waiting", at, "question")
-            self._set(agent, at, state, act, target=target, waitingOn="question" if asking else None)
+            self._set(agent, at, state, act, target=target, waitingOn="question" if asking else None,
+                      readKind=robots.read_kind(tool) if state == "reading" else None)
             if state == "carry":
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
             if tool in EDIT_TOOLS:
@@ -647,7 +650,8 @@ class World:
                 self._set(agent, at, "idle", _settled_act(agent["act"], failed))
             elif opened and agent["state"] == "waiting" and waited_on:
                 still = self._open_tool.get(opened[-1]) or ""   # the newest call still open: what the robot does now
-                self._set(agent, at, robots.state_for_tool(still, {}) if still else "idle", _settled_act(agent["act"], failed))
+                back = robots.state_for_tool(still, {}) if still else "idle"
+                self._set(agent, at, back, _settled_act(agent["act"], failed), readKind=robots.read_kind(still) if back == "reading" else None)
             if tool == "SendMessage":
                 self.calls.sent(use_id, failed, at)
                 self._dirty.add("calls")

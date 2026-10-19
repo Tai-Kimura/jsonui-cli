@@ -382,3 +382,29 @@ window.__dbg.rolePills = () => {
   }));
   return { html, canvas, body: Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [k, v.color])) };
 };
+// reading the web (10-20): the dictionary on the desk of each robot, read from the robot itself: shown (it and every
+// parent visible, in the scene), the held book, each page's turn (radians, 0 on the right block, π on the left one)
+// and whether it is drawn; dictAt: the pages' turns at pose times (still under reduced motion, turning otherwise)
+window.__dbg.webLook = () => robots.map((R) => {
+  const r = R.robot, d = r.dict, book = r.props.reading;
+  let shown = !!d; for (let x = d ? d.book : null; x; x = x.parent) { if (!x.visible) shown = false; if (!x.parent && x !== scene) shown = false; }
+  return { id: R.def.id, kind: R.def.kind, state: r.state, readKind: r.readKind || null, dict: shown, book: !!(book && book.group.visible),
+    pages: d ? d.pages.map((h) => +(-h.rotation.z).toFixed(3)) : [], pagesShown: d ? d.pages.filter((h) => h.visible).length : 0,
+    armRz: +r.armR.rotation.z.toFixed(4), look: r.look || null, headset: !!(r.headset && r.headset.visible), reduced: reduceMotion,
+    play: !!R.play, brk: !!R.brk, solo: !!R.solo, walking: R.path.length > 0 };
+});
+window.__dbg.dictAt = (times) => times.map((s) => [...Array(DICT_PAGES).keys()].map((k) => +(Math.PI * dictFlip(s, k)).toFixed(3)));
+// a mark on the dispose of each geometry and material of a robot's dictionary that is its own (the arm sees whether
+// taking the robot down disposes them); returns how many were marked
+window.__dbg.markDict = (id) => {
+  const R = robots.find((x) => x.def.id === id), d = R && R.robot.dict;
+  if (!d) return 0;
+  window.__disposed = window.__disposed || {};
+  liveShared();
+  const seen = new Set();
+  d.book.traverse((o) => {
+    const own = [o.geometry, ...[].concat(o.material || [])].filter((x) => x && !seen.has(x) && !LIVE3D.sharedGeo.has(x) && !LIVE3D.sharedMat.has(x));
+    for (const x of own) { seen.add(x); const key = `dict:${x.uuid}`, f = x.dispose.bind(x); window.__disposed[key] = 0; x.dispose = () => { window.__disposed[key] += 1; f(); }; }
+  });
+  return seen.size;
+};

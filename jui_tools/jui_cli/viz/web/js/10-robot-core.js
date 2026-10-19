@@ -766,6 +766,74 @@ function notePose(r, k, t) {
   return { x: (k % 2 ? -1 : 1) * (0.42 + ph * 0.18) + Math.sin(ph * 6.3 + k) * 0.06, y: 1.95 + ph * 0.75,
     opacity: reduceMotion ? 1 : Math.min(1, Math.sin(ph * Math.PI) * 1.6) };
 }
+/* Reading the web (requester 10-20: "WebFetchの時は机で辞書をペラペラめくるアニメーションにして欲しい"; WebSearch too): the
+   state stays 'reading' (lamp, tag and card as they were) and r.readKind is 'web' (ingest.py agent.readKind, from
+   robots.WEB_READING_TOOLS). In place of the book held up, a thick dictionary lies open on the desk and the right hand
+   flips its pages: DICT_PAGES pages one after another (DICT_GAP apart, each over in DICT_FLIP), then a rest, every
+   DICT_PERIOD of pose time. A page is drawn only while it turns; the two blocks of pages stay. Only in 'reading', so
+   never away from the desk (walking, a break, a game, the box: other states). Reduced motion: the dictionary open,
+   no page turning, the hand still. Built once a robot first reads the web, under its root with geometries and
+   materials of its own: taking the robot down (disposeTree) disposes them, as the other props. */
+const DICT_PAGES = 3, DICT_PERIOD = 2.6, DICT_FLIP = 0.55, DICT_GAP = 0.22;
+const DICT = { w: 0.27, d: 0.36, block: 0.1, board: 0.014, x: 0, y: 0.55, z: 0.5 };   // y: the desk's top (0.275 + 0.25 + 0.025)
+/* How far page k has turned at pose time s, 0 (on the right block) to 1 (laid on the left one). */
+function dictFlip(s, k) {
+  if (reduceMotion) return 0;
+  const u = Math.min(1, Math.max(0, ((((s % DICT_PERIOD) + DICT_PERIOD) % DICT_PERIOD) - k * DICT_GAP) / DICT_FLIP));
+  return u * u * (3 - 2 * u);
+}
+/* The right hand over the pages: 0 at rest, 1 in the middle of a turn. */
+function dictHand(s) {
+  let f = 0;
+  for (let k = 0; k < DICT_PAGES; k++) f = Math.max(f, Math.sin(Math.PI * dictFlip(s, k)));
+  return f;
+}
+function dictBuild(r) {
+  const group = new THREE.Group(); group.userData.dictionary = true;
+  group.position.set(DICT.x, DICT.y, DICT.z);
+  const coverMat = toon('#7a2432'), pageMat = toon('#f7f1df'), edgeMat = toon('#d9cba3'), tabMat = toon('#c9a227');
+  const top = DICT.board + DICT.block;
+  for (const side of [-1, 1]) {   // -1: the robot's right (-x), the pages not read yet; 1: its left
+    const board = new THREE.Mesh(new THREE.BoxGeometry(DICT.w + 0.02, DICT.board, DICT.d + 0.025), coverMat);
+    board.position.set(side * (DICT.w / 2 + 0.008), DICT.board / 2, 0); group.add(board);
+    const block = new THREE.Mesh(new THREE.BoxGeometry(DICT.w, DICT.block, DICT.d), [edgeMat, edgeMat, pageMat, edgeMat, edgeMat, edgeMat]);
+    block.position.set(side * (DICT.w / 2 + 0.004), DICT.board + DICT.block / 2, 0); block.rotation.z = side * 0.04; group.add(block);
+  }
+  const spine = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, DICT.d + 0.025, 16, 1, false, -Math.PI / 2, Math.PI), coverMat);
+  spine.rotation.x = Math.PI / 2; spine.position.set(0, 0.03, 0); group.add(spine);   // the round back, under the middle
+  for (let k = 0; k < 3; k++) {   // thumb-index tabs on the outer edge of the pages still to read: a dictionary
+    const tab = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.03, 0.05), tabMat);
+    tab.position.set(-(DICT.w + 0.01), DICT.board + 0.022 + k * 0.028, -0.11 + k * 0.11); group.add(tab);
+  }
+  const leafGeo = new THREE.BoxGeometry(DICT.w - 0.01, 0.003, DICT.d - 0.01).translate(-(DICT.w - 0.01) / 2, 0, 0);
+  const pages = [];
+  for (let k = 0; k < DICT_PAGES; k++) {   // each page turns about the spine, from the right block over to the left
+    const hinge = new THREE.Group(); hinge.position.set(0, top + 0.002 + k * 0.001, 0); group.add(hinge);
+    const leaf = new THREE.Mesh(leafGeo, pageMat); hinge.add(leaf);
+    pages.push(hinge);
+  }
+  const holder = new THREE.Group(); holder.add(group);
+  if (!r.furnished) {   // a robot without a desk of its own (the demo) gets one, as the laptop does
+    const g = S.geo, m = S.mat, desk = new THREE.Group(); desk.position.set(0, 0.275, 0.6); holder.add(desk);
+    const deskTop = new THREE.Mesh(g.deskTop, m.wood); deskTop.position.y = 0.25; desk.add(deskTop);
+    for (const [x, z] of [[-0.44, -0.22], [0.44, -0.22], [-0.44, 0.22], [0.44, 0.22]]) { const leg = new THREE.Mesh(g.deskLeg, m.woodDark); leg.position.set(x, -0.025, z); desk.add(leg); }
+  }
+  r.root.add(holder);
+  return { group: holder, book: group, pages };
+}
+function dictUpdate(r, s, k) {
+  const on = k > 0.02;
+  if (on && !r.dict) r.dict = dictBuild(r);
+  if (!r.dict) return;
+  r.dict.group.visible = on;
+  if (!on) return;
+  r.dict.book.scale.setScalar(Math.max(0.001, k));
+  r.dict.pages.forEach((hinge, i) => {
+    const f = dictFlip(s, i);
+    hinge.rotation.z = -Math.PI * f;   // 0: lying on the right block; π: on the left one
+    hinge.visible = f > 0.001 && f < 0.999;
+  });
+}
 function setRobotTired(r, on) {
   if (on && !r.tired) r.needDrink = true;
   if (!on) r.needDrink = false;
@@ -1228,6 +1296,13 @@ function poseFor(state, s) {
       p.headX = 0.3 + Math.sin(s * 0.7) * 0.03; p.headY = Math.sin(s * 0.3) * 0.12;
       p.aLx = -1.25; p.aLz = -0.55; p.aRx = -1.25; p.aRz = 0.55;
       break;
+    case 'readingWeb': {   // over the dictionary on the desk: the left hand holds its pages, the right one turns them
+      const f = dictHand(s);
+      p.torsoX = 0.06; p.headX = 0.42 + Math.sin(s * 0.7) * 0.02; p.headY = -0.1 + f * 0.16;
+      p.aLx = -0.95; p.aLz = -0.3;
+      p.aRx = -0.95 - f * 0.25; p.aRz = 0.2 + f * 0.45;
+      break;
+    }
     case 'command': {
       const tap = Math.max(0, Math.sin(s * 5));
       p.headY = -0.55; p.headX = -0.02; p.torsoY = -0.15;
@@ -1272,7 +1347,8 @@ function updateRobot(r, t, dt) {
   const e = r.blend * r.blend * (3 - 2 * r.blend);
   const look = lookUpdate(r, t, dt), heavy = !!look;
   // heavy: fast typing (drained: slower than fired)
-  const a = poseFor(r.prev, s), b = heavy ? poseFor('typing', s * (look === 'drained' ? 1.5 : 2.4)) : poseFor(r.state, s);
+  const posed = (state) => (state === 'reading' && r.readKind === 'web' ? 'readingWeb' : state);   // the dictionary (10-20)
+  const a = poseFor(posed(r.prev), s), b = heavy ? poseFor('typing', s * (look === 'drained' ? 1.5 : 2.4)) : poseFor(posed(r.state), s);
   sweatUpdate(r, s, heavy);
   const p = {};
   for (const k in b) p[k] = a[k] + (b[k] - a[k]) * e;
@@ -1321,9 +1397,11 @@ function updateRobot(r, t, dt) {
   const faceKey = `${mode}|${tint ? tint.join(',') : ''}`;   // the colour in steps: redrawn a few times while it eases
   if (faceKey !== r.faceMode) { drawFace(r.faceCtx, mode, tint); r.faceTex.needsUpdate = true; r.faceMode = faceKey; }
 
+  let dictK = 0;
   for (const key in r.props) {
     const pr = r.props[key];
-    const k = key === r.state ? e : (key === r.prev && r.prev !== r.state ? 1 - e : 0);
+    let k = key === r.state ? e : (key === r.prev && r.prev !== r.state ? 1 - e : 0);
+    if (key === 'reading' && r.readKind === 'web') { dictK = k; k = 0; }   // the dictionary on the desk, not the book
     pr.group.visible = k > 0.02;
     if (!pr.group.visible) continue;
     for (const child of pr.group.children) {
@@ -1332,6 +1410,7 @@ function updateRobot(r, t, dt) {
     }
     if (pr.update) pr.update(s);
   }
+  dictUpdate(r, s, dictK);
 }
 function setRobotState(r, state) {
   if (state === r.state) return;
