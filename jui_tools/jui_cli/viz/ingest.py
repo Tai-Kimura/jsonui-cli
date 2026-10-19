@@ -1384,7 +1384,9 @@ class World:
         """Write the changed slices into the state store (sorted for stable output)."""
         if "projects" in self._dirty:
             used = {s["projectId"] for s in self.sessions.values()}
-            projects = [p for p in self.rooms.projects.values() if p["id"] in used]
+            # copies: a row changed in place (apply_mock) must compare unequal to the one published before, or
+            # set_slice sees no change and the page never hears of it
+            projects = [dict(p) for p in self.rooms.projects.values() if p["id"] in used]
             self.state.set_slice("projects", sorted(projects, key=lambda p: p["order"]))
         relay, prompt = self.perms.relay_sessions(), self.perms.prompt_sessions()
         for sid, session in self.sessions.items():
