@@ -96,7 +96,10 @@ document.addEventListener('pointerout', (e) => {
 });
 document.addEventListener('focusin', (e) => {
   const t = e.target;
-  const line = t.matches && t.matches(FULLTEXT_LINES) ? t : [...(t.querySelectorAll ? t.querySelectorAll(FULLTEXT_LINES) : [])].find(fulltextCut);
+  // a box focused by the mouse (the history pane takes the focus on a click) shows nothing: only a keyboard visit
+  // to a box names its first cut line (10-20: the tag of an unrelated line popped up under the pointer and took the click)
+  const viaKeys = !!(t.matches && t.matches(':focus-visible'));
+  const line = t.matches && t.matches(FULLTEXT_LINES) ? t : viaKeys ? [...(t.querySelectorAll ? t.querySelectorAll(FULLTEXT_LINES) : [])].find(fulltextCut) : null;
   if (line && fulltextHost(line) && fulltextCut(line)) fulltextShow(line, 'focus');
   else if (FULLTEXT.via === 'focus') fulltextHide();
 });
