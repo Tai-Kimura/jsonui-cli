@@ -18,16 +18,23 @@ import sys
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from waits import settled
 
 CWD = "/work/tags-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SID = "e2e00000-0000-4000-8000-0000000003{:02x}"
 BUDGET_MS = 1.0   # placeRobotTags per frame, mean (software GL machine)
+BENCH_RUNS = 200  # placeRobotTags run this many times in a row in the page, its own CPU time: the cost arm's sample
 
-# Move robot i to (x, z) and keep it there (no path); the room's seat of robot 0 is the anchor.
+# Move robot i to (x, z) and keep it there (no path); the room's seat of robot 0 is the anchor. Every tag's target is
+# forgotten (NaN), so __dbg.settle holds only after a placement has run with the robots where they are now.
 MOVE_JS = """([moves]) => { const rs = window.__dbg.robots; const a = rs[0].robot.root.position;
-  const base = [a.x, a.z]; moves.forEach(([i, dx, dz]) => { const R = rs[i]; R.path = []; R.robot.root.position.x = base[0] + dx; R.robot.root.position.z = base[1] + dz; }); }"""
+  const base = [a.x, a.z]; moves.forEach(([i, dx, dz]) => { const R = rs[i]; R.path = []; R.robot.root.position.x = base[0] + dx; R.robot.root.position.z = base[1] + dz; });
+  rs.forEach((R) => { R.tagTarget = NaN; }); return window.__dbg.settle ? window.__dbg.settle() : null; }"""
 # Every visible robot tag's rect, from the page itself (works on a tree without __dbg.tags).
+# The rects, and whether the tags had settled at that same moment (ticket 2026-10-19-jui-viz-e2e-name-tags-few-frames-flaky:
+# 2.3.4 read 0.9 s / 1.2 s after a move and, on a loaded machine, read tags still easing apart).
+READ_JS = """() => ({ rects: (RECTS)(), settled: window.__dbg.settle() })"""
 RECTS_JS = """() => window.__dbg.robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !document.getElementById('tags').hidden)
   .map((R) => { const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; })"""
 
@@ -99,11 +106,24 @@ async def run_name_tags(pw, out, failures, jt=None, shots_only=False):
         await wait(page, "() => window.__dbg.robots.length >= 4 && window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated")
         room_id = await page.evaluate("() => window.__dbg.robots[0].def.room")
 
+        async def read(label):
+            got = await page.evaluate(READ_JS.replace("(RECTS)", f"({RECTS_JS})"))
+            res[label] = {"rects": got["rects"], "cross": crossings(got["rects"]), "settled": got["settled"]}
+            check(failures, got["settled"], f"{label}: the tags were read after they settled")
+            return got["rects"]
+
         async def measure(label, moves, shot=None):
-            await page.evaluate(MOVE_JS, [moves])
-            await page.wait_for_timeout(900)   # the eased move settles
-            rects = await page.evaluate(RECTS_JS)
-            res[label] = {"rects": rects, "cross": crossings(rects)}
+            moving = await page.evaluate(MOVE_JS, [moves])   # __dbg.settle at the moment of the move
+            if shots_only:   # the before pictures, from a tree that may lack __dbg.settle: pictures only, no arm reads them
+                await page.wait_for_timeout(900)
+                rects = await page.evaluate(RECTS_JS)
+                res[label] = {"rects": rects, "cross": crossings(rects)}
+            else:
+                # the settle hook says false while the tags have not been placed since the move (a hook that always says
+                # true would pass every read below: dd's mutation, 10-19)
+                check(failures, moving is False, f"{label}: right after the move (no placement yet), settle must say false; it said {moving}")
+                await settled(page, f"{label}: the tags after the move")
+                rects = await read(label)
             if shot:
                 await page.screenshot(path=str(out / shot))
             return rects
@@ -136,9 +156,8 @@ async def run_name_tags(pw, out, failures, jt=None, shots_only=False):
         hook(SID.format(1), hook_event_name="Stop")
         await page.evaluate("() => window.__dbg.play({ idleMs: 0, p: 1, minSec: 30, maxSec: 30, restMinSec: 600, restMaxSec: 600 })")
         await wait(page, "() => window.__dbg.play().list.some((g) => g.started)", timeout=40000, label="a game")
-        await page.wait_for_timeout(1200)
-        rects = await page.evaluate(RECTS_JS)
-        res["play"] = {"rects": rects, "cross": crossings(rects)}
+        await settled(page, "at play")
+        rects = await read("play")
         check(failures, not res["play"]["cross"], f"at play: {res['play']['cross']}")
         playing = [x for x in rects if any(w in x["text"] for w in ("キャッチボール中", "ハイタッチ中", "じゃんけん中"))]
         check(failures, len(playing) == 2, f"at play: both players' tags say the game (and still cross none): {[x['text'][:30] for x in rects]}")
@@ -152,20 +171,22 @@ async def run_name_tags(pw, out, failures, jt=None, shots_only=False):
         await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="settled for the booth")
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 1, vend: 0 }, joinP: 1, smokeMinSec: 50, smokeMaxSec: 50, restMinSec: 0, restMaxSec: 0 })")
         await wait(page, "() => window.__dbg.brk().robots.filter((x) => x.kind === 'smoke' && x.at).length >= 2", timeout=40000, label="two in the booth")
-        await page.wait_for_timeout(1200)
-        rects = await page.evaluate(RECTS_JS)
-        res["booth"] = {"rects": rects, "cross": crossings(rects)}
+        await settled(page, "two in the booth")
+        rects = await read("booth")
         smokers = [x for x in rects if "タバコ休憩" in x["text"]]
         check(failures, len(smokers) == 2 and not res["booth"]["cross"], f"two in the booth: タバコ休憩 on both, no crossing: {res['booth']['cross']} {[x['text'][:30] for x in rects]}")
         await page.screenshot(path=str(out / "after-booth-light.png"))
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true })")
         # the cost
-        await page.evaluate("() => window.__dbg.tagStats(true)")
-        await page.wait_for_timeout(3000)
-        st = res["cost"] = await page.evaluate("() => window.__dbg.tagStats(false)")
-        check(failures, st["frames"] > 20 and st["meanMs"] < BUDGET_MS, f"placeRobotTags under {BUDGET_MS} ms a frame on average: {st}")
+        # the cost: placeRobotTags' own CPU time over BENCH_RUNS placements in a row (the frames a loaded machine draws in a
+        # few seconds were 1–2: a mean over those said nothing). The frames' own stats are kept in the results.
+        res["frameStats"] = await page.evaluate("() => window.__dbg.tagStats(false)")
+        st = res["cost"] = await page.evaluate("(k) => window.__dbg.tagBench(k)", BENCH_RUNS)
+        check(failures, st["runs"] == BENCH_RUNS and st["n"] >= 4 and st["meanMs"] < BUDGET_MS, f"placeRobotTags under {BUDGET_MS} ms a placement on average ({BENCH_RUNS} in a row): {st}")
         check(failures, not watch.console and not watch.foreign and not watch.csp, f"no console error, nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
         await page.close()
+    except Exception as e:   # a wait that ran out is a FAIL line with what was seen, not a traceback that ends run.py
+        failures.append(f"name-tags: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
         await browser.close()
         srv.terminate()  # our own child (started above)

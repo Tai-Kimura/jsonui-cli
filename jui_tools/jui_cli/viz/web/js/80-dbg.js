@@ -90,6 +90,11 @@ window.__dbg = {
   // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
   tags: () => robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !tagsEl.hidden).map((R) => {
     const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; }),
+  // placeRobotTags' own CPU time, k placements in a row in this call (2.3.5): the cost arm reads this, not the frames a
+  // loaded machine happened to draw (1–2 in 3 s at load 90–130). The frame stats are left as they were.
+  tagBench: (k) => { const keep = { ...TAGS.stats }; let sum = 0, max = 0;
+    for (let i = 0; i < k; i++) { const t = performance.now(); placeRobotTags(); const ms = performance.now() - t; sum += ms; max = Math.max(max, ms); }
+    Object.assign(TAGS.stats, keep); return { n: robots.length, runs: k, meanMs: sum / k, maxMs: max }; },
   tagStats: (reset) => { const S0 = TAGS.stats, out = { n: S0.n, frames: S0.frames, meanMs: S0.frames ? S0.sumMs / S0.frames : 0, maxMs: S0.maxMs };
     if (reset) Object.assign(S0, { sumMs: 0, maxMs: 0, frames: 0 }); return out; },
   // the shredder (10-19): where it is and its box, the bits in flight, and each robot's errand

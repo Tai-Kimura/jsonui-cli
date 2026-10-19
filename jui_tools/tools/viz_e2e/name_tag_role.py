@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 
+from waits import WaitTimeout, settled, until
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
 
 CWD = "/work/name-app"
@@ -119,7 +120,10 @@ async def run_name_tag_role(pw, out, failures, jt=None, shots_only=False):
                 await page.click(f".tag.room[data-set-project='{room_id}']")
                 await wait(page, f"() => window.__dbg.solo() === '{room_id}'", label=f"one room, {scheme}")
                 await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="settled up close")
-                await page.wait_for_timeout(600)
+                if tag == "before":   # another tree, maybe without __dbg.settle: a picture only
+                    await page.wait_for_timeout(600)
+                else:
+                    await settled(page, f"up close, {scheme}: the tags for the picture")
                 await page.screenshot(path=str(out / f"{tag}-room-{scheme}.png"))
                 await page.click("#room-back")
                 await wait(page, "() => window.__dbg.solo() === null", label="back")
@@ -156,7 +160,8 @@ async def run_name_tag_role(pw, out, failures, jt=None, shots_only=False):
         check(failures, (await page.evaluate(PANEL_JS, lab[2]))["b"] == 0, "the session row's name is text, not HTML")
         await page.click(f"#sessions [data-robot-open='{lab[1]}']")
         await wait(page, "() => !document.getElementById('rb').hidden && document.getElementById('rb-title')", label="the robot's card")
-        await page.wait_for_timeout(1500)
+        await until(page, "(name) => document.getElementById('rb-title').textContent === name", "the card shows the long name", arg=LONG,
+                    why="() => document.getElementById('rb-title').textContent")
         card = res["card"] = await page.evaluate("() => ({ nameBox: (({ top, bottom, left, right }) => ({ top, bottom, left, right }))(document.getElementById('rb-title').getBoundingClientRect()), navBox: (({ top, bottom, left, right }) => ({ top, bottom, left, right }))(document.querySelector('.rb-nav').getBoundingClientRect()), headBox: (({ left, right }) => ({ left, right }))(document.querySelector('.rb-head').getBoundingClientRect()), name: document.getElementById('rb-title').textContent, sub: document.querySelector('.rb-sub').textContent, badge: document.querySelector('.rb-badge').textContent, badgeShown: getComputedStyle(document.querySelector('.rb-badge')).display !== 'none' })")
         check(failures, card["name"] == LONG and card["badge"] == lab[1] and card["badgeShown"] and lab[1] in card["sub"],
               f"the robot's card: the whole name, and its mark (requester: the id stays on the robot's panel): {card}")
@@ -169,7 +174,17 @@ async def run_name_tag_role(pw, out, failures, jt=None, shots_only=False):
         # a rename: the file rewritten (as /rename does) — the tag and the panels follow
         session_file(0, RENAMED)
         await wait(page, f"() => window.__dbg.robots.find((R) => R.def.id === '{lab[0]}').def.title === '{RENAMED}'", label="renamed")
-        await page.wait_for_timeout(600)
+        # the tag's name is written in a frame (liveTagName), the session list on its own beat: wait for each to show
+        # the new name, never for time (ticket 2026-10-19-jui-viz-e2e-name-tags-few-frames-flaky; 2.3.4 read once after
+        # 0.6 s and, at load ~123, still saw the old name). A timeout fails the arms below with what was shown.
+        try:
+            await until(page, "([id, name]) => { const R = window.__dbg.robots.find((x) => x.def.id === id); const nm = R && R.tag.querySelector('.nm'); return !!nm && nm.textContent === name; }",
+                        "the tag shows the new name", arg=[lab[0], RENAMED],
+                        why="([id]) => { const R = window.__dbg.robots.find((x) => x.def.id === id); return R ? R.tag.textContent : null; }")
+            await until(page, f"([id, name]) => {{ const row = ({PANEL_JS})(id); return !!row && row.text.includes(name); }}", "the session list shows the new name",
+                        arg=[lab[0], RENAMED], why=f"([id]) => ({PANEL_JS})(id)")
+        except WaitTimeout:
+            pass
         t = next(x for x in await page.evaluate(TAGS_JS) if x["id"] == lab[0])
         row = await page.evaluate(PANEL_JS, lab[0])
         res["renamed"] = {"tag": t, "row": row}
