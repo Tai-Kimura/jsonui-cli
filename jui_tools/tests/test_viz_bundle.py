@@ -25,7 +25,7 @@ def web_text(*parts):
 
 
 def test_each_mode_is_its_parts_in_order():
-    assert bundle.parts("demo", e2e=False) == ("10-robot-core.js", "20-core.js", "30-source-demo.js",
+    assert bundle.parts("demo", e2e=False) == ("10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
                                                "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "60-log.js", "70-main.js")
     assert bundle.parts("live", e2e=False) == ("10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
                                                "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "60-log.js", "70-main.js")

@@ -4,7 +4,8 @@ The prototype was one module whose parts share top-level names (plan 07 §1), so
 module rather than imported from each other. Two modes pick which data source goes in the middle:
 
 - ``live``: the WebSocket client (25-net.js) and the source built from the server's slices (30-source-live.js).
-- ``demo``: the prototype's script and simulation (30-source-demo.js) — ``/?demo=1``.
+- ``demo``: the prototype's script and simulation (30-source-demo.js) — ``/?demo=1`` — and the talk view's demo
+  frames (31-talk-demo-data.js: data only, written by tools/viz_e2e/talk_demo_gen.py).
 
 ``JUI_VIZ_E2E=1`` appends 80-dbg.js, the hook the browser tests drive the 3D boards through (``window.__dbg``);
 it is never served otherwise. The server builds both modes once at start and, with ``JUI_VIZ_DEV=1``, again on
@@ -22,7 +23,7 @@ MODES = ("live", "demo")
 ORDER = {
     "live": ("10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
              "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "60-log.js", "70-main.js"),
-    "demo": ("10-robot-core.js", "20-core.js", "30-source-demo.js",
+    "demo": ("10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
              "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "60-log.js", "70-main.js"),
 }
 E2E_PART = "80-dbg.js"
