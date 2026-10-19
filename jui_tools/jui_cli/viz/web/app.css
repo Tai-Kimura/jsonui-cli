@@ -815,7 +815,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-peer summary { flex-direction: column; align-items: stretch; gap: 2px; }
 .h-peer summary > b { max-width: none; }
 .h-peer summary > .h-head { flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; white-space: normal; overflow-wrap: anywhere; }
-.h-peer summary > .h-at { align-self: flex-start; }
+.h-peer summary > .h-at { align-self: flex-end; margin-top: 4px; }   /* the time at the right end, a little apart from the body (issue #37) */
 .h-err { color: var(--warn); font-weight: 700; }
 .h-run { color: var(--info); }
 .h-io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 0 8px 8px; }
