@@ -17,7 +17,7 @@
     {
       "id": "hooks",
       "name": "hooks の入力の形とイベント名",
-      "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason), the hooks section of settings.json, the plugin's hooks.json",
+      "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason), the hooks section of settings.json, the plugin's hooks.json; the hook output fields the CLI reads back (hookSpecificOutput, permissionDecision, additionalContext, decision: block)",
       "probe": "hook_input_shape",
       "impact": "viz: ロボットが出ない・状態が動かない、許可と質問の中継が止まる。session-recovery と agents の hook が記録を取れない",
       "files": [
@@ -171,16 +171,17 @@
     },
     {
       "id": "env",
-      "name": "環境変数（CLAUDE_PROJECT_DIR、CLAUDE_PLUGIN_ROOT ほか）",
-      "relies_on": "the variables the CLI sets for hooks and plugins, and the ones our installer honours",
+      "name": "環境変数（CLAUDE_PROJECT_DIR、CLAUDE_PLUGIN_ROOT、CLAUDECODE ほか）",
+      "relies_on": "the variables the CLI sets for hooks and plugins, and the ones our installer honours; CLAUDECODE, which the CLI sets for the processes it starts and vitest reads to pick its agent reporter (that reporter drops what a passing test logged)",
       "probe": "env_vars",
-      "impact": "プラグインの hook が自分のスクリプトを見つけられない、タスクの場所がずれる",
+      "impact": "プラグインの hook が自分のスクリプトを見つけられない、タスクの場所がずれる。CLAUDECODE が変わると、jsonui-test の branch の通知が agent の実行で見えなくなる（branch_tests.py が stderr に出す理由）",
       "files": [
         "jui_tools/jui_cli/viz/sources/tasks.py",
         "plugins/jui-viz/.claude-plugin/plugin.json",
         "plugins/jui-viz/hooks/hooks.json",
         "plugins/jui-viz/scripts/session_env.sh",
-        "installer/bootstrap.sh"
+        "installer/bootstrap.sh",
+        "test_tools/jsonui_test_cli/branch_tests.py"
       ]
     },
     {

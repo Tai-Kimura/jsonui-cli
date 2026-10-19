@@ -36,7 +36,8 @@ HOOK_KEYS = {"*": ["session_id", "transcript_path", "cwd", "hook_event_name", "p
              "SessionStart": ["source"], "SessionEnd": ["reason"], "UserPromptSubmit": ["prompt"],
              "PreToolUse": ["tool_name", "tool_input", "tool_use_id"],
              "PostToolUse": ["tool_name", "tool_input", "tool_response", "tool_use_id"], "Stop": []}
-ENV_NAMES = ["CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_CODE_ENTRYPOINT"]
+#: CLAUDECODE: set by the CLI for what it starts; vitest picks its agent reporter on it (test_tools branch_tests.py).
+ENV_NAMES = ["CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_CODE_ENTRYPOINT", "CLAUDECODE"]
 STATUSLINE_KEYS = ["session_id", "transcript_path", "cwd", "model", "workspace", "version"]
 CONFIG_PATHS = ["settings.json", "projects", "sessions", "plugins"]
 #: Tool names viz keys on (robots.py, questions.py, permissions.py, config.py, the page): present in the session's tools.

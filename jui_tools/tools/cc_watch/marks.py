@@ -26,7 +26,7 @@ MARKS: dict[str, str] = {
     "identity": r"""\bwhich\(\s*["']claude["']|(?:===?|!==?|\bin)\s*["']claude["']|["']claude["']\s*(?:===?|!==?)"""
                 r"""|@anthropic-ai/claude-code""",
     # the CLI's environment
-    "env": r"\bCLAUDE_[A-Z][A-Z_]*",
+    "env": r"\bCLAUDE_?[A-Z][A-Z_]*",     # CLAUDE_PROJECT_DIR, and CLAUDECODE (no underscore)
     # hook events: the distinctive names anywhere; the generic two quoted, as an object key, or compared with
     "hook-event": r"\b(?:SessionStart|SessionEnd|PreToolUse|PostToolUse|UserPromptSubmit|PermissionRequest|SubagentStop"
                   r"|SubagentStart|PreCompact|TaskCreated|TaskCompleted)\b|[\"'](?:Stop|Notification)[\"']|hook_event_name"
@@ -39,6 +39,9 @@ MARKS: dict[str, str] = {
     # the CLI's tool names we key on (the generic ones — Bash, Edit, Read — are caught through hook-field / the areas)
     "tool-name": r"\b(?:AskUserQuestion|ExitPlanMode|EnterPlanMode|TodoWrite|NotebookEdit|MultiEdit|WebFetch|WebSearch"
                  r"|BashOutput|KillShell|SlashCommand)\b|\bmcp__",
+    # what a hook answers with: the output fields the CLI reads back
+    "hook-output": r"\b(?:hookSpecificOutput|additionalContext|permissionDecision(?:Reason)?|updatedInput)\b"
+                   r"|[\"']decision[\"']\s*:\s*[\"'](?:block|approve|allow|deny)[\"']",
     # settings keys we read or write
     "settings-key": r"\b(?:statusLine|mcpServers|enabledPlugins|extraKnownMarketplaces|apiKeyHelper|allowedTools"
                     r"|permissionMode)\b|setting-sources",
@@ -77,6 +80,7 @@ SPECIMENS: dict[str, tuple[str, str]] = {
     "transcript": ("tool/i.py", "for f in root.glob('*/*.jsonl'):\n"),
     "tool-name": ("tool/j.js", "if (name === 'AskUserQuestion') ask();\n"),
     "settings-key": ("tool/k.py", "conf['statusLine'] = cmd\n"),
+    "hook-output": ("tool/l.py", "print(json.dumps({'hookSpecificOutput': out}))\n"),
 }
 
 #: Realistic one-line shapes of relying on the CLI (dd's survey of 10-19, and the ones found while widening): each
@@ -110,6 +114,12 @@ SURVEY: list[str] = [
     'exec claude -n "$NAME"',
     'claude --dangerously-load-development-channels server:jui-viz',
     "MANIFEST = root / '.claude-plugin' / 'plugin.json'",
+    'if os.environ.get("CLAUDECODE"):',
+    "AGENT_VARS = ('AI_AGENT', 'CLAUDECODE')",
+    'out = {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}',
+    'ctx = {"additionalContext": text}',
+    '"permissionDecision": "allow",',
+    'print(json.dumps({"decision": "block", "reason": why}))',
 ]
 
 #: Lines that must hit nothing: plain words in prose and the generic names this repository uses for itself.
@@ -121,6 +131,8 @@ NOT_RELYING: list[str] = [
     "Notification sounds are off.",
     'TITLE = "claude-like"',
     'for line in path.glob("*.jsonl"):',
+    'record["decision"] = verdict',
+    "CLAUDIA = 'name'",
 ]
 
 COMPILED = {k: re.compile(v) for k, v in MARKS.items()}
@@ -133,8 +145,10 @@ def repo_root() -> Path:
 
 def tracked_files(root: Path) -> list[str]:
     try:
-        out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True).stdout
-        return [x for x in out.splitlines() if x]
+        # tracked, and untracked but not ignored: a file not yet added is seen by a local run of the suite too
+        out = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=root,
+                             capture_output=True, text=True, check=True).stdout
+        return sorted({x for x in out.splitlines() if x})
     except (OSError, subprocess.CalledProcessError):   # not a checkout: every file under the root
         return [str(p.relative_to(root)) for p in root.rglob("*") if p.is_file() and ".git" not in p.parts]
 

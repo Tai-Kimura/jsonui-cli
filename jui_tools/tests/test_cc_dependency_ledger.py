@@ -515,3 +515,16 @@ def test_the_real_ledger_decides_every_facing_file():
 def test_the_agents_probe_reads_the_json_option():
     run = lambda argv: (0, "Options:\n  --json  print JSON\n") if argv == ["agents", "--help"] else (1, "")  # noqa: E731
     assert P.agents_cli(P.Context(run=run)) == {"exit": 0, "json": True}
+
+
+def test_an_untracked_plant_in_a_facing_area_is_red(tmp_path):
+    """A file not yet added to git is seen too (git ls-files --others --exclude-standard), so the local suite is red
+    before the commit, not only CI after it; an ignored file is not a file of the repository."""
+    git = lambda *a: subprocess.run(["git", *a], cwd=tmp_path, capture_output=True, text=True, check=True)  # noqa: E731
+    git("init", "-q")
+    (tmp_path / ".gitignore").write_text("*.pyc\n")
+    tree(tmp_path, {"jui_tools/jui_cli/viz/planted_helper.py": "VALUE = 1\n", "jui_tools/jui_cli/viz/cache.pyc": "x"})
+    assert "jui_tools/jui_cli/viz/planted_helper.py" in M.tracked_files(tmp_path)
+    assert "jui_tools/jui_cli/viz/cache.pyc" not in M.tracked_files(tmp_path)
+    problems = L.check(tmp_path, ledger={"entries": []})
+    assert any("planted_helper.py" in p and "not_relying with a reason" in p for p in problems), problems
