@@ -306,3 +306,35 @@ window.__dbg.poseStats = (state) => {   // the left arm over 20 s of pose time: 
   window.__dbgRising = false;
   return { swing: +(hi - lo).toFixed(4), strokesPerSec: +(strokes / 20).toFixed(2) };
 };
+// a subagent's work clothes and size (2.3.5): what each robot wears, its height as drawn, where its tag hangs
+window.__dbg.wear = () => robots.map((R) => {
+  const r = R.robot, T = THREE, box = new T.Box3(), b = new T.Box3();
+  r.hips.updateWorldMatrix(true, true);
+  r.hips.traverse((o) => {
+    if (!o.isMesh) return;
+    for (let x = o; x && x !== r.hips; x = x.parent) if (!x.visible) return;
+    o.geometry.computeBoundingBox(); b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); box.union(b);
+  });
+  const hex = (m) => (m && m.color ? '#' + m.color.getHexString() : null);
+  const w = r.wear || {}, hand = r.armL.children.find((c) => c.geometry === S.geo.hand), deskTop = r.desk ? r.desk.children[0] : null;
+  return { id: R.def.id, kind: R.def.kind || 'main', role: R.def.role, size: +r.root.scale.x.toFixed(3), cap: !!w.cap, patch: w.fill ? hex(w.fill.material) : null,
+    patchEdge: w.patch ? hex(w.patch.children[0].material) : null, body: hex(r.torso.children[0].material), roleColor: ROLES[R.def.role].color,
+    height: +(box.max.y - box.min.y).toFixed(3), top: +box.max.y.toFixed(3), bottom: +box.min.y.toFixed(3), rootY: +r.root.position.y.toFixed(3),
+    tagY: +(r.root.position.y + TAG_UP.y * (r.size || 1)).toFixed(3),
+    handY: hand ? +hand.getWorldPosition(new T.Vector3()).y.toFixed(3) : null, deskY: deskTop ? +deskTop.getWorldPosition(new T.Vector3()).y.toFixed(3) : null,
+    torso: r.torso.children[0].getWorldPosition(new T.Vector3()).toArray().map((v) => +v.toFixed(3)) };
+});
+// the headset over the work cap, in the head's own space: the band's top against the crown's, the cups against its sides
+window.__dbg.wearFit = (id) => {
+  const R = robots.find((x) => x.def.id === id), r = R && R.robot;
+  if (!r || !r.wear || !r.wear.crown) return null;
+  if (!r.headset) bgGear(r);
+  const bb = (mesh) => { mesh.updateMatrix(); mesh.geometry.computeBoundingBox(); return mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrix); };
+  const crown = bb(r.wear.crown), parts = r.headset.children.map(bb);
+  const arc = parts[0], cups = parts.slice(1, 5);
+  return { crownTop: +crown.max.y.toFixed(3), arcTop: +arc.max.y.toFixed(3), crownHalfW: +crown.max.x.toFixed(3),
+    cupInnerX: +Math.min(...cups.map((c) => Math.min(Math.abs(c.min.x), Math.abs(c.max.x)))).toFixed(3),
+    overlapCrownCups: cups.some((c) => c.intersectsBox(crown)) };
+};
+window.__dbg.setVisState = (id, state) => { robotState[id] = { ...(robotState[id] || {}), state }; };
+window.__dbg.wearColors = () => ({ main: ROLES.main.color, overall: WEAR.overall, edge: WEAR.edge, rim: WEAR.rim, roles: Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [k, v.color])) });

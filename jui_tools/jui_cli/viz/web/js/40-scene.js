@@ -674,7 +674,7 @@ function liveDropRoom(id) {
   delete LIVE3D.rooms[id];
 }
 function liveAddRobot(d, i) {
-  const robot = createRobot({ label: d.id, role: d.role, state: 'idle', seed: i * 1.7, furnished: true });
+  const robot = createRobot({ label: d.id, role: d.role, state: 'idle', seed: i * 1.7, furnished: true, sub: d.kind === 'sub' });   // a subagent: work clothes, 0.8 (2.3.5)
   robot.drawPhone = drawLivePhone;
   // a robot that comes in walks from the corridor through the doors (requester, 10-18)
   const route = d.enter ? liveRoute(null, d.room) : [];
@@ -2649,8 +2649,9 @@ function placeRobotTags(dt = 1 / 60) {
   const t0 = performance.now(), W = canvas.clientWidth, H = canvas.clientHeight, list = [];
   billsExpire();   // 54-bills.js
   for (const R of robots) {
-    tagNdc.copy(R.robot.root.position).add(TAG_UP);
-    if (R.robot.rps && R.robot.rps.visible) tagNdc.y += TAGS.rpsLift;
+    const size = R.robot.size || 1;   // a subagent is smaller (2.3.5): its tag just above its own head
+    tagNdc.copy(R.robot.root.position).addScaledVector(TAG_UP, size);
+    if (R.robot.rps && R.robot.rps.visible) tagNdc.y += TAGS.rpsLift * size;
     tagNdc.project(camera);
     const hidden = tagNdc.z > 1 || tagNdc.z < -1 || !R.robot.root.visible || R.tag.hidden;
     const text = R.tag.textContent;
@@ -2692,7 +2693,7 @@ function placeRobotTags(dt = 1 / 60) {
 }
 const HEAD_UP = new THREE.Vector3(0, 2.2, 0);
 const TAG_UP = new THREE.Vector3(0, 2.62, 0);
-function robotPoint(id, up) { const R = robots.find((x) => x.def.id === id); return R.robot.root.position.clone().add(up); }
+function robotPoint(id, up) { const R = robots.find((x) => x.def.id === id); return R.robot.root.position.clone().addScaledVector(up, R.robot.size || 1); }   // a subagent is smaller (2.3.5)
 
 function update3D(model, nowSec, dt) {
   if (SOURCE.mode === 'live') { liveUpdateRobots(nowSec, dt); liveSoloSync(); }

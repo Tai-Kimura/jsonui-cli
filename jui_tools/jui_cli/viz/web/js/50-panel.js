@@ -1212,7 +1212,7 @@ function focusPose(R, az, el, dist) {
   const dir = focusDir(az, el), wide = sceneEl.clientWidth > 900;
   const right = new THREE.Vector3().crossVectors(dir.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
   const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), viewW = viewH * camera.aspect;
-  const t = R.robot.root.position.clone().add(new THREE.Vector3(0, 1.15, 0));
+  const t = R.robot.root.position.clone().add(new THREE.Vector3(0, 1.15 * (R.robot.size || 1), 0));   // a subagent is 0.8 (2.3.5)
   // Wide: the card covers the right of the scene, so the robot sits left of centre. Narrow: the card is a
   // bottom sheet, so the robot sits high.
   // The wide 応答の履歴 (2.3.4, 55-history.js): the card leaves only histWideMargin() on the left, and the robot sits in its middle.
@@ -1228,7 +1228,7 @@ const ofRobot = (o) => { for (let x = o; x; x = x.parent) if (x.userData && x.us
 function focusBlockers(R, p) {
   const out = new Set();
   for (const y of FOCUS_SAMPLES) {
-    const from = R.robot.root.position.clone().add(new THREE.Vector3(0, y, 0)), dir = p.clone().sub(from), len = dir.length();
+    const from = R.robot.root.position.clone().add(new THREE.Vector3(0, y * (R.robot.size || 1), 0)), dir = p.clone().sub(from), len = dir.length();
     focusRay.set(from, dir.normalize());
     focusRay.far = len;
     focusRay.camera = camera;   // a sprite (a tag, a label) cannot be raycast without it: three.js throws

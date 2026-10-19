@@ -24,6 +24,13 @@ const COL = {
   band: '#fffdf7', bandInk: '#d62839', wood: '#c99f73', woodDark: '#9e7752',
   laptop: '#c9d0db', phone: '#1f2532',
 };
+/* A subagent's work clothes (2.3.5, requester 10-19: "サブエージェントは格好を作業着っぽい感じにできる？", "さいずも0.8くらいに
+   して", "作業着の服装の感じはアメリカの囚人服っぽいオレンジがいいな"): a bright orange coverall (body, sleeves, legs) with a
+   reflective stripe, a patch of its role's colour on the chest (a white rim and a navy edge, readable on the orange),
+   a work cap; the whole robot SUB_SIZE of a main one. The orange is kept apart from ROLES.main (ΔE2000 ≥ 10; the e2e
+   measures it). */
+const WEAR = { overall: '#ff8c1a', stripe: '#e8edf3', brim: '#c25e00', rim: '#ffffff', edge: '#1f2a44' };
+const SUB_SIZE = 0.8;
 const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', bg: '#4cc3d9', waiting: '#ffb020', done: '#35d07f', off: '#2a3a30' };
 const STATES = {
   idle: { name: '待機', lamp: 'idle', face: 'normal' },
@@ -42,6 +49,7 @@ const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', thin
 
 const HIPS_Y = 0.36;
 const HEAD = { w: 1.1, h: 0.9, d: 0.92, r: 0.17 };
+const CAP = { w: 0.92, h: 0.18, d: 0.82, y: HEAD.h + 0.06 };   // the work cap's crown, sitting on the head (head space)
 const BAND = { y: 0.645, h: 0.17, t: 0.028 };
 const LOOK = new THREE.Vector3(0, 1.25, 0.5);
 const UP = new THREE.Vector3(0, 1, 0);
@@ -394,6 +402,12 @@ function initShared() {
     beam: new THREE.CylinderGeometry(0.3, 0.05, 0.68, 24, 1, true),
     sheet: new RoundedBoxGeometry(0.34, 0.03, 0.24, 1, 0.006),
     confetti: new THREE.PlaneGeometry(0.035, 0.06),
+    stripe: new THREE.BoxGeometry(0.77, 0.045, 0.57),
+    patch: new THREE.PlaneGeometry(0.13, 0.1),
+    patchRim: new THREE.PlaneGeometry(0.16, 0.13),
+    patchEdge: new THREE.PlaneGeometry(0.185, 0.155),
+    capCrown: new RoundedBoxGeometry(CAP.w, CAP.h, CAP.d, 4, 0.09),
+    capBrim: new RoundedBoxGeometry(0.74, 0.035, 0.32, 2, 0.015),
   };
   S.tex = {
     chest: texFrom(makeCanvas(160, 100)),
@@ -432,6 +446,11 @@ function initShared() {
     projector: toon('#3a4252'),
     beam: new THREE.MeshBasicMaterial({ color: '#7ef9ff', transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
     sheets: ['#ffffff', '#f4efe3', '#e8f0fb', '#fff6dc'].map((c) => toon(c)),
+    overall: toon(WEAR.overall),
+    stripe: toon(WEAR.stripe),
+    brim: toon(WEAR.brim),
+    rim: new THREE.MeshBasicMaterial({ color: WEAR.rim }),
+    edge: new THREE.MeshBasicMaterial({ color: WEAR.edge }),
     confetti: ['#d62839', '#ffb020', '#35d07f', '#2f80ed', '#7d5cff', '#ff7a3d'].map((c) => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide })),
   };
 }
@@ -441,12 +460,14 @@ function faceToward(obj, target) {
   const m = new THREE.Matrix4().lookAt(target, obj.position, UP);
   obj.quaternion.setFromRotationMatrix(m);
 }
-function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, furnished = false }) {
+function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, furnished = false, sub = false }) {
   const g = S.geo, m = S.mat;
+  const coat = sub ? m.overall : null;   // a subagent: the coverall over body, sleeves and legs
   const r = { label, role, state, prev: state, blend: 1, seed, props: {}, faceMode: '', nextBlink: 1 + (seed % 2), blinkEnd: 0, termAt: 0, phoneAt: 0,
     tired: false, needDrink: false, drinks: 0, gesture: null, hand: null, heavy: false, sweat: null,
     look: null, tint: null, whistle: null, pipi: null };
   r.furnished = furnished;
+  r.sub = sub; r.size = sub ? SUB_SIZE : 1;
   r.accent = toon(ROLES[role].color);
   r.lampMat = new THREE.MeshBasicMaterial({ color: LAMP.idle });
   r.logoCanvas = makeCanvas(96, 64);
@@ -455,17 +476,25 @@ function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, fu
   r.root = new THREE.Group();
 
   r.hips = new THREE.Group(); r.hips.position.y = HIPS_Y; r.root.add(r.hips);
-  const pelvis = new THREE.Mesh(g.pelvis, m.limb); pelvis.position.y = 0.03; r.hips.add(pelvis);
+  const pelvis = new THREE.Mesh(g.pelvis, coat || m.limb); pelvis.position.y = 0.03; r.hips.add(pelvis);
   const leg = (x) => {
     const pivot = new THREE.Group(); pivot.position.set(x, 0, 0); r.hips.add(pivot);
-    const shin = new THREE.Mesh(g.leg, m.limb); shin.position.y = -0.15; pivot.add(shin);
+    const shin = new THREE.Mesh(g.leg, coat || m.limb); shin.position.y = -0.15; pivot.add(shin);
     const foot = new THREE.Mesh(g.foot, r.accent); foot.position.set(0, -0.31, 0.04); pivot.add(foot);
     return pivot;
   };
   r.legL = leg(0.17); r.legR = leg(-0.17);
 
   r.torso = new THREE.Group(); r.hips.add(r.torso);
-  const body = new THREE.Mesh(g.torso, m.shell); body.position.y = 0.32; r.torso.add(body);
+  const body = new THREE.Mesh(g.torso, coat || m.shell); body.position.y = 0.32; r.torso.add(body);
+  if (sub) {
+    const stripe = new THREE.Mesh(g.stripe, m.stripe); stripe.position.y = 0.14; r.torso.add(stripe);
+    const patch = new THREE.Group(); patch.position.set(-0.24, 0.45, 0.2725); patch.userData.wear = 'patch'; r.torso.add(patch);
+    const edge = new THREE.Mesh(g.patchEdge, m.edge); patch.add(edge);
+    const rim = new THREE.Mesh(g.patchRim, m.rim); rim.position.z = 0.001; patch.add(rim);
+    const fill = new THREE.Mesh(g.patch, r.accent); fill.position.z = 0.002; patch.add(fill);
+    r.wear = { body, stripe, patch, fill };
+  }
   const chest = new THREE.Mesh(g.chest, m.chest); chest.position.set(0, 0.3, 0.2715); r.torso.add(chest);
   const lamp = new THREE.Mesh(g.lamp, r.lampMat); lamp.position.set(0.2, 0.5, 0.235); r.torso.add(lamp);
   const neck = new THREE.Mesh(g.neck, m.limb); neck.position.y = 0.63; r.torso.add(neck);
@@ -503,11 +532,18 @@ function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, fu
   const arm = (x) => {
     const pivot = new THREE.Group(); pivot.position.set(x, 0.49, 0.05); r.torso.add(pivot);
     pivot.add(new THREE.Mesh(g.shoulder, r.accent));
-    const upper = new THREE.Mesh(g.arm, m.limb); upper.position.y = -0.18; pivot.add(upper);
+    const upper = new THREE.Mesh(g.arm, coat || m.limb); upper.position.y = -0.18; pivot.add(upper);
     const hand = new THREE.Mesh(g.hand, m.shell); hand.position.y = -0.38; pivot.add(hand);
     return pivot;
   };
   r.armL = arm(0.42); r.armR = arm(-0.42);
+  if (sub) {   // the work cap: its brim to the front, over the band; the antenna stays out through the top
+    const cap = new THREE.Group(); cap.userData.wear = 'cap'; r.head.add(cap);
+    const crown = new THREE.Mesh(g.capCrown, m.overall); crown.position.y = CAP.y; cap.add(crown);
+    const brim = new THREE.Mesh(g.capBrim, m.brim); brim.position.set(0, HEAD.h - 0.01, HEAD.d / 2 + 0.13); brim.rotation.x = 0.1; cap.add(brim);
+    r.wear.cap = cap; r.wear.crown = crown;
+  }
+  r.root.scale.setScalar(r.size);
   if (furnished) {
     const desk = new THREE.Group(); desk.position.set(0, 0.275, 0.6); r.root.add(desk);
     const top = new THREE.Mesh(g.deskTop, m.wood); top.position.y = 0.25; desk.add(top);
@@ -691,7 +727,8 @@ function bgGear(r) {
   const headset = new THREE.Group(); headset.userData.headset = true;
   const R = HEAD.w / 2 + 0.15;
   const arc = new THREE.Mesh(new THREE.TorusGeometry(R, 0.04, 10, 40, Math.PI), band);
-  arc.position.set(0, 0.42, -0.02); arc.scale.y = (HEAD.h + 0.07 - 0.42) / R; headset.add(arc);
+  const top = r.sub ? CAP.y + CAP.h / 2 + 0.07 : HEAD.h + 0.07;   // over the work cap's crown when it has one
+  arc.position.set(0, 0.42, -0.02); arc.scale.y = (top - 0.42) / R; headset.add(arc);
   for (const side of [1, -1]) {
     const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.13, 28), cup); shell.rotation.z = Math.PI / 2; shell.position.set(side * R, 0.42, -0.02); headset.add(shell);
     const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.05, 24), pad); cushion.rotation.z = Math.PI / 2; cushion.position.set(side * (R - 0.08), 0.42, -0.02); headset.add(cushion);
