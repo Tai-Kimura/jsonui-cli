@@ -53,9 +53,13 @@ STUB = r"""(() => {
     constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; window.__ac = this; }
     // Chromium's rule: a context runs only after a press on the page since it loaded (sticky user activation); the
     // test can also hold it suspended ('e2e-ac'); it settles a moment later, as a real one does
-    resume() { return new Promise((done) => setTimeout(() => {
-      if ((localStorage.getItem('e2e-ac') || 'running') === 'running' && navigator.userActivation && navigator.userActivation.hasBeenActive) this.state = 'running';
-      done(); }, 20)); }
+    // 'gesture': a stricter browser's rule — resume only while the page is being pressed (transient activation, read
+    // at the call), so only a press can bring a context back
+    resume() {
+      const mode = localStorage.getItem('e2e-ac') || 'running', ua = navigator.userActivation;
+      const may = mode === 'running' ? !!(ua && ua.hasBeenActive) : mode === 'gesture' ? !!(ua && ua.isActive) : false;
+      return new Promise((done) => setTimeout(() => { if (may) this.state = 'running'; done(); }, 20));
+    }
     createOscillator() { return { type: '', frequency: { setValueAtTime() {} }, connect() {}, stop() {},
       start() { try { localStorage.setItem('e2e-tones', String(Number(localStorage.getItem('e2e-tones') || 0) + 1)); } catch (e) {} } }; }
     createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
@@ -261,6 +265,18 @@ async def run_notify(pw, out, failures):
         last = res["resumed"]["last"] or {}
         check(failures, res["resumed"]["chimes"] == 1 and last.get("before") == "suspended" and last.get("after") == "running" and last.get("played") is True,
               f"a suspended context is resumed before the chime, and the try is kept: {res['resumed']}")
+
+        # 3e. a press wakes the sound again: back to suspended where only a press can resume it, the page pressed once
+        # more — it runs again (with the press handled once only, the first press long gone: still suspended)
+        await a.evaluate("() => { localStorage.setItem('e2e-ac', 'gesture'); window.__ac.state = 'suspended'; }")
+        await a.mouse.click(5, 880)
+        try:
+            await wait(a, "() => window.__dbg.notifyAudio() === 'running'", timeout=5000, label="a press brings the sound back")
+            res["pressWakes"] = "running"
+        except RuntimeError:
+            res["pressWakes"] = await a.evaluate("() => window.__dbg.notifyAudio()")
+        check(failures, res["pressWakes"] == "running", f"a later press wakes a context gone back to suspended: {res['pressWakes']}")
+        await a.evaluate("() => localStorage.setItem('e2e-ac', 'running')")
 
         # 4. a reload rings nothing again — with the list of rung keys cleared first (a fresh profile), so it is the
         # page's own "nothing from before it was loaded" that holds, not the other tabs' record
