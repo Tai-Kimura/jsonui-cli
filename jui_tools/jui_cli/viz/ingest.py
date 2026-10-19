@@ -35,6 +35,9 @@ KNOWN_EVENTS = frozenset({
 TOOL_EVENTS = frozenset({"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied"})
 
 PROMPT_MAX = 200
+#: A test run's command as the card's テスト実行 row shows it: whole up to this (2.3.6 — the row is cut to one line by the
+#: page and its floating tag shows the rest; until then the server cut it at 200 and the tail was nowhere).
+TEST_COMMAND_MAX = 2000
 #: How a robot's act says it waits for the person (a permission / a question); _settled_act takes it off when the wait ends.
 PERM_WAIT = "許可待ち "
 QUESTION_WAIT = "質問に回答待ち"
@@ -589,7 +592,7 @@ class World:
                 command = str(tool_input.get("command", ""))
                 self.tests[use_id] = {
                     "id": use_id, "projectId": session["projectId"], "agentId": agent["id"],
-                    "platform": platform, "command": robots._clip(command, 200),
+                    "platform": platform, "command": robots._clip(command, TEST_COMMAND_MAX),
                     "status": "running", "startedAt": at,
                 }
                 device_id = devices_mod.device_for_command(command, self.devices)

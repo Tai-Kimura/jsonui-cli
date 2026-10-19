@@ -217,6 +217,7 @@
   "not_relying": {
     "jui_tools/jui_cli/viz/bundle.py": "web/js を順に連結するだけ。CLI の形を読まない",
     "jui_tools/jui_cli/viz/data_docs.py": "JsonUI の room の docs/api・docs/db の仕様（OpenAPI・Swagger）を document_tools で読むだけ。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/57-fulltext.js": "カード・パネルの 1 行で切れた文の全文を浮き札で見せるだけ（ページの中の DOM だけ。CLI の形を読まない）",
     "jui_tools/jui_cli/viz/export_demo.py": "デモのページを静的に書き出すだけ（サーバーも CLI も無し）",
     "jui_tools/jui_cli/viz/rooms.py": "cwd から JsonUI プロジェクトの根を探すだけ（jui.config.json / .git）",
     "jui_tools/jui_cli/viz/security.py": "viz サーバー自身の Host・Origin・トークンの守り。CLI 側の形は読まない",
