@@ -41,7 +41,7 @@ def test_the_default_folder_and_the_configured_one(tmp_path):
 def test_a_folder_outside_the_room_is_bad_config(tmp_path, folder):
     root = _room(tmp_path, config={"infra": {"dir": folder}})
     got = R.read(root)
-    assert got == {"ok": False, "reason": "bad_config", "message": got["message"]}
+    assert got == {"ok": False, "reason": "bad_config", "message": got["message"], "short": got["short"]}
     assert R.counts(root)["files"] == 0
 
 
@@ -94,7 +94,7 @@ def test_no_room_and_no_files(tmp_path):
     empty = tmp_path / "e"
     (empty / "docs" / "infra").mkdir(parents=True)
     assert R.read(empty)["reason"] == "no_infra"
-    assert set(R.REASONS) == {"not_a_room", "no_infra", "bad_config", "too_many_files", "too_large", "unreadable"}
+    assert set(R.REASONS) == {"not_a_room", "no_infra", "bad_config", "too_many_files", "too_large", "invalid", "unreadable"}
 
 
 def test_icons_inside_the_room_only(tmp_path):
@@ -138,3 +138,45 @@ def test_validate_infra_exit_codes(room, rc):
     assert r.returncode == rc, r.stderr
     out = json.loads(r.stdout)
     assert out["ok"] is (rc != 2) and "nodes" not in out
+
+
+# ---------------------------------------------------------------- the short lines the page shows (boundary §5.2)
+
+def test_a_broken_json_says_its_file_and_line(tmp_path):
+    root = _room(tmp_path, files={"prod.json": '{\n "version": 0,\n "nodes": [,]\n}'})
+    got = R.read(root)
+    assert got["ok"] is False and got["reason"] == "invalid" and R.REASONS["invalid"] == 422
+    assert got["short"] == "docs/infra/prod.json: 3 行目の JSON が壊れています"
+    assert got["problems"][0]["line"] == 3 and got["problems"][0]["short"] == got["short"]
+
+
+def test_a_usable_room_with_a_bad_file_is_ok_with_short_lines(tmp_path):
+    root = _room(tmp_path, files={"main.json": OK, "prod.json": "{"})
+    got = R.read(root)
+    assert got["ok"] and got["files"] == ["main.json"] and [p["short"] for p in got["problems"]] == [
+        "docs/infra/prod.json: 1 行目の JSON が壊れています"]
+
+
+@pytest.mark.parametrize("reason, make", [
+    ("no_infra", lambda tmp: tmp / "nowhere"),
+    ("bad_config", lambda tmp: _room(tmp, config={"infra": {"dir": "/etc"}})),
+])
+def test_every_failure_has_a_short_line(tmp_path, reason, make):
+    got = R.read(make(tmp_path))
+    assert got["reason"] == reason and got["short"] and "\n" not in got["short"]
+    assert {k for k in got} >= {"ok", "reason", "message", "short"}
+    assert all(R._short_refused(k, "docs/infra") for k in R.REASONS if k != "invalid")
+
+
+@pytest.mark.parametrize("fixture", sorted(p.name for p in (FIX / "invalid" / "single").glob("secret-*.json")))
+def test_a_secret_never_reaches_the_short_line_nor_the_full_text(tmp_path, fixture):
+    from jsonui_doc_cli.infra import model as M
+    raw = (FIX / "invalid" / "single" / fixture).read_text()
+    values = [v for _p, v in M._walk_strings(json.loads(raw), "") if M.secret_findings(v)]
+    assert values
+    for files in ({"leak.json": raw}, {"main.json": OK, "leak.json": raw}):
+        got = R.read(_room(tmp_path / fixture / str(len(files)), files=files))
+        text = json.dumps(got, ensure_ascii=False)
+        assert "秘密の形" in text
+        for v in values:
+            assert v not in text, (fixture, v)

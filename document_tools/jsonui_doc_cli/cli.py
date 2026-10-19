@@ -2346,7 +2346,7 @@ def _fetch_specific_nodes(file_key, token, node_ids, output_path, depth):
 def cmd_validate_infra(args):
     """The room's infra model (docs/plans/2026-10-20-jui-viz-server-room-boundary.md): the files read as jui viz reads
     them, each checked against the schema and the shapes of secrets, then merged. Exit 0: no error; 1: errors
-    (warnings alone are 0); 2: nothing could be read (the reason)."""
+    (warnings alone are 0; also when every file was refused); 2: nothing could be read (the reason)."""
     from .infra import room as infra_room
     result = infra_room.read(Path(args.root))
     if args.json:
@@ -2354,16 +2354,20 @@ def cmd_validate_infra(args):
         if result.get("ok"):
             out["counts"] = {k: len(result[k]) for k in ("groups", "nodes", "edges")}
         print(json.dumps(out, ensure_ascii=False, indent=2))
+    elif not result["ok"] and result["reason"] != "invalid":
+        print(f"infra: cannot read ({result['reason']}): {result['short']}", file=sys.stderr)
     elif not result["ok"]:
-        print(f"infra: cannot read ({result['reason']}): {result['message']}", file=sys.stderr)
+        for p in result["problems"]:
+            print(f"{p['severity'].upper()} {p['short']}  [{p['code']}]")
+        print(f"infra: {result['dir']}: no model file could be used")
     else:
         for p in result["problems"]:
-            print(f"{p['severity'].upper()} {p['file'] or '(room)'}{p['path']}: {p['code']}: {p['message']}")
+            print(f"{p['severity'].upper()} {p['short']}  [{p['code']}]")
         errs = sum(1 for p in result["problems"] if p["severity"] == "error")
         print(f"infra: {result['dir']}: {len(result['files'])} file(s) used, {len(result['nodes'])} nodes, "
               f"{len(result['edges'])} edges, {len(result['environments'])} environment(s); {errs} error(s)")
     if not result["ok"]:
-        return 2
+        return 1 if result["reason"] == "invalid" else 2
     return 1 if any(p["severity"] == "error" for p in result["problems"]) else 0
 
 

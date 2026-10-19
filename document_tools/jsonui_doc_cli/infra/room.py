@@ -24,7 +24,43 @@ ICON_KEY = re.compile(r"^(?:service:[a-z0-9][a-z0-9.-]{0,39}/[a-z0-9][a-z0-9._/-
                       r"|provider:[a-z0-9][a-z0-9.-]{0,39}|category:[a-z0-9][a-z0-9._]{0,39})$")
 ICON_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp"}
 REASONS = {"not_a_room": 404, "no_infra": 404, "bad_config": 400, "too_many_files": 413, "too_large": 413,
-           "unreadable": 500}
+           "invalid": 422, "unreadable": 500}
+SECRET_JA = {"arn": "ARN", "account_id": "アカウント ID", "ip_address": "IP アドレス", "connection_string": "接続文字列",
+             "url_credentials": "URL の中の資格情報", "private_key": "秘密鍵", "access_key": "アクセスキー", "token": "トークン"}
+
+
+def short(p: dict, folder: str) -> str:
+    """One line the page can show as it is (boundary §5.2): the file (a path inside the room), the line when known, and
+    the kind — never the value found (a secret's shape is named by its kind only)."""
+    f = p.get("file") or ""
+    where = f if f == CONFIG_NAME or not f else f"{folder}/{f}"
+    code = p["code"]
+    if code == "json":
+        return f"{where}: {p['line']} 行目の JSON が壊れています" if p.get("line") else f"{where}: JSON として読めません"
+    if code.startswith("secret."):
+        return f"{where}: {p['path']} に秘密の形（{SECRET_JA.get(code[7:], code[7:])}）があります。値は書けません"
+    if code == "schema":
+        return f"{where}: {p['path']} がスキーマに合いません"
+    if code in ("environment.conflict", "environment.missing", "id.duplicate", "group.missing", "group.cycle", "edge.missing"):
+        return f"{where}: {p['path']} の参照が合いません（{code}）"
+    if code == "model.too_big":
+        return f"{folder}: 部屋のモデルが上限を超えています（{p['path'].lstrip('/')}）"
+    if code == "read.too_large":
+        return f"{where}: 1 ファイルの上限（{LIMITS['file_bytes'] // 1_000_000} MB）を超えています"
+    if code == "read.unreadable":
+        return f"{where}: 読めません"
+    if code in ("config.icon", "read.icon"):
+        return f"{CONFIG_NAME}: {p['path']} のアイコンが使えません"
+    return f"{where}: {code}"
+
+
+def _short_refused(reason: str, folder: str) -> str:
+    return {"not_a_room": "この部屋は読めません",
+            "no_infra": f"{folder} に infra のファイル（*.json）がありません",
+            "bad_config": f"{CONFIG_NAME}: infra の設定が正しくありません（dir は部屋の中の相対パス）",
+            "too_many_files": f"{folder}: ファイルが多すぎます（{LIMITS['files']} 個まで）",
+            "too_large": f"{folder}: ファイルの合計が上限（{LIMITS['total_bytes'] // 1_000_000} MB）を超えています",
+            "unreadable": f"{folder}: 読めません"}.get(reason, reason)
 
 
 class Refused(Exception):
@@ -227,15 +263,27 @@ def read(root: Path, is_room: bool = True) -> dict:
             files.append((name, raw))
         model, found = M.merge(files)
         problems.extend(found)
+        if not model["files"]:                 # every file was left out: nothing to show, the first error says why
+            first = next((p for p in problems if p["severity"] == "error"), None)
+            for p in problems:
+                p["short"] = short(p, folder)
+            return {"ok": False, "reason": "invalid", "dir": folder,
+                    "message": "no model file could be used", "short": first["short"] if first else folder,
+                    "problems": problems}
         for key, path in list(icons.items()):
             if read_icon(root, path) is None:
                 problems.append(M._problem(CONFIG_NAME, f"/infra/icons/{key}", "read.icon",
                                            "the image is not there, not a regular file, or too big"))
                 del icons[key]
     except Refused as r:
-        return {"ok": False, "reason": r.reason, "message": r.message}
+        folder = locals().get("folder") or DEFAULT_DIR
+        return {"ok": False, "reason": r.reason, "message": r.message, "short": _short_refused(r.reason, folder)}
     except OSError as exc:
-        return {"ok": False, "reason": "unreadable", "message": f"reading failed ({exc.strerror or type(exc).__name__})"}
+        folder = locals().get("folder") or DEFAULT_DIR
+        return {"ok": False, "reason": "unreadable", "message": f"reading failed ({exc.strerror or type(exc).__name__})",
+                "short": _short_refused("unreadable", folder)}
+    for p in problems:
+        p["short"] = short(p, folder)
     out = {"ok": True, "dir": folder}
     out.update(model)
     out.update(problems=problems, icons=icons, readMs=int((time.monotonic() - t0) * 1000))

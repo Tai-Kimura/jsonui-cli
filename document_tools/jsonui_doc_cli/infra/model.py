@@ -149,6 +149,8 @@ def check_file(name: str, raw: bytes) -> tuple[dict | None, list[dict]]:
     problems: list[dict] = []
     try:
         data = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        return None, [dict(_problem(name, "/", "json", f"not JSON (line {exc.lineno}, column {exc.colno})"), line=exc.lineno)]
     except (ValueError, UnicodeDecodeError) as exc:
         return None, [_problem(name, "/", "json", f"not JSON ({type(exc).__name__})")]
     for path, text in _walk_strings(data, ""):
