@@ -433,6 +433,21 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 #ticker time { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 #ticker .kind { overflow: hidden; font-weight: 700; text-overflow: ellipsis; }
 #ticker .what { overflow: hidden; text-overflow: ellipsis; }
+.ticker-btns { display: flex; gap: 6px; align-items: start; }
+/* The log strip closed (requester, 10-19): its row goes (the scene and the panel take the height) and only 「ログを開く」
+   is left at the bottom right: at the foot of the panel (an opaque band of its own, pushed to the bottom when the
+   panel is short and kept there when it scrolls, so it never lies on the panel's text), or, with the panel closed,
+   floating over the scene's corner (whose hint moves up). */
+.app.log-closed .ticker { display: none; }
+/* only while the panel shows: .main.side-closed hides it, and the same weight here, later, would show it again (10-19) */
+.app.log-closed .main:not(.side-closed) > .side { display: flex; flex-direction: column; gap: 22px; padding-bottom: 0; }
+.app.log-closed .side > section { flex: none; }
+.side-foot { position: sticky; bottom: 0; z-index: 2; display: flex; justify-content: flex-end; margin-top: auto; padding: 10px 0 14px; background: var(--panel); }
+.side-foot[hidden] { display: none; }
+.app.log-closed .main.side-closed .scene-hint { bottom: 54px; }   /* clear of the floating 「ログを開く」 */
+.log-open { padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); font: 700 12px/1.5 var(--font-body); box-shadow: 0 4px 14px var(--shadow); cursor: pointer; }
+.log-open-float { position: fixed; right: 16px; bottom: 14px; z-index: 30; }
+.log-open-float[hidden] { display: none; }
 .ticker-btn, .log-close, .wb-btn { padding: 4px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); white-space: nowrap; cursor: pointer; }
 
 .log-overlay {
@@ -867,6 +882,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
   .side { overflow: visible; border-top: 1px solid var(--line); border-left: 0; }
   .spec-list { max-height: none; }
   .ticker { height: auto; }
+  .side-foot { position: static; }   /* the page scrolls: a row of its own at the panel's end, over nothing */
+  .log-open-float { position: static; display: block; margin: 8px 16px 16px auto; }
   #ticker li { grid-template-columns: auto auto minmax(0, 1fr); }
   #ticker .kind { display: none; }
   .wb { position: fixed; z-index: 40; padding: 6px; }

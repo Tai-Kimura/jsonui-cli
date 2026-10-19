@@ -49,6 +49,29 @@ function openLogFor(id, opener) {
 }
 function closeLog() { logState.open = false; logOverlay.hidden = true; if (logState.opener) logState.opener.focus(); }
 $('btn-log').addEventListener('click', (e) => openLog(e.currentTarget));
+/* The log strip can be closed (requester, 10-19): the strip goes, the scene and the panel take its height, and
+   「ログを開く」 floats at the bottom right. Remembered in this browser (readPref / writePref: a blocked storage only
+   forgets it). Closed, the strip still gets every event (renderTicker keeps writing it), so it opens on the latest. */
+const LOG_STRIP = { open: true };
+function placeStripOpen() {   // the panel's foot while the panel shows, else floating over the scene's corner
+  const sideShown = !document.querySelector('.main').classList.contains('side-closed');
+  $('side-foot').hidden = LOG_STRIP.open || !sideShown;
+  $('btn-strip-open-float').hidden = LOG_STRIP.open || sideShown;
+}
+function setLogStrip(open, { save = true, focus = false } = {}) {
+  LOG_STRIP.open = open;
+  document.querySelector('.app').classList.toggle('log-closed', !open);
+  placeStripOpen();
+  for (const id of ['btn-strip-close', 'btn-strip-open', 'btn-strip-open-float']) $(id).setAttribute('aria-expanded', String(open));
+  if (save) writePref('logStrip', open ? 'open' : 'closed');
+  if (open) renderTicker();
+  if (focus) (open ? $('btn-strip-close') : $('btn-strip-open').offsetParent ? $('btn-strip-open') : $('btn-strip-open-float')).focus();
+}
+$('btn-strip-close').addEventListener('click', () => setLogStrip(false, { focus: true }));
+$('btn-strip-open').addEventListener('click', () => setLogStrip(true, { focus: true }));
+$('btn-strip-open-float').addEventListener('click', () => setLogStrip(true, { focus: true }));
+new MutationObserver(placeStripOpen).observe(document.querySelector('.main'), { attributes: true, attributeFilter: ['class'] });
+setLogStrip(readPref('logStrip', 'open') !== 'closed', { save: false });
 $('log-close').addEventListener('click', closeLog);
 function renderLog(force) {
   if (!logState.open) return;

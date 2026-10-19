@@ -195,7 +195,7 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "weather", "usage", "name-tags", "shredder", "gitbox"],
+    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "weather", "usage", "name-tags", "shredder", "gitbox", "log-strip"],
                     help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; play-look: only what a game looks like (tags, the ball, the slap, the bubble); spec-help: only the 「?」 dialog of spec の進み具合; weather: only the season and the near weather outside; name-tags: only robots' name tags kept apart; "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
@@ -307,6 +307,9 @@ def main(argv=None) -> int:
                 before = progress_count()
                 await gitbox.run_gitbox(pw, out, failures)
                 failures.extend(m for m in [progress_grew("gitbox", before)] if m)
+            if a.only in (None, "live", "log-strip"):
+                import log_strip
+                await log_strip.run_log_strip(pw, out, failures)
             if a.only in (None, "live", "rooms"):
                 import rooms
                 await rooms.run_rooms(pw, out, failures, RealServer)
