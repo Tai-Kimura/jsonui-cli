@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 
+from rooms import SEG_JS
 from waits import settled, until
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
 
@@ -209,8 +210,19 @@ async def run_props(pw, out, failures, jt=None, shots_only=False):
         hook(SID.format(11), hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.robots.length === 4 && window.__dbg.robots.some((R) => R.path.length > 1)", label="a robot walking in")
         jumps0 = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.id, R.jumps || 0]))")
+        await page.evaluate(SEG_JS)       # the walls watcher of rooms.py, along the path (walkTrail)
+        await page.evaluate(NEXT_FRAME)
+        from0 = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.id, [R.robot.root.position.x, R.robot.root.position.z]]))")
+        await page.evaluate("() => { window.__walk.hits = []; window.__walk.steps = 0; }")
         await page.evaluate("() => window.__dbg.walkGap(300)")
         await page.evaluate(NEXT_FRAME)   # the frame after the gap: everyone has arrived in it
+        await page.evaluate(NEXT_FRAME)   # and the watcher has sampled it
+        # the whole walk in one frame, around the door's corners: never a wall hit along the path, though one straight
+        # line from where it was to its seat may cross a wall (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
+        res["gapWalls"] = await page.evaluate("""(from0) => ({ hits: window.__walk.hits.map((h) => ({ id: h.id, from: h.from, to: h.to })),
+          straight: window.__dbg.robots.filter((R) => from0[R.def.id]).map((R) => ({ id: R.def.id,
+            walls: window.__segHits(from0[R.def.id], [R.robot.root.position.x, R.robot.root.position.z], window.__dbg.walls() || [], 0.15).length })) })""", from0)
+        check(failures, not res["gapWalls"]["hits"], f"after a gap of minutes, the walk in went along its path, through no wall: {res['gapWalls']}")
         res["arrivedInOneFrame"] = await page.evaluate("() => window.__dbg.robots.every((R) => !R.path.length)")
         check(failures, res["arrivedInOneFrame"], "after a gap of minutes, every walk ends in the next frame")
         gap = res["gapIn"] = await page.evaluate("() => window.__dbg.robots.map((R) => ({ id: R.def.id, at: [+R.robot.root.position.x.toFixed(3), +R.robot.root.position.z.toFixed(3)], seat: R.def.pos, jumps: R.jumps || 0 }))")

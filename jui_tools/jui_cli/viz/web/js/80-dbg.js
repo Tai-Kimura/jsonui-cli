@@ -270,5 +270,14 @@ window.__dbg.settle = (ids) => window.__dbg.settleInfo(ids).every((x) => x.blend
 // A gap between frames, as a hidden tab makes (rAF stops; minutes later it resumes): the next frame walks with `sec`
 // more of real time (liveUpdateRobots' walkDt), and nothing else is touched.
 window.__dbg.walkGap = (sec) => { LIVE3D.lastWalk -= sec * 1000; return true; };
+// Send robot `id` on foot from its room to the middle of room `to`, through the doors (liveRoute, as every walk goes):
+// with walkGap, the whole route in one frame, around the doors' corners (rooms.py: the wall watcher follows the path)
+window.__dbg.walkRoute = (id, to) => {
+  const R = robots.find((x) => x.def.id === id), r = PROJECT[to];
+  if (!R || !r) return null;
+  const end = [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2], p = R.robot.root.position;
+  R.path = [...liveRoute(R.def.room, to), end];
+  return { from: [p.x, p.z], to: end, points: R.path.length };
+};
 // how far the camera following a robot is from where it is going (0 once it has arrived)
 window.__dbg.camFollowGap = () => (rbState.id && zoom.zoomed ? camera.position.distanceTo(robotPose(rbState.id).p) : null);

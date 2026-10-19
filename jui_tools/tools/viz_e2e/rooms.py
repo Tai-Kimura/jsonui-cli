@@ -47,14 +47,19 @@ function sample() {
   const walls = window.__dbg.walls() || [];
   for (const R of window.__dbg.robots) {
     const p = R.robot.root.position, here = [p.x, p.z], id = R.def.id;
-    const prev = last.get(R);
+    const prev = last.get(R), trail = R.walkTrail;
     if (prev && prev.jumps === (R.jumps || 0)) {
       if (Math.hypot(here[0] - prev.at[0], here[1] - prev.at[1]) > 1e-6) {
         window.__walk.steps += 1;
-        for (const w of window.__segHits(prev.at, here, walls, PAD)) window.__walk.hits.push({ id, from: prev.at, to: here, wall: w });
+        // along the path: through the points the walk turned at since the last sample (liveWalk's walkTrail, a new
+        // array each walking frame), not one straight line, which cuts a door's corner when a frame passes several
+        // points (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
+        const pts = [prev.at, ...(trail && trail !== prev.trail ? trail : []), here];
+        for (let i = 1; i < pts.length; i++)
+          for (const w of window.__segHits(pts[i - 1], pts[i], walls, PAD)) window.__walk.hits.push({ id, from: pts[i - 1], to: pts[i], wall: w, frameFrom: prev.at, frameTo: here });
       }
     }
-    last.set(R, { at: here, jumps: R.jumps || 0 });
+    last.set(R, { at: here, jumps: R.jumps || 0, trail });
     const room = (window.__dbg.walls && (() => { for (const k of Object.keys(window.__dbg.live3d().rooms)) { const r = window.__dbg.room(k); if (r && r.shown && p.x > r.x0 && p.x < r.x1 && p.z > r.z0 && p.z < r.z1) return k; } return null; })());
     const seen = window.__walk.rooms[id] || (window.__walk.rooms[id] = []);
     if (room && seen[seen.length - 1] !== room) seen.push(room);
@@ -63,6 +68,9 @@ function sample() {
 }
 requestAnimationFrame(sample);
 """
+
+
+NEXT_FRAME = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
 
 def check(failures, cond, text):
@@ -176,6 +184,32 @@ async def run_rooms(pw, out, failures, RealServer):
         await ready(fresh)
         await wait(fresh, SETTLED_JS + " && window.__dbg.robots.length === " + str(len(settled)), label="fresh page seated")
         anew = await fresh.evaluate(SEATS_JS)
+        # a whole walk from one room to another in one frame (a hidden tab, or a frame seconds late): around the doors'
+        # corners, so one straight line from where it was to where it is would cross walls; the watcher follows the
+        # points it passed (walkTrail) and sees no wall (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
+        await fresh.evaluate(SEG_JS)
+        await fresh.evaluate(NEXT_FRAME)
+        gapw = res["gapWalk"] = await fresh.evaluate("""() => {
+          const walls = window.__dbg.walls(), ids = Object.keys(window.__dbg.live3d().rooms);
+          for (const R of window.__dbg.robots) for (const to of ids) {
+            if (to === R.def.room || R.path.length) continue;
+            const r = window.__dbg.room(to), end = [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2], p = R.robot.root.position;
+            const straight = window.__segHits([p.x, p.z], end, walls, 0.15).length;
+            if (straight < 1) continue;
+            const w = window.__dbg.walkRoute(R.def.id, to);
+            window.__walk.hits = []; window.__walk.steps = 0;
+            window.__dbg.walkGap(300);
+            return { id: R.def.id, to, straight, ...w };
+          }
+          return null; }""")
+        await fresh.evaluate(NEXT_FRAME)
+        await fresh.evaluate(NEXT_FRAME)
+        if gapw:
+            gapw.update(await fresh.evaluate("""(id) => { const R = window.__dbg.robots.find((x) => x.def.id === id), p = R.robot.root.position;
+              return { at: [p.x, p.z], left: R.path.length, hits: window.__walk.hits.slice(0, 3), steps: window.__walk.steps }; }""", gapw["id"]))
+        check(failures, gapw and gapw["straight"] > 0 and gapw["left"] == 0 and abs(gapw["at"][0] - gapw["to"][0]) < 1e-3 and abs(gapw["at"][1] - gapw["to"][1]) < 1e-3,
+              f"a walk to another room in one frame: arrived, and one straight line would have crossed a wall: {gapw}")
+        check(failures, gapw and gapw["steps"] >= 1 and not gapw["hits"], f"a walk to another room in one frame goes through no wall, along its path: {gapw}")
         await fresh.close()
         same_rooms = [k for k, v in settled.items() if v and v[0] not in left_from]
         res["fresh"] = {"compared": len(same_rooms), "diff": {k: [settled[k], anew.get(k)] for k in same_rooms if settled[k] != anew.get(k)}}

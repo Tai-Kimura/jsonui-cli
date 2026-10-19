@@ -795,10 +795,13 @@ function liveWalk(R, dt, nowMs) {
   // Always along the path, point by point, so never through a wall; never past its end.
   let step = WALK_SPEED * (SOURCE.replaySpeed > 1 ? Math.min(4, SOURCE.replaySpeed) : 1) * dt;
   if (R.robot.desk) R.robot.desk.visible = false;
+  // The points passed in this frame, in order (a new array each walking frame): what a watcher joins between two
+  // frames' positions, since the walk turns at them (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
+  const trail = R.walkTrail = [];
   while (R.path.length) {
     const q = R.path[0], dx = q[0] - root.position.x, dz = q[1] - root.position.z, dist = Math.hypot(dx, dz);
     if (dist > 1e-3) root.rotation.y = Math.atan2(dx, dz);
-    if (dist <= step || dist < 1e-3) { root.position.x = q[0]; root.position.z = q[1]; R.path.shift(); step -= dist; continue; }
+    if (dist <= step || dist < 1e-3) { root.position.x = q[0]; root.position.z = q[1]; R.path.shift(); trail.push([q[0], q[1]]); step -= dist; continue; }
     root.position.x += (dx / dist) * step; root.position.z += (dz / dist) * step;
     break;
   }
