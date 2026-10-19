@@ -53,9 +53,11 @@ def test_a_symlinked_folder_or_file_is_not_followed(tmp_path):
     os.symlink(outside / "secret.json", root / "docs" / "infra" / "link.json")
     got = R.read(root)
     assert got["files"] == ["main.json"]                                   # the symlink is not a regular file here
+    assert [(p["file"], p["code"]) for p in got["problems"]] == [("link.json", "read.not_regular")]   # said, not silent
     shutil.rmtree(root / "docs" / "infra")
     os.symlink(outside, root / "docs" / "infra")
-    assert R.read(root)["reason"] == "no_infra" and R.counts(root)["files"] == 0
+    got = R.read(root)
+    assert got["reason"] == "unreadable" and "symlink" in got["short"] and R.counts(root)["files"] == 0
 
 
 def test_a_fifo_in_the_folder_never_holds_the_read(tmp_path):
@@ -180,3 +182,80 @@ def test_a_secret_never_reaches_the_short_line_nor_the_full_text(tmp_path, fixtu
         assert "秘密の形" in text
         for v in values:
             assert v not in text, (fixture, v)
+
+
+
+# ---------------------------------------------------------------- dd's verification (10-20): the reading's arms
+
+def test_a_symlink_anywhere_on_the_way_is_not_followed(tmp_path):
+    """M11: docs itself a symlink (not only docs/infra)."""
+    outside = tmp_path / "outside"
+    (outside / "infra").mkdir(parents=True)
+    (outside / "infra" / "main.json").write_text(json.dumps(OK))
+    root = tmp_path / "room"
+    root.mkdir()
+    os.symlink(outside, root / "docs")
+    got = R.read(root)
+    assert got["ok"] is False and got["reason"] == "unreadable" and R.counts(root)["files"] == 0
+
+
+def _within(fn, seconds=5):
+    out = []
+    t = threading.Thread(target=lambda: out.append(fn()), daemon=True)
+    t.start()
+    t.join(seconds)
+    assert not t.is_alive(), "held"
+    return out[0]
+
+
+def test_a_fifo_as_an_icon_or_as_the_config_never_holds_and_is_never_taken(tmp_path):
+    """M12 (O_NONBLOCK on the last part) and M13 (fstat S_ISREG): a FIFO icon or config is refused at once."""
+    root = _room(tmp_path, config={"infra": {"icons": {"provider:aws": "docs/infra/aws.svg"}}})
+    os.mkfifo(root / "docs" / "infra" / "aws.svg")
+    got = _within(lambda: R.read(root))
+    assert got["icons"] == {} and [p["code"] for p in got["problems"]] == ["read.icon"]
+    assert _within(lambda: R.read_icon(root, "docs/infra/aws.svg")) is None
+    cfg = _room(tmp_path / "c")
+    os.mkfifo(cfg / "jui.config.json")
+    got = _within(lambda: R.read(cfg))
+    assert got["ok"] and got["dir"] == "docs/infra"                       # not a regular file: no config, the defaults
+
+
+def test_the_real_file_limit(tmp_path):
+    """M15: the limit itself (50), not a stand-in."""
+    n = R.LIMITS["files"]
+    at = _room(tmp_path / "at", files={f"f{i:02d}.json": {"version": 0} for i in range(n)})
+    over = _room(tmp_path / "over", files={f"f{i:02d}.json": {"version": 0} for i in range(n + 1)})
+    assert n == 50 and R.read(at)["ok"] and R.read(over)["reason"] == "too_many_files"
+
+
+def test_an_icon_over_its_limit_is_refused(tmp_path):
+    """M37: 256 KB."""
+    root = _room(tmp_path, config={"infra": {"icons": {"provider:aws": "a.png", "provider:gcp": "b.png"}}})
+    (root / "a.png").write_bytes(b"x" * (R.LIMITS["icon_bytes"] + 1))
+    (root / "b.png").write_bytes(b"x" * R.LIMITS["icon_bytes"])
+    got = R.read(root)
+    assert got["icons"] == {"provider:gcp": "b.png"} and R.LIMITS["icon_bytes"] == 256_000
+
+
+def test_a_broken_config_says_so(tmp_path):
+    root = _room(tmp_path)
+    (root / "jui.config.json").write_text('{\n  "infra": {,}\n}')
+    got = R.read(root)
+    assert got["reason"] == "bad_config" and got["short"] == "jui.config.json: 2 行目の JSON が壊れています"
+
+
+def test_an_icon_key_is_never_shown_unless_it_is_one_of_the_forms(tmp_path):
+    root = _room(tmp_path, config={"infra": {"icons": {"10.0.0.1": "a.svg", "service:aws/x": "https://h/x.svg"}}})
+    text = json.dumps(R.read(root), ensure_ascii=False)
+    assert "10.0.0.1" not in text and "/infra/icons/<key>" in text and "/infra/icons/service:aws/x" in text
+
+
+def test_a_folder_or_fifo_named_json_is_said_not_read(tmp_path):
+    root = _room(tmp_path)
+    (root / "docs" / "infra" / "dir.json").mkdir()
+    os.mkfifo(root / "docs" / "infra" / "pipe.json")
+    got = R.read(root)
+    assert sorted((p["file"], p["code"], p["severity"]) for p in got["problems"]) == [
+        ("dir.json", "read.not_regular", "warning"), ("pipe.json", "read.not_regular", "warning")]
+    assert all("普通のファイルでない" in p["short"] for p in got["problems"])

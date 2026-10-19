@@ -49,6 +49,8 @@ def short(p: dict, folder: str) -> str:
         return f"{where}: 1 ファイルの上限（{LIMITS['file_bytes'] // 1_000_000} MB）を超えています"
     if code == "read.unreadable":
         return f"{where}: 読めません"
+    if code == "read.not_regular":
+        return f"{where}: 普通のファイルでないため読みません（{p['message'].split(',')[0]}）"
     if code in ("config.icon", "read.icon"):
         return f"{CONFIG_NAME}: {p['path']} のアイコンが使えません"
     return f"{where}: {code}"
@@ -64,11 +66,12 @@ def _short_refused(reason: str, folder: str) -> str:
 
 
 class Refused(Exception):
-    """The room cannot be read at all: ``reason`` is one of REASONS."""
+    """The room cannot be read at all: ``reason`` is one of REASONS; ``short`` the line for the page, when the reason's
+    usual one would say the wrong thing."""
 
-    def __init__(self, reason: str, message: str) -> None:
+    def __init__(self, reason: str, message: str, short: str | None = None) -> None:
         super().__init__(message)
-        self.reason, self.message = reason, message
+        self.reason, self.message, self.short = reason, message, short
 
 
 # ---------------------------------------------------------------- opening inside the room
@@ -128,9 +131,10 @@ def read_capped(root: Path, rel: str, cap: int):
         os.close(fd)
 
 
-def _list_dir(root: Path, rel: str) -> list[tuple[str, int]] | None:
+def _list_dir(root: Path, rel: str, skipped: list | None = None) -> list[tuple[str, int]] | None:
     """(name, size) of the regular *.json files directly in root/rel (no symlink on the way, none followed), by name;
-    None when the folder is not there. Hidden names and *.check-report.json are not the model."""
+    None when the folder is not there. Hidden names and *.check-report.json are not the model; a *.json that is not a
+    regular file (a symlink, a FIFO, a folder) is not read, and goes into ``skipped`` as (name, what it is)."""
     fd = open_inside(root, rel)
     if fd is None:
         return None
@@ -147,11 +151,29 @@ def _list_dir(root: Path, rel: str) -> list[tuple[str, int]] | None:
                 continue
             if stat.S_ISREG(st.st_mode):
                 out.append((name, st.st_size))
+            elif skipped is not None:
+                what = ("a symlink" if stat.S_ISLNK(st.st_mode) else "a FIFO" if stat.S_ISFIFO(st.st_mode)
+                        else "a folder" if stat.S_ISDIR(st.st_mode) else "not a regular file")
+                skipped.append((name, what))
         return out
     except OSError:
         return None
     finally:
         os.close(fd)
+
+
+def _symlink_on_the_way(root: Path, rel: str) -> bool:
+    """Whether a part of root/rel (below the root) is a symlink: the folder is there, but not reached as the rules
+    allow — a different reason from "there is no folder"."""
+    cur = Path(root).resolve()
+    for part in PurePosixPath(rel).parts:
+        cur = cur / part
+        try:
+            if stat.S_ISLNK(os.lstat(cur).st_mode):
+                return True
+        except OSError:
+            return False
+    return False
 
 
 # ---------------------------------------------------------------- jui.config.json's "infra"
@@ -171,11 +193,15 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
     if raw is None:
         return DEFAULT_DIR, {}, []
     if raw is TOO_BIG:
-        raise Refused("bad_config", f"{CONFIG_NAME} is larger than {LIMITS['config_bytes']} bytes")
+        raise Refused("bad_config", f"{CONFIG_NAME} is larger than {LIMITS['config_bytes']} bytes",
+                      f"{CONFIG_NAME} が大きすぎます（{LIMITS['config_bytes'] // 1_000_000} MB まで）")
     try:
         cfg = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
-        raise Refused("bad_config", f"{CONFIG_NAME} is not JSON") from None
+    except json.JSONDecodeError as exc:
+        raise Refused("bad_config", f"{CONFIG_NAME} is not JSON (line {exc.lineno})",
+                      f"{CONFIG_NAME}: {exc.lineno} 行目の JSON が壊れています") from None
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        raise Refused("bad_config", f"{CONFIG_NAME} is not JSON", f"{CONFIG_NAME} が JSON として読めません") from None
     infra = cfg.get("infra") if isinstance(cfg, dict) else None
     if infra is None:
         return DEFAULT_DIR, {}, []
@@ -191,7 +217,8 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
         problems.append(M._problem(CONFIG_NAME, "/infra/icons", "config.icon", "infra.icons must be an object"))
         raw_icons = {}
     for key, path in list(raw_icons.items()):
-        where = f"/infra/icons/{key}"
+        # a key that is not one of the three forms may be anything (a value): never shown
+        where = f"/infra/icons/{key}" if ICON_KEY.match(key) and not M.secret_findings(key) else "/infra/icons/<key>"
         if len(icons) >= LIMITS["icons"]:
             problems.append(M._problem(CONFIG_NAME, where, "config.icon", f"more than {LIMITS['icons']} icons"))
             break
@@ -243,7 +270,13 @@ def read(root: Path, is_room: bool = True) -> dict:
         if not is_room:
             raise Refused("not_a_room", "not a room jui viz knows")
         folder, icons, problems = infra_config(root)
-        listed = _list_dir(root, folder)
+        skipped: list = []
+        listed = _list_dir(root, folder, skipped)
+        if listed is None and _symlink_on_the_way(root, folder):
+            raise Refused("unreadable", f"{folder} is reached through a symlink: not read",
+                          f"{folder} は symlink を通るため読みません（部屋の中の本物のフォルダに置いてください）")
+        for name, what in skipped:
+            problems.append(M._problem(name, "/", "read.not_regular", f"{what}, not a regular file: not read", "warning"))
         if not listed:
             raise Refused("no_infra", f"no model files in {folder} (*.json)")
         if len(listed) > LIMITS["files"]:
@@ -277,7 +310,7 @@ def read(root: Path, is_room: bool = True) -> dict:
                 del icons[key]
     except Refused as r:
         folder = locals().get("folder") or DEFAULT_DIR
-        return {"ok": False, "reason": r.reason, "message": r.message, "short": _short_refused(r.reason, folder)}
+        return {"ok": False, "reason": r.reason, "message": r.message, "short": r.short or _short_refused(r.reason, folder)}
     except OSError as exc:
         folder = locals().get("folder") or DEFAULT_DIR
         return {"ok": False, "reason": "unreadable", "message": f"reading failed ({exc.strerror or type(exc).__name__})",
