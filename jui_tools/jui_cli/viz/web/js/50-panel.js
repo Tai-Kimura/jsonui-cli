@@ -1258,7 +1258,7 @@ rbEl.addEventListener('click', (e) => { const b = e.target.closest('[data-rb-ste
 document.addEventListener('keydown', (e) => {
   if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   if (e.isComposing || e.keyCode === 229) return;                                                   // an IME is composing
-  if (!rbState.id || rbEl.hidden || !popEl.hidden || logState.open || alwaysDlg) return;
+  if (!rbState.id || rbEl.hidden || !popEl.hidden || logState.open || alwaysDlg || clockDlg) return;
   const t = e.target;
   if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select')))) return;   // typing keeps its keys
   e.preventDefault();
@@ -1294,7 +1294,7 @@ function renderRobot(model) {
       const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
       return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
     }).join('')}</ul>` : `<p class="rb-none">${isMain ? 'このセッションのタスク一覧は空' : '担当しているタスクはない'}</p>`;
-    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? `${id} のメインセッション · ${d.head}` : d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div>
+    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? `${id} のメインセッション · ${d.head}` : d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-side"><button type="button" class="wb-btn rb-clock" data-rb-clock data-fk="rb-clock" aria-haspopup="dialog" aria-describedby="rb-clock-why">退勤…</button><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div><p class="rb-clock-why" id="rb-clock-why" data-rb-clock-why hidden></p></div>
 <div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" hidden>広げる</button><div class="rb-tablist" role="tablist" aria-label="表示"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">今の様子</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">応答の履歴</button></div></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴" tabindex="0"></div>
 <div class="rb-body" tabindex="0" aria-label="今の様子">
@@ -1341,6 +1341,7 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
     bar.setAttribute('aria-label', `通過 ${T.passed} 件 / 全 ${n} 件`);
     bar.children[0].style.width = `${(T.passed / n) * 100}%`; bar.children[1].style.width = `${T.runningIdx >= 0 ? 100 / n : 0}%`;
   }
+  clockPaint(id);
   rbEl.querySelectorAll('[data-rb-sub]').forEach((el) => paintState(el, robotBadge(el.dataset.rbSub)));
   rbEl.querySelectorAll('[data-rb-subact]').forEach((el) => setText(el, robotState[el.dataset.rbSubact].act));
   paintSince(rbEl, model.t, '待ち');
@@ -1350,6 +1351,93 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   histSync();   // 55-history.js: the tab shown, and the history kept fresh while it is
   focusFadeSync();   // what stands between the camera and this robot, faint
 }
+
+/* ---------- 退勤: end this robot's session from its card (requester, 10-19) ----------
+   「3Dに戻るの上あたりに退勤ボタン置いて、それ押したら確認ダイアログの後にセッション消す」. Measured with the requester (11:10–11:15):
+   SIGTERM ends claude in about 1.5 s everywhere, but only a terminal is left in a good state (back at its shell); the
+   VS Code tab stays with an error and the desktop app shows no change. So the button works for terminal sessions only and
+   is disabled elsewhere with the reason (the server refuses those too: clockout.py). The dialog names the robot, the
+   session (its title), the folder and the client; its default focus is やめる. After 退勤させる the server sends SIGTERM once,
+   sees the process go and marks the session ended — the robot then walks out of the door like any session that ended. */
+const CLOCK_WHY = {
+  vscode: 'VS Code ではタブがエラーで残るので使えない。タブを閉じて終わらせる',
+  desktop: 'デスクトップアプリでは画面が変わらないので使えない',
+  other: 'ターミナルで起動したセッションだけ退勤させられる',
+  unknown: '起動元が分からないので使えない（ターミナルで起動したセッションだけ）',
+};
+const CLIENT_JA = { terminal: 'ターミナル', vscode: 'VS Code 拡張', desktop: 'デスクトップアプリ', other: 'その他', unknown: '不明' };
+const CLOCK = { busy: null, last: null };
+let clockDlg = null;
+function clockTarget(id) {
+  if (SOURCE.mode !== 'live') return { why: 'デモでは使えない' };
+  if (!id || !DEF[id]) return { why: '' };
+  if (DEF[id].kind === 'sub') return { why: `サブエージェントは退勤させられない（${SESSION_OF[id]} のメインセッションのカードから）` };
+  const sess = SESSIONS.find((x) => x.id === SESSION_OF[id]);
+  if (!sess || sess.status === 'ended' || LIVE.leaving[id]) return { why: 'このセッションは終わっている' };
+  const client = sess.client || 'unknown';
+  if (client !== 'terminal') return { why: CLOCK_WHY[client] || CLOCK_WHY.unknown, client };
+  if (location.hostname !== '127.0.0.1') return { why: `このページは http://127.0.0.1:${location.port}/ で開いたときだけ使える（jui viz open）`, client };
+  return { why: '', sess, client };
+}
+function clockPaint(id) {
+  const btn = rbEl.querySelector('[data-rb-clock]'), why = rbEl.querySelector('[data-rb-clock-why]');
+  if (!btn || !why) return;
+  const t = clockTarget(id), busy = CLOCK.busy === id, last = CLOCK.last && CLOCK.last.id === id ? CLOCK.last : null;
+  btn.disabled = !!t.why || busy;
+  setText(btn, busy ? '退勤中…' : '退勤…');
+  const text = t.why || (last ? `退勤させられなかった（${last.error}）` : '');
+  setText(why, text);
+  why.hidden = !text;
+  why.classList.toggle('rb-clock-err', !t.why && !!last);
+}
+function openClockConfirm(id) {
+  const t = clockTarget(id);
+  if (t.why || clockDlg) return;
+  const opener = rbEl.querySelector('[data-rb-clock]');
+  const el = document.createElement('div');
+  el.className = 'perm-confirm clock-confirm'; el.setAttribute('role', 'alertdialog'); el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'clk-title'); el.setAttribute('aria-describedby', 'clk-note');
+  const title = t.sess.title || '（名前なし）';
+  el.innerHTML = `<div class="pcf-box"><h3 id="clk-title">${esc(id)} を退勤させる</h3>
+<dl class="clk-facts"><dt>ロボット</dt><dd data-clk-robot>${pill(id, DEF[id].role)} ${esc(id)} のメインセッション</dd><dt>セッション</dt><dd data-clk-title>${esc(title)}</dd><dt>フォルダ</dt><dd data-clk-cwd><code>${esc(CWD[id] || '?')}</code></dd><dt>クライアント</dt><dd data-clk-client>${esc(CLIENT_JA[t.client] || t.client)}</dd></dl>
+<p id="clk-note">このセッションの claude に終了の合図（SIGTERM）を 1 回送る。途中の作業はそこで止まる。終わらなければ「終わらなかった」と出すだけで、強制終了はしない。</p>
+<div class="pcf-acts"><button type="button" class="pa clk-go" data-clk-go>退勤させる</button><button type="button" class="pa clk-cancel" data-clk-cancel>やめる</button></div></div>`;
+  document.body.append(el);
+  clockDlg = { el, id, opener, at: Date.now() };
+  el.addEventListener('click', (e) => {
+    if (e.target === el || e.target.closest('[data-clk-cancel]')) { closeClockConfirm(true); return; }
+    if (e.target.closest('[data-clk-go]') && Date.now() - clockDlg.at > 350) clockGo(id);   // not the press that opened it
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeClockConfirm(true); return; }
+    if (e.key === 'Tab') {   // the focus stays in the dialog
+      const f = [...el.querySelectorAll('button')];
+      const i = f.indexOf(document.activeElement);
+      e.preventDefault();
+      f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    }
+  });
+  el.querySelector('[data-clk-cancel]').focus();
+}
+function closeClockConfirm(back) {
+  if (!clockDlg) return;
+  const { el, opener } = clockDlg;
+  clockDlg = null; el.remove();
+  const again = back ? rbEl.querySelector('[data-rb-clock]') || opener : null;
+  if (again && document.contains(again) && !again.disabled) again.focus({ preventScroll: true });
+}
+async function clockGo(id) {
+  closeClockConfirm(false);
+  if (clockTarget(id).why || CLOCK.busy) return;
+  CLOCK.busy = id; CLOCK.last = null;
+  if (rbState.id === id) clockPaint(id);
+  const got = await SOURCE.clockOut(id);
+  CLOCK.busy = null;
+  if (got.ok) showToast(`${id} を退勤させた（セッションは終わった）`);
+  else { CLOCK.last = { id, error: got.error || `HTTP ${got.status}` }; showToast(`${id} を退勤させられなかった（${CLOCK.last.error}）`); }
+  if (rbState.id === id) clockPaint(id);
+}
+rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rb-clock]') && rbState.id) openClockConfirm(rbState.id); });
 
 /* ---------- live: the test run in the side panel (plan 09 §4) ---------- */
 const CASE_ICON = { pending: '○', running: '▶', passed: '✓', flaky: '⚠', failed: '✗', skipped: '–' };

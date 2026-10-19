@@ -732,6 +732,20 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; padding: 12px 14px; border-top: 5px solid var(--c); border-bottom: 1px solid var(--line); }
 .rb-nav { display: flex; grid-column: 1 / -1; align-items: center; gap: 4px; }
 .rb-nav #rb-close { margin-left: auto; }
+.rb-side { display: grid; grid-column: 1 / -1; gap: 6px; }   /* the 2nd row: 退勤 right-aligned just above 「← 3D に戻る」 (both on the card's width) */
+.rb-side .rb-clock { justify-self: end; }
+.rb-clock { border-color: var(--bad); color: var(--bad); background: var(--panel); }
+.rb-clock:hover:not(:disabled) { background: var(--bad-bg); }
+.rb-clock:disabled { border-color: var(--line); color: var(--ink-soft); opacity: 0.75; cursor: not-allowed; }
+.rb-clock-why { grid-column: 1 / -1; margin: 0; padding: 4px 10px; border-radius: 8px; background: var(--chip); color: var(--ink-soft); font: 600 11.5px/1.5 var(--font-body); overflow-wrap: anywhere; }
+.rb-clock-why[hidden] { display: none; }
+.rb-clock-why.rb-clock-err { background: var(--bad-bg); color: var(--bad); }
+.clk-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0 0 10px; font-size: 13px; }
+.clk-facts dt { color: var(--ink-soft); font-weight: 700; }
+.clk-facts dd { margin: 0; overflow-wrap: anywhere; }
+.clk-facts code { font: 500 12px/1.5 var(--font-mono); }
+.pa.clk-go { border-color: var(--bad); background: var(--bad); color: var(--panel); }
+.pa.clk-cancel { border-color: var(--line); background: var(--panel); color: var(--ink); }
 .rb-step { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 700 18px/1 var(--font-body); cursor: pointer; }
 .rb-step:hover { background: var(--chip); }
 .rb-badge { display: grid; place-items: center; min-width: 54px; height: 54px; padding: 0 6px; border: 3px solid var(--cloth-ink); border-radius: 12px; background: var(--cloth); color: var(--cloth-ink); font: 400 21px/1 var(--font-display); transform: rotate(-3deg); }

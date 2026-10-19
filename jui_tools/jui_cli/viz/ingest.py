@@ -13,7 +13,7 @@ from typing import Any
 
 from pathlib import Path
 
-from . import gitbox, robots
+from . import clockout, gitbox, robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .calls import CallBook, peer_name
@@ -293,6 +293,40 @@ class World:
         agent["updatedAt"] = at
         self._dirty.add("agents")
 
+    def _end(self, session: dict, agent: dict, at: int) -> None:
+        """The session has ended (SessionEnd, or 退勤 from the page): ended, and its robot walks out of the door."""
+        sid = session["id"]
+        self._background_off(session, at)
+        self.perms.session_stopped(sid, at)
+        self._dirty.add("perms")
+        if self.questions.session_stopped(sid, at):
+            self._dirty.add("questions")
+        if self.calls.session_ended(sid, at):
+            self._dirty.add("calls")
+        self._status(session, "ended", at)
+        self._set(agent, at, "idle", "退勤", leftAt=at)
+
+    def clock_out(self, sid: str, at: int) -> None:
+        """退勤 from the page ended this session's process (clockout.end_session saw it go): the same as its SessionEnd,
+        which the session sends too — whichever comes first ends it."""
+        session = self.sessions.get(sid)
+        if session is None:
+            return
+        session["clockedOut"] = at   # also when its own SessionEnd came first
+        self._dirty.add("sessions")
+        if session["status"] != "ended":
+            self._end(session, self._main(sid, at), at)
+
+    def clock_out_event(self, sid: str, at: int, record: dict) -> None:
+        """The event log's line for one 退勤 attempt: when (the event's time), to whom, and the outcome."""
+        session = self.sessions.get(sid)
+        label = session["label"] if session else sid[:8]
+        how = {"ended": "終わった", "not-ended": "終わらなかった", "refused": "断った"}.get(record.get("result"), "?")
+        pid = f"（pid {record['pid']}）" if record.get("pid") else ""
+        why = "" if record.get("result") == "ended" else f": {record.get('reason', '')}"
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "ClockOut", "cat": "session",
+                              "text": f"退勤の合図 → {label}{pid} {how}{why}"})
+
     def _status(self, session: dict, status: str, at: int, waiting_for: str | None = None) -> None:
         if session["status"] != status or session.get("waitingFor") != waiting_for:
             session["status"] = status
@@ -411,15 +445,7 @@ class World:
             self._set(agent, at, "idle", "待機")
             text = f"出勤 {payload.get('source') or ''}".strip()
         elif kind == "SessionEnd":
-            self._background_off(session, at)
-            self.perms.session_stopped(sid, at)
-            self._dirty.add("perms")
-            if self.questions.session_stopped(sid, at):
-                self._dirty.add("questions")
-            if self.calls.session_ended(sid, at):
-                self._dirty.add("calls")
-            self._status(session, "ended", at)
-            self._set(agent, at, "idle", "退勤", leftAt=at)
+            self._end(session, agent, at)
             text = f"退勤 {payload.get('reason') or ''}".strip()
         elif kind == "UserPromptSubmit":
             session["lastPrompt"] = _head(payload.get("prompt"), PROMPT_MAX)
@@ -717,6 +743,10 @@ class World:
                 if self.session_proc.get(sid) != proc:
                     self.session_proc[sid] = proc
                     self._dirty.add("sessions")
+            entry = _s(row.get("entrypoint"))
+            if entry and session.get("client") != clockout.client_of(entry):
+                session["client"] = clockout.client_of(entry)   # terminal / vscode / desktop / other: 退勤 is terminal only
+                self._dirty.add("sessions")
             name = _s(row.get("name"))
             if name:   # the name a SendMessage's `to` uses (changes on a restart: the newest row wins)
                 old = self._session_names.get(sid)

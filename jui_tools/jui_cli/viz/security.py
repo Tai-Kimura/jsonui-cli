@@ -69,13 +69,17 @@ def csp(port: int, script_hashes: Iterable[str] = ()) -> str:
     )
 
 
-def make_middleware(port: int, script_hashes: Iterable[str] = ()):
-    """Refuse a foreign Host with 421 before any handler runs."""
+def make_middleware(port: int, script_hashes: Iterable[str] = (), on_refused=None):
+    """Refuse a foreign Host with 421 before any handler runs. ``on_refused(request, response)``, when given, hears of
+    each such refusal (the server logs the ones aimed at POST /api/session/end)."""
 
     @web.middleware
     async def guard(request: web.Request, handler):
         if not host_ok(request.headers.get("Host"), port):
-            return web.Response(status=421, text="misdirected request\n")
+            refused = web.Response(status=421, text="misdirected request\n")
+            if on_refused is not None:
+                on_refused(request, refused)
+            return refused
         return await handler(request)
 
     return guard

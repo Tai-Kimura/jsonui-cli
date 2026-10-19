@@ -172,6 +172,18 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   `origin: {"kind": "channel", "server": "plugin:jui-viz:jui-viz"}`、中身は `<channel source="plugin:jui-viz:jui-viz" sender="jui_viz_page">` で包んだ文。
   `sources/history.py` はこれを `channel` の項目（包みを外した文）にし、ページはこの項目の文が送った文で始まるときだけ「届いた」にする。
   同期のフックは、表示中のページ（presence、12 秒）が無ければ即座に空で返る。
+- **退勤**（`server.py` の `POST /api/session/end`、`clockout.py`、`ingest.clock_out`、`50-panel.js` の CLOCK）:
+  ロボットのカードの「退勤…」から、確認（ロボット・セッションの title・フォルダ・クライアント、既定のフォーカスはやめる）の後に、
+  そのセッションの claude へ SIGTERM を 1 回。使えるのはターミナルで起動したセッション（登録簿の `entrypoint` が `cli`）だけで、
+  VS Code（タブがエラーで残る）とデスクトップアプリ（画面が変わらない）はページでも無効、サーバーでも断る（依頼者の目の前の測定と裁定、10-19）。
+  リクエストの検査は `prompt_checks` をそのまま使う（上限は 1 KB）。そのあと、このサーバーのセッション一覧にあって終わっていないこと、
+  メインのロボットであること（サブエージェントは断る）。pid は `~/.claude/sessions/<pid>.json` から引き、sessionId・pid・
+  `kind: interactive`・`entrypoint: cli`・viz 自身でない・ps のコマンド行の argv[0] が claude・開始時刻が `procStart` と同じ
+  （再利用された pid は別の時刻に始まっている）を確かめ、合図の直前にもう一度全部を確かめる。SIGKILL は送らない
+  （6 秒で終わらなければ「終わらなかった」と返すだけ）。試みは全部 `<viz_home>/clock-out.log`（0600、1 行 1 JSON）と stderr、
+  知っているセッションならイベントログにも残る。終わったら session-recovery の台帳（`~/.claude/session-recovery/active.json`、
+  別レーンの道具）の該当エントリに `ended_reason: "clocked-out"` を付ける。ロックは common.sh の `lock_acquire` と同じ
+  （`.lock` の mkdir、0.1 秒おきに 50 回、30 秒より古いロックは捨てる、`active.json.tmp.<pid>` からの rename）。ファイルが無ければ何もしない。
 - **テストの進捗**: driver 3 種が `schemas/progress.schema.json`（jsonui-test-runner、写しは
   `test_tools/tests/schema_fixtures/`）の 1 行を出す。Web はフォルダの .jsonl、Android は logcat、
   iOS は unified logging。jui_tools に JSON Schema のライブラリが無いので検証は手書きで、

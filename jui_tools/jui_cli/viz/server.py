@@ -12,6 +12,7 @@ Routes (design: dev-guide, 05 §3):
   GET  /api/snapshot  the whole state (token)
   POST /api/prompt    a prompt typed in the page for one session (prompt_checks: the page's own origin only)
   POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
+  POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
 """
 from __future__ import annotations
 
@@ -21,13 +22,14 @@ import logging
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import paths, security
+from . import clockout, paths, security
 from .config import VizConfig
 from .state import VizState, now_ms
 
@@ -35,6 +37,8 @@ MAX_HOOK_BODY = 2_000_000
 USAGE_MAX_BODY = 64_000
 #: POST /api/prompt: the whole request body, JSON included (the requester's ruling, 10-19: "例: 8 KB").
 PROMPT_MAX_BODY = 8_192
+#: POST /api/session/end: {"sessionId", "agentId"} and nothing more.
+END_MAX_BODY = 1_024
 AUTH_TIMEOUT_SEC = 2.0
 POLL_SEC = 25.0
 PRESENCE_MS = 12_000
@@ -143,7 +147,9 @@ def make_app(ctx: ServerContext) -> web.Application:
     page = _page_html(ctx) or ""
     hashes = _importmap_hashes(page)
     app = web.Application(
-        middlewares=[security.make_middleware(ctx.port, hashes)],
+        middlewares=[security.make_middleware(ctx.port, hashes, on_refused=lambda request, response: (
+            _clock_log(ctx, {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "remote": request.remote}, response)
+            if request.path == "/api/session/end" else None))],
         client_max_size=MAX_HOOK_BODY,
     )
     security.install_headers(app, ctx.port, hashes)
@@ -421,18 +427,9 @@ def make_app(ctx: ServerContext) -> web.Application:
         if refused is not None:
             log(f"拒否: /api/prompt（{refused.text.strip()}）")
             return refused
-        raw = b""
-        while len(raw) <= PROMPT_MAX_BODY:   # a chunked body has no Content-Length: stop reading past the cap
-            chunk = await request.content.read(PROMPT_MAX_BODY + 1 - len(raw))
-            if not chunk:
-                break
-            raw += chunk
-        if len(raw) > PROMPT_MAX_BODY:
-            return web.Response(status=413, text="too large\n")
-        try:
-            body = json.loads(raw)
-        except (ValueError, UnicodeDecodeError):
-            return web.Response(status=400, text="not json\n")
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
         sid = body.get("sessionId") if isinstance(body, dict) else None
         text = body.get("text") if isinstance(body, dict) else None
         if not isinstance(sid, str) or not sid or not isinstance(text, str) or not text.strip():
@@ -483,9 +480,48 @@ def make_app(ctx: ServerContext) -> web.Application:
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
                                      "Content-Disposition": "inline"})
 
+    async def api_session_end(request: web.Request) -> web.Response:
+        """退勤 from a robot card (ticket 2026-10-19-jui-viz-clock-out-button): the checks of /api/prompt
+        (prompt_checks, with this route's cap), then the session in this server's list and not ended, the robot asked
+        for its main robot (never a subagent), then clockout.end_session's checks of the pid, made twice, and one
+        SIGTERM. Every attempt goes to clock-out.log in the runtime folder and to stderr; one naming a session this
+        server knows, to the event log too."""
+        at = now_ms()
+        record = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "remote": request.remote}
+        refused = prompt_checks(request, ctx, END_MAX_BODY)
+        if refused is None:
+            body = await _capped_json(request, END_MAX_BODY)
+            refused = body if isinstance(body, web.Response) else None
+        if refused is not None:
+            return _clock_log(ctx, record, refused)
+        sid, agent_id = body.get("sessionId"), body.get("agentId", body.get("sessionId"))
+        record.update(sessionId=sid if isinstance(sid, str) else None, agentId=agent_id if isinstance(agent_id, str) else None)
+        if not isinstance(sid, str) or not sid or not isinstance(agent_id, str) or not agent_id:
+            return _clock_log(ctx, record, web.Response(status=400, text="sessionId is required\n"))
+        world = ctx.world
+        session = world.sessions.get(sid) if world is not None else None
+        if session is None or session["status"] == "ended":
+            return _clock_log(ctx, record, web.Response(status=404, text="no such session in this server's list\n"))
+        agent = world.agents.get(agent_id)
+        if agent is None or agent.get("sessionId") != sid:
+            return _clock_log(ctx, record, web.Response(status=404, text="no such robot in this session\n"), world, sid)
+        if agent.get("kind") != "main" or agent_id != sid:
+            return _clock_log(ctx, record, web.Response(status=403, text="a subagent cannot be clocked out; only its session's main robot\n"), world, sid)
+        loop = asyncio.get_running_loop()
+        outcome = await loop.run_in_executor(None, lambda: clockout.end_session(paths.claude_sessions_dir(), sid, os.getpid()))
+        record.update(pid=outcome.pid, signalled=outcome.signalled)
+        if outcome.result == "ended":
+            world.clock_out(sid, now_ms())
+            record["ledger"] = await loop.run_in_executor(None, lambda: clockout.mark_ledger(paths.claude_home() / "session-recovery", sid))
+            if ctx.publish:
+                ctx.publish()
+            return _clock_log(ctx, record, web.json_response({"ok": True, "ended": True, "pid": outcome.pid}), world, sid, outcome)
+        return _clock_log(ctx, record, web.Response(status=outcome.status, text=outcome.reason + "\n"), world, sid, outcome)
+
     # Before the static catch-all: every method reaches the handler, which answers 405 to all but POST.
     app.router.add_route("*", "/api/prompt", api_prompt)
     app.router.add_route("*", "/api/history-image", api_history_image)
+    app.router.add_route("*", "/api/session/end", api_session_end)
     app.router.add_post("/channel/hello", channel_hello)
     app.router.add_post("/channel/request", channel_request)
     app.router.add_get("/channel/poll", channel_poll)
@@ -518,8 +554,9 @@ def make_app(ctx: ServerContext) -> web.Application:
     return app
 
 
-def prompt_checks(request: web.Request, ctx: ServerContext) -> web.Response | None:
-    """The checks of POST /api/prompt, each on its own (the requester's ruling, 10-19; none may be dropped):
+def prompt_checks(request: web.Request, ctx: ServerContext, max_body: int = PROMPT_MAX_BODY) -> web.Response | None:
+    """The checks of POST /api/prompt — and of POST /api/session/end, with its own ``max_body`` — each on its own
+    (the requester's ruling, 10-19; none may be dropped):
 
       * POST only (405). The page has no other way to send, and a GET could be made by an <img> on any site.
       * Host exactly ``127.0.0.1:<port>`` (403). The middleware already refuses foreign names (DNS rebinding) with
@@ -530,7 +567,7 @@ def prompt_checks(request: web.Request, ctx: ServerContext) -> web.Response | No
       * X-Jui-Viz-Token, the per-start token from the served page (401).
       * Content-Type application/json (415): another site's form can only post the three "simple" types without a
         preflight, which this route never answers with CORS headers.
-      * a declared body over PROMPT_MAX_BODY (413); the read in the handler stops at PROMPT_MAX_BODY + 1 bytes too.
+      * a declared body over ``max_body`` (413); the read in the handler (_capped_json) stops at max_body + 1 bytes too.
     The server binds 127.0.0.1 only and has no option to bind anything else (viz_cmd._serve), so no other machine
     reaches it. What it does not stop: another process of this user (security.py says why)."""
     if request.method != "POST":
@@ -544,9 +581,41 @@ def prompt_checks(request: web.Request, ctx: ServerContext) -> web.Response | No
         return web.Response(status=401, text="unauthorized\n")
     if request.content_type != "application/json":
         return web.Response(status=415, text="application/json only\n")
-    if request.content_length is not None and request.content_length > PROMPT_MAX_BODY:
+    if request.content_length is not None and request.content_length > max_body:
         return web.Response(status=413, text="too large\n")
     return None
+
+
+async def _capped_json(request: web.Request, cap: int):
+    """The body as a JSON object, read up to cap + 1 bytes (a chunked body has no Content-Length), or the refusal."""
+    raw = b""
+    while len(raw) <= cap:
+        chunk = await request.content.read(cap + 1 - len(raw))
+        if not chunk:
+            break
+        raw += chunk
+    if len(raw) > cap:
+        return web.Response(status=413, text="too large\n")
+    try:
+        body = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return web.Response(status=400, text="not json\n")
+    return body if isinstance(body, dict) else web.Response(status=400, text="not a JSON object\n")
+
+
+def _clock_log(ctx: ServerContext, record: dict, response: web.Response, world=None, sid: str | None = None, outcome=None) -> web.Response:
+    """Every 退勤 attempt and its outcome: clock-out.log (0600, one JSON line), stderr, and for a session this server
+    knows the event log."""
+    text = response.text.strip() if response.text and not response.content_type.endswith("json") else "ended"
+    result = outcome.result if outcome is not None else "refused"
+    record.update(status=response.status, result=result, reason=text)
+    clockout.write_log(paths.viz_home() / "clock-out.log", record)
+    log(f"退勤: {record.get('sessionId') or '?'} pid={record.get('pid')} → {result} {response.status}（{text}）")
+    if world is not None and sid is not None:
+        world.clock_out_event(sid, now_ms(), record)
+        if ctx.publish:
+            ctx.publish()
+    return response
 
 
 def _dispatch_hook(ctx: ServerContext, payload: dict) -> None:

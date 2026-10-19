@@ -80,6 +80,18 @@ const SOURCE = {
       return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
     } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
   },
+  /* 退勤 (50-panel.js): POST /api/session/end with the same page-only checks as /api/prompt; the server checks the session,
+     the robot (a main one) and the process again, sends SIGTERM once and answers when it has gone. Resolves { ok, status, error }. */
+  async clockOut(label) {
+    try {
+      const res = await fetch('/api/session/end', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ sessionId: SESSION_UUID[label] || '', agentId: (DEF[label] && DEF[label].realId) || '' }),
+      });
+      return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
+    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
   /* One picture of that history (2.3.4): the robot and the picture's place, under the same checks as a prompt
@@ -758,6 +770,7 @@ function rebuildSessions() {
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
       relay: s.relay === true, prompt: s.prompt === true,   // prompt: its channel takes a prompt from the page (jui-viz 1.2.0+)
       launch: typeof s.launch === 'string' ? s.launch : null,   // whether the CLI hands that text over (sources/launch.py)
+      client: ['terminal', 'vscode', 'desktop', 'other'].includes(s.client) ? s.client : 'unknown',   // 退勤: terminal only
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
       heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [],   // tokens / tool / subagents
       heavyInfo: s.heavyInfo && typeof s.heavyInfo === 'object' ? { tokensPerMin: Number(s.heavyInfo.tokensPerMin) || 0, toolSec: Number(s.heavyInfo.toolSec) || 0, subagents: Number(s.heavyInfo.subagents) || 0 } : null });   // the transcript's first record; none: not guessed
