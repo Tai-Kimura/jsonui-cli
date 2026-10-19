@@ -24,8 +24,12 @@ from waits import frame_log_js
 
 # Frames SLOW_MS apart (the e2e's own requestAnimationFrame wrapper) for one trip: its time at the box starts in the
 # frame it arrives (it waited a frame for gitTick: ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames).
-SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
-  window.requestAnimationFrame = (cb) => { const ms = window.__slowFrameMs || 0; return ms ? setTimeout(() => raf(cb), ms) : raf(cb); }; })()"""
+# window.__fastFrames() ends the slow frames at once: the frame already waiting its 3 s runs now (else that one late
+# frame carried the whole 1.4 s at the box and the walk back, and the arm after it never saw the trip going back).
+SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window), held = new Map();
+  window.requestAnimationFrame = (cb) => { const ms = window.__slowFrameMs || 0; if (!ms) return raf(cb);
+    const h = setTimeout(() => { held.delete(h); raf(cb); }, ms); held.set(h, cb); return h; };
+  window.__fastFrames = () => { window.__slowFrameMs = 0; for (const [h, cb] of held) { clearTimeout(h); raf(cb); } held.clear(); return true; }; })()"""
 SLOW_MS = 3000
 TRIP_LOG_JS = frame_log_js(
     "(id) => { const w = window.__dbg.gitBox().why[id] || {}; return { git: w.git, path: w.path }; }",
@@ -358,11 +362,13 @@ async def run_gitbox(pw, out, failures):
         await page.evaluate(TRIP_LOG_JS, rid)
         bash("git push", stderr=f"   {revs['base']}..{revs['big']}  main -> main\n")
         await wait(page, "(id) => window.__dbg.gitBox().trips[id] && window.__dbg.gitBox().trips[id].phase === 'at'", arg=rid, timeout=40000, label="at the box (dark)")
-        await page.evaluate("() => { window.__slowFrameMs = 0; }")
+        await page.evaluate("() => window.__fastFrames()")
         rows = res["tripRows"] = await page.evaluate("() => window.__frameRows")
         waited = [r for r in rows if r.get("git") == "going" and r.get("path") == 0]
         walked = [r for r in rows if r.get("git") == "going" and r.get("path")]
-        check(failures, walked and not waited, f"with frames {SLOW_MS} ms apart, the time at the box starts in the frame it arrives: {len(waited)} frames between, {len(walked)} walking")
+        # a trip shorter than one 3 s step goes and arrives in one frame (no "going" row): that is the same claim
+        check(failures, rows and rows[-1].get("git") == "at" and not waited,
+              f"with frames {SLOW_MS} ms apart, the time at the box starts in the frame it arrives: {len(waited)} frames between, {len(walked)} walking")
         await page.screenshot(path=str(out / "at-box-dark.png"))
         await page.emulate_media(color_scheme="light")
         await wait(page, "(id) => window.__dbg.gitBox().trips[id] && window.__dbg.gitBox().trips[id].phase === 'back'", arg=rid, timeout=20000, label="back")
