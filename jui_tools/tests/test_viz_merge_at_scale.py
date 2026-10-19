@@ -12,6 +12,7 @@ change.
 from __future__ import annotations
 
 import json
+import statistics
 import time
 import uuid
 from pathlib import Path
@@ -102,15 +103,41 @@ def _drive(world: World, rows: list[dict], at: int, ticks_every: int = 60) -> No
     world.publish()
 
 
+#: The merge's cost, in units of REFERENCE's CPU time on the same machine at the same moment. Measured 10-19 (load 90-100):
+#: clean 14; 2.3.1's merge for every record 34; ties not remembered 325. Under 25 keeps the guard of the old "under a
+#: second" (the clean merge took about 0.5 s of CPU) without the clock of the wall: on a busy machine the wall time grew
+#: to 1.4 s (the process waiting for a core and for the disk) while the CPU time stayed 0.50 s.
+UNITS_MAX = 25
+
+
+def _reference_cpu() -> float:
+    """CPU seconds of a fixed piece of plain Python (dict updates and str work, as the merge does), on this machine now."""
+    t0 = time.process_time()
+    d: dict[int, int] = {}
+    n = 0
+    for i in range(300_000):
+        d[i % 997] = d.get(i % 997, 0) + i
+        n += len(str(i))
+    assert n
+    return time.process_time() - t0
+
+
 def test_a_large_run_against_large_rooms_merges_in_well_under_a_second(tmp_path):
+    """Not quadratic, not accidentally slow (ticket 2026-10-19-jui-viz-merge-at-scale-timing-under-load): the merge's CPU
+    time (time.process_time: this process only, so other processes on a loaded machine do not count) against a reference
+    workload timed on either side of it (so a slower machine or a slower moment scales both)."""
     world, state, roots = _world(tmp_path)
     rows = _rows()
     at = int(time.time() * 1000)
     _command(world, roots["b"], at)
-    t0 = time.perf_counter()
+    ref = [_reference_cpu() for _ in range(3)]
+    w0, c0 = time.perf_counter(), time.process_time()
     _drive(world, rows, at)
-    took = time.perf_counter() - t0
-    assert took < 1.0, f"{took:.2f} s for {len(rows)} rows and {RUNS * (CASES + 2)} records"
+    cpu, wall = time.process_time() - c0, time.perf_counter() - w0
+    ref += [_reference_cpu() for _ in range(3)]
+    units = cpu / statistics.median(ref)
+    assert units < UNITS_MAX, (f"{units:.1f} units (CPU {cpu:.2f} s, reference {statistics.median(ref):.3f} s, wall {wall:.2f} s) "
+                               f"for {len(rows)} rows and {RUNS * (CASES + 2)} records")
     # What the merge says is what it said before (counted from the specimen, not from the code):
     assert _passed(state, "a") == (ROOMS["a"] * (ROWS_PER_FILE - 1), ROOMS["a"])
     assert _passed(state, "c") == (ROOMS["c"] * (ROWS_PER_FILE - 1), ROOMS["c"])
