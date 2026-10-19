@@ -26,7 +26,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready, stamp
 
 S_OK = "e2e00000-0000-4000-8000-0000000000d1"
 S_OLD = "e2e00000-0000-4000-8000-0000000000d2"
@@ -62,8 +62,8 @@ async def run_send_prompt(pw, out, failures):
     for sid, cwd in CWDS.items():
         t = home / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", cwd) / f"{sid}.jsonl"
         t.parent.mkdir(parents=True, exist_ok=True)
-        t.write_text(json.dumps({"type": "user", "timestamp": "2026-10-19T09:00:00Z", "message": {"role": "user", "content": "最初の依頼"}}, ensure_ascii=False) + "\n"
-                     + json.dumps({"type": "assistant", "timestamp": "2026-10-19T09:00:01Z", "message": {"id": "a1", "role": "assistant", "content": [{"type": "text", "text": "最初の応答"}]}}, ensure_ascii=False) + "\n")
+        t.write_text(json.dumps({"type": "user", "timestamp": stamp("2026-10-19T09:00:00Z"), "message": {"role": "user", "content": "最初の依頼"}}, ensure_ascii=False) + "\n"
+                     + json.dumps({"type": "assistant", "timestamp": stamp("2026-10-19T09:00:01Z"), "message": {"id": "a1", "role": "assistant", "content": [{"type": "text", "text": "最初の応答"}]}}, ensure_ascii=False) + "\n")
         transcripts[sid] = t
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")

@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 
-from common import ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
 
 SID = "e2e00000-0000-4000-8000-0000000000d4"
 CWD = "/work/rb-layout-app"
@@ -68,8 +68,8 @@ async def run_rb_layout(pw, out, failures, shots: pathlib.Path | None = None):
     transcript.parent.mkdir(parents=True, exist_ok=True)
     lines = []
     for n in range(30):
-        lines.append({"type": "user", "timestamp": "2026-10-18T09:00:00Z", "message": {"role": "user", "content": f"指示 {n}"}})
-        lines.append({"type": "assistant", "timestamp": "2026-10-18T09:00:01Z",
+        lines.append({"type": "user", "timestamp": stamp("2026-10-18T09:00:00Z"), "message": {"role": "user", "content": f"指示 {n}"}})
+        lines.append({"type": "assistant", "timestamp": stamp("2026-10-18T09:00:01Z"),
                       "message": {"id": f"m{n}", "role": "assistant", "content": [{"type": "text", "text": f"## 応答 {n}\n- 一行目\n- 二行目"}]}})
     transcript.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in lines))
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}

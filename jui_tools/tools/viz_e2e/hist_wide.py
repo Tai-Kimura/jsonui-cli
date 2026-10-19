@@ -16,7 +16,6 @@ localStorage throwing; at 390 px it is the whole screen. Screenshots (light and 
 from __future__ import annotations
 
 import base64
-import datetime
 import json
 import os
 import pathlib
@@ -27,7 +26,7 @@ import sys
 import time
 import zlib
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, ago, dump, new_page, ready, stamp
 
 A = "e2e00000-0000-4000-8000-0000000000c1"
 B = "e2e00000-0000-4000-8000-0000000000c2"
@@ -56,19 +55,9 @@ TABLE = "\n".join(["| " + " | ".join(f"列{i}" for i in range(14)) + " |", "|" +
                    "| " + " | ".join(f"値{i}-とても長いセルの中身" for i in range(14)) + " |"])
 CODE = "```\n" + "x = '" + "長い行" * 80 + "'\n```"
 
-# The transcript's times, written as if the sessions started at 09:00Z on 10-19, are moved to start an hour before the
-# run (ticket 2026-10-20-jui-viz-hist-wide-robot-margin-red-on-integrate): a session's start comes from its transcript,
-# and one that started 8 hours before is drawn tired (20-core.js isTired) — a slumped pose a few pixels wider. With the
-# fixed date the robots turned tired at 02:00 JST on 10-20 and the margin arms went red from then on: what was checked
-# depended on the clock. The order and the gaps between the records are kept.
-FIXTURE_T0 = datetime.datetime(2026, 10, 19, 9, 0, 0, tzinfo=datetime.timezone.utc)
-FIXTURE_BASE = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0) - datetime.timedelta(hours=1)
-
-
-def stamp(ts: str) -> str:
-    """A fixture time (as written, on 10-19) moved to the run's hour."""
-    t = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
-    return (FIXTURE_BASE + (t - FIXTURE_T0)).strftime("%Y-%m-%dT%H:%M:%SZ")
+# The transcript's times go through stamp() (common.py): an hour before the run, not a fixed day (ticket
+# 2026-10-20-jui-viz-hist-wide-robot-margin-red-on-integrate — from 02:00 JST on 10-20 the robots of a fixed 10-19 09:00Z
+# were 8 hours old, drawn tired, and the margin arms went red: what was checked depended on the clock).
 
 
 def records(who):
@@ -78,29 +67,29 @@ def records(who):
     def asst(text, mid, ts):
         return {"type": "assistant", "timestamp": ts, "message": {"id": mid, "role": "assistant", "content": [{"type": "text", "text": text}]}}
     pic = lambda data: {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(data).decode()}}  # noqa: E731
-    out = [user(f"{who} 最初の指示", "2026-10-19T09:00:00Z")]
+    # B's session began 9 hours ago, so its robot is drawn tired (a wider pose): the → arm below keeps a tired robot inside
+    # the margin too (ticket 2026-10-20-jui-viz-wide-history-tired-robot-leans-out-of-the-margin). A's began an hour ago.
+    out = [user(f"{who} 最初の指示", stamp("2026-10-19T09:00:00Z") if who == "A" else ago(hours=9))]
     if who == "A":   # long bodies next to the labels (hist_labels.py: the time and the names must not fold)
         out.append(user("Another Claude session sent a message:\n<cross-session-message from=\"uds:/tmp/x.sock\" from-name=\"jsonui-agents-for-claude-dd\">\n"
-                        + "もう 1 本お願いします（dd から）。" + "とても長い知らせの本文。" * 30 + "\n</cross-session-message>", "2026-10-19T09:47:00Z"))
-        out.append({"type": "assistant", "timestamp": "2026-10-19T09:47:10Z", "message": {"id": "mt", "role": "assistant", "content": [
+                        + "もう 1 本お願いします（dd から）。" + "とても長い知らせの本文。" * 30 + "\n</cross-session-message>", stamp("2026-10-19T09:47:00Z")))
+        out.append({"type": "assistant", "timestamp": stamp("2026-10-19T09:47:10Z"), "message": {"id": "mt", "role": "assistant", "content": [
             {"type": "tool_use", "id": "tu-long", "name": "Bash", "input": {"command": "cat " + "/very/long/path/segment" * 20 + " | head -n 200"}}]}})
-        out.append({"type": "user", "timestamp": "2026-10-19T09:47:11Z", "message": {"role": "user", "content": [
+        out.append({"type": "user", "timestamp": stamp("2026-10-19T09:47:11Z"), "message": {"role": "user", "content": [
             {"type": "tool_result", "tool_use_id": "tu-long", "content": "ok"}]}})
-        out.append(user("依頼者の長い指示。" * 60, "2026-10-19T09:47:20Z"))
-        out.append({"type": "user", "timestamp": "2026-10-19T09:47:30Z", "isMeta": True, "message": {"role": "user", "content": "<system-reminder>\n" + "ハーネスの長い注記。" * 40 + "\n</system-reminder>"}})
-        out.append({"type": "assistant", "timestamp": "2026-10-19T09:47:40Z", "message": {"id": "mt2", "role": "assistant", "content": [
+        out.append(user("依頼者の長い指示。" * 60, stamp("2026-10-19T09:47:20Z")))
+        out.append({"type": "user", "timestamp": stamp("2026-10-19T09:47:30Z"), "isMeta": True, "message": {"role": "user", "content": "<system-reminder>\n" + "ハーネスの長い注記。" * 40 + "\n</system-reminder>"}})
+        out.append({"type": "assistant", "timestamp": stamp("2026-10-19T09:47:40Z"), "message": {"id": "mt2", "role": "assistant", "content": [
             {"type": "tool_use", "id": "tu-err", "name": "mcp__long-tool-server__a_tool_with_a_rather_long_name_indeed", "input": {"description": "長い説明。" * 30}}]}})
-        out.append({"type": "user", "timestamp": "2026-10-19T09:47:41Z", "message": {"role": "user", "content": [
+        out.append({"type": "user", "timestamp": stamp("2026-10-19T09:47:41Z"), "message": {"role": "user", "content": [
             {"type": "tool_result", "tool_use_id": "tu-err", "content": "failed", "is_error": True}]}})
-        out.append({"type": "assistant", "timestamp": "2026-10-19T09:47:50Z", "message": {"id": "mt3", "role": "assistant", "content": [
+        out.append({"type": "assistant", "timestamp": stamp("2026-10-19T09:47:50Z"), "message": {"id": "mt3", "role": "assistant", "content": [
             {"type": "tool_use", "id": "tu-run", "name": "Bash", "input": {"command": "sleep 100 && " + "echo running " * 40}}]}})
     for k in range(6):
-        out.append(asst(f"応答 {k}: " + "本文。" * 40, f"m{k}", f"2026-10-19T09:00:{10 + k:02d}Z"))
+        out.append(asst(f"応答 {k}: " + "本文。" * 40, f"m{k}", stamp(f"2026-10-19T09:00:{10 + k:02d}Z")))
     if who == "A":
-        out.append(user([pic(PIC1), pic(PIC2), {"type": "text", "text": f"[Image: source: {GONE}, original 640x480]\nこの 2 枚を見て"}], "2026-10-19T09:01:00Z"))
-        out.append(asst("## 表\n\n" + TABLE + "\n\n" + CODE, "m9", "2026-10-19T09:01:10Z"))
-    for r in out:
-        r["timestamp"] = stamp(r["timestamp"])
+        out.append(user([pic(PIC1), pic(PIC2), {"type": "text", "text": f"[Image: source: {GONE}, original 640x480]\nこの 2 枚を見て"}], stamp("2026-10-19T09:01:00Z")))
+        out.append(asst("## 表\n\n" + TABLE + "\n\n" + CODE, "m9", stamp("2026-10-19T09:01:10Z")))
     return out
 
 
@@ -301,6 +290,9 @@ async def run_hist_wide(pw, out, failures):
         rb_id = await page.evaluate("() => window.__dbg.focus().id")
         c2 = await page.evaluate(CARD)
         box2 = res["wideNext"] = await page.evaluate(ROBOT_BOX, rb_id)
+        tired = res["tired"] = {"A": (await page.evaluate("(id) => window.__dbg.condition(id).tired", ra)),
+                                "next": (await page.evaluate("(id) => window.__dbg.condition(id).tired", rb_id))}
+        check(failures, tired == {"A": False, "next": True}, f"A is fresh and the next robot (B, 9 hours) is tired, as the scene means: {tired}")
         check(failures, c2["wide"] and box2 and box2["x0"] >= 0 and box2["x1"] <= c2["left"], f"→: the next robot is inside the margin too: {box2} margin {c2['left']}")
         await page.keyboard.press("ArrowLeft")
         await wait(page, f"() => window.__dbg.focus().id === '{ra}'", label="back to A")

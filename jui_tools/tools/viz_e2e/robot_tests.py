@@ -21,7 +21,7 @@ import time
 import urllib.request
 import uuid
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
 
 SID_A = "aaaa0000-0000-4000-8000-0000000000c1"
 SID_B = "bbbb0000-0000-4000-8000-0000000000c2"
@@ -88,11 +88,11 @@ async def run_robot_tests(pw, out, failures):
     def saved(run, cases):
         """A driver's results file for run (B's shape: run, app, suites[].file), named by now."""
         results.mkdir(parents=True, exist_ok=True)
-        stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + ".000"
-        doc = {"format": "jsonui-test-results", "version": 1, "platform": "web", "generatedAt": "2026-10-18T09:00:00Z",
+        name_at = time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + ".000"
+        doc = {"format": "jsonui-test-results", "version": 1, "platform": "web", "generatedAt": stamp("2026-10-18T09:00:00Z"),
                "run": run, "app": "runs-app", "suites": [{"suiteName": "a", "file": "tests/a.test.json", "results": [
                    {"testName": "a", "caseName": c, "status": st, "durationMs": 1} for c, st in cases]}]}
-        (results / f"{stamp}Z-{run}.json").write_text(json.dumps(doc))
+        (results / f"{name_at}Z-{run}.json").write_text(json.dumps(doc))
     res: dict = {}
 
     def hook(payload):

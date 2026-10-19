@@ -30,7 +30,7 @@ import sys
 import time
 
 from waits import frame_log_js, settled, until
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 ONE = "e2e00000-0000-4000-8000-0000000001a0"            # alone in its room
@@ -193,7 +193,7 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         proj = home / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", cwd)
         proj.mkdir(parents=True, exist_ok=True)
         transcripts[sid] = proj / f"{sid}.jsonl"
-        transcripts[sid].write_text(json.dumps({"type": "user", "timestamp": "2026-10-19T09:00:00Z", "message": {"role": "user", "content": "start"}}) + "\n")
+        transcripts[sid].write_text(json.dumps({"type": "user", "timestamp": stamp("2026-10-19T09:00:00Z"), "message": {"role": "user", "content": "start"}}) + "\n")
         (sessions / f"{91000 + n}.json").write_text(json.dumps({
             "pid": 91000 + n, "sessionId": sid, "cwd": cwd, "name": NAMES[sid], "nameSource": "derived", "status": "idle",
             "messagingSocketPath": f"/tmp/e2e/{sid[-2:]}.sock", "entrypoint": "cli"}))

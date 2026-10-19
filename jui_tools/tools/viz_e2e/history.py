@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready, stamp
 
 SID = "e2e00000-0000-4000-8000-0000000000b7"
 CWD = "/work/hist-app"
@@ -51,20 +51,20 @@ ANSWER = "\n".join([
 
 def records():
     def user(text, **extra):
-        return {"type": "user", "timestamp": "2026-10-18T09:00:00Z", "message": {"role": "user", "content": text}, **extra}
+        return {"type": "user", "timestamp": stamp("2026-10-18T09:00:00Z"), "message": {"role": "user", "content": text}, **extra}
 
     return [
         user("履歴を見せて " + HOSTILE[0]),
         user('Another Claude session sent a message:\n<cross-session-message from="uds:/tmp/x.sock" from-name="jsonui-5b">\n票を振りました\n</cross-session-message>'),
         user("<system-reminder>\nharness note\n</system-reminder>", isMeta=True),
-        {"type": "assistant", "timestamp": "2026-10-18T09:00:01Z",
+        {"type": "assistant", "timestamp": stamp("2026-10-18T09:00:01Z"),
          "message": {"id": "m1", "role": "assistant", "content": [{"type": "thinking", "thinking": "THINK-SECRET", "signature": "s"}]}},
-        {"type": "assistant", "timestamp": "2026-10-18T09:00:02Z",
+        {"type": "assistant", "timestamp": stamp("2026-10-18T09:00:02Z"),
          "message": {"id": "m2", "role": "assistant", "content": [{"type": "tool_use", "id": "toolu_e2e", "name": "Bash",
                                                                     "input": {"command": "ls -la " + HOSTILE[1], "description": "一覧を見る"}}]}},
-        {"type": "user", "timestamp": "2026-10-18T09:00:03Z",
+        {"type": "user", "timestamp": stamp("2026-10-18T09:00:03Z"),
          "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_e2e", "content": "total 0 " + HOSTILE[0]}]}},
-        {"type": "assistant", "timestamp": "2026-10-18T09:00:04Z",
+        {"type": "assistant", "timestamp": stamp("2026-10-18T09:00:04Z"),
          "message": {"id": "m3", "role": "assistant", "content": [{"type": "text", "text": ANSWER}]}},
         user([{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"}}]),
     ]
@@ -192,7 +192,7 @@ async def run_history(pw, out, failures):
 
         # a new line while the tab is open: it shows (and an open fold stays open)
         with open(transcript, "a") as f:
-            f.write(json.dumps({"type": "assistant", "timestamp": "2026-10-18T09:01:00Z",
+            f.write(json.dumps({"type": "assistant", "timestamp": stamp("2026-10-18T09:01:00Z"),
                                 "message": {"id": "m9", "role": "assistant", "content": [{"type": "text", "text": "追記された応答"}]}}, ensure_ascii=False) + "\n")
         t1 = time.monotonic()
         await wait(page, "() => document.querySelector('[data-rb-hist]').textContent.includes('追記された応答')", timeout=10000, label="the appended answer")
@@ -248,10 +248,10 @@ def scroll_records(n, start=0):
     out = []
     for k in range(start, start + n):
         if k % 2 == 0:
-            out.append({"type": "user", "timestamp": "2026-10-19T09:00:00Z", "message": {"role": "user", "content": f"依頼-{k:02d}"}})
+            out.append({"type": "user", "timestamp": stamp("2026-10-19T09:00:00Z"), "message": {"role": "user", "content": f"依頼-{k:02d}"}})
         else:
             body = "\n".join([f"## 応答-{k:02d}", *[f"- 行 {i} の説明が少し長めに続く" for i in range(5)]])
-            out.append({"type": "assistant", "timestamp": "2026-10-19T09:00:01Z",
+            out.append({"type": "assistant", "timestamp": stamp("2026-10-19T09:00:01Z"),
                         "message": {"id": f"s{k}", "role": "assistant", "content": [{"type": "text", "text": body}]}})
     return out
 

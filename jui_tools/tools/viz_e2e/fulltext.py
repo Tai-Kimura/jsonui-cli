@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
 from waits import WaitTimeout, until
 
 SID_A = "a1f00000-0000-4000-8000-0000000000f1"
@@ -102,11 +102,11 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
     transcript = home / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(proj)) / f"{SID_A}.jsonl"
     transcript.parent.mkdir(parents=True, exist_ok=True)
     transcript.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in [
-        {"type": "user", "timestamp": "2026-10-19T09:00:00Z", "message": {"role": "user", "content": "テストを走らせて"}},
-        {"type": "assistant", "timestamp": "2026-10-19T09:00:01Z", "message": {"id": "m1", "role": "assistant", "content": [
+        {"type": "user", "timestamp": stamp("2026-10-19T09:00:00Z"), "message": {"role": "user", "content": "テストを走らせて"}},
+        {"type": "assistant", "timestamp": stamp("2026-10-19T09:00:01Z"), "message": {"id": "m1", "role": "assistant", "content": [
             {"type": "tool_use", "id": "toolu_ft", "name": MCP_TOOL, "input": {"description": DESC, "query": "x"}}]}},
-        {"type": "user", "timestamp": "2026-10-19T09:00:02Z", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_ft", "content": "ok"}]}},
-        {"type": "assistant", "timestamp": "2026-10-19T09:00:03Z", "message": {"id": "m2", "role": "assistant", "content": [{"type": "text", "text": "走らせました"}]}},
+        {"type": "user", "timestamp": stamp("2026-10-19T09:00:02Z"), "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_ft", "content": "ok"}]}},
+        {"type": "assistant", "timestamp": stamp("2026-10-19T09:00:03Z"), "message": {"id": "m2", "role": "assistant", "content": [{"type": "text", "text": "走らせました"}]}},
     ]) + "\n")
     jt = pathlib.Path(jt) if jt else pathlib.Path(__file__).resolve().parents[2]
     forward = jt / "jui_cli" / "viz" / "forward.py"

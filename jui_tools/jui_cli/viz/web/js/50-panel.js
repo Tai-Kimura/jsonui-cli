@@ -1208,19 +1208,51 @@ const FOCUS_BASE = { az: Math.atan2(CAM_DIR.x, CAM_DIR.z), el: Math.asin(CAM_DIR
 const FOCUS_SAMPLES = [0.55, 1.15, 1.65];   // heights on the robot the camera must see
 const focusRay = new THREE.Raycaster();
 const focusDir = (az, el) => new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-function focusPose(R, az, el, dist) {
+function focusPose(R, az, el, dist, fitted = false) {
   const dir = focusDir(az, el), wide = sceneEl.clientWidth > 900;
   const right = new THREE.Vector3().crossVectors(dir.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
   const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), viewW = viewH * camera.aspect;
   const t = R.robot.root.position.clone().add(new THREE.Vector3(0, 1.15 * (R.robot.size || 1), 0));   // a subagent is 0.8 (2.3.5)
   // Wide: the card covers the right of the scene, so the robot sits left of centre. Narrow: the card is a
   // bottom sheet, so the robot sits high.
-  // The wide 応答の履歴 (2.3.4, 55-history.js): the card leaves only histWideMargin() on the left, and the robot sits in its middle.
+  // The wide 応答の履歴 (2.3.4, 55-history.js): the card leaves only histWideMargin() on the left, and the robot sits in its middle —
+  // the robot as posed (2.3.5: a tired robot's slumped pose is wider and stuck 1–10 px out of the margin when its root was
+  // put in the middle): the middle of its posed width in the middle of the margin, and the camera backs off if that width
+  // would not fit (ticket 2026-10-20-jui-viz-wide-history-tired-robot-leans-out-of-the-margin).
   const margin = typeof histWideMargin === 'function' ? histWideMargin() : 0;
-  if (wide && margin) t.add(right.multiplyScalar(((sceneEl.clientWidth - margin) / 2 / sceneEl.clientWidth) * viewW));
+  if (wide && margin) {
+    const ext = focusExtent(R, right, dir, dist, az), mid = (ext.l + ext.r) / 2, width = ext.r - ext.l;
+    const fit = (margin / sceneEl.clientWidth) * viewW * FOCUS_FIT;
+    if (width > fit && !fitted) return focusPose(R, az, el, dist * (width / fit), true);   // farther, so the posed robot fits the margin
+    t.add(right.clone().multiplyScalar(((sceneEl.clientWidth - margin) / 2 / sceneEl.clientWidth) * viewW + mid));
+  }
   else if (wide) t.add(right.multiplyScalar((Math.min(420, sceneEl.clientWidth - 28) / 2 / sceneEl.clientWidth) * viewW));
   else t.y -= viewH * 0.2;
   return { p: t.clone().add(dir.multiplyScalar(dist)), t };
+}
+/* The robot's posed width as the camera sees it, measured from its root along the camera's right, in units of the plane
+   the camera looks at (a corner nearer the camera counts wider: perspective): every shown mesh, the desk included, as the
+   wide history must keep it in the margin. Kept per robot as the widest seen for its posture (state, tired, desk), the
+   camera's turn and distance, so a pose that breathes or types does not shake the camera every frame. */
+const FOCUS_FIT = 0.9;
+const focusBox = new THREE.Box3(), focusCorner = new THREE.Vector3(), FOCUS_LOOK = new THREE.Vector3(0, 1.15, 0);
+function focusExtent(R, right, dir, dist, az) {
+  const root = R.robot.root, key = `${R.robot.state}|${!!R.robot.tired}|${!!(R.robot.desk && R.robot.desk.visible)}|${Math.round(az * 20)}|${dist.toFixed(2)}`;
+  const kept = R.focusExt && R.focusExt.key === key ? R.focusExt : (R.focusExt = { key, l: 0, r: 0 });
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    if (!o.isMesh || !shownChain(o)) return;
+    focusBox.setFromObject(o);
+    for (let i = 0; i < 8; i++) {
+      focusCorner.set(i & 1 ? focusBox.max.x : focusBox.min.x, i & 2 ? focusBox.max.y : focusBox.min.y, i & 4 ? focusBox.max.z : focusBox.min.z);
+      focusCorner.sub(root.position);
+      const side = focusCorner.dot(right), depth = dist - focusCorner.sub(FOCUS_LOOK).dot(dir);
+      const d = depth > 0.1 ? side * (dist / depth) : side;
+      if (d < kept.l) kept.l = d;
+      if (d > kept.r) kept.r = d;
+    }
+  });
+  return kept;
 }
 const shownChain = (o) => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
 const ofRobot = (o) => { for (let x = o; x; x = x.parent) if (x.userData && x.userData.robotId !== undefined) return true; return false; };

@@ -7,11 +7,34 @@ except `settle`, which only lets a camera tween finish before the next click.
 from __future__ import annotations
 
 import contextlib
+import datetime
 import json
 import re
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# ---- the times a fixture writes (2.3.5; ticket 2026-10-20-jui-viz-hist-wide-robot-margin-red-on-integrate) ----
+# A session's start is its transcript's first record, and the page draws a robot tired 8 hours after that (20-core.js
+# isTired, a wider pose). A fixture dated on a fixed day made the robots turn tired at a fixed hour of the clock, and
+# what a suite checked depended on when it ran. Fixtures write their times through stamp() (or ago()), never as a
+# fixed date: tests/test_viz_e2e_fixture_times.py fails on a fixed one outside its allowlist.
+RUN_BASE = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0) - datetime.timedelta(hours=1)
+
+
+def stamp(ts: str) -> str:
+    """A fixture time written as 09:00 plus an offset on any day ("2026-10-19T09:47:10Z") → that offset after
+    RUN_BASE (an hour before the run): the order and the gaps are kept, the day and the hour are the run's."""
+    t = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+    offset = t - t.replace(hour=9, minute=0, second=0)
+    assert offset >= datetime.timedelta(0), f"a fixture time is written as 09:00 plus an offset: {ts}"
+    return (RUN_BASE + offset).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def ago(hours: float = 0, minutes: float = 0) -> str:
+    """A time this long before now, for a fixture that means it (a session 9 hours old is meant to be tired)."""
+    t = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0) - datetime.timedelta(hours=hours, minutes=minutes)
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # Taken out of every environment a suite gives its server and its hooks: each would point the throwaway server at the
 # real one's state (its folder, the progress a runner writes, the saved results) — 10-18.

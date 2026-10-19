@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
 
 A = "e2e00000-0000-4000-8000-0000000000ca"
 B = "e2e00000-0000-4000-8000-0000000000cb"
@@ -62,7 +62,7 @@ async def run_calls(pw, out, failures):
     transcripts = {}
     for n, sid in enumerate((A, B)):
         transcripts[sid] = proj / f"{sid}.jsonl"
-        transcripts[sid].write_text(json.dumps({"type": "user", "timestamp": "2026-10-18T09:00:00Z", "message": {"role": "user", "content": "start"}}) + "\n")
+        transcripts[sid].write_text(json.dumps({"type": "user", "timestamp": stamp("2026-10-18T09:00:00Z"), "message": {"role": "user", "content": "start"}}) + "\n")
         (sessions / f"{90000 + n}.json").write_text(json.dumps({
             "pid": 90000 + n, "sessionId": sid, "cwd": CWD, "name": NAMES[sid], "nameSource": "derived", "status": "idle",
             "messagingSocketPath": f"/tmp/e2e/{sid[-2:]}.sock", "entrypoint": "cli"}))
@@ -121,12 +121,12 @@ async def run_calls(pw, out, failures):
         hook(A, hook_event_name="PostToolUse", tool_name="SendMessage", tool_use_id="toolu_call1",
              tool_input={"to": f"{NAMES[B]} [abc123]", "message": BODY}, tool_response={"success": True})
         # it arrives: still ringing
-        append(B, {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-10-18T09:00:05Z", "sessionId": B, "content": _xmsg()})
+        append(B, {"type": "queue-operation", "operation": "enqueue", "timestamp": stamp("2026-10-18T09:00:05Z"), "sessionId": B, "content": _xmsg()})
         await page.wait_for_timeout(3500)
         r = res["arrived"] = await page.evaluate(calls_js)
         check(failures, any(c["ring"] for c in r.values()), f"arrived, not read: it still rings: {r}")
         # it is read (the receiver was idle): picked up, both on the line
-        append(B, {"type": "user", "isMeta": True, "timestamp": "2026-10-18T09:00:05Z",
+        append(B, {"type": "user", "isMeta": True, "timestamp": stamp("2026-10-18T09:00:05Z"),
                    "message": {"role": "user", "content": "Another Claude session sent a message:\n" + _xmsg()}})
         t1 = time.monotonic()
         await wait(page, "() => window.__dbg.calls().filter((c) => c.handset).length === 2", timeout=10000, label="both on the line")
