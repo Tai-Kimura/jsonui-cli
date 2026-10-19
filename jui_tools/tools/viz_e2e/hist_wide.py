@@ -228,6 +228,7 @@ async def run_hist_wide(pw, out, failures):
         await page.emulate_media(color_scheme="light")
         before_cam = await page.evaluate("() => window.__dbg.camera.position.toArray().map((v) => +v.toFixed(2))")
         res["narrow"] = await page.evaluate(CARD)
+        check(failures, (res["narrow"]["tableScroll"] or 0) > 0, f"at the card's width too, a many-column table scrolls sideways (cells keep their width): {res['narrow']['tableScroll']}")
         wbtn = page.locator("#rb [data-rb-wide]")
         if not (await wbtn.count() and await wbtn.is_visible()):
             check(failures, False, "a 広げる button on the history tab")

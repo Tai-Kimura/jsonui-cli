@@ -770,6 +770,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-tablewrap { overflow-x: auto; }
 .h-table { border-collapse: collapse; font-size: 12px; }
 .h-table th, .h-table td { padding: 3px 6px; border: 1px solid var(--line); text-align: left; }
+.h-table th, .h-table td { min-width: 6em; }   /* a many-column table scrolls sideways (.h-tablewrap) instead of folding every cell to one character */
 .h-md a { color: var(--info); }
 .h-img { color: var(--ink-soft); font-style: italic; }
 .h-tool, .h-peer, .h-harness { border-radius: 8px; background: var(--bg); }
