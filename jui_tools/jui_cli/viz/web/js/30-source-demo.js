@@ -9,7 +9,7 @@ const START_AT = 24;
 const BASE_CLOCK = 14 * 3600 + 20 * 60;
 
 const ROOMS = [
-  { id: 'shop', name: 'shop-app/', path: '~/work/shop-app', x0: -9.6, x1: 2.6, z0: -5.0, z1: 4.2, floor: '--floor-a', back: 3.9, left: 3.9 },
+  { id: 'shop', name: 'shop-app/', path: '~/work/shop-app', x0: -9.6, x1: 2.6, z0: -5.0, z1: 4.2, floor: '--floor-a', back: 3.9, left: 3.9, infraDocs: { files: 2, dir: 'docs/infra' } },
   { id: 'cli', name: 'jsonui-cli/', path: '~/resource/jsonui-cli', x0: 3.1, x1: 10.2, z0: -5.0, z1: -0.25, floor: '--floor-b', back: 3.9, left: 0.55 },
   { id: 'doc', name: 'JsonUIDocument/', path: '~/resource/JsonUIDocument', x0: 3.1, x1: 10.2, z0: 0.25, z1: 4.2, floor: '--floor-c', back: 0.55, left: 0.55 },
 ];
@@ -720,7 +720,54 @@ const SOURCE = {
   notifyPresence() { return Promise.resolve(); },
   callCommand() { return Promise.resolve({ ok: false, why: 'デモでは使えません（プロジェクトのフォルダがありません）' }); },
   setWeather() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo asks nobody about the weather
+  // the server room (ticket 2026-10-20-jui-viz-server-room): shop-app/'s door reads a made-up, generic layout (no real
+  // service's values, requester 10-20), after a moment so the keypad's * are seen
+  infraDocs(project, seq) { return new Promise((r) => setTimeout(() => r(project === 'shop' ? { ...demoInfra(), seq } : { ok: false, seq, reason: 'no_infra', message: 'デモのこの部屋には構成が無い', short: 'docs/infra がありません' }), 1200)); },
+  infraIcon() { return Promise.resolve(null); },
 };
+/* The demo's server room: a made-up web shop on one cloud, a CDN in front, a card payment service outside, two
+   environments; the IAM role and the alarm are folded until asked for. */
+function demoInfra() {
+  const both = ['production', 'staging'], prod = ['production'];
+  const g = (id, label, kind, extra = {}) => ({ id, label, kind, environments: both, providerResolved: extra.provider || '', ...extra });
+  const n = (id, label, category, group, provider, extra = {}) => ({ id, label, category, group, count: 1, providerResolved: provider, managed_by: 'iac', fold: false, environments: both, ...extra });
+  const e = (from, to, protocol, crossProvider = false, environments = both) => ({ from, to, protocol, direction: 'out', environments, crossProvider });
+  return {
+    ok: true, version: 0, dir: 'docs/infra', files: ['shop.json', 'shop-staging.json'], readMs: 3, icons: {}, problems: [],
+    environments: [{ id: 'production', label: 'production', kind: 'production' }, { id: 'staging', label: 'staging', kind: 'staging' }],
+    groups: [
+      g('shop', 'ショップ（全体）', 'logical'),
+      g('cloud', 'クラウドのアカウント', 'account', { provider: 'aws', parent: 'shop' }),
+      g('vpc', 'VPC', 'network', { provider: 'aws', parent: 'cloud' }),
+      g('pub', '公開サブネット', 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'public' }),
+      g('app', 'アプリのサブネット', 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'private' }),
+      g('data', 'データのサブネット', 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'private' }),
+      g('edge', 'CDN のアカウント', 'account', { provider: 'cloudflare', parent: 'shop' }),
+    ],
+    nodes: [
+      n('browser', 'ブラウザ', 'client', undefined, '', { group: undefined }),
+      n('cdn', 'CDN', 'edge.cdn', 'edge', 'cloudflare'),
+      n('dns', 'DNS', 'edge.dns', 'edge', 'cloudflare'),
+      n('lb', 'ロードバランサー', 'load_balancer', 'pub', 'aws'),
+      n('web', 'Web アプリ', 'compute.container', 'app', 'aws', { count: 3 }),
+      n('worker', '注文の処理', 'compute.container', 'app', 'aws'),
+      n('queue', '注文のキュー', 'queue', 'app', 'aws'),
+      n('db', '注文の DB', 'database.relational', 'data', 'aws'),
+      n('replica', '読み取りの写し', 'database.relational', 'data', 'aws', { environments: prod }),
+      n('cache', 'セッションのキャッシュ', 'cache', 'data', 'aws'),
+      n('images', '商品画像', 'storage.object', 'cloud', 'aws'),
+      n('role', 'アプリの IAM ロール', 'security.iam', 'cloud', 'aws', { fold: true }),
+      n('alarm', '5xx のアラーム', 'monitoring.alarm', 'cloud', 'aws', { fold: true }),
+      n('pay', 'カード決済（外部）', 'external.saas', undefined, '', { external: true, group: undefined }),
+    ],
+    edges: [
+      e('browser', 'dns', 'dns'), e('browser', 'cdn', 'https'), e('cdn', 'lb', 'https', true), e('cdn', 'images', 'https', true),
+      e('lb', 'web', 'http'), e('web', 'cache', 'redis'), e('web', 'db', 'postgres'), e('web', 'queue', 'sqs'),
+      e('worker', 'queue', 'sqs'), e('worker', 'db', 'postgres'), e('db', 'replica', 'postgres', false, prod),
+      e('worker', 'pay', 'https'), e('worker', 'cache', 'redis', false, ['staging']), e('alarm', 'lb', 'metrics'), e('role', 'web', 'iam'),
+    ],
+  };
+}
 const robotRuns = () => [];   // the demo's one test run is shown by the card's own a2 row
 
 /* ---------- robot states (kept even without WebGL so the panels still run) ---------- */

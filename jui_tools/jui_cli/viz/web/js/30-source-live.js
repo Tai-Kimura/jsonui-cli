@@ -167,6 +167,26 @@ const SOURCE = {
       return res.ok && body && body.ok ? { ok: true } : { ok: false, why: (body && body.why) || `${res.status} ${text.trim()}` };
     } catch (err) { return { ok: false, why: 'サーバーにつながらない' }; }
   },
+  /* The server room (56-server-room.js): the room's model, read when its door is pressed (POST /api/infra-docs, the
+     room's id and the press's seq; the boundary's §5.2 reply, ok or {ok: false, reason, message, short}). */
+  async infraDocs(project, seq) {
+    try {
+      const res = await fetch('/api/infra-docs', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: JSON.stringify({ projectId: project, seq }) });
+      let body = null;
+      try { body = await res.json(); } catch (err) { body = null; }
+      if (body && typeof body === 'object' && typeof body.ok === 'boolean') return body;
+      return { ok: false, seq, reason: 'unreadable', message: `HTTP ${res.status}`, short: `読めなかった（HTTP ${res.status}）` };
+    } catch (err) { return { ok: false, seq, reason: 'unreadable', message: 'サーバーにつながらない', short: 'サーバーにつながらない' }; }
+  },
+  /* One icon the room's settings name (POST /api/infra-icon): a Blob, or null (the neutral shape stays). */
+  async infraIcon(project, key) {
+    try {
+      const res = await fetch('/api/infra-icon', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: JSON.stringify({ projectId: project, key }) });
+      return res.ok ? await res.blob() : null;
+    } catch (err) { return null; }
+  },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
   /* One picture of that history (2.3.4): the robot and the picture's place, under the same checks as a prompt
@@ -812,6 +832,8 @@ function rebuildRooms() {
     r.order = Number.isFinite(p.order) ? p.order : k;
     // its API / DB specifications, counted by the server (2.3.5): the data server's rack stands there when either is above 0
     r.dataDocs = p.dataDocs && typeof p.dataDocs === 'object' ? { api: Number(p.dataDocs.api) || 0, db: Number(p.dataDocs.db) || 0 } : { api: 0, db: 0 };
+    // the server room's door: how many model files the room has (infra_docs.counts); the model is read on the door only
+    r.infraDocs = p.infraDocs && typeof p.infraDocs === 'object' ? { files: Number(p.infraDocs.files) || 0, dir: String(p.infraDocs.dir || '') } : { files: 0, dir: '' };
     return r;
   });
   ROOMS.splice(0, ROOMS.length, ...next);

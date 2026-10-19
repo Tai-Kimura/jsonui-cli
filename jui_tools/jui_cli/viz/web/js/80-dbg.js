@@ -2,6 +2,28 @@
 // The e2e scripts press the 3D boards through these, as the prototype's agent-test.html did.
 // Demo: setSim(seconds) jumps the script. Live: setSim(factor) sets the replay speed instead (25-net.js).
 window.__dbg = {
+  // the server room (ticket 2026-10-20-jui-viz-server-room): the door's press, the keypad, the bubble, the view
+  sr: () => {
+    const k = srKeypad(SR.project, 0), V = SR.view;
+    let door = null;
+    const at = srDoorNow();
+    if (at) { const v = new THREE.Vector3(); at.D.root.getWorldPosition(v); v.y = 1.1; v.project(camera); const r = canvas.getBoundingClientRect(); door = [Math.round(r.left + (v.x + 1) / 2 * r.width), Math.round(r.top + (1 - v.y) / 2 * r.height)]; }
+    return { phase: SR.phase, project: SR.project, seq: SR.seq, keypad: k.state, stars: k.stars, built: !!at, door, place: at ? at.place : null,
+      bubble: srBubbleEl.hidden ? null : { kind: srBubbleEl.dataset.kind, text: srBubbleEl.querySelector('.sr-short').textContent, full: srBubbleEl.querySelector('.sr-full').textContent },
+      open: !srEl.hidden, lod: V ? V.lod : null, labels: V ? V.shownLabels || 0 : 0, cellPx: V ? +srCellPx(V).toFixed(2) : null, stats: SR.stats, shown: SR.shown || null,
+      frames: V ? V.frames.slice(-90) : [], icons: V ? V.iconCount || 0 : 0, env: V ? V.env : null, log: SR.log.slice(0, 20).map((l) => l.text),
+      board: srEl.hidden ? '' : $('sr-board').textContent, layers: V ? { near: V.near.visible, far: V.far.visible } : null,
+      bubbleRect: srBubbleEl.hidden ? null : (({ left, top, right, bottom }) => [left, top, right, bottom].map(Math.round))(srBubbleEl.getBoundingClientRect()),
+      gpu: V ? { geometries: V.renderer.info.memory.geometries, textures: V.renderer.info.memory.textures, calls: V.renderer.info.render.calls, triangles: V.renderer.info.render.triangles } : null };
+  },
+  srGroups: () => (SR.view ? SR.view.L.floors.filter((G) => G.g.id).map((G) => ({ id: G.g.id, nodes: srCountNodes(G), closed: !!G.closed })) : []),
+  srSelectGroup: (id) => { SR.selected = null; SR.selectedGroup = id; srRenderBoard(); return !!document.querySelector('#sr-board [data-sr-act="toggle"]'); },
+  srEdges: () => (SR.view ? SR.view.L.edges.map((e) => `${e.from}>${e.to}`) : []),
+  mainFrames: () => renderer.info.render.frame,
+  srFramesReset: () => { if (SR.view) SR.view.frames = []; return !!SR.view; },
+  srZoom: (factor) => { const V = SR.view; if (!V) return null; const d = V.camera.position.clone().sub(V.controls.target).multiplyScalar(factor); V.camera.position.copy(V.controls.target).add(d); V.controls.update(); return +srCellPx(V).toFixed(2); },
+  srEnter: (project) => srEnter(project, null),
+  srCross: () => { const V = SR.view; return V ? { drawn: V.crossLines.geometry.attributes.position.count / 2, dashed: !!V.crossLines.material.isLineDashedMaterial, plain: V.plainLines.geometry.attributes.position.count / 2 } : null; },
   // the browser notifications (2.3.6): what this tab has looked at, its switches, the board and the card open now
   notifySeen: () => [...NOTIFY.seen],
   notifyBased: () => NOTIFY.based.perm && NOTIFY.based.ask,

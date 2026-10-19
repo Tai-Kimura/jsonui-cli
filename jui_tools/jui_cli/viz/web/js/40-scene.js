@@ -429,6 +429,7 @@ function buildDemoOffice() {
   tbCanvas = makeCanvas(TB.W, TB.H); tbTex = texFrom(tbCanvas);
   const tboard = new THREE.Mesh(new THREE.PlaneGeometry(TB.w, TB.h), new THREE.MeshBasicMaterial({ map: tbTex, toneMapped: false }));
   tboard.rotation.y = Math.PI / 2; tboard.position.set(TB.x, TB.cy, TB.cz); scene.add(tboard);
+  if (serverDoorWanted('shop')) DEMO_SRDOOR = { D: serverDoorBuild(SRDOOR_DEMO, scene), room: 'shop', place: SRDOOR_DEMO };   // the server room's door (2026-10-20)
 
   const stand = new THREE.Group(); stand.position.set(-8.7, 0, -0.5); stand.rotation.y = 0.85; scene.add(stand);
   const legMat = toon('#394150');
@@ -505,8 +506,10 @@ function build3D() {
     ray.setFromCamera(ndc, camera);
     if (TOWER.on) return towerHit(ray);
     if (SOURCE.mode === 'live') return liveHit(ray);
-    const hit = ray.intersectObjects([boardMesh, kbMesh, trayGroup, ...PBOARDS.map((pb) => pb.mesh), ...robots.map((R) => R.robot.root)], true)[0];
+    const hit = ray.intersectObjects([boardMesh, kbMesh, trayGroup, ...PBOARDS.map((pb) => pb.mesh), ...robots.map((R) => R.robot.root),
+      ...(DEMO_SRDOOR ? [DEMO_SRDOOR.D.root, DEMO_SRDOOR.D.pad] : [])], true)[0];
     if (!hit) return null;
+    if (hit.object.userData.serverDoor) return { kind: 'serverroom', project: DEMO_SRDOOR.room, title: 'サーバールームに入る（構成を読み込む）' };
     let o = hit.object;
     while (o && o.userData.robotId === undefined && o.parent) o = o.parent;
     if (o && o.userData.robotId !== undefined) return { kind: 'robot', id: o.userData.robotId };
@@ -539,6 +542,7 @@ function build3D() {
     else if (h.kind === 'tasks') { fit(h.project); openTaskBoard(canvas, undefined, h.project); }
     else if (h.kind === 'spec') { fit(SPECS[h.i].project); openWhiteboard(h.i, canvas); }
     else if (h.kind === 'data') openDataDocs(h.project, canvas);
+    else if (h.kind === 'serverroom') srEnter(h.project, canvas);
     else { fit(h.project); openWhiteboard(-1, canvas, h.project); }
   });
   /* A robot's tag and its bill select the robot (ticket 2026-10-20-jui-viz-robot-name-tag-click-selects): a press on
@@ -575,7 +579,7 @@ function build3D() {
     if (ev.buttons || (zoom.zoomed && !rbState.id)) return;
     const h = hitAt(ev);
     canvas.style.cursor = h ? 'pointer' : '';
-    canvas.title = h && (h.kind === 'floor' || h.kind === 'room' || h.kind === 'call' || h.kind === 'data') ? h.title : '';
+    canvas.title = h && (h.kind === 'floor' || h.kind === 'room' || h.kind === 'call' || h.kind === 'data' || h.kind === 'serverroom') ? h.title : '';
   });
 
   sceneEl.addEventListener('pointerdown', () => { DIRECTOR.userAt = performance.now(); });
@@ -1199,9 +1203,9 @@ function liveSoloSync() {
    view, PROPS.max robots or fewer); robots on a break walk to them (BRK below). Where the three stand: propsPlace. */
 const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
   boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9,   // the robots' scale (they stand about 1 m)
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null, serverDoor: null };
 const PROPS_EMPTY = { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0,
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null, serverDoor: null };
 function woodTexture(dark) {
   const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
   const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
@@ -1271,6 +1275,7 @@ function propsBuild(id) {
   gitDeskBuild(id, g);   // the cardboard box on its desk (2.3.4)
   PROPS.bell = bellBuild(P.callButton); g.add(PROPS.bell);   // the call bell (2.3.5)
   if (dataServerWanted(id)) PROPS.dataServer = dataServerBuild(P.dataServer, g);   // the rack (2.3.5)
+  if (serverDoorWanted(id)) PROPS.serverDoor = serverDoorBuild(P.serverDoor, g);   // the server room's door
   propsBoxes(0, true);
   const start = propsSpot();
   vac.position.set(start[0], 0, start[1]);
@@ -1290,6 +1295,7 @@ function propsBoxes(nowSec, force) {
     .map((R) => { box.setFromObject(R.robot.root); return [box.min.x, box.max.x, box.min.z, box.max.z]; });
   if (PROPS.shredder) PROPS.boxes.push(PROPS.shredder.box);
   if (PROPS.dataServer) PROPS.boxes.push(PROPS.place.dataServer.rect);
+  if (PROPS.serverDoor) PROPS.boxes.push(PROPS.place.serverDoor.rect);   // the floor in front of the server room's door
   const s = PROPS.server.position;
   const half = 0.42 * PROPS.serverScale;
   PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
@@ -1506,11 +1512,12 @@ function gitDeskOverlaps() {
 }
 function propsTick(nowSec, dt) {
   const want = propsWanted();
-  if (PROPS.room && (want !== PROPS.room || LIVE3D.rooms[PROPS.room].geo !== PROPS.geo || isDark() !== PROPS.dark || dataServerWanted(PROPS.room) !== !!PROPS.dataServer)) propsClear();
+  if (PROPS.room && (want !== PROPS.room || LIVE3D.rooms[PROPS.room].geo !== PROPS.geo || isDark() !== PROPS.dark || dataServerWanted(PROPS.room) !== !!PROPS.dataServer || serverDoorWanted(PROPS.room) !== !!PROPS.serverDoor)) propsClear();
   if (!want) return;
   if (!PROPS.room) propsBuild(want);
   propsBoxes(nowSec, false);
   dataServerTick(nowSec);
+  serverDoorTick(nowSec);
   if (reduceMotion) return;   // placed, not driven
   const v = PROPS.vac, p = v.position;
   if (!propsClearAt(p.x, p.z)) { const s = propsSpot(); p.set(s[0], 0, s[1]); return; }   // a robot sat down on it: start elsewhere
@@ -1556,7 +1563,7 @@ function propsPlace(r) {
   vend.cx = (vend.x0 + vend.x1) / 2;
   vend.spot = [vend.cx, vend.z1 + 0.55, Math.PI];   // in front of it, facing it
   vend.way = [[vend.cx, vend.z1 + 1.3]];              // from the front: never round its corner
-  return { booth, server, vend, backDoor, git: gitDeskSpot(r), shredder: shredderSpot(r), callButton: bellSpot(r), dataServer: dataServerSpot(r) };   // the call bell (2.3.5, BELL)   // the git box's desk (2.3.4, GITBOX) and the shredder (10-19)   // the git box's desk (2.3.4, GITBOX)
+  return { booth, server, vend, backDoor, git: gitDeskSpot(r), shredder: shredderSpot(r), callButton: bellSpot(r), dataServer: dataServerSpot(r), serverDoor: serverDoorSpot(r) };   // the call bell (2.3.5, BELL)   // the git box's desk (2.3.4, GITBOX) and the shredder (10-19)   // the git box's desk (2.3.4, GITBOX)
 }
 function signTexture(text, bg, ink, w = 256, h = 96) {
   const cv = makeCanvas(w, h), ctx = cv.getContext('2d');
@@ -1796,6 +1803,87 @@ function dataServerBuild(S, g) {
   g.add(rack);
   return { group: rack, leds, next: 0 };
 }
+/* ---------- the server room's door (ticket 2026-10-20-jui-viz-server-room, part B) ----------
+   Requester 10-20: 「各リポジトリの部屋にサーバールームの扉を置く そこクリックで全体をサーバールームの3Dページに遷移させる」, and 「読み込みに
+   時間かかりそうならサーバールームクリックしたタイミングで処理走らせてアニメーションは壁についてるパネルにパスワード打ち込んでるように」.
+   A door on the left wall, just in front of the cork board, in a room up close whose model has files (infraDocs, a
+   count only); a keypad on the wall at its front side. Pressing either starts the read (56-server-room.js): the
+   keypad fills with * while it reads (the viewer types: no robot has to walk there, and none may be free), turns green
+   (解錠) and the door swings open, or turns red with the reason in a bubble and the room stays. Its floor in front is
+   propsPlace's serverDoor row (the breaks arm's 12 room configs see it), kept clear by the vacuum. */
+const SRDOOR = { w: 1.0, h: 2.2, gap: 0.4, padY: 1.35, swingSec: 0.45 };
+const SRDOOR_DEMO = { x: -9.6, z: -3.0, pad: [-9.57, SRDOOR.padY, -2.2], rect: null };   // shop-app/'s left wall, behind the task board
+let DEMO_SRDOOR = null;
+/* The door in sight now: the live room's up close (PROPS), or the demo's one. */
+function srDoorNow() {
+  if (SOURCE.mode !== 'live') return DEMO_SRDOOR;
+  return PROPS.serverDoor ? { D: PROPS.serverDoor, room: PROPS.room, place: PROPS.place.serverDoor } : null;
+}
+function serverDoorWanted(id) { const d = PROJECT[id] && PROJECT[id].infraDocs; return !!(d && d.files > 0); }
+function serverDoorSpot(r) {
+  const d = r.z1 - r.z0, kw = Math.min(d - 1.4, 2.6), cz = (r.z0 + r.z1) / 2, da = doorAt(r);
+  const kz = r.doors && r.doors.left ? Math.min(cz, da.leftZ - DOOR_W / 2 - 0.25 - kw / 2) : cz;   // the cork board (liveBuildRoom)
+  const z = kz + kw / 2 + SRDOOR.gap + SRDOOR.w / 2, pz = z + SRDOOR.w / 2 + 0.3;
+  return { x: r.x0, z, pad: [r.x0 + 0.03, SRDOOR.padY, pz], rect: [r.x0, r.x0 + 1.2, z - SRDOOR.w / 2 - 0.1, pz + 0.2] };
+}
+function serverDoorBuild(S, g) {
+  const root = new THREE.Group(), metal = toon('#3d4450'), steel = toon('#8d96a3');
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.08, SRDOOR.h + 0.1, SRDOOR.w + 0.14), metal); frame.position.set(0.02, (SRDOOR.h + 0.1) / 2, 0); root.add(frame);
+  const hinge = new THREE.Group(); hinge.position.set(0.07, 0, -SRDOOR.w / 2); root.add(hinge);   // swings from its back edge
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.05, SRDOOR.h, SRDOOR.w), steel); leaf.position.set(0, SRDOOR.h / 2, SRDOOR.w / 2); hinge.add(leaf);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: signTexture('サーバールーム', '#2b3340', '#ffffff'), toneMapped: false }));
+  sign.rotation.y = Math.PI / 2; sign.position.set(0.1, SRDOOR.h - 0.35, SRDOOR.w / 2); hinge.add(sign);
+  root.position.set(S.x, 0, S.z);
+  const cv = makeCanvas(256, 160), tex = texFrom(cv);
+  const pad = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.34, 0.26), metal); pad.add(box);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.14), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+  screen.rotation.y = Math.PI / 2; screen.position.set(0.032, 0.06, 0); pad.add(screen);
+  for (let k = 0; k < 9; k++) {   // the keys
+    const key = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.03, 0.05), toon('#c7cdd6'));
+    key.position.set(0.034, -0.04 - Math.floor(k / 3) * 0.04, -0.065 + (k % 3) * 0.065); pad.add(key);
+  }
+  pad.position.set(S.pad[0], S.pad[1], S.pad[2]);
+  g.add(root); g.add(pad);
+  for (const o of [root, pad]) o.traverse((m) => { m.userData.serverDoor = true; });
+  const D = { root, hinge, pad, cv, tex, sig: '', open: 0 };
+  serverDoorDraw(D, { state: 'idle', stars: 0 });
+  return D;
+}
+/* The keypad's screen: dark when idle, blue while it reads (a * per key pressed), green 解錠, red with the stars gone. */
+function serverDoorDraw(D, k) {
+  const sig = `${k.state}:${k.stars}`;
+  if (sig === D.sig) return;
+  D.sig = sig;
+  const ctx = D.cv.getContext('2d'), W = D.cv.width, H = D.cv.height;
+  ctx.fillStyle = { idle: '#1d2430', loading: '#123a6b', ok: '#1d7a3e', failed: '#8a1f24' }[k.state] || '#1d2430';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `bold 46px ${FONT_MONO}`;
+  const text = k.state === 'ok' ? '解錠' : k.state === 'failed' ? '× エラー' : '*'.repeat(Math.min(k.stars, 8)) || '— — — —';
+  if (k.state === 'ok' || k.state === 'failed') ctx.font = `bold 44px ${FONT_BODY}`;
+  ctx.fillText(text, W / 2, H / 2 + 4);
+  D.tex.needsUpdate = true;
+}
+function serverDoorTick(nowSec) {
+  const at = srDoorNow(), D = at && at.D;
+  if (!D || typeof srKeypad !== 'function') return;
+  const k = srKeypad(at.room, nowSec);   // 56-server-room.js: {state, stars, open (0..1), shake}
+  serverDoorDraw(D, k);
+  D.open += ((k.open || 0) - D.open) * (reduceMotion ? 1 : Math.min(1, 0.016 / SRDOOR.swingSec * 6));
+  D.hinge.rotation.y = -D.open * 1.4;
+  D.pad.position.z = at.place.pad[2] + (k.shake && !reduceMotion ? Math.sin(nowSec * 60) * 0.012 : 0);
+}
+/* Where the keypad is on the page (the bubble above it, 56-server-room.js); null when it is not in sight. */
+function serverDoorScreen() {
+  const at = srDoorNow(), D = at && at.D;
+  if (!D) return null;
+  const v = new THREE.Vector3(); D.pad.getWorldPosition(v); v.y += 0.35;
+  v.project(camera);
+  if (v.z < -1 || v.z > 1) return null;
+  const r = canvas.getBoundingClientRect();
+  return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
+}
 function dataServerTick(nowSec) {   // the lamps blink now and then (none with reduced motion)
   const S = PROPS.dataServer;
   if (!S || reduceMotion || nowSec < S.next) return;
@@ -1929,11 +2017,11 @@ function liveTargets() {
   const solo = liveSolo();
   return [...liveRooms().flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.filter((R) => R.robot.root.visible).map((R) => R.robot.root),
     ...(PROPS.bell && PROPS.room === solo ? [PROPS.bell] : []),
-    ...(PROPS.dataServer ? [PROPS.dataServer.group] : [])];   // the data server's rack (2.3.5)
+    ...(PROPS.dataServer ? [PROPS.dataServer.group] : []), ...(PROPS.serverDoor ? [PROPS.serverDoor.root, PROPS.serverDoor.pad] : [])];   // the data server's rack (2.3.5), the server room's door and keypad
 }
 const robotOf = (obj) => { let o = obj; while (o && o.userData.robotId === undefined && o.parent) o = o.parent; return o && o.userData.robotId !== undefined ? o.userData.robotId : undefined; };
-const isFixture = (obj) => { for (let q = obj; q; q = q.parent) if (q.userData.callBell) return true; return !!obj.userData.dataServer; };
-/* The call bell and the data server's rack are small and stand against the back wall: a robot's desk drawn in front of
+const isFixture = (obj) => { for (let q = obj; q; q = q.parent) if (q.userData.callBell || q.userData.serverDoor) return true; return !!obj.userData.dataServer; };
+/* The call bell, the data server's rack and the server room's door and keypad (dd's verification D2, 10-20) are small and stand against the back wall: a robot's desk drawn in front of
    one (or a robot walking past) covered all of it, and the press opened the robot's card (ticket
    2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk). A fixture the ray reaches behind a robot wins over that robot,
    from any camera; the robot is still opened by the rest of its body and by its name tag. Boards are not fixtures here
@@ -1956,6 +2044,7 @@ function liveHit(ray) {
   if (rid !== undefined) return { kind: 'robot', id: rid };
   for (let q = hit.object; q; q = q.parent) if (q.userData.callBell) return { kind: 'call', project: PROPS.room, title: 'ロボットを呼ぶ（起動のコマンドをコピー）' };
   if (hit.object.userData.dataServer && PROPS.room) return { kind: 'data', project: PROPS.room, title: 'API 仕様書・DB 仕様書を見る' };
+  if (hit.object.userData.serverDoor && PROPS.room) return { kind: 'serverroom', project: PROPS.room, title: 'サーバールームに入る（構成を読み込む）' };
   for (const [id, R] of Object.entries(LIVE3D.rooms)) {
     if (hit.object === R.kb.mesh) return { kind: 'tasks', project: id };
     if (R.tb && hit.object === R.tb.mesh) return { kind: 'board', project: id };
@@ -2760,6 +2849,7 @@ function update3D(model, nowSec, dt) {
   if (SOURCE.mode === 'live') { liveUpdateRobots(nowSec, dt); liveSoloSync(); }
   else {
     demoDirector(model, nowSec);
+    serverDoorTick(nowSec);
     for (const R of robots) {
       const st = robotState[R.def.id];
       setRobotTired(R.robot, forced(R.robot, 'tired', demoTired(R.def.id)));
@@ -2817,7 +2907,7 @@ function update3D(model, nowSec, dt) {
   }
   stepTween(performance.now());
   if (camTween || zoom.zoomed) camera.lookAt(viewTarget); else controls.update();
-  renderer.render(scene, camera);
+  if (!srCovers()) renderer.render(scene, camera);   // the server room covers the whole page: its own 3D is the one drawn
   if (TOWER.on) { towerSync(); towerAnimate(nowSec, dt); }
   skySync();
   tagsEl.hidden = zoom.zoomed || TOWER.on;
