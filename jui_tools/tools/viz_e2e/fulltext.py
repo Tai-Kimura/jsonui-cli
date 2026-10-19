@@ -37,6 +37,19 @@ SUB = "a1fsub0000000001"
 LONG_CMD = ("S=/private/tmp/e2e-hover/-Users-someone-resource-JsonUI-Agents/6376a1cb-5b86-497f-b8aa-880b2bc9bd52/scratchpad "
             "&& npx playwright test tests/screens/a-very-long-folder-name/and-a-long-screen-name.test.json --reporter=line")
 SHORT_CMD = "npx playwright test t.json"
+# The log strip (2.3.6): a prompt that came as a message from another session — the line the requester saw cut (23:07).
+PEER_PROMPT = ("Another session sent a message: <cross-session-message from=\"uds:/tmp/e2e-hover.sock\" from-name=\"jsonui-dd\"> "
+               "2.3.6 の票を振りました。ログの帯の行もホバーとフォーカスで全文が読めるかを確かめるための、わざと長くした文です。"
+               "</cross-session-message>")
+# One strip line (by its text) and the tag: inside the viewport and above the line.
+STRIP_JS = """(want) => { const line = [...document.querySelectorAll('#ticker .what')].find((x) => x.textContent.includes(want));
+  const tag = document.getElementById('fulltext');
+  if (!line) return null;
+  const lb = line.getBoundingClientRect(), tb = tag && !tag.hidden ? tag.getBoundingClientRect() : null;
+  return { cut: line.scrollWidth > line.clientWidth + 1, text: line.textContent, tabindex: line.getAttribute('tabindex'),
+    shown: !!tb, tagText: tag && !tag.hidden ? tag.textContent : '', described: line.getAttribute('aria-describedby'),
+    inView: !!tb && tb.left >= -0.5 && tb.top >= -0.5 && tb.right <= innerWidth + 0.5 && tb.bottom <= innerHeight + 0.5,
+    above: !!tb && tb.bottom <= lb.top + 0.5, focused: document.activeElement === line }; }"""
 TITLE = "とても長いセッションの名前：テストのパスがホバーで全部見えるかを確かめるための、わざと長くした名前"
 SUB_TYPE = "a-subagent-type-with-a-name-long-enough-to-be-cut-in-the-session-list"
 SPEC_NAME = "わざと長くした画面の名前：浮き札でカードやパネルの 1 行で切れた文の全文が読めるかを確かめる画面"
@@ -141,6 +154,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
         await until(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", "connected")
         hook(SID_A, hook_event_name="SessionStart", source="startup", session_title=TITLE)
         hook(SID_B, hook_event_name="SessionStart", source="startup")
+        hook(SID_A, hook_event_name="UserPromptSubmit", prompt=PEER_PROMPT)   # before the tools: A's act stays the long one
         hook(SID_A, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="run-a", tool_input={"command": LONG_CMD})
         hook(SID_B, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="run-b", tool_input={"command": SHORT_CMD})
         hook(SID_A, hook_event_name="PreToolUse", tool_name="Read", tool_use_id="sub-r", agent_id=SUB, agent_type=SUB_TYPE,
@@ -236,6 +250,49 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
                 await page.screenshot(path=str(out / "after-panel-light.png"))
             await page.mouse.move(5, 5)
             await until(page, TAG_HIDDEN, f"{fname}: the tag gone")
+        # 5. the log strip (2.3.6): a long line hovered → the whole text, upward, inside the viewport; a short line nothing;
+        #    the keyboard reaches the long line (backwards from ログを全画面で見る) and shows it; closed, the strip does nothing
+        await page.click("#rb-close")
+        await until(page, "() => document.getElementById('rb').hidden", "the card closed")
+        head = PEER_PROMPT[:16]
+        await until(page, "(w) => [...document.querySelectorAll('#ticker .what')].some((x) => x.textContent.includes(w) && x.getAttribute('tabindex') === '0')",
+                    "the strip's long line, cut and focusable", arg=head,
+                    why="() => [...document.querySelectorAll('#ticker .what')].map((x) => [x.textContent.slice(0, 30), x.scrollWidth, x.clientWidth, x.getAttribute('tabindex')])")
+        await page.hover(f"#ticker .what:has-text('{head}')")
+        r = res["stripLong"] = await page.evaluate(STRIP_JS, head)
+        check(failures, r and r["cut"] and r["shown"] and r["tagText"] == r["text"] and "</cross-session-message>" in r["tagText"] and r["inView"] and r["above"] and r["described"] == "fulltext",
+              f"the strip's long line hovered: the whole text, above the line, inside the viewport: {r}")
+        await page.screenshot(path=str(out / "after-strip-light.png"))
+        await page.mouse.move(5, 5)
+        await until(page, TAG_HIDDEN, "the strip's tag gone")
+        await page.hover("#ticker .what:has-text('出勤')")
+        r = res["stripShort"] = await page.evaluate(STRIP_JS, "出勤")
+        check(failures, r and not r["cut"] and not r["shown"] and r["tabindex"] is None, f"a short strip line: no tag, not focusable: {r}")
+        await page.mouse.move(5, 5)
+        await page.focus("#btn-log")
+        reached = False
+        for _ in range(12):
+            await page.keyboard.press("Shift+Tab")
+            r = await page.evaluate(STRIP_JS, head)
+            if r and r["focused"]:
+                reached = True
+                break
+        res["stripFocus"] = r
+        check(failures, reached and r["shown"] and r["inView"] and r["above"], f"the keyboard reaches the strip's long line and shows the tag: reached {reached}, {r}")
+        await page.keyboard.press("Escape")
+        await until(page, TAG_HIDDEN, "the strip's tag gone on Esc")
+        await page.emulate_media(color_scheme="dark")
+        await page.hover(f"#ticker .what:has-text('{head}')")
+        await until(page, TAG_SHOWN, "the strip's tag, dark")
+        await page.screenshot(path=str(out / "after-strip-dark.png"))
+        await page.emulate_media(color_scheme="light")
+        await page.mouse.move(5, 5)
+        await page.click("#btn-strip-close")
+        await until(page, "() => document.querySelector('.app').classList.contains('log-closed')", "the strip closed")
+        await until(page, "() => !document.querySelector('#ticker [tabindex]')", "no strip line focusable while closed",
+                    why="() => [...document.querySelectorAll('#ticker [tabindex]')].length")
+        r = res["stripClosed"] = await page.evaluate("() => ({ focusable: document.querySelectorAll('#ticker [tabindex]').length, tag: !document.getElementById('fulltext').hidden })")
+        check(failures, r == {"focusable": 0, "tag": False}, f"the strip closed: nothing: {r}")
         await page.close()
         for l in watch.console:
             failures.append(f"fulltext: console: {l}")

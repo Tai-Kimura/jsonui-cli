@@ -7,7 +7,10 @@
    Focus: a cut line that is plain text becomes focusable (tabindex 0) only while it is cut; a line inside a button or a
    summary (already focusable) shows through that control's focus. The control or the line points at the tag
    (aria-describedby) while the tag shows. */
-const FULLTEXT_HOSTS = ['#rb', '#side'];
+const FULLTEXT_HOSTS = ['#rb', '#side', '#ticker-strip'];
+/* The log strip (2.3.6) sits at the bottom of the screen and is a few lines high: its tag opens upward and is kept inside
+   the viewport, not inside the strip. Closed (2.3.4's log-strip), its lines are not drawn: never cut, never focusable. */
+const FULLTEXT_UP = '#ticker-strip';
 const FULLTEXT_LINES = [
   '.rb-run-file',                 // card · テスト実行: the test file / command (the request)
   '.rb-subs .act',                // card · サブエージェント: what each is doing
@@ -17,6 +20,8 @@ const FULLTEXT_LINES = [
   '#sessions .subs .who-btn > span:last-child',   // panel · セッション: a subagent's name (in its button)
   '.spec-row .nm',                // panel · spec の進み具合: the spec's name (in its button)
   '.pg-toggle small',             // panel · セッション: a project group's summary (in its button)
+  '#ticker .what',                // the log strip: an event's text (2.3.6: a cross-session message was cut there)
+  '#ticker .kind',                // the log strip: an event's kind
 ].join(', ');
 const FULLTEXT = { el: null, anchor: null, owner: null, host: null, via: null };
 const fulltextCut = (el) => !!el && el.isConnected && el.scrollWidth > el.clientWidth + 1;
@@ -47,15 +52,18 @@ function fulltextShow(line, via) {
 function fulltextPlace() {
   const { el, anchor, host } = FULLTEXT;
   if (!el || el.hidden || !anchor) return;
-  const hb = host.getBoundingClientRect(), lb = anchor.getBoundingClientRect(), pad = 8;
+  const up = host.matches(FULLTEXT_UP);
+  const hb = up ? { left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight, width: window.innerWidth } : host.getBoundingClientRect();
+  const lb = anchor.getBoundingClientRect(), pad = 8;
   const top = Math.max(hb.top, 0), bottom = Math.min(hb.bottom, window.innerHeight);
   el.style.maxWidth = `${Math.max(120, hb.width - pad * 2)}px`;
   el.style.maxHeight = `${Math.max(60, (bottom - top) - pad * 2)}px`;
   el.style.left = '0px'; el.style.top = '0px';
   const r = el.getBoundingClientRect();
   const x = Math.min(Math.max(lb.left, hb.left + pad), hb.right - pad - r.width);
-  let y = lb.bottom + 4;
-  if (y + r.height > bottom - pad) y = Math.max(top + pad, lb.top - 4 - r.height);
+  let y = up ? lb.top - 4 - r.height : lb.bottom + 4;
+  if (up && y < top + pad) y = Math.min(lb.bottom + 4, bottom - pad - r.height);
+  if (!up && y + r.height > bottom - pad) y = Math.max(top + pad, lb.top - 4 - r.height);
   el.style.left = `${Math.round(x)}px`; el.style.top = `${Math.round(y)}px`;
 }
 function fulltextHide() {
