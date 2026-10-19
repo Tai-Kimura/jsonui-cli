@@ -1,0 +1,234 @@
+"""jui viz: the data server's documents (2.3.5, requester 10-19).
+
+data_docs finds a JsonUI room's API and DB specifications the way `jsonui-doc generate` does (docs/api, docs/db,
+docs/db/<name>/, is_swagger_file, has_api_paths) with document_tools' own helpers, counts them for the rack, and reads
+them only when asked, from inside the room only. POST /api/data-docs hands them to the page under /api/prompt's checks.
+A JsonUI room under tmp_path; nothing reads the real home.
+"""
+from __future__ import annotations
+
+import asyncio
+import html as htmllib
+import json
+import os
+import re
+import socket
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from aiohttp.test_utils import TestClient, TestServer
+
+from jui_cli.viz import data_docs
+from jui_cli.viz.config import VizConfig
+from jui_cli.viz.ingest import World
+from jui_cli.viz.server import ServerContext, make_app
+from jui_cli.viz.state import VizState
+
+TOKEN = "t" * 43
+API = {"openapi": "3.0.0", "info": {"title": "Users API <b>", "version": "1.2", "description": "ユーザー"},
+       "paths": {"/users/{id}": {"parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}],
+                                 "get": {"summary": "一人を取る", "operationId": "getUser", "tags": ["users"],
+                                         "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}}}},
+                                 "delete": {"summary": "消す", "responses": {"204": {"description": "gone"}}}},
+                 "/users": {"post": {"summary": "作る", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+                                     "responses": {"201": {"description": "made"}}}}},
+       "components": {"schemas": {"User": {"type": "object", "properties": {"id": {"type": "string"}}}}}}
+USERS_TABLE = {"openapi": "3.0.0", "info": {"title": "users", "version": "1", "x-table-name": "users"},
+               "components": {"schemas": {
+                   "User": {"type": "object", "description": "利用者", "required": ["id", "email"],
+                            "properties": {"id": {"type": "integer", "format": "int64", "x-primary-key": True, "x-auto-increment": True},
+                                           "email": {"type": "string", "maxLength": 255, "x-unique": True, "description": "連絡先"},
+                                           "role": {"type": "string", "enum": ["admin", "member"], "default": "member", "nullable": True},
+                                           "team_id": {"type": "integer", "x-foreign-key": {"table": "teams", "column": "id"}, "x-index": True,
+                                                       "x-notes": ["チームは任意", "<i>"]}}},
+                   "Role": {"type": "string", "enum": ["admin", "member"]}}}}
+TEAMS_TABLE = {"openapi": "3.0.0", "info": {"title": "teams", "version": "1", "x-table-name": "teams"},
+               "components": {"schemas": {"Team": {"type": "object", "properties": {"id": {"type": "integer", "x-primary-key": True}, "name": {"type": "string"}}}}}}
+EVENTS_TABLE = {"openapi": "3.0.0", "info": {"title": "events", "version": "1", "x-table-name": "events"},
+                "components": {"schemas": {"Event": {"type": "object", "properties": {"id": {"type": "integer", "x-primary-key": True}}}}}}
+
+
+def _room(root: Path, api=True, db=True, multi=False) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "jui.config.json").write_text(json.dumps({"spec_directory": "docs/screens/json"}))
+    (root / "docs/screens/json").mkdir(parents=True, exist_ok=True)
+    if api:
+        (root / "docs/api").mkdir(parents=True, exist_ok=True)
+        (root / "docs/api/users.json").write_text(json.dumps(API, ensure_ascii=False))
+        (root / "docs/api/notes.json").write_text(json.dumps({"not": "openapi"}))
+    if db:
+        (root / "docs/db").mkdir(parents=True, exist_ok=True)
+        (root / "docs/db/users.json").write_text(json.dumps(USERS_TABLE, ensure_ascii=False))
+        (root / "docs/db/teams.json").write_text(json.dumps(TEAMS_TABLE))
+    if multi:
+        (root / "docs/db/analytics").mkdir(parents=True, exist_ok=True)
+        (root / "docs/db/analytics/events.json").write_text(json.dumps(EVENTS_TABLE))
+    return root
+
+
+def _project(root: Path):
+    return SimpleNamespace(root=root, sources=[SimpleNamespace(root=root)])
+
+
+@pytest.mark.parametrize("api,db,want", [(True, True, {"api": 1, "db": 2}), (True, False, {"api": 1, "db": 0}),
+                                         (False, True, {"api": 0, "db": 2}), (False, False, {"api": 0, "db": 0})])
+def test_counts(tmp_path, api, db, want):
+    assert data_docs.counts(_project(_room(tmp_path / "app", api, db))) == want
+
+
+def test_the_files_are_document_tools_own_choice(tmp_path):
+    """The same files, sorted the same way, that generate's discovery takes (is_swagger_file over docs/{api,db}
+    rglob *.json), with generator.py's category for each (docs/db/<name>/ a database of its own)."""
+    root = _room(tmp_path / "app", multi=True)
+    mods = data_docs._doc()
+    theirs = [(("db/" + f.relative_to(root / "docs/db").parts[0]) if k == "db" and len(f.relative_to(root / f"docs/{k}").parts) > 1 else k, f)
+              for k in ("api", "db") for f in sorted((root / "docs" / k).rglob("*.json")) if mods["swagger"].is_swagger_file(f)]
+    ours = [(c, f) for c, f, _d in data_docs._files(_project(root)) if mods["swagger"].is_swagger_file(f)]
+    assert ours == theirs
+    doc = data_docs.read(_project(root))
+    assert [d["category"] for d in doc["db"]] == ["db/analytics", "db"] or sorted(d["category"] for d in doc["db"]) == ["db", "db/analytics"]
+
+
+def test_what_is_read(tmp_path):
+    doc = data_docs.read(_project(_room(tmp_path / "app")))
+    (api,) = doc["api"]
+    assert api["file"] == "docs/api/users.json" and api["title"] == "Users API <b>" and api["version"] == "1.2"
+    assert [(e["method"], e["path"]) for e in api["endpoints"]] == [("GET", "/users/{id}"), ("DELETE", "/users/{id}"), ("POST", "/users")]
+    get = api["endpoints"][0]
+    assert get["summary"] == "一人を取る" and get["parameters"][0]["name"] == "id" and "200" in get["responses"]
+    assert "User" in api["schemas"]
+    (db,) = doc["db"]
+    assert db["name"] == "db" and {t["name"] for t in db["tables"]} == {"User", "Role", "Team"}
+
+
+def test_the_er_diagram_is_document_tools_own(tmp_path):
+    root = _room(tmp_path / "app")
+    mods = data_docs._doc()
+    files = [{"name": n, "swagger_data": json.loads((root / f"docs/db/{n}.json").read_text())} for n in ("teams", "users")]
+    doc = data_docs.read(_project(root))
+    assert doc["db"][0]["erd"] == mods["erd"]._build_mermaid_erd(files)
+    assert doc["db"][0]["erd"].startswith("erDiagram")
+
+
+def _cells(row_html: str) -> list[str]:
+    cells = re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.S)
+    return [" ".join(htmllib.unescape(re.sub(r"<br>", " ", re.sub(r"<(?!br)[^>]+>", "", c))).split()) for c in cells]
+
+
+def test_each_column_says_what_the_schema_page_says(tmp_path):
+    """The columns carry what schema.py's _render_property_row writes (Field, Type, Description, Default, Key,
+    Constraints, Notes), cell for cell as text."""
+    mods = data_docs._doc()
+    user = USERS_TABLE["components"]["schemas"]["User"]
+    for name, prop in user["properties"].items():
+        theirs = _cells("".join(mods["schema"]._render_property_row(name, prop, name in user["required"])))
+        c = data_docs._column(name, prop, name in user["required"])
+        ours = [c["name"], c["type"], c["description"], c["default"], " ".join(c["keys"]) or "-", " ".join(c["constraints"]) or "-", " ".join(c["notes"]) or "-"]
+        assert [" ".join(x.split()) for x in ours] == theirs, name
+
+
+def test_nothing_outside_the_room_is_read(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.json").write_text(json.dumps({**API, "info": {"title": "SECRET", "version": "1"}}))
+    root = _room(tmp_path / "app", db=False)
+    os.symlink(outside / "secret.json", root / "docs/api/link.json")               # a file pointing out
+    (root / "docs/api/sub").mkdir()
+    os.symlink(outside, root / "docs/api/sub/out")                                  # a folder pointing out
+    other = _room(tmp_path / "other", api=False, db=False)
+    (other / "docs").mkdir(exist_ok=True)
+    os.symlink(outside, other / "docs/api")                                         # the docs folder itself
+    for proj in (_project(root), _project(other)):
+        doc = data_docs.read(proj)
+        assert "SECRET" not in json.dumps(doc, ensure_ascii=False)
+    assert data_docs.counts(_project(other)) == {"api": 0, "db": 0}
+
+
+def test_caps(tmp_path, monkeypatch):
+    root = _room(tmp_path / "app")
+    monkeypatch.setattr(data_docs, "MAX_FILE_BYTES", 100)
+    assert data_docs.read(_project(root))["api"] == []
+    monkeypatch.setattr(data_docs, "MAX_FILE_BYTES", 2_000_000)
+    monkeypatch.setattr(data_docs, "MAX_TOTAL_BYTES", 1500)
+    doc = data_docs.read(_project(root))
+    assert doc["skipped"] >= 1
+
+
+# ---- the world and the route --------------------------------------------------------------------------------------
+
+def _world(tmp_path):
+    root = _room(tmp_path / "app")
+    world = World(VizState())
+    world.apply_hook({"hook_event_name": "SessionStart", "session_id": "s1", "cwd": str(root)}, 1)
+    world.publish()
+    (pid,) = [p["id"] for p in world.state.slices["projects"]]
+    return world, root, pid
+
+
+def test_the_room_carries_its_counts_and_a_change_updates_them(tmp_path):
+    world, root, pid = _world(tmp_path)
+    (room,) = world.state.slices["projects"]
+    assert room["dataDocs"] == {"api": 1, "db": 2}
+    (root / "docs/db/teams.json").unlink()
+    world.file_changed(pid, str(root / "docs/db/teams.json"), 5)
+    world.publish()
+    assert world.state.slices["projects"][0]["dataDocs"] == {"api": 1, "db": 1}
+    assert "dataDocs" not in json.dumps(world.state.slices.get("specs", []))
+
+
+def _free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _serve(world, calls):
+    port = _free_port()
+    own = f"127.0.0.1:{port}"
+
+    async def run():
+        ctx = ServerContext(config=VizConfig(pushIntervalMs=50), port=port, token=TOKEN, state=world.state, world=world, publish=world.publish)
+        client = TestClient(TestServer(make_app(ctx), host="127.0.0.1", port=port))
+        await client.start_server()
+        out = []
+        try:
+            for method, headers, body in calls(own):
+                r = await client.request(method, "/api/data-docs", headers=headers, data=body)
+                out.append((r.status, r.headers.get("Content-Type", ""), await r.read(), dict(r.headers)))
+        finally:
+            await client.close()
+        return out
+    return asyncio.run(run())
+
+
+def test_the_route_gives_the_documents_to_the_page_and_nothing_to_anyone_else(tmp_path):
+    world, root, pid = _world(tmp_path)
+    good = json.dumps({"projectId": pid})
+
+    def calls(own):
+        ok = {"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+        return [
+            ("POST", ok, good),
+            ("POST", {**ok, "X-Jui-Viz-Token": "x" * 43}, good),
+            ("POST", {k: v for k, v in ok.items() if k != "X-Jui-Viz-Token"}, good),
+            ("POST", {**ok, "Origin": "http://evil.example"}, good),
+            ("POST", {k: v for k, v in ok.items() if k != "Origin"}, good),
+            ("POST", {**ok, "Host": f"localhost:{own.split(':')[1]}"}, good),
+            ("GET", ok, None),
+            ("POST", {**ok, "Content-Type": "text/plain"}, good),
+            ("POST", ok, json.dumps({"projectId": "nope"})),
+            ("POST", ok, json.dumps({"projectId": str(root)})),
+            ("POST", ok, json.dumps({"projectId": pid, "path": "/etc/passwd", "file": "../../etc/passwd"})),
+            ("POST", ok, json.dumps({"projectId": 3})),
+            ("POST", ok, "x" * 9000),
+        ]
+    got = _serve(world, calls)
+    status = [g[0] for g in got]
+    assert status == [200, 401, 401, 403, 403, 403, 405, 415, 404, 400, 200, 400, 413], status
+    body = json.loads(got[0][2])
+    assert got[0][1] == "application/json" and got[0][3].get("Cache-Control") == "no-store"
+    assert body["api"][0]["title"] == "Users API <b>" and len(body["db"]) == 1
+    assert got[10][2] == got[0][2]                       # a path in the body changes nothing
+    for st, _ct, b, _h in got[1:10] + got[11:]:
+        assert b"Users API" not in b                      # a refusal carries no document

@@ -123,6 +123,21 @@ const SOURCE = {
       return { ok: true, blob: await res.blob() };
     } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
   },
+  /* The data server's documents (2.3.5): the room's API and DB specifications, read by the server now (POST
+     /api/data-docs under the prompt's checks; the room's id only, never a path). Resolves { ok, doc } or { ok, error }. */
+  async dataDocs(projectId) {
+    try {
+      const res = await fetch('/api/data-docs', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ projectId }),
+      });
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      const doc = await res.json();
+      const arr = (v) => (Array.isArray(v) ? v : []);
+      return { ok: true, doc: { api: arr(doc.api), db: arr(doc.db), skipped: Number(doc.skipped) || 0 } };
+    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
   /* The near weather's switch (10-18): { on, lat, lon } with the position already rounded (40-scene.js). */
   setWeather(body) { return netRequest('weather.set', body); },
   /* question.answer (10-18): picks are question text -> { labels, other }; the card says "sent" when the slice does. */
@@ -708,6 +723,8 @@ function rebuildRooms() {
     r.name = String(p.name || p.id); r.path = home(p.displayRoot); r.jsonui = !!p.jsonui;
     r.mock = p.mock && typeof p.mock === 'object' ? { running: !!p.mock.running, port: Number(p.mock.port) || 0, other: !!p.mock.other } : null;
     r.order = Number.isFinite(p.order) ? p.order : k;
+    // its API / DB specifications, counted by the server (2.3.5): the data server's rack stands there when either is above 0
+    r.dataDocs = p.dataDocs && typeof p.dataDocs === 'object' ? { api: Number(p.dataDocs.api) || 0, db: Number(p.dataDocs.db) || 0 } : { api: 0, db: 0 };
     return r;
   });
   ROOMS.splice(0, ROOMS.length, ...next);

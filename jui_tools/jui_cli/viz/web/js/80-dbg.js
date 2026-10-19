@@ -18,6 +18,19 @@ window.__dbg = {
       securityLevel: window.mermaid ? window.mermaid.mermaidAPI.getConfig().securityLevel : null, theme: box.dataset.theme || null,
       src: [...document.scripts].map((x) => x.getAttribute('src')).filter((x) => x && x.includes('mermaid')) };
   },
+  // the data server (2.3.5): its rack (built, its box, where it is on the screen) and its sheet (open, tab, what shows)
+  dataServer: () => {
+    const S = PROPS.dataServer, b = new THREE.Box3(), r = canvas.getBoundingClientRect();
+    let box = null, screen = null;
+    if (S) {
+      S.group.updateMatrixWorld(true); b.setFromObject(S.group);
+      box = [b.min.x, b.max.x, b.min.z, b.max.z].map((v) => +v.toFixed(3));
+      const c = b.getCenter(new THREE.Vector3()).project(camera);
+      screen = [r.left + (c.x + 1) / 2 * r.width, r.top + (1 - c.y) / 2 * r.height];
+    }
+    return { room: PROPS.room, docs: PROPS.room && PROJECT[PROPS.room] ? PROJECT[PROPS.room].dataDocs : null, built: !!S, box, screen, spot: PROPS.place ? PROPS.place.dataServer.rect : null, wanted: PROPS.room ? dataServerWanted(PROPS.room) : null,
+      open: ds.open, tab: ds.tab, loading: ds.loading, error: ds.error, api: ds.doc ? ds.doc.api.length : null, db: ds.doc ? ds.doc.db.length : null };
+  },
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
   // the outside (10-18): the arms force a season ('spring' …) or a weather ({ kind, isDay }); null gives it back
   outside: (opts) => {
@@ -84,7 +97,7 @@ window.__dbg = {
     const P = PROPS.place;
     const top = (o) => { if (!o) return null; const b = new THREE.Box3(); o.updateMatrixWorld(true); o.traverseVisible((m) => { if (m.isMesh) b.expandByObject(m, true); }); return [+b.min.y.toFixed(3), +b.max.y.toFixed(3)]; };
     const xz = (o) => { if (!o) return null; const b = new THREE.Box3(); o.updateMatrixWorld(true); o.traverseVisible((m) => { if (m.isMesh) b.expandByObject(m, true); }); return [b.min.x, b.max.x, b.min.z, b.max.z].map((v) => +v.toFixed(3)); };
-    return { ends: BRK.ends.slice(), place: P ? JSON.parse(JSON.stringify(P)) : null, meshBoxes: { booth: xz(PROPS.booth), vend: xz(PROPS.vend), server: xz(PROPS.server), bell: xz(PROPS.bell) }, heights: { vend: top(PROPS.vend), robots: robots.filter((R) => R.robot.root.visible).map((R) => [R.def.id, top(R.robot.root), !!(R.robot.desk && R.robot.desk.visible)]) },
+    return { ends: BRK.ends.slice(), place: P ? JSON.parse(JSON.stringify(P)) : null, meshBoxes: { booth: xz(PROPS.booth), vend: xz(PROPS.vend), server: xz(PROPS.server), bell: xz(PROPS.bell), ...(PROPS.dataServer ? { dataServer: xz(PROPS.dataServer.group) } : {}) }, heights: { vend: top(PROPS.vend), robots: robots.filter((R) => R.robot.root.visible).map((R) => [R.def.id, top(R.robot.root), !!(R.robot.desk && R.robot.desk.visible)]) },
       deskBoxes: robots.filter((R) => R.def.room === PROPS.room && !R.brk && !R.playBack && !R.path.length && R.robot.root.visible).map((R) => [R.def.id, xz(R.robot.root)]), built: { booth: !!PROPS.booth, vend: !!PROPS.vend, fan: PROPS.fan ? +PROPS.fan.rotation.z.toFixed(2) : null },
       smoke: PROPS.smoke.filter((q) => q.s.visible).length, puffs: PROPS.smoke.filter((q) => q.s.visible).map((q) => [...q.s.position.toArray().map((v) => +v.toFixed(2)), +q.s.scale.x.toFixed(2), +q.s.material.opacity.toFixed(2)]), smokeMax: PROPS.smoke.length,
       robots: robots.map((R) => ({ id: R.def.id, kind: R.brk ? R.brk.kind : null, phase: R.brk ? R.brk.phase : null, at: !!R.robot.brk, back: !!R.playBack,

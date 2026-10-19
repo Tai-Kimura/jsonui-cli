@@ -706,7 +706,9 @@ def watch(project: JsonUIProject, on_change):
     Returns the observer (call .stop() / .join()), or None when none of the
     folders exist. Folders in SKIP_DIRS are ignored.
     """
+    from .. import data_docs
     folders = [f for f in project.artifact_dirs() if f.is_dir()]
+    folders += [d for _k, d, _r in data_docs.doc_dirs(project) if d not in folders]   # the data server's (2.3.5)
     if not folders:
         return None
     from watchdog.events import FileSystemEventHandler

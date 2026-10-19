@@ -12,6 +12,7 @@ Routes (design: dev-guide, 05 §3):
   GET  /api/snapshot  the whole state (token)
   POST /api/prompt    a prompt typed in the page for one session (prompt_checks: the page's own origin only)
   POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
+  POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
 """
 from __future__ import annotations
@@ -509,6 +510,31 @@ def make_app(ctx: ServerContext) -> web.Application:
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
                                      "Content-Disposition": "inline"})
 
+    async def api_data_docs(request: web.Request) -> web.Response:
+        """The data server's documents (2.3.5): {"projectId"} names a JsonUI room; data_docs.read gives its API and DB
+        specifications, read now from the room's docs/api and docs/db (data_docs.doc_dirs: inside the room, no
+        symlink or .. out of it, capped). The same checks as /api/prompt (prompt_checks), never a path from the client,
+        asked only when the rack is pressed, nothing kept; JSON, no-store."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: /api/data-docs（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        project_id = body.get("projectId") if isinstance(body, dict) else None
+        if not isinstance(project_id, str) or not project_id or len(project_id) > 64:
+            return web.Response(status=400, text="projectId is required\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        status, got = ctx.world.data_docs(project_id)
+        if status != 200:
+            return web.Response(status=status, text=f"{got}\n")
+        if ctx.publish:
+            ctx.publish()   # the counts on the room may have changed
+        return web.Response(body=got, content_type="application/json",
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
     async def api_session_end(request: web.Request) -> web.Response:
         """退勤 from a robot card (ticket 2026-10-19-jui-viz-clock-out-button): the checks of /api/prompt
         (prompt_checks, with this route's cap), then the session in this server's list and not ended, the robot asked
@@ -550,6 +576,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     # Before the static catch-all: every method reaches the handler, which answers 405 to all but POST.
     app.router.add_route("*", "/api/prompt", api_prompt)
     app.router.add_route("*", "/api/history-image", api_history_image)
+    app.router.add_route("*", "/api/data-docs", api_data_docs)
     app.router.add_route("*", "/api/session/end", api_session_end)
     app.router.add_route("*", "/api/call-command", api_call_command)
     app.router.add_post("/channel/hello", channel_hello)

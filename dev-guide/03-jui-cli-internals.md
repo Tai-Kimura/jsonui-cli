@@ -216,6 +216,14 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   シュレッダーへ行く。削除は休憩・遊び・居眠りを終わらせ（同じフレームで始まったものも）、git の箱への往復は待つ。
   新しい指示（`promptAt`）・道具・電話で即やめる。終わったターン（done）は続ける。
   見えないもの: スクリプトの中の削除、利用者自身の削除（doctor に出す）。
+- **データサーバー（2.3.5）**: JsonUI の部屋の `docs/api`・`docs/db`（部屋の根と各アプリの config の根。`docs/db/<名前>/`
+  は別の DB）にある仕様を、`viz/data_docs.py` が document_tools の部品（`is_swagger_file`・`has_api_paths`・ER 図の
+  `_build_mermaid_erd`。`core/document_tools_import.load_document_tools_module` で読む）で見つけて数え、件数を部屋の行の
+  `dataDocs` に載せる。拡大した部屋に 1 件以上あればラックを置き、押すと `POST /api/data-docs`（`prompt_checks`、部屋の
+  ID だけ、パスは受け取らない、部屋の外へ出る symlink と `..` は読まない、件数と大きさに上限）で、その時に読む。
+  スナップショットにも export にも入らない。ER 図とデータの流れの図は、同梱の Mermaid（`web/vendor/VENDOR.md`、
+  securityLevel strict・htmlLabels なし、初めて描くときだけ読む）。データの流れの図の文字列は、spec ページと同じ規則
+  （`sheet.dataflow_mermaid` → html_generator）。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 

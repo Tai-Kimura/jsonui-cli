@@ -13,7 +13,7 @@ from typing import Any
 
 from pathlib import Path
 
-from . import clockout, gitbox, robots
+from . import clockout, data_docs, gitbox, robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .calls import CallBook, peer_name
@@ -122,6 +122,8 @@ def _settled_act(act: str, failed: bool) -> str:
         return "質問に回答なし" if failed else "質問の回答を受けた"
     return act
 
+#: The data server's counts are taken again this often (2.3.5): a stat of each file, parsed only when one changed.
+DATA_DOCS_EVERY_MS = 5_000
 
 class World:
     def __init__(self, state: VizState, tool_input_max: int = 2000, session_start=None) -> None:
@@ -194,6 +196,8 @@ class World:
         self._run_rooms_seen: dict[str, frozenset[str]] = {}
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
+        self._data_docs_cache: dict[str, dict] = {}   # project id -> data_docs.counts' cache (2.3.5)
+        self._data_docs_at = 0
         self._dirty: set[str] = set()
         self._now = 0
         # Called with each JsonUIProject once it is loaded (serve starts its file watcher).
@@ -373,9 +377,31 @@ class World:
         for other in self.jsonui.values():  # a new room's test files can make another room's row ambiguous
             self._merge_results(other)
         self._dirty |= {"specs", "tasks"}
+        self._data_docs_count(project_id)
         if self.on_project_loaded is not None:
             self.on_project_loaded(loaded)
         return loaded
+
+    def _data_docs_count(self, project_id: str) -> None:
+        """The room's API / DB documents counted (data_docs.counts) into its project row as ``dataDocs``: the page puts
+        the data server's rack there when either is above 0 (2.3.5). Counted on loading, on a change under docs/api
+        or docs/db, and each time the rack is read."""
+        loaded, room = self.jsonui.get(project_id), self.rooms.projects.get(project_id)
+        if loaded is None or room is None:
+            return
+        n = data_docs.counts(loaded, self._data_docs_cache.setdefault(project_id, {}))
+        if room.get("dataDocs") != n:
+            room["dataDocs"] = n
+            self._dirty.add("projects")
+
+    def data_docs(self, project_id) -> tuple[int, object]:
+        """The rack's documents of one JsonUI room (data_docs.read), read now: (200, JSON bytes) or (404, reason). The
+        room is named by its id only; which files are read is the server's (data_docs.doc_dirs)."""
+        loaded = self.jsonui.get(project_id) if isinstance(project_id, str) else None
+        if loaded is None:
+            return 404, "no such JsonUI room"
+        self._data_docs_count(project_id)
+        return 200, data_docs.payload(loaded)
 
     def file_changed(self, project_id: str, path: str, at: int, by: str | None = None) -> None:
         """A spec, layout or test file changed (an edit by a robot, or the watcher)."""
@@ -383,6 +409,9 @@ class World:
         if project is None:
             return
         target = Path(path)
+        if target.suffix == ".json" and any(target.is_relative_to(d) for _k, d, _r in data_docs.doc_dirs(project)):
+            self._data_docs_count(project_id)   # the rack shows or goes; its contents are read when pressed
+            return
         if target.name.endswith(".spec.json"):
             project.reload_spec(target, at, by)
             self._forget_ties()  # a spec's name and layoutFile decide which spec a test file reaches
@@ -1205,6 +1234,10 @@ class World:
             self._dirty.add("questions")
         if self.calls.tick(at):
             self._dirty.add("calls")
+        if at - self._data_docs_at >= DATA_DOCS_EVERY_MS:   # the watcher misses a docs/api or docs/db moved whole
+            self._data_docs_at = at
+            for pid in list(self.jsonui):
+                self._data_docs_count(pid)
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]
