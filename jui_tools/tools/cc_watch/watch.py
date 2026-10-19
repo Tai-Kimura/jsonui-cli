@@ -97,43 +97,76 @@ if kind == "statusline":
 '''
 
 
-def live_session(cli: str, work: Path, timeout: int = 180) -> P.Session:
-    """One short session in a temporary config folder, its own hooks recording their input, then one SIGTERM'd run.
-    Uses a little of the account's quota. Nothing outside *work* is written (CLAUDE_CONFIG_DIR, --setting-sources "")."""
-    config, cap = work / "config", work / "captured"
-    config.mkdir()
-    cap.mkdir()
+#: The Keychain item the watcher reads its login from (made once by the user, see token_from_keychain).
+TOKEN_SERVICE = "cc-dependency-watch"
+
+
+def token_from_keychain() -> str | None:
+    """The long-lived login for the throwaway session. Measured 10-19 22:00: with CLAUDE_CONFIG_DIR set to a temporary
+    folder the CLI does not find the user's login ("Not logged in · Please run /login", nothing spent), so the session
+    needs its own: `claude setup-token` once, stored by the user in the login Keychain under TOKEN_SERVICE, passed to
+    the session as CLAUDE_CODE_OAUTH_TOKEN (never written to a file)."""
+    if not shutil.which("security"):
+        return None
+    r = subprocess.run(["security", "find-generic-password", "-s", TOKEN_SERVICE, "-w"], capture_output=True, text=True)
+    return r.stdout.strip() or None if r.returncode == 0 else None
+
+
+def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], str | None] = token_from_keychain) -> P.Session:
+    """One short session in a temporary config folder and an empty working folder, its own hooks recording their input,
+    then one run stopped with SIGTERM (only the process started here). Uses a little of the account's quota.
+    Measured 10-19 22:00 (run 1): CLAUDE_CONFIG_DIR=<tmp> + --setting-sources "" + --settings <own> fired only the
+    hooks of <own> (SessionStart, UserPromptSubmit, SessionEnd captured); no robot in viz, nothing for the session in
+    session-recovery, ~/.claude/projects or ~/.claude/sessions."""
+    config, cap, cwd = work / "config", work / "captured", work / "cwd"
+    for d in (config, cap, cwd):
+        d.mkdir()
     script = work / "capture.py"
     script.write_text(CAPTURE)
     hook = lambda kind: [{"hooks": [{"type": "command", "command": f"{sys.executable} {script} {cap} {kind}"}]}]  # noqa: E731
     settings = {"hooks": {e: hook(e) for e in ("SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop")},
                 "statusLine": {"type": "command", "command": f"{sys.executable} {script} {cap} statusline"}}
     (work / "settings.json").write_text(json.dumps(settings))
-    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
     env.update(CLAUDE_CONFIG_DIR=str(config))
+    if (t := token()) is not None:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = t
     base = [cli, "--setting-sources", "", "--settings", str(work / "settings.json")]
-    subprocess.run([*base, "-p", "Run the shell command `true`, then reply with the single word ok."],
-                   cwd=work, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    p = subprocess.run([*base, "-p", "Run the shell command `true`, then reply with the single word ok.",
+                        "--output-format", "json", "--allowedTools", "Bash(true)"],
+                       cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     session = P.Session(config_dir=config)
-    # SIGTERM: a second run, stopped by us once its SessionStart hook ran (only this process, which we started)
-    before = {p.name for p in cap.iterdir()}
-    proc = subprocess.Popen([*base, "-p", "Count from 1 to 200, one number per line."], cwd=work, env=env,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
     try:
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline and not any(n.startswith("SessionStart") for n in {p.name for p in cap.iterdir()} - before):
-            time.sleep(0.5)
-        proc.send_signal(signal.SIGTERM)
-        session.sigterm_exit = proc.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-    after = {p.name for p in cap.iterdir()} - before
-    session.sigterm_session_end = any(n.startswith("SessionEnd") for n in after)
+        out = json.loads(p.stdout)
+    except ValueError:
+        out = {"is_error": True, "result": (p.stdout + p.stderr).strip()[:200]}
+    session.result = {"ok": not out.get("is_error", True), "result": str(out.get("result", ""))[:200],
+                      "terminal_reason": out.get("terminal_reason"), "cost_usd": out.get("total_cost_usd"),
+                      "usage": {k: (out.get("usage") or {}).get(k) for k in ("input_tokens", "output_tokens",
+                                "cache_creation_input_tokens", "cache_read_input_tokens")}}
+    if session.result["ok"]:
+        # SIGTERM: a second run, stopped once its SessionStart hook ran (only this process, which we started)
+        before = {f.name for f in cap.iterdir()}
+        proc = subprocess.Popen([*base, "-p", "Count from 1 to 200, one number per line."], cwd=cwd, env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        try:
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline and not any(n.startswith("SessionStart") for n in {f.name for f in cap.iterdir()} - before):
+                time.sleep(0.5)
+            proc.send_signal(signal.SIGTERM)
+            session.sigterm_exit = proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        time.sleep(2)   # a SessionEnd hook may still be writing
+        after = {f.name for f in cap.iterdir()} - before
+        session.sigterm_session_end = any(n.startswith("SessionEnd") for n in after)
+    else:
+        after = set()
     for f in sorted(cap.iterdir()):
-        rec = json.loads(f.read_text())
         if f.name in after:
             continue
+        rec = json.loads(f.read_text())
         if rec["kind"] == "statusline":
             session.statusline = json.loads(rec["stdin"] or "null")
         else:
@@ -156,14 +189,21 @@ def run_probes(ctx: P.Context) -> dict:
     return out
 
 
+def notice_text(ticket: Path) -> str:
+    """The desktop notice: the ticket's file name in one line the user can paste to cd."""
+    return f"Claude Code の依存の見張りが赤: docs/bugs/{ticket.name} を見て"
+
+
 def notify_route(ticket: Path) -> list[str]:
     """Tell the orchestrator. Measured 10-19: a script has no way to send a cross-session message (the CLI has no such
     command; that channel exists only inside a running session), and viz has no notice endpoint (its /hook would make
     a robot). What reaches cd from a script: the ticket in docs/bugs (cd's queue), and the desktop notification the
-    user sees (they forward it). Returns what was done."""
+    user sees (they forward it). On top of both (10-19 ruling), red_ticket_hook.sh, a UserPromptSubmit hook cd installs
+    in its own session (`watch.py print-hook`), puts every unseen red ticket in cd's context at its next prompt.
+    Returns what was done."""
     done = [f"ticket {ticket}"]
     if shutil.which("osascript"):
-        msg = f"Claude Code の依存の見張り: 赤。票 {ticket.name}"
+        msg = notice_text(ticket)
         r = subprocess.run(["osascript", "-e", f'display notification {json.dumps(msg)} with title "cc-dependency-watch"'],
                            capture_output=True, timeout=20)
         done.append(f"desktop notification (exit {r.returncode})")
@@ -178,7 +218,10 @@ def write_ticket(repo: Path, today: str, installed: str | None, latest: str | No
     while path.exists():
         path = folder / f"{today}-cc-dependency-watch-red-{n}.md"
         n += 1
-    led = {e["probe"]: e for e in load()["entries"]}
+    led = {"session_ran": {"name": "使い捨てのセッションが動いたか（ログイン）",
+                           "impact": "セッション系の probe（hooks・transcript・env・statusLine・SIGTERM・config）が測れない",
+                           "files": []},
+           **{e["probe"]: e for e in load()["entries"]}}
     body = [
         "---", "library: jsonui-cli", "component: Claude Code への依存（jui_tools/tools/cc_watch/ledger.json）",
         "reported_by: cc-dependency-watch（毎日の見張り、自動）", f"reported_at: {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}",
@@ -229,7 +272,8 @@ def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, f
     for k, v in errors.items():
         changed.setdefault(k, (saved.get(k) if saved else None, v))
     result = {"at": now.isoformat(timespec="seconds"), "installed": installed, "latest": latest,
-              "changelog_lines": len(lines), "changed": sorted(changed), "baseline": saved is None}
+              "changelog_lines": len(lines), "changed": sorted(changed), "baseline": saved is None,
+              "session": session.result if session is not None else None}   # cost and tokens of the live run
     if changed:
         ticket = write_ticket(repo, today, installed, latest, changed, lines)
         result["ticket"] = str(ticket)
@@ -240,6 +284,38 @@ def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, f
     with open(state / "watch.log", "a", encoding="utf-8") as log:
         log.write(json.dumps(result, ensure_ascii=False) + "\n")
     return result
+
+
+# ------------------------------------------------------------------ cd's side: the hook and "seen"
+HOOK = HERE / "red_ticket_hook.sh"
+UNSEEN = re.compile(r"^status: open\b.*$", re.M)
+
+
+def mark_seen(ticket: Path, now: dt.datetime | None = None) -> bool:
+    """Rewrite the ticket's status line from open to seen (the hook stops naming it). False if it was not open."""
+    text = ticket.read_text(encoding="utf-8")
+    stamp = (now or dt.datetime.now()).strftime("%Y-%m-%d %H:%M")
+    new, n = UNSEEN.subn(f"status: seen {stamp} — cd が読んだ。振り先と結果はこの票に書く", text, count=1)
+    if n:
+        ticket.write_text(new, encoding="utf-8")
+    return bool(n)
+
+
+def hook_settings(repo: Path) -> dict:
+    return {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": f"{HOOK} {repo}"}]}]}}
+
+
+def add_hook(settings_file: Path, repo: Path) -> bool:
+    """Merge the hook into *settings_file* (cd runs this; it is never run for cd). False if it is already there."""
+    data = json.loads(settings_file.read_text()) if settings_file.exists() else {}
+    entries = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+    command = hook_settings(repo)["hooks"]["UserPromptSubmit"][0]
+    if any(h.get("command") == command["hooks"][0]["command"] for e in entries for h in e.get("hooks", [])):
+        return False
+    entries.append(command)
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    return True
 
 
 # ------------------------------------------------------------------ launchd
@@ -270,7 +346,22 @@ def main(argv: list[str] | None = None) -> int:
         if name == "run":
             s.add_argument("--cli", default="claude")
     sub.add_parser("uninstall")
+    s = sub.add_parser("seen", help="mark a red ticket as read (the hook stops naming it)")
+    s.add_argument("ticket", type=Path)
+    for name in ("print-hook", "add-hook"):
+        s = sub.add_parser(name, help="the UserPromptSubmit hook for cd's session (add-hook merges it; cd runs it)")
+        s.add_argument("--repo", required=True, type=lambda p: Path(p).expanduser().resolve())
+        if name == "add-hook":
+            s.add_argument("--settings", required=True, type=lambda p: Path(p).expanduser())
     a = ap.parse_args(argv)
+    if a.cmd == "seen":
+        return 0 if mark_seen(a.ticket) else 1
+    if a.cmd == "print-hook":
+        print(json.dumps(hook_settings(a.repo), ensure_ascii=False, indent=2))
+        return 0
+    if a.cmd == "add-hook":
+        print("added" if add_hook(a.settings, a.repo) else "already there")
+        return 0
     if a.cmd == "run":
         print(json.dumps(run(a.repo, a.state, a.live, a.cli), ensure_ascii=False))
         return 0

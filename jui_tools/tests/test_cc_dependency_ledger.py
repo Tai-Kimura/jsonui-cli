@@ -242,3 +242,146 @@ def test_the_launch_agent_runs_the_watch_daily_and_the_session_is_opt_in(tmp_pat
 def test_changelog_lines_keep_only_the_range_and_the_ledger_words():
     text = "## 2.1.305\n- New hook event\n## 2.1.304\n- statusLine gets cost\n- UI polish\n## 2.1.303\n- hooks old\n"
     assert W.changelog_lines(text, "2.1.303", "2.1.304") == ["2.1.304: - statusLine gets cost"]
+
+
+# ------------------------------------------------------------------ cd's side: the hook, "seen", the notice
+import os  # noqa: E402
+import subprocess  # noqa: E402
+import time  # noqa: E402
+
+
+def hook_output(repo):
+    p = subprocess.run(["sh", str(W.HOOK), str(repo)], capture_output=True, text=True, timeout=10)
+    assert p.returncode == 0, p.stderr
+    return p.stdout
+
+
+def red_ticket(repo, name, status="open — 自動起票"):
+    (repo / "docs" / "bugs").mkdir(parents=True, exist_ok=True)
+    path = repo / "docs" / "bugs" / name
+    path.write_text(f"---\nlibrary: jsonui-cli\nstatus: {status}\n---\n# x\n")
+    return path
+
+
+def test_the_hook_names_a_new_red_ticket(tmp_path):
+    red_ticket(tmp_path, "2026-10-20-other-bug.md")
+    t = red_ticket(tmp_path, "2026-10-20-cc-dependency-watch-red.md")
+    out = hook_output(tmp_path)
+    assert t.name in out and "other-bug" not in out
+
+
+def test_a_seen_or_old_ticket_and_no_ticket_say_nothing(tmp_path):
+    assert hook_output(tmp_path) == ""                               # no docs/bugs at all
+    (tmp_path / "docs" / "bugs").mkdir(parents=True)
+    started = time.monotonic()
+    assert hook_output(tmp_path) == ""                               # no tickets
+    assert time.monotonic() - started < 1.0
+    red_ticket(tmp_path, "2026-10-01-cc-dependency-watch-red.md", status="closed — 直した")
+    t = red_ticket(tmp_path, "2026-10-20-cc-dependency-watch-red.md")
+    assert t.name in hook_output(tmp_path)
+    assert W.mark_seen(t) and not W.mark_seen(t)
+    assert "status: seen" in t.read_text()
+    assert hook_output(tmp_path) == ""
+
+
+def test_the_hook_reads_the_ticket_the_watcher_writes(world):
+    repo, *_ = world
+    go(world, fake_cli(), fake_fetch("2.1.303"))
+    go(world, fake_cli(help_text=HELP.replace("--plugin-dir <d>", "")), fake_fetch("2.1.303"))
+    [ticket] = tickets(repo)
+    assert ticket.name in hook_output(repo)
+    W.mark_seen(ticket)
+    assert hook_output(repo) == ""
+
+
+def test_the_desktop_notice_names_the_ticket(tmp_path):
+    t = tmp_path / "2026-10-20-cc-dependency-watch-red-2.md"
+    assert f"docs/bugs/{t.name}" in W.notice_text(t)
+
+
+def test_add_hook_merges_once_and_keeps_the_rest(tmp_path):
+    f = tmp_path / ".claude" / "settings.local.json"
+    f.parent.mkdir()
+    f.write_text(json.dumps({"permissions": {"allow": ["Bash(ls)"]}, "hooks": {"Stop": [{"hooks": []}]}}))
+    assert W.add_hook(f, tmp_path) and not W.add_hook(f, tmp_path)
+    data = json.loads(f.read_text())
+    assert data["permissions"] == {"allow": ["Bash(ls)"]} and "Stop" in data["hooks"]
+    [entry] = data["hooks"]["UserPromptSubmit"]
+    assert entry["hooks"][0]["command"].endswith(f"red_ticket_hook.sh {tmp_path}")
+
+
+# ------------------------------------------------------------------ the throwaway session, against a fake CLI
+FAKE_CLI = r'''#!/usr/bin/env python3
+import json, os, signal, subprocess, sys, time
+args = sys.argv[1:]
+settings = json.load(open(args[args.index("--settings") + 1]))
+mode = os.environ.get("FAKE_MODE", "ok")
+def fire(event, extra):
+    for e in settings["hooks"].get(event, []):
+        for h in e["hooks"]:
+            payload = dict(session_id="s", transcript_path="t", cwd=os.getcwd(), hook_event_name=event, **extra)
+            subprocess.run(h["command"], shell=True, input=json.dumps(payload), text=True,
+                           env={**os.environ, "CLAUDE_PROJECT_DIR": os.getcwd()})
+open(os.path.join(os.environ["FAKE_LOG"], "argv-%d" % time.time_ns()), "w").write(json.dumps(
+    {"argv": args, "cwd": os.getcwd(), "config": os.environ.get("CLAUDE_CONFIG_DIR"),
+     "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"), "leaked": sorted(k for k in os.environ if k.startswith("CLAUDE")
+     and k not in ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN"))}))
+fire("SessionStart", {"source": "startup"})
+if mode == "nologin":
+    fire("SessionEnd", {"reason": "other"})
+    print(json.dumps({"is_error": True, "result": "Not logged in · Please run /login", "terminal_reason": "api_error",
+                      "total_cost_usd": 0, "usage": {"input_tokens": 0, "output_tokens": 0}}))
+    sys.exit(1)
+if "Count" in " ".join(args):
+    signal.signal(signal.SIGTERM, lambda *a: (fire("SessionEnd", {"reason": "other"}), sys.exit(143)))
+    time.sleep(30)
+    sys.exit(0)
+fire("UserPromptSubmit", {"prompt": "p", "permission_mode": "default"})
+fire("SessionEnd", {"reason": "other"})
+print(json.dumps({"is_error": False, "result": "ok", "total_cost_usd": 0.01, "usage": {"input_tokens": 5, "output_tokens": 1}}))
+'''
+
+
+@pytest.fixture
+def fake_claude(tmp_path, monkeypatch):
+    cli = tmp_path / "fake-claude"
+    cli.write_text(FAKE_CLI)
+    cli.chmod(0o755)
+    log = tmp_path / "log"
+    log.mkdir()
+    monkeypatch.setenv("FAKE_LOG", str(log))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "the-parent-session")   # must not reach the throwaway session
+    work = tmp_path / "work"
+    work.mkdir()
+    return cli, log, work
+
+
+def launched(log):
+    return [json.loads(p.read_text()) for p in sorted(log.iterdir())]
+
+
+def test_the_live_session_runs_twice_isolated_and_sigterms_its_own_child(fake_claude):
+    cli, log, work = fake_claude
+    s = W.live_session(str(cli), work, token=lambda: "tok")
+    runs = launched(log)
+    assert len(runs) == 2
+    for r in runs:
+        assert r["config"] == str(work / "config") and r["cwd"] == str(work / "cwd") and r["leaked"] == []
+        assert r["token"] == "tok"
+        assert r["argv"][:4] == ["--setting-sources", "", "--settings", str(work / "settings.json")]
+    assert s.result["ok"] and s.result["cost_usd"] == 0.01 and s.result["usage"]["input_tokens"] == 5
+    assert s.sigterm_exit == 143 and s.sigterm_session_end is True
+    events = {h["hook_event_name"] for h in s.hook_inputs}
+    assert events == {"SessionStart", "UserPromptSubmit", "SessionEnd"}
+    assert s.hook_env.get("CLAUDE_PROJECT_DIR") == str(work / "cwd")
+    assert P.session_ran(P.Context(run=fake_cli(), session=s)) == {"ok": True}
+
+
+def test_a_lost_login_is_one_red_shape_and_no_second_run(fake_claude, monkeypatch):
+    cli, log, work = fake_claude
+    monkeypatch.setenv("FAKE_MODE", "nologin")
+    s = W.live_session(str(cli), work, token=lambda: None)
+    assert len(launched(log)) == 1 and launched(log)[0]["token"] is None
+    assert s.sigterm_exit is None
+    assert P.session_ran(P.Context(run=fake_cli(), session=s)) == {
+        "ok": False, "result": "Not logged in · Please run /login", "terminal_reason": "api_error"}

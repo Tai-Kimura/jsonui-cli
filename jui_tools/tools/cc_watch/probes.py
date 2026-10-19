@@ -50,6 +50,7 @@ class Session:
     statusline: dict | None = None
     sigterm_exit: int | None = None
     sigterm_session_end: bool | None = None
+    result: dict | None = None          # the -p run's outcome: ok, result text, terminal_reason, cost, usage
 
 
 @dataclass
@@ -161,8 +162,18 @@ def config_paths(ctx: Context):
     return {p: (ctx.session.config_dir / p).exists() for p in CONFIG_PATHS}
 
 
+def session_ran(ctx: Context):
+    """Whether the throwaway session ran at all (a lost login turns every session probe into an empty shape)."""
+    if (s := _skipped(ctx)) is not None:
+        return s
+    r = ctx.session.result or {}
+    return {"ok": bool(r.get("ok"))} if r.get("ok") else {"ok": False, "result": r.get("result"),
+                                                         "terminal_reason": r.get("terminal_reason")}
+
+
 PROBES: dict[str, Callable[[Context], object]] = {
     "cli_flags": cli_flags, "plugin_cli": plugin_cli, "mcp_cli": mcp_cli, "channels_flags": channels_flags,
     "transcript_shape": transcript_shape, "hook_input_shape": hook_input_shape, "env_vars": env_vars,
     "statusline_input": statusline_input, "sigterm_session_end": sigterm_session_end, "config_paths": config_paths,
+    "session_ran": session_ran,
 }
