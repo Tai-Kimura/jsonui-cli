@@ -47,7 +47,12 @@ def dist(a, b):
 
 
 async def look_of(page, rid):
-    return (await page.evaluate(LOOKS, [rid]))[0]
+    """The robot's look read on a frame outside a blink. A blink (0.12 s, every 2.4–5.6 s) redraws the face as 'blink'
+    over fired and tired alike; read at one instant, the arm saw 'blink' instead of the look's own face (2.3.5's whole
+    e2e at 443fa709, ticket 2026-10-20-jui-viz-heavy-looks-reads-face-mid-blink). Waiting for a frame that is not a
+    blink reads the same record, the face the look sets, and checks no less."""
+    return await until(page, "(id) => { const x = window.__dbg.looks([id])[0]; return x.face !== 'blink' && x; }",
+                       f"{rid}'s look outside a blink", arg=rid, why=f"() => window.__dbg.looks(['{rid}'])")
 
 
 async def force(page, rid, **o):
@@ -131,7 +136,6 @@ async def run_heavy_looks(pw, out, failures, Server):
             await force(page, TIRED, tired=True)
             await until(page, f"(id) => {{ const x = window.__dbg.looks([id])[0]; return x.tired && x.antenna > 0.9 && (x.face === 'tired' || x.face === 'blink'); }}",
                         f"{scheme}: b4 tired", arg=TIRED, why=f"() => window.__dbg.looks(['{TIRED}'])")
-            await until(page, f"(id) => window.__dbg.looks([id])[0].face === 'tired'", f"{scheme}: b4's tired face (not a blink)", arg=TIRED)
             tired, drained = await look_of(page, TIRED), await look_of(page, MAIN)
             r["tiredVsDrained"] = {"tired": tired, "drained": drained}
             check(failures, tired["face"] == "tired" and drained["face"] == "drained" and dist(tired["screen"], SCREEN) < 12
