@@ -144,6 +144,27 @@ function histMarkdown(text) {
 /* ---------- the items ---------- */
 const HIST_TIME = (at) => (Number.isFinite(at) ? new Date(at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '');
 function histCutNote(item) { return item.cut ? hNode('p', 'h-cut', '（長いので途中まで）') : null; }
+/* A fold (a message from another session, the harness's text, a tool's IN / OUT): the summary opens and closes it,
+   and once open a click anywhere in its body closes it too (requester, 10-20: 「開くと閉じづらい」), then the row's
+   head is scrolled back into view if it went above. A click does not close it when it selects text (a drag, a
+   double-click: the selection is not empty, the pointer moved, or a second click came within HIST_DBL_MS), or when
+   it lands on something with its own action (HIST_FOLD_KEEP: a link, a button, a field, a picture, the whole-text
+   tag, a table that scrolls sideways, and the scroll bar of a long code line).
+   Keyboard: Enter / Space on the summary, as before — focus stays on the summary after it opens, so the body gets no
+   key and no extra tab stop of its own. */
+const HIST_FOLD_KEEP = 'a[href], button, input, textarea, select, label, img, video, [contenteditable], .h-thumb, .fulltext';
+const HIST_DRAG_PX = 4, HIST_DBL_MS = 280;
+const histScrollsX = (el) => el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX);
+function histFoldKeeps(target, d, y) {
+  if (!(target instanceof Element) || target.closest('summary') || target.closest(HIST_FOLD_KEEP)) return true;
+  const table = target.closest('.h-tablewrap');
+  if (table && histScrollsX(table)) return true;
+  for (let el = target; el && el !== d; el = el.parentElement) {   // on the scroll bar under a sideways-scrolling box
+    if (histScrollsX(el) && y > el.getBoundingClientRect().top + el.clientTop + el.clientHeight) return true;
+  }
+  const sel = window.getSelection ? window.getSelection() : null;
+  return !!(sel && !sel.isCollapsed && String(sel).trim() && d.contains(sel.anchorNode));
+}
 function histFolded(cls, title, body, open) {
   const d = hNode('details', cls);
   if (open) d.open = true;
@@ -151,6 +172,22 @@ function histFolded(cls, title, body, open) {
   for (const part of title) s.appendChild(part);
   d.appendChild(s);
   for (const b of body) if (b) d.appendChild(b);
+  let down = null, pending = 0;
+  d.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
+  d.addEventListener('click', (e) => {
+    const moved = down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > HIST_DRAG_PX;
+    down = null;
+    clearTimeout(pending);
+    if (!d.open || moved || e.detail > 1 || histFoldKeeps(e.target, d, e.clientY)) return;
+    // a double-click selects a word: wait out its second click before closing (and look at the selection again then)
+    const target = e.target, y = e.clientY;
+    pending = setTimeout(() => {
+      if (!d.open || histFoldKeeps(target, d, y)) return;
+      d.open = false;
+      const pane = d.closest('[data-rb-hist]'), top = s.getBoundingClientRect().top;
+      if (pane && top < pane.getBoundingClientRect().top) s.scrollIntoView({ block: 'nearest' });
+    }, HIST_DBL_MS);
+  });
   return d;
 }
 function histItem(item) {

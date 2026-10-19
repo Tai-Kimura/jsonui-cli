@@ -858,6 +858,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-io-k { color: var(--ink-soft); font: 700 11px/1.9 var(--font-mono); }
 .h-peer { border-left: 3px solid var(--info); }
 .h-peer > .h-plain, .h-harness > .h-plain { padding: 0 8px 8px; }
+details.h-item[open] > :not(summary) { cursor: pointer; }   /* an open fold's body closes it on a click (text still selects) */
+details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { cursor: revert; }
 .h-harness { border-left: 3px solid var(--line); background: none; }
 .h-harness summary b { color: var(--ink-soft); }
 .h-mark { color: var(--ink-soft); font-size: 11.5px; font-style: italic; }
