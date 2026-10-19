@@ -119,7 +119,8 @@ def test_what_could_not_be_checked_is_said_per_provider(tmp_path):
     assert not any("iam" in w or "alarm" in w for w in un["aws"])            # fine-grained types are dropped, not "unmapped"
     assert any('module "net" comes from outside' in w for w in un["*"])
     assert any("count / for_each are not evaluated" in w for w in un["*"])
-    assert all(w.startswith("[unverified] ") for w in rep.warnings) and len(rep.warnings) == sum(map(len, un.values()))
+    lines = [w for w in rep.warnings if w.startswith("[unverified] ")]
+    assert len(lines) == sum(map(len, un.values()))
 
 
 def test_findings_are_warnings_unless_gate(tmp_path):
@@ -184,3 +185,66 @@ def test_check_infra_from_the_cli(tmp_path):
                        text=True, env={**os.environ, "PYTHONPATH": os.pathsep.join([str(tools), *sys.path])})
     assert r.returncode == 0, r.stdout + r.stderr
     assert "builtin:infra-iac" in r.stdout and "[unverified] vercel" in r.stdout
+
+
+
+# ---------------------------------------------------------------- one table with seed (ticket 2026-10-20-jui-infra-seed-and-check-tables-disagree)
+
+def test_check_has_no_table_of_its_own():
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert set(C.TF_CATEGORY) == set(T.TF_TYPES) and C.TF_PROVIDER is T.TF_PROVIDER and C.COMPOSE_IMAGE is T.COMPOSE_IMAGE
+    assert not hasattr(C, "IGNORED")
+    src = Path(C.__file__).read_text()
+    assert '"aws_db_instance"' not in src and '"AWS::S3::Bucket"' not in src     # no type is spelled in check itself
+
+
+def _mini(tmp_path, files, nodes):
+    root = tmp_path / "mini"
+    (root / "docs" / "infra").mkdir(parents=True)
+    (root / "docs" / "infra" / "m.json").write_text(json.dumps({"version": 0, "nodes": nodes}))
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    (root / "jui.config.json").write_text(json.dumps({"checks": [{"name": "iac", "type": "builtin:infra-iac", "gate": True}]}))
+    return root, C.run_infra_iac(_decls(root)["iac"], root)
+
+
+def test_folded_resources_are_compared_when_declared_and_not_asked_for_when_not(tmp_path):
+    tf = 'resource "aws_iam_role" "api" {}\nresource "aws_cloudwatch_metric_alarm" "cpu" {}\nresource "aws_iam_role_policy_attachment" "a" {}\n'
+    root, rep = _mini(tmp_path, {"main.tf": tf}, [{"id": "role", "category": "security.iam", "provider": "aws", "iac": ["aws_iam_role.api"]}])
+    t = _by_target(rep)
+    assert t["aws/role"].status == "ok"
+    assert not any("alarm" in k or "attachment" in k for k in t)               # not declared: not asked for; a part: never
+    assert any("IAM / policy / alarm" in w and w.startswith("1 ") for w in rep.warnings)
+
+
+def test_a_k8s_workload_is_a_container_and_the_cluster_is_compute_k8s(tmp_path):
+    k8s = ("apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n---\napiVersion: v1\nkind: Service\n"
+           "metadata:\n  name: lb\nspec:\n  type: LoadBalancer\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: inner\n")
+    _r, rep = _mini(tmp_path, {"k8s/app.yaml": k8s}, [   # named like App Engine's file: a manifest all the same
+        {"id": "web", "category": "compute.container", "provider": "kubernetes", "iac": ["Deployment/web"]},
+        {"id": "lb", "category": "load_balancer", "provider": "kubernetes", "iac": ["Service/lb"]}])
+    t = _by_target(rep)
+    assert t["kubernetes/web"].status == "ok" and t["kubernetes/lb"].status == "ok"
+    assert "kubernetes/Service/inner" not in t                                # a ClusterIP Service is a part
+
+
+def test_a_synthesized_cdk_app_and_bicep_are_read(tmp_path):
+    cdk = json.dumps({"Resources": {"ApiFnABC123": {"Type": "AWS::Lambda::Function"}, "ApiFnRole": {"Type": "AWS::IAM::Policy"},
+                                    "CDKMetadata": {"Type": "AWS::CDK::Metadata"}}})
+    bicep = "resource web 'Microsoft.Web/sites@2023-01-01' = {\n}\nresource plan 'Microsoft.Web/serverfarms@2023-01-01' = {\n}\n"
+    _r, rep = _mini(tmp_path, {"cdk.out/App.template.json": cdk, "infra/main.bicep": bicep}, [
+        {"id": "fn", "category": "compute.function", "provider": "aws", "iac": ["ApiFnABC123"]},
+        {"id": "web", "category": "compute.paas", "provider": "azure", "iac": ["web"]}])
+    t = _by_target(rep)
+    assert t["aws/fn"].status == "ok" and t["azure/web"].status == "ok"
+    assert not any("CDKMetadata" in k or "plan" in k for k in t)
+
+
+def test_settings_seed_reads_are_said_not_compared(tmp_path):
+    _r, rep = _mini(tmp_path, {"firebase.json": "{}", "fly.toml": "app = 'x'\n", "gae/app.yaml": "runtime: python312\n"},
+                    [{"id": "h", "category": "compute.paas", "provider": "firebase", "iac": ["firebase:hosting"]}])
+    un = rep.target_extra["unverified"]
+    assert any("firebase.json" in w and "not compare" in w for w in un["firebase"]) and "fly" in un
+    assert any("gae/app.yaml" in w for w in un["gcp"])                      # App Engine's app.yaml (a runtime, no apiVersion)
+    assert _by_target(rep)["firebase/h"].status == "skipped"

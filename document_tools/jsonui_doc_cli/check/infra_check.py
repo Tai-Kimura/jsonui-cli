@@ -1,10 +1,12 @@
 """check kind=infra: the room's declared infrastructure (docs/infra, boundary §6) against what the project's own files say.
 
 builtin:infra-iac — the IaC and deploy settings in the project (Docker Compose, Terraform / OpenTofu HCL, CloudFormation
-/ SAM, Kubernetes manifests, Cloudflare wrangler), read statically: no credentials, no plan, no state (state holds
-secrets in the clear). Each resource is mapped to a category and a provider by the tables below (fine-grained types —
-IAM, policies, alarms, rules, attachments — are dropped by IGNORED, InfraMap's way); each provider's resources are
-compared with that provider's declared nodes (providerResolved) through their ``iac`` addresses.
+/ SAM and a synthesized CDK app's cdk.out, Bicep, Kubernetes manifests, Cloudflare wrangler), read statically: no
+credentials, no plan, no state (state holds secrets in the clear). Each resource gets its provider, category and
+address from infra/iac_tables.py — the one table seed drafts with — parts of another resource (attachments, rules,
+routes, records, ...) are dropped, and IAM, policies and alarms are compared when declared and not asked for when not
+(they are folded by default); each provider's resources are compared with that provider's declared nodes
+(providerResolved) through their ``iac`` addresses.
 
 builtin:infra-code — the code: every node's ``evidence`` (the file is there, the pattern still in it), and the services
 the code talks to by its SDK imports and the *names* of its environment variables (never their values), against the
@@ -25,12 +27,13 @@ import os
 import re
 from pathlib import Path, PurePosixPath
 
+from ..infra import iac_tables as T
 from ..infra import model as M
 from ..infra import room as R
 from .report import CheckReport, ResultItem, compute_input_hashes
 
 SKIP_DIRS = {".git", "node_modules", "vendor", "build", "dist", ".terraform", ".venv", "venv", "__pycache__", "Pods",
-             ".next", ".wrangler", "target", ".gradle", "DerivedData", "cdk.out"}
+             ".next", ".wrangler", "target", ".gradle", "DerivedData"}   # cdk.out is read: a synthesized CDK app
 MAX_FILES = 5000
 MAX_BYTES = 1_000_000
 
@@ -69,71 +72,20 @@ def _rel(p: Path, root: Path) -> str:
     return PurePosixPath(p.relative_to(root)).as_posix()
 
 
-# ---------------------------------------------------------------- the IaC tables
+# ---------------------------------------------------------------- reading the IaC (tables: infra/iac_tables.py)
 
-TF_PROVIDER = {"aws": "aws", "google": "gcp", "azurerm": "azure", "cloudflare": "cloudflare", "kubernetes": "kubernetes",
-               "vercel": "vercel", "digitalocean": "digitalocean", "fly": "fly", "heroku": "heroku", "netlify": "netlify",
-               "supabase": "supabase"}
-TF_CATEGORY = {
-    "aws_instance": "compute.vm", "aws_ecs_service": "compute.container", "aws_apprunner_service": "compute.container",
-    "aws_lambda_function": "compute.function", "aws_eks_cluster": "compute.k8s",
-    "aws_lb": "load_balancer", "aws_alb": "load_balancer", "aws_elb": "load_balancer",
-    "aws_cloudfront_distribution": "edge.cdn", "aws_route53_zone": "edge.dns", "aws_wafv2_web_acl": "edge.waf",
-    "aws_api_gateway_rest_api": "gateway.api", "aws_apigatewayv2_api": "gateway.api",
-    "aws_db_instance": "database.relational", "aws_rds_cluster": "database.relational",
-    "aws_dynamodb_table": "database.kv", "aws_docdb_cluster": "database.document",
-    "aws_opensearch_domain": "database.search", "aws_elasticache_cluster": "cache",
-    "aws_elasticache_replication_group": "cache", "aws_s3_bucket": "storage.object", "aws_efs_file_system": "storage.file",
-    "aws_ebs_volume": "storage.block", "aws_sqs_queue": "queue", "aws_sns_topic": "queue", "aws_kinesis_stream": "stream",
-    "aws_cloudwatch_event_rule": "scheduler", "aws_scheduler_schedule": "scheduler", "aws_ses_domain_identity": "mail",
-    "aws_cognito_user_pool": "auth", "aws_secretsmanager_secret": "secrets", "aws_vpc": None, "aws_subnet": None,
-    "google_compute_instance": "compute.vm", "google_cloud_run_service": "compute.container",
-    "google_cloud_run_v2_service": "compute.container", "google_cloudfunctions_function": "compute.function",
-    "google_cloudfunctions2_function": "compute.function", "google_container_cluster": "compute.k8s",
-    "google_app_engine_application": "compute.paas", "google_compute_global_forwarding_rule": "load_balancer",
-    "google_dns_managed_zone": "edge.dns", "google_sql_database_instance": "database.relational",
-    "google_spanner_instance": "database.relational", "google_firestore_database": "database.document",
-    "google_redis_instance": "cache", "google_storage_bucket": "storage.object", "google_pubsub_topic": "queue",
-    "google_cloud_scheduler_job": "scheduler", "google_secret_manager_secret": "secrets", "google_compute_network": None,
-    "azurerm_linux_virtual_machine": "compute.vm", "azurerm_windows_virtual_machine": "compute.vm",
-    "azurerm_container_app": "compute.container", "azurerm_linux_function_app": "compute.function",
-    "azurerm_kubernetes_cluster": "compute.k8s", "azurerm_linux_web_app": "compute.paas",
-    "azurerm_application_gateway": "load_balancer", "azurerm_lb": "load_balancer", "azurerm_cdn_frontdoor_profile": "edge.cdn",
-    "azurerm_dns_zone": "edge.dns", "azurerm_mssql_server": "database.relational",
-    "azurerm_postgresql_flexible_server": "database.relational", "azurerm_cosmosdb_account": "database.document",
-    "azurerm_redis_cache": "cache", "azurerm_storage_account": "storage.object", "azurerm_servicebus_namespace": "queue",
-    "azurerm_key_vault": "secrets", "azurerm_virtual_network": None,
-    "cloudflare_zone": "edge.dns", "cloudflare_worker_script": "compute.function", "cloudflare_workers_script": "compute.function",
-    "cloudflare_pages_project": "compute.paas", "cloudflare_workers_kv_namespace": "database.kv",
-    "cloudflare_r2_bucket": "storage.object", "cloudflare_d1_database": "database.relational", "cloudflare_queue": "queue",
-}
-# fine-grained: never a node of their own (folded like InfraMap does), whatever the provider
-IGNORED = re.compile(r"(?:^|_)(?:iam|policy|policies|role|roles|alarm|alarms|metric|log_group|rule|rules|attachment"
-                     r"|association|permission|security_group|route|routes|record|records|binding|bindings|member"
-                     r"|version|key_pair|subnet|vpc|network|eip|nat_gateway|internet_gateway|acl|listener|target_group"
-                     r"|task_definition|launch_template|parameter|lifecycle|notification|cors|website|object|alias"
-                     r"|certificate|access_key|user|group|account_iam|service_account)(?:_|$)")
-CFN_CATEGORY = {"AWS::EC2::Instance": "compute.vm", "AWS::ECS::Service": "compute.container",
-                "AWS::Lambda::Function": "compute.function", "AWS::Serverless::Function": "compute.function",
-                "AWS::EKS::Cluster": "compute.k8s", "AWS::ElasticLoadBalancingV2::LoadBalancer": "load_balancer",
-                "AWS::CloudFront::Distribution": "edge.cdn", "AWS::Route53::HostedZone": "edge.dns",
-                "AWS::ApiGateway::RestApi": "gateway.api", "AWS::Serverless::Api": "gateway.api",
-                "AWS::Serverless::HttpApi": "gateway.api", "AWS::RDS::DBInstance": "database.relational",
-                "AWS::RDS::DBCluster": "database.relational", "AWS::DynamoDB::Table": "database.kv",
-                "AWS::Serverless::SimpleTable": "database.kv", "AWS::ElastiCache::CacheCluster": "cache",
-                "AWS::S3::Bucket": "storage.object", "AWS::SQS::Queue": "queue", "AWS::SNS::Topic": "queue",
-                "AWS::Kinesis::Stream": "stream", "AWS::Events::Rule": "scheduler", "AWS::Cognito::UserPool": "auth",
-                "AWS::SecretsManager::Secret": "secrets"}
-K8S_CATEGORY = {"Deployment": "compute.k8s", "StatefulSet": "compute.k8s", "DaemonSet": "compute.k8s",
-                "CronJob": "scheduler", "Job": "compute.k8s", "Ingress": "load_balancer",
-                "PersistentVolumeClaim": "storage.block"}
-COMPOSE_IMAGE = (("postgres", "database.relational"), ("mysql", "database.relational"), ("mariadb", "database.relational"),
-                 ("mongo", "database.document"), ("redis", "cache"), ("valkey", "cache"), ("memcached", "cache"),
-                 ("rabbitmq", "queue"), ("kafka", "stream"), ("elasticsearch", "database.search"),
-                 ("opensearch", "database.search"), ("minio", "storage.object"), ("nginx", "load_balancer"),
-                 ("traefik", "load_balancer"), ("mailhog", "mail"), ("mailpit", "mail"))
+# The tables live in infra/iac_tables.py, shared with seed (ticket 2026-10-20-jui-infra-seed-and-check-tables-disagree).
+# These names stay for code that imported them from here; new code imports iac_tables.
+TF_PROVIDER = T.TF_PROVIDER
+TF_CATEGORY = {t: (None if c.startswith("group:") else c) for t, (c, _s) in T.TF_TYPES.items()}
+CFN_CATEGORY = {t: c for t, (c, _s) in T.CFN_TYPES.items() if not c.startswith("group:")}
+K8S_CATEGORY = {k: T.k8s_mapping(k)[0] for k in (*T.K8S_WORKLOAD, "CronJob", "Ingress", "PersistentVolumeClaim")}
+COMPOSE_IMAGE = T.COMPOSE_IMAGE
 COMPOSE_NAMES = re.compile(r"^(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$")
 WRANGLER = re.compile(r"^wrangler\.(?:toml|json|jsonc)$")
+# settings files seed reads and check does not compare (yet): file name -> provider
+NOT_COMPARED = {"firebase.json": "firebase", "render.yaml": "render", "serverless.yml": "aws", "serverless.yaml": "aws",
+                "vercel.json": "vercel", "netlify.toml": "netlify", "fly.toml": "fly", "app.yaml": "gcp", "Procfile": "heroku"}
 
 
 def _yaml():
@@ -151,9 +103,20 @@ def _yaml():
     return yaml, Loader
 
 
+def _app_engine(text: str | None) -> bool:
+    """app.yaml is App Engine's only with a runtime and no apiVersion: a Kubernetes manifest is often named so too."""
+    return bool(text) and bool(re.search(r"^runtime:", text, re.M)) and not re.search(r"^apiVersion:", text, re.M)
+
+
+def _node(found, address, provider, mapping, source):
+    cat, svc = mapping
+    if not cat.startswith("group:"):          # a network, a cluster: a group of the model, not compared as a node
+        found.append({"address": address, "provider": provider, "category": cat, "service": svc, "source": source})
+
+
 def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
-    """Resources the project's IaC declares: {address, provider, category, source}, and what could not be read, per
-    provider ("*" when the provider cannot be told)."""
+    """Resources the project's IaC declares: {address, provider, category, service, source}, and what could not be
+    read, per provider ("*" when the provider cannot be told)."""
     found: list[dict] = []
     unverified: dict[str, list[str]] = {}
 
@@ -162,7 +125,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
         if why not in unverified[provider]:
             unverified[provider].append(why)
 
-    names = lambda n: n.endswith((".tf", ".yaml", ".yml", ".json", ".toml", ".jsonc"))  # noqa: E731
+    names = lambda n: n.endswith((".tf", ".yaml", ".yml", ".json", ".toml", ".jsonc", ".bicep")) or n == "Procfile"  # noqa: E731
     files, capped = _walk(root, names)
     if capped:
         note("*", f"more than {MAX_FILES} candidate files: the rest were not read")
@@ -170,55 +133,66 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
     unmapped: dict[str, set[str]] = {}
     for p in files:
         rel, name = _rel(p, root), p.name
-        if rel.startswith(R.DEFAULT_DIR + "/") or name.endswith(".check-report.json") or "/.check-report" in rel:
+        if rel.startswith(R.DEFAULT_DIR + "/") or ".check-report" in name:
             continue
         text = _text(p)
+        if name in NOT_COMPARED and not (name == "app.yaml" and not _app_engine(text)):
+            note(NOT_COMPARED[name], f"{rel}: settings check does not compare yet (seed reads them): its nodes are not compared")
+            continue
         if text is None:
             continue
         if name.endswith(".tf"):
             for t, n in re.findall(r'^\s*resource\s+"([a-z0-9_]+)"\s+"([A-Za-z0-9_-]+)"', text, re.M):
-                prefix = t.split("_", 1)[0]
-                provider = TF_PROVIDER.get(prefix, prefix)
-                cat = TF_CATEGORY.get(t, "?")
-                if cat is None or (cat == "?" and IGNORED.search(t)):
+                provider = T.tf_provider(t)
+                m = T.tf_mapping(t)
+                if provider is None or m == "part":
                     continue
-                if cat == "?":
+                if m is None:
                     unmapped.setdefault(provider, set()).add(t)
                     continue
-                found.append({"address": f"{t}.{n}", "provider": provider, "category": cat, "source": rel})
+                _node(found, T.tf_address(t, n), provider, m, rel)
             for mname, body in re.findall(r'^\s*module\s+"([A-Za-z0-9_-]+)"\s*\{(.*?)^\}', text, re.M | re.S):
                 src = re.search(r'^\s*source\s*=\s*"([^"]+)"', body, re.M)
                 if src and not src.group(1).startswith(("./", "../")):
                     note("*", f"{rel}: module \"{mname}\" comes from outside the project: its resources were not read")
             if re.search(r"^\s*(?:count|for_each)\s*=", text, re.M):
                 note("*", f"{rel}: count / for_each are not evaluated (a static read; no plan): how many is not checked")
-        elif COMPOSE_NAMES.match(name) or WRANGLER.match(name):
-            if WRANGLER.match(name):
-                _wrangler(p, rel, text, found, note)
-            elif y is None:
-                note("docker", f"{rel}: PyYAML is not installed: not read")
-            else:
-                try:
-                    data = y[0].load(text, Loader=y[1])
-                except Exception:   # noqa: BLE001 — a file that does not parse is said, not fatal
-                    note("docker", f"{rel}: not YAML: not read")
+        elif name.endswith(".bicep"):
+            for sym, t in re.findall(r"^\s*resource\s+([A-Za-z_][A-Za-z0-9_]*)\s+'([^'@]+)@", text, re.M):
+                m = T.bicep_mapping(t)
+                if m == "part":
                     continue
-                for svc, spec in ((data or {}).get("services") or {}).items():
-                    image = str((spec or {}).get("image") or "") if isinstance(spec, dict) else ""
-                    cat = next((c for key, c in COMPOSE_IMAGE if key in image.lower()), "compute.container")
-                    found.append({"address": f"{rel}#services.{svc}", "provider": "docker", "category": cat, "source": rel})
+                if m is None:
+                    unmapped.setdefault("azure", set()).add(t)
+                    continue
+                _node(found, T.bicep_address(sym), "azure", m, rel)
+        elif WRANGLER.match(name):
+            _wrangler(p, rel, text, found, note)
+        elif COMPOSE_NAMES.match(name):
+            if y is None:
+                note("docker", f"{rel}: PyYAML is not installed: not read")
+                continue
+            try:
+                data = y[0].load(text, Loader=y[1])
+            except Exception:   # noqa: BLE001 — a file that does not parse is said, not fatal
+                note("docker", f"{rel}: not YAML: not read")
+                continue
+            for svc, spec in ((data or {}).get("services") or {}).items():
+                image = str((spec or {}).get("image") or "") if isinstance(spec, dict) else ""
+                _node(found, T.compose_address(rel, svc), "docker", (T.compose_category(image), "compose.service"), rel)
         elif name.endswith((".yaml", ".yml", ".json")):
-            if "AWSTemplateFormatVersion" in text or "AWS::" in text:
-                _cfn(p, rel, text, y, found, note)
+            if "/cdk.out/" in f"/{rel}" and name.endswith(".template.json") or "AWSTemplateFormatVersion" in text \
+                    or "AWS::" in text:
+                _cfn(p, rel, text, y, found, note, unmapped)
             elif re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M):
-                _k8s(rel, text, y, found, note)
+                _k8s(rel, text, y, found, note, unmapped)
     for provider, types in unmapped.items():
         note(provider, f"{len(types)} resource type(s) with no mapping to a category, not compared: "
                        + ", ".join(sorted(types)[:8]) + (" …" if len(types) > 8 else ""))
     return found, unverified
 
 
-def _cfn(p, rel, text, y, found, note):
+def _cfn(p, rel, text, y, found, note, unmapped):
     if y is None and not p.name.endswith(".json"):
         note("aws", f"{rel}: PyYAML is not installed: not read")
         return
@@ -231,14 +205,16 @@ def _cfn(p, rel, text, y, found, note):
         t = (res or {}).get("Type") if isinstance(res, dict) else None
         if not isinstance(t, str):
             continue
-        cat = CFN_CATEGORY.get(t)
-        if cat:
-            found.append({"address": logical, "provider": "aws", "category": cat, "source": rel})
-        elif not IGNORED.search(t.replace("::", "_").lower()):
-            note("aws", f"{rel}: {t} has no mapping to a category, not compared")
+        m = T.cfn_mapping(t)
+        if m == "part":
+            continue
+        if m is None:
+            unmapped.setdefault("aws", set()).add(t)
+            continue
+        _node(found, T.cfn_address(logical), "aws", m, rel)
 
 
-def _k8s(rel, text, y, found, note):
+def _k8s(rel, text, y, found, note, unmapped):
     if y is None:
         note("kubernetes", f"{rel}: PyYAML is not installed: not read")
         return
@@ -251,8 +227,15 @@ def _k8s(rel, text, y, found, note):
         if not isinstance(d, dict):
             continue
         kind, name = d.get("kind"), (d.get("metadata") or {}).get("name")
-        if kind in K8S_CATEGORY and isinstance(name, str):
-            found.append({"address": f"{kind}/{name}", "provider": "kubernetes", "category": K8S_CATEGORY[kind], "source": rel})
+        if not isinstance(kind, str) or not isinstance(name, str):
+            continue
+        m = T.k8s_mapping(kind, d.get("spec") if isinstance(d.get("spec"), dict) else None)
+        if m == "part":
+            continue
+        if m is None:
+            unmapped.setdefault("kubernetes", set()).add(kind)
+            continue
+        _node(found, T.k8s_address(kind, name), "kubernetes", m, rel)
     if "{{" in text:
         note("kubernetes", f"{rel}: a Helm template is not rendered: not read as it deploys")
 
@@ -267,11 +250,9 @@ def _wrangler(p, rel, text, found, note):
     except Exception:   # noqa: BLE001
         note("cloudflare", f"{rel}: not parsed: not read")
         return
-    found.append({"address": rel, "provider": "cloudflare", "category": "compute.function", "source": rel})
-    for key, cat in (("kv_namespaces", "database.kv"), ("r2_buckets", "storage.object"), ("d1_databases", "database.relational")):
-        for b in data.get(key) or []:
-            if isinstance(b, dict) and isinstance(b.get("binding"), str):
-                found.append({"address": f"{rel}#{key}.{b['binding']}", "provider": "cloudflare", "category": cat, "source": rel})
+    _node(found, T.wrangler_address(rel), "cloudflare", ("compute.function", "workers"), rel)
+    for kind, handle, _label, cat, svc in T.wrangler_bindings(data):
+        _node(found, T.wrangler_address(rel, kind, handle), "cloudflare", (cat, svc), rel)
 
 
 # ---------------------------------------------------------------- code: SDKs and environment names
@@ -356,7 +337,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
         if provider not in by_provider:
             results.append(ResultItem(target, "skipped", "metadata", message=f"no IaC read for {provider}"))
             continue
-        hit = [f for f in by_provider[provider] for a in n["iac"] if a == f["address"] or a.endswith("." + f["address"])]
+        hit = [f for f in by_provider[provider] for a in n["iac"] if T.matches(a, f["address"])]
         if hit:
             claimed.update(f["address"] for f in hit)
             cats = {f["category"] for f in hit}
@@ -368,7 +349,13 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
         else:
             results.append(ResultItem(target, _status(decl, "missing_in_impl"), "metadata", expected=", ".join(n["iac"]),
                                       message="declared, but no such resource in this provider's IaC"))
+    folded_quiet = 0
     for f in found:
+        if f["address"] in claimed:
+            continue
+        if T.optional(f["category"]):          # IAM, policy, alarm: compared when declared, not asked for
+            folded_quiet += 1
+            continue
         if f["address"] not in claimed:
             results.append(ResultItem(f"{f['provider']}/{f['address']}", _status(decl, "missing_in_doc"), "metadata",
                                       actual=f["category"], message=f"in {f['source']}, but no node names it in iac"))
@@ -376,6 +363,9 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
                       target_extra={"dir": folder, "unverified": unverified, "gate": bool(getattr(decl, "gate", False))},
                       input_hashes=compute_input_hashes(model_files, project_root), results=results, unit="resource")
     rep.warnings = [f"[unverified] {p}: {why}" for p, whys in sorted(unverified.items()) for why in whys]
+    if folded_quiet:
+        rep.warnings.append(f"{folded_quiet} IAM / policy / alarm resource(s) in the IaC are not declared: folded by "
+                            "default, so not asked for (declare them to have them compared)")
     return rep
 
 
