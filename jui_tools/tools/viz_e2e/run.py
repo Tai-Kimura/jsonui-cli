@@ -195,8 +195,8 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "spec-colors", "weather", "usage", "name-tags", "shredder", "gitbox", "log-strip", "hist-wide", "hist-labels", "hist-images", "name-tag-role", "clock-out", "arrows-rooms"],
-                    help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; play-look: only what a game looks like (tags, the ball, the slap, the bubble); spec-help: only the 「?」 dialog of spec の進み具合; spec-colors: only the spec sheet's colours; weather: only the season and the near weather outside; name-tags: only robots' name tags kept apart; hist-wide: only the wide history; hist-labels: only the history's labels on one line; hist-images: only the pictures in the history; name-tag-role: only a session's name on its robot's tag; clock-out: only the 退勤 button; arrows-rooms: only ← → between rooms and ↑ ↓ between floors; "
+    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "spec-colors", "weather", "usage", "name-tags", "shredder", "gitbox", "log-strip", "hist-wide", "hist-labels", "hist-images", "name-tag-role", "clock-out", "arrows-rooms", "ask-board"],
+                    help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; play-look: only what a game looks like (tags, the ball, the slap, the bubble); spec-help: only the 「?」 dialog of spec の進み具合; spec-colors: only the spec sheet's colours; weather: only the season and the near weather outside; name-tags: only robots' name tags kept apart; hist-wide: only the wide history; hist-labels: only the history's labels on one line; hist-images: only the pictures in the history; name-tag-role: only a session's name on its robot's tag; clock-out: only the 退勤 button; arrows-rooms: only ← → between rooms and ↑ ↓ between floors; ask-board: only the 質問 / 許可待ち chips' board; "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
     ap.add_argument("--record-demo", metavar="URL",
@@ -249,6 +249,9 @@ def main(argv=None) -> int:
             if a.only in (None, "live", "ask"):
                 import ask
                 await ask.run_ask(pw, out, failures)
+            if a.only in (None, "live", "ask-board"):
+                import ask_board
+                await ask_board.run_ask_board(pw, out, failures)
             if a.only in (None, "live", "history"):
                 import history
                 before = progress_count()

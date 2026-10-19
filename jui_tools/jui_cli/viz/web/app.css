@@ -1134,3 +1134,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .sh-body .sh-kinds { gap: 6px 8px; }
 .tk.tk-solo .tk-k { margin-right: 0; padding-right: 0; border-right: 0; }
 .sh-body .sh-types code { font: 600 12px/1.5 var(--font-mono); }
+
+/* The questions on the board (2.3.5): the panel's cards in the permission strip's frame, above it */
+.q-strip { border-color: var(--wb-violet, var(--info)); }
+.q-strip .qcard { margin: 0; }

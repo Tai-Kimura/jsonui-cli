@@ -255,7 +255,7 @@ document.addEventListener('click', (e) => {
   else if (t.hasAttribute('data-rb-close')) closeRobot();
   else if (t.hasAttribute('data-set-all')) setProject('all');
 });
-$('chip-perm').addEventListener('click', (e) => openTaskBoard(e.currentTarget));
+$('chip-perm').addEventListener('click', (e) => { tb.waitView = true; openTaskBoard(e.currentTarget); });
 
 /* ---------- scope: which project (or all) every panel and board shows, and which sessions ---------- */
 function paintScopeButtons() {
@@ -312,12 +312,12 @@ const qState = (q) => (q.status === 'sent' ? '送信済み · Claude Code の確
 const qWhy = (q) => (q.tooLongToShow ? '質問の全部をここに表示できないため、ここでは答えられません'
   : q.released ? 'ターミナルに返しました' : q.waitEnded ? 'ブラウザで答えられる時間が過ぎました（だれも操作しないまま待ちが終わった）'
     : 'このセッションは答えの中継を待っていません');
-function questionHTML(q) {
+function questionHTML(q, where = '') {   // where: '' in the panel, 'b' on the board (the same card twice in one page)
   const open = q.status === 'pending' && q.hookWaiting && !q.tooLongToShow;
   const closed = q.status === 'pending' && !open;
   const got = q.sentAnswers || q.gotAnswers || null;
   const itemsHTML = q.questions.map((x, i) => {
-    const type = x.multiSelect ? 'checkbox' : 'radio', name = `qa-${q.id}-${i}`;
+    const type = x.multiSelect ? 'checkbox' : 'radio', name = `qa-${where}${q.id}-${i}`;   // radios: one group per card
     const optsHTML = x.options.map((o, k) => `<label class="qopt"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="${k}"${open ? '' : ' disabled'}><span class="qlabel">${esc(o.label)}</span>${o.description ? `<span class="qdesc">${esc(o.description)}</span>` : ''}${o.preview ? `<pre class="qprev">${esc(o.preview)}</pre>` : ''}</label>`).join('');
     const otherHTML = `<label class="qopt qother"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="other"${open ? '' : ' disabled'}><span class="qlabel">その他（自由記述）</span><input type="text" class="qother-text" data-qi="${i}" aria-label="${esc(x.question)} への自由記述" maxlength="2000"${open ? '' : ' disabled'}></label>`;
     const answeredHTML = got && got[x.question] !== undefined ? `<p class="qgot">答え: <b>${esc(got[x.question])}</b></p>` : '';
@@ -326,21 +326,27 @@ function questionHTML(q) {
     return `<fieldset class="qq"><legend>${x.header ? `<span class="qhead">${esc(x.header)}</span>` : ''}<span class="qtext">${esc(x.question)}</span>${x.multiSelect ? '<span class="qmulti">複数選べる</span>' : ''}</legend>${choicesHTML}${answeredHTML}</fieldset>`;
   }).join('');
   // While the hook waits the terminal shows no question (measured 10-18): the time left, and the way to the terminal.
-  const footHTML = open ? `<div class="qfoot"><button type="button" class="pa pa-allow" data-qsend="${esc(q.id)}" data-fk="qs-${esc(q.id)}" disabled>答えを送る</button><button type="button" class="pa pa-deny" data-qrelease="${esc(q.id)}" data-fk="qr-${esc(q.id)}">ターミナルで答える</button></div><p class="qnote">待っている間はターミナルに質問が出ない · <span data-quntil="${esc(q.id)}"></span>（操作すると延びる）</p>`
+  const footHTML = open ? `<div class="qfoot"><button type="button" class="pa pa-allow" data-qsend="${esc(q.id)}" data-fk="${esc(where)}qs-${esc(q.id)}" disabled>答えを送る</button><button type="button" class="pa pa-deny" data-qrelease="${esc(q.id)}" data-fk="${esc(where)}qr-${esc(q.id)}">ターミナルで答える</button></div><p class="qnote">待っている間はターミナルに質問が出ない · <span data-quntil="${esc(q.id)}"></span>（操作すると延びる）</p>`
     : closed ? '' : `<p class="qnote qdone">${esc(qState(q))}</p>`;
   const whyHTML = closed ? `<p class="qnote qwhy" role="note">${esc(qWhy(q))}。ターミナルで答えてください（ここでは選べません）</p>` : '';
   return `<article class="qcard${open ? ' q-open' : ''}${closed ? ' q-closed' : ''}" data-qcard="${esc(q.id)}"><header class="qwho">${pill(q.who, DEF[q.who].role)}<span>${esc(DEF[q.who].agent)}</span><span class="pc-wait" data-since="${q.at}"></span></header>${whyHTML}${itemsHTML}${footHTML}</article>`;
 }
+/* The question cards the panel shows and the board shows (2.3.5): one list from QUESTIONS, oldest first. */
+function questionsShown(now = Date.now()) {
+  return QUESTIONS.filter((q) => inScope(projectOfRobot(q.who)) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS))
+    .sort((a, b) => (a.at || 0) - (b.at || 0));
+}
+const questionsSig = (shown) => JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])]);
 function renderQuestions() {
   const now = Date.now();
-  const shown = QUESTIONS.filter((q) => inScope(projectOfRobot(q.who)) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS));
+  const shown = questionsShown(now);
   const waiting = QUESTIONS.filter((q) => q.status === 'pending').length;
   const chip = $('chip-ask');
   chip.hidden = waiting === 0;
   setText(chip, `質問 ${waiting}`);
   $('questions-sec').hidden = shown.length === 0;
-  keyed($('questions'), JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])]), () => shown.map((q) => questionHTML(q)).join(''));
-  for (const el of $('questions').querySelectorAll('[data-quntil]')) {   // the countdown, in place (inputs keep their state)
+  keyed($('questions'), questionsSig(shown), () => shown.map((q) => questionHTML(q)).join(''));
+  for (const el of document.querySelectorAll('#questions [data-quntil], #q-strip [data-quntil]')) {   // the countdown, in place (inputs keep their state)
     const q = QUESTIONS.find((x) => x.id === el.dataset.quntil);
     setText(el, q && q.waitUntil ? `あと ${Math.max(0, Math.ceil((q.waitUntil - now) / 1000))} 秒でターミナルに戻す` : '');
   }
@@ -367,7 +373,7 @@ function questionPicks(card, q) {
   });
   return { picks, complete };
 }
-$('questions').addEventListener('input', (e) => {
+function onQuestionInput(e) {
   const card = e.target.closest('[data-qcard]');
   const q = card && QUESTIONS.find((x) => x.id === card.dataset.qcard);
   if (!q) return;
@@ -376,8 +382,8 @@ $('questions').addEventListener('input', (e) => {
   const send = card.querySelector('[data-qsend]');
   if (send) send.disabled = !questionPicks(card, q).complete;
   if (send) holdQuestion(q.id);   // someone is answering: the hook waits a little longer
-});
-$('questions').addEventListener('click', (e) => {
+}
+function onQuestionClick(e) {
   const r = e.target.closest('[data-qrelease]');
   if (r) { r.disabled = true; SOURCE.releaseQuestion(r.dataset.qrelease); return; }
   const b = e.target.closest('[data-qsend]');
@@ -388,8 +394,13 @@ $('questions').addEventListener('click', (e) => {
   if (!complete) return;
   b.disabled = true;
   SOURCE.answerQuestion(q.id, picks);
-});
-$('chip-ask').addEventListener('click', () => { const sec = $('questions-sec'); sec.scrollIntoView({ block: 'start' }); const first = sec.querySelector('input:not([disabled])'); if (first) first.focus({ preventScroll: true }); });
+}
+// The same handlers for the panel's cards and the board's: the same state (QUESTIONS), the same sending (SOURCE).
+for (const id of ['questions', 'q-strip']) { $(id).addEventListener('input', onQuestionInput); $(id).addEventListener('click', onQuestionClick); }
+/* 2.3.5 (requester 10-19: "このヘッダーの許可のチップクリックでボード表示してほしい"): the 質問 chip opens the board that
+   already lists what waits for a permission (the task board, its strip on top) with the questions waiting over it,
+   panel open or not; the 許可待ち chip opens the same board. The chips are hidden while nothing waits (no no-op chip). */
+$('chip-ask').addEventListener('click', (e) => { tb.waitView = true; openTaskBoard(e.currentTarget); });
 
 /* ---------- popovers: project switcher, session picker, robot picker ---------- */
 const popEl = $('pop');
@@ -968,8 +979,8 @@ function renderSheet(model, force) {
 }
 
 /* ---------- task board up close: one column per task state, permission prompts on top ---------- */
-const tbEl = $('tb'), kanbanEl = $('kanban'), stripEl = $('perm-strip'), detailEl = $('tb-detail');
-const tb = { open: false, detail: null, board: null };
+const tbEl = $('tb'), kanbanEl = $('kanban'), stripEl = $('perm-strip'), detailEl = $('tb-detail'), qStripEl = $('q-strip');
+const tb = { open: false, detail: null, board: null, waitView: false };   // waitView: opened from a 質問 / 許可待ち chip
 $('tb-lanes').addEventListener('change', (e) => { UI.lanes = e.target.checked; writePref('lanes', UI.lanes ? 'on' : 'off'); renderTaskBoard(latestModel); });
 function openTaskBoard(opener, detail, board) {
   if (detail !== undefined) tb.detail = detail;
@@ -984,7 +995,8 @@ function openTaskBoard(opener, detail, board) {
     if (!tb.open) return;
     showOverlay(tbEl);
     renderTaskBoard(latestModel);
-    $(tb.detail ? 'tbd-close' : 'tb-close').focus({ preventScroll: true });
+    const firstQ = tb.waitView && !tb.detail ? qStripEl.querySelector('input:not([disabled])') : null;   // from the 質問 chip: the first choice
+    (firstQ || $(tb.detail ? 'tbd-close' : 'tb-close')).focus({ preventScroll: true });
   });
 }
 function closeTaskDetail() {
@@ -996,7 +1008,8 @@ function closeTaskDetail() {
 }
 function closeTaskBoard() {
   if (!tb.open) return;
-  tb.open = false; tb.detail = null;
+  tb.open = false; tb.detail = null; tb.waitView = false;
+  qStripEl.replaceChildren(); qStripEl._sig = null; qStripEl.hidden = true;   // no second copy of the cards while closed
   hideOverlay(tbEl);
   zoomBack();
 }
@@ -1014,7 +1027,12 @@ function renderTaskBoard(model) {
   const elsewhere = model.pending.length - pend.length;
   setText($('tb-count'), `${tasks.length} 件`);
   setText($('tb-title'), UI.project === 'all' ? 'タスクボード' : `タスクボード · ${PROJECT[UI.project].name}`);
-  stripEl.hidden = !pend.length && !alwaysRules.size && !elsewhere;
+  // the questions waiting, the same cards as the panel's from the same list (questionsShown), on top
+  const qs = questionsShown();
+  qStripEl.hidden = !qs.length && !tb.waitView;
+  keyed(qStripEl, `${tb.waitView}|${questionsSig(qs)}`, () => `<h3 class="ps-title">質問に答える<b>${qs.filter((q) => q.status === 'pending').length}</b><small>古い順</small></h3>${qs.some((q) => q.status === 'pending') ? '' : '<p class="ps-none">答えを待っている質問はない</p>'}${qs.map((q) => questionHTML(q, 'b')).join('')}`);
+  paintSince(qStripEl, model.t, '待ち');
+  stripEl.hidden = !pend.length && !alwaysRules.size && !elsewhere && !tb.waitView;
   keyed(stripEl, JSON.stringify([NAMES.rev, pend.map(permSig), [...alwaysRules.keys()], elsewhere]), () => {
     const cardsHTML = pend.map((p) => {
       const x = p.task && TASK_BY_KEY[p.task];
