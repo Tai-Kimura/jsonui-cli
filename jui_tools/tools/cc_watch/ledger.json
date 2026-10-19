@@ -224,6 +224,50 @@
         "jui_tools/tools/cc_watch/watch.py",
         "jui_tools/tools/cc_watch/red_ticket_hook.sh"
       ]
+    },
+    {
+      "id": "talk-send-input",
+      "name": "SendMessage の tool input（to・message・summary）",
+      "relies_on": "the assistant tool_use named SendMessage and its input: to (a name, `name [ref]`, `uds:<socket>`, an agent id, or main), message (the body shown in the talk), summary (optional), recipient_kind (optional); an input without message is a pure notify_when_idle subscription and is not a message",
+      "probe": "talk_send_input",
+      "impact": "viz: トークに送った通が出ない・相手が分からない（一覧と詳細が空になる）",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py"
+      ]
+    },
+    {
+      "id": "talk-msg-id",
+      "name": "SendMessage の照合の鍵 msg_id（送り手の toolUseResult.msg_id ＝ 受け手の origin.msg_id）",
+      "relies_on": "the user record's toolUseResult.msg_id on a SendMessage's tool_result (a send to a session), the same value as origin.msg_id on the receiver's record; the successful-looking text \"No agent named … is reachable\" without msg_id for a send that reached nobody",
+      "probe": "talk_msg_id",
+      "impact": "viz: 送った通と読んだ記録が突き合わず、既読が付かない・同じ通が 2 行になる",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py"
+      ]
+    },
+    {
+      "id": "talk-origin",
+      "name": "受け手の記録の origin（peer・coordinator）と queued_command",
+      "relies_on": "origin on an isMeta user record or on an attachment of type queued_command: kind peer with msg_id, from, verifiedPeerPid, name, body (members when two sends were bundled; senderTaskId for a subagent's send to main; handback for a hand-back, skipped); kind coordinator for the parent's send to a subagent, the queued_command's prompt being the body",
+      "probe": "talk_origin",
+      "impact": "viz: 相手の通が出ない・既読が付かない（受け手の側が見えない）",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py"
+      ]
+    },
+    {
+      "id": "talk-envelope",
+      "name": "届いた印 queue-operation enqueue の封筒（<cross-session-message …>・<agent-message …>）",
+      "relies_on": "queue-operation records with operation enqueue whose content is <cross-session-message from=… from-name=…> with the body between two newlines, or <agent-message …> (a subagent's send to main): the time a message arrived, matched by its body",
+      "probe": "talk_envelope",
+      "impact": "viz: 届いた時刻が送りの結果の時刻になる（表示の既読には影響しない）",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py"
+      ]
     }
   ],
   "not_relying": {

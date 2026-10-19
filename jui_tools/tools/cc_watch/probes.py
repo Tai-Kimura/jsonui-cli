@@ -62,6 +62,12 @@ class Session:
 class Context:
     run: Callable[[list[str]], tuple[int, str]]      # argv -> (exit code, stdout + stderr); the watcher's is a subprocess
     session: Session | None = None
+    #: The machine's own transcripts folder (the config folder's projects/), read only by the talk probes: SendMessage
+    #: needs two live sessions, which a throwaway -p session cannot be, while this machine's sessions send hundreds a
+    #: day with the installed CLI (measured 10-20: 688 in 24 h). None (every test, and the watcher without --live):
+    #: the talk probes report skipped.
+    transcripts: Path | None = None
+    _talk: dict | None = None
 
 
 def _help_options(text: str) -> set[str]:
@@ -186,6 +192,157 @@ def tool_names(ctx: Context):
             "mcp_prefix": (all(t.count("__") >= 2 for t in mcp) if mcp else None)}
 
 
+# ------------------------------------------------------------------ the talk view (viz/talk.py, sources/talk_records.py)
+#: How far back and how much the talk probes read: the newest files first, records of the last TALK_DAYS days only.
+TALK_DAYS = 7
+TALK_FILES = 80
+TALK_BYTES = 256 * 1_048_576
+TALK_FILE_BYTES = 16 * 1_048_576
+TALK_KEEP = 40
+SEND_INPUT_KEYS = ["to", "message", "summary"]
+PEER_ORIGIN_KEYS = ["kind", "msg_id", "from", "verifiedPeerPid", "name", "body"]
+CHILD_ORIGIN_KEYS = ["kind", "senderTaskId", "from", "body"]
+_ENVELOPE = re.compile(r'^<cross-session-message\b[^>]*\bfrom-name="[^"]*"[^>]*>\n')
+
+
+def _talk_scan(ctx: Context) -> dict | None:
+    """The newest SendMessage records of this machine's transcripts, by kind (read once per run, only lines with a
+    needle parsed; the bodies are looked at only to compare the two sides, never kept in a shape)."""
+    if ctx.transcripts is None:
+        return None
+    if ctx._talk is not None:
+        return ctx._talk
+    import os
+    import time
+    root, since = Path(ctx.transcripts), time.time() - TALK_DAYS * 86_400
+    files = []
+    for pattern in ("*/*.jsonl", "*/*/subagents/**/agent-*.jsonl"):
+        for f in root.glob(pattern):
+            try:
+                st = f.lstat()
+            except OSError:
+                continue
+            if not f.is_symlink() and st.st_mtime >= since:
+                files.append((st.st_mtime, f))
+    got = {"sends": [], "results": [], "peer": [], "queued": [], "child": [], "coordinator": [], "enqueue": [], "agent_msg": []}
+    sends: set = set()
+    read = 0
+    for _m, f in sorted(files, reverse=True)[:TALK_FILES]:
+        if read >= TALK_BYTES:
+            break
+        try:
+            fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as fh:          # the newest records: the file's tail
+                size = os.fstat(fh.fileno()).st_size
+                want = min(size, TALK_FILE_BYTES, TALK_BYTES - read)
+                fh.seek(size - want)
+                data = fh.read(want)
+        except OSError:
+            continue
+        read += len(data)
+        lines = data.split(b"\n")
+        if len(data) < size:
+            lines = lines[1:]                           # the first line is cut
+        for line in lines:
+            if not (b'"SendMessage"' in line or b'"origin"' in line or b'"enqueue"' in line or (sends and b'"tool_result"' in line)):
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            t = r.get("type")
+            if t == "assistant":
+                for b in (r.get("message") or {}).get("content") or []:
+                    if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
+                        sends.add(b.get("id"))
+                        got["sends"].append(b.get("input") if isinstance(b.get("input"), dict) else {})
+            elif t == "user":
+                content = (r.get("message") or {}).get("content")
+                for b in content if isinstance(content, list) else []:
+                    if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in sends:
+                        got["results"].append(r.get("toolUseResult"))
+                o = r.get("origin")
+                if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback"):
+                    got["child" if o.get("senderTaskId") else "peer"].append(o)
+                elif isinstance(o, dict) and o.get("kind") == "coordinator":
+                    got["coordinator"].append(o)
+            elif t == "attachment":
+                a = r.get("attachment") or {}
+                if a.get("type") == "queued_command" and isinstance(a.get("origin"), dict):
+                    got["queued"].append(a)
+            elif t == "queue-operation" and r.get("operation") == "enqueue" and isinstance(r.get("content"), str):
+                c = r["content"]
+                if c.startswith("<cross-session-message"):
+                    got["enqueue"].append(c)
+                elif c.startswith("<agent-message"):
+                    got["agent_msg"].append(c)
+    ctx._talk = {k: v[-TALK_KEEP:] for k, v in got.items()}
+    return ctx._talk
+
+
+def _talk_skipped(ctx: Context):
+    return {"skipped": "no transcripts folder (run with --live)"} if _talk_scan(ctx) is None else None
+
+
+def _all_any(items: list, test) -> str:
+    """'all' / 'some' / 'none' / 'unseen' (no record of the kind in the window): a shape, not a judgement."""
+    if not items:
+        return "unseen"
+    n = sum(1 for i in items if test(i))
+    return "all" if n == len(items) else "some" if n else "none"
+
+
+def talk_send_input(ctx: Context):
+    """SendMessage's tool input as talk_records reads it: to, message (the body), summary."""
+    if (s := _talk_skipped(ctx)) is not None:
+        return s
+    sends = [i for i in ctx._talk["sends"] if "message" in i]
+    shape = {k: _all_any(sends, lambda i, k=k: k in i) for k in SEND_INPUT_KEYS if k != "summary"}
+    # summary is optional (measured 10-19: 156 sends without one): only whether it is still written at all
+    shape["summary"] = "unseen" if not sends else "seen" if any("summary" in i for i in sends) else "none"
+    return shape
+
+
+def talk_msg_id(ctx: Context):
+    """The match key: toolUseResult.msg_id on the sender's result and origin.msg_id on the receiver's record, the same
+    value (one msg_id seen on both sides in the window)."""
+    if (s := _talk_skipped(ctx)) is not None:
+        return s
+    results = [r for r in ctx._talk["results"] if isinstance(r, dict) and "msg_id" in r]
+    sent = {r["msg_id"] for r in results if isinstance(r.get("msg_id"), str)}
+    origins = ctx._talk["peer"] + [a["origin"] for a in ctx._talk["queued"] if a["origin"].get("kind") == "peer"]
+    seen = {o.get("msg_id") for o in origins if isinstance(o.get("msg_id"), str)}
+    return {"result_has_msg_id": bool(sent), "origin_has_msg_id": bool(seen),
+            "uuid_like": _all_any(sorted(sent | seen), lambda v: re.fullmatch(r"[0-9a-f-]{36}", v) is not None),
+            "both_sides": bool(sent & seen) if sent and seen else "unseen"}
+
+
+def talk_origin(ctx: Context):
+    """The receiver's record of a message read: origin {kind peer: msg_id, from, verifiedPeerPid, name, body} on an
+    isMeta user record or a queued_command attachment; a subagent's send to main (senderTaskId); the parent's send to
+    a subagent (kind coordinator, the queued prompt the body)."""
+    if (s := _talk_skipped(ctx)) is not None:
+        return s
+    peer = ctx._talk["peer"] + [a["origin"] for a in ctx._talk["queued"] if a["origin"].get("kind") == "peer" and not a["origin"].get("senderTaskId")]
+    peer = [o for o in peer if "members" not in o]
+    queued = ctx._talk["queued"]
+    return {"peer": {k: _all_any(peer, lambda o, k=k: k in o) for k in PEER_ORIGIN_KEYS},
+            "child": {k: _all_any(ctx._talk["child"], lambda o, k=k: k in o) for k in CHILD_ORIGIN_KEYS},
+            "coordinator": "seen" if ctx._talk["coordinator"] or any(a["origin"].get("kind") == "coordinator" for a in queued) else "unseen",
+            "queued_command": _all_any(queued, lambda a: isinstance(a.get("prompt"), str) and isinstance(a.get("origin"), dict))}
+
+
+def talk_envelope(ctx: Context):
+    """The enqueue of a message: <cross-session-message … from-name="…">, the body between two newlines (the arrival
+    is matched by it); a subagent's to main: <agent-message …>."""
+    if (s := _talk_skipped(ctx)) is not None:
+        return s
+    env = ctx._talk["enqueue"]
+    return {"cross_session": _all_any(env, lambda c: _ENVELOPE.match(c) is not None),
+            "closed": _all_any(env, lambda c: c.rstrip().endswith("\n</cross-session-message>")),
+            "agent_message": "seen" if ctx._talk["agent_msg"] else "unseen"}
+
+
 def session_ran(ctx: Context):
     """Whether the throwaway session ran at all (a lost login turns every session probe into an empty shape)."""
     if (s := _skipped(ctx)) is not None:
@@ -235,4 +392,6 @@ PROBES: dict[str, Callable[[Context], object]] = {
     "statusline_input": statusline_input, "sigterm_session_end": sigterm_session_end, "config_paths": config_paths,
     "session_ran": session_ran, "agents_cli": agents_cli, "tool_names": tool_names,
     "price_table_models": price_table_models,
+    "talk_send_input": talk_send_input, "talk_msg_id": talk_msg_id, "talk_origin": talk_origin,
+    "talk_envelope": talk_envelope,
 }

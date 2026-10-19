@@ -731,6 +731,14 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             def on_session_file(data: dict) -> None:
                 loop.call_soon_threadsafe(lambda: (world.apply_session_file(data, now_ms()), world.publish()))
 
+            # the talk view (talk.py): its index is read and written in its own thread, stepped from tick_loop
+            from ..viz import talk as talk_mod
+            ctx.talk = talk_mod.TalkHub(
+                lambda: talk_mod.TalkIndex(paths.viz_home() / "talk.db", claude_home() / "projects", paths.claude_sessions_dir(),
+                                           int(config.talkGraceSec * 1000)),
+                agents=lambda: world.agents, sessions=lambda: world.sessions)
+            reader_cleanup.append(lambda: loop.run_in_executor(None, ctx.talk.close))
+
             observer = session_files.watch(paths.claude_sessions_dir(), on_session_file)
             set_source("sessionFiles", "running" if observer else "stopped",
                        None if observer else "~/.claude/sessions がありません")
@@ -871,6 +879,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                         rows = await loop.run_in_executor(None, shelf.scan)
                         world.apply_saved_results(rows)
                     manage_readers(at)
+                    ctx.talk.tick(at)
                     world.tick(at)
                     world.publish()
 

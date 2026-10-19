@@ -33,6 +33,9 @@ class VizConfig:
     # while a hook waits on a hidden page, the server asks the pages to say it again this often (a hidden tab's own
     # timers can be held back to once a minute; a message from the server still runs at once)
     askPingSec: float = 4
+    # The talk view (talk.py): how long a conversation is kept after one of its two sessions ended (the requester's
+    # ruling 10-20: one hour), so a session resumed within it keeps its talks.
+    talkGraceSec: float = 3600
 
 
 #: the page's choices for askWaitSec: 20 s, 1, 3, 10, 30 min, and 0 = until answered

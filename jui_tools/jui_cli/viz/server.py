@@ -131,6 +131,8 @@ class ServerContext:
     present_until: int = 0
     # Until when a page said its question notifications are on (POST /api/notify-presence, 2.3.6), epoch ms.
     notify_until: int = 0
+    # The talk view (talk.TalkHub): talk.* requests, its increments and the chat icon's badges.
+    talk: object | None = None
 
     def browser_present(self) -> bool:
         return self.present_until > now_ms()
@@ -321,6 +323,8 @@ def make_app(ctx: ServerContext) -> web.Application:
         ctx.sockets[sock] = {"rev": snapshot["rev"], "seq": ctx.state.last_seq}
         await sock.send_json({"type": "snapshot", **snapshot})
         await sock.send_json({"type": "events", "items": recent})
+        if ctx.talk is not None:
+            await sock.send_json(ctx.talk.badges_frame())
         try:
             async for msg in sock:
                 request_message = _parse(msg)
@@ -329,6 +333,8 @@ def make_app(ctx: ServerContext) -> web.Application:
                 await _handle_browser_message(ctx, sock, request_message)
         finally:
             ctx.sockets.pop(sock, None)
+            if ctx.talk is not None:
+                ctx.talk.forget(sock)
             if not ctx.sockets:
                 ctx.present_until = 0  # the last page went away: nobody answers in the browser
         return sock
@@ -867,6 +873,12 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
             return
         await sock.send_json({"type": "history", "reqId": req_id, "agentId": agent_id, "items": got["items"],
                               "bytes": got["bytes"], "more": got["more"]})
+    elif isinstance(kind, str) and kind.startswith("talk."):
+        # The talk view (talk_contract.json): read only; there is no request that sends a message.
+        if ctx.talk is None:
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "トークはこのサーバーでは使えません"})
+            return
+        await ctx.talk.handle(sock, message)
     elif kind == "perm.decide":
         perm_id, behavior = message.get("permId"), message.get("behavior")
         if ctx.world is None or not isinstance(perm_id, str) or not isinstance(behavior, str):
@@ -930,6 +942,8 @@ async def push_loop(ctx: ServerContext) -> None:
     interval = max(ctx.config.pushIntervalMs, 20) / 1000
     while True:
         await asyncio.sleep(interval)
+        if ctx.talk is not None and ctx.talk.frames:
+            await ctx.talk.flush(ctx.sockets)
         changed, events = ctx.state.take_changes()
         if changed is None and not events:
             continue

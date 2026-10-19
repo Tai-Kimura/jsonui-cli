@@ -276,6 +276,11 @@ def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], s
     return session
 
 
+def own_transcripts() -> Path:
+    """This machine's transcripts (the talk probes read them, never write): the config folder's projects/."""
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+
+
 # ------------------------------------------------------------------ one run
 def run_probes(ctx: P.Context) -> dict:
     out = {}
@@ -342,7 +347,7 @@ def write_ticket(repo: Path, today: str, installed: str | None, latest: str | No
 
 
 def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, fetch=default_fetch, notify=notify_route,
-        session_maker=live_session, now: dt.datetime | None = None) -> dict:
+        session_maker=live_session, now: dt.datetime | None = None, transcripts=None) -> dict:
     """One day's watch. Returns what it found (also written to the log)."""
     now = now or dt.datetime.now()
     today = now.strftime("%Y-%m-%d")
@@ -362,7 +367,7 @@ def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, f
     work = Path(tempfile.mkdtemp(prefix="cc-watch-"))
     try:
         session = session_maker(cli, work) if live else None
-        shapes = run_probes(P.Context(run=run_cli, session=session))
+        shapes = run_probes(P.Context(run=run_cli, session=session, transcripts=(transcripts or own_transcripts)() if live else None))
     finally:
         shutil.rmtree(work, ignore_errors=True)
     saved_path = state / "shapes.json"
