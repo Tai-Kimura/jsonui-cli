@@ -7,7 +7,7 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const frac = (t, a, b) => clamp01((t - a) / (b - a));
 const pct = (v) => Math.round(v * 100);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-const ROLE_INK = { debug: '#2a2000' };
+const ROLE_INK = { debug: '#2a2000', main: '#082f49' };   // dark ink where white would not read (sky blue: 2.77:1 white, 5.01:1 this)
 /* A session's name (/rename, `claude -n`; 10-19): the server's title, one line, at most NAME_MAX characters. Panels and
    cards show all of it next to the two-letter mark; the tag over the robot shows it alone, cut at its end with "…". */
 const NAME_MAX = 80;

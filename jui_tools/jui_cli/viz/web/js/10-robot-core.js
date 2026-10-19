@@ -10,10 +10,10 @@ const FONT_BODY = '"BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif';
 const FONT_MONO = '"JetBrains Mono", ui-monospace, Menlo, monospace';
 
 const ROLES = {
-  main: { name: 'メイン', color: '#ff7a3d' },
+  main: { name: 'メイン', color: '#0ea5e9' },   // sky blue (2.3.5, requester 10-19: 「スカイブルーにしようか」; it was orange, beside the subagents' orange coveralls)
   define: { name: 'define', color: '#7d5cff' },
   ground: { name: 'ground', color: '#b07a52' },
-  implement: { name: 'implement', color: '#2f80ed' },
+  implement: { name: 'implement', color: '#3b5bdb' },   // indigo (2.3.5): #2f80ed sat ΔE2000 14.6 from the main sky blue, side by side in the panel
   navigation: { name: 'navigation', color: '#10a693' },
   test: { name: 'test', color: '#3fae4a' },
   debug: { name: 'debug', color: '#f0b400' },
