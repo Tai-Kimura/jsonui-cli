@@ -16,6 +16,7 @@ object; this builds it from a real spec so the renderer ports unchanged:
   branches        [[method, when, then]]      ("note" entries: [method, "note", text])
   related         [[type, path, exists]]
   impl            {total, done}
+  flowMermaid     the data flow diagram document_tools' spec page draws ("" when there is none; 2.3.5)
 
 Strings are passed through as data; the page escapes them when it renders.
 """
@@ -26,6 +27,35 @@ from pathlib import Path
 
 MAX_ITEMS = 300
 MAX_TEXT = 300
+#: Mermaid's own default maxTextSize: a longer diagram is not drawn (the page shows the boxes instead).
+MERMAID_MAX = 50_000
+_DOC_HTML: list = []
+
+
+def _doc_html():
+    """document_tools' spec page generator (spec_doc/html_generator.py), found by jui's own routes; None if none."""
+    if not _DOC_HTML:
+        from ..core.document_tools_import import load_document_tools_module
+        _DOC_HTML.append(load_document_tools_module("spec_doc.html_generator")[0])
+    return _DOC_HTML[0]
+
+
+def dataflow_mermaid(spec: dict) -> str:
+    """The data flow diagram of a spec, by document_tools' rule (html_generator: ``dataFlow.diagram``, else
+    ``_build_dataflow_mermaid(metadata, dataFlow)``) — one copy of the builder, so the whiteboard and the generated
+    spec page draw the same graph. "" when the spec has no data flow, the builder is not found or fails on the spec,
+    or the text is longer than MERMAID_MAX."""
+    df = spec.get("dataFlow")
+    if not isinstance(df, dict) or not df:
+        return ""
+    gen = _doc_html()
+    if gen is None:
+        return ""
+    try:
+        text = df.get("diagram") or gen._build_dataflow_mermaid(_d(spec.get("metadata")), df)
+    except Exception:  # a spec the builder cannot read: the page keeps the boxes
+        return ""
+    return text if isinstance(text, str) and len(text) <= MERMAID_MAX else ""
 
 
 def _t(value) -> str:
@@ -113,6 +143,7 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
         "branches": branches,
         "related": related,
         "impl": dict(impl),
+        "flowMermaid": dataflow_mermaid(spec),
     }
 
 

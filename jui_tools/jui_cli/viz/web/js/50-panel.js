@@ -608,7 +608,24 @@ function taskPose(pref) {
 
 /* ---------- spec board up close: every spec (overview) or one spec as a readable sheet ---------- */
 const wbEl = $('wb'), wbCode = $('wb-code'), wbNav = $('wb-nav'), wbBody = $('wb-body'), wbSideList = $('wb-side-list');
-const wb = { open: false, idx: -1, lastActive: null, q: '', app: 'all' };
+const wb = { open: false, idx: -1, lastActive: null, q: '', app: 'all', flowFit: false };
+/* The data flow diagram (2.3.5): at the sheet's text size (Mermaid's 16 px × FLOW_SCALE = 12 px), with a scroll bar
+   when it is wider than the section — fitted, a long flow's text came out at 8 px — or fitted on request. */
+const FLOW_SCALE = 0.75;
+function flowZoomApply(svg) {
+  if (!svg || !svg.viewBox || !svg.viewBox.baseVal) return;
+  const vb = svg.viewBox.baseVal;
+  svg.style.maxWidth = wb.flowFit ? `${Math.round(vb.width)}px` : 'none';
+  svg.style.width = wb.flowFit ? '100%' : `${Math.round(vb.width * FLOW_SCALE)}px`;
+  svg.style.height = 'auto';
+}
+wbCode.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-flow-zoom]');
+  if (!b) return;
+  wb.flowFit = !wb.flowFit;
+  b.setAttribute('aria-pressed', String(wb.flowFit)); b.textContent = wb.flowFit ? '実際の大きさ' : '幅に合わせる';
+  flowZoomApply(b.closest('.flow-mmd-wrap').querySelector('svg'));
+});
 /* The apps of the rooms in scope (a repo with client/, admin/, … each declaring its own specs): [app, count, specDir],
    in the order the specs come. The board offers them only when there is more than one; 全体 adds them up. */
 function wbApps(model) {
@@ -940,7 +957,11 @@ function renderSheet(model, force) {
       let apisHTML = '';
       if (shown > M + 1 && !d.apis.length) apisHTML = '<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">API</p><p class="sc-ph">通信しない</p></div>';
       else if (apiN > 0) apisHTML = `<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">API</p><ul class="rows">${d.apis.slice(0, apiN).map(([op, method, path]) => `<li class="api"><span class="http http-${esc(method)}">${esc(method)}</span><code>${esc(path)}</code><span class="desc">${esc(op)}</span></li>`).join('')}</ul></div>`;
-      return `<div class="flow"><div class="fbox"><p class="fb-h">ViewModel</p><ul class="rows">${methodsHTML}</ul>${varsHTML}</div>${reposHTML}${apisHTML}</div>`;
+      const boxesHTML = `<div class="flow"><div class="fbox"><p class="fb-h">ViewModel</p><ul class="rows">${methodsHTML}</ul>${varsHTML}</div>${reposHTML}${apisHTML}</div>`;
+      // 2.3.5: the diagram the spec page draws (Mermaid), the boxes under it with what it does not say; while the
+      // section is being written, the boxes alone (they grow as it is written)
+      if (!d.flowMermaid || writing) return boxesHTML;
+      return `<div class="flow-mmd-wrap"><div class="flow-mmd-bar"><button type="button" class="wb-btn" data-flow-zoom data-fk="flow-zoom" aria-pressed="${wb.flowFit ? 'true' : 'false'}">${wb.flowFit ? '実際の大きさ' : '幅に合わせる'}</button></div><div class="flow-mmd" data-flow-mmd role="img" aria-label="データの流れの図"></div></div><p class="sub-h">詳しく</p>${boxesHTML}`;
     },
     (w, writing) => `<ul class="rows">${pick(4, d.userActions, reveal(d.userActions.length, w), writing).map(([[a, p], i, m]) => li(m, `a${i}`, `${esc(a)}<span class="to">→</span><code>${esc(p)}</code>`)).join('')}</ul>`,
     (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest, how], i, m]) => li(m, `t${i}`, `${esc(trig)}<span class="to">→</span>${transitionTag(dest, how)}`)).join('')}</ul>`,
@@ -954,7 +975,8 @@ function renderSheet(model, force) {
       return `<li class="${now ? 'now' : ''}"><span class="bdg">${esc(type)}</span><code>${esc(path)}</code>${exists === false ? '<span class="desc">まだ無い</span>' : ''}${now ? `<span class="editing">${pill(s.by, DEF[s.by].role)} ${s.status.kind === 'test' ? '実行中' : '編集中'}</span>` : ''}</li>`;
     }).join('')}</ul>`,
   ];
-  const sheetHTML = SHEET.map(([k, title, key, wide]) => {
+  const sheetHTML = SHEET.map(([k, title, key, wideAlways]) => {
+    const wide = wideAlways || (k === 3 && !!d.flowMermaid);   // the data flow diagram takes the whole row (2.3.5)
     // 関連ファイル: live, written when the spec lists any (the demo ties it to 分岐, as its script does).
     const w = k === 7 ? (s.measure ? (s.measure.related.total ? 1 : 0) : (s.written[6] >= 1 ? 1 : 0)) : s.written[k];
     const rel = s.measure && s.measure.related;
@@ -969,6 +991,8 @@ function renderSheet(model, force) {
     return `<section class="${esc(cls)}" id="wb-sec-${k}"${esc(act)}>${headHTML}${bodies[k](w, writing)}${tailHTML}</section>`;
   }).join('');
   setHTML(wbCode, sheetHTML);
+  const mmd = wbCode.querySelector('[data-flow-mmd]');
+  if (mmd) drawMermaid(mmd, d.flowMermaid).then((svg) => flowZoomApply(svg));
 
   // Follow: keep the card being written, or the row being implemented or tested, in view.
   if ($('wb-follow').checked && activeKey) {

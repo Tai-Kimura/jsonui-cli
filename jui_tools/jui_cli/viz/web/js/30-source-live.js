@@ -238,6 +238,7 @@ function liveSheet(msg) {
     components: arr(d.components), layoutChildren: arr(d.layoutChildren), uiVariables: arr(d.uiVariables), eventHandlers: arr(d.eventHandlers),
     vmMethods: arr(d.vmMethods), vmVars: arr(d.vmVars), repositories: arr(d.repositories), apis: arr(d.apis),
     userActions: arr(d.userActions), transitions: arr(d.transitions), branches: arr(d.branches), related: arr(d.related),
+    flowMermaid: typeof d.flowMermaid === 'string' ? d.flowMermaid : '',   // the spec page's data flow diagram (2.3.5)
   };
   row.related = row.doc.related; row.docAt = LIVE.sheetAsked[row.id] ? LIVE.sheetAsked[row.id].at : row.updatedAt;
   delete LIVE.sheetFailed[row.id];

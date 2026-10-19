@@ -44,17 +44,15 @@ def distribution_root() -> Path:
     return Path(jui_cli.__file__).resolve().parents[2]
 
 
-def _import(module: str):
-    return importlib.import_module(module).SpecValidator
-
-
-def load_spec_validator() -> tuple[object | None, str]:
-    """(SpecValidator, where it came from), or (None, every route tried)."""
+def load_document_tools_module(module: str) -> tuple[object | None, str]:
+    """(the module ``jsonui_doc_cli.<module>``, where it came from), or (None, every route tried) — by the routes the
+    module docstring gives. `jui viz` reaches the spec documents' Mermaid builder this way (2.3.5): one copy of it."""
+    name = f"jsonui_doc_cli.{module}"
     tried: list[str] = []
     try:
-        return _import(f"document_tools.{VALIDATOR}"), "document_tools (already on sys.path)"
+        return importlib.import_module(f"document_tools.{name}"), "document_tools (already on sys.path)"
     except ImportError as e:
-        tried.append(f"document_tools.{VALIDATOR}: {e}")
+        tried.append(f"document_tools.{name}: {e}")
 
     root = distribution_root()
     if (root / "document_tools" / "jsonui_doc_cli").is_dir():
@@ -66,14 +64,20 @@ def load_spec_validator() -> tuple[object | None, str]:
                 sys.path.remove(str(test_tools))
             sys.path.insert(0, str(test_tools))
         try:
-            return _import(f"document_tools.{VALIDATOR}"), f"document_tools beside jui_tools in {root}"
+            return importlib.import_module(f"document_tools.{name}"), f"document_tools beside jui_tools in {root}"
         except ImportError as e:
             tried.append(f"{root / 'document_tools'}: {e}")
     else:
         tried.append(f"{root}: no document_tools/ beside jui_tools")
 
     try:
-        return _import(VALIDATOR), "jsonui_doc_cli (pip)"
+        return importlib.import_module(name), "jsonui_doc_cli (pip)"
     except ImportError as e:
-        tried.append(f"{VALIDATOR}: {e}")
+        tried.append(f"{name}: {e}")
     return None, "; ".join(tried)
+
+
+def load_spec_validator() -> tuple[object | None, str]:
+    """(SpecValidator, where it came from), or (None, every route tried)."""
+    module, where = load_document_tools_module(VALIDATOR.removeprefix("jsonui_doc_cli."))
+    return (module.SpecValidator, where) if module is not None else (None, where)

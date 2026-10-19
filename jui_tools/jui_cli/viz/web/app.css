@@ -615,6 +615,12 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .vt td { padding: 5px 6px; border-bottom: 1px dashed var(--wb-line); color: var(--wb-ink); vertical-align: baseline; }
 .vt td.mk { width: 1.8em; }
 .sub-h, .fb-h { margin: 0; color: var(--wb-soft); font: 700 11.5px/1.5 var(--font-body); }
+/* the data flow diagram (2.3.5): Mermaid's SVG on the sheet at its own size, a scroll bar when wider (or fitted) */
+.flow-mmd-wrap { min-width: 0; max-width: 100%; margin: 2px 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.flow-mmd-bar { display: flex; justify-content: flex-end; padding: 6px 8px 0; }
+.flow-mmd { max-width: 100%; overflow-x: auto; padding: 6px 10px 10px; }
+.flow-mmd svg { display: block; margin: 0 auto; }
+.flow-mmd.mmd-failed::before { content: '図を描けませんでした（下の箱を見てください）'; color: var(--ink-soft); font-size: 12px; }
 .flow { display: grid; gap: 4px; }
 .fbox { display: grid; gap: 4px; padding: 8px 10px; border: 1.5px solid var(--wb-line); border-radius: 8px; }
 .fbox p { margin: 0; }

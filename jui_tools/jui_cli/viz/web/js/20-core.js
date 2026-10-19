@@ -32,7 +32,7 @@ const writePref = (key, value) => { try { localStorage.setItem(`agent-view:${key
    text is a spec's, so labels are sanitized and no click / script in a diagram runs. htmlLabels off: a label is SVG
    text, never HTML (with HTML labels, strict still lets an <img src> through and the page fetched it — measured
    10-19). The theme follows the page's. */
-const MERMAID = { src: 'vendor/mermaid-11.17.2/mermaid.min.js', loading: null, theme: '', n: 0 };
+const MERMAID = { src: 'vendor/mermaid-11.17.2/mermaid.min.js', loading: null, theme: '', n: 0, drawn: new Map() };
 function loadMermaid() {
   if (!MERMAID.loading) {
     MERMAID.loading = new Promise((resolve, reject) => {
@@ -56,7 +56,18 @@ async function renderMermaid(el, text) {
   const { svg } = await mm.render(`mmd-${MERMAID.n}`, String(text));
   el.innerHTML = svg;   // Mermaid's own SVG, its labels sanitized (securityLevel 'strict')
   el.dataset.theme = theme;
+  if (MERMAID.drawn.size >= 40) MERMAID.drawn.clear();
+  MERMAID.drawn.set(`${theme}\n${text}`, svg);
   return el.querySelector('svg');
+}
+/* A diagram in a box the panels rebuild: the same text in the same theme is drawn once and put back as it was. */
+function drawMermaid(el, text) {
+  const theme = isDark() ? 'dark' : 'default', key = `${theme}\n${text}`;
+  if (el.dataset.drawn === key) return Promise.resolve(el.querySelector('svg'));
+  el.dataset.drawn = key;
+  const svg = MERMAID.drawn.get(key);
+  if (svg) { el.innerHTML = svg; el.dataset.theme = theme; return Promise.resolve(el.querySelector('svg')); }   // drawn before (strict)
+  return renderMermaid(el, text).catch(() => { delete el.dataset.drawn; el.classList.add('mmd-failed'); return null; });
 }
 const ROLE_JA = { main: 'メインセッション', define: 'spec を書く担当', ground: '初期設定の担当', implement: '実装の担当', navigation: '画面遷移の担当', test: 'テストの担当', debug: '調査の担当', other: 'その他' };
 const SECTIONS = ['概要', '構造', '状態', 'データ', '操作', '遷移', '分岐'];
