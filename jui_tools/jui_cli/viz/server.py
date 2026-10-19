@@ -527,11 +527,12 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=400, text="projectId is required\n")
         if ctx.world is None:
             return web.Response(status=503, text="no world\n")
-        status, got = ctx.world.data_docs(project_id)
+        if ctx.world.data_docs_room(project_id) is None:
+            return web.Response(status=404, text="no such JsonUI room\n")
+        # read off the event loop (up to 8 MB of JSON): the page, the hooks and /health go on meanwhile
+        status, got = await asyncio.get_running_loop().run_in_executor(None, ctx.world.data_docs, project_id)
         if status != 200:
             return web.Response(status=status, text=f"{got}\n")
-        if ctx.publish:
-            ctx.publish()   # the counts on the room may have changed
         return web.Response(body=got, content_type="application/json",
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 

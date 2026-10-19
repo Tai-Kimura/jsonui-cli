@@ -17,6 +17,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
@@ -205,6 +206,62 @@ async def run_data_server(pw, out, failures, jt=None, shots_only=False):
         check(failures, s["titles"] and s["titles"][0].startswith("Users API v2"), f"opening again reads the changed file: {s['titles']}")
         await page.click("#ds-close")
         await wait(page, "() => document.getElementById('ds').hidden", label="closed")
+
+        # 200 documents of 1 MB (200 MB) written and rewritten three times while the rack is pressed again and again
+        # (dd's review, 10-19: counted on the event loop for each watcher event, with no total cap, and the press read
+        # on it too, /health was held for seconds): the server answers within 1 s all along, and the count (up to
+        # its 8 MB) shows on the page
+        bulk = room_a / "docs" / "api" / "bulk"
+        bulk.mkdir(exist_ok=True)
+        pad = list(range(150_000))   # about 1 MB of small numbers: slow to parse, as real documents are
+        lat, stop = [], threading.Event()
+
+        def probe():
+            while not stop.is_set():
+                t = time.monotonic()
+                try:
+                    urllib.request.urlopen(f"{url}/health", timeout=30).read()
+                except OSError:
+                    pass
+                lat.append(time.monotonic() - t)
+                time.sleep(0.1)
+
+        def write_all():
+            for rnd in range(3):
+                for i in range(200):
+                    (bulk / f"api-{i:03}.json").write_text(json.dumps({**API, "info": {"title": f"bulk {i} r{rnd}", "version": "1"}, "x-pad": pad}))
+        token = await page.evaluate("() => document.querySelector('meta[name=jui-viz-token]').content")
+        reads = []
+
+        def press():   # the rack pressed again and again meanwhile (the page's own request)
+            own = f"127.0.0.1:{port}"
+            body = json.dumps({"projectId": pa}).encode()
+            while not stop.is_set():
+                rq = urllib.request.Request(f"{url}/api/data-docs", data=body, method="POST",
+                                            headers={"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": token, "Content-Type": "application/json"})
+                t = time.monotonic()
+                try:
+                    urllib.request.urlopen(rq, timeout=60).read()
+                except OSError:
+                    pass
+                reads.append(time.monotonic() - t)
+        th = threading.Thread(target=probe, daemon=True)
+        th.start()
+        th2 = threading.Thread(target=press, daemon=True)
+        th2.start()
+        writer = threading.Thread(target=write_all)
+        writer.start()
+        while writer.is_alive():
+            await page.wait_for_timeout(200)
+        await wait(page, "() => { const d = window.__dbg.dataServer(); return d.docs && d.docs.api > 1; }", timeout=120000, label="the new documents counted")
+        await page.wait_for_timeout(2000)   # a little more of the probe after the count
+        stop.set()
+        th.join()
+        th2.join()
+        res["health"] = {"n": len(lat), "max": round(max(lat), 3), "p95": round(sorted(lat)[int(len(lat) * 0.95)], 3),
+                         "reads": len(reads), "readMax": round(max(reads), 3) if reads else None}
+        check(failures, len(lat) >= 10 and max(lat) < 1.0, f"/health within 1 s while 200 documents (200 MB) are written three times and the rack is read: {res['health']}")
+        shutil.rmtree(bulk)
 
         # the files go: the rack goes; they come back: so does it (the watcher)
         shutil.move(str(room_a / "docs" / "api"), str(out / "api-away"))

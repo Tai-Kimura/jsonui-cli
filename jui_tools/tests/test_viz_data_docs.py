@@ -158,11 +158,24 @@ def test_caps(tmp_path, monkeypatch):
 
 # ---- the world and the route --------------------------------------------------------------------------------------
 
+def _settle(world, at: int) -> int:
+    """Tick until no room is marked and the worker has nothing running (a state, bounded by a count), then publish."""
+    import time as _t
+    for _ in range(500):
+        at += 600
+        world.tick(at)
+        if not world._data_docs_due and world._data_docs_job is None:
+            break
+        _t.sleep(0.01)
+    world.publish()
+    return at
+
+
 def _world(tmp_path):
     root = _room(tmp_path / "app")
     world = World(VizState())
     world.apply_hook({"hook_event_name": "SessionStart", "session_id": "s1", "cwd": str(root)}, 1)
-    world.publish()
+    _settle(world, 1)
     (pid,) = [p["id"] for p in world.state.slices["projects"]]
     return world, root, pid
 
@@ -172,8 +185,9 @@ def test_the_room_carries_its_counts_and_a_change_updates_them(tmp_path):
     (room,) = world.state.slices["projects"]
     assert room["dataDocs"] == {"api": 1, "db": 2}
     (root / "docs/db/teams.json").unlink()
-    world.file_changed(pid, str(root / "docs/db/teams.json"), 5)
-    world.publish()
+    world.file_changed(pid, str(root / "docs/db/teams.json"), 10_000_000)
+    assert world._data_docs_due == {pid: 10_000_000}          # marked only: nothing read on the caller's thread
+    _settle(world, 10_000_000)
     assert world.state.slices["projects"][0]["dataDocs"] == {"api": 1, "db": 1}
     assert "dataDocs" not in json.dumps(world.state.slices.get("specs", []))
 
@@ -305,3 +319,19 @@ def test_a_big_file_swapped_in_never_passes_the_cap(tmp_path, monkeypatch):
         t.join()
     assert not any("BIG" in x for x in seen)
     assert any("Users API" in x for x in seen)
+
+
+def test_the_counts_are_taken_off_the_calling_thread_and_once_for_a_burst(tmp_path, monkeypatch):
+    """dd's review (10-19): each watcher event used to count on the event loop. A burst of changes marks the room;
+    one count runs, on the worker thread, once the burst is quiet."""
+    world, root, pid = _world(tmp_path)
+    calls = []
+    real = data_docs.counts
+    monkeypatch.setattr(data_docs, "counts", lambda p, cache=None: (calls.append(threading.current_thread().name), real(p, cache))[1])
+    at = 20_000_000
+    for k in range(200):
+        world.file_changed(pid, str(root / "docs/api/users.json"), at + k)
+        world.tick(at + k)
+    assert calls == []                                         # still changing: not counted yet
+    _settle(world, at + 200)
+    assert len(calls) == 1 and calls[0].startswith("jui-viz-data-docs"), calls

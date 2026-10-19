@@ -122,8 +122,13 @@ def _settled_act(act: str, failed: bool) -> str:
         return "質問に回答なし" if failed else "質問の回答を受けた"
     return act
 
-#: The data server's counts are taken again this often (2.3.5): a stat of each file, parsed only when one changed.
+#: The data server's counts (2.3.5) are never taken on the event loop (dd's review, 10-19: counted for each watcher
+#: event, 200 files rewritten held /health for 8.8 s): a change marks the room, tick hands the marked rooms to one
+#: worker thread once DATA_DOCS_QUIET_MS have passed without a new change, and applies what it found on a later tick.
+#: Every DATA_DOCS_EVERY_MS every room is marked (the watcher misses a docs/api or docs/db moved whole).
 DATA_DOCS_EVERY_MS = 5_000
+DATA_DOCS_QUIET_MS = 500
+
 
 class World:
     def __init__(self, state: VizState, tool_input_max: int = 2000, session_start=None) -> None:
@@ -196,8 +201,12 @@ class World:
         self._run_rooms_seen: dict[str, frozenset[str]] = {}
         self.jsonui: dict[str, JsonUIProject] = {}
         self.jsonui_errors: dict[str, str] = {}
-        self._data_docs_cache: dict[str, dict] = {}   # project id -> data_docs.counts' cache (2.3.5)
+        self._data_docs_cache: dict[str, dict] = {}   # project id -> data_docs.counts' cache (the worker's only)
         self._data_docs_at = 0
+        self._data_docs_due: dict[str, int] = {}     # project id -> its last change (ms)
+        self._data_docs_dirs: dict[str, tuple] = {}  # project id -> its docs/api and docs/db (for file_changed)
+        self._data_docs_job = None                   # the worker's future: {project id: (counts, dirs)}
+        self._data_docs_pool = None
         self._dirty: set[str] = set()
         self._now = 0
         # Called with each JsonUIProject once it is loaded (serve starts its file watcher).
@@ -377,30 +386,64 @@ class World:
         for other in self.jsonui.values():  # a new room's test files can make another room's row ambiguous
             self._merge_results(other)
         self._dirty |= {"specs", "tasks"}
-        self._data_docs_count(project_id)
+        self._data_docs_dirs[project_id] = tuple(d for _k, d, _r in data_docs.doc_dirs(loaded))
+        self._data_docs_due[project_id] = 0   # counted by the worker on the next tick
         if self.on_project_loaded is not None:
             self.on_project_loaded(loaded)
         return loaded
 
-    def _data_docs_count(self, project_id: str) -> None:
-        """The room's API / DB documents counted (data_docs.counts) into its project row as ``dataDocs``: the page puts
-        the data server's rack there when either is above 0 (2.3.5). Counted on loading, on a change under docs/api
-        or docs/db, and each time the rack is read."""
-        loaded, room = self.jsonui.get(project_id), self.rooms.projects.get(project_id)
-        if loaded is None or room is None:
+    def _data_docs_tick(self, at: int) -> None:
+        """The data server's counts (2.3.5), off the event loop: apply a finished count, then hand the rooms marked and
+        quiet for DATA_DOCS_QUIET_MS to the worker (data_docs.counts and doc_dirs read the files there). A room's row
+        gets ``dataDocs``: the page puts the rack there when either count is above 0."""
+        if at - self._data_docs_at >= DATA_DOCS_EVERY_MS:
+            self._data_docs_at = at
+            for pid in self.jsonui:
+                self._data_docs_due.setdefault(pid, 0)
+        job = self._data_docs_job
+        if job is not None:
+            if not job.done():
+                return
+            self._data_docs_job = None
+            try:
+                found = job.result()
+            except Exception:  # noqa: BLE001 — a count that failed is taken again on the next round
+                found = {}
+            for pid, (n, dirs) in found.items():
+                self._data_docs_dirs[pid] = dirs
+                room = self.rooms.projects.get(pid)
+                if room is not None and room.get("dataDocs") != n:
+                    room["dataDocs"] = n
+                    self._dirty.add("projects")
+        quiet = {pid: self.jsonui[pid] for pid, t in self._data_docs_due.items() if pid in self.jsonui and at - t >= DATA_DOCS_QUIET_MS}
+        if not quiet:
             return
-        n = data_docs.counts(loaded, self._data_docs_cache.setdefault(project_id, {}))
-        if room.get("dataDocs") != n:
-            room["dataDocs"] = n
-            self._dirty.add("projects")
+        for pid in quiet:
+            del self._data_docs_due[pid]
+        if self._data_docs_pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._data_docs_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jui-viz-data-docs")
+        caches = {pid: self._data_docs_cache.setdefault(pid, {}) for pid in quiet}
+
+        def count() -> dict:
+            return {pid: (data_docs.counts(p, caches[pid]), tuple(d for _k, d, _r in data_docs.doc_dirs(p))) for pid, p in quiet.items()}
+        self._data_docs_job = self._data_docs_pool.submit(count)
+
+    def data_docs_room(self, project_id):
+        """The loaded JsonUI room the rack's sheet reads (POST /api/data-docs), its count marked to be taken again;
+        None for a room that is not one. The reading itself (data_docs.payload) is the caller's, off the event loop."""
+        loaded = self.jsonui.get(project_id) if isinstance(project_id, str) else None
+        if loaded is not None:
+            self._data_docs_due[project_id] = 0
+        return loaded
 
     def data_docs(self, project_id) -> tuple[int, object]:
         """The rack's documents of one JsonUI room (data_docs.read), read now: (200, JSON bytes) or (404, reason). The
-        room is named by its id only; which files are read is the server's (data_docs.doc_dirs)."""
+        room is named by its id only; which files are read is the server's (data_docs.doc_dirs). Blocking: the server
+        calls it in an executor."""
         loaded = self.jsonui.get(project_id) if isinstance(project_id, str) else None
         if loaded is None:
             return 404, "no such JsonUI room"
-        self._data_docs_count(project_id)
         return 200, data_docs.payload(loaded)
 
     def file_changed(self, project_id: str, path: str, at: int, by: str | None = None) -> None:
@@ -409,8 +452,8 @@ class World:
         if project is None:
             return
         target = Path(path)
-        if target.suffix == ".json" and any(target.is_relative_to(d) for _k, d, _r in data_docs.doc_dirs(project)):
-            self._data_docs_count(project_id)   # the rack shows or goes; its contents are read when pressed
+        if target.suffix == ".json" and any(target.is_relative_to(d) for d in self._data_docs_dirs.get(project_id, ())):
+            self._data_docs_due[project_id] = at   # counted off the loop once quiet (_data_docs_tick); read when pressed
             return
         if target.name.endswith(".spec.json"):
             project.reload_spec(target, at, by)
@@ -1234,10 +1277,7 @@ class World:
             self._dirty.add("questions")
         if self.calls.tick(at):
             self._dirty.add("calls")
-        if at - self._data_docs_at >= DATA_DOCS_EVERY_MS:   # the watcher misses a docs/api or docs/db moved whole
-            self._data_docs_at = at
-            for pid in list(self.jsonui):
-                self._data_docs_count(pid)
+        self._data_docs_tick(at)
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]
