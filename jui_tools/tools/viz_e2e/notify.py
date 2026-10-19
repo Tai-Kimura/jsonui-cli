@@ -195,16 +195,31 @@ async def run_notify(pw, out, failures):
         res["perm"] = shown[-1]
         check(failures, len(shown) == 2 and "許可を待っています: Bash" in shown[1]["body"] and "ls -la" not in shown[1]["body"],
               f"the permission rings once, the tool's name and not the command: {shown}")
+        # the two hooks of a question in the order that sent the text to the terminal: the async one first, seen by the
+        # page before --ask (ticket 2026-10-20-jui-viz-notify-ask-says-terminal-while-viz-waits)
         hook(body(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="ask-1", tool_input=Q))
+        await wait(a, "() => window.__dbg.questions().some((q) => q.status === 'pending' && !q.hookWaiting)", label="the card before --ask")
         ask_p = hook(body(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="ask-1", tool_input=Q), "--ask")
         shown = await shown_after(3, "the question's notification")
         res["ask"] = shown[-1]
         check(failures, len(shown) == 3 and "が質問しています" in shown[2]["body"] and "viz で答えるか、3 分後にターミナルへ" in shown[2]["body"],
-              f"the question rings once and says how long it waits: {shown}")
+              f"the question rings once and says how long it waits (--ask after the card): {shown}")
         res["perTab"] = [len(await p.evaluate("() => window.__shown")) for p in (a, b)]
         check(failures, sum(res["perTab"]) == 3, f"three in all, not three per tab: {res['perTab']}")
+        # a question with the async hook only (no --ask installed): after the wait for --ask, once, to the terminal
+        Q2 = {"questions": [{**Q["questions"][0], "question": "上と下のどちら"}]}
+        hook(body(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="ask-nohook", tool_input=Q2))
+        shown = await shown_after(4, "the question without --ask")
+        res["askNoHook"] = shown[3:]
+        check(failures, len(shown) == 4 and "ターミナルで答えてください" in shown[3]["body"], f"a question with no --ask: once, to the terminal: {shown[3:]}")
+        hook(body(hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="ask-nohook", tool_input=Q2, tool_response={"answers": {}}))
+        await wait(a, "() => window.__dbg.questions().filter((q) => q.status === 'pending').length <= 1", label="the second question answered")
+        try:
+            await wait(a, "() => Number(localStorage.getItem('e2e-tones') || 0) / 2 >= 4", timeout=5000, label="four chimes")
+        except RuntimeError:
+            pass
         res["chimes"] = await a.evaluate(CHIMES)
-        check(failures, res["chimes"] == 3, f"one chime per notification, from the tab that showed it: {res['chimes']}")
+        check(failures, res["chimes"] == 4, f"one chime per notification (four), from the tab that showed it: {res['chimes']}")
 
         # 3. a click opens what it is about
         for kind, js, label in (("done", "(id) => window.__dbg.board().robot === id", "the robot's card"),
@@ -323,6 +338,10 @@ async def run_notify(pw, out, failures):
         await a.evaluate("() => { window.__acMode = 'suspended'; window.__ac.state = 'suspended'; }")
         await b.evaluate("() => window.__dbg.notifyDelay(800)")
         await wait(a, "() => window.__dbg.notifyPeers().includes(true)", timeout=8000, label="tab a hears that tab b can sound")
+        # and tab b says nothing more for 7 s (a hidden tab's timers can run once a minute): its last word still holds
+        await b.evaluate("() => window.__dbg.notifySayStop()")
+        t7 = await a.evaluate("() => performance.now()")
+        await wait(a, "(t) => performance.now() > t + 7000", arg=t7, timeout=15000, label="7 s of tab a's clock")
         n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
         a0, b0 = len(await a.evaluate("() => window.__shown")), len(await b.evaluate("() => window.__shown"))
         turn()

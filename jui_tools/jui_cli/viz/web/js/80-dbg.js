@@ -11,6 +11,7 @@ window.__dbg = {
   notifyPanel: () => { notifyOpenPanel(null); return !notifyEl.hidden; },   // opened without a press (a press would wake the sound)
   notifyOn: () => ({ ...NOTIFY.on }),
   notifyVolume: () => NOTIFY.volume,
+  notifySayStop: () => { clearInterval(NOTIFY.sayTimer); return true; },   // a hidden tab's throttled timers, at their worst
   notifyPeers: () => [...NOTIFY.peers.values()].map((p) => p.running),
   // a test's way to make this tab take events later than the others (which tab takes one first is not fixed)
   notifyDelay: (ms) => { const orig = notifyEvent; notifyEvent = (...a) => setTimeout(() => orig(...a), ms); return true; },

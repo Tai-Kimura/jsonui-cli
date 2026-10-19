@@ -1911,35 +1911,31 @@ function notifyTones(ac, kind) {
 }
 /* Which tab rings (the real check 2, 10-20): two old tabs of an earlier check, their sound never started, took the
    one-time key first and showed the notification silently, while the tab in front could sound. Each tab says on a
-   BroadcastChannel whether its sound runs (when it changes, every NOTIFY_SAY_MS, and good-bye when it goes); a tab
-   that cannot sound leaves an event to a tab that says it can (heard within NOTIFY_PEER_MS), and takes it itself
-   only if, NOTIFY.yieldMs later, nobody has (the notification is never lost, and still shows once). When no tab can
-   sound, the notification shows without it and the settings say so. */
-const NOTIFY_SAY_MS = 2000, NOTIFY_PEER_MS = 6000;
+   BroadcastChannel whether its sound runs (when it changes, every NOTIFY_SAY_MS, when a new tab asks, and good-bye
+   when it goes); a tab that cannot sound leaves an event to a tab whose last word was that it can, and takes it
+   itself only if, NOTIFY.yieldMs later, nobody has (the notification is never lost, and still shows once). A last
+   word does not age: a hidden tab's timers can run once a minute (the browser's throttling), so its every-2-s word
+   comes late though its sound runs; one gone without a good-bye costs NOTIFY.yieldMs and a silent notification.
+   When no tab can sound, the notification shows without it and the settings say so. */
+const NOTIFY_SAY_MS = 2000;
 const notifyBus = typeof BroadcastChannel === 'function' ? new BroadcastChannel('jui-viz-notify-audio') : null;
-function notifyAudioSay(bye = false) {
+function notifyAudioSay(bye = false, hello = false) {
   if (!notifyBus) return;
-  try { notifyBus.postMessage({ tab: NOTIFY.tab, running: !bye && notifyAudioReady(), bye }); } catch (err) { /* a closed channel */ }
+  try { notifyBus.postMessage({ tab: NOTIFY.tab, running: !bye && notifyAudioReady(), bye, hello }); } catch (err) { /* a closed channel */ }
 }
 if (notifyBus) {
   notifyBus.onmessage = (e) => {
     const m = e.data || {};
     if (typeof m.tab !== 'string' || m.tab === NOTIFY.tab) return;
     if (m.bye) NOTIFY.peers.delete(m.tab); else NOTIFY.peers.set(m.tab, { running: !!m.running, at: Date.now() });
+    if (m.hello) notifyAudioSay();   // a new tab: it hears this one now, not a throttled timer later
     notifySettingsShow();
   };
-  setInterval(() => notifyAudioSay(), NOTIFY_SAY_MS);
+  NOTIFY.sayTimer = setInterval(() => notifyAudioSay(), NOTIFY_SAY_MS);
   window.addEventListener('pagehide', () => notifyAudioSay(true));
-  notifyAudioSay();
+  notifyAudioSay(false, true);
 }
-function notifyPeerCanSound() {
-  const now = Date.now();
-  for (const [id, p] of NOTIFY.peers) {
-    if (now - p.at > NOTIFY_PEER_MS) { NOTIFY.peers.delete(id); continue; }
-    if (p.running) return true;
-  }
-  return false;
-}
+const notifyPeerCanSound = () => [...NOTIFY.peers.values()].some((p) => p.running);
 // every press until the sound runs (not the first only: a context can go back to suspended)
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { if (!notifyAudioReady()) notifyAudioWake(); }, { capture: true });
 /* true: this tab rings it (the first to take the key); false: another tab (or this one) already did. */
@@ -1973,6 +1969,8 @@ function notifyStop(raw, item, replay = false) {
   if (!item || !DEF[item.who] || DEF[item.who].kind !== 'main' || !(Date.now() - (Number(raw.at) || 0) < 120_000)) return;
   notifyEvent('done', `${notifyServer()}:done:${raw.seq}`, { who: item.who }, `${notifyName(item.who)} が完了${raw.kind === 'StopFailure' ? '（失敗で止まった）' : ''}`);
 }
+const NOTIFY_ASK_GRACE_MS = 1500;
+NOTIFY.askFirst = new Map();
 function notifyWaiting(kind, rows) {
   const waiting = rows.filter((x) => x.status === 'pending');
   if (!NOTIFY.based[kind]) {   // the first look after loading: what already waits was there before this page
@@ -1981,10 +1979,21 @@ function notifyWaiting(kind, rows) {
     return;
   }
   for (const x of waiting) {
+    const key = `${notifyServer()}:${kind}:${x.id}`;
+    // a question comes with two hooks in no fixed order (the async forward and --ask, ingest.py): before --ask the card
+    // does not wait in viz yet, so the text would send the person to the terminal while viz waits — give --ask
+    // NOTIFY_ASK_GRACE_MS from this tab's first sight (ticket 2026-10-20-jui-viz-notify-ask-says-terminal-while-viz-waits)
+    if (kind === 'ask' && !x.hookWaiting && !NOTIFY.seen.has(key)) {
+      const first = NOTIFY.askFirst.get(key) || Date.now();
+      NOTIFY.askFirst.set(key, first);
+      const left = first + NOTIFY_ASK_GRACE_MS - Date.now();
+      if (left > 0) { setTimeout(() => notifyWaiting('ask', typeof QUESTIONS !== 'undefined' ? QUESTIONS : rows), left + 20); continue; }
+    }
+    NOTIFY.askFirst.delete(key);
     const name = notifyName(x.who);
     const body = kind === 'perm' ? `${name} が許可を待っています: ${String(x.tool || '').slice(0, 40)}`
       : `${name} が質問しています — ${x.hookWaiting ? notifyAskLeft() : 'ターミナルで答えてください'}`;
-    notifyEvent(kind, `${notifyServer()}:${kind}:${x.id}`, { id: x.id, who: x.who, task: x.task || null }, body);
+    notifyEvent(kind, key, { id: x.id, who: x.who, task: x.task || null }, body);
   }
 }
 /* The question window as the page shows and offers it (ticket 2026-10-20): never over the server's cap (5 min, or
