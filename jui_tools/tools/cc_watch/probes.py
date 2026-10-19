@@ -167,6 +167,8 @@ def session_ran(ctx: Context):
     if (s := _skipped(ctx)) is not None:
         return s
     r = ctx.session.result or {}
+    if r.get("leaks"):     # the session reached the user's real state: red, whatever else it did
+        return {"ok": False, "leaks": r["leaks"]}
     return {"ok": bool(r.get("ok"))} if r.get("ok") else {"ok": False, "result": r.get("result"),
                                                          "terminal_reason": r.get("terminal_reason")}
 

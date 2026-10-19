@@ -327,6 +327,12 @@ open(os.path.join(os.environ["FAKE_LOG"], "argv-%d" % time.time_ns()), "w").writ
      "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"), "leaked": sorted(k for k in os.environ if k.startswith("CLAUDE")
      and k not in ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN"))}))
 fire("SessionStart", {"source": "startup"})
+leak = os.environ.get("FAKE_LEAK_DIR")
+if leak and "Count" not in " ".join(args):
+    # "foreign": another lane rewrites a watched file; "own": our session id reaches the user's real state
+    body = "s-123 was here" if mode == "own" else "another lane's session 135b315a"
+    with open(os.path.join(leak, "active.json"), "w") as f:
+        f.write(body)
 if mode == "nologin":
     fire("SessionEnd", {"reason": "other"})
     print(json.dumps({"is_error": True, "result": "Not logged in · Please run /login", "terminal_reason": "api_error",
@@ -338,7 +344,7 @@ if "Count" in " ".join(args):
     sys.exit(0)
 fire("UserPromptSubmit", {"prompt": "p", "permission_mode": "default"})
 fire("SessionEnd", {"reason": "other"})
-print(json.dumps({"is_error": False, "result": "ok", "total_cost_usd": 0.01, "usage": {"input_tokens": 5, "output_tokens": 1}}))
+print(json.dumps({"is_error": False, "result": "ok", "session_id": "s-123", "total_cost_usd": 0.01, "usage": {"input_tokens": 5, "output_tokens": 1}}))
 '''
 
 
@@ -353,6 +359,11 @@ def fake_claude(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "the-parent-session")   # must not reach the throwaway session
     work = tmp_path / "work"
     work.mkdir()
+    real = tmp_path / "real-state"      # stands for session-recovery and the rest: the guard reads only this
+    real.mkdir()
+    (real / "active.json").write_text("before")
+    monkeypatch.setenv("FAKE_LEAK_DIR", str(real))
+    monkeypatch.setattr(W, "default_watched", lambda: [real])
     return cli, log, work
 
 
@@ -362,12 +373,13 @@ def launched(log):
 
 def test_the_live_session_runs_twice_isolated_and_sigterms_its_own_child(fake_claude):
     cli, log, work = fake_claude
-    s = W.live_session(str(cli), work, token=lambda: "tok")
+    s = W.live_session(str(cli), work, token=lambda: "SECRET-TOKEN-123", watched=lambda: [work.parent / "real-state"])
     runs = launched(log)
     assert len(runs) == 2
     for r in runs:
         assert r["config"] == str(work / "config") and r["cwd"] == str(work / "cwd") and r["leaked"] == []
-        assert r["token"] == "tok"
+        # the token reaches the CLI through the child's environment only, never its argv
+        assert r["token"] == "SECRET-TOKEN-123" and not any("SECRET-TOKEN" in a for a in r["argv"])
         assert r["argv"][:4] == ["--setting-sources", "", "--settings", str(work / "settings.json")]
     assert s.result["ok"] and s.result["cost_usd"] == 0.01 and s.result["usage"]["input_tokens"] == 5
     assert s.sigterm_exit == 143 and s.sigterm_session_end is True
@@ -380,8 +392,52 @@ def test_the_live_session_runs_twice_isolated_and_sigterms_its_own_child(fake_cl
 def test_a_lost_login_is_one_red_shape_and_no_second_run(fake_claude, monkeypatch):
     cli, log, work = fake_claude
     monkeypatch.setenv("FAKE_MODE", "nologin")
-    s = W.live_session(str(cli), work, token=lambda: None)
+    s = W.live_session(str(cli), work, token=lambda: None, watched=lambda: [work.parent / "real-state"])
     assert len(launched(log)) == 1 and launched(log)[0]["token"] is None
     assert s.sigterm_exit is None
     assert P.session_ran(P.Context(run=fake_cli(), session=s)) == {
         "ok": False, "result": "Not logged in · Please run /login", "terminal_reason": "api_error"}
+
+
+def test_a_foreign_change_to_the_watched_state_passes_the_guard(fake_claude):
+    cli, log, work = fake_claude      # FAKE_MODE ok: the fake rewrites active.json with another lane's id
+    s = W.live_session(str(cli), work, token=lambda: None, watched=lambda: [work.parent / "real-state"])
+    assert (work.parent / "real-state" / "active.json").read_text().startswith("another lane")
+    assert s.result["leaks"] == [] and len(launched(log)) == 2
+
+
+def test_our_own_session_id_in_the_watched_state_stops_the_second_run(fake_claude, monkeypatch):
+    cli, log, work = fake_claude
+    monkeypatch.setenv("FAKE_MODE", "own")
+    s = W.live_session(str(cli), work, token=lambda: None, watched=lambda: [work.parent / "real-state"])
+    assert s.result["leaks"] == [str(work.parent / "real-state" / "active.json")]
+    assert len(launched(log)) == 1 and s.sigterm_exit is None
+    assert P.session_ran(P.Context(run=fake_cli(), session=s))["leaks"]
+
+
+def test_our_temp_path_as_a_new_folder_name_is_a_leak(tmp_path):
+    root = tmp_path / "projects"
+    root.mkdir()
+    before = W.watched_state([root])
+    work = tmp_path / "cc-watch-x"
+    (root / re.sub(r"[^A-Za-z0-9-]", "-", str(work))).mkdir()
+    (root / "-Users-someone-else").mkdir()
+    hits = W.own_traces(before, W.watched_state([root]), [str(work), re.sub(r"[^A-Za-z0-9-]", "-", str(work))])
+    assert len(hits) == 1 and "cc-watch-x" in hits[0]
+
+
+def test_the_printed_login_steps_never_put_the_token_in_an_argument():
+    out = subprocess.run([sys.executable, str(W.HERE / "watch.py"), "token-help"], capture_output=True, text=True,
+                         timeout=30).stdout
+    assert out.strip() == W.TOKEN_HELP.strip()
+    commands = re.findall(r"`([^`]*add-generic-password[^`]*)`", out)
+    assert commands, out
+    for c in commands:
+        assert c.split()[-1] == "-w", c      # -w last, with no value: security asks for the token at a prompt
+
+
+def test_a_lost_login_ticket_carries_the_login_steps(world):
+    repo, *_ = world
+    t = W.write_ticket(repo, "2026-10-20", "2.1.303", "2.1.303",
+                       {"session_ran": ({"ok": True}, {"ok": False, "result": "Not logged in"})}, [])
+    assert W.TOKEN_HELP in t.read_text()

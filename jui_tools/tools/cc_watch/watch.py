@@ -112,12 +112,71 @@ def token_from_keychain() -> str | None:
     return r.stdout.strip() or None if r.returncode == 0 else None
 
 
-def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], str | None] = token_from_keychain) -> P.Session:
+#: How the user stores the login. `-w` comes last with no value, so `security` asks for the token at a prompt: the
+#: token never appears as an argument (shell history, `ps`). Printed by `watch.py token-help` and in a login ticket.
+TOKEN_HELP = (
+    "1. `claude setup-token` を撃ち、表示されたトークンを控える。\n"
+    f"2. `security add-generic-password -s {TOKEN_SERVICE} -a \"$USER\" -w` を撃ち、聞かれたらトークンを貼る"
+    "（-w は最後に値なしで書く。値を引数に書くと履歴と ps に残る）。\n"
+    f"3. 作り直すときは `security delete-generic-password -s {TOKEN_SERVICE}` の後に 2 をもう一度。"
+)
+
+
+def default_watched() -> list[Path]:
+    """The user's real state the throwaway session must not reach: session-recovery, sessions, projects, viz's state."""
+    home = Path.home()
+    viz = os.environ.get("JUI_VIZ_HOME") or (os.path.join(os.environ["XDG_STATE_HOME"], "jui-viz")
+                                             if os.environ.get("XDG_STATE_HOME") else str(home / ".local/state/jui-viz"))
+    return [home / ".claude/session-recovery", home / ".claude/sessions", home / ".claude/projects", Path(viz)]
+
+
+def watched_state(roots: list[Path]) -> dict[str, tuple[float, int]]:
+    """path -> (mtime, size) under each root; ~/.claude/projects only one level down (one folder per working folder)."""
+    out: dict[str, tuple[float, int]] = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        entries = root.iterdir() if root.name == "projects" else root.rglob("*")
+        for f in entries:
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            out[str(f)] = (st.st_mtime, st.st_size if f.is_file() else -1)
+    return out
+
+
+def own_traces(before: dict, after: dict, marks: list[str]) -> list[str]:
+    """The added or changed paths whose name or content carries one of *marks* (the session id, the temporary path
+    and its folder-name form). Other lanes rewrite these folders all the time; only our own marks mean a leak."""
+    hits = []
+    for path, stamp in after.items():
+        if before.get(path) == stamp:
+            continue
+        if any(m in path for m in marks):
+            hits.append(path)
+            continue
+        if stamp[1] < 0 or stamp[1] > 20_000_000:
+            continue
+        try:
+            data = Path(path).read_bytes()
+        except OSError:
+            continue
+        if any(m.encode() in data for m in marks):
+            hits.append(path)
+    return sorted(hits)
+
+
+def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], str | None] = token_from_keychain,
+                 watched: Callable[[], list[Path]] = default_watched) -> P.Session:
     """One short session in a temporary config folder and an empty working folder, its own hooks recording their input,
     then one run stopped with SIGTERM (only the process started here). Uses a little of the account's quota.
     Measured 10-19 22:00 (run 1): CLAUDE_CONFIG_DIR=<tmp> + --setting-sources "" + --settings <own> fired only the
     hooks of <own> (SessionStart, UserPromptSubmit, SessionEnd captured); no robot in viz, nothing for the session in
-    session-recovery, ~/.claude/projects or ~/.claude/sessions."""
+    session-recovery, ~/.claude/projects or ~/.claude/sessions.
+    The guard: the watched folders are read before and after the first run; if a path added or changed there carries
+    this session's id or temporary path, the SIGTERM run is not fired and the session reports the leak (red).
+    The token reaches the CLI only through the child's environment, never its argv."""
     config, cap, cwd = work / "config", work / "captured", work / "cwd"
     for d in (config, cap, cwd):
         d.mkdir()
@@ -132,6 +191,8 @@ def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], s
     if (t := token()) is not None:
         env["CLAUDE_CODE_OAUTH_TOKEN"] = t
     base = [cli, "--setting-sources", "", "--settings", str(work / "settings.json")]
+    roots = watched()
+    before = watched_state(roots)
     p = subprocess.run([*base, "-p", "Run the shell command `true`, then reply with the single word ok.",
                         "--output-format", "json", "--allowedTools", "Bash(true)"],
                        cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
@@ -144,7 +205,9 @@ def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], s
                       "terminal_reason": out.get("terminal_reason"), "cost_usd": out.get("total_cost_usd"),
                       "usage": {k: (out.get("usage") or {}).get(k) for k in ("input_tokens", "output_tokens",
                                 "cache_creation_input_tokens", "cache_read_input_tokens")}}
-    if session.result["ok"]:
+    marks = [str(work), re.sub(r"[^A-Za-z0-9-]", "-", str(work))] + ([out["session_id"]] if out.get("session_id") else [])
+    session.result["leaks"] = own_traces(before, watched_state(roots), marks)
+    if session.result["ok"] and not session.result["leaks"]:
         # SIGTERM: a second run, stopped once its SessionStart hook ran (only this process, which we started)
         before = {f.name for f in cap.iterdir()}
         proc = subprocess.Popen([*base, "-p", "Count from 1 to 200, one number per line."], cwd=cwd, env=env,
@@ -236,6 +299,8 @@ def write_ticket(repo: Path, today: str, installed: str | None, latest: str | No
                  f"- 使っている所: {', '.join(e.get('files', []))}",
                  f"- 前回: `{json.dumps(old, ensure_ascii=False, sort_keys=True)}`",
                  f"- 今回: `{json.dumps(new, ensure_ascii=False, sort_keys=True)}`", ""]
+    if "session_ran" in changed:
+        body += ["## ログインの入れ方（使い捨てのセッションが動かなかったとき）", TOKEN_HELP, ""]
     body += ["## CHANGELOG の該当しそうな行", *(f"- {ln}" for ln in lines or ["（版が変わっていない、または該当なし）"]), ""]
     path.write_text("\n".join(body) + "\n", encoding="utf-8")
     return path
@@ -346,6 +411,7 @@ def main(argv: list[str] | None = None) -> int:
         if name == "run":
             s.add_argument("--cli", default="claude")
     sub.add_parser("uninstall")
+    sub.add_parser("token-help", help="how to store the login of the throwaway session")
     s = sub.add_parser("seen", help="mark a red ticket as read (the hook stops naming it)")
     s.add_argument("ticket", type=Path)
     for name in ("print-hook", "add-hook"):
@@ -354,6 +420,9 @@ def main(argv: list[str] | None = None) -> int:
         if name == "add-hook":
             s.add_argument("--settings", required=True, type=lambda p: Path(p).expanduser())
     a = ap.parse_args(argv)
+    if a.cmd == "token-help":
+        print(TOKEN_HELP)
+        return 0
     if a.cmd == "seen":
         return 0 if mark_seen(a.ticket) else 1
     if a.cmd == "print-hook":
