@@ -19,6 +19,7 @@ import sys
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from waits import settled, until
 from rooms import SEG_JS
 
 A = "e2e00000-0000-4000-8000-0000000000da"
@@ -33,11 +34,26 @@ def check(failures, cond, text):
         failures.append(f"play: {text}")
 
 
+# Every wait here is on page state, checked each animation frame (waits.until, 2.3.5): on a busy machine the page
+# draws a few frames a second, and a wait that polled on the clock could read between them. A timeout says the play
+# state and every robot's settle state at that moment.
+PLAY_WHY = "() => ({ play: window.__dbg.play(), settle: window.__dbg.settleInfo() })"
+
+
 async def wait(page, js, timeout=20000, label="", arg=None):
-    try:
-        await page.wait_for_function(js, arg=arg, timeout=timeout, polling=200)
-    except Exception as e:
-        raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
+    return await until(page, js, label or js[:90], arg=arg, timeout=timeout, why=PLAY_WHY)
+
+
+# One game until what the arm looks for shows, or the game is over (state, every frame): the ball's heights (four
+# different ones, more than 0.3 m apart; gathered in window.__playYs as the frames come), or a hand over a head.
+GAME_SEEN_JS = """(kind) => {
+  const p = window.__dbg.play(), g = p.list.find((x) => x.kind === kind && x.started);
+  const ys = window.__playYs || (window.__playYs = []);
+  if (!g) return { ended: true, shown: false, ys };
+  if (kind === 'rps') return p.robots.some((x) => x.rps) ? { ended: false, shown: true, ys } : false;
+  if (g.ball) ys.push(g.ball[1]);
+  return new Set(ys).size >= 4 && Math.max(...ys) - Math.min(...ys) > 0.3 ? { ended: false, shown: true, ys } : false;
+}"""
 
 
 
@@ -152,20 +168,20 @@ async def run_play(pw, out, failures):
         hook(A, hook_event_name="PostToolUse", tool_name="Read", tool_use_id="ta1", tool_input={"file_path": "/work/play-app/a.txt"})
         hook(A, hook_event_name="Stop")
         for kind in ("ball", "rps"):
-            await page.evaluate(f"() => window.__dbg.play({{ kinds: ['{kind}'], restMinSec: 0, restMaxSec: 0, minSec: 8, maxSec: 8 }})")
-            await wait(page, "() => window.__dbg.play().list.some((g) => g.started)", timeout=20000, label=f"a {kind} game")
-            seen = []
-            for _ in range(8):
-                await page.wait_for_timeout(450)
-                seen.append(await page.evaluate(play))
+            # long enough for the players to settle first on a busy machine (8 frames of blending at a frame or two a
+            # second took the whole of an 8 s game, measured): it is ended here once it has been seen
+            await page.evaluate(f"() => window.__dbg.play({{ kinds: ['{kind}'], restMinSec: 0, restMaxSec: 0, minSec: 60, maxSec: 60 }})")
+            g = await wait(page, f"() => window.__dbg.play().list.find((g) => g.kind === '{kind}' && g.started) || false", timeout=20000, label=f"a {kind} game")
+            await settled(page, f"the {kind} players at their spot", ids=g["players"])
+            await page.evaluate("() => { window.__playYs = []; }")
+            seen = await wait(page, GAME_SEEN_JS, timeout=30000, label=f"the {kind} game shows (or ends)", arg=kind)
             if kind == "ball":
-                ys = [s["list"][0]["ball"][1] for s in seen if s["list"] and s["list"][0]["ball"]]
-                res["ballY"] = ys
-                check(failures, len(ys) >= 4 and max(ys) - min(ys) > 0.3, f"the ball flies: {ys}")
+                res["ballY"] = seen["ys"][:40]
+                check(failures, seen["shown"], f"the ball flies, before the game ends: {seen['ended']} {seen['ys'][:20]}")
             else:
-                shown = [any(x["rps"] for x in s["robots"]) for s in seen]
-                res["rps"] = shown
-                check(failures, any(shown), f"a hand shows over a head: {shown}")
+                res["rps"] = seen
+                check(failures, seen["shown"], f"a hand shows over a head, before the game ends: {seen}")
+            await page.evaluate("() => window.__dbg.play({ endAll: true })")
             await wait(page, "() => window.__dbg.play().list.length === 0 && window.__dbg.play().robots.every((x) => !x.back)", timeout=40000, label=f"the {kind} game ends")
             await page.evaluate("() => window.__dbg.play({ restMinSec: 0, restMaxSec: 0 })")
         await page.screenshot(path=str(out / "after.png"))
@@ -188,7 +204,11 @@ async def run_play(pw, out, failures):
         n_ends = len((await page.evaluate(play))["ends"])
         hook(THIRD, hook_event_name="SessionStart", source="startup", cwd="/work/play-third")
         await wait(page, "() => window.__dbg.play().robots.length >= 3", label="the third robot")
-        await page.wait_for_timeout(2500)
+        try:   # the room laid out again: a desk of the two moves (a state; the check below says so if it never did)
+            await wait(page, "(before) => window.__dbg.play().robots.some((x) => x.id in before && x.seatKey !== before[x.id])",
+                       timeout=20000, label="a desk moved for the third robot", arg=before)
+        except RuntimeError:
+            pass
         r = await page.evaluate(play)
         moved = [x["id"] for x in r["robots"] if x["id"] in before and x["seatKey"] != before[x["id"]]]
         check(failures, bool(moved), f"the room was laid out again and a desk moved (else this says nothing): {before} -> {[(x['id'], x['seatKey']) for x in r['robots']]}")
@@ -271,7 +291,7 @@ async def run_play(pw, out, failures):
             await wait(page, f"() => window.__dbg.solo() === '{a_room}'", label="up close")
             for scheme in ("light", "dark"):
                 await page.emulate_media(color_scheme=scheme)
-                await page.wait_for_timeout(1200)
+                await settled(page, f"alone up close ({kind}, {scheme})", ids=[lone["id"]])
                 await page.screenshot(path=str(out / f"solo-{kind}-{scheme}.png"))
             res.setdefault("soloTags", {})[kind] = next((x["tag"] for x in (await page.evaluate(play))["robots"] if x["solo"] == kind), None)
             res["soloLook"][kind] = await page.evaluate("""() => { const R = window.__dbg.robots.find((x) => x.solo); if (!R) return null;
