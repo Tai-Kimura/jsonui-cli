@@ -740,6 +740,7 @@ function rebuildSessions() {
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
       relay: s.relay === true, prompt: s.prompt === true,   // prompt: its channel takes a prompt from the page (jui-viz 1.2.0+)
+      launch: typeof s.launch === 'string' ? s.launch : null,   // whether the CLI hands that text over (sources/launch.py)
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
       heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [],   // tokens / tool / subagents
       heavyInfo: s.heavyInfo && typeof s.heavyInfo === 'object' ? { tokensPerMin: Number(s.heavyInfo.tokensPerMin) || 0, toolSec: Number(s.heavyInfo.toolSec) || 0, subagents: Number(s.heavyInfo.subagents) || 0 } : null });   // the transcript's first record; none: not guessed

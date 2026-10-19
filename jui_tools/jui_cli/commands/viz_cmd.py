@@ -1493,16 +1493,28 @@ def _server_sessions(port: int, token) -> list | None:
 
 
 def _prompt_reach(sessions: list) -> str:
-    """Which sessions a prompt typed in the page can reach (the robot card's 応答の履歴 tab, jui-viz 1.2.0+)."""
+    """Which sessions a prompt typed in the page reaches (the robot card's 応答の履歴 tab): jui-viz 1.2.0+ connected,
+    and the session started naming the channel (2.3.4: the CLI drops a channel's text otherwise; sources/launch.py)."""
+    from ..viz.sources import launch
+
     live = [s for s in sessions if isinstance(s, dict) and s.get("status") != "ended"]
     relay = [s for s in live if s.get("relay")]
-    able = [s for s in relay if s.get("prompt")]
+    able = [s for s in relay if s.get("prompt") and launch.REASONS.get(s.get("launch"), (False,))[0]]
     old = [s for s in relay if not s.get("prompt")]
-    text = f"ページからのプロンプト送信: 送れるセッション {len(able)}（中継あり {len(relay)} / 全 {len(live)}）"
+    text = f"ページからのプロンプト送信: 届くセッション {len(able)}（中継あり {len(relay)} / 全 {len(live)}）"
+    blocked: dict[str, list[str]] = {}
+    for s in relay:
+        if s.get("prompt") and s not in able:
+            blocked.setdefault(str(s.get("launch") or "unreadable"), []).append(str(s.get("label") or s.get("id")))
+    for key, names in blocked.items():
+        text += f"。届かない {len(names)}（{', '.join(names)}）: {launch.REASONS.get(key, launch.REASONS['unreadable'])[1]}"
     if old:
         names = ", ".join(str(s.get("label") or s.get("id")) for s in old)
         text += (f"。jui-viz プラグインが 1.2.0 より古いセッション {len(old)}（{names}）には送れません"
                  "（/plugin で jui-viz を更新し、そのセッションを起動し直す）")
+    if any(s.get("launch") == "channels" for s in able):
+        text += "。--channels で起動したセッションは、managed settings の allowedChannelPlugins に jui-viz が無ければ届きません"
+    text += f"。届く起動: {launch.HOW_TO_START}"
     return text
 
 

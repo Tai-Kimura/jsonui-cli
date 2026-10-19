@@ -19,7 +19,7 @@ from .calls import CallBook, peer_name
 from .permissions import PROMPTS_QUEUED_MAX, PermissionBook
 from .questions import QuestionBook
 from .sources import devices as devices_mod
-from .sources import processes
+from .sources import launch, processes
 from .sources.tasks import TaskBook
 from .sources.test_progress import ProgressBook
 from .state import VizState
@@ -139,6 +139,11 @@ class World:
         self._asking: dict[str, str] = {}
         self._new_files: set[str] = set()  # tool_use_ids writing a file that did not exist
         self.pid_to_session: dict[int, str] = {}
+        # A session's process as its newest agents-list row / session file names it: (pid, procStart, entrypoint),
+        # and that process's argv as read once (sources/launch.py) — only the classification is ever published.
+        self.session_proc: dict[str, tuple] = {}
+        self._argv: dict[tuple, list | None] = {}
+        self.read_argv = launch.read_argv   # a test puts its own reader here
         self.tasks = TaskBook()
         self.perms = PermissionBook()
         self.questions = QuestionBook()
@@ -702,6 +707,10 @@ class World:
                 self._status(session, status, at, waiting_for)
             if isinstance(row.get("pid"), int):
                 self.pid_to_session[row["pid"]] = sid
+                proc = (row["pid"], row.get("procStart"), _s(row.get("entrypoint")))
+                if self.session_proc.get(sid) != proc:
+                    self.session_proc[sid] = proc
+                    self._dirty.add("sessions")
             name = _s(row.get("name"))
             if name:   # the name a SendMessage's `to` uses (changes on a restart: the newest row wins)
                 old = self._session_names.get(sid)
@@ -763,7 +772,7 @@ class World:
 
     # ---------------------------------------------------------------- relay channel (08 §2)
 
-    def channel_hello(self, ppid, cwd, session_id, at: int, accepts=None) -> str:
+    def channel_hello(self, ppid, cwd, session_id, at: int, accepts=None, via=None) -> str:
         """Register a channel; find its session by id, by the parent pid, or by a unique cwd."""
         sid = session_id if isinstance(session_id, str) and session_id in self.sessions else None
         if sid is None and isinstance(ppid, int):
@@ -773,9 +782,20 @@ class World:
             same = [s for s, v in self.sessions.items() if v["cwd"] == tilde(cwd) and v["status"] != "ended" and s not in relay]
             sid = same[0] if len(same) == 1 else None
         prompts = isinstance(accepts, list) and "prompt" in accepts   # jui-viz 1.2.0+ (channel.py VERSION 2)
-        channel = self.perms.hello(sid, at, prompts)
+        channel = self.perms.hello(sid, at, prompts, via if via in ("plugin", "mcp") else None)
         self._dirty.add("sessions")
         return channel.id
+
+    def launch_of(self, sid: str) -> str:
+        """Why this session can or cannot take a prompt from the page (a key of launch.REASONS): its process's argv,
+        its entrypoint, and how its jui-viz channel is connected."""
+        proc = self.session_proc.get(sid)
+        if proc is None:
+            return "unreadable"
+        if proc not in self._argv:
+            self._argv[proc] = None if proc[2] in launch.IDE_ENTRYPOINTS else self.read_argv(proc[0])
+        channel = self.perms.prompt_channel(sid)
+        return launch.classify(self._argv[proc], proc[2], channel.via if channel else None)
 
     def send_prompt(self, sid: str, text: str, at: int) -> tuple[int, str] | None:
         """A prompt typed in the page for this session (POST /api/prompt, after its checks): queued for that session's
@@ -789,6 +809,11 @@ class World:
         channel = self.perms.prompt_channel(sid)
         if channel is None:
             return 409, "this session's jui-viz plugin is older than 1.2.0 and cannot receive prompts"
+        why = self.launch_of(sid)
+        if not launch.REASONS[why][0]:
+            # The CLI drops a channel's text unless the channel was named at launch (2.3.4): refuse here, so the
+            # page never says "sent" for a prompt that cannot arrive.
+            return 409, f"this session was not started with the channel named ({why}): {launch.START_DEV}"
         if len(channel.inbox) >= PROMPTS_QUEUED_MAX:
             return 429, "earlier prompts have not been taken yet"
         channel.inbox.append({"text": text, "at": at})
@@ -1279,9 +1304,11 @@ class World:
             self.state.set_slice("projects", sorted(projects, key=lambda p: p["order"]))
         relay, prompt = self.perms.relay_sessions(), self.perms.prompt_sessions()
         for sid, session in self.sessions.items():
-            if session["relay"] != (sid in relay) or session.get("prompt") != (sid in prompt):
+            how = self.launch_of(sid) if sid in prompt else None
+            if session["relay"] != (sid in relay) or session.get("prompt") != (sid in prompt) or session.get("launch") != how:
                 session["relay"] = sid in relay
                 session["prompt"] = sid in prompt   # relay true and prompt false: a jui-viz plugin older than 1.2.0
+                session["launch"] = how             # launch.REASONS: whether the CLI hands the channel's text over
                 self._dirty.add("sessions")
         if "perms" in self._dirty:
             self.state.set_slice("perms", self.perms.items())

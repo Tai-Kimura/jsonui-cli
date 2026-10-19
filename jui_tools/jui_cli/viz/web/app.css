@@ -740,6 +740,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-compose { display: grid; gap: 6px; padding: 8px 14px 12px; border-top: 1px solid var(--line); background: var(--panel); }
 .h-compose[hidden], .h-confirm[hidden], .h-compose-why[hidden] { display: none; }
 .h-compose-why { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font: 700 12px/1.5 var(--font-body); overflow-wrap: anywhere; }
+.h-compose-why.h-compose-note { background: var(--info-bg); color: var(--ink); font-weight: 500; }
 .h-compose-text { box-sizing: border-box; width: 100%; min-height: 3.6em; max-height: 30vh; resize: vertical; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 500 13px/1.5 var(--font-body); }
 .h-compose-text:disabled { opacity: 0.55; cursor: not-allowed; }
 .h-compose-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -753,6 +754,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-confirm-go { border-color: var(--info); background: var(--info); color: var(--bg); }
 .h-item { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .h-user { padding: 8px 10px; border-radius: 10px; background: var(--chip); }
+.h-channel { border-left: 3px solid var(--info); }
 .h-who { display: flex; gap: 8px; margin: 0 0 2px; color: var(--ink-soft); font: 700 11px/1.4 var(--font-body); }
 .h-at { color: var(--ink-soft); font: 500 11px/1.4 var(--font-mono); }
 .h-plain { margin: 0; white-space: pre-wrap; }

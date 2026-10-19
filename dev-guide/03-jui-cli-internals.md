@@ -157,6 +157,20 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   session id で、中継（relay）があり、そのチャンネルの hello が `accepts: ["prompt"]`（jui-viz 1.2.0 以上）のものだけ。
   イベントログには時刻・宛先・先頭 40 文字だけ（本文はチャンネルの待ち行列にだけあり、渡したら消える）。
   待ち受けは 127.0.0.1 固定で、変える口（オプション・設定）は無い。古いプラグインのセッションはページと doctor がそう言う。
+  **届くのは、起動のときに channel を名指ししたセッションだけ**（2.3.4。CLI は名指しの無い channel の文を黙って捨てる。
+  MCP のログに `not in --channels list for this session`）。名指しは `--dangerously-load-development-channels plugin:jui-viz@jsonui`
+  （`jui viz relay install` で入れたなら `server:jui-viz`。起動のたびに確認が出る）。または managed settings
+  （macOS: `/Library/Application Support/ClaudeCode/managed-settings.json`）に
+  `{"channelsEnabled": true, "allowedChannelPlugins": [{"plugin": "jui-viz", "marketplace": "jsonui"}]}` を載せれば、
+  `claude --channels plugin:jui-viz@jsonui` で警告なしに使える（allowedChannelPlugins は既定の承認リストを置き換える。10-19 に依頼者の前で確認）。
+  組織のアカウントは `channelsEnabled` が要る。managed settings の中身は viz からは見ない（--channels の起動は届く扱い）。
+  VS Code 拡張とデスクトップアプリは起動の引数を足せないので届かない。見分けは `sources/launch.py`: セッションファイルの pid の
+  argv（macOS は sysctl KERN_PROCARGS2、Linux は /proc の cmdline）と entrypoint、channel.py の hello の `via`（plugin / mcp、1.2.1）。
+  公開するのは分類（`sessions[].launch`）だけで、argv は出さない。届かないセッションはサーバーが 409 で断り、ページは理由と起動の仕方を出す。
+  ページは「送信中」→ 受け手の transcript（応答の履歴）に送った文が出たら「届いた」、出ないまま 60 秒・セッションが 30 秒静かなら「届いていない」。
+  自分の POST の成功は「送った」までしか言わない。受け手の transcript での記録は、本物で測った形（10-19）: `user` の記録で `isMeta`、
+  `origin: {"kind": "channel", "server": "plugin:jui-viz:jui-viz"}`、中身は `<channel source="plugin:jui-viz:jui-viz" sender="jui_viz_page">` で包んだ文。
+  `sources/history.py` はこれを `channel` の項目（包みを外した文）にし、ページはこの項目の文が送った文で始まるときだけ「届いた」にする。
   同期のフックは、表示中のページ（presence、12 秒）が無ければ即座に空で返る。
 - **テストの進捗**: driver 3 種が `schemas/progress.schema.json`（jsonui-test-runner、写しは
   `test_tools/tests/schema_fixtures/`）の 1 行を出す。Web はフォルダの .jsonl、Android は logcat、

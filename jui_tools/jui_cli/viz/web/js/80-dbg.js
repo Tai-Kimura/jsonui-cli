@@ -163,3 +163,5 @@ window.__dbg = {
   renderInfo: () => (renderer ? { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures } : null),
   setSim: SOURCE.mode === 'demo' ? (v) => { simT = v; prevSim = v - 0.001; } : (v) => SOURCE.setReplaySpeed(v),
 };
+// the prompt box's waits (55-history.js): an arm shortens 「届いていない」 instead of waiting a minute
+window.__dbg.promptWait = PROMPT_WAIT;

@@ -14,6 +14,7 @@ What an item is (records of type ``user`` and ``assistant`` only; measured on th
 10-18: ``api-request-blob`` lines are the requests sent to the API — the same conversation again with the
 system-reminders and the tool definitions — and are not shown, nor any other type):
   * ``user`` — the requester's words; ``peer`` — another session's message (<cross-session-message from-name=…>);
+    ``channel`` — a channel's text the CLI put in (origin.kind "channel": a prompt sent from the viz page, 2.3.4);
     ``harness`` — text the harness put in the user's turn (harness_label: system-reminder, a subagent's hand-back,
     a task notification, a local command; or ``isMeta``), shown folded in its own colour;
   * ``assistant`` — the answer's text (Markdown, drawn by the page as text nodes only);
@@ -46,7 +47,7 @@ CHUNK = 65_536
 BYTES_MAX = 4 * 1_048_576
 #: A longer line (one huge tool result) is skipped, not parsed.
 LINE_MAX = 1_048_576
-COUNTED = frozenset({"user", "peer", "harness", "assistant", "tool"})
+COUNTED = frozenset({"user", "peer", "harness", "channel", "assistant", "tool"})
 
 # ---------------------------------------------------------------- text the harness put in the user's turn
 # The one place this is decided (the task board's turn titles use it too). Matched at the start of the text.
@@ -136,6 +137,24 @@ def _result_text(content) -> str:
     return ""
 
 
+_CHANNEL_WRAP = re.compile(r"^\s*<channel\b[^>]*>\n?(.*?)\n?</channel>\s*$", re.S)
+
+
+def _channel_item(rec: dict, content, at) -> dict:
+    """A channel's text the CLI put in the session (a prompt from the viz page, 2.3.4). Measured 10-19 on a real
+    receiver (a terminal session started with --channels plugin:jui-viz@jsonui): a ``user`` record with ``isMeta``,
+    ``origin: {"kind": "channel", "server": "plugin:jui-viz:jui-viz"}``, ``promptSource: "system"`` and the content
+    ``<channel source="plugin:jui-viz:jui-viz" sender="jui_viz_page">\\n<text>\\n</channel>``. The item carries the
+    text inside the wrapper and the server's name."""
+    if isinstance(content, list):
+        content = "\n".join(b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str))
+    text = content if isinstance(content, str) else ""
+    m = _CHANNEL_WRAP.match(text)
+    body, cut = _cut(m.group(1) if m else text, TEXT_MAX)
+    server = rec["origin"].get("server")
+    return {"kind": "channel", "server": server[:200] if isinstance(server, str) else "", "text": body, "cut": cut, "at": at}
+
+
 def items_of(rec, results: dict) -> list[dict]:
     """The items of one record, in order. tool_result blocks go into ``results`` (tool_use_id -> OUT)."""
     if not isinstance(rec, dict) or rec.get("type") not in ("user", "assistant"):
@@ -144,6 +163,8 @@ def items_of(rec, results: dict) -> list[dict]:
     content = msg.get("content") if isinstance(msg, dict) else None
     at, out = _at(rec), []
     if rec["type"] == "user":
+        if isinstance(rec.get("origin"), dict) and rec["origin"].get("kind") == "channel":
+            return [_channel_item(rec, content, at)]
         if isinstance(content, str):
             return [_text_item(content, at, rec.get("isMeta") is True)] if content.strip() else []
         for b in content if isinstance(content, list) else []:

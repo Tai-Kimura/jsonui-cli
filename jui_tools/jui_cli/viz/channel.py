@@ -22,7 +22,11 @@ Rules:
     the per-start token, JSON, a size cap and a confirmation in the page, and
     queues it for one session's channel (server.prompt_checks). The hello says
     ``accepts: ["prompt"]``; a channel without it (jui-viz 1.1.0 and older) is
-    never given a prompt.
+    never given a prompt. The CLI passes the text on only when the session was
+    started naming this channel (``--dangerously-load-development-channels
+    plugin:jui-viz@jsonui``, or ``server:jui-viz`` when registered with claude
+    mcp add); otherwise it drops it silently (found in 2.3.3, 10-19). The hello
+    says ``via`` so the server can tell which of the two names applies.
   * The server is reached over http.client on 127.0.0.1 (no proxy variables
     apply); when it is not running, retry quietly every 5 s.
 """
@@ -87,6 +91,13 @@ def read_server() -> dict | None:
         return None
 
 
+def via() -> str:
+    """How the session runs this channel, which decides the launch flag that names it (jui-viz 1.2.1): the plugin's
+    copy lives in the plugin's scripts/ ("plugin": plugin:jui-viz@jsonui), the package's in jui_cli/viz/ ("mcp":
+    registered by `jui viz relay install`, server:jui-viz)."""
+    return "plugin" if os.path.basename(os.path.dirname(os.path.abspath(__file__))) == "scripts" else "mcp"
+
+
 def session_id_of(pid: int) -> str | None:
     """sessionId from ~/.claude/sessions/<pid>.json — never a .key, never through a symlink."""
     path = os.path.join(_home(), ".claude", "sessions", f"{int(pid)}.json")
@@ -141,7 +152,8 @@ class Bridge:
         if self.server is None:
             return False
         ppid = os.getppid()
-        body = {"ppid": ppid, "cwd": os.getcwd(), "sessionId": session_id_of(ppid), "version": VERSION, "accepts": ["prompt"]}
+        body = {"ppid": ppid, "cwd": os.getcwd(), "sessionId": session_id_of(ppid), "version": VERSION, "accepts": ["prompt"],
+                "via": via()}
         try:
             status, data = self._call("POST", "/channel/hello", body)
         except OSError:

@@ -133,7 +133,7 @@ PROMPTS_QUEUED_MAX = 5
 
 
 class Channel:
-    def __init__(self, channel_id: str, session_id: str | None, at: int, prompts: bool = False) -> None:
+    def __init__(self, channel_id: str, session_id: str | None, at: int, prompts: bool = False, via: str | None = None) -> None:
         self.id = channel_id
         self.session_id = session_id
         self.last_seen = at
@@ -143,6 +143,9 @@ class Channel:
         # ignores them, so none is ever queued for it.
         self.prompts = prompts
         self.inbox: list[dict] = []          # prompts queued for the next poll (the text lives only here)
+        # How the session connected it (channel.py's hello, 2.3.4): "plugin" (named plugin:jui-viz@jsonui at
+        # launch) or "mcp" (claude mcp add: server:jui-viz); None from an older channel.py.
+        self.via = via
 
 
 class PermissionBook:
@@ -267,8 +270,8 @@ class PermissionBook:
 
     # ---------------------------------------------------------------- channel side
 
-    def hello(self, session_id: str | None, at: int, prompts: bool = False) -> Channel:
-        channel = Channel(secrets.token_urlsafe(12), session_id, at, prompts)
+    def hello(self, session_id: str | None, at: int, prompts: bool = False, via: str | None = None) -> Channel:
+        channel = Channel(secrets.token_urlsafe(12), session_id, at, prompts, via)
         self.channels[channel.id] = channel
         return channel
 

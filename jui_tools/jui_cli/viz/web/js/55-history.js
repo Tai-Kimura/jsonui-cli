@@ -168,6 +168,14 @@ function histItem(item) {
     const cut = histCutNote(item); if (cut) n.appendChild(cut);
     return n;
   }
+  if (item.kind === 'channel') {   // a prompt that came through a channel (from this page, for jui-viz)
+    const n = hNode('div', 'h-item h-user h-channel');
+    const head = hNode('p', 'h-who', /(^|:)jui-viz$/.test(String(item.server || '')) ? 'ページから（jui-viz の channel）' : `channel ${item.server || ''}`);
+    head.appendChild(at); n.appendChild(head);
+    n.appendChild(hNode('p', 'h-plain', item.text));
+    const cut = histCutNote(item); if (cut) n.appendChild(cut);
+    return n;
+  }
   if (item.kind === 'peer') {
     return histFolded('h-item h-peer', [hNode('b', '', `${item.from} から`), hNode('span', 'h-head', String(item.text).split('\n').find((l) => l.trim()) || ''), at],
       [hNode('p', 'h-plain', item.text), histCutNote(item)], false);
@@ -305,7 +313,7 @@ function histSync() {
   composePlace(pane, id);
   if (!id || HIST.tab !== 'history') { histStop(); return; }
   histShow();
-  if (!HIST.timer) { histFetch(); HIST.timer = setInterval(() => { if (document.visibilityState === 'visible') histFetch(); }, HIST_POLL_MS); }
+  if (!HIST.timer) { histFetch(); HIST.timer = setInterval(() => { if (document.visibilityState === 'visible') { histFetch(); composePaint(); } }, HIST_POLL_MS); }
 }
 rbEl.addEventListener('click', (e) => {
   const b = e.target.closest('[data-rb-tab]');
@@ -331,6 +339,24 @@ const PROMPT_MAX_BYTES = 8192;   // server.PROMPT_MAX_BODY: the JSON body, not o
 const composeBytes = (label, text) => new TextEncoder().encode(JSON.stringify({ sessionId: SESSION_UUID[label] || '', text })).length;
 const RELAY_HOW_TEXT = RELAY_HOW.replace(/<[^>]+>/g, '');   // the same how-to as on a permission card, as plain text
 const composeNorm = (t) => String(t || '').split(/\s+/).join(' ').trim();
+/* Whether the CLI hands the channel's text to the session (sources/launch.py, 2.3.4): it does only for a session started
+   naming the channel. The server's sessions slice says which case (launch); the words here are the same as the server's. */
+const PROMPT_START = 'claude --dangerously-load-development-channels plugin:jui-viz@jsonui';
+const PROMPT_START_CHANNELS = 'claude --channels plugin:jui-viz@jsonui';
+const LAUNCH_WHY = {
+  dev: [true, ''],
+  channels: [true, '--channels で起動したセッション。managed settings の allowedChannelPlugins に jui-viz が載っていなければ届かない'],
+  'no-flag': [false, '起動に channel の指定が無いので届かない'],
+  other: [false, '起動の channel の指定に jui-viz が無いので届かない'],
+  form: [false, '起動の指定の形が、この channel のつながり方と合わない（プラグインなら plugin:jui-viz@jsonui、jui viz relay install なら server:jui-viz）'],
+  'server-channels': [false, 'server: の指定は --channels では効かない'],
+  vscode: [false, 'VS Code 拡張のセッションは起動の指定を足せないので届かない'],
+  desktop: [false, 'デスクトップアプリのセッションは起動の指定を足せないので届かない'],
+  unreadable: [false, 'このセッションのプロセスの起動の引数を読めないので、届くか確かめられない'],
+};
+/* 送信中 until the receiver's own transcript shows the prompt (届いた); 届いていない when it has not, NOT_ARRIVED_MS after
+   sending and with the session quiet (not busy) for QUIET_MS — a busy session takes it at the end of its turn. */
+const PROMPT_WAIT = { notArrivedMs: 60000, quietMs: 30000 };
 function composeTarget(id) {
   if (!id || !DEF[id]) return { why: '' };
   const sess = SESSIONS.find((x) => x.id === SESSION_OF[id]);
@@ -341,7 +367,11 @@ function composeTarget(id) {
   if (!sess || sess.status === 'ended') return { why: 'このセッションは終わっている' };
   if (!sess.relay) return { why: 'このセッションは中継（jui-viz の channel）につながっていないので送れない。' + RELAY_HOW_TEXT };
   if (!sess.prompt) return { why: 'このセッションの jui-viz プラグインが古いので送れない（1.2.0 から送れる）。/plugin で jui-viz を更新して、セッションを起動し直す' };
-  return { why: '', name };
+  const L = LAUNCH_WHY[sess.launch] || LAUNCH_WHY.unreadable;
+  if (!L[0]) {
+    return { why: `${L[1]}。届くのは、ターミナルで ${PROMPT_START}（起動のたびに確認が出る）か、managed settings の allowedChannelPlugins に jui-viz を載せて ${PROMPT_START_CHANNELS}（警告なし）と起動したセッションだけ。組織のアカウントは channelsEnabled も要る` };
+  }
+  return { why: '', name, note: L[1] };
 }
 function composeBuild() {
   const box = hNode('div', 'h-compose');
@@ -403,18 +433,31 @@ function composePaint() {
   if (!HIST.compose) return;
   const E = composeEls(), id = HIST.compose._for, t = composeTarget(id);
   const asking = !E.confirm.hidden;
-  E.why.textContent = t.why;
-  E.why.hidden = !t.why;
+  E.why.textContent = t.why || t.note || '';
+  E.why.hidden = !(t.why || t.note);
+  E.why.classList.toggle('h-compose-note', !t.why && !!t.note);
   E.area.disabled = !!t.why;
   E.area.readOnly = asking;
   const text = E.area.value, bytes = text.trim() ? composeBytes(id, text) : 0;
   E.send.disabled = !!t.why || !text.trim() || bytes > PROMPT_MAX_BYTES || asking;
   const sent = HIST.sent && HIST.sent.id === id ? HIST.sent : null;
+  const phase = sent && !sent.error ? composePhase(sent) : '';
   E.state.textContent = bytes > PROMPT_MAX_BYTES ? `長すぎる（${bytes.toLocaleString('ja-JP')} / ${PROMPT_MAX_BYTES.toLocaleString('ja-JP')} バイト）`
     : sent && sent.error ? `送れなかった（${sent.error}）`
-    : sent ? `送信済み ${HIST_TIME(sent.at)}（履歴に出るまで待っている）` : '';
-  E.state.classList.toggle('h-compose-err', bytes > PROMPT_MAX_BYTES || !!(sent && sent.error));
+    : phase === 'arrived' ? `届いた ${HIST_TIME(sent.arrivedAt)}（受け手の記録に出た）`
+    : phase === 'missing' ? `届いていない（${HIST_TIME(sent.at)} に送ったが、受け手の記録に出ない。候補: 起動の指定が無い・組織の channelsEnabled が無い・セッションが閉じた）`
+    : sent ? `送信中 ${HIST_TIME(sent.at)}（受け手の記録に出るのを待っている。まだ届いたとは言えない）` : '';
+  E.state.dataset.hPhase = bytes > PROMPT_MAX_BYTES ? 'long' : sent && sent.error ? 'error' : phase;
+  E.state.classList.toggle('h-compose-err', bytes > PROMPT_MAX_BYTES || !!(sent && sent.error) || phase === 'missing');
   if (asking && t.why) composeClose(false);   // the session lost its relay while the confirmation was open
+}
+/* sending / arrived / missing for a prompt sent (and taken by the server). */
+function composePhase(sent) {
+  if (sent.arrivedAt) return 'arrived';
+  const now = Date.now(), sess = SESSIONS.find((x) => x.id === SESSION_OF[sent.id]);
+  if (sess && sess.status === 'busy') sent.quietSince = 0;
+  else if (!sent.quietSince) sent.quietSince = now;
+  return now - sent.at > PROMPT_WAIT.notArrivedMs && sent.quietSince && now - sent.quietSince > PROMPT_WAIT.quietMs ? 'missing' : 'sending';
 }
 function composeAsk() {
   const E = composeEls(), id = HIST.compose._for, t = composeTarget(id), text = E.area.value;
@@ -443,11 +486,14 @@ async function composeSend() {
   else HIST.sent = { id, text, at: Date.now(), error: got.error || `HTTP ${got.status}` };
   composePaint();
 }
-/* The prompt sent shows in the history (as words of the requester, or folded as text the harness put in): 送信済み ends. */
+/* The prompt sent shows in the receiver's transcript as a channel item of jui-viz (sources/history.py: the CLI's own
+   record, origin.kind "channel", measured 10-19 on a real receiver started with --channels plugin:jui-viz@jsonui),
+   its text the text sent: 届いた. Our own POST proves only that it was sent; the same words typed by hand do not count. */
 function composeArrived(items) {
   const sent = HIST.sent;
-  if (!sent || sent.error || sent.id !== HIST.id || !Array.isArray(items)) return;
+  if (!sent || sent.error || sent.arrivedAt || sent.id !== HIST.id || !Array.isArray(items)) return;
   const want = composeNorm(sent.text).slice(0, 120);
   const fresh = (x) => !(Number(x.at) < sent.at - 60000);   // an older item with the same words is not this one
-  if (items.some((x) => ['user', 'harness', 'peer'].includes(x.kind) && fresh(x) && composeNorm(x.text).includes(want))) { HIST.sent = null; composePaint(); }
+  const ours = (x) => x.kind === 'channel' && /(^|:)jui-viz$/.test(String(x.server || ''));
+  if (items.some((x) => ours(x) && fresh(x) && composeNorm(x.text).startsWith(want))) { sent.arrivedAt = Date.now(); composePaint(); }
 }

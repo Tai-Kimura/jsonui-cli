@@ -376,7 +376,8 @@ def make_app(ctx: ServerContext) -> web.Application:
         body = await _json_body(request)
         if body is None or ctx.world is None:
             return web.Response(status=400, text="bad request\n")
-        channel_id = ctx.world.channel_hello(body.get("ppid"), body.get("cwd"), body.get("sessionId"), now_ms(), body.get("accepts"))
+        channel_id = ctx.world.channel_hello(body.get("ppid"), body.get("cwd"), body.get("sessionId"), now_ms(), body.get("accepts"),
+                                             body.get("via"))
         if ctx.publish:
             ctx.publish()
         return web.json_response({"channelId": channel_id})
