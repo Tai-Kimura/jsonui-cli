@@ -336,11 +336,15 @@ function questionsShown(now = Date.now()) {
   return QUESTIONS.filter((q) => inScope(projectOfRobot(q.who)) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS))
     .sort((a, b) => (a.at || 0) - (b.at || 0));
 }
+/* The questions waiting for an answer, every project; the chip counts them all. In scope and elsewhere: the board shows
+   the first and says how many of the second (as its permission strip does), so the chip = cards in scope + elsewhere. */
+const questionsWaiting = () => QUESTIONS.filter((q) => q.status === 'pending');
+const questionsElsewhere = () => questionsWaiting().filter((q) => !inScope(projectOfRobot(q.who))).length;
 const questionsSig = (shown) => JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])]);
 function renderQuestions() {
   const now = Date.now();
   const shown = questionsShown(now);
-  const waiting = QUESTIONS.filter((q) => q.status === 'pending').length;
+  const waiting = questionsWaiting().length;
   const chip = $('chip-ask');
   chip.hidden = waiting === 0;
   setText(chip, `質問 ${waiting}`);
@@ -1017,6 +1021,15 @@ $('tb-close').addEventListener('click', closeTaskBoard);
 const COL_HINT = { todo: '担当が決まれば始められる', wait: '先に終わるタスクがある', doing: 'ロボットが今やっている', done: '' };
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 const paintSince = (root, t, word) => root.querySelectorAll('[data-since]').forEach((el) => setText(el, `${word} ${mmss(Math.max(0, t - Number(el.dataset.since)))}`));
+/* The board's question strip (2.3.5): the panel's cards in scope, and how many wait elsewhere (the chip counts both). */
+function renderQuestionStrip() {
+  const qs = questionsShown(), elsewhere = questionsElsewhere();
+  qStripEl.hidden = !qs.length && !elsewhere && !tb.waitView;
+  keyed(qStripEl, `${tb.waitView}|${elsewhere}|${questionsSig(qs)}`, () => {
+    const otherHTML = elsewhere ? `<p class="ps-rules" data-q-elsewhere="${elsewhere}">ほかのプロジェクトでも ${elsewhere} 件が答えを待っている <button type="button" class="link-btn" data-set-all data-fk="qs-all">すべてのプロジェクトを表示</button></p>` : '';
+    return `<h3 class="ps-title">質問に答える<b>${qs.filter((q) => q.status === 'pending').length}</b><small>古い順</small></h3>${qs.some((q) => q.status === 'pending') ? '' : '<p class="ps-none">答えを待っている質問はない</p>'}${otherHTML}${qs.map((q) => questionHTML(q, 'b')).join('')}`;
+  });
+}
 function renderTaskBoard(model) {
   if (!tb.open) return;
   const visible = (list) => inScope(PROJECT_OF[list]) && !UI.hiddenLists.has(list);
@@ -1028,9 +1041,7 @@ function renderTaskBoard(model) {
   setText($('tb-count'), `${tasks.length} 件`);
   setText($('tb-title'), UI.project === 'all' ? 'タスクボード' : `タスクボード · ${PROJECT[UI.project].name}`);
   // the questions waiting, the same cards as the panel's from the same list (questionsShown), on top
-  const qs = questionsShown();
-  qStripEl.hidden = !qs.length && !tb.waitView;
-  keyed(qStripEl, `${tb.waitView}|${questionsSig(qs)}`, () => `<h3 class="ps-title">質問に答える<b>${qs.filter((q) => q.status === 'pending').length}</b><small>古い順</small></h3>${qs.some((q) => q.status === 'pending') ? '' : '<p class="ps-none">答えを待っている質問はない</p>'}${qs.map((q) => questionHTML(q, 'b')).join('')}`);
+  renderQuestionStrip();
   paintSince(qStripEl, model.t, '待ち');
   stripEl.hidden = !pend.length && !alwaysRules.size && !elsewhere && !tb.waitView;
   keyed(stripEl, JSON.stringify([NAMES.rev, pend.map(permSig), [...alwaysRules.keys()], elsewhere]), () => {

@@ -226,6 +226,28 @@ async def run_ask_board(pw, out, failures):
             pc2.communicate(timeout=30)
         except subprocess.TimeoutExpired:
             pass
+        # one project picked in the header (dd, 10-19): a question waiting in another project is counted on the chip;
+        # the board shows the one in scope and says how many wait elsewhere, and 「すべてのプロジェクトを表示」 shows them all
+        await page.keyboard.press("Escape")
+        await wait(page, "() => document.getElementById('tb').hidden", label="closed before the projects")
+        ask("a", "ask-a2"), ask("b", "ask-b2")
+        await wait(page, "() => document.getElementById('chip-ask').textContent === '質問 2'", timeout=20000, label="two questions in two projects")
+        await page.click("#scope-top")
+        await page.evaluate("() => [...document.querySelectorAll('#pop [data-pick-project]')].find((x) => x.textContent.includes('board-a')).click()")
+        await page.wait_for_timeout(800)
+        await page.click("#chip-ask")
+        await wait(page, "() => { const tb = document.getElementById('tb'); return !tb.hidden && tb.classList.contains('show'); }", label="the board, one project")
+        await page.wait_for_timeout(500)
+        scoped = res["scoped"] = await page.evaluate("""() => { const n = document.querySelector('#q-strip [data-q-elsewhere]');
+          return { chip: document.getElementById('chip-ask').textContent, pend: document.querySelectorAll('#q-strip [data-qcard].q-open').length,
+                   elsewhere: n ? Number(n.dataset.qElsewhere) : 0, note: n ? n.textContent : '', button: !!(n && n.querySelector('[data-set-all]')) }; }""")
+        check(failures, scoped["chip"] == "質問 2" and scoped["pend"] == 1 and scoped["elsewhere"] == 1 and scoped["button"]
+              and "ほかのプロジェクトでも 1 件が答えを待っている" in scoped["note"], f"one project picked: the card in scope and the count elsewhere: {scoped}")
+        check(failures, scoped["chip"] == f"質問 {scoped['pend'] + scoped['elsewhere']}", f"the chip = the cards in scope + elsewhere: {scoped}")
+        await page.click("#q-strip [data-set-all]")
+        await wait(page, "() => document.querySelectorAll('#q-strip [data-qcard].q-open').length === 2", timeout=10000, label="all projects: both cards")
+        allp = res["allProjects"] = await page.evaluate("() => ({ chip: document.getElementById('chip-ask').textContent, pend: document.querySelectorAll('#q-strip [data-qcard].q-open').length, note: !!document.querySelector('#q-strip [data-q-elsewhere]') })")
+        check(failures, allp["chip"] == f"質問 {allp['pend']}" and not allp["note"], f"after すべて: the cards equal the chip, no note: {allp}")
         await page.close()
         for line in watch.console:
             failures.append(f"ask-board: console: {line}")
