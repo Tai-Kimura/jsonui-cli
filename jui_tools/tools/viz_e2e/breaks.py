@@ -29,6 +29,7 @@ import subprocess
 import sys
 import time
 
+from waits import until
 from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -135,11 +136,13 @@ def check(failures, cond, text):
         failures.append(f"breaks: {text}")
 
 
+# What the page looked like when a wait ran out (waits.py): which robots had not arrived, and why.
+WHY = "() => { const b = window.__dbg.brk(); return { built: b.built, place: !!b.place, onBreak: b.robots.filter((x) => x.kind).map((x) => [x.id, x.kind, x.phase]), robots: window.__dbg.settleInfo() }; }"
+
+
 async def wait(page, js, timeout=20000, label=""):
-    try:
-        await page.wait_for_function(js, timeout=timeout, polling=200)
-    except Exception as e:
-        raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
+    """Checked on every animation frame (waits.until), named; a timeout carries the page's state (WHY)."""
+    await until(page, js, label or js[:90], timeout=timeout, why=WHY)
 
 
 async def run_breaks(pw, out, failures, jt=None, shots_only=False):

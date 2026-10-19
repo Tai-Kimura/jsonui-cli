@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 
+from waits import until
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
 
 CWD = "/work/props-app"
@@ -56,11 +57,13 @@ def check(failures, cond, text):
         failures.append(f"props: {text}")
 
 
+# What the page looked like when a wait ran out (waits.py): which robots had not arrived, and why.
+WHY = "() => ({ props: window.__dbg.props().room, solo: window.__dbg.solo(), robots: window.__dbg.settleInfo() })"
+
+
 async def wait(page, js, timeout=20000, label=""):
-    try:
-        await page.wait_for_function(js, timeout=timeout, polling=200)
-    except Exception as e:
-        raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
+    """Checked on every animation frame (waits.until), named; a timeout carries the page's state (WHY)."""
+    await until(page, js, label or js[:90], timeout=timeout, why=WHY)
 
 
 async def run_props(pw, out, failures, jt=None, shots_only=False):
