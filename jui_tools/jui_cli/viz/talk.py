@@ -417,9 +417,13 @@ class TalkIndex:
                         if line and wanted(line, self._pending):
                             try:
                                 rec = json.loads(line)
-                            except ValueError:
+                            except (ValueError, RecursionError):   # a line nested too deep is skipped, not fatal
                                 continue
-                            for ob in observations(rec):
+                            try:
+                                found = observations(rec)
+                            except RecursionError:          # a message too deep to show as JSON: skipped
+                                continue
+                            for ob in found:
                                 if ob[0] == "send":
                                     self._pending.add(ob[1])
                                 out.append((sid, agent, ob))
@@ -934,7 +938,7 @@ class TalkHub:
             if req_id is not None:
                 await sock.send_json({"type": "ack", "reqId": req_id, "ok": True})
             return
-        problems = talk_contract.validate(message)
+        problems = talk_contract.validate_request(message)   # a request only, never a server frame's type
         if problems:
             await refuse("bad request: " + problems[0][:200])
             return

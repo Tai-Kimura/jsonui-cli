@@ -112,6 +112,18 @@ def validate(frame: Any) -> list[str]:
     return _check(frame, schema, kind, root)
 
 
+def validate_request(message: Any) -> list[str]:
+    """Every way ``message`` breaks the contract as a page request (``talk.open`` / ``talk.close`` / ``talk.get`` /
+    ``talk.seen``): a server frame's type (``talk.list``, ``talk.badges`` …) is not a request and is refused here
+    (independent review 10-20: TalkHub.handle took them and a ``talk.badges`` from a page closed its socket)."""
+    root = load()
+    kind = message.get("type") if isinstance(message, dict) else None
+    schema = root["requests"].get(kind)
+    if schema is None:
+        return [f"type {kind!r} is not a talk request"]
+    return _check(message, schema, kind, root)
+
+
 def validate_def(value: Any, name: str) -> list[str]:
     """Check one value against a named definition (``conversation``, ``message``, ``op``, …)."""
     root = load()

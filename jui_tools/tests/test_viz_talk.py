@@ -617,3 +617,74 @@ def test_a_server_without_talks_refuses_talk_requests():
     sock = FakeSock()
     asyncio.run(_handle_browser_message(ctx, sock, {"type": "talk.open", "reqId": 1, "agentId": A}))
     assert sock.sent[-1]["ok"] is False
+
+
+# ------------------------------------------------------------------ the independent review's findings (10-20)
+def test_a_matched_receivers_record_read_again_stays_one_row(box):
+    """A subagent's send to main, matched by sender and body (no msg_id), its file read again from the start and the
+    hold passed: still one row (the receiver's (receiver, uuid) is remembered; without it a second r- row appears)."""
+    child = box.child_file()
+    box.write(child, box.send(A, "toolu_c", "main", "親への報告", T0 + 1_000, sub=CHILD), box.result(A, "toolu_c", T0 + 1_050))
+    box.write(box.files[A], {"type": "user", "isMeta": True, "timestamp": iso(T0 + 1_500), "uuid": "child-read-0001",
+                             "origin": {"kind": "peer", "from": CHILD, "senderTaskId": CHILD, "name": "worker", "body": "親への報告"},
+                             "message": {"role": "user", "content": "x"}})
+    box.step(T0 + 2_000)
+    assert [(m["id"], m["state"]) for m in box.messages(A, CHILD)] == [("u-toolu_c", "read")]
+    box.index.db.execute("UPDATE files SET off=0")
+    box.step(T0 + 3_000)
+    box.step(T0 + 3_000 + T.HOLD_MS)
+    assert [m["id"] for m in box.messages(A, CHILD)] == ["u-toolu_c"]
+    assert [c["peer"]["key"] for c in box.convs(A)] == [CHILD]
+
+
+def test_a_body_over_text_max_is_cut_before_it_is_sent(box):
+    long = "あ" * (T.TEXT_MAX + 5_000)
+    box.write(box.files[A], box.send(A, "toolu_l", NAMES[B], long, T0 + 1_000), box.result(A, "toolu_l", T0 + 1_100, msg_id="ml"))
+    got = box.step(T0 + 2_000)
+    [m] = box.messages(A, B)                     # messages() checks the talk.messages frame against the contract
+    assert len(m["text"]) == T.TEXT_MAX and m["cut"] is True
+    ops = [op for op in got["ops"][B] if op["op"] == "message"]
+    assert ops and len(ops[0]["message"]["text"]) == T.TEXT_MAX
+
+
+def test_the_database_folder_is_made_0700(tmp_path):
+    b = Box(tmp_path)
+    assert stat.S_IMODE(os.stat(b.db.parent).st_mode) == 0o700
+    b.index.close()
+
+
+def test_a_line_nested_too_deep_is_skipped_and_the_reading_goes_on(tmp_path):
+    """A line with a needle and a million brackets (json.loads raises RecursionError, not ValueError): skipped; the
+    send and read after it are indexed and the place read is kept."""
+    b = Box(tmp_path)
+    with b.files[A].open("a") as fh:
+        fh.write('{"type":"assistant","x":"SendMessage","y":' + "[" * 1_000_000 + "\n")
+    b.write(b.files[A], b.send(A, "toolu_1", NAMES[B], "毒の後", T0 + 1_000), b.result(A, "toolu_1", T0 + 1_100, msg_id="m1"))
+    b.write(b.files[B], b.read_meta(B, T0 + 2_000, "m1", A, "毒の後"))
+    b.step(T0 + 3_000)
+    assert [(m["id"], m["state"]) for m in b.messages(A, B)] == [("m-m1", "read")]
+    assert b.index.db.execute("SELECT MIN(off) FROM files WHERE agent IS NULL AND sid IN (?, ?)", (A, B)).fetchone()[0] > 0
+    b.index.close()
+
+
+def test_a_server_frames_type_sent_by_a_page_is_refused_not_fatal(tmp_path):
+    """talk.badges / talk.list / talk.update from a page are not requests: an ack with ok false, the socket stays (a
+    KeyError there closed the page's socket; a talk.list passed and was never answered)."""
+    b = Box(tmp_path)
+    hub = T.TalkHub(lambda: b.index, agents=lambda: {A: {}, B: {}})
+    sock = FakeSock()
+
+    async def go():
+        for i, frame in enumerate([{"type": "talk.badges", "counts": {}},
+                                   {"type": "talk.list", "agentId": A, "items": [], "more": False},
+                                   {"type": "talk.update", "agentId": A, "ops": [{"op": "remove", "convId": "t-0123456789abcdef", "reason": "peer-ended"}]},
+                                   {"type": "talk.messages", "reqId": 9, "agentId": A, "convId": "t-0123456789abcdef", "items": [], "more": False}]):
+            await hub.handle(sock, {**frame, "reqId": i})
+            assert sock.sent[-1]["type"] == "ack" and sock.sent[-1]["ok"] is False and sock.sent[-1]["reqId"] == i
+            assert "not a talk request" in sock.sent[-1]["error"]
+
+    try:
+        asyncio.run(go())
+        assert C.validate_request({"type": "talk.open", "reqId": 1, "agentId": A}) == []
+    finally:
+        hub.close()
