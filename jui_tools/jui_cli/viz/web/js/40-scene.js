@@ -1222,10 +1222,10 @@ function propsSpot() {
    the left door and the easel at the front left. The left strip is kept clear of desks (SEAT.left, SEAT_SOLO.left); no
    door, aisle or play spot is on it. It is one row of propsPlace (PROPS.place.git: desk, stand, rect), so the breaks
    arm's 12 room configs and gitDeskOverlaps both see it, and the vacuum keeps off it (propsBoxes).
-   A trip, a break (or play) and the shredder's errand never share a robot: playIdle is false on a trip or an errand;
-   the one that comes second waits for the first to end — a trip while it is fresh (GITBOX.freshMs), a deletion up to
-   SHRED.waitSec (then it is dropped, as it is for a break). gitTick runs before shredTick in a frame, so both cannot
-   start in one frame.
+   A trip, a break (or play) and the shredder's errand never share a robot: playIdle is false on a trip or an errand.
+   Between a trip and an errand the one that comes second waits for the first to end — a trip while it is fresh
+   (GITBOX.freshMs), a deletion up to SHRED.waitSec (then it is dropped). A deletion ends a break, a game or a nap
+   instead (shredTick: work ends them). gitTick runs before shredTick in a frame, so both cannot start in one frame.
    What: the server's agent.git (gitbox.py: a push or a pull a session's Bash ran, its branch, commits and lines).
    A robot in the room up close walks to the box with a stack as thick as the push (1 to CARRY_MAX sheets), puts it in
    and walks back empty; for a pull it walks there empty and comes back with the stack. Nothing to pull (up to date):
@@ -1671,14 +1671,23 @@ function shredTick(R, st, nowSec) {
     if (first && vizNow() - sh.at > 30_000) return;   // a deletion from before the page opened: not acted out now
     if (!sh.ok) { R.tiltUntil = nowSec + SHRED.tiltSec; return; }
     // only with a shredder in its room now: a deletion seen on the floor view is not acted out on coming up close
-    if (PROPS.shredder && PROPS.room === R.def.room) R.shredPending = { sh, until: nowSec + SHRED.waitSec };
+    if (PROPS.shredder && PROPS.room === R.def.room) {
+      R.shredPending = { sh, until: nowSec + SHRED.waitSec };
+      // A deletion is work, and work ends a break, a game or a nap. Most are ended already (playTick / brkTick, earlier
+      // in the frame, see the new since), but one begun this very frame took that since and would hold the errand:
+      // it ends here. A git trip is not ended: the errand waits for it (gitTick).
+      if (R.brk) brkStop(R, 'shred', nowSec);
+      if (R.play) playStop(R);
+      if (R.solo) { PLAY.ends.push({ room: R.solo.room, kind: R.solo.kind, players: [R.def.id], reason: 'shred', playedSec: +(nowSec - R.solo.t0).toFixed(1) }); soloStop(R); }
+    }
   }
   const want = R.shredPending;
   if (want && nowSec > want.until) R.shredPending = null;
   const P = PROPS.shredder;
-  // It goes when nothing else holds it: never from a break, a game, a nap or a bento still under way (it waits for them,
-  // up to SHRED.waitSec), but straight from the walk back from one — a deletion is work, and work ends a break first.
-  if (R.shredPending && P && PROPS.room === R.def.room && R.robot.root.visible && !R.play && !R.brk && !R.solo && !R.shred && !R.git   // a git trip (2.3.4): it waits too
+  // It goes when nothing else holds it. A break, a game or a nap is never under way here: the deletion ended it above,
+  // and none starts while the errand waits, for what holds it (a git trip, an errand, a call) keeps playIdle false too.
+  // It goes straight from the walk back from one. A git trip (2.3.4) holds it: it waits, up to SHRED.waitSec.
+  if (R.shredPending && P && PROPS.room === R.def.room && R.robot.root.visible && !R.shred && !R.git
       && !LIVE.leaving[R.def.id] && !R.robot.call && (st.promptAt || 0) <= want.sh.at) {
     const s0 = R.shredPending.sh;
     R.shredPending = null; R.playBack = false;

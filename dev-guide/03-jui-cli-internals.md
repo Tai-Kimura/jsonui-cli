@@ -201,7 +201,8 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   find -delete / -exec rm。sudo・command・`\rm`・`git -C` も。git rm の -n / --dry-run / --cached と、文字列の中の rm は
   数えない）。対象は書かれた形のまま（glob は展開前、-r のフォルダは 1 件）。PostToolUse でエージェントに `shred`
   （成否・名前・件数・フォルダか・時刻）を付け、拡大した部屋（小物の条件）ではロボットが書類を持って奥の壁の
-  シュレッダーへ行く。新しい指示（`promptAt`）・道具・電話で即やめる。終わったターン（done）は続ける。
+  シュレッダーへ行く。削除は休憩・遊び・居眠りを終わらせ（同じフレームで始まったものも）、git の箱への往復は待つ。
+  新しい指示（`promptAt`）・道具・電話で即やめる。終わったターン（done）は続ける。
   見えないもの: スクリプトの中の削除、利用者自身の削除（doctor に出す）。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。

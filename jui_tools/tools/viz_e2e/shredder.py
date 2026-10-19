@@ -25,6 +25,28 @@ ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI
 SID = "e2e00000-0000-4000-8000-0000000002{:02x}"
 
 
+# Hold the page's frames (requestAnimationFrame) and let them go again: what happens in between lands in one frame.
+HOLD_JS = """() => { const F = window.__frames || (window.__frames = { raf: window.requestAnimationFrame.bind(window), held: [], on: false });
+  F.on = true; window.requestAnimationFrame = (cb) => { if (F.on) { F.held.push(cb); return 0; } return F.raf(cb); }; }"""
+RELEASE_JS = """() => { const F = window.__frames; F.on = false; window.requestAnimationFrame = F.raf; const cbs = F.held.splice(0); cbs.forEach((cb) => F.raf(cb)); }"""
+# From the first frame on: is the robot ever on a break / at a game / napping while on the errand; does it feed the
+# shredder; how many samples saw the other (break, game or nap) holding it while the errand waited (the old way).
+WINDOW_JS = """async ([id, ms]) => { const out = { samples: 0, both: [], feeding: 0, held: 0, phases: [] }, t0 = performance.now();
+  while (performance.now() - t0 < ms) {
+    const R = window.__dbg.robots.find((x) => x.def.id === id);
+    if (!R) break;
+    const other = R.brk ? 'break' : R.play ? 'game' : R.solo ? 'nap' : null, phase = R.shred ? R.shred.phase : null;
+    out.samples++;
+    if (other && phase) out.both.push([other, phase]);
+    if (other && !phase && R.shredPending) out.held++;
+    if (phase === 'feeding') out.feeding++;
+    if (out.phases[out.phases.length - 1] !== phase) out.phases.push(phase);
+    if (out.feeding && !phase) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  out.both = out.both.slice(0, 5); return out; }"""
+
+
 def check(failures, cond, text):
     if not cond:
         failures.append(f"shredder: {text}")
@@ -234,6 +256,58 @@ async def run_shredder(pw, out, failures, jt=None, shots_only=False):
               f"no break starts on the way to the shredder or while feeding it: {took}")
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true })")
         await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').phase === null", timeout=20000, label="a done")
+
+        # A break, a game or a nap begun in the very frame the deletion lands (2.3.4): brkTick / playTick / soloTick run
+        # before shredTick and could start one with the since the deletion brought. The window is made on purpose: the
+        # frames are held, the deletion arrives, the knob goes to 1, and the frames go on — the first one is that frame.
+        # The deletion ends it (work ends it) and the errand goes; never both at once, never dropped.
+        await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length && !R.brk && !R.play && !R.solo)", timeout=30000, label="all seated for the window")
+        await page.evaluate("() => { window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true }); window.__dbg.play({ p: 0, solo: { p: 0 }, idleMs: 0, restMinSec: 0, restMaxSec: 0, endAll: true }); }")
+        c = labels[2]
+        busy = {"n": 0}
+
+        def hold_busy(sid):   # a tool under way: the robot is not idle (no break, game or nap for it)
+            busy["n"] += 1
+            hook(sid, hook_event_name="PreToolUse", tool_name="Read", tool_use_id=f"busy{busy['n']}", tool_input={"file_path": f"/work/shred-app/busy-{busy['n']}.json"})
+            return f"busy{busy['n']}"
+
+        def free(sid, uid):
+            hook(sid, hook_event_name="PostToolUse", tool_name="Read", tool_use_id=uid, tool_input={"file_path": "/work/shred-app/x.json"}, tool_response={})
+
+        for kind, knob, others_busy in (
+            ("break", "() => { window.__dbg.brk({ p: { smoke: 1, vend: 0 }, joinP: 0, smokeMinSec: 60, smokeMaxSec: 60, restMinSec: 0, restMaxSec: 0 }); }", (b, c)),
+            ("game", "() => { window.__dbg.play({ p: 1, minSec: 60, maxSec: 60, restMinSec: 0, restMaxSec: 0, idleMs: 0 }); }", (c,)),
+            ("nap", "() => { window.__dbg.play({ p: 0, solo: { p: 1, minSec: 60, maxSec: 60 }, restMinSec: 0, restMaxSec: 0, idleMs: 0 }); }", (b, c)),
+        ):
+            held = [(x, hold_busy(sids[x])) for x in others_busy]
+            await wait(page, f"() => {{ const s = window.__dbg.robotState(); return {json.dumps(list(others_busy))}.every((id) => s[id].state !== 'idle'); }}", label=f"{kind}: the others busy")
+            before = await page.evaluate(f"() => (window.__dbg.robotState()['{a}'].shred || {{}}).at || 0")
+            await page.evaluate(HOLD_JS)
+            await wait(page, "() => window.__frames.held.length > 0", label=f"{kind}: frames held")
+            bash(sids[a], f"rm -f window-{kind}.txt", stop=False)
+            await wait(page, f"() => {{ const s = window.__dbg.robotState()['{a}']; return s.state === 'idle' && s.shred && s.shred.at > {before}; }}", label=f"{kind}: the deletion arrived, frames held")
+            await page.evaluate(knob)
+            await page.evaluate(f"() => {{ window.__dbg.robots.forEach((R) => {{ R.restUntil = R.def.id === '{a}' || ('{kind}' === 'game' && R.def.id === '{b}') ? 0 : 1e12; }}); }}")
+            await page.evaluate(RELEASE_JS)
+            got = res[f"window-{kind}"] = await page.evaluate(WINDOW_JS, [a, 20000])
+            ends = await page.evaluate("() => ({ brk: window.__dbg.brk().ends, play: window.__dbg.play().ends })")
+            if kind == "break":
+                hit = any(e["who"] == a and e["reason"] == "shred" for e in ends["brk"]) or got["held"] > 0
+            elif kind == "game":
+                hit = any(a in e["players"] and len(e["players"]) == 2 for e in ends["play"]) or got["held"] > 0
+            else:
+                hit = any(e["players"] == [a] and e["reason"] == "shred" for e in ends["play"]) or got["held"] > 0
+            got["hit"] = hit
+            check(failures, hit, f"{kind}: the window was made (one began in the frame the deletion landed): {got} {ends}")
+            check(failures, not got["both"] and got["feeding"] > 0,
+                  f"{kind} begun in the deletion's frame: the deletion ends it and the errand goes, never both at once: {got}")
+            await page.evaluate("() => { window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true }); window.__dbg.play({ p: 0, solo: { p: 0 }, endAll: true }); }")
+            await page.evaluate("() => window.__dbg.robots.forEach((R) => { if (R.solo) { R.solo = null; R.robot.solo = null; } })")
+            for x, uid in held:
+                free(sids[x], uid)
+            await wait(page, f"() => {{ const x = window.__dbg.shred().robots.find((y) => y.id === '{a}'); return x.phase === null && x.path === 0; }}", timeout=30000, label=f"{kind}: a back")
+            await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length && !R.brk && !R.play && !R.solo)", timeout=30000, label=f"{kind}: all seated again")
+        await page.evaluate("() => window.__dbg.play({ p: 0, solo: { p: 0 }, idleMs: 60000 })")
 
         await page.click("#room-back")
         await wait(page, "() => window.__dbg.solo() === null && window.__dbg.shred().shredder === null", label="gone with the props")
