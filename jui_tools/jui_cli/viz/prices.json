@@ -1,0 +1,24 @@
+{
+ "about": "The prices viz uses for the estimated cost (USD) of one response over its robot (ticket 2026-10-19-jui-viz-cost-bill-over-robot). USD per million tokens, copied from the source below on the checked date, never guessed: a model whose ID or price could not be confirmed there is left out, and a response of a model not in the table shows no amount. The user's own table (<viz home>/prices.json; `jui viz prices`, or the page's 単価 sheet) overrides and adds to this one. cache_read: cache hits and refreshes. long: the prices of a request whose prompt (input + cache writes + cache reads) is over `over` tokens. fast: fast mode's input and output (the caching multipliers of the row apply on top, per the source). us: the multiplier of inference_geo \"us\" (Claude 4.6 and later).",
+ "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+ "ids_source": "https://platform.claude.com/docs/en/about-claude/models/overview and https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions",
+ "checked": "2026-10-19",
+ "models": {
+  "claude-fable-5-1": {"input": 10, "cache_write_5m": 12.5, "cache_write_1h": 20, "cache_read": 0.25, "output": 50, "us": 1.1},
+  "claude-opus-5-5": {"input": 4, "cache_write_5m": 5, "cache_write_1h": 8, "cache_read": 0.2, "output": 20, "us": 1.1,
+                      "fast": {"input": 8, "output": 40}},
+  "claude-sonnet-5-5": {"input": 2, "cache_write_5m": 2.5, "cache_write_1h": 4, "cache_read": 0.1, "output": 10, "us": 1.1},
+  "claude-haiku-5-5": {"input": 0.1, "cache_write_5m": 0.125, "cache_write_1h": 0.2, "cache_read": 0.01, "output": 0.5, "us": 1.1,
+                       "long": {"over": 100000, "input": 0.5, "cache_write_5m": 0.625, "cache_write_1h": 1, "cache_read": 0.05, "output": 2.5}},
+  "claude-opus-5": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25, "us": 1.1,
+                    "fast": {"input": 10, "output": 50}},
+  "claude-opus-4-8": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25, "us": 1.1,
+                      "fast": {"input": 10, "output": 50}},
+  "claude-opus-4-7": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25, "us": 1.1},
+  "claude-opus-4-6": {"input": 5, "cache_write_5m": 6.25, "cache_write_1h": 10, "cache_read": 0.5, "output": 25, "us": 1.1},
+  "claude-sonnet-5": {"input": 2, "cache_write_5m": 2.5, "cache_write_1h": 4, "cache_read": 0.2, "output": 10, "us": 1.1},
+  "claude-sonnet-4-6": {"input": 3, "cache_write_5m": 3.75, "cache_write_1h": 6, "cache_read": 0.3, "output": 15, "us": 1.1},
+  "claude-sonnet-4-5-20250929": {"input": 3, "cache_write_5m": 3.75, "cache_write_1h": 6, "cache_read": 0.3, "output": 15},
+  "claude-haiku-4-5-20251001": {"input": 1, "cache_write_5m": 1.25, "cache_write_1h": 2, "cache_read": 0.1, "output": 5}
+ }
+}

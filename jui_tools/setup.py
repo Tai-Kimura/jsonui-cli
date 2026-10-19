@@ -24,6 +24,7 @@ setup(
             "web/vendor/three-0.160.0/addons/controls/*.js",
             "web/vendor/three-0.160.0/addons/geometries/*.js",
             "web/vendor/mermaid-11.17.2/*",
+            "prices.json",
         ],
     },
     python_requires=">=3.11",

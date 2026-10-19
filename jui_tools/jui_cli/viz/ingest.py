@@ -13,7 +13,7 @@ from typing import Any
 
 from pathlib import Path
 
-from . import clockout, data_docs, gitbox, robots
+from . import clockout, data_docs, gitbox, prices, robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .calls import CallBook, peer_name
@@ -57,6 +57,11 @@ HEAVY_TOKENS_PER_MIN = 2_000          # output tokens a minute over the last HEA
 HEAVY_WINDOW_MS = 120_000
 HEAVY_TOOL_MS = 60_000                # one tool call running this long (hooks)
 HEAVY_SUBAGENTS = 3                   # subagents at work at once (hooks)
+# The bill over a robot (2.3.6, ticket 2026-10-19-jui-viz-cost-bill-over-robot): each response's estimated cost, kept
+# this long in the "bills" slice (the page shows each one once, by its message id), at most BILLS_MAX of them.
+BILL_KEEP_MS = 30_000
+BILLS_MAX = 60
+UNPRICED_MAX = 20
 ENDED_LINGER_MS = 60_000
 # Waiting on background work (requester, 10-18): a session whose Stop listed background_tasks keeps its light on
 # until the work ends — the next Stop without any, SessionEnd, or no background shell left under its process
@@ -149,6 +154,14 @@ class World:
         self._paths: dict[str, tuple[str | None, str | None]] = {}
         self._tails: dict = {}
         self._usage_seen: dict[str, dict[str, int]] = {}
+        # the bills: the price table (prices.PriceBook, read again off the loop when the user's file changes), the
+        # bills of the last BILL_KEEP_MS, per transcript the usage last billed for each message id (a message is
+        # written once per content block with the same usage: billed once), and the models with no price
+        self.prices: prices.PriceBook | None = None
+        self._prices_pool = None
+        self._bills: list[dict] = []
+        self._billed: dict[str, dict[str, tuple]] = {}
+        self._unpriced: dict[str, int] = {}
         self._tokens: dict[str, list[tuple[int, int]]] = {}
         self._tool_started: dict[str, int] = {}
         self.rooms = Rooms()
@@ -1417,6 +1430,7 @@ class World:
             total["usage"] += len(got["usage"])
             if got.get("calls"):
                 self._call_records(sid, got["calls"], at)
+            self._bill(sid, sid, got.get("bills"), at)
             seen = self._usage_seen.setdefault(sid, {})
             for mid, tokens, when in got["usage"]:
                 delta = tokens - seen.get(mid, 0)
@@ -1426,7 +1440,96 @@ class World:
             if len(seen) > 2_000:                                     # old ids: keep the newest
                 for mid in list(seen)[:-1_000]:
                     del seen[mid]
+        self._poll_sub_usage(at)
+        self._prune_bills(at)
         return total
+
+    def _poll_sub_usage(self, at: int) -> None:
+        """Each subagent at work: its own transcript's new responses, billed over its own robot (the main session's
+        transcript holds none of them: measured 10-19, no isSidechain record in it)."""
+        for aid, agent in self.agents.items():
+            key = f"sub:{aid}"
+            if agent["kind"] != "sub" or agent.get("leftAt") or self.sessions.get(agent["sessionId"], {}).get("status") == "ended":
+                if key in self._tails:
+                    self._tails.pop(key, None)
+                    self._billed.pop(aid, None)
+                continue
+            tail = self._tails.get(key)
+            if tail is None:
+                cwd, given = self._paths.get(agent["sessionId"], (None, None))
+                try:
+                    path = self.transcript_path(agent["sessionId"], cwd, given, aid, self._agent_paths.get(aid))
+                except TypeError:          # a finder that knows no subagents (a test's)
+                    path = None
+                if path is None:
+                    continue
+                from .sources.transcripts import UsageTail
+                tail = self._tails[key] = UsageTail(path)
+            self._bill(aid, agent["sessionId"], tail.read().get("bills"), at)
+        for key in [k for k in self._tails if isinstance(k, str) and k.startswith("sub:") and k[4:] not in self.agents]:
+            self._tails.pop(key, None)
+            self._billed.pop(key[4:], None)
+
+    def _bill(self, agent_id: str, sid: str, got, at: int) -> None:
+        """The new responses of one transcript as bills over agent_id's robot: one per message id (the same usage
+        written again is not billed again; a usage that grew replaces the bill), priced by the table in use."""
+        if not got or self.prices is None:
+            return
+        seen = self._billed.setdefault(agent_id, {})
+        for mid, model, usage, when in got:
+            sig = (model, tuple(sorted((k, v) for k, v in usage.items() if isinstance(v, (int, float, str)))))
+            if seen.get(mid) == sig:
+                continue
+            seen[mid] = sig
+            tokens = prices.total_tokens(usage)
+            if tokens <= 0:
+                continue
+            usd, why = prices.cost(self.prices.table, model, usage)
+            bill = {"id": mid, "agentId": agent_id, "sessionId": sid, "at": at, "model": model, "tokens": tokens,
+                    "usd": None if usd is None else round(usd, 6),
+                    "priceFrom": "user" if self.prices.user_rows.get(model) else "default"}   # the card says whose
+            if why:
+                bill["why"] = why
+                if why == "model not in the table" and model not in self._unpriced:
+                    self._unpriced[model] = at
+                    while len(self._unpriced) > UNPRICED_MAX:
+                        self._unpriced.pop(next(iter(self._unpriced)))
+                    self._dirty.add("prices")
+            self._bills = [b for b in self._bills if not (b["id"] == mid and b["agentId"] == agent_id)] + [bill]
+            self._dirty.add("bills")
+        if len(seen) > 2_000:
+            for mid in list(seen)[:-1_000]:
+                del seen[mid]
+
+    def _prune_bills(self, at: int) -> None:
+        kept = [b for b in self._bills if at - b["at"] < BILL_KEEP_MS][-BILLS_MAX:]
+        if len(kept) != len(self._bills):
+            self._bills = kept
+            self._dirty.add("bills")
+
+    def poll_prices(self) -> bool:
+        """The user's price table read again when it changed (in a worker thread of its own: never on the loop), and
+        a model that is priced now no longer listed as unpriced. True when the table changed (serve logs the rows
+        left out)."""
+        if self.prices is None:
+            return False
+        if self._prices_pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._prices_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jui-viz-prices")
+        if not self.prices.poll(self._prices_pool):
+            return False
+        for model in [m for m in self._unpriced if m in self.prices.table]:
+            del self._unpriced[model]
+        self._dirty.add("prices")
+        return True
+
+    def prices_slice(self) -> dict:
+        book = self.prices
+        if book is None:
+            return {}
+        return {"rows": book.rows(), "errors": list(book.errors), "unpriced": sorted(self._unpriced),
+                "source": book.default.get("source"), "checked": book.default.get("checked"),
+                "userPath": tilde(str(book.path())), "rev": book.rev}
 
     def _heavy(self, at: int) -> None:
         for sid, session in self.sessions.items():
@@ -1501,6 +1604,10 @@ class World:
         if "tests" in self._dirty:
             self.state.set_slice("tests", sorted(({k: v for k, v in t.items() if k not in ("progressRun", "progressRuns")} for t in self.tests.values()),
                                                  key=lambda t: t["startedAt"]))
+        if "bills" in self._dirty:
+            self.state.set_slice("bills", [dict(b) for b in self._bills])
+        if "prices" in self._dirty:
+            self.state.set_slice("prices", self.prices_slice())
         if "devices" in self._dirty:
             busy = {t["deviceId"]: t["agentId"] for t in self.running_tests() if t.get("deviceId")}
             self.state.set_slice("devices", [dict(d, **({"busyBy": busy[d["id"]]} if d["id"] in busy else {})) for d in self.devices])

@@ -12,6 +12,8 @@ window.__dbg = {
   board: () => ({ open: !!tb.open, detail: tb.detail || null, waitView: !!tb.waitView, robot: rbState.id || null }),
   questions: () => QUESTIONS.map((q) => ({ id: q.id, status: q.status, hookWaiting: !!q.hookWaiting, waitEndReason: q.waitEndReason || null })),
   questionRelease: (id) => SOURCE.releaseQuestion(id),
+  // the bill over a robot (54-bills.js): the message ids the page has taken from the bills slice (shown or not)
+  billSeen: () => [...BILL.seen.keys()],
   camera, sbTile, sbPoint, SB, KB, THREE, robots,
   // Mermaid (2.3.5): draw a text into a box of its own and say what came out — whether it was read yet, the config it
   // runs with, the svg's nodes, and anything that could run (a script, an on* attribute, a javascript: link)

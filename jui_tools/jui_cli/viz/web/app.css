@@ -1201,3 +1201,43 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 /* The questions on the board (2.3.5): the panel's cards in the permission strip's frame, above it */
 .q-strip { border-color: var(--wb-violet, var(--info)); }
 .q-strip .qcard { margin: 0; }
+
+/* The bill over a robot (2.3.6): a banknote and the estimated cost of its responses, above its name tag (placeRobotTags
+   keeps the room for it inside the tag's box, so it never covers a tag); it rises a little and goes. ? = no price. */
+.bill { position: absolute; left: 0; top: 0; pointer-events: none; }
+.bill-in { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 5px; border: 1.5px solid var(--ok); border-radius: 999px; background: var(--ok-bg); color: var(--ok); font: 700 11.5px/1.5 var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px var(--shadow); }
+.bill.unknown .bill-in { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+.bill-ico { flex: none; width: 18px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.bill-ico rect { fill: currentColor; fill-opacity: 0.16; }
+.bill-in.rise { animation: bill-rise 4.2s ease-out forwards; }
+@keyframes bill-rise {
+  0% { opacity: 0; transform: translateY(0); }
+  8% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-12px); }
+}
+.set-bills { display: grid; justify-items: start; gap: 6px; margin-top: 14px; }
+.price-chip::before { content: "$ "; }
+.pr-body { display: grid; align-content: start; gap: 14px; }
+.pr-about { margin: 0; font-size: 12.5px; line-height: 1.6; }
+.pr-about code, .pr-body li code { font: 500 11.5px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.pr-msg { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--wb-card); font: 700 12.5px/1.5 var(--font-body); }
+.pr-unpriced, .pr-errors { padding: 10px 14px; border: 1.5px solid var(--warn); border-radius: 12px; background: var(--wb-card); }
+.pr-body h3 { margin: 0 0 6px; font: 700 13.5px/1.4 var(--font-body); }
+.pr-unpriced ul, .pr-errors ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 12.5px; }
+.pr-form { display: grid; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--wb-line); border-radius: 12px; background: var(--wb-card); }
+.pr-form label { display: grid; gap: 3px; font: 700 11.5px/1.4 var(--font-body); color: var(--wb-soft); }
+.pr-form input { min-width: 0; padding: 5px 8px; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--panel); color: var(--ink); font: 500 13px/1.4 var(--font-mono); }
+.pr-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.pr-btns { display: flex; gap: 8px; }
+.pr-table td, .pr-table th { font-variant-numeric: tabular-nums; }
+.pr-table tr.removed { opacity: 0.55; }
+.pr-extra { display: block; color: var(--wb-soft); font-size: 11px; font-weight: 500; }
+.pr-origin { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--wb-bg); font: 700 11px/1.6 var(--font-body); white-space: nowrap; }
+.pr-origin[data-origin="changed"], .pr-origin[data-origin="user"] { background: var(--info-bg); color: var(--info); }
+.pr-origin[data-origin="removed"] { background: var(--bad-bg); color: var(--bad); }
+.pr-acts { white-space: nowrap; }
+.pr-acts .mini-btn + .mini-btn { margin-left: 4px; }
+@media (max-width: 640px) { .pr-table thead { display: none; } .pr-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 0; border-bottom: 1px solid var(--wb-line); } .pr-table th[scope="row"], .pr-table td.pr-acts { grid-column: 1 / -1; } .pr-table td, .pr-table th { border: 0; } }
+/* priced by the user's own table (not the shipped one): a dashed frame, and the title says so */
+.bill.own-price .bill-in { border-style: dashed; }

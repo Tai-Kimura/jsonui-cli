@@ -635,6 +635,33 @@ def make_app(ctx: ServerContext) -> web.Application:
         return web.Response(body=got, content_type="application/json",
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
+    async def api_prices(request: web.Request) -> web.Response:
+        """The page's 単価 sheet (2.3.6): {"op": set | remove | reset, "model", "row"?} changes the user's price
+        table (prices.apply_op) — the checks of /api/prompt (prompt_checks) first. Written in the price table's own
+        worker (never on the event loop), then read again at once: the next response is priced by it."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: /api/prices（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        op, model, row = body.get("op"), body.get("model"), body.get("row")
+        world = ctx.world
+        if world is None or world.prices is None:
+            return web.Response(status=503, text="no world\n")
+        from . import prices
+        book = world.prices
+        if world._prices_pool is None:
+            world.poll_prices()
+        ok, msg = await asyncio.get_running_loop().run_in_executor(
+            world._prices_pool, lambda: prices.apply_op(book.path(), op, model, row, book.default))
+        if not ok:
+            return web.json_response({"ok": False, "error": msg}, status=400, headers={"Cache-Control": "no-store"})
+        log(f"単価: {msg}")
+        book.recheck()
+        return web.json_response({"ok": True, "message": msg}, headers={"Cache-Control": "no-store"})
+
     async def api_session_end(request: web.Request) -> web.Response:
         """退勤 from a robot card (ticket 2026-10-19-jui-viz-clock-out-button): the checks of /api/prompt
         (prompt_checks, with this route's cap), then the session in this server's list and not ended, the robot asked
@@ -677,6 +704,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/prompt", api_prompt)
     app.router.add_route("*", "/api/history-image", api_history_image)
     app.router.add_route("*", "/api/data-docs", api_data_docs)
+    app.router.add_route("*", "/api/prices", api_prices)
     app.router.add_route("*", "/api/session/end", api_session_end)
     app.router.add_route("*", "/api/call-command", api_call_command)
     app.router.add_route("*", "/api/notify-presence", api_notify_presence)

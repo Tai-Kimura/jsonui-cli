@@ -79,6 +79,14 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     export = sub.add_parser("export-demo", help="Write the demo page as a static folder (for a docs site)")
     export.add_argument("--out", required=True, help="An empty or new folder")
 
+    pr = sub.add_parser("prices", help="Show or change the prices behind the estimated cost over each robot")
+    pr.add_argument("prices_action", nargs="?", choices=["list", "set", "remove", "reset"], default="list")
+    pr.add_argument("model", nargs="?", help="The model ID as the transcript writes it (message.model)")
+    for flag, key in (("--input", "input"), ("--cache-write-5m", "cache_write_5m"), ("--cache-write-1h", "cache_write_1h"),
+                      ("--cache-read", "cache_read"), ("--output", "output")):
+        pr.add_argument(flag, dest=key, type=float, help="USD per million tokens (set: all five are required)")
+    pr.add_argument("--json", action="store_true", help="Machine-readable list")
+
     relay = sub.add_parser("relay", help="Register the permission relay (an MCP channel) with Claude Code")
     relay.add_argument("relay_action", nargs="?", choices=["install", "uninstall", "status"])
     relay.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the command, run nothing")
@@ -97,10 +105,11 @@ def cmd_viz(args: argparse.Namespace) -> int:
         "statusline": _cmd_statusline,
         "relay": _cmd_relay,
         "export-demo": _cmd_export_demo,
+        "prices": _cmd_prices,
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo}")
+        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,prices}")
         return 1
     try:
         # Every command that reads or writes the runtime folder moves the old one first; export-demo uses none.
@@ -113,6 +122,54 @@ def cmd_viz(args: argparse.Namespace) -> int:
     except Exception as exc:  # noqa: BLE001 - report, don't dump a traceback
         _err(f"内部エラー: {type(exc).__name__}: {exc}")
         return 2
+
+
+# ---------------------------------------------------------------- prices (the bill over a robot, 2.3.6)
+
+
+def _cmd_prices(args: argparse.Namespace) -> int:
+    """list: the table in use (shipped, then the user's), where each price comes from, and the user's rows left out
+    with the reason. set / remove / reset: change the user's table (<viz home>/prices.json); a running server uses it
+    from its next response, with no restart."""
+    from ..viz import prices
+    action = args.prices_action
+    path = prices.user_path()
+    if action == "list":
+        book = prices.PriceBook(user=path)
+        book.read_now()
+        rows = book.rows()
+        if args.json:
+            print(json.dumps({"rows": rows, "errors": book.errors, "source": book.default["source"],
+                              "checked": book.default["checked"], "userPath": str(path)}, ensure_ascii=False, indent=1))
+            return 0
+        print(f"単価（USD / 100 万トークン）。出典: {book.default['source']}（{book.default['checked']} に確認）")
+        print(f"利用者の表: {path}")
+        names = {"default": "既定", "user": "追加", "changed": "変更", "removed": "削除"}
+        for r in rows:
+            if r["origin"] == "removed":
+                print(f"  {r['model']:<30} 削除（金額を出さない）")
+                continue
+            print(f"  {r['model']:<30} 入力 {r['input']:g} / 書込5分 {r['cache_write_5m']:g} / 書込1時間 {r['cache_write_1h']:g}"
+                  f" / 読込 {r['cache_read']:g} / 出力 {r['output']:g}  [{names[r['origin']]}]")
+        for e in book.errors:
+            print(f"  使わない行: {e}")
+        return 0
+    if not args.model:
+        _err(f"jui viz prices {action} にはモデル名が要ります")
+        return 1
+    row = None
+    if action == "set":
+        row = {k: getattr(args, k) for k in prices.KINDS}
+        missing = [k for k, v in row.items() if v is None]
+        if missing:
+            _err("set には 5 つの単価が要ります: " + ", ".join("--" + k.replace("_", "-") for k in missing))
+            return 1
+    ok, msg = prices.apply_op(path, action, args.model, row)
+    if not ok:
+        _err(msg)
+        return 1
+    print(f"{msg}（{path}）")
+    return 0
 
 
 # ---------------------------------------------------------------- helpers
@@ -525,6 +582,9 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     world = World(ctx.state, config.toolInputMaxChars, session_start=transcripts.session_start(claude_home() / "projects"))
     world.transcript_path = transcripts.transcript_path(claude_home() / "projects")
     world.history_reader = history.reader(claude_home() / "projects")
+    from ..viz import prices as prices_mod
+    world.prices = prices_mod.PriceBook()
+    world._dirty.add("prices")
     started_at = now_ms()
     sources: dict[str, dict] = {}
 
@@ -801,6 +861,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                         for rec in tail.read_new():
                             world.apply_progress(rec, "web", None, at)
                     usage_ticks["n"] += 1
+                    if world.poll_prices():
+                        log(f"単価の表を読み直しました（{world.prices.path()}）")
+                        for e in world.prices.errors:
+                            log(f"単価の表: 使わない行: {e}")
                     if usage_ticks["n"] % 4 == 0:
                         poll_usage(at)
                     if usage_ticks["n"] % 10 == 0:  # every 5 s: new files from iOS / Web runs

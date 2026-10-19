@@ -116,6 +116,18 @@ def usage_of(rec) -> tuple[str, int, int | None] | None:
     return mid, out, at
 
 
+def bill_of(rec) -> tuple[str, str, dict, int | None] | None:
+    """(message id, model, message.usage, epoch ms or None) of an assistant record, for its cost (prices.cost). The
+    same message is written once per content block with the same usage: the caller counts a message id once."""
+    msg = rec.get("message") if isinstance(rec, dict) else None
+    if not isinstance(msg, dict) or not isinstance(msg.get("id"), str) or not isinstance(msg.get("usage"), dict):
+        return None
+    model = msg.get("model")
+    if not isinstance(model, str) or not model or model.startswith("<"):    # <synthetic>: written by the CLI, no call
+        return None
+    return msg["id"], model[:100], msg["usage"], _epoch_ms(rec.get("timestamp"))
+
+
 def _epoch_ms(ts) -> int | None:
     if not isinstance(ts, str):
         return None
@@ -135,9 +147,9 @@ class UsageTail:
         self.skipping = False
 
     def read(self) -> dict:
-        """{'usage': [(id, tokens, at)], 'calls': [(kind, sender name, at)], 'bytes': n, 'assistant': n, 'bad': n}
-        for what was added. ``calls``: the receiver's records of a cross-session message (calls.record_event)."""
-        out = {"usage": [], "calls": [], "bytes": 0, "assistant": 0, "bad": 0}
+        """{'usage': [(id, tokens, at)], 'bills': [(id, model, usage, at)], 'calls': [(kind, sender name, at)],
+        'bytes': n, 'assistant': n, 'bad': n} for what was added. ``calls``: the receiver's records of a cross-session message (calls.record_event)."""
+        out = {"usage": [], "bills": [], "calls": [], "bytes": 0, "assistant": 0, "bad": 0}
         try:
             fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
@@ -178,14 +190,40 @@ class UsageTail:
             u = usage_of(rec)
             if u:
                 out["usage"].append(u)
+                b = bill_of(rec)
+                if b:
+                    out["bills"].append(b)
             c = record_event(rec)
             if c:
                 out["calls"].append((c[0], c[1], _epoch_ms(rec.get("timestamp"))))
         return out
 
 
-def transcript_path(projects: Path) -> Callable[[str, str | None, str | None], Path | None]:
-    def find(session_id: str, cwd: str | None, given: str | None = None) -> Path | None:
+def transcript_path(projects: Path) -> Callable[..., Path | None]:
+    """find(session_id, cwd, given, agent_id=None, agent_given=None): the session's transcript, or with agent_id its
+    subagent's (the hook's agent_transcript_path, else <session folder>/subagents/agent-<id>.jsonl), a regular .jsonl
+    under the projects folder reached through no symlink — or None."""
+    root = projects.resolve() if projects.exists() else projects
+
+    def agent_paths(session_id, cwd, given, agent_id, agent_given) -> list[Path]:
+        out = []
+        if isinstance(agent_given, str) and agent_given.endswith(".jsonl"):
+            out.append(Path(agent_given).expanduser())
+        if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", agent_id):
+            for main in candidates(projects, session_id, cwd, given):
+                out.append(main.parent / session_id / "subagents" / f"agent-{agent_id}.jsonl")
+        return out
+
+    def find(session_id: str, cwd: str | None, given: str | None = None, agent_id: str | None = None,
+             agent_given: str | None = None) -> Path | None:
+        if agent_id:
+            for path in agent_paths(session_id, cwd, given, agent_id, agent_given):
+                try:
+                    if path.parent.resolve().is_relative_to(root) and path.is_file() and not path.is_symlink():
+                        return path
+                except (OSError, ValueError):
+                    continue
+            return None
         for path in candidates(projects, session_id, cwd, given):
             try:
                 if path.is_file() and not path.is_symlink():

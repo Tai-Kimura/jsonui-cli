@@ -30,6 +30,7 @@
       <button type="button" class="chip perm-chip" id="chip-perm" hidden aria-haspopup="dialog">許可待ち 0</button>
       <button type="button" class="chip perm-chip" id="chip-ask" hidden aria-controls="questions-sec">質問 0</button>
       <button type="button" class="chip" id="chip-askwait" hidden aria-haspopup="dialog" title="質問が viz で待つ間、ターミナルや VS Code には質問が出ない（押すと変えられる）"></button>
+      <button type="button" class="chip perm-chip price-chip" id="chip-price" hidden aria-haspopup="dialog">単価の無いモデル 0</button>
     </div>
     <div class="controls">
       <button type="button" id="btn-play" aria-pressed="false">一時停止</button>
@@ -134,6 +135,15 @@
           <div class="ds-body" id="ds-body" tabindex="0" aria-label="仕様書の内容"></div>
         </div>
       </div>
+      <div class="wb" id="pr" hidden role="dialog" aria-modal="false" aria-labelledby="pr-title">
+        <div class="wb-frame pr-frame">
+          <div class="wb-head">
+            <button type="button" class="wb-btn" id="pr-close">← 3D に戻る</button>
+            <h2 id="pr-title">単価の表（お札の概算）</h2>
+          </div>
+          <div class="ds-body pr-body" id="pr-body" tabindex="0" aria-label="単価の表"></div>
+        </div>
+      </div>
       <section class="rb" id="rb" hidden role="dialog" aria-modal="false" aria-labelledby="rb-title"></section>
     </div>
     <aside class="side" id="side" aria-label="セッション、spec、テスト、タスク">
@@ -166,6 +176,11 @@
           <button type="button" class="tw-switch" id="weather-switch-panel" role="switch" aria-checked="false">近所の天気</button>
           <p class="tw-note" id="weather-note-panel">オフ — 外への通信はしません</p>
           <p class="set-hint">オンにすると位置の許可を求め、約 1 km に丸めた位置でサーバーが 30 分に 1 回天気を問い合わせます。見た目に出るのは、ビルの全景（部屋が 7 つ以上）です。</p>
+        </div>
+        <div class="set-bills">
+          <button type="button" class="tw-switch" id="bill-switch" role="switch" aria-checked="true">お札（概算の金額）</button>
+          <p class="tw-note" id="bill-note">オン — 応答ごとの概算の金額をロボットの頭上に出します</p>
+          <p class="set-hint">金額は公式の単価 × 応答のトークン数の概算です。サブスクリプションでの利用では、実際の請求とは一致しません。<button type="button" class="mini-btn" id="prices-open" aria-haspopup="dialog">単価の表</button></p>
         </div>
       </section>
       <div class="side-foot" id="side-foot" hidden><button type="button" class="log-open" id="btn-strip-open" aria-controls="ticker-strip" aria-expanded="false" aria-label="ログの帯を開く">ログを開く</button></div>

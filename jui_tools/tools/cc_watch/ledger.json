@@ -15,6 +15,18 @@
       ]
     },
     {
+      "id": "model-prices",
+      "name": "モデル名と単価（お札の概算: message.model・message.usage の 4 種類のトークン・公式の価格のページ）",
+      "relies_on": "message.model as the API's model ID; message.usage input_tokens / cache_creation_input_tokens (with cache_creation.ephemeral_5m_input_tokens / ephemeral_1h_input_tokens) / cache_read_input_tokens / output_tokens, speed, inference_geo; one message written once per content block with the same usage (billed once by message.id); a subagent's responses in <session>/subagents/agent-<id>.jsonl; the prices of https://platform.claude.com/docs/en/about-claude/pricing (copied into prices.json with the day checked)",
+      "probe": "price_table_models",
+      "impact": "viz: 新しいモデルのお札に金額が出ない（? とトークン数になる。単価の表に足すまで）。usage の形が変わると金額がずれるか出ない",
+      "files": [
+        "jui_tools/jui_cli/viz/prices.py",
+        "jui_tools/jui_cli/viz/prices.json",
+        "jui_tools/jui_cli/viz/web/js/54-bills.js"
+      ]
+    },
+    {
       "id": "hooks",
       "name": "hooks の入力の形とイベント名",
       "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason), the hooks section of settings.json, the plugin's hooks.json; the hook output fields the CLI reads back (hookSpecificOutput, permissionDecision, additionalContext, decision: block)",

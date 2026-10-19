@@ -92,6 +92,21 @@ const SOURCE = {
       return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
     } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
   },
+  /* The 単価 sheet (2.3.6, 54-bills.js): set / remove / reset a model's line in the user's price table (POST /api/prices,
+     the checks of /api/prompt). Resolves { ok } or { ok: false, error }. */
+  async pricesOp(op, model, row) {
+    try {
+      const res = await fetch('/api/prices', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify(row ? { op, model, row } : { op, model }),
+      });
+      const text = await res.text();
+      let body = null;
+      try { body = JSON.parse(text); } catch (err) { body = null; }
+      return res.ok && body && body.ok ? { ok: true } : { ok: false, error: (body && body.error) || `${res.status} ${text.trim()}` };
+    } catch (err) { return { ok: false, error: 'サーバーにつながらない' }; }
+  },
   /* The call bell (2.3.5, 50-panel.js): the line to paste, made by the server (callcmd.py) from the project's own folder,
      under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. */
   async callCommand(project, name, role) {

@@ -693,6 +693,7 @@ function liveDropRobot(R) {
   scene.remove(R.robot.root); focusRelease(R.robot.root); disposeTree(R.robot.root);   // focusRelease: 50-panel.js (10-18)
   const k = fontRedraws.indexOf(R.robot.fontRedraw); if (k >= 0) fontRedraws.splice(k, 1);
   R.tag.remove();
+  if (R.bill) R.bill.remove();
   if (links[R.def.id]) links[R.def.id].set(null, null, false, 0);
   robots.splice(robots.indexOf(R), 1);
 }
@@ -1121,7 +1122,7 @@ function liveSoloSync() {
   }
   const box = document.getElementById('room-solo');
   if (!box) return;
-  box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed || ds.open;   // the data server's sheet covers it (2.3.5)
+  box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed || ds.open || pr.open;   // the data server's sheet covers it (2.3.5)
   if (solo) setText(document.getElementById('room-solo-name'), PROJECT[solo].name);
   const call = document.getElementById('room-call');
   if (call) call.hidden = SOURCE.mode !== 'live';   // the call bell's keyboard way in (2.3.5); the demo has no folder
@@ -2610,6 +2611,7 @@ const tagNdc = new THREE.Vector3();
 function placeRobotTags(dt = 1 / 60) {
   const ease = 1 - Math.pow(1 - TAGS.ease, dt * 60);   // TAGS.ease of the way each 1/60 s, in real time (it was per frame)
   const t0 = performance.now(), W = canvas.clientWidth, H = canvas.clientHeight, list = [];
+  billsExpire();   // 54-bills.js
   for (const R of robots) {
     tagNdc.copy(R.robot.root.position).add(TAG_UP);
     if (R.robot.rps && R.robot.rps.visible) tagNdc.y += TAGS.rpsLift;
@@ -2617,11 +2619,16 @@ function placeRobotTags(dt = 1 / 60) {
     const hidden = tagNdc.z > 1 || tagNdc.z < -1 || !R.robot.root.visible || R.tag.hidden;
     const text = R.tag.textContent;
     if (!hidden && (!R.tagSize || R.tagSize.text !== text || t0 - R.tagSize.at > TAGS.measureMs)) R.tagSize = { text, at: t0, w: R.tag.offsetWidth, h: R.tag.offsetHeight };
-    list.push({ R, hidden, x: ((tagNdc.x + 1) / 2) * W, y: ((1 - tagNdc.y) / 2) * H, z: tagNdc.z });
+    // the bill (54-bills.js) sits on the tag, inside the tag's box: what keeps tags apart keeps it off every tag
+    const bill = !hidden && R.bill && !R.bill.hidden ? R.bill : null, btext = bill ? bill.textContent : '';
+    if (bill && (!R.billSize || R.billSize.text !== btext)) R.billSize = { text: btext, w: bill.offsetWidth, h: bill.offsetHeight };
+    list.push({ R, hidden, bill, x: ((tagNdc.x + 1) / 2) * W, y: ((1 - tagNdc.y) / 2) * H, z: tagNdc.z });
   }
   const placed = [];
   for (const it of list.filter((q) => !q.hidden).sort((a, b) => a.z - b.z)) {   // nearest first: it keeps its spot
-    const { w, h } = it.R.tagSize, x0 = it.x - w / 2, x1 = it.x + w / 2;
+    const b = it.bill ? it.R.billSize : null;
+    const w = Math.max(it.R.tagSize.w, b ? b.w : 0), h = it.R.tagSize.h + (b ? b.h + BILL.gap + BILL.rise : 0);
+    const x0 = it.x - w / 2, x1 = it.x + w / 2;
     let bottom = it.y;
     for (let pass = 0; pass < TAGS.maxPasses; pass++) {
       const hit = placed.find((p) => x0 < p.x1 && p.x0 < x1 && bottom - h < p.y1 && p.y0 < bottom);
@@ -2633,12 +2640,16 @@ function placeRobotTags(dt = 1 / 60) {
   }
   for (const it of list) {   // the writes
     const el = it.R.tag;
-    if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; continue; }
+    if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; if (it.R.bill) it.R.bill.style.visibility = 'hidden'; continue; }
     el.style.visibility = 'visible';
     const dy = it.R.tagDy === undefined ? it.target : it.R.tagDy + (it.target - it.R.tagDy) * ease;
     it.R.tagDy = Math.abs(dy - it.target) < 0.5 ? it.target : dy;
     it.R.tagTarget = it.target;   // where the tag is going (the e2e reads a tag once tagDy has reached it: the settle hook of 80-dbg.js)
     el.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy).toFixed(1)}px) translate(-50%, -100%)`;
+    if (it.bill) {   // its bottom just above the tag; it rises inside the room the box kept for it (BILL.rise)
+      it.bill.style.visibility = 'visible';
+      it.bill.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy - it.R.tagSize.h - BILL.gap).toFixed(1)}px) translate(-50%, -100%)`;
+    } else if (it.R.bill) it.R.bill.style.visibility = 'hidden';
   }
   const ms = performance.now() - t0, S0 = TAGS.stats;
   S0.n = list.length; S0.frames++; S0.sumMs += ms; S0.maxMs = Math.max(S0.maxMs, ms);

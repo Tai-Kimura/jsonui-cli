@@ -34,6 +34,7 @@ function frame(ms) {
   if (has3D) {
     if (ms - lastBoard > 200 && !TOWER.on) { redrawBoards(latestModel, ms / 1000); lastBoard = ms; }   // the building hides the boards
     update3D(latestModel, ms / 1000, Math.min(FRAME_DT_MAX, rawDt));
+    billsFrame(ms);   // 54-bills.js
   }
   if (ms - lastPanel > 250) {
     renderPanel(latestModel);
@@ -42,6 +43,7 @@ function frame(ms) {
     renderTaskBoard(latestModel);
     renderRobot(latestModel);
     renderLog(false);
+    pricesPanel();
     $('chip-clock').textContent = fmtClock(BASE_CLOCK + simT);
     if (SOURCE.mode === 'live') liveChrome();
     floorNavSync();

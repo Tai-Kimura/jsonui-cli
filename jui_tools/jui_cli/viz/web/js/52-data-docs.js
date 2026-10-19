@@ -11,6 +11,7 @@ async function openDataDocs(project, opener) {
   if (wb.open) closeWhiteboard();
   if (tb.open) closeTaskBoard();
   if (rbState.id) closeRobot(true);
+  if (pr.open) closePrices();   // 54-bills.js
   Object.assign(ds, { open: true, project, doc: null, error: '', loading: true, ep: null, opener: opener || null });
   setText($('ds-room'), PROJECT[project] ? PROJECT[project].name : '');
   showOverlay(dsEl);

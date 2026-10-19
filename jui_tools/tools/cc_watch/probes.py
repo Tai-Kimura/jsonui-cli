@@ -197,9 +197,42 @@ def session_ran(ctx: Context):
                                                          "terminal_reason": r.get("terminal_reason")}
 
 
+def _price_table() -> dict:
+    """The table viz prices responses with: the shipped one and the user's (<viz home>/prices.json) together."""
+    import sys
+    tools_root = str(Path(__file__).resolve().parents[2])        # jui_tools
+    if tools_root not in sys.path:
+        sys.path.insert(0, tools_root)
+    from jui_cli.viz import prices
+    book = prices.PriceBook()
+    book.read_now()
+    return book.table
+
+
+def price_table_models(ctx: Context, table: dict | None = None):
+    """The models the session's responses name (message.model, its own and its subagents' transcripts) that the price
+    table of the bill over a robot (jui_cli/viz/prices.py) has no row for: a new model is red until it is priced."""
+    if (s := _skipped(ctx)) is not None:
+        return s
+    table = _price_table() if table is None else table
+    models: set[str] = set()
+    for f in sorted((ctx.session.config_dir / "projects").rglob("*.jsonl")):
+        for ln in f.read_text(errors="replace").splitlines():
+            try:
+                rec = json.loads(ln)
+            except ValueError:
+                continue
+            msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "assistant" else None
+            model = msg.get("model") if isinstance(msg, dict) else None
+            if isinstance(model, str) and model and not model.startswith("<"):    # <synthetic>: no API call
+                models.add(model)
+    return {"responses": bool(models), "unpriced": sorted(m for m in models if m not in table)}
+
+
 PROBES: dict[str, Callable[[Context], object]] = {
     "cli_flags": cli_flags, "plugin_cli": plugin_cli, "mcp_cli": mcp_cli, "channels_flags": channels_flags,
     "transcript_shape": transcript_shape, "hook_input_shape": hook_input_shape, "env_vars": env_vars,
     "statusline_input": statusline_input, "sigterm_session_end": sigterm_session_end, "config_paths": config_paths,
     "session_ran": session_ran, "agents_cli": agents_cli, "tool_names": tool_names,
+    "price_table_models": price_table_models,
 }
