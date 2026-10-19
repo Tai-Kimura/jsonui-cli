@@ -15,6 +15,8 @@ Everything is read from the robots themselves (window.__dbg.launchLook) with the
   - a background Agent call that ends at once (PostToolUse right after): the whistle all the same, for its length;
   - with heavy work's whistle (3+ subagents, forced) at the same time: 「ピーッ！」 in place of 「ピッ！」 for the launch,
     then 「ピッ！」 and the sweat go on;
+  - never away from the desk: a session that calls a subagent at once, its robot still walking in from the door,
+    shows no whistle on any frame it walks inside the whistle's time (and such frames do occur);
   - under reduced motion: the whistle at the mouth, the arm not raised and still.
 
 Screenshots: a0's launch up close in the demo (light and dark), and the live room.
@@ -33,6 +35,7 @@ from common import DESKTOP, LAUNCH_ARGS, Watch, dump, freeze, new_page, ready, s
 from waits import settled, until
 
 MAIN = "e2e00000-0000-4000-8000-0000000004e1"
+NEW = "e2e00000-0000-4000-8000-0000000004e2"   # a session that calls a subagent at once, its robot still walking in
 CWD = "/work/launch-whistle"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 LEN_MS = 2500           # robots.LAUNCH_WHISTLE_MS (test_viz_launch_whistle.py keeps the demo's launchSec equal to it)
@@ -106,14 +109,16 @@ async def run_live_part(browser, watch, out, failures, res):
     proj.mkdir(parents=True, exist_ok=True)
     transcript = proj / f"{MAIN}.jsonl"
     transcript.write_text(json.dumps({"type": "user", "timestamp": stamp("2026-10-20T09:00:00Z"), "message": {"role": "user", "content": "start"}}) + "\n")
+    transcript_new = proj / f"{NEW}.jsonl"
+    transcript_new.write_text(json.dumps({"type": "user", "timestamp": stamp("2026-10-20T09:00:01Z"), "message": {"role": "user", "content": "start"}}) + "\n")
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT,
                            env=dict(base_env, HOME=str(home), JUI_VIZ_E2E="1"))
     url = f"http://127.0.0.1:{port}"
 
-    def hook(**payload):
-        body = {"session_id": MAIN, "cwd": CWD, "permission_mode": "default", "transcript_path": str(transcript), **payload}
+    def hook(sid=MAIN, **payload):
+        body = {"session_id": sid, "cwd": CWD, "permission_mode": "default", "transcript_path": str(transcript if sid == MAIN else transcript_new), **payload}
         subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(),
                        capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
 
@@ -198,6 +203,26 @@ async def run_live_part(browser, watch, out, failures, res):
         post("Agent", bg, "toolu_lw_bg3")
         await is_on(page, rid, False, "the room up close, the whistle over", timeout=30000)
         await page.click("#room-back")
+
+        # away from the desk: a new session calls a subagent at once, while its robot still walks in from the door. On
+        # every frame it walks (a path left) inside the whistle's time, no whistle; then, at its desk, none either
+        # (its time is over by then or it shows there). Probed 10-20: the walk in takes longer than the 2.5 s.
+        await page.evaluate("""(sid) => { const W = window.__walkWhistle = { frames: 0, due: 0, bad: 0, rows: [] };
+          window.__dbg.afterFrame(() => { const R = window.__dbg.robots.find((x) => x.def.sessionId === sid); if (!R) return;
+            const st = window.__dbg.robotState()[R.def.id] || {}, due = !!(st.whistle && Date.now() < st.whistle.until);
+            const shown = !!(R.robot.launch || (R.robot.whistle && R.robot.whistle.visible) || (R.robot.pipiLong && R.robot.pipiLong.visible));
+            if (!R.path.length) return;
+            W.frames += 1; if (due) W.due += 1;
+            if (shown) { W.bad += 1; if (W.rows.length < 3) W.rows.push({ path: R.path.length, state: R.robot.state, launch: !!R.robot.launch }); } }); }""", NEW)
+        hook(NEW, hook_event_name="SessionStart", source="startup")
+        hook(NEW, hook_event_name="UserPromptSubmit", prompt="すぐ頼む")
+        hook(NEW, hook_event_name="PreToolUse", tool_name="Agent", tool_input=bg, tool_use_id="toolu_lw_walk")
+        hook(NEW, hook_event_name="PostToolUse", tool_name="Agent", tool_input=bg, tool_use_id="toolu_lw_walk", tool_response="ok")
+        await until(page, "(sid) => { const R = window.__dbg.robots.find((x) => x.def.sessionId === sid); const st = R && window.__dbg.robotState()[R.def.id]; "
+                    "return !!R && !R.path.length && st && !st.whistle; }", "the new robot at its desk, its whistle's time over", arg=NEW, timeout=60000, why=WHY)
+        walk = res["walkIn"] = await page.evaluate("() => { window.__dbg.afterFrame(null); const W = window.__walkWhistle; window.__walkWhistle = null; return W; }")
+        check(failures, walk["due"] > 0 and walk["bad"] == 0,
+              f"walking in (a path left) inside the whistle's time: no whistle on any frame (due frames > 0 shows it reaches): {walk}")
 
         # reduced motion: the whistle at the mouth, no waving
         quiet = await new_page(browser, watch, "launch-whistle-reduced", reduced_motion="reduce", **DESKTOP)
