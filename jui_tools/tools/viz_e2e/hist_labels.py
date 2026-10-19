@@ -47,10 +47,23 @@ PEER_STACK = """() => {
   if (!s) return null;
   const box = (sel) => { const e = s.querySelector(sel); return e ? e.getBoundingClientRect() : null; };
   const who = box(':scope > b'), head = box(':scope > .h-head'), at = box(':scope > .h-at');
-  const lh = parseFloat(getComputedStyle(s.querySelector(':scope > .h-head')).lineHeight) || 18;
+  const headEl = s.querySelector(':scope > .h-head');
+  const lh = parseFloat(getComputedStyle(headEl).lineHeight) || 18;
   const row = s.getBoundingClientRect(), pad = parseFloat(getComputedStyle(s).paddingRight) || 0;
   return who && head && at && { whoBottom: Math.round(who.bottom), headTop: Math.round(head.top), headBottom: Math.round(head.bottom),
-    atTop: Math.round(at.top), headLines: Math.round(head.height / lh), atRightGap: Math.round(row.right - pad - at.right) };
+    atTop: Math.round(at.top), headLines: Math.round(head.height / lh), atRightGap: Math.round(row.right - pad - at.right),
+    // the body as it would run unfolded: the folded head keeps its whole text, only its box is cut (issue #34: 3 lines)
+    fullLines: Math.round(headEl.scrollHeight / lh), clamp: getComputedStyle(headEl).webkitLineClamp || getComputedStyle(headEl).getPropertyValue('-webkit-line-clamp') };
+}"""
+PEER_LONG = "もう 1 本お願いします（dd から）。" + "とても長い知らせの本文。" * 30   # hist_wide.py's sample
+PEER_OPEN = """(want) => {
+  const d = document.querySelector('[data-rb-hist] .h-peer');
+  if (!d) return null;
+  const was = d.open; d.open = true;
+  const p = d.querySelector(':scope > .h-plain'), lh = parseFloat(getComputedStyle(p).lineHeight) || 18, r = p.getBoundingClientRect();
+  const got = { whole: p.textContent === want, lines: Math.round(r.height / lh), clipped: p.scrollHeight > p.clientHeight + 1 || getComputedStyle(p).webkitLineClamp !== 'none' };
+  d.open = was;
+  return got;
 }"""
 SQUEEZE = "(on) => { const p = document.querySelector('[data-rb-hist]'); p.style.width = on ? '130px' : ''; p.style.justifySelf = on ? 'start' : ''; }"
 
@@ -76,6 +89,13 @@ async def measure(page, failures, where, res):
           f"{where}: another session's message reads sender, body (wrapped), time top to bottom: {st}")
     check(failures, st and abs(st["atRightGap"]) <= 2 and st["atTop"] - st["headBottom"] >= 3,
           f"{where}: its time sits at the right end, a little apart from the body (issue #37): {st}")
+    # folded: at most 3 lines of a body that would run well past 3 (the sample is long enough to show the fold)
+    check(failures, st and st["fullLines"] > 4 and 2 <= st["headLines"] <= 3,
+          f"{where}: another session's long message is folded to 3 lines at most (issue #34): {st}")
+    # opened: the whole text, unfolded, in the panel under the summary
+    res[f"{where}-peerOpen"] = op = await page.evaluate(PEER_OPEN, PEER_LONG)
+    check(failures, op and op["whole"] and op["lines"] > 3 and not op["clipped"],
+          f"{where}: opened, the whole message reads in full: {op}")
     await page.evaluate(SQUEEZE, True)
     await page.wait_for_timeout(150)
     res[f"{where}-squeezed"] = got = await page.evaluate(LABELS, KINDS)
