@@ -660,6 +660,7 @@ JS_GLOBALS = {
     "requestAnimationFrame", "cancelAnimationFrame", "fetch", "getComputedStyle", "queueMicrotask", "alert",
     "WebSocket", "URL", "URLSearchParams", "Event", "CustomEvent", "MutationObserver", "ResizeObserver",
     "IntersectionObserver", "TextEncoder", "TextDecoder", "Blob", "FileReader", "Image", "CSS",
+    "Notification",   # the browser notifications (2.3.6, 50-panel.js notifyOut)
     "Float32Array", "Uint8Array", "Uint16Array", "Int32Array",
 }
 JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "typeof", "new", "await", "async",

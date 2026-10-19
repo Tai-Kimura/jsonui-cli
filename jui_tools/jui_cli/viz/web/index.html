@@ -29,10 +29,12 @@
       <span class="usage" id="usage" hidden></span>
       <button type="button" class="chip perm-chip" id="chip-perm" hidden aria-haspopup="dialog">許可待ち 0</button>
       <button type="button" class="chip perm-chip" id="chip-ask" hidden aria-controls="questions-sec">質問 0</button>
+      <button type="button" class="chip" id="chip-askwait" hidden aria-haspopup="dialog" title="質問が viz で待つ間、ターミナルや VS Code には質問が出ない（押すと変えられる）"></button>
     </div>
     <div class="controls">
       <button type="button" id="btn-play" aria-pressed="false">一時停止</button>
       <button type="button" id="btn-speed">速度 ×1</button>
+      <button type="button" id="btn-notify" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="notify-pop">通知</button>
       <button type="button" id="btn-side" aria-controls="side" aria-expanded="true">パネルを閉じる</button>
     </div>
   </header>
@@ -174,6 +176,21 @@
 <button type="button" class="log-open log-open-float" id="btn-strip-open-float" hidden aria-controls="ticker-strip" aria-expanded="false" aria-label="ログの帯を開く">ログを開く</button>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="pop" id="pop" hidden role="dialog" aria-modal="false"></div>
+<div class="notify-pop" id="notify-pop" hidden role="dialog" aria-modal="false" aria-labelledby="notify-title">
+  <h2 id="notify-title">通知と、質問の待ち時間</h2>
+  <p id="notify-perm-state"></p>
+  <button type="button" class="fn-btn" id="notify-ask-perm" hidden>ブラウザの通知を許可する</button>
+  <fieldset class="notify-kinds">
+    <legend>通知する出来事（このブラウザに覚える）</legend>
+    <label><input type="checkbox" data-notify-kind="done"> 完了（メインのセッションのターンの終わり）</label>
+    <label><input type="checkbox" data-notify-kind="perm"> 許可の待ち</label>
+    <label><input type="checkbox" data-notify-kind="ask"> 質問の待ち</label>
+  </fieldset>
+  <label for="ask-wait">質問を viz で待つ時間（サーバーに保存）</label>
+  <select id="ask-wait"></select>
+  <p class="notify-note" id="ask-wait-note">待っている間、ターミナルや VS Code には質問が出ません。カードの「ターミナルで答える」でいつでも戻せます。viz のページを全部閉じると、12 秒ほどで戻ります。ページが見えていないときは、質問の通知がオンで許可済みの間だけ待ちます。</p>
+  <button type="button" class="fn-btn" id="notify-close">閉じる（Esc）</button>
+</div>
 <div class="call-overlay" id="call" hidden role="dialog" aria-modal="true" aria-labelledby="call-title">
   <div class="call-card">
     <h2 id="call-title">ロボットを呼ぶ</h2>

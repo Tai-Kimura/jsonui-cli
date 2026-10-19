@@ -590,6 +590,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..viz import usage as usage_mod
 
     ctx.state.set_slice("usage", usage_mod.load())
+    # the page's settings (2.3.6): how long a question waits for the page, its choices
+    from ..viz.server import settings_slice
+
+    ctx.state.set_slice("settings", settings_slice(ctx.config))
 
     def on_usage(payload: dict) -> None:
         value = usage_mod.accept(payload, now_ms())

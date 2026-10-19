@@ -310,8 +310,25 @@ const qState = (q) => (q.status === 'sent' ? '送信済み · Claude Code の確
 /* Why a pending card cannot be answered here. It goes at the top, above choices drawn as not pickable: at the
    bottom, under radios that looked live, the requester clicked them and nothing happened (10-18). */
 const qWhy = (q) => (q.tooLongToShow ? '質問の全部をここに表示できないため、ここでは答えられません'
-  : q.released ? 'ターミナルに返しました' : q.waitEnded ? 'ブラウザで答えられる時間が過ぎました（だれも操作しないまま待ちが終わった）'
+  : q.released ? 'ターミナルに返しました' : q.waitEnded ? qWhyEnded(q)
     : 'このセッションは答えの中継を待っていません');
+/* Why the wait ended (2.3.6, ticket 2026-10-19-jui-viz-question-window-too-short): the server keeps the reason and
+   the time on the card (questions.hook_gave_up), so a reload says the same. */
+const qClock = (ms) => (ms ? new Date(ms).toTimeString().slice(0, 8) : '');
+function qWhyEnded(q) {
+  const at = q.waitEndedAt ? `（${qClock(q.waitEndedAt)}）` : '';
+  if (q.waitEndReason === 'hidden') return `viz のページが見えなくなったので、ターミナルに返しました${at}。ターミナルで答えてください`;
+  if (q.waitEndReason === 'session') return `セッションが止まったので、待ちを終えました${at}`;
+  return `ブラウザで答えられる時間が過ぎました${at}（だれも操作しないまま待ちが終わった）。ターミナルで答えてください`;
+}
+/* The countdown on a waiting card: "until answered" (2.3.6) has none. */
+const Q_NEVER_MS = 2 ** 53 - 1;
+function qLeftText(q, now) {
+  if (!q || !q.waitUntil) return '';
+  if (q.waitUntil >= Q_NEVER_MS) return 'viz で答えるまで待っている（「ターミナルで答える」で戻す）';
+  const left = Math.max(0, Math.ceil((q.waitUntil - now) / 1000));
+  return left >= 90 ? `あと ${Math.floor(left / 60)} 分 ${left % 60} 秒でターミナルに戻す` : `あと ${left} 秒でターミナルに戻す`;
+}
 function questionHTML(q, where = '') {   // where: '' in the panel, 'b' on the board (the same card twice in one page)
   const open = q.status === 'pending' && q.hookWaiting && !q.tooLongToShow;
   const closed = q.status === 'pending' && !open;
@@ -340,7 +357,7 @@ function questionsShown(now = Date.now()) {
    the first and says how many of the second (as its permission strip does), so the chip = cards in scope + elsewhere. */
 const questionsWaiting = () => QUESTIONS.filter((q) => q.status === 'pending');
 const questionsElsewhere = () => questionsWaiting().filter((q) => !inScope(projectOfRobot(q.who))).length;
-const questionsSig = (shown) => JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.released, q.sentAnswers, q.gotAnswers])]);
+const questionsSig = (shown) => JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.waitEndReason, q.waitEndedAt, q.released, q.sentAnswers, q.gotAnswers])]);
 function renderQuestions() {
   const now = Date.now();
   const shown = questionsShown(now);
@@ -352,7 +369,7 @@ function renderQuestions() {
   keyed($('questions'), questionsSig(shown), () => shown.map((q) => questionHTML(q)).join(''));
   for (const el of document.querySelectorAll('#questions [data-quntil], #q-strip [data-quntil]')) {   // the countdown, in place (inputs keep their state)
     const q = QUESTIONS.find((x) => x.id === el.dataset.quntil);
-    setText(el, q && q.waitUntil ? `あと ${Math.max(0, Math.ceil((q.waitUntil - now) / 1000))} 秒でターミナルに戻す` : '');
+    setText(el, qLeftText(q, now));
   }
 }
 const qHeld = {};   // question id -> when the page last asked the hook to wait longer
@@ -1724,3 +1741,169 @@ callEl.addEventListener('keydown', (e) => {
     f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
   }
 });
+
+/* ---------- browser notifications and the question window's setting (2.3.6) ----------
+   Requester 10-19: 「完了通知がwebプッシュで届くようにしてほしい。許可や質問も同様」, then 「開いている間でいい」: the
+   Notification API only, while a viz page is open — no service worker, no push service; nothing leaves the machine.
+   - done: a main robot's turn ends (its Stop); subagents never. perm: a new permission waits. ask: a new question waits.
+   - one ring per event in all the tabs: the rung keys (server start + kind + id) are kept in localStorage and read
+     and written under one Web Lock; a tab without storage decides alone. The notification's tag is the key too.
+   - nothing from before the page was loaded or connected: the waiting permissions and questions of the first snapshot
+     are taken as seen; neither the recent events the server sends after each snapshot nor the history asked for are
+     rung; and an event older than 2 minutes is not either.
+   - quiet: the page in front and focused, and that very thing on screen (the robot's card; that permission or that
+     question on the board).
+   - a click: the page comes forward and opens the robot's card, or the board on that permission, or the questions.
+   - the switches per kind are kept in this browser (localStorage, try/catch); the browser's permission is asked only
+     from the button in the settings, never on load.
+   - while question notifications can be shown (permission granted, the kind on) the page says so to the server every
+     4 s and whenever the server asks (notify.ping): then a question waits for an answer though the page is hidden
+     (cd's ruling 10-19; it lapses notifyPresenceSec after the last word, a closed tab included). */
+const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask'];
+const NOTIFY = { on: { done: true, perm: true, ask: true }, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0 };
+function notifyLoadPrefs() {
+  try {
+    const v = JSON.parse(localStorage.getItem(NOTIFY_PREFS) || 'null');
+    if (v && typeof v === 'object') for (const k of NOTIFY_KINDS) if (typeof v[k] === 'boolean') NOTIFY.on[k] = v[k];
+  } catch (err) { /* no storage: the defaults */ }
+}
+notifyLoadPrefs();
+// a switch turned in another tab holds here too (a kind turned off there must not ring from this one)
+window.addEventListener('storage', (e) => { if (e.key === NOTIFY_PREFS) { notifyLoadPrefs(); notifySettingsShow(); notifyPresenceSay(); } });
+function notifySavePrefs() { try { localStorage.setItem(NOTIFY_PREFS, JSON.stringify(NOTIFY.on)); } catch (err) { /* kept for this page only */ } }
+const notifyCan = () => typeof Notification !== 'undefined';
+const notifyGranted = () => notifyCan() && Notification.permission === 'granted';
+const notifyName = (who) => String((DEF[who] && (DEF[who].title || DEF[who].agent)) || who).slice(0, 40);
+function notifyViewing(kind, ref) {
+  if (document.visibilityState !== 'visible' || !document.hasFocus()) return false;
+  if (kind === 'done') return rbState.id === ref.who;
+  if (kind === 'perm') return tb.open && (tb.detail === `perm:${ref.id}` || (!!ref.task && tb.detail === ref.task) || (tb.waitView && !tb.detail));
+  return tb.open && !!(qStripEl && qStripEl.querySelector(`[data-qcard="${CSS.escape(ref.id)}"]`));
+}
+function notifyOpen(kind, ref) {
+  try { window.focus(); } catch (err) { /* the OS may keep it behind */ }
+  if (kind === 'done') { if (DEF[ref.who]) openRobot(ref.who, document.getElementById('scene-canvas')); }
+  else if (kind === 'perm') openTaskBoard(null, ref.task || `perm:${ref.id}`);
+  else { tb.waitView = true; openTaskBoard(null); }
+}
+/* The one place a notification is made. */
+function notifyOut(key, body, onClick) {
+  const n = new Notification('jui viz', { body, tag: key });
+  n.onclick = () => { n.close(); onClick(); };
+  return n;
+}
+/* true: this tab rings it (the first to take the key); false: another tab (or this one) already did. */
+function notifyRungTake(key) {
+  let rung;
+  try { rung = JSON.parse(localStorage.getItem(NOTIFY_RUNG) || '[]'); if (!Array.isArray(rung)) rung = []; } catch (err) { return true; }
+  if (rung.includes(key)) return false;
+  rung.push(key);
+  try { localStorage.setItem(NOTIFY_RUNG, JSON.stringify(rung.slice(-300))); } catch (err) { /* the next tab may ring it too */ }
+  return true;
+}
+function notifyEvent(kind, key, ref, body) {
+  if (NOTIFY.seen.has(key)) return;
+  NOTIFY.seen.add(key);
+  if (!NOTIFY.on[kind] || !notifyGranted() || notifyViewing(kind, ref)) return;
+  const ring = () => { if (notifyRungTake(key)) notifyOut(key, body, () => notifyOpen(kind, ref)); };
+  if (navigator.locks && navigator.locks.request) navigator.locks.request('jui-viz-notify', ring).catch(() => {});
+  else ring();
+}
+/* From the live source: a turn's end, the permissions and the questions as they are now. */
+const notifyServer = () => (typeof LIVE !== 'undefined' && LIVE.slices.server && LIVE.slices.server.startedAt) || 0;
+function notifyStop(raw, item) {
+  if (!item || !DEF[item.who] || DEF[item.who].kind !== 'main' || !(Date.now() - (Number(raw.at) || 0) < 120_000)) return;
+  notifyEvent('done', `${notifyServer()}:done:${raw.seq}`, { who: item.who }, `${notifyName(item.who)} が完了${raw.kind === 'StopFailure' ? '（失敗で止まった）' : ''}`);
+}
+function notifyWaiting(kind, rows) {
+  const waiting = rows.filter((x) => x.status === 'pending');
+  if (!NOTIFY.based[kind]) {   // the first look after loading: what already waits was there before this page
+    NOTIFY.based[kind] = true;
+    for (const x of waiting) NOTIFY.seen.add(`${notifyServer()}:${kind}:${x.id}`);
+    return;
+  }
+  for (const x of waiting) {
+    const name = notifyName(x.who);
+    const body = kind === 'perm' ? `${name} が許可を待っています: ${String(x.tool || '').slice(0, 40)}`
+      : `${name} が質問しています — ${x.hookWaiting ? notifyAskLeft() : 'ターミナルで答えてください'}`;
+    notifyEvent(kind, `${notifyServer()}:${kind}:${x.id}`, { id: x.id, who: x.who, task: x.task || null }, body);
+  }
+}
+function notifyAskLeft() {
+  const s = NOTIFY.settings;
+  if (!s) return 'viz で答えるか、ターミナルで';
+  return s.askWaitSec > 0 ? `viz で答えるか、${s.askWaitText}後にターミナルへ` : 'viz で答えるまで待ちます';
+}
+/* The page tells the server its question notifications are on (or no longer). */
+const notifyPresenceWanted = () => SOURCE.mode === 'live' && notifyGranted() && NOTIFY.on.ask;
+function notifyPresenceSay() {
+  const want = notifyPresenceWanted();
+  if (!want && !NOTIFY.said) return;
+  NOTIFY.said = want;
+  if (SOURCE.notifyPresence) SOURCE.notifyPresence(want);
+}
+setInterval(notifyPresenceSay, 4000);
+document.addEventListener('visibilitychange', notifyPresenceSay);
+
+/* The settings: a button in the header, a chip saying how long a question waits, a small panel. */
+const notifyEl = $('notify-pop');
+function notifySettingsShow(settings) {
+  if (settings && typeof settings === 'object') NOTIFY.settings = settings;
+  const s = NOTIFY.settings, live = SOURCE.mode === 'live';
+  $('btn-notify').hidden = !live;
+  const chip = $('chip-askwait');
+  chip.hidden = !live || !s;
+  if (s) setText(chip, s.askWaitSec > 0 ? `質問は viz で ${s.askWaitText}待つ` : '質問は viz で答えるまで待つ');
+  if (notifyEl.hidden) return;
+  const state = !notifyCan() ? 'このブラウザは通知を出せません'
+    : Notification.permission === 'granted' ? 'ブラウザの通知: 許可済み'
+      : Notification.permission === 'denied' ? 'ブラウザの通知: 拒否されています（ブラウザのサイトの設定で許可してください）'
+        : 'ブラウザの通知: まだ許可していません';
+  setText($('notify-perm-state'), state);
+  $('notify-ask-perm').hidden = !notifyCan() || Notification.permission !== 'default';
+  for (const el of notifyEl.querySelectorAll('[data-notify-kind]')) el.checked = !!NOTIFY.on[el.dataset.notifyKind];
+  const sel = $('ask-wait');
+  if (s) {
+    const label = (sec) => (sec <= 0 ? '答えるまで' : sec < 60 ? `${sec} 秒` : `${sec / 60} 分`);
+    const choices = s.askWaitChoices.includes(s.askWaitSec) ? s.askWaitChoices : [...s.askWaitChoices, s.askWaitSec];
+    const sig = JSON.stringify(choices);
+    if (sel.dataset.sig !== sig) { sel.dataset.sig = sig; sel.innerHTML = choices.map((c) => `<option value="${esc(String(c))}">${esc(label(c))}</option>`).join(''); }
+    sel.value = String(s.askWaitSec);
+  }
+}
+function notifyOpenPanel(opener) {
+  NOTIFY.opener = opener || null;
+  notifyEl.hidden = false;
+  $('btn-notify').setAttribute('aria-expanded', 'true');
+  notifySettingsShow();
+  (notifyEl.querySelector('#notify-ask-perm:not([hidden])') || notifyEl.querySelector('[data-notify-kind]')).focus({ preventScroll: true });
+}
+function notifyClosePanel() {
+  if (notifyEl.hidden) return;
+  notifyEl.hidden = true;
+  $('btn-notify').setAttribute('aria-expanded', 'false');
+  const back = NOTIFY.opener; NOTIFY.opener = null;
+  if (back && document.contains(back)) back.focus({ preventScroll: true });
+}
+$('btn-notify').addEventListener('click', (e) => (notifyEl.hidden ? notifyOpenPanel(e.currentTarget) : notifyClosePanel()));
+$('chip-askwait').addEventListener('click', (e) => notifyOpenPanel(e.currentTarget));
+$('notify-close').addEventListener('click', notifyClosePanel);
+$('notify-ask-perm').addEventListener('click', async () => {
+  if (!notifyCan()) return;
+  try { await Notification.requestPermission(); } catch (err) { /* refused or not asked */ }
+  notifySettingsShow();
+  notifyPresenceSay();
+});
+notifyEl.addEventListener('change', async (e) => {
+  const k = e.target.closest('[data-notify-kind]');
+  if (k) { NOTIFY.on[k.dataset.notifyKind] = k.checked; notifySavePrefs(); notifyPresenceSay(); return; }
+  if (e.target.id === 'ask-wait') {
+    const got = SOURCE.setAskWait ? await SOURCE.setAskWait(Number(e.target.value)) : { ok: false, why: 'デモでは変えられません' };
+    setText($('ask-wait-note'), got.ok ? '保存した。次の質問から使います' : `変えられなかった（${got.why || '?'}）`);
+  }
+});
+notifyEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); notifyClosePanel(); } });
+document.addEventListener('pointerdown', (e) => {
+  if (!notifyEl.hidden && !notifyEl.contains(e.target) && !$('btn-notify').contains(e.target) && !$('chip-askwait').contains(e.target)) notifyClosePanel();
+}, true);
+notifySettingsShow();

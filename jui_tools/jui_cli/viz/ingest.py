@@ -1028,7 +1028,7 @@ class World:
         return error
 
     def release_question(self, card_id: str, at: int) -> str | None:
-        error = self.questions.release(card_id)
+        error = self.questions.release(card_id, at)
         if error is None:
             card = self.questions.cards[card_id]
             self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "QuestionReleased",
@@ -1036,8 +1036,8 @@ class World:
             self._dirty.add("questions")
         return error
 
-    def question_gave_up(self, card: dict) -> None:
-        self.questions.hook_gave_up(card)
+    def question_gave_up(self, card: dict, reason: str | None = None, at: int | None = None) -> None:
+        self.questions.hook_gave_up(card, reason, at)
         self._dirty.add("questions")
 
     def answer_question(self, card_id: str, picks, at: int) -> str | None:

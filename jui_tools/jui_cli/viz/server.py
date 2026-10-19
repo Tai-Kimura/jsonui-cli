@@ -31,7 +31,7 @@ from typing import Awaitable, Callable
 from aiohttp import WSMsgType, web
 
 from . import callcmd, clockout, paths, security
-from .config import VizConfig
+from .config import ASK_WAIT_CHOICES, VizConfig, save_setting
 from .state import VizState, now_ms
 
 MAX_HOOK_BODY = 2_000_000
@@ -40,6 +40,7 @@ USAGE_MAX_BODY = 64_000
 PROMPT_MAX_BODY = 8_192
 #: POST /api/session/end: {"sessionId", "agentId"} and nothing more.
 END_MAX_BODY = 1_024
+NOTIFY_MAX_BODY = 256     # /api/notify-presence and /api/ask-wait: one small object
 CALL_MAX_BODY = 32_768   # the call button: a role text of callcmd.ROLE_MAX characters, JSON-escaped
 AUTH_TIMEOUT_SEC = 2.0
 POLL_SEC = 25.0
@@ -128,9 +129,19 @@ class ServerContext:
     on_usage: Callable[[dict], None] | None = None
     # Until when a page reported itself visible (presence), epoch ms.
     present_until: int = 0
+    # Until when a page said its question notifications are on (POST /api/notify-presence, 2.3.6), epoch ms.
+    notify_until: int = 0
 
     def browser_present(self) -> bool:
         return self.present_until > now_ms()
+
+    def notify_present(self) -> bool:
+        return self.notify_until > now_ms()
+
+    def page_can_answer(self) -> bool:
+        """A page that can answer a question now: one visible, or one whose question notifications are on (it shows
+        the question on screen even when hidden, and someone comes from it) — cd's ruling 10-19, both time-limited."""
+        return self.browser_present() or self.notify_present()
     # Each authed socket and the (rev, seq) it has already been sent, so a
     # change made before it connected is not delivered twice.
     sockets: dict = field(default_factory=dict)
@@ -143,6 +154,42 @@ def _page_html(ctx: ServerContext) -> str | None:
         if raw is not None:
             return raw.decode("utf-8")
     return None
+
+
+#: "until answered" (askWaitSec 0): a time no hook reaches (the card's ターミナルで答える, every page gone and the session
+#: ending still end the wait)
+NEVER_MS = 2 ** 53 - 1
+
+
+def ask_window(config: VizConfig, start: int) -> tuple[int, int]:
+    """(until, latest) of a question's wait: askWaitSec from now, holds from the page up to askMaxSec in all — or up
+    to askWaitSec when that is longer (a 10 or 30 minute choice is not cut at 5); 0: until answered."""
+    wait = float(config.askWaitSec)
+    if wait <= 0:
+        return NEVER_MS, NEVER_MS
+    return start + int(wait * 1000), start + int(max(config.askMaxSec, wait) * 1000)
+
+
+def ask_wait_text(sec: float) -> str:
+    """質問は viz で <これ> 待つ: 20 秒, 3 分, 答えるまで."""
+    if sec <= 0:
+        return "答えるまで"
+    return f"{int(sec)} 秒" if sec < 60 else f"{sec / 60:g} 分"
+
+
+def settings_slice(config: VizConfig) -> dict:
+    """What the page shows and changes (2.3.6): the question window, its choices, the notifications' presence."""
+    return {"askWaitSec": config.askWaitSec, "askWaitText": ask_wait_text(config.askWaitSec), "askWaitChoices": list(ASK_WAIT_CHOICES),
+            "notifyPresenceSec": config.notifyPresenceSec}
+
+
+async def _send_all(ctx: "ServerContext", message: dict) -> None:
+    """One message to every page that is connected (authed sockets only)."""
+    for sock in list(ctx.sockets):
+        try:
+            await sock.send_json(message)
+        except (ConnectionResetError, RuntimeError):
+            ctx.sockets.pop(sock, None)
 
 
 def make_app(ctx: ServerContext) -> web.Application:
@@ -351,19 +398,28 @@ def make_app(ctx: ServerContext) -> web.Application:
         card = ctx.world.hook_ask(body, now_ms())
         if ctx.publish:
             ctx.publish()
-        if card is None or card["status"] != "pending" or card["tooLongToShow"] or not ctx.browser_present():
+        if card is None or card["status"] != "pending" or card["tooLongToShow"] or not ctx.page_can_answer():
             return web.json_response({})
         future = asyncio.get_running_loop().create_future()
         start = now_ms()
-        ctx.world.question_waiting(card, future, start + int(ctx.config.askWaitSec * 1000), start + int(ctx.config.askMaxSec * 1000))
+        until, latest = ask_window(ctx.config, start)
+        ctx.world.question_waiting(card, future, until, latest)
         if ctx.publish:
             ctx.publish()
-        answer = {}
+        answer, reason, pinged = {}, None, 0
         try:
             while True:
-                left = (card.get("waitUntil", 0) - now_ms()) / 1000   # holds from the page move it
-                if left <= 0 or not ctx.browser_present():
+                now = now_ms()
+                left = (card.get("waitUntil", 0) - now) / 1000   # holds from the page move it
+                if left <= 0:
+                    reason = "timeout"
                     break
+                if not ctx.page_can_answer():
+                    reason = "hidden"
+                    break
+                if not ctx.browser_present() and now - pinged >= ctx.config.askPingSec * 1000:
+                    pinged = now   # waiting on a hidden page: it says again that its notifications are on
+                    await _send_all(ctx, {"type": "notify.ping"})
                 try:
                     answer = await asyncio.wait_for(asyncio.shield(future), min(left, PRESENCE_POLL_SEC))
                     break
@@ -371,7 +427,7 @@ def make_app(ctx: ServerContext) -> web.Application:
                     continue
         finally:
             if card.get("_future") is future:
-                ctx.world.question_gave_up(card)
+                ctx.world.question_gave_up(card, reason, now_ms())
                 if ctx.publish:
                     ctx.publish()
         return web.json_response(answer)
@@ -472,6 +528,47 @@ def make_app(ctx: ServerContext) -> web.Application:
         flag = callcmd.channels_flag()
         return web.json_response({"ok": True, "command": callcmd.command(root, name, role, flag), "flag": flag, "root": root},
                                  headers={"Cache-Control": "no-store"})
+
+    async def api_notify_presence(request: web.Request) -> web.Response:
+        """A page whose question notifications are on says so (2.3.6, cd's ruling 10-19): {"ask": true} — the page
+        sends it only when Notification.permission is granted and the question kind is on — holds for
+        notifyPresenceSec; {"ask": false} ends it at once. The checks of /api/prompt (prompt_checks)."""
+        refused = prompt_checks(request, ctx, NOTIFY_MAX_BODY)
+        if refused is not None:
+            log(f"拒否: /api/notify-presence（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, NOTIFY_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        if not isinstance(body, dict) or not isinstance(body.get("ask"), bool):
+            return web.Response(status=400, text="ask (true or false) is required\n")
+        ctx.notify_until = now_ms() + int(ctx.config.notifyPresenceSec * 1000) if body["ask"] else 0
+        return web.json_response({"ok": True, "forSec": ctx.config.notifyPresenceSec if body["ask"] else 0})
+
+    async def api_ask_wait(request: web.Request) -> web.Response:
+        """How long a question waits for the page (2.3.6, requester 10-19): {"sec": one of ASK_WAIT_CHOICES}, 0 =
+        until answered. Saved in config.json (kept after a restart) and used from the next question on. The checks of
+        /api/prompt (prompt_checks)."""
+        refused = prompt_checks(request, ctx, NOTIFY_MAX_BODY)
+        if refused is not None:
+            log(f"拒否: /api/ask-wait（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, NOTIFY_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        sec = body.get("sec") if isinstance(body, dict) else None
+        if isinstance(sec, bool) or not isinstance(sec, (int, float)) or sec not in ASK_WAIT_CHOICES:
+            return web.Response(status=400, text=f"sec must be one of {list(ASK_WAIT_CHOICES)}\n")
+        try:
+            save_setting("askWaitSec", sec)
+        except (OSError, ValueError) as exc:
+            return web.json_response({"ok": False, "why": f"config.json に保存できなかった（{exc}）"}, status=500)
+        ctx.config.askWaitSec = float(sec)
+        ctx.state.set_slice("settings", settings_slice(ctx.config))
+        if ctx.publish:
+            ctx.publish()
+        log(f"質問の待ち時間: {ask_wait_text(ctx.config.askWaitSec)}")
+        return web.json_response({"ok": True, "askWaitSec": ctx.config.askWaitSec})
 
     async def api_history_image(request: web.Request) -> web.Response:
         """One picture of the 応答の履歴 (2.3.4): {"agentId", "off", "n"} names the robot (so its transcript) and the
@@ -582,6 +679,8 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/data-docs", api_data_docs)
     app.router.add_route("*", "/api/session/end", api_session_end)
     app.router.add_route("*", "/api/call-command", api_call_command)
+    app.router.add_route("*", "/api/notify-presence", api_notify_presence)
+    app.router.add_route("*", "/api/ask-wait", api_ask_wait)
     app.router.add_post("/channel/hello", channel_hello)
     app.router.add_post("/channel/request", channel_request)
     app.router.add_get("/channel/poll", channel_poll)

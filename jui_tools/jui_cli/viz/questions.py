@@ -160,7 +160,7 @@ class QuestionBook:
         card["waitUntil"] = max(card["waitUntil"], min(card["_latest"], at + wait_ms))
         return None
 
-    def release(self, card_id: str) -> str | None:
+    def release(self, card_id: str, at: int | None = None) -> str | None:
         """ターミナルで答える: the hook stops waiting and prints nothing, so the terminal's dialog opens."""
         card = self.cards.get(card_id)
         future = card.get("_future") if card else None
@@ -168,10 +168,15 @@ class QuestionBook:
             return "no hook is waiting for this question"
         future.set_result({})
         card["released"] = True
-        self.hook_gave_up(card)
+        self.hook_gave_up(card, "released", at)
         return None
 
-    def hook_gave_up(self, card: dict) -> None:
+    def hook_gave_up(self, card: dict, reason: str | None = None, at: int | None = None) -> None:
+        """The hook stops waiting on the card. reason (2.3.6, kept on the card and shown by it): "timeout" (the window
+        ran out with nobody answering), "hidden" (no page visible and none with question notifications on), "released"
+        (ターミナルで答える), "session" (the session ended or moved on), "answered"; at: when."""
+        if card.get("_future") is not None and reason and "waitEndReason" not in card:
+            card["waitEndReason"], card["waitEndedAt"] = reason, at
         future = card.get("_future")
         if future is not None and not future.done() and card["status"] == "pending":
             # The wait ran out (askWaitSec with nobody answering, or no page visible any more): the card must say so
@@ -204,7 +209,7 @@ class QuestionBook:
             return error
         card["status"], card["sentAt"], card["sentAnswers"] = "sent", at, answers
         future.set_result(self.hook_output(card, answers))
-        self.hook_gave_up(card)
+        self.hook_gave_up(card, "answered", at)
         return None
 
     def tool_finished(self, sid: str, use_id: str | None, tool_input: dict, at: int) -> dict | None:
@@ -220,7 +225,7 @@ class QuestionBook:
         future = card.get("_future")
         if future is not None and not future.done():
             future.set_result({})
-        self.hook_gave_up(card)
+        self.hook_gave_up(card, "answered", at)   # answered in the terminal (or by the browser's answer going through)
         return card
 
     def session_stopped(self, sid: str, at: int) -> bool:
@@ -232,7 +237,7 @@ class QuestionBook:
                 future = card.get("_future")
                 if future is not None and not future.done():
                     future.set_result({})
-                self.hook_gave_up(card)
+                self.hook_gave_up(card, "session", at)
                 changed = True
         return changed
 
@@ -250,5 +255,5 @@ class QuestionBook:
 
     def items(self) -> list[dict]:
         keep = ("id", "sessionId", "agentId", "createdAt", "status", "questions", "tooLongToShow", "hookWaiting",
-                "waitUntil", "waitEnded", "released", "sentAt", "sentAnswers", "doneAt", "gotAnswers")
+                "waitUntil", "waitEnded", "waitEndReason", "waitEndedAt", "released", "sentAt", "sentAnswers", "doneAt", "gotAnswers")
         return [{k: c[k] for k in keep if k in c} for c in sorted(self.cards.values(), key=lambda c: c["createdAt"])]

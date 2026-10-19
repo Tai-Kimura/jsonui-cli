@@ -2,6 +2,16 @@
 // The e2e scripts press the 3D boards through these, as the prototype's agent-test.html did.
 // Demo: setSim(seconds) jumps the script. Live: setSim(factor) sets the replay speed instead (25-net.js).
 window.__dbg = {
+  // the browser notifications (2.3.6): what this tab has looked at, its switches, the board and the card open now
+  notifySeen: () => [...NOTIFY.seen],
+  notifyBased: () => NOTIFY.based.perm && NOTIFY.based.ask,
+  notifyPings: () => NOTIFY.pings,
+  notifyOn: () => ({ ...NOTIFY.on }),
+  notifyPresenceSay: () => notifyPresenceSay(),
+  notifySet: (o) => { Object.assign(NOTIFY.on, o || {}); notifySavePrefs(); notifyPresenceSay(); return { ...NOTIFY.on }; },
+  board: () => ({ open: !!tb.open, detail: tb.detail || null, waitView: !!tb.waitView, robot: rbState.id || null }),
+  questions: () => QUESTIONS.map((q) => ({ id: q.id, status: q.status, hookWaiting: !!q.hookWaiting, waitEndReason: q.waitEndReason || null })),
+  questionRelease: (id) => SOURCE.releaseQuestion(id),
   camera, sbTile, sbPoint, SB, KB, THREE, robots,
   // Mermaid (2.3.5): draw a text into a box of its own and say what came out — whether it was read yet, the config it
   // runs with, the svg's nodes, and anything that could run (a script, an on* attribute, a javascript: link)

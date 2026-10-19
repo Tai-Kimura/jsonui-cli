@@ -108,6 +108,24 @@ const SOURCE = {
       return { ok: false, why: (body && body.why) || `作れなかった（${res.status} ${text.trim()}）` };
     } catch (err) { return { ok: false, why: 'サーバーにつながらない' }; }
   },
+  /* 2.3.6: question notifications are on (or not) on this page — POST /api/notify-presence, the checks of /api/prompt */
+  async notifyPresence(ask) {
+    try {
+      await fetch('/api/notify-presence', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: JSON.stringify({ ask: !!ask }) });
+    } catch (err) { /* the next word comes in 4 s */ }
+  },
+  /* 2.3.6: how long a question waits for the page — POST /api/ask-wait, saved in the server's config.json */
+  async setAskWait(sec) {
+    try {
+      const res = await fetch('/api/ask-wait', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: JSON.stringify({ sec }) });
+      const text = await res.text();
+      let body = null;
+      try { body = JSON.parse(text); } catch (err) { body = null; }
+      return res.ok && body && body.ok ? { ok: true } : { ok: false, why: (body && body.why) || `${res.status} ${text.trim()}` };
+    } catch (err) { return { ok: false, why: 'サーバーにつながらない' }; }
+  },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   history(label) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label }); },
   /* One picture of that history (2.3.4): the robot and the picture's place, under the same checks as a prompt
@@ -398,6 +416,7 @@ function rebuildPerms() {
   PERMS_LIVE.splice(0, PERMS_LIVE.length, ...rows);
   for (const k of Object.keys(PERM_BY_ID)) delete PERM_BY_ID[k];
   for (const p of PERMS_LIVE) PERM_BY_ID[p.id] = p;
+  notifyWaiting('perm', PERMS_LIVE);   // 2.3.6
 }
 
 /* ---------- rooms: size by robot count, left to right by order, a new row past 24 (plan 07 §4) ---------- */
@@ -825,10 +844,12 @@ function rebuildQuestions() {
     rows.push({ ...x, who, at: secOfDay(x.createdAt || Date.now()) });
   }
   QUESTIONS.splice(0, QUESTIONS.length, ...rows);
+  notifyWaiting('ask', QUESTIONS);   // 2.3.6
 }
 function liveApply(changed, replace) {
   if (replace) LIVE.slices = {};
   for (const [k, v] of Object.entries(changed || {})) LIVE.slices[k] = v;
+  if (changed && changed.settings) notifySettingsShow(changed.settings);   // 2.3.6: the question window, as the server has it
   const before = layoutSignature();
   rebuildRooms();
   rebuildRobots(replace);
@@ -864,12 +885,13 @@ function liveEvent(e) {
   }
   return { abs: secOfDay(Number(e.at) || Date.now()), who, kind, what, cat: LIVE_CAT[e.cat] || 'session', detail: e.detail, srvSeq: Number(e.seq), seq: ++logSeq };
 }
-function liveEvents(items, older) {
+function liveEvents(items, older, replay = false) {
   const add = [];
   for (const raw of items) {
     if (!older && Number(raw.seq) <= LIVE.seenSeq) continue;
     const item = liveEvent(raw);
     if (item) add.push(item);
+    if (!older && !replay && item && (raw.kind === 'Stop' || raw.kind === 'StopFailure')) notifyStop(raw, item);   // 2.3.6: never the replay
     if (!older) LIVE.seenSeq = Math.max(LIVE.seenSeq, Number(raw.seq) || 0);
   }
   add.sort((a, b) => a.srvSeq - b.srvSeq);
@@ -889,14 +911,16 @@ function liveEvents(items, older) {
 NET.handlers = {
   state(state) { SOURCE.connected = state === 'connected'; if (state === 'connected') LIVE.connectedOnce = true; liveChrome(); },
   snapshot(slices) {
+    LIVE.replayNext = true;   // the server sends the recent events right after the snapshot (server.ws): seen, not rung
     liveApply(slices, true);
     netRequest('events.more', { beforeSeq: 2 ** 31, limit: 200 });
     if (typeof refreshNow === 'function') refreshNow();
   },
   slices(changed) { liveApply(changed, false); },
-  events(items, older) { liveEvents(items, older); },
+  events(items, older) { const replay = !older && LIVE.replayNext; if (!older) LIVE.replayNext = false; liveEvents(items, older, replay); },
   sheet(msg) { liveSheet(msg); },
   notice(level, text) { if (text) showToast(text); void level; },
+  notifyPing() { NOTIFY.pings += 1; notifyPresenceSay(); },
 };
 
 /* ---------- the plan's usage limits (requester, 10-18) ----------
