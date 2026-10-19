@@ -633,10 +633,11 @@ CAUGHT = [
     "`<b>${xs.map((x) => { return x.name; }).join('')}</b>`", "`<b>${x.at.name}</b>`",
     "const fooHTML = x.name;", "el.innerHTML = x.name;", "setHTML($('a'), x.name);", "const lHTML = `#${x.id}`;",
     "`<b>${'a' + x.name}</b>`", "`<b>${barHTML}</b>`",
-    # the DOM's other HTML sinks (2.3.5): a value put into each is red
+    # the DOM's other HTML sinks (2.3.5): a value put into each is red. Each sink has a plain value (no template) that
+    # only its own entry in _SINK / _SINK_METHOD catches — a template with HTML is red by the template rule anyway.
     "el.insertAdjacentHTML('beforeend', x.name);", "el.insertAdjacentHTML('beforeend', `<p>${x.name}</p>`);",
-    "el.outerHTML = x.name;", "el.innerHTML += x.name;", "frame.srcdoc = `<p>${x.name}</p>`;",
-    "frame.setAttribute('srcdoc', x.name);", "document.write(x.name);", "document.writeln(`<p>${x.name}</p>`);",
+    "el.outerHTML = x.name;", "el.innerHTML += x.name;", "frame.srcdoc = x.name;", "frame.srcdoc = `<p>${x.name}</p>`;",
+    "frame.setAttribute('srcdoc', x.name);", "document.write(x.name);", "document.writeln(x.name);", "document.writeln(`<p>${x.name}</p>`);",
     "document.createRange().createContextualFragment(x.name);", "new DOMParser().parseFromString(x.name, 'text/html');",
     "el.setHTMLUnsafe(x.name);", "Document.parseHTMLUnsafe(x.name);",
 ]
