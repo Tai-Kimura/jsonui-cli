@@ -424,3 +424,64 @@ def test_a_held_read_takes_its_own_executor_not_the_shared_one(tmp_path, monkeyp
             await client.close()
     shared, health, status = asyncio.run(run())
     assert shared < 1.0 and health < 1.0 and status == 200, (shared, health, status)
+
+
+# ---- what is not a regular file (cd, 10-19) -------------------------------------------------------------------------
+
+def test_a_directory_or_a_socket_named_like_a_document_is_neither_counted_nor_read_nor_holds(tmp_path):
+    import socket as _socket
+    import time as _t
+    root = _room(tmp_path / "app", db=False)
+    (root / "docs/api/folder.json").mkdir()
+    sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    here = os.getcwd()
+    os.chdir(root / "docs/api")   # an AF_UNIX path is short: bind by a name relative to the folder, then back
+    try:
+        sock.bind("sock.json")
+    finally:
+        os.chdir(here)
+    try:
+        t = _t.monotonic()
+        n = data_docs.counts(_project(root))
+        doc = data_docs.read(_project(root))
+        took = _t.monotonic() - t
+        assert n == {"api": 1, "db": 0} and [d["file"] for d in doc["api"]] == ["docs/api/users.json"]
+        assert took < 2.0, took
+        world, _r, pid = _world(tmp_path / "w")
+        (_r / "docs/api/folder.json").mkdir()
+        _settle(world, 1)
+        port = _free_port()
+        own = f"127.0.0.1:{port}"
+
+        async def run():
+            ctx = ServerContext(config=VizConfig(pushIntervalMs=50), port=port, token=TOKEN, state=world.state, world=world, publish=world.publish)
+            client = TestClient(TestServer(make_app(ctx), host="127.0.0.1", port=port))
+            await client.start_server()
+            try:
+                ok = {"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+                t0 = _t.monotonic()
+                r = await client.post("/api/data-docs", headers=ok, data=json.dumps({"projectId": pid}))
+                body = await r.read()
+                h = await client.get("/health")
+                return r.status, body, h.status, _t.monotonic() - t0
+            finally:
+                await client.close()
+        status, body, hstatus, took = asyncio.run(run())
+        assert status == 200 and hstatus == 200 and took < 2.0 and b"folder.json" not in body
+    finally:
+        sock.close()
+
+
+def test_only_a_regular_file_is_read_whatever_its_name(tmp_path):
+    """The fstat check itself (the listing's is_file is a pre-filter, raced past by a swap): a FIFO with a document
+    waiting in it is never read."""
+    root = _room(tmp_path / "app", db=False)
+    fifo = root / "docs/api/pipe.json"
+    os.mkfifo(fifo)
+    w = os.open(str(fifo), os.O_RDWR | os.O_NONBLOCK)   # a writer holding it open, a document in its buffer
+    try:
+        os.write(w, json.dumps({"openapi": "3.0.0", "info": {"title": "FROM A PIPE", "version": "1"}, "paths": {"/p": {"get": {}}}}).encode())
+        got = data_docs._read_capped(root, Path("docs/api/pipe.json"), data_docs.MAX_FILE_BYTES)
+        assert got is None, got
+    finally:
+        os.close(w)
