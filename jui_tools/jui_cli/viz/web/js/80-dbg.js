@@ -289,3 +289,20 @@ window.__dbg.walkRoute = (id, to) => {
 };
 // how far the camera following a robot is from where it is going (0 once it has arrived)
 window.__dbg.camFollowGap = () => (rbState.id && zoom.zoomed ? camera.position.distanceTo(robotPose(rbState.id).p) : null);
+// background work (2.3.5): the headset, the notes and the laptop of each robot; and a pose's keystroke, sampled
+window.__dbg.bgLook = () => robots.map((R) => {
+  const r = R.robot, notes = r.notes ? r.notes.children : [], lap = r.props.background;
+  return { id: R.def.id, state: r.state, kind: R.def.kind, headset: !!(r.headset && r.headset.visible && r.headset.parent),
+    noteSprites: notes.length, notes: r.notes && r.notes.visible ? notes.map((n) => [+n.position.x.toFixed(3), +n.position.y.toFixed(3), +n.material.opacity.toFixed(2)]) : [],
+    laptop: !!(lap && lap.group.visible), armL: +r.armL.rotation.x.toFixed(4), play: !!R.play, brk: !!R.brk, solo: !!R.solo };
+});
+window.__dbg.poseStats = (state) => {   // the left arm over 20 s of pose time: its swing and how many strokes a second
+  let lo = Infinity, hi = -Infinity, strokes = 0, prev = null;
+  for (let i = 0; i <= 4000; i++) {
+    const s = i * 0.005, a = poseFor(state, s).aLx;
+    lo = Math.min(lo, a); hi = Math.max(hi, a);
+    const up = prev !== null && a > prev; if (up && prev !== null && !window.__dbgRising) strokes += 1; window.__dbgRising = up; prev = a;
+  }
+  window.__dbgRising = false;
+  return { swing: +(hi - lo).toFixed(4), strokesPerSec: +(strokes / 20).toFixed(2) };
+};

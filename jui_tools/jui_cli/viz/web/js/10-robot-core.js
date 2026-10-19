@@ -659,6 +659,67 @@ function lookUpdate(r, t, dt) {
 }
 /* The browser tests' hook (80-dbg.js, force) sets a robot's causes or its tiredness; the page never does. */
 const forced = (r, key, value) => (r.force && key in r.force ? r.force[key] : value);
+/* Background work and heavy work never show at once: the heavy looks (lookUpdate, sweat) hold only in HEAVY_OK's
+   states (typing, reading, a command), and a robot working in the background is in its own state, 'background', so the
+   headset, the notes and the loose typing win while it waits on background work; its heavy causes show again when it is
+   back at work in the foreground (2.3.5 integration, 10-20). */
+/* Background work (requester, 10-19: "バックグラウンドで作業の場合はヘッドセットつけて、音符出してる状態で机の上でパソコンを
+   ゆるめにいじってほしい"): a headset on the head (cups in the 裏で作業中 colour, LAMP.bg, as on the tag, the card and the
+   legend), NOTE_MAX notes rising over it (still under reduced motion), and the laptop typed on loosely (poseFor
+   'background'). Built once a robot first works in the background, one set a robot; shown only in that state. */
+const NOTE_MAX = 3;
+function noteCanvas(double) {
+  const c = makeCanvas(96, 112), ctx = c.getContext('2d');
+  const head = (x, y) => { ctx.beginPath(); ctx.ellipse(x, y, 15, 11, -0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); };
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const [pass, w, colour] of [[0, 14, '#1f2a44'], [1, 0, LAMP.bg]]) {
+    ctx.strokeStyle = pass ? colour : '#1f2a44'; ctx.fillStyle = pass ? colour : '#1f2a44'; ctx.lineWidth = pass ? 6 : w;
+    if (double) {
+      ctx.beginPath(); ctx.moveTo(38, 84); ctx.lineTo(38, 24); ctx.lineTo(80, 14); ctx.lineTo(80, 74); ctx.stroke();
+      ctx.lineWidth = pass ? 10 : 18; ctx.beginPath(); ctx.moveTo(38, 26); ctx.lineTo(80, 16); ctx.stroke();
+      ctx.lineWidth = pass ? 2 : w; head(26, 86); head(68, 76);
+    } else {
+      ctx.beginPath(); ctx.moveTo(56, 86); ctx.lineTo(56, 16); ctx.quadraticCurveTo(66, 40, 84, 46); ctx.stroke();
+      ctx.lineWidth = pass ? 2 : w; head(44, 88);
+    }
+  }
+  return c;
+}
+function bgGear(r) {
+  if (!S.tex.notes) S.tex.notes = [texFrom(noteCanvas(false)), texFrom(noteCanvas(true))];
+  const band = toon('#273449'), cup = toon(LAMP.bg), pad = toon('#1b2333');
+  const headset = new THREE.Group(); headset.userData.headset = true;
+  const R = HEAD.w / 2 + 0.15;
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(R, 0.04, 10, 40, Math.PI), band);
+  arc.position.set(0, 0.42, -0.02); arc.scale.y = (HEAD.h + 0.07 - 0.42) / R; headset.add(arc);
+  for (const side of [1, -1]) {
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.13, 28), cup); shell.rotation.z = Math.PI / 2; shell.position.set(side * R, 0.42, -0.02); headset.add(shell);
+    const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.05, 24), pad); cushion.rotation.z = Math.PI / 2; cushion.position.set(side * (R - 0.08), 0.42, -0.02); headset.add(cushion);
+  }
+  // the microphone on its boom, from the right cup to in front of the mouth
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 8), band);
+  boom.position.set(R - 0.12, 0.26, 0.24); boom.rotation.set(Math.PI / 2 - 0.35, 0, 0.55); headset.add(boom);
+  const mic = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 10), pad); mic.position.set(R - 0.27, 0.15, 0.47); headset.add(mic);
+  r.head.add(headset);
+  const notes = new THREE.Group(); notes.userData.notes = true;
+  for (let k = 0; k < NOTE_MAX; k++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: S.tex.notes[k % 2], transparent: true, depthWrite: false }));
+    sp.scale.set(0.3, 0.35, 1); sp.userData.k = k; notes.add(sp);
+  }
+  r.root.add(notes);
+  r.headset = headset; r.notes = notes;
+}
+function bgUpdate(r, t, on) {
+  if (on && !r.headset) bgGear(r);
+  if (!r.headset) return;
+  r.headset.visible = on; r.notes.visible = on;
+  if (!on) return;
+  for (const sp of r.notes.children) {
+    const k = sp.userData.k, ph = reduceMotion ? 0.3 + k * 0.22 : (t * 0.42 + k / NOTE_MAX + r.seed * 0.13) % 1;
+    sp.position.set((k % 2 ? -1 : 1) * (0.42 + ph * 0.18) + Math.sin(ph * 6.3 + k) * 0.06, 1.95 + ph * 0.75, 0.1);
+    sp.material.opacity = reduceMotion ? 1 : Math.min(1, Math.sin(ph * Math.PI) * 1.6);
+  }
+}
 function setRobotTired(r, on) {
   if (on && !r.tired) r.needDrink = true;
   if (!on) r.needDrink = false;
@@ -956,6 +1017,7 @@ const BUILDERS = {
     const screen = new THREE.Mesh(g.lidScreen, m.code); screen.position.set(0, 0.2, -0.0115); screen.rotation.y = Math.PI; lid.add(screen);
     return { group };
   },
+  background(r) { return BUILDERS.typing(r); },   // the same laptop (and desk where the room has none) as typing
   reading(r) {
     const g = S.geo, m = S.mat, group = new THREE.Group();
     const book = new THREE.Group(); book.position.set(0, 0.93, 0.47); book.rotation.x = -0.35; book.scale.setScalar(1.2); group.add(book);
@@ -1102,10 +1164,13 @@ function poseFor(state, s) {
       p.torsoY = sway * 0.04; p.hipsY = reduceMotion ? 0 : Math.sin(s * 1.8) * 0.006;
       break;
     }
-    case 'background': {   // at its desk, watching the screen while the work runs in the background
-      const look = reduceMotion ? 0 : Math.sin(s * 0.35);
-      p.torsoX = 0.04; p.headX = 0.22 + look * 0.02; p.headY = look * 0.06; p.hipsY = reduceMotion ? 0 : Math.sin(s * 1.4) * 0.006;
-      p.aLx = -0.85; p.aLz = -0.28; p.aRx = -0.85; p.aRz = 0.28;   // hands resting on the desk
+    case 'background': {   // at its desk with the headset on, typing now and then while the work runs in the background
+      const nod = reduceMotion ? 0 : Math.sin(s * 2.2);   // nodding along to the music
+      p.torsoX = 0.04; p.headX = 0.2 + nod * 0.035; p.headY = Math.sin(s * 0.35) * 0.06; p.headZ = nod * 0.03;
+      p.hipsY = reduceMotion ? 0 : Math.sin(s * 1.4) * 0.006;
+      // the keys, loosely: slower (6 against 15) and smaller (0.05 against 0.13) than 'typing'
+      p.aLx = -1.0 + Math.max(0, Math.sin(s * 6)) * 0.05; p.aLz = -0.3;
+      p.aRx = -1.0 + Math.max(0, Math.sin(s * 6 + 2.6)) * 0.05; p.aRz = 0.3;
       break;
     }
     case 'typing':
@@ -1182,6 +1247,7 @@ function updateRobot(r, t, dt) {
   soloProps(r, onCall ? null : r.solo, t);
   brkProps(r, onCall ? null : r.brk, t);
   playBubble(r, onCall ? null : r.play, t);
+  bgUpdate(r, t, r.state === 'background' && !onCall && !r.play && !r.solo && !r.brk);
   r.antenna.rotation.x += ((r.tired ? 1.0 : 0) - r.antenna.rotation.x) * Math.min(1, dt * 3);
   r.root.position.y = p.rootY;
   r.hips.position.y = HIPS_Y + p.hipsY;
