@@ -9,7 +9,10 @@ difference means the port stopped behaving like the prototype). Live: live.py ag
 scenarios (scenarios/*.jsonl). Rooms (rooms.py): doors, desks and the one-room view on the real server (`--only rooms` runs it alone).
 Both: no console errors, no request to anywhere but the server, no CSP violation.
 
-Exit status 0 only when every check passed; each failed check is printed on its own line with FAIL.
+Exit status 0 only when every check passed; each failed check is printed on its own line with FAIL. A suite that
+stops on an exception (a wait's timeout, or anything else) is one FAIL line, its traceback is written next to its
+results (<suite>-traceback.txt), and the next suite runs (common.suite_guard; ticket
+2026-10-20-jui-viz-e2e-one-suite-exception-stops-the-run). `--only` may be given more than once.
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ sys.path.insert(0, str(HERE))
 from playwright.async_api import async_playwright  # noqa: E402
 
 import demo  # noqa: E402
-from common import ISOLATE, LAUNCH_ARGS, Watch, dump, progress_count, progress_grew  # noqa: E402
+from common import ISOLATE, LAUNCH_ARGS, Watch, dump, progress_count, progress_grew, suite_guard  # noqa: E402
 
 EXPECT_DEMO = HERE / "expect_demo.json"
 
@@ -195,7 +198,7 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "spec-colors", "weather", "usage", "name-tags", "shredder", "gitbox", "log-strip", "hist-wide", "hist-labels", "hist-images", "name-tag-role", "clock-out", "arrows-rooms", "ask-board", "callbell", "mermaid", "dataflow-mermaid", "data-server", "fulltext", "notify", "heavy-looks", "frame-gaps", "cost-bill"],
+    ap.add_argument("--only", action="append", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "spec-colors", "weather", "usage", "name-tags", "shredder", "gitbox", "log-strip", "hist-wide", "hist-labels", "hist-images", "name-tag-role", "clock-out", "arrows-rooms", "ask-board", "callbell", "mermaid", "dataflow-mermaid", "data-server", "fulltext", "notify", "heavy-looks", "frame-gaps", "cost-bill"],
                     help="run one half (rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; play-look: only what a game looks like (tags, the ball, the slap, the bubble); spec-help: only the 「?」 dialog of spec の進み具合; spec-colors: only the spec sheet's colours; weather: only the season and the near weather outside; name-tags: only robots' name tags kept apart; hist-wide: only the wide history; hist-labels: only the history's labels on one line; hist-images: only the pictures in the history; name-tag-role: only a session's name on its robot's tag; clock-out: only the 退勤 button; arrows-rooms: only ← → between rooms and ↑ ↓ between floors; ask-board: only the 質問 / 許可待ち chips' board; mermaid: only the vendored Mermaid (strict, nothing outside); dataflow-mermaid: only a spec's data flow as a diagram; data-server: only the rack and its API / DB sheet; heavy-looks: only heavy work's three looks (red, blue, the whistle); cost-bill: only the bill over a robot and the 単価 sheet; "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
@@ -206,6 +209,10 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     failures: list[str] = []
     suites = a.suite or list(demo.SUITES)
+
+    def want(*names):
+        """This block runs: no --only, or one of the --only values names it (--only may be given more than once)."""
+        return not a.only or any(n in a.only for n in names)
 
     async def go():
         async with async_playwright() as pw:
@@ -218,161 +225,200 @@ def main(argv=None) -> int:
                 (out / "record-console.txt").write_text("\n".join(watch.console))
                 print(f"recorded {', '.join(res)} into {EXPECT_DEMO.name}; console lines: {len(watch.console)}")
                 return
-            if a.only in (None, "demo"):
-                srv = Server()
-                try:
-                    res, watch = await run_demo(pw, f"{srv.url}/?demo=1", out, suites)
-                finally:
-                    srv.stop()
-                (out / "demo-results.json").write_text(dump(res) + "\n")
-                expect = json.loads(EXPECT_DEMO.read_text())
-                for name in suites:
-                    for line in diff(expect.get(name), res.get(name), f"demo/{name}"):
-                        failures.append(line)
-                check_watch(watch, "demo", failures)
-                for key in ("shots", "perm", "scope", "phone"):
-                    r = res.get(key) or {}
-                    for k, v in r.items():
-                        if isinstance(v, dict) and isinstance(v.get("sw"), int) and v["sw"] > 390:
-                            failures.append(f"demo/{key}/{k}: horizontal scroll at 390 px (scrollWidth {v['sw']})")
-            if a.only in (None, "live", "spec-colors"):
-                import spec_colors
-                await spec_colors.run_spec_colors(pw, out, failures, Server)
-            if a.only in (None, "demo", "spec-help"):
-                import spec_help
-                await spec_help.run_spec_help(pw, out, failures, Server)
-            if a.only in (None, "demo", "heavy-looks"):
-                import heavy_looks
-                await heavy_looks.run_heavy_looks(pw, out, failures, Server)
-            if a.only in (None, "live"):
-                import live
-                await live.run(pw, out, failures, Server)
-                await live.run_real(pw, out, failures, RealServer)
-                await live.run_real_decide(pw, out, failures)
-            if a.only in (None, "live", "ask"):
-                import ask
-                await ask.run_ask(pw, out, failures)
-            if a.only in (None, "live", "notify"):
-                import notify
-                await notify.run_notify(pw, out, failures)
-            if a.only in (None, "live", "ask-board"):
-                import ask_board
-                await ask_board.run_ask_board(pw, out, failures)
-            if a.only in (None, "live", "history"):
-                import history
-                before = progress_count()
-                await history.run_history(pw, out, failures)
-                await history.run_history_scroll(pw, out, failures)
-                import send_prompt
-                await send_prompt.run_send_prompt(pw, out, failures)
-                failures.extend(m for m in [progress_grew("history", before)] if m)
-            if a.only in (None, "live", "hist-wide"):
-                import hist_wide
-                before = progress_count()
-                await hist_wide.run_hist_wide(pw, out, failures)
-                failures.extend(m for m in [progress_grew("hist-wide", before)] if m)
-            if a.only in (None, "live", "hist-labels"):
-                import hist_labels
-                await hist_labels.run_hist_labels(pw, out, failures)
-            if a.only in (None, "live", "hist-images"):
-                import hist_images
-                before = progress_count()
-                await hist_images.run_hist_images(pw, out, failures)
-                failures.extend(m for m in [progress_grew("hist-images", before)] if m)
-            if a.only in (None, "live", "rb-layout"):
-                import rb_layout
-                before = progress_count()
-                await rb_layout.run_rb_layout(pw, out, failures)
-                failures.extend(m for m in [progress_grew("rb-layout", before)] if m)
-            if a.only in (None, "live", "focus-cam"):
-                import focus_cam
-                before = progress_count()
-                await focus_cam.run_focus_cam(pw, out, failures)
-                failures.extend(m for m in [progress_grew("focus-cam", before)] if m)
-            if a.only in (None, "live", "rb-arrows"):
-                import rb_arrows
-                before = progress_count()
-                await rb_arrows.run_rb_arrows(pw, out, failures)
-                failures.extend(m for m in [progress_grew("rb-arrows", before)] if m)
-            if a.only in (None, "live", "robot-tests"):
-                import robot_tests
-                before = progress_count()
-                await robot_tests.run_robot_tests(pw, out, failures)
-                failures.extend(m for m in [progress_grew("robot-tests", before)] if m)
-            if a.only in (None, "live", "calls"):
-                import calls
-                await calls.run_calls(pw, out, failures)
-            if a.only in (None, "live", "play"):
-                import play
-                await play.run_play(pw, out, failures)
-            if a.only in (None, "live", "play-look"):
-                import play_look
-                await play_look.run_play_look(pw, out, failures)
-            if a.only in (None, "live", "frame-gaps"):
-                import frame_gaps
-                await frame_gaps.run_frame_gaps(pw, out, failures)
-            if a.only in (None, "live", "props"):
-                import props
-                await props.run_props(pw, out, failures)
-            if a.only in (None, "live", "breaks"):
-                import breaks
-                await breaks.run_breaks(pw, out, failures)
-            if a.only in (None, "live", "callbell"):
-                import callbell
-                await callbell.run_callbell(pw, out, failures)
-            if a.only in (None, "live", "weather"):
-                import weather
-                await weather.run_weather(pw, out, failures)
-                await weather.run_weather_few(pw, out, failures)
-            if a.only in (None, "live", "usage"):
-                import usage_header
-                await usage_header.run_usage(pw, out, failures)
-            if a.only in (None, "live", "name-tags"):
-                import name_tags
-                await name_tags.run_name_tags(pw, out, failures)
-            if a.only in (None, "live", "shredder"):
-                import shredder
-                await shredder.run_shredder(pw, out, failures)
-            if a.only in (None, "live", "gitbox"):
-                import gitbox
-                before = progress_count()
-                await gitbox.run_gitbox(pw, out, failures)
-                failures.extend(m for m in [progress_grew("gitbox", before)] if m)
-            if a.only in (None, "live", "log-strip"):
-                import log_strip
-                await log_strip.run_log_strip(pw, out, failures)
-            if a.only in (None, "live", "name-tag-role"):
-                import name_tag_role
-                await name_tag_role.run_name_tag_role(pw, out, failures)
-            if a.only in (None, "live", "clock-out"):
-                import clock_out
-                before = progress_count()
-                await clock_out.run_clock_out(pw, out, failures)
-                failures.extend(m for m in [progress_grew("clock-out", before)] if m)
-            if a.only in (None, "live", "arrows-rooms"):
-                import arrows_rooms
-                await arrows_rooms.run_arrows_rooms(pw, out, failures)
-            if a.only in (None, "live", "mermaid"):
-                import mermaid_vendor
-                await mermaid_vendor.run_mermaid(pw, out, failures)
-            if a.only in (None, "live", "dataflow-mermaid"):
-                import dataflow_mermaid
-                await dataflow_mermaid.run_dataflow_mermaid(pw, out, failures)
-            if a.only in (None, "live", "data-server"):
-                import data_server
-                await data_server.run_data_server(pw, out, failures)
-            if a.only in (None, "live", "fulltext"):
-                import fulltext
-                await fulltext.run_fulltext(pw, out, failures)
-            if a.only in (None, "live", "cost-bill"):
-                import cost_bill
-                await cost_bill.run_cost_bill(pw, out, failures)
-            if a.only in (None, "live", "rooms"):
-                import rooms
-                await rooms.run_rooms(pw, out, failures, RealServer)
-            if a.only in (None, "live", "tower"):
-                import tower_press
-                await tower_press.run_tower_press(pw, out, failures, RealServer)
+            if want("demo"):
+                with suite_guard("demo", failures, out):
+                    srv = Server()
+                    try:
+                        res, watch = await run_demo(pw, f"{srv.url}/?demo=1", out, suites)
+                    finally:
+                        srv.stop()
+                    (out / "demo-results.json").write_text(dump(res) + "\n")
+                    expect = json.loads(EXPECT_DEMO.read_text())
+                    for name in suites:
+                        for line in diff(expect.get(name), res.get(name), f"demo/{name}"):
+                            failures.append(line)
+                    check_watch(watch, "demo", failures)
+                    for key in ("shots", "perm", "scope", "phone"):
+                        r = res.get(key) or {}
+                        for k, v in r.items():
+                            if isinstance(v, dict) and isinstance(v.get("sw"), int) and v["sw"] > 390:
+                                failures.append(f"demo/{key}/{k}: horizontal scroll at 390 px (scrollWidth {v['sw']})")
+            if want("live", "spec-colors"):
+                with suite_guard("spec-colors", failures, out):
+                    import spec_colors
+                    await spec_colors.run_spec_colors(pw, out, failures, Server)
+            if want("demo", "spec-help"):
+                with suite_guard("spec-help", failures, out):
+                    import spec_help
+                    await spec_help.run_spec_help(pw, out, failures, Server)
+            if want("demo", "heavy-looks"):
+                with suite_guard("heavy-looks", failures, out):
+                    import heavy_looks
+                    await heavy_looks.run_heavy_looks(pw, out, failures, Server)
+            if want("live"):
+                with suite_guard("live", failures, out):
+                    import live
+                    await live.run(pw, out, failures, Server)
+                    await live.run_real(pw, out, failures, RealServer)
+                    await live.run_real_decide(pw, out, failures)
+            if want("live", "ask"):
+                with suite_guard("ask", failures, out):
+                    import ask
+                    await ask.run_ask(pw, out, failures)
+            if want("live", "notify"):
+                with suite_guard("notify", failures, out):
+                    import notify
+                    await notify.run_notify(pw, out, failures)
+            if want("live", "ask-board"):
+                with suite_guard("ask-board", failures, out):
+                    import ask_board
+                    await ask_board.run_ask_board(pw, out, failures)
+            if want("live", "history"):
+                with suite_guard("history", failures, out):
+                    import history
+                    before = progress_count()
+                    await history.run_history(pw, out, failures)
+                    await history.run_history_scroll(pw, out, failures)
+                    import send_prompt
+                    await send_prompt.run_send_prompt(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("history", before)] if m)
+            if want("live", "hist-wide"):
+                with suite_guard("hist-wide", failures, out):
+                    import hist_wide
+                    before = progress_count()
+                    await hist_wide.run_hist_wide(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("hist-wide", before)] if m)
+            if want("live", "hist-labels"):
+                with suite_guard("hist-labels", failures, out):
+                    import hist_labels
+                    await hist_labels.run_hist_labels(pw, out, failures)
+            if want("live", "hist-images"):
+                with suite_guard("hist-images", failures, out):
+                    import hist_images
+                    before = progress_count()
+                    await hist_images.run_hist_images(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("hist-images", before)] if m)
+            if want("live", "rb-layout"):
+                with suite_guard("rb-layout", failures, out):
+                    import rb_layout
+                    before = progress_count()
+                    await rb_layout.run_rb_layout(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("rb-layout", before)] if m)
+            if want("live", "focus-cam"):
+                with suite_guard("focus-cam", failures, out):
+                    import focus_cam
+                    before = progress_count()
+                    await focus_cam.run_focus_cam(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("focus-cam", before)] if m)
+            if want("live", "rb-arrows"):
+                with suite_guard("rb-arrows", failures, out):
+                    import rb_arrows
+                    before = progress_count()
+                    await rb_arrows.run_rb_arrows(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("rb-arrows", before)] if m)
+            if want("live", "robot-tests"):
+                with suite_guard("robot-tests", failures, out):
+                    import robot_tests
+                    before = progress_count()
+                    await robot_tests.run_robot_tests(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("robot-tests", before)] if m)
+            if want("live", "calls"):
+                with suite_guard("calls", failures, out):
+                    import calls
+                    await calls.run_calls(pw, out, failures)
+            if want("live", "play"):
+                with suite_guard("play", failures, out):
+                    import play
+                    await play.run_play(pw, out, failures)
+            if want("live", "play-look"):
+                with suite_guard("play-look", failures, out):
+                    import play_look
+                    await play_look.run_play_look(pw, out, failures)
+            if want("live", "frame-gaps"):
+                with suite_guard("frame-gaps", failures, out):
+                    import frame_gaps
+                    await frame_gaps.run_frame_gaps(pw, out, failures)
+            if want("live", "props"):
+                with suite_guard("props", failures, out):
+                    import props
+                    await props.run_props(pw, out, failures)
+            if want("live", "breaks"):
+                with suite_guard("breaks", failures, out):
+                    import breaks
+                    await breaks.run_breaks(pw, out, failures)
+            if want("live", "callbell"):
+                with suite_guard("callbell", failures, out):
+                    import callbell
+                    await callbell.run_callbell(pw, out, failures)
+            if want("live", "weather"):
+                with suite_guard("weather", failures, out):
+                    import weather
+                    await weather.run_weather(pw, out, failures)
+                    await weather.run_weather_few(pw, out, failures)
+            if want("live", "usage"):
+                with suite_guard("usage", failures, out):
+                    import usage_header
+                    await usage_header.run_usage(pw, out, failures)
+            if want("live", "name-tags"):
+                with suite_guard("name-tags", failures, out):
+                    import name_tags
+                    await name_tags.run_name_tags(pw, out, failures)
+            if want("live", "shredder"):
+                with suite_guard("shredder", failures, out):
+                    import shredder
+                    await shredder.run_shredder(pw, out, failures)
+            if want("live", "gitbox"):
+                with suite_guard("gitbox", failures, out):
+                    import gitbox
+                    before = progress_count()
+                    await gitbox.run_gitbox(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("gitbox", before)] if m)
+            if want("live", "log-strip"):
+                with suite_guard("log-strip", failures, out):
+                    import log_strip
+                    await log_strip.run_log_strip(pw, out, failures)
+            if want("live", "name-tag-role"):
+                with suite_guard("name-tag-role", failures, out):
+                    import name_tag_role
+                    await name_tag_role.run_name_tag_role(pw, out, failures)
+            if want("live", "clock-out"):
+                with suite_guard("clock-out", failures, out):
+                    import clock_out
+                    before = progress_count()
+                    await clock_out.run_clock_out(pw, out, failures)
+                    failures.extend(m for m in [progress_grew("clock-out", before)] if m)
+            if want("live", "arrows-rooms"):
+                with suite_guard("arrows-rooms", failures, out):
+                    import arrows_rooms
+                    await arrows_rooms.run_arrows_rooms(pw, out, failures)
+            if want("live", "mermaid"):
+                with suite_guard("mermaid", failures, out):
+                    import mermaid_vendor
+                    await mermaid_vendor.run_mermaid(pw, out, failures)
+            if want("live", "dataflow-mermaid"):
+                with suite_guard("dataflow-mermaid", failures, out):
+                    import dataflow_mermaid
+                    await dataflow_mermaid.run_dataflow_mermaid(pw, out, failures)
+            if want("live", "data-server"):
+                with suite_guard("data-server", failures, out):
+                    import data_server
+                    await data_server.run_data_server(pw, out, failures)
+            if want("live", "fulltext"):
+                with suite_guard("fulltext", failures, out):
+                    import fulltext
+                    await fulltext.run_fulltext(pw, out, failures)
+            if want("live", "cost-bill"):
+                with suite_guard("cost-bill", failures, out):
+                    import cost_bill
+                    await cost_bill.run_cost_bill(pw, out, failures)
+            if want("live", "rooms"):
+                with suite_guard("rooms", failures, out):
+                    import rooms
+                    await rooms.run_rooms(pw, out, failures, RealServer)
+            if want("live", "tower"):
+                with suite_guard("tower", failures, out):
+                    import tower_press
+                    await tower_press.run_tower_press(pw, out, failures, RealServer)
 
     asyncio.run(go())
     if a.record_demo:

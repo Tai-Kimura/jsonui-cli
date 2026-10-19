@@ -6,8 +6,10 @@ except `settle`, which only lets a camera tween finish before the next click.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
+import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,6 +29,27 @@ def progress_count(folder: Path = REAL_PROGRESS) -> int:
 def progress_grew(suite: str, before: int, folder: Path = REAL_PROGRESS) -> str | None:
     now = progress_count(folder)
     return f"{suite}: the real test-progress folder grew ({before} -> {now})" if now > before else None
+
+
+@contextlib.contextmanager
+def suite_guard(name: str, failures: list, out: Path | None = None):
+    """Run one suite's block in run.py: an exception out of it (a wait's WaitTimeout, a crash) becomes one FAIL line
+    and the run goes on to the next suite (ticket 2026-10-20-jui-viz-e2e-one-suite-exception-stops-the-run: one
+    timeout in props ended the whole run with a traceback, no FAIL line, and no later suite ran). The traceback is
+    kept in <out>/<name>-traceback.txt. KeyboardInterrupt still stops the run."""
+    try:
+        yield
+    except Exception as e:  # noqa: BLE001 - every exception, so the next suite runs
+        first = (str(e).splitlines() or [""])[0][:2000]
+        failures.append(f"{name}: the suite stopped: {type(e).__name__}: {first}")
+        if out is not None:
+            try:
+                Path(out).mkdir(parents=True, exist_ok=True)
+                (Path(out) / f"{name}-traceback.txt").write_text(traceback.format_exc())
+            except OSError:
+                pass
+
+
 LAUNCH_ARGS = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
 DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
 PHONE = {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 2, "is_mobile": True, "has_touch": True}

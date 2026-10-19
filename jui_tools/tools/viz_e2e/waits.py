@@ -4,8 +4,8 @@ bg-look, workwear and name-tag-role, one family).
 Measured 10-19 under load 85–146: the page draws 1–15 frames a second instead of 60. Whatever moves per frame then
 takes more wall time: a pose blending into the next (r.blend, 0.4 s of frame time capped at 0.05 s a frame: 8
 frames), a tag easing up (0.35 of the way a frame), a camera following. Walking does not: liveWalk takes the real time
-between frames (up to 1 s), so a walk takes about its real time at 1 fps and more (measured: the walk out of a room
-took 9.6–12.8 s at 4–14 fps). So:
+between frames, so a walk takes about its real time at 1 fps and less (since eaa948c5 with no cap, and any number of
+waypoints in one frame). So:
 
   until(page, js, name, ...)   wait for a predicate on page state, checked on every animation frame (polling 'raf':
                                state only changes in a frame), its name in the timeout, and with `why` a JSON of the
@@ -24,6 +24,11 @@ The cap of a wait is never the fix: keep it as it was. Example:
 from __future__ import annotations
 
 import json
+import os
+
+# A forced timeout for the runner's arm (2026-10-20-jui-viz-e2e-one-suite-exception-stops-the-run): a wait whose name
+# contains this text times out at once, so one suite stops on a WaitTimeout and the next must still run and report.
+FORCE_TIMEOUT = "JUI_VIZ_E2E_FORCE_TIMEOUT"
 
 
 class WaitTimeout(RuntimeError):
@@ -32,6 +37,9 @@ class WaitTimeout(RuntimeError):
 
 async def until(page, js: str, name: str, arg=None, timeout: int = 30000, why: str | None = None):
     """Wait for `js` (a function of `arg`) to be truthy, checked every animation frame; returns its value."""
+    forced = os.environ.get(FORCE_TIMEOUT)
+    if forced and forced in name:
+        raise WaitTimeout(f"waiting for {name}: forced ({FORCE_TIMEOUT}={forced})")
     try:
         handle = await page.wait_for_function(js, arg=arg, timeout=timeout, polling="raf")
         return await handle.json_value()
