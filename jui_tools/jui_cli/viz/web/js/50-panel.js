@@ -1819,8 +1819,8 @@ callEl.addEventListener('keydown', (e) => {
    - while question notifications can be shown (permission granted, the kind on) the page says so to the server every
      4 s and whenever the server asks (notify.ping): then a question waits for an answer though the page is hidden
      (cd's ruling 10-19; it lapses notifyPresenceSec after the last word, a closed tab included). */
-const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask'];
-const NOTIFY = { on: { done: true, perm: true, ask: true }, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0 };
+const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask', 'chime'];
+const NOTIFY = { on: { done: true, perm: true, ask: true, chime: true }, audio: null, woke: false, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0 };
 function notifyLoadPrefs() {
   try {
     const v = JSON.parse(localStorage.getItem(NOTIFY_PREFS) || 'null');
@@ -1852,6 +1852,34 @@ function notifyOut(key, body, onClick) {
   n.onclick = () => { n.close(); onClick(); };
   return n;
 }
+/* The chime (2.3.6, ticket 2026-10-20-jui-viz-notify-chime; requester: 「鳴らす 鳴らすかどうかは設定で変えれる」): the
+   page makes it with Web Audio (no sound file), quietly, when it shows a notification — the tab that showed it only,
+   never when quiet. One switch for all three kinds (on by default, kept with them); done falls, a permission or a
+   question rises. A browser starts an AudioContext only after the person has pressed something on the page: it is
+   woken by the permission button and by the first press anywhere; until then the notification shows without sound
+   and the settings say a press is needed. */
+function notifyAudioWake() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!NOTIFY.audio) NOTIFY.audio = new AC();
+    if (NOTIFY.audio.state !== 'running') NOTIFY.audio.resume().catch(() => {}).finally(() => notifySettingsShow());
+  } catch (err) { /* no sound: the notification still shows */ }
+}
+const notifyAudioReady = () => !!(NOTIFY.audio && NOTIFY.audio.state === 'running');
+function notifyChime(kind) {
+  if (!NOTIFY.on.chime || !notifyAudioReady()) return;
+  try {
+    const ac = NOTIFY.audio, t = ac.currentTime, notes = kind === 'done' ? [880, 660] : [660, 988];
+    notes.forEach((hz, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), at = t + i * 0.16;
+      o.type = 'sine'; o.frequency.setValueAtTime(hz, at);
+      g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(0.08, at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
+      o.connect(g); g.connect(ac.destination); o.start(at); o.stop(at + 0.32);
+    });
+  } catch (err) { /* no sound: the notification has shown */ }
+}
+for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { if (!NOTIFY.woke) { NOTIFY.woke = true; notifyAudioWake(); } }, { capture: true, once: true });
 /* true: this tab rings it (the first to take the key); false: another tab (or this one) already did. */
 function notifyRungTake(key) {
   let rung;
@@ -1864,8 +1892,11 @@ function notifyRungTake(key) {
 function notifyEvent(kind, key, ref, body) {
   if (NOTIFY.seen.has(key)) return;
   NOTIFY.seen.add(key);
-  if (!NOTIFY.on[kind] || !notifyGranted() || notifyViewing(kind, ref)) return;
-  const ring = () => { if (notifyRungTake(key)) notifyOut(key, body, () => notifyOpen(kind, ref)); };
+  if (!NOTIFY.on[kind] || !notifyGranted()) return;
+  // quiet (this very thing on screen, in front): the key is taken without a ring, so a tab that comes to it later does
+  // not ring it either (tabs take an event in no fixed order: one that came first may already have rung it)
+  const quiet = notifyViewing(kind, ref);
+  const ring = () => { if (notifyRungTake(key) && !quiet) { notifyOut(key, body, () => notifyOpen(kind, ref)); notifyChime(kind); } };   // the sound: the same one tab
   if (navigator.locks && navigator.locks.request) navigator.locks.request('jui-viz-notify', ring).catch(() => {});
   else ring();
 }
@@ -1931,6 +1962,7 @@ function notifySettingsShow(settings) {
   setText($('notify-perm-state'), state);
   $('notify-ask-perm').hidden = !notifyCan() || Notification.permission !== 'default';
   for (const el of notifyEl.querySelectorAll('[data-notify-kind]')) el.checked = !!NOTIFY.on[el.dataset.notifyKind];
+  setText($('notify-chime-note'), NOTIFY.on.chime && !notifyAudioReady() ? 'ページを一度クリックすると鳴ります' : '');
   const sel = $('ask-wait');
   if (s) {
     const label = (sec) => (sec < 60 ? `${sec} 秒` : `${sec / 60} 分`);
@@ -1960,6 +1992,7 @@ $('chip-askwait').addEventListener('click', (e) => notifyOpenPanel(e.currentTarg
 $('notify-close').addEventListener('click', notifyClosePanel);
 $('notify-ask-perm').addEventListener('click', async () => {
   if (!notifyCan()) return;
+  notifyAudioWake();   // the press that asks also lets the page make a sound (the chime)
   try { await Notification.requestPermission(); } catch (err) { /* refused or not asked */ }
   notifySettingsShow();
   notifyPresenceSay();

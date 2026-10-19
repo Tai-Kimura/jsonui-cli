@@ -47,7 +47,18 @@ STUB = r"""(() => {
   Object.defineProperty(FakeNotification, 'permission', { get: read });
   FakeNotification.requestPermission = () => { window.__asked += 1; try { localStorage.setItem('e2e-perm', 'granted'); } catch (e) {} return Promise.resolve('granted'); };
   window.Notification = FakeNotification;
+  // a stand-in AudioContext: "running" after resume unless the test says 'suspended'; each chime starts two tones,
+  // logged to localStorage (shared by the tabs)
+  class FakeAudioContext {
+    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; window.__ac = this; }
+    resume() { if ((localStorage.getItem('e2e-ac') || 'running') === 'running') this.state = 'running'; return Promise.resolve(); }
+    createOscillator() { return { type: '', frequency: { setValueAtTime() {} }, connect() {}, stop() {},
+      start() { try { localStorage.setItem('e2e-tones', String(Number(localStorage.getItem('e2e-tones') || 0) + 1)); } catch (e) {} } }; }
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+  }
+  window.AudioContext = FakeAudioContext;
 })();"""
+CHIMES = "() => Number(localStorage.getItem('e2e-tones') || 0) / 2"
 SHOWN = "() => JSON.parse(localStorage.getItem('e2e-shown') || '[]')"
 
 
@@ -144,6 +155,10 @@ async def run_notify(pw, out, failures):
         await b.goto(url + "/")
         await ready(b)
         await wait(b, "() => Object.keys(window.__dbg.robotState()).length >= 1", timeout=30000, label="tab b's robot")
+        # a press in tab b too (a tab nobody has pressed in cannot make a sound: the browser's rule)
+        await b.mouse.click(5, 880)
+        for p, name in ((a, "a"), (b, "b")):
+            await wait(p, "() => window.__dbg.notifyAudio() === 'running'", label=f"tab {name}'s sound woken")
 
         async def shown_after(n, label):
             await wait(a, f"() => JSON.parse(localStorage.getItem('e2e-shown') || '[]').length >= {n}", label=label)
@@ -179,6 +194,8 @@ async def run_notify(pw, out, failures):
               f"the question rings once and says how long it waits: {shown}")
         res["perTab"] = [len(await p.evaluate("() => window.__shown")) for p in (a, b)]
         check(failures, sum(res["perTab"]) == 3, f"three in all, not three per tab: {res['perTab']}")
+        res["chimes"] = await a.evaluate(CHIMES)
+        check(failures, res["chimes"] == 3, f"one chime per notification, from the tab that showed it: {res['chimes']}")
 
         # 3. a click opens what it is about
         for kind, js, label in (("done", "(id) => window.__dbg.board().robot === id", "the robot's card"),
@@ -204,6 +221,27 @@ async def run_notify(pw, out, failures):
         ask_p.wait(timeout=10)
         perm_p.kill()
         perm_p.wait(timeout=10)
+
+        # 3b. the chime turned off: the notification shows, no sound
+        n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+        await a.evaluate("() => window.__dbg.notifySet({ chime: false })")
+        await wait(b, "() => window.__dbg.notifyOn().chime === false", label="the chime's switch reaches tab b")
+        turn()
+        await shown_after(n0 + 1, "a turn end with the chime off")
+        res["chimeOff"] = [len(await a.evaluate(SHOWN)) - n0, await a.evaluate(CHIMES) - c0]
+        check(failures, res["chimeOff"] == [1, 0], f"the chime off: the notification, no sound: {res['chimeOff']}")
+        await a.evaluate("() => window.__dbg.notifySet({ chime: true })")
+        await wait(b, "() => window.__dbg.notifyOn().chime === true", label="the chime back on in tab b")
+        # 3c. a sound the browser keeps suspended: the notification still shows, without sound, and nothing breaks
+        n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+        for p in (a, b):
+            await p.evaluate("() => { localStorage.setItem('e2e-ac', 'suspended'); window.__ac.state = 'suspended'; }")
+        turn()
+        await shown_after(n0 + 1, "a turn end with the sound suspended")
+        res["suspended"] = [len(await a.evaluate(SHOWN)) - n0, await a.evaluate(CHIMES) - c0]
+        check(failures, res["suspended"] == [1, 0], f"a suspended sound: the notification, no sound: {res['suspended']}")
+        for p in (a, b):
+            await p.evaluate("() => { localStorage.setItem('e2e-ac', 'running'); window.__ac.state = 'running'; }")
 
         # 4. a reload rings nothing again — with the list of rung keys cleared first (a fresh profile), so it is the
         # page's own "nothing from before it was loaded" that holds, not the other tabs' record
@@ -232,6 +270,22 @@ async def run_notify(pw, out, failures):
 
         # 6. the question window: hidden with question notifications on, the question waits; turned off, it goes back
         await b.close()
+        # 5b. quiet: the page in front, focused, showing that robot's card — no notification, no sound
+        await a.bring_to_front()
+        await a.evaluate("() => window.__dbg.notifySet({ done: true })")
+        await a.mouse.click(5, 880)   # wakes the reloaded tab's sound (a press), so a ring would sound
+        await wait(a, "() => window.__dbg.notifyAudio() === 'running'", label="tab a's sound woken again")
+        await a.evaluate("(id) => window.__dbg.openRobot(id)", rid)
+        await wait(a, "(id) => window.__dbg.board().robot === id", arg=rid, label="the robot's card open")
+        res["focus"] = await a.evaluate("() => [document.visibilityState, document.hasFocus()]")
+        n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+        seen0 = await a.evaluate("() => window.__dbg.notifySeen()")
+        turn()
+        await wait(a, "(before) => window.__dbg.notifySeen().some((k) => k.includes(':done:') && !before.includes(k))", arg=seen0, label="the quiet turn end seen")
+        res["quiet"] = [len(await a.evaluate(SHOWN)) - n0, await a.evaluate(CHIMES) - c0]
+        check(failures, res["focus"] == ["visible", True] and res["quiet"] == [0, 0],
+              f"quiet while that card is on screen: no notification, no sound: {res['quiet']} (visibility, focus {res['focus']})")
+        await a.keyboard.press("Escape")
         await a.evaluate("() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); }")
         await a.evaluate("() => window.__dbg.notifyPresenceSay()")
         hook(body(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="ask-2", tool_input=Q))

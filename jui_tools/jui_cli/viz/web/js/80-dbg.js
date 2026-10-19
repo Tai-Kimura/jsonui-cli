@@ -6,6 +6,7 @@ window.__dbg = {
   notifySeen: () => [...NOTIFY.seen],
   notifyBased: () => NOTIFY.based.perm && NOTIFY.based.ask,
   notifyPings: () => NOTIFY.pings,
+  notifyAudio: () => (NOTIFY.audio ? NOTIFY.audio.state : null),
   notifyOn: () => ({ ...NOTIFY.on }),
   notifyPresenceSay: () => notifyPresenceSay(),
   notifySet: (o) => { Object.assign(NOTIFY.on, o || {}); notifySavePrefs(); notifyPresenceSay(); return { ...NOTIFY.on }; },
