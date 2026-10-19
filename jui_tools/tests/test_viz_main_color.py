@@ -25,9 +25,10 @@ def _contrast(a: str, b: str) -> float:
 MAIN = "#0ea5e9"
 MAIN_PILL = "#0369a1"   # 2.3.6 (ticket 2026-10-20-jui-viz-main-pill-text-contrast): the pill one step darker, white text 5.93:1
 OLD_INK = "#082f49"     # the dark ink on the sky-blue pill (2.3.5): the requester found it hard to read
-# Roles whose pill is under 4.5:1 today; listed in the ticket, shown to the requester, not changed with main's. A role
-# not named here (main among them) is red under 4.5:1.
-KNOWN_BELOW = {"define", "ground", "navigation", "test", "other"}
+# Every role's body colour, which the pills must not change (requester 10-20: 「全部直す」 is the pills only).
+BODIES = {"main": MAIN, "define": "#7d5cff", "ground": "#b07a52", "implement": "#3b5bdb", "navigation": "#10a693",
+          "test": "#3fae4a", "debug": "#f0b400", "other": "#8a9bb0"}
+E2E = Path(__file__).resolve().parents[1] / "tools" / "viz_e2e" / "main_color.py"
 
 
 def _roles() -> dict:
@@ -58,12 +59,21 @@ def test_the_old_dark_ink_does_not_come_back():
     assert hits == [], hits
 
 
-def test_every_pill_reads_or_is_a_known_one():
+def test_every_pill_reads_and_every_body_stays():
     roles, ink = _roles(), _ink()
-    assert len(roles) == 8, roles
+    assert {r: color for r, (color, _) in roles.items()} == BODIES, roles
     ratios = {r: round(_contrast(pill or color, ink.get(r, "#ffffff")), 2) for r, (color, pill) in roles.items()}
-    below = {r for r, c in ratios.items() if c < 4.5}
-    assert below <= KNOWN_BELOW, ratios
+    assert all(c >= 4.5 for c in ratios.values()), ratios
+
+
+def test_no_role_is_let_off_the_contrast():
+    """The 4.5:1 arms name no role to skip (2.3.6: five were, until the requester said 「全部直す」). A set of roles let off,
+    or an `or` on the contrast check, is red here even while the e2e would pass with it."""
+    for path in (Path(__file__), E2E):
+        text = path.read_text()
+        assert ("KNOWN" + "_BELOW") not in text and ("BELOW" + " =") not in text, path.name   # split so this line is not a hit
+    e2e = E2E.read_text()
+    assert e2e.count("c >= INK_CONTRAST") == 1 and "c >= INK_CONTRAST," in e2e, "the e2e's contrast check is bare"
 
 
 def test_every_pill_takes_the_one_source():

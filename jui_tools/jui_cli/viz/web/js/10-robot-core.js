@@ -13,13 +13,14 @@ const ROLES = {
   main: { name: 'メイン', color: '#0ea5e9', pill: '#0369a1' },   // sky blue (2.3.5, requester 10-19: 「スカイブルーにしようか」; it was orange, beside the subagents' orange coveralls)
   // `pill` (2.3.6, ticket 2026-10-20-jui-viz-main-pill-text-contrast): a role's pills (over the robot, in the panels, on the
   // boards) take it in place of `color`, white text on it. Main's is one step darker (#0369a1, white 5.93:1); its body stays #0ea5e9.
-  define: { name: 'define', color: '#7d5cff' },
-  ground: { name: 'ground', color: '#b07a52' },
+  // define / ground / navigation / test / other the same (requester 10-20: 「全部直す」): each the body's hue, darker, white ≥ 4.7:1.
+  define: { name: 'define', color: '#7d5cff', pill: '#7552ff' },
+  ground: { name: 'ground', color: '#b07a52', pill: '#996946' },
   implement: { name: 'implement', color: '#3b5bdb' },   // indigo (2.3.5): #2f80ed sat ΔE2000 14.6 from the main sky blue, side by side in the panel
-  navigation: { name: 'navigation', color: '#10a693' },
-  test: { name: 'test', color: '#3fae4a' },
+  navigation: { name: 'navigation', color: '#10a693', pill: '#0c8172' },
+  test: { name: 'test', color: '#3fae4a', pill: '#2f8338' },
   debug: { name: 'debug', color: '#f0b400' },
-  other: { name: 'その他', color: '#8a9bb0' },
+  other: { name: 'その他', color: '#8a9bb0', pill: '#60748e' },
 };
 const COL = {
   shell: '#e8ecf3', limb: '#394150', screen: '#0f1830', eye: '#a6fbff',

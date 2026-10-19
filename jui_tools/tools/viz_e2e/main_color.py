@@ -7,7 +7,7 @@ subagent (the two blues side by side in the panel), and a second main session in
   - the main pill in the panel and over the robot: its background MAIN_PILL (#0369a1, one step darker than the body;
     2.3.6, ticket 2026-10-20-jui-viz-main-pill-text-contrast), its text white, never the old dark ink OLD_INK;
   - every role's pill as drawn (pill() with the page's CSS, and drawRolePill on a canvas): main's MAIN_PILL / white,
-    and each pair's contrast ≥ 4.5:1 unless the role is one of KNOWN_BELOW (listed in the ticket, not changed here);
+    and every pair's contrast ≥ 4.5:1 (requester 10-20: 「全部直す」, the other five pills darker too), the bodies as they were;
   - the robot card of a main robot: its head's colour MAIN;
   - nothing on the page is drawn in the old orange (#ff7a3d) any more (every element's colour, background and border);
   - the main blue and implement's blue stay apart (ΔE2000 ≥ DE_IMPLEMENT).
@@ -30,7 +30,8 @@ MAIN = "#0ea5e9"
 MAIN_PILL = "#0369a1"
 WHITE = "#ffffff"
 OLD_INK = "#082f49"
-KNOWN_BELOW = {"define", "ground", "navigation", "test", "other"}
+BODIES = {"main": MAIN, "define": "#7d5cff", "ground": "#b07a52", "implement": "#3b5bdb", "navigation": "#10a693",
+          "test": "#3fae4a", "debug": "#f0b400", "other": "#8a9bb0"}
 OLD = "rgb(255, 122, 61)"
 DE_IMPLEMENT = 20.0
 INK_CONTRAST = 4.5
@@ -140,11 +141,12 @@ async def run_main_color(pw, out, failures):
             hbg, hfg = rgb_hex(h["bg"]), rgb_hex(h["fg"])
             check(failures, (cv["bg"], cv["fg"]) == (hbg, hfg), f"{role}: the canvas pill is drawn as the HTML one: {cv} vs {hbg}/{hfg}")
             c = res["pillContrast"][role] = round(contrast(hfg, hbg), 2)
-            check(failures, c >= INK_CONTRAST or role in KNOWN_BELOW, f"{role}'s pill reads: {c}:1 ({hfg} on {hbg})")
+            check(failures, c >= INK_CONTRAST, f"{role}'s pill reads: {c}:1 ({hfg} on {hbg})")
+            check(failures, hbg != BODIES[role] or role in ("implement", "debug"), f"{role}'s pill is its own darker colour, not the body's {BODIES[role]}")
         check(failures, (rgb_hex(rp["html"]["main"]["bg"]), rgb_hex(rp["html"]["main"]["fg"])) == (MAIN_PILL, WHITE)
               and (rp["canvas"]["main"]["bg"], rp["canvas"]["main"]["fg"]) == (MAIN_PILL, WHITE),
               f"the main pill (HTML and canvas) is {MAIN_PILL} with white text: {rp['html']['main']} {rp['canvas']['main']}")
-        check(failures, rp["body"]["main"] == MAIN, f"the main robot's body stays {MAIN}: {rp['body']['main']}")
+        check(failures, rp["body"] == BODIES, f"every robot's body colour stays: {rp['body']}")
         check(failures, not got["old"], f"nothing drawn in the old orange: {got['old']}")
         colors = await page.evaluate("() => window.__dbg.wearColors()")
         res["deImplement"] = round(de2000(colors["roles"]["main"], colors["roles"]["implement"]), 2)
