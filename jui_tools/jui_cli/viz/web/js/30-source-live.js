@@ -925,7 +925,7 @@ function liveEvents(items, older, replay = false) {
 }
 
 NET.handlers = {
-  state(state) { SOURCE.connected = state === 'connected'; if (state === 'connected') LIVE.connectedOnce = true; liveChrome(); },
+  state(state) { SOURCE.connected = state === 'connected'; if (state === 'connected') LIVE.connectedOnce = true; liveChrome(); talkConn(state); },
   snapshot(slices) {
     LIVE.replayNext = true;   // the server sends the recent events right after the snapshot (server.ws): seen, not rung
     liveApply(slices, true);
@@ -937,7 +937,23 @@ NET.handlers = {
   sheet(msg) { liveSheet(msg); },
   notice(level, text) { if (text) showToast(text); void level; },
   notifyPing() { NOTIFY.pings += 1; notifyPresenceSay(); },
+  talk(msg) { talkReceive(msg); },   // talk.list / talk.messages / talk.update / talk.badges (58-talk.js)
 };
+/* トーク (2.3.7): a robot's agentId on the wire is the server's id (a main robot: its session id; a subagent: its id). */
+Object.assign(SOURCE, {
+  talkAgentId: (label) => (DEF[label] && DEF[label].realId) || null,
+  talkLabel: (agentId) => (agentId ? LIVE.labelOfReal[agentId] || null : null),
+  /* One request, already checked against the contract (58-talk.js talkFrame). talk.open and talk.get wait for their
+     answer (talk.list / talk.messages, or a failed ack); talk.seen and talk.close are sent and not waited for. */
+  talkSend(frame) {
+    if (frame.type !== 'talk.open' && frame.type !== 'talk.get') return Promise.resolve({ ok: netSend(frame) });
+    return new Promise((resolve) => {
+      if (!netSend(frame)) { resolve({ ok: false, error: 'offline' }); return; }
+      const timer = setTimeout(() => { NET.waits.delete(frame.reqId); resolve({ ok: false, error: 'timeout' }); }, 15000);
+      NET.waits.set(frame.reqId, (ack) => { clearTimeout(timer); resolve(ack); });
+    });
+  },
+});
 
 /* ---------- the plan's usage limits (requester, 10-18) ----------
    From the statusLine (statusline.py → POST /usage → the usage slice): the 5-hour and the weekly window, their

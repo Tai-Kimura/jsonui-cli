@@ -26,9 +26,9 @@ def web_text(*parts):
 
 def test_each_mode_is_its_parts_in_order():
     assert bundle.parts("demo", e2e=False) == ("10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
-                                               "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
     assert bundle.parts("live", e2e=False) == ("10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
-                                               "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
 
 
 def test_build_joins_the_parts_in_that_order_with_a_marker_each():
@@ -187,7 +187,7 @@ BUILDER_TABLES = {"bodies": "the sheet's section renderers, each a template chec
 CONST_TABLES = {"ROLES", "ROLE_INK", "CASE_ICON", "COL_HINT", "COL_STATE", "EXACT_LABEL", "PLATFORM_JA",
                 "STATUS_CLASS", "CHIP", "titles"}
 # Literal markup the page defines once; each declaration is checked as HTML, like an …HTML name.
-CONST_HTML = {"SEGS", "SWATCHES", "RELAY_HOW", "PERM_NOTE", "OV_LEGEND", "SHEET_LEGEND", "SHEET_LEGEND_LIVE"}
+CONST_HTML = {"SEGS", "TALK_ICON", "SWATCHES", "RELAY_HOW", "PERM_NOTE", "OV_LEGEND", "SHEET_LEGEND", "SHEET_LEGEND_LIVE"}
 # Numbers: names that only ever hold one, and fields the page itself computes as numbers.
 NUMERIC_NAMES = {"i", "k", "n", "specIdx", "pPct", "rPct", "fPct", "elsewhere", "compAll", "COMP_MAX"}
 NUMERIC_FIELDS = {"at", "start", "end", "abs", "seq", "passed", "failed", "busy", "live", "pend", "sessions"}

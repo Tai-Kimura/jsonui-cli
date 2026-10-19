@@ -734,3 +734,130 @@ function updateRobotStates(simT, t, perms) {
     robotState[d.id] = st;
   }
 }
+
+/* ---------- トーク (2.3.7): the demo's stand-in for the server's talk frames (TALK_CONTRACT.md) ----------
+   The talks themselves are 31-talk-demo-data.js (TALK_DEMO: generated frames, data only; it comes after this file, so it
+   is read only when the first request comes). talkStandIn answers the page's talk.* requests from them the way the
+   server does: talk.open → the robot's list, talk.get → a page of messages (before / limit), talk.seen → the unread
+   recounted (a conv op, and talk.badges when a total changed). The data's script (a new message at 20 s, a read at 30 s,
+   a removal at 45 s) plays on the page's clock; ?talkhold=1 holds it for the e2e, which plays it with talkDemo.play(t).
+   Times move by (now − base). tests/test_viz_talk_ui_frames.py runs this block under node and validates every frame. */
+/* talk-demo:begin */
+function talkStandIn(data, now) {
+  const shift = now - data.base;
+  const TIMES = ['at', 'deliveredAt', 'readAt', 'lastAt', 'goneAt', 'removeAt'];
+  const moved = (v) => {   // a deep copy with every time moved to the page's clock
+    if (Array.isArray(v)) return v.map(moved);
+    if (!v || typeof v !== 'object') return v;
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = TIMES.includes(k) && Number.isFinite(x) ? x + shift : moved(x);
+    return o;
+  };
+  const lists = {}, msgs = {}, seen = {};
+  for (const [owner, f] of Object.entries(data.lists)) lists[owner] = moved(f.items);
+  for (const [key, f] of Object.entries(data.messages)) msgs[key] = moved(f.items);
+  const ins = (owner, convId) => (msgs[`${owner} ${convId}`] || []).filter((m) => m.dir === 'in');
+  // "seen" up to where the data's unread count says: the newest `unread` messages in are not seen yet
+  for (const [owner, items] of Object.entries(lists)) for (const c of items) {
+    const list = ins(owner, c.id).sort((a, b) => a.at - b.at);
+    const k = list.length - c.unread - 1;
+    seen[`${owner} ${c.id}`] = k >= 0 ? list[k].at : 0;
+  }
+  const unread = (owner, convId) => ins(owner, convId).filter((m) => m.at > (seen[`${owner} ${convId}`] || 0)).length;
+  const row = (owner, convId) => (lists[owner] || []).find((c) => c.id === convId);
+  const recount = (owner, convId) => { const c = row(owner, convId); if (c) c.unread = unread(owner, convId); return c; };
+  function badges() {
+    const counts = {};
+    for (const [owner, items] of Object.entries(lists)) { const n = items.reduce((a, c) => a + c.unread, 0); if (n) counts[owner] = n; }
+    return { type: 'talk.badges', counts };
+  }
+  const ack = (reqId, error) => ({ type: 'ack', reqId, ok: false, error });
+  function handle(f) {
+    if (f.type === 'talk.open') {
+      const items = (lists[f.agentId] || []).slice().sort((a, b) => b.lastAt - a.lastAt);
+      return [{ type: 'talk.list', reqId: f.reqId, agentId: f.agentId, items: items.slice(0, 200), more: items.length > 200 }];
+    }
+    if (f.type === 'talk.close') return [];
+    const all = msgs[`${f.agentId} ${f.convId}`];
+    if (!all || !row(f.agentId, f.convId)) return [ack(f.reqId, 'no such conversation')];
+    if (f.type === 'talk.get') {
+      let end = all.length;
+      if (f.before !== undefined) { end = all.findIndex((m) => m.id === f.before); if (end < 0) return [ack(f.reqId, 'no such message')]; }
+      const start = Math.max(0, end - (f.limit || 100));
+      return [{ type: 'talk.messages', reqId: f.reqId, agentId: f.agentId, convId: f.convId, items: all.slice(start, end), more: start > 0 }];
+    }
+    if (f.type === 'talk.seen') {
+      const before = JSON.stringify(badges()), k = `${f.agentId} ${f.convId}`;
+      seen[k] = Math.max(seen[k] || 0, f.upTo);
+      const out = [{ type: 'talk.update', agentId: f.agentId, ops: [{ op: 'conv', conv: recount(f.agentId, f.convId) }] }];
+      const after = badges();
+      if (JSON.stringify(after) !== before) out.push(after);
+      return out;
+    }
+    return [ack(f.reqId, 'unknown request')];
+  }
+  /* One frame of the data's script, applied to the state; what goes out is recounted from the state (a seen before it
+     counts), so the badge and the rows never disagree with what the page told the stand-in. */
+  function apply(frame) {
+    const f = moved(frame);
+    if (f.type === 'talk.badges') return [badges()];
+    if (f.type !== 'talk.update') return [];
+    const owner = f.agentId, ops = [];
+    for (const op of f.ops) {
+      if (op.op === 'message') {
+        const key = `${owner} ${op.convId}`, list = msgs[key] || (msgs[key] = []);
+        const k = list.findIndex((m) => m.id === op.message.id);
+        if (k >= 0) list[k] = op.message; else { list.push(op.message); list.sort((a, b) => a.at - b.at); }
+        ops.push(op);
+      } else if (op.op === 'conv') {
+        const items = lists[owner] || (lists[owner] = []), k = items.findIndex((c) => c.id === op.conv.id);
+        if (k >= 0) items[k] = op.conv; else items.push(op.conv);
+        ops.push({ op: 'conv', conv: recount(owner, op.conv.id) });
+      } else if (op.op === 'remove') {
+        lists[owner] = (lists[owner] || []).filter((c) => c.id !== op.convId);
+        delete msgs[`${owner} ${op.convId}`];
+        ops.push(op);
+      }
+    }
+    return ops.length ? [{ type: 'talk.update', agentId: owner, ops }] : [];
+  }
+  return { handle, badges, apply, script: data.script };
+}
+/* talk-demo:end */
+const TALK_SOCK = { open: null, stand: null, played: new Set() };
+const talkStand = () => TALK_SOCK.stand || (TALK_SOCK.stand = talkStandIn(TALK_DEMO, Date.now()));
+/* Frames reach the page a moment later, as from the socket; an update only for the robot this "socket" has open. */
+function talkDemoDeliver(frames) {
+  for (const f of frames) {
+    if (f.type === 'ack') continue;
+    if (f.type === 'talk.update' && f.agentId !== TALK_SOCK.open) continue;
+    setTimeout(() => talkReceive(f), 30);
+  }
+}
+/* The script's frames due by t seconds (each once). */
+function talkDemoPlay(t) {
+  const S = talkStand();
+  S.script.forEach((x, k) => { if (x.t <= t && !TALK_SOCK.played.has(k)) { TALK_SOCK.played.add(k); talkDemoDeliver(S.apply(x.frame)); } });
+}
+Object.assign(SOURCE, {
+  talkAgentId: (label) => (DEF[label] ? label : null),   // the demo's talks name the robots by their labels
+  talkLabel: (agentId) => (agentId && DEF[agentId] ? agentId : null),
+  /* One request, already checked against the contract (58-talk.js talkFrame). Resolves { ok, data } / { ok: false, error }. */
+  talkSend(frame) {
+    if (frame.type === 'talk.open') TALK_SOCK.open = frame.agentId;
+    if (frame.type === 'talk.close') TALK_SOCK.open = null;
+    const out = talkStand().handle(frame);
+    const fail = out.find((f) => f.type === 'ack' && f.reqId === frame.reqId);
+    const answer = out.find((f) => f.type === 'talk.messages' && f.reqId === frame.reqId);
+    talkDemoDeliver(out.filter((f) => f !== answer));
+    return new Promise((resolve) => setTimeout(() => resolve(fail ? { ok: false, error: fail.error } : { ok: true, data: answer || null }), 30));
+  },
+  /* The e2e's hand on the script: play what is due by t seconds. */
+  talkDemo: { play: (t) => talkDemoPlay(t) },
+});
+setTimeout(() => {
+  talkDemoDeliver([talkStand().badges()]);   // as the server sends it right after auth
+  if (new URLSearchParams(location.search).get('talkhold') !== '1') {
+    for (const t of [...new Set(talkStand().script.map((x) => x.t))]) setTimeout(() => talkDemoPlay(t), t * 1000);
+  }
+}, 0);

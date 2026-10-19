@@ -495,9 +495,8 @@ function composePlace(pane, id) {
   box.hidden = !pane || HIST.tab !== 'history';
   // The card was rebuilt (50-panel.js, keyed) while the box had the focus, and the box is put back only now: refocus.
   const lost = rbEl._lostFk;
-  rbEl._lostFk = undefined;
   const again = lost !== undefined && !box.hidden ? box.querySelector('[data-fk="' + CSS.escape(lost) + '"]') : null;
-  if (again) again.focus({ preventScroll: true });
+  if (again) { rbEl._lostFk = undefined; again.focus({ preventScroll: true }); }   // not found here: the talk pane may hold it (58-talk.js)
   composePaint();
 }
 function composePaint() {

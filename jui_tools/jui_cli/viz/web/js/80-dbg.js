@@ -351,3 +351,12 @@ window.__dbg.wearFit = (id) => {
 };
 window.__dbg.setVisState = (id, state) => { robotState[id] = { ...(robotState[id] || {}), state }; };
 window.__dbg.wearColors = () => ({ main: ROLES.main.color, overall: WEAR.overall, edge: WEAR.edge, rim: WEAR.rim, roles: Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [k, v.color])) });
+// トーク (2.3.7, 58-talk.js): its state, the requests it sent and refused, and in the demo the stand-in server's hands
+window.__dbg.talk = () => ({ on: TALK.on, owner: TALK.owner, agent: TALK.agent, opened: TALK.opened, conv: TALK.conv, atEnd: TALK.atEnd, newer: TALK.newer,
+  list: TALK.list ? TALK.list.map((c) => ({ id: c.id, name: c.peer.name, unread: c.unread, alive: c.peer.alive, agentId: c.peer.agentId })) : null,
+  msgs: TALK.conv && TALK.msgs.get(TALK.conv) ? TALK.msgs.get(TALK.conv).items.length : 0, more: TALK.conv && TALK.msgs.get(TALK.conv) ? TALK.msgs.get(TALK.conv).more : null,
+  badges: { ...TALK.badges }, sent: TALK.sent.map((f) => ({ ...f })), refused: TALK.refused.length });
+window.__dbg.talkFrame = (type, fields) => talkFrame(type, fields);
+window.__dbg.talkDemo = SOURCE.talkDemo || null;
+window.__dbg.talkAgentId = (label) => SOURCE.talkAgentId(label);
+window.__dbg.talkPage = (n) => { TALK.page = n; };   // a smaller page, so paging shows on a short talk

@@ -779,6 +779,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-nav #rb-close { margin-left: auto; }
 .rb-side { display: grid; grid-column: 1 / -1; gap: 6px; }   /* the 2nd row: 退勤 right-aligned just above 「← 3D に戻る」 (both on the card's width) */
 .rb-side .rb-clock { justify-self: end; }
+.rb-menu { display: flex; justify-self: end; align-items: center; gap: 6px; }   /* トーク and 退勤, right-aligned above 「← 3D に戻る」 */
+.rb.rb-wide:not(.rb-wide-full) .rb-side .rb-menu { order: 1; }
 .rb-clock { border-color: var(--bad); color: var(--bad); background: var(--panel); }
 .rb-clock:hover:not(:disabled) { background: var(--bad-bg); }
 .rb-clock:disabled { border-color: var(--line); color: var(--ink-soft); opacity: 0.75; cursor: not-allowed; }
@@ -1257,3 +1259,64 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 @media (max-width: 640px) { .pr-table thead { display: none; } .pr-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 0; border-bottom: 1px solid var(--wb-line); } .pr-table th[scope="row"], .pr-table td.pr-acts { grid-column: 1 / -1; } .pr-table td, .pr-table th { border: 0; } }
 /* priced by the user's own table (not the shipped one): a dashed frame, and the title says so */
 .bill.own-price .bill-in { border-style: dashed; }
+/* ---------- トーク (58-talk.js, 2.3.7): a robot's SendMessage conversations, as a chat ---------- */
+.rb-talk { position: relative; display: inline-flex; align-items: center; gap: 5px; background: var(--panel); color: var(--ink); }
+.rb-talk[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+.rb-talk-icon { flex: none; }
+.rb-talk-n { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #ffffff; font: 700 11px/18px var(--font-body); text-align: center; }
+.rb-talk-n[hidden] { display: none; }
+.rb.rb-talking > .rb-tabs, .rb.rb-talking > .rb-body, .rb.rb-talking > .h-compose { display: none !important; }
+.tk { grid-row: 2 / -1; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; position: relative; }
+.talk-head { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.talk-back { flex: none; }
+.talk-title { margin: 0; font: 700 14px/1.4 var(--font-body); }
+.talk-peer-box { display: grid; gap: 1px; min-width: 0; flex: 1 1 auto; }
+.talk-peer { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 2px 6px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: 700 14px/1.4 var(--font-body); text-align: left; cursor: pointer; }
+button.talk-peer:hover { background: var(--chip); }
+button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.talk-peer-off { cursor: default; }
+.talk-peer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talk-peer-sub { margin: 0; padding: 0 6px; color: var(--ink-soft); font: 500 11px/1.4 var(--font-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.talk-mark { flex: none; display: inline-flex; }
+.talk-kind { display: inline-grid; place-items: center; min-width: 26px; height: 20px; padding: 0 4px; border-radius: 6px; background: var(--chip); color: var(--ink-soft); font: 700 10.5px/1 var(--font-body); }
+.talk-kind-external { background: var(--warn-bg); color: var(--warn); }
+.talk-body { min-height: 0; overflow-y: auto; padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.talk-foot { margin: 0; padding: 5px 14px 8px; border-top: 1px solid var(--line); color: var(--ink-soft); font: 500 11px/1.4 var(--font-body); }
+.talk-empty { margin: 4px 2px; color: var(--ink-soft); font: 500 12.5px/1.6 var(--font-body); }
+.talk-error { color: var(--bad); font-weight: 700; }
+.talk-gone-note { padding: 6px 10px; border-radius: 8px; background: var(--chip); color: var(--ink); }
+.talk-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.talk-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; padding: 8px 8px; border: 0; border-radius: 10px; background: none; color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
+.talk-row:hover { background: var(--chip); }
+.talk-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.talk-row-text { display: grid; gap: 2px; min-width: 0; }
+.talk-row-top, .talk-row-bottom { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.talk-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 13px/1.4 var(--font-body); }
+.talk-row-at { flex: none; color: var(--ink-soft); font: 500 11px/1.4 var(--font-mono); }
+.talk-row-pre { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); font: 500 12px/1.5 var(--font-body); }
+.talk-unread { flex: none; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--bad); color: #ffffff; font: 700 11px/20px var(--font-body); text-align: center; }
+.talk-row-gone .talk-row-name, .talk-row-gone .talk-row-pre { opacity: 0.7; }
+.talk-row-gone-note { color: var(--warn); font: 700 11px/1.4 var(--font-body); }
+.talk-day { align-self: center; margin: 4px 0; padding: 1px 10px; border-radius: 999px; background: var(--chip); color: var(--ink-soft); font: 700 11px/1.6 var(--font-body); }
+.talk-older { align-self: center; padding: 3px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); font: 700 11.5px/1.5 var(--font-body); cursor: pointer; }
+.talk-msg { display: grid; gap: 2px; max-width: 84%; min-width: 0; }
+.talk-in { justify-self: start; align-self: flex-start; }
+.talk-out { justify-self: end; align-self: flex-end; justify-items: end; }
+.talk-bubble { min-width: 0; padding: 7px 11px; border-radius: 14px; overflow-wrap: anywhere; font-size: 13px; }
+.talk-in .talk-bubble { border: 1px solid var(--line); border-top-left-radius: 4px; background: var(--chip); color: var(--ink); }
+.talk-out .talk-bubble { border: 1px solid var(--info); border-top-right-radius: 4px; background: var(--info-bg); color: var(--ink); }
+.talk-out .talk-bubble.talk-undelivered { border: 1px dashed var(--bad); background: var(--bad-bg); }
+.talk-text { line-height: 1.6; }
+.talk-text .h-md { line-height: 1.6; }
+.talk-text.talk-folded { max-height: 4.8em; overflow: hidden; }   /* three lines, as the history's messages from other sessions */
+.talk-text.talk-foldable { cursor: pointer; }
+.talk-more { margin-top: 2px; padding: 0; border: 0; background: none; color: var(--info); font: 700 11.5px/1.5 var(--font-body); cursor: pointer; }
+.talk-more[hidden] { display: none; }
+.talk-note { margin: 2px 0 0; color: var(--ink-soft); font-size: 11px; }
+.talk-meta { display: flex; gap: 6px; margin: 0; padding: 0 4px; color: var(--ink-soft); font: 500 10.5px/1.4 var(--font-body); }
+.talk-at { font-family: var(--font-mono); }
+.talk-state-read { color: var(--ok); font-weight: 700; }
+.talk-state-undelivered { color: var(--bad); font-weight: 700; }
+.talk-via { color: var(--violet); }
+.talk-newer { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); }
+.talk-newer[hidden] { display: none; }
