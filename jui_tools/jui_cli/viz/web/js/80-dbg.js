@@ -223,3 +223,11 @@ window.__dbg = {
 };
 // the prompt box's waits (55-history.js): an arm shortens 「届いていない」 instead of waiting a minute
 window.__dbg.promptWait = PROMPT_WAIT;
+// Settled, for the e2e's waits (tools/viz_e2e/waits.py, 2.3.5): what animates per frame — a pose blending into the
+// next (0.4 s of capped frame time), a robot walking, a tag easing up — read only when it has arrived, never sampled
+// on the wall clock. ids: robot labels (all robots when omitted). A robot is settled when its pose has finished
+// blending, it has no path left and is not leaving, and its tag stands where it was going.
+window.__dbg.settleInfo = (ids) => robots.filter((R) => !ids || ids.includes(R.def.id)).map((R) => ({
+  id: R.def.id, state: R.robot.state, blend: +R.robot.blend.toFixed(3), path: (R.path || []).length, leaving: !!(typeof LIVE !== 'undefined' && LIVE.leaving[R.def.id]),
+  tag: R.tagTarget === undefined || R.tag.style.visibility === 'hidden' ? null : +(R.tagDy - R.tagTarget).toFixed(2) }));
+window.__dbg.settle = (ids) => window.__dbg.settleInfo(ids).every((x) => x.blend >= 1 && !x.path && !x.leaving && (x.tag === null || x.tag === 0));

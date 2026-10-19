@@ -2622,6 +2622,7 @@ function placeRobotTags() {
     el.style.visibility = 'visible';
     const dy = it.R.tagDy === undefined ? it.target : it.R.tagDy + (it.target - it.R.tagDy) * TAGS.ease;
     it.R.tagDy = Math.abs(dy - it.target) < 0.5 ? it.target : dy;
+    it.R.tagTarget = it.target;   // where the tag is going (the e2e reads a tag once tagDy has reached it: the settle hook of 80-dbg.js)
     el.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy).toFixed(1)}px) translate(-50%, -100%)`;
   }
   const ms = performance.now() - t0, S0 = TAGS.stats;
