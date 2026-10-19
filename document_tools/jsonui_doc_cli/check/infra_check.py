@@ -27,6 +27,7 @@ import os
 import re
 from pathlib import Path, PurePosixPath
 
+from ..infra import code_hints as H
 from ..infra import iac_tables as T
 from ..infra import model as M
 from ..infra import room as R
@@ -68,6 +69,47 @@ def _text(p: Path) -> str | None:
         return None
 
 
+def _text_or_why(p: Path) -> tuple[str | None, str]:
+    try:
+        size = p.stat().st_size
+        if size > MAX_BYTES:
+            return None, f"over {MAX_BYTES // 1_000_000} MB"
+        return p.read_text(encoding="utf-8", errors="replace"), ""
+    except OSError as exc:
+        return None, f"unreadable ({exc.strerror or type(exc).__name__})"
+
+
+def _iac_provider(name: str, rel: str) -> str:
+    """Whose an IaC file is, by its kind ("*" when it can be anyone's: Terraform names many providers)."""
+    if name.endswith(".bicep"):
+        return "azure"
+    if "/cdk.out/" in f"/{rel}" or name.endswith(".template.json") or name.startswith("template."):
+        return "aws"
+    if COMPOSE_NAMES.match(name):
+        return "docker"
+    if WRANGLER.match(name):
+        return "cloudflare"
+    return "*"
+
+
+def _iac_name(name: str) -> bool:
+    return (name.endswith((".tf", ".tofu", ".tf.json", ".bicep", ".template.json")) or bool(COMPOSE_NAMES.match(name))
+            or bool(WRANGLER.match(name)) or name in ("template.yaml", "template.yml", "template.json"))
+
+
+def _tf_json_resources(data) -> list[tuple[str, str]]:
+    """(type, name) of the resources of a Terraform JSON configuration (resource: {type: {name: ...}}, or a list of
+    such objects, as CDKTF writes it)."""
+    out = []
+    blocks = data.get("resource") if isinstance(data, dict) else None
+    for block in (blocks if isinstance(blocks, list) else [blocks]):
+        if isinstance(block, dict):
+            for t, by_name in block.items():
+                if isinstance(by_name, dict):
+                    out.extend((t, n) for n in by_name)
+    return out
+
+
 def _rel(p: Path, root: Path) -> str:
     return PurePosixPath(p.relative_to(root)).as_posix()
 
@@ -78,9 +120,8 @@ def _rel(p: Path, root: Path) -> str:
 # check spells no IaC type of its own.
 COMPOSE_NAMES = re.compile(r"^(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$")
 WRANGLER = re.compile(r"^wrangler\.(?:toml|json|jsonc)$")
-# settings files seed reads and check does not compare (yet): file name -> provider
-NOT_COMPARED = {"firebase.json": "firebase", "render.yaml": "render", "serverless.yml": "aws", "serverless.yaml": "aws",
-                "vercel.json": "vercel", "netlify.toml": "netlify", "fly.toml": "fly", "app.yaml": "gcp", "Procfile": "heroku"}
+# platform settings (firebase.json, serverless.yml, ...): seed reads them, check does not compare them (yet)
+NOT_COMPARED = {name: (provider or "*") for name, (provider, _platform) in T.PAAS_FILES.items()}
 
 
 def _yaml():
@@ -103,10 +144,11 @@ def _app_engine(text: str | None) -> bool:
     return bool(text) and bool(re.search(r"^runtime:", text, re.M)) and not re.search(r"^apiVersion:", text, re.M)
 
 
-def _node(found, address, provider, mapping, source):
+def _node(found, address, provider, mapping, source, type_):
     cat, svc = mapping
     if not cat.startswith("group:"):          # a network, a cluster: a group of the model, not compared as a node
-        found.append({"address": address, "provider": provider, "category": cat, "service": svc, "source": source})
+        found.append({"address": address, "provider": provider, "category": cat, "service": svc, "source": source,
+                      "type": type_})
 
 
 def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
@@ -120,47 +162,73 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
         if why not in unverified[provider]:
             unverified[provider].append(why)
 
-    names = lambda n: n.endswith((".tf", ".yaml", ".yml", ".json", ".toml", ".jsonc", ".bicep")) or n == "Procfile"  # noqa: E731
+    names = lambda n: n.endswith((".tf", ".tofu", ".yaml", ".yml", ".json", ".toml", ".jsonc", ".bicep")) or n == "Procfile"  # noqa: E731
     files, capped = _walk(root, names)
     if capped:
         note("*", f"more than {MAX_FILES} candidate files: the rest were not read")
     y = _yaml()
     unmapped: dict[str, set[str]] = {}
+    parts: dict[str, int] = {}
+    unread: set[str] = set()
+
+    def part(provider: str) -> None:
+        parts[provider] = parts.get(provider, 0) + 1
     for p in files:
         rel, name = _rel(p, root), p.name
         if rel.startswith(R.DEFAULT_DIR + "/") or ".check-report" in name:
             continue
-        text = _text(p)
+        text, why = _text_or_why(p)
         if name in NOT_COMPARED and not (name == "app.yaml" and not _app_engine(text)):
             note(NOT_COMPARED[name], f"{rel}: settings check does not compare yet (seed reads them): its nodes are not compared")
             continue
         if text is None:
+            if _iac_name(name):            # an IaC file not read is a range not checked: said, never silent
+                who = _iac_provider(name, rel)
+                note(who, f"{rel}: {why}: not read")
+                unread.add(who)
             continue
-        if name.endswith(".tf"):
-            for t, n in re.findall(r'^\s*resource\s+"([a-z0-9_]+)"\s+"([A-Za-z0-9_-]+)"', text, re.M):
+        if name.endswith((".tf", ".tofu", ".tf.json")):
+            if name.endswith(".tf.json"):
+                try:
+                    pairs = _tf_json_resources(json.loads(text))
+                except (ValueError, RecursionError):
+                    note("*", f"{rel}: not JSON: not read")
+                    continue
+            else:
+                pairs = re.findall(r'^\s*resource\s+"([a-z0-9_]+)"\s+"([A-Za-z0-9_-]+)"', text, re.M)
+            file_providers = set()
+            for t, n in pairs:
                 provider = T.tf_provider(t)
                 m = T.tf_mapping(t)
-                if provider is None or m == "part":
+                if provider is None:
+                    continue
+                file_providers.add(provider)
+                if m == "part":
+                    part(provider)
                     continue
                 if m is None:
                     unmapped.setdefault(provider, set()).add(t)
                     continue
-                _node(found, T.tf_address(t, n), provider, m, rel)
+                _node(found, T.tf_address(t, n), provider, m, rel, t)
+            if name.endswith(".tf.json"):
+                continue
             for mname, body in re.findall(r'^\s*module\s+"([A-Za-z0-9_-]+)"\s*\{(.*?)^\}', text, re.M | re.S):
                 src = re.search(r'^\s*source\s*=\s*"([^"]+)"', body, re.M)
                 if src and not src.group(1).startswith(("./", "../")):
                     note("*", f"{rel}: module \"{mname}\" comes from outside the project: its resources were not read")
             if re.search(r"^\s*(?:count|for_each)\s*=", text, re.M):
-                note("*", f"{rel}: count / for_each are not evaluated (a static read; no plan): how many is not checked")
+                who = next(iter(file_providers)) if len(file_providers) == 1 else "*"
+                note(who, f"{rel}: count / for_each are not evaluated (a static read; no plan): how many is not checked")
         elif name.endswith(".bicep"):
             for sym, t in re.findall(r"^\s*resource\s+([A-Za-z_][A-Za-z0-9_]*)\s+'([^'@]+)@", text, re.M):
                 m = T.bicep_mapping(t)
                 if m == "part":
+                    part("azure")
                     continue
                 if m is None:
                     unmapped.setdefault("azure", set()).add(t)
                     continue
-                _node(found, T.bicep_address(sym), "azure", m, rel)
+                _node(found, T.bicep_address(sym), "azure", m, rel, t)
         elif WRANGLER.match(name):
             _wrangler(p, rel, text, found, note)
         elif COMPOSE_NAMES.match(name):
@@ -174,20 +242,27 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                 continue
             for svc, spec in ((data or {}).get("services") or {}).items():
                 image = str((spec or {}).get("image") or "") if isinstance(spec, dict) else ""
-                _node(found, T.compose_address(rel, svc), "docker", (T.compose_category(image), "compose.service"), rel)
+                _node(found, T.compose_address(rel, svc), "docker", (T.compose_category(image), "compose.service"), rel,
+                      "compose.service")
         elif name.endswith((".yaml", ".yml", ".json")):
             if "/cdk.out/" in f"/{rel}" and name.endswith(".template.json") or "AWSTemplateFormatVersion" in text \
                     or "AWS::" in text:
-                _cfn(p, rel, text, y, found, note, unmapped)
-            elif re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M):
-                _k8s(rel, text, y, found, note, unmapped)
+                _cfn(p, rel, text, y, found, note, unmapped, part)
+            elif (re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M)) or \
+                    (name.endswith(".json") and '"apiVersion"' in text and '"kind"' in text):
+                _k8s(rel, text, y, found, note, unmapped, part)
+    for provider, n in sorted(parts.items()):
+        note(provider, f"{n} resource(s) that are parts of another (attachments, rules, routes, records, ...): not nodes, "
+                       "not compared")
     for provider, types in unmapped.items():
         note(provider, f"{len(types)} resource type(s) with no mapping to a category, not compared: "
                        + ", ".join(sorted(types)[:8]) + (" …" if len(types) > 8 else ""))
+    if unread:
+        unverified["_unread"] = sorted(unread)       # taken out by run_infra_iac: which providers' files were not read
     return found, unverified
 
 
-def _cfn(p, rel, text, y, found, note, unmapped):
+def _cfn(p, rel, text, y, found, note, unmapped, part):
     if y is None and not p.name.endswith(".json"):
         note("aws", f"{rel}: PyYAML is not installed: not read")
         return
@@ -202,21 +277,26 @@ def _cfn(p, rel, text, y, found, note, unmapped):
             continue
         m = T.cfn_mapping(t)
         if m == "part":
+            part("aws")
             continue
         if m is None:
             unmapped.setdefault("aws", set()).add(t)
             continue
-        _node(found, T.cfn_address(logical), "aws", m, rel)
+        _node(found, T.cfn_address(logical), "aws", m, rel, t)
 
 
-def _k8s(rel, text, y, found, note, unmapped):
-    if y is None:
-        note("kubernetes", f"{rel}: PyYAML is not installed: not read")
-        return
+def _k8s(rel, text, y, found, note, unmapped, part):
     try:
-        docs = list(y[0].load_all(text, Loader=y[1]))
+        if rel.endswith(".json"):
+            data = json.loads(text)
+            docs = data.get("items", [data]) if isinstance(data, dict) and data.get("kind") == "List" else [data]
+        elif y is None:
+            note("kubernetes", f"{rel}: PyYAML is not installed: not read")
+            return
+        else:
+            docs = list(y[0].load_all(text, Loader=y[1]))
     except Exception:   # noqa: BLE001
-        note("kubernetes", f"{rel}: not YAML: not read")
+        note("kubernetes", f"{rel}: not parsed: not read")
         return
     for d in docs:
         if not isinstance(d, dict):
@@ -226,11 +306,12 @@ def _k8s(rel, text, y, found, note, unmapped):
             continue
         m = T.k8s_mapping(kind, d.get("spec") if isinstance(d.get("spec"), dict) else None)
         if m == "part":
+            part("kubernetes")
             continue
         if m is None:
             unmapped.setdefault("kubernetes", set()).add(kind)
             continue
-        _node(found, T.k8s_address(kind, name), "kubernetes", m, rel)
+        _node(found, T.k8s_address(kind, name), "kubernetes", m, rel, kind)
     if "{{" in text:
         note("kubernetes", f"{rel}: a Helm template is not rendered: not read as it deploys")
 
@@ -245,50 +326,45 @@ def _wrangler(p, rel, text, found, note):
     except Exception:   # noqa: BLE001
         note("cloudflare", f"{rel}: not parsed: not read")
         return
-    _node(found, T.wrangler_address(rel), "cloudflare", ("compute.function", "workers"), rel)
+    _node(found, T.wrangler_address(rel), "cloudflare", ("compute.function", "workers"), rel, "wrangler.worker")
     for kind, handle, _label, cat, svc in T.wrangler_bindings(data):
-        _node(found, T.wrangler_address(rel, kind, handle), "cloudflare", (cat, svc), rel)
+        _node(found, T.wrangler_address(rel, kind, handle), "cloudflare", (cat, svc), rel, f"wrangler.{kind}")
 
 
 # ---------------------------------------------------------------- code: SDKs and environment names
 
-SDK_HINTS = (  # (regex on an import / require line, provider, category or None)
-    (r"\bboto3\b|@aws-sdk/|aws-sdk", "aws", None), (r"google[.-]cloud|@google-cloud/", "gcp", None),
-    (r"firebase-admin|firebase/", "firebase", None), (r"@azure/|azure[.-]", "azure", None),
-    (r"@supabase/supabase-js|\bsupabase\b", "supabase", None), (r"\bstripe\b", "stripe", "external.saas"),
-    (r"\bopenai\b", "openai", "external.saas"), (r"\banthropic\b", "anthropic", "external.saas"),
-    (r"@sendgrid/|\bsendgrid\b", "sendgrid", "mail"), (r"\btwilio\b", "twilio", "external.saas"),
-    (r"@auth0/|\bauth0\b", "auth0", "auth"), (r"\bsentry[_-]sdk\b|@sentry/", "sentry", "monitoring"),
-)
-ENV_HINTS = ((r"\bDATABASE_URL\b|\b(?:DB|POSTGRES|MYSQL)_HOST\b", "database.relational"),
-             (r"\bREDIS_(?:URL|HOST)\b", "cache"), (r"\b[A-Z_]*S3_BUCKET[A-Z_]*\b|\bGCS_BUCKET\b", "storage.object"),
-             (r"\bSMTP_HOST\b", "mail"), (r"\b(?:SQS|PUBSUB)_[A-Z_]*\b", "queue"))
-CODE_EXT = (".py", ".ts", ".tsx", ".js", ".mjs", ".go", ".rb", ".kt", ".java", ".swift", ".dart")
-IMPORT_LINE = re.compile(r"^\s*(?:import\b|from\s+\S+\s+import\b|const\s+.*=\s*require\(|require\b|use\b).*$", re.M)
+OTHER_CODE = {".go": "Go", ".rb": "Ruby", ".java": "Java", ".kt": "Kotlin", ".swift": "Swift", ".dart": "Dart",
+              ".php": "PHP", ".cs": "C#", ".rs": "Rust", ".scala": "Scala", ".ex": "Elixir"}
 
 
 def scan_code(root: Path) -> tuple[list[dict], list[str]]:
-    """What the code names: {provider|None, category|None, file, line, why} from import lines and environment
-    variable *names*; and what was not scanned."""
+    """What the code names, by infra/code_hints.py (the table seed drafts with): {provider ('' when the import does not
+    say whose), category, file, line, why} from Python and JavaScript / TypeScript imports, AWS SDK clients and the
+    *names* of environment variables (code and .env.example-like files); and what was not scanned."""
     hints: list[dict] = []
     notes: list[str] = []
-    files, capped = _walk(root, lambda n: n.endswith(CODE_EXT) or n in (".env.example", "env.example"))
+    others: dict[str, int] = {}
+
+    def take(name: str) -> bool:
+        ext = os.path.splitext(name)[1]
+        if ext in OTHER_CODE:
+            others[OTHER_CODE[ext]] = others.get(OTHER_CODE[ext], 0) + 1
+        return ext in H.CODE_EXT or bool(H.ENV_NAME_FILES.match(name))
+    files, capped = _walk(root, take)
     if capped:
         notes.append(f"more than {MAX_FILES} source files: the rest were not scanned")
+    for lang, n in sorted(others.items()):
+        notes.append(f"{n} {lang} file(s): code in {lang} is not read for SDKs or environment names")
     for p in files:
-        text = _text(p)
-        if text is None:
-            continue
+        text, why = _text_or_why(p)
         rel = _rel(p, root)
-        for m in IMPORT_LINE.finditer(text):
-            line = text.count("\n", 0, m.start()) + 1
-            for rx, provider, cat in SDK_HINTS:
-                if re.search(rx, m.group(0)):
-                    hints.append({"provider": provider, "category": cat, "file": rel, "line": line, "why": "import"})
-        for rx, cat in ENV_HINTS:
-            for m in re.finditer(rx, text):
-                hints.append({"provider": None, "category": cat, "file": rel,
-                              "line": text.count("\n", 0, m.start()) + 1, "why": f"environment name {m.group(0)}"})
+        if text is None:
+            notes.append(f"{rel}: {why}: not scanned")
+            continue
+        got = H.scan_env_names(rel, text) if H.ENV_NAME_FILES.match(p.name) else H.scan_text(rel, text)
+        for (provider, cat, _svc), file, literal, line in got["hits"]:
+            hints.append({"provider": provider, "category": cat, "file": file, "line": line,
+                          "why": f"environment name {literal}" if literal.isupper() else "import"})
     return hints, notes
 
 
@@ -305,6 +381,16 @@ def _model(project_root: Path) -> tuple[dict, str, list[Path]]:
     return got, got["dir"], files
 
 
+def _masked(r: ResultItem) -> ResultItem:
+    """A report goes to a file and a terminal: names read from IaC or code (a bucket's name, a database's) that have a
+    secret's shape are masked, as the model never holds one."""
+    for f in ("target", "expected", "actual", "message"):
+        v = getattr(r, f)
+        if isinstance(v, str) and M.secret_findings(v):
+            setattr(r, f, "<masked: holds the shape of a secret>")
+    return r
+
+
 def _status(decl, status: str) -> str:
     return status if getattr(decl, "gate", False) or status in ("ok", "skipped") else "warning"
 
@@ -312,8 +398,9 @@ def _status(decl, status: str) -> str:
 def run_infra_iac(decl, project_root: Path) -> CheckReport:
     model, folder, model_files = _model(project_root)
     found, unverified = scan_iac(project_root)
+    unread = set(unverified.pop("_unread", []))
     ignore = set(getattr(decl, "ignore_types", []) or [])
-    found = [f for f in found if f["address"].split(".")[0] not in ignore]
+    found = [f for f in found if f["type"] not in ignore]
     nodes = [n for n in model["nodes"] if n["managed_by"] == "iac"]
     results: list[ResultItem] = []
     claimed: set[str] = set()
@@ -329,6 +416,15 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
         if not n.get("iac"):
             results.append(ResultItem(target, "skipped", "metadata", message="no iac address on the node: not compared"))
             continue
+        platforms = {T.paas_platform(a) for a in n["iac"]}
+        if None not in platforms:          # serverless:hello, firebase:hosting, ...: settings check does not compare
+            results.append(ResultItem(target, "skipped", "metadata",
+                                      message=f"{', '.join(sorted(platforms))} settings are not compared by check"))
+            unverified.setdefault(provider, [])
+            why = f"nodes from {', '.join(sorted(platforms))} settings are not compared"
+            if why not in unverified[provider]:
+                unverified[provider].append(why)
+            continue
         if provider not in by_provider:
             results.append(ResultItem(target, "skipped", "metadata", message=f"no IaC read for {provider}"))
             continue
@@ -341,6 +437,10 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
             else:
                 results.append(ResultItem(target, _status(decl, "mismatch"), "metadata", expected=n["category"],
                                           actual=", ".join(sorted(cats)), message=f"category differs from {hit[0]['source']}"))
+        elif provider in unread or "*" in unread:
+            # one of this provider's IaC files (or a Terraform file, anyone's) was not read: not there is not known
+            results.append(ResultItem(target, "skipped", "metadata", expected=", ".join(n["iac"]),
+                                      message="not found in what was read, and an IaC file was not read (see unverified)"))
         else:
             results.append(ResultItem(target, _status(decl, "missing_in_impl"), "metadata", expected=", ".join(n["iac"]),
                                       message="declared, but no such resource in this provider's IaC"))
@@ -354,6 +454,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
         if f["address"] not in claimed:
             results.append(ResultItem(f"{f['provider']}/{f['address']}", _status(decl, "missing_in_doc"), "metadata",
                                       actual=f["category"], message=f"in {f['source']}, but no node names it in iac"))
+    results = [_masked(r) for r in results]
     rep = CheckReport(checker="builtin:infra-iac", target_kind="infra", target_name="infra-iac",
                       target_extra={"dir": folder, "unverified": unverified, "gate": bool(getattr(decl, "gate", False))},
                       input_hashes=compute_input_hashes(model_files, project_root), results=results, unit="resource")
@@ -388,6 +489,8 @@ def run_infra_code(decl, project_root: Path) -> CheckReport:
         if key in seen:
             continue
         seen.add(key)
+        # a hint that names its provider answers to a node of that provider; one that does not (a database driver, a
+        # cache's URL variable) to a node of its category
         known = (h["provider"] in providers) if h["provider"] else (h["category"] in categories)
         target = f"code/{h['provider'] or h['category']}"
         if known:
@@ -396,11 +499,12 @@ def run_infra_code(decl, project_root: Path) -> CheckReport:
             results.append(ResultItem(target, _status(decl, "missing_in_doc"), "sampled",
                                       actual=h["provider"] or h["category"],
                                       message=f"{h['file']}:{h['line']} ({h['why']}) — no node for it"))
+    results = [_masked(r) for r in results]
     rep = CheckReport(checker="builtin:infra-code", target_kind="infra", target_name="infra-code",
                       target_extra={"dir": folder, "unverified": {"*": notes} if notes else {},
                                     "gate": bool(getattr(decl, "gate", False))},
                       input_hashes=compute_input_hashes(model_files, project_root), results=results, unit="reference")
     rep.warnings = [f"[unverified] *: {n}" for n in notes] + [
-        "[unverified] *: only import lines and environment variable names are read (not values, not calls): a service "
-        "reached another way is not seen"]
+        "[unverified] *: only Python and JavaScript / TypeScript imports, AWS SDK clients and environment variable names "
+        "are read (not values, not calls): a service reached another way is not seen"]
     return rep

@@ -125,7 +125,8 @@ TF_TYPES: dict[str, tuple[str, str]] = {
     "digitalocean_database_cluster": ("database.relational", "database"),
     "digitalocean_spaces_bucket": ("storage.object", "spaces"), "digitalocean_kubernetes_cluster": ("compute.k8s", "doks"),
     "digitalocean_loadbalancer": ("load_balancer", "lb"), "digitalocean_vpc": ("group:network", "vpc"),
-    "heroku_app": ("compute.paas", "app"), "netlify_site": ("compute.paas", "site"),
+    "heroku_app": ("compute.paas", "app"), "heroku_addon": ("external.saas", "addon"),
+    "aws_lightsail_instance": ("compute.vm", "lightsail"), "aws_lightsail_database": ("database.relational", "lightsail"), "netlify_site": ("compute.paas", "site"),
     "kubernetes_deployment": ("compute.container", "deployment"),
     "kubernetes_deployment_v1": ("compute.container", "deployment"),
     "kubernetes_stateful_set": ("compute.container", "statefulset"),
@@ -354,6 +355,21 @@ def wrangler_address(rel: str, kind: str | None = None, handle: str | None = Non
 
 def paas_address(platform: str, name: str) -> str:
     return f"{platform}:{name}"         # firebase.json, render.yaml, serverless.yml, vercel / netlify / fly settings
+
+
+# Platform settings files: file name -> (provider or None when the file does not say whose, the platform's address
+# prefix). A Procfile runs on Heroku, Render, Dokku and others alike: its provider is not known from the file.
+PAAS_FILES = {"firebase.json": ("firebase", "firebase"), "render.yaml": ("render", "render"),
+              "serverless.yml": ("aws", "serverless"), "serverless.yaml": ("aws", "serverless"),
+              "vercel.json": ("vercel", "vercel"), "netlify.toml": ("netlify", "netlify"), "fly.toml": ("fly", "fly"),
+              "app.yaml": ("gcp", "appengine"), "Procfile": (None, "procfile")}
+PAAS_PLATFORMS = {platform for _p, platform in PAAS_FILES.values()}
+
+
+def paas_platform(address: str) -> str | None:
+    """The platform of a platform-settings address (serverless:hello -> serverless), or None for any other form."""
+    head = address.split(":", 1)[0] if ":" in address else ""
+    return head if head in PAAS_PLATFORMS else None
 
 
 def matches(declared: str, read: str) -> bool:

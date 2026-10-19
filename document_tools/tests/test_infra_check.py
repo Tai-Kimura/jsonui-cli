@@ -118,7 +118,8 @@ def test_what_could_not_be_checked_is_said_per_provider(tmp_path):
     assert any("aws_mystery_widget" in w for w in un["aws"])
     assert not any("iam" in w or "alarm" in w for w in un["aws"])            # fine-grained types are dropped, not "unmapped"
     assert any('module "net" comes from outside' in w for w in un["*"])
-    assert any("count / for_each are not evaluated" in w for w in un["*"])
+    assert any("count / for_each are not evaluated" in w for w in un["aws"])   # the file's resources are aws's
+    assert any(w.startswith("1 resource(s) that are parts") for w in un["kubernetes"])   # the ConfigMap: counted, not silent
     lines = [w for w in rep.warnings if w.startswith("[unverified] ")]
     assert len(lines) == sum(map(len, un.values()))
 
@@ -143,7 +144,7 @@ def test_code_evidence_and_sdks(tmp_path):
     assert t["code/stripe"].status == "ok" and t["code/openai"].status == "missing_in_doc"
     assert "backend/ai.py:1" in t["code/openai"].message
     assert t["code/cache"].status == "ok"                                     # REDIS_URL, and a cache node exists
-    assert any("only import lines and environment variable names" in w for w in rep.warnings)
+    assert any("only Python and JavaScript / TypeScript imports" in w for w in rep.warnings)
 
 
 def test_reports_go_beside_the_model_hidden_from_its_reader(tmp_path):
@@ -249,3 +250,74 @@ def test_settings_seed_reads_are_said_not_compared(tmp_path):
     assert any("firebase.json" in w and "not compare" in w for w in un["firebase"]) and "fly" in un
     assert any("gae/app.yaml" in w for w in un["gcp"])                      # App Engine's app.yaml (a runtime, no apiVersion)
     assert _by_target(rep)["firebase/h"].status == "skipped"
+
+
+# ---------------------------------------------------------------- dd's verification (10-20): nothing dropped in silence
+
+def test_an_iac_file_not_read_is_said_and_never_gates(tmp_path, monkeypatch):
+    """D4: a CDK template over the read limit made its declared node "missing_in_impl" (exit 1 with gate) and said
+    nothing in unverified."""
+    monkeypatch.setattr(C, "MAX_BYTES", 2_000)
+    big = json.dumps({"Resources": {"BigDb": {"Type": "AWS::RDS::DBInstance"}}, "Pad": "x" * 3_000})
+    small = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Q:\n    Type: AWS::SQS::Queue\n"
+    root, rep = _mini(tmp_path, {"cdk.out/Big.template.json": big, "template.yaml": small},   # aws IaC read, and one file not
+                      [{"id": "db", "category": "database.relational", "provider": "aws", "iac": ["BigDb"]},
+                       {"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]}])
+    assert _by_target(rep)["aws/q"].status == "ok"
+    assert any("cdk.out/Big.template.json" in w and "not read" in w for w in rep.target_extra["unverified"]["aws"])
+    assert _by_target(rep)["aws/db"].status == "skipped" and not rep.has_mismatch
+
+
+def test_terraform_json_tofu_and_json_manifests_are_read(tmp_path):
+    tfjson = json.dumps({"resource": {"aws_s3_bucket": {"assets": {}}, "aws_iam_role_policy": {"p": {}}}})
+    k8s = json.dumps({"apiVersion": "v1", "kind": "List", "items": [
+        {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "web"}}]})
+    _r, rep = _mini(tmp_path, {"cdktf.out/stacks/app/cdk.tf.json": tfjson, "infra/db.tofu": 'resource "aws_db_instance" "main" {}\n',
+                               "k8s/web.json": k8s}, [
+        {"id": "assets", "category": "storage.object", "provider": "aws", "iac": ["aws_s3_bucket.assets"]},
+        {"id": "db", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.main"]},
+        {"id": "web", "category": "compute.container", "provider": "kubernetes", "iac": ["Deployment/web"]}])
+    t = _by_target(rep)
+    assert [t[k].status for k in ("aws/assets", "aws/db", "kubernetes/web")] == ["ok", "ok", "ok"]
+
+
+def test_ignore_types_works_on_every_kind_of_type(tmp_path):
+    root = _project(tmp_path, [{"name": "iac", "type": "builtin:infra-iac",
+                                "ignore_types": ["AWS::Serverless::Function", "Deployment", "aws_s3_bucket"]}])
+    t = _by_target(C.run_infra_iac(_decls(root)["iac"], root))
+    assert not any(k in t for k in ("aws/Fn", "kubernetes/Deployment/web-k8s", "aws/aws_s3_bucket.logs"))
+
+
+def test_nodes_from_platform_settings_are_not_compared_and_a_procfile_is_no_ones(tmp_path):
+    """serverless:hello (seed drafts it from serverless.yml) was "declared but not in IaC" beside a CFN template."""
+    _r, rep = _mini(tmp_path, {"serverless.yml": "functions:\n  hello: {}\n", "Procfile": "web: run\n",
+                               "template.yaml": "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Q:\n    Type: AWS::SQS::Queue\n"},
+                    [{"id": "hello", "category": "compute.function", "provider": "aws", "iac": ["serverless:hello"]},
+                     {"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]}])
+    t = _by_target(rep)
+    assert t["aws/hello"].status == "skipped" and t["aws/q"].status == "ok" and not rep.has_mismatch
+    un = rep.target_extra["unverified"]
+    assert any("serverless settings are not compared" in w for w in un["aws"]) and any("Procfile" in w for w in un["*"])
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert T.PAAS_FILES["Procfile"][0] is None and C.NOT_COMPARED["Procfile"] == "*"
+
+
+def test_a_name_read_from_iac_with_a_secret_shape_is_masked_in_the_report(tmp_path):
+    wr = 'name = "w"\n[[d1_databases]]\ndatabase_name = "998877665544"\n'
+    _r, rep = _mini(tmp_path, {"wrangler.toml": wr}, [])
+    text = json.dumps(rep.to_dict())
+    assert "998877665544" not in text and "<masked: holds the shape of a secret>" in text
+
+
+def test_code_is_read_through_the_shared_hints_and_other_languages_are_said(tmp_path):
+    _r, _rep = _mini(tmp_path, {"svc/main.go": "package main\n", "app/db.py": "import psycopg2\n"},
+                     [{"id": "pg", "category": "database.relational", "provider": "aws"}])
+    root = _r
+    (root / "jui.config.json").write_text(json.dumps({"checks": [{"name": "code", "type": "builtin:infra-code"}]}))
+    rep = C.run_infra_code(_decls(root)["code"], root)
+    t = _by_target(rep)
+    assert t["code/database.relational"].status == "ok"                      # psycopg2 names no provider: its category
+    assert any("1 Go file(s)" in w for w in rep.warnings)
+    from jsonui_doc_cli.infra import code_hints as H
+    src = Path(C.__file__).read_text()
+    assert "psycopg2" not in src and "SDK_HINTS" not in src and H.SDK_PY      # one table: code_hints
