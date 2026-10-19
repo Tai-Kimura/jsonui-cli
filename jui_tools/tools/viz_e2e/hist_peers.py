@@ -22,7 +22,7 @@ import json
 import pathlib
 import time
 
-from common import dump
+from common import dump, stamp
 from hist_wide import A, B, CWD_A, CWD_B, Stage, check as _check
 from waits import until
 
@@ -55,13 +55,14 @@ def setup(st):
     for pid, sid, cwd, name in ((4241, A, CWD_A, NAME_A), (4242, B, CWD_B, NAME_B)):
         (sessions / f"{pid}.json").write_text(json.dumps({"pid": pid, "sessionId": sid, "cwd": cwd, "name": name, "status": "idle",
                                                           "messagingSocketPath": f"/tmp/cc-socks/{pid}.sock"}))
+    # after the stage's own records (hist_wide's last is 09:47:50 on its clock), with their gaps: through stamp()
     with open(st.paths[A], "a") as f:
-        for r in (send("sm1", f"{NAME_B} [ab12cd]", LONG, "2026-10-20T01:00:00Z"),
-                  send("sm2", "far-away-zz", "届かない宛先", "2026-10-20T01:00:01Z"),
-                  send("sm3", "uds:/tmp/cc-socks-elsewhere/4242.sock", "pid で見つかる宛先", "2026-10-20T01:00:02Z")):
+        for r in (send("sm1", f"{NAME_B} [ab12cd]", LONG, stamp("2026-10-19T09:50:00Z")),
+                  send("sm2", "far-away-zz", "届かない宛先", stamp("2026-10-19T09:50:01Z")),
+                  send("sm3", "uds:/tmp/cc-socks-elsewhere/4242.sock", "pid で見つかる宛先", stamp("2026-10-19T09:50:02Z"))):
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     with open(st.paths[B], "a") as f:
-        f.write(json.dumps({"type": "user", "timestamp": "2026-10-20T01:00:05Z", "message": {"role": "user", "content":
+        f.write(json.dumps({"type": "user", "timestamp": stamp("2026-10-19T09:50:05Z"), "message": {"role": "user", "content":
                 f'Another Claude session sent a message:\n<cross-session-message from="uds:/tmp/cc-socks/4241.sock" from-name="{NAME_A}">\nB へ\n</cross-session-message>'}},
                 ensure_ascii=False) + "\n")
 

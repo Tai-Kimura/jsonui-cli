@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page
+from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, stamp
 from waits import settled, until
 
 IDLE = "e2e00000-0000-4000-8000-0000000002a1"
@@ -80,7 +80,7 @@ async def run_bg_look(pw, out, failures):
     pids = {IDLE: 92000, BACK: stand_in.pid}
     for n, sid in enumerate((IDLE, WORK, BACK)):
         transcripts[sid] = proj / f"{sid}.jsonl"
-        transcripts[sid].write_text(json.dumps({"type": "user", "timestamp": "2026-10-19T09:00:00Z", "message": {"role": "user", "content": "start"}}) + "\n")
+        transcripts[sid].write_text(json.dumps({"type": "user", "timestamp": stamp("2026-10-19T09:00:00Z"), "message": {"role": "user", "content": "start"}}) + "\n")
         if sid in NAMES:
             (sessions / f"{pids[sid]}.json").write_text(json.dumps({
                 "pid": pids[sid], "sessionId": sid, "cwd": CWD, "name": NAMES[sid], "nameSource": "derived", "status": "idle",
@@ -210,8 +210,8 @@ async def run_bg_look(pw, out, failures):
         # the idle session reads it: picked up; the call over, still in the background: the headset and the notes back
         xmsg = (f'<cross-session-message from="uds:/tmp/e2e/{BACK[-2:]}.sock" from-name="{NAMES[BACK]}" from-mode="prompting">\n'
                 f"{BODY}\n</cross-session-message>")
-        append(IDLE, {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-10-19T09:00:05Z", "sessionId": IDLE, "content": xmsg})
-        append(IDLE, {"type": "user", "isMeta": True, "timestamp": "2026-10-19T09:00:06Z",
+        append(IDLE, {"type": "queue-operation", "operation": "enqueue", "timestamp": stamp("2026-10-19T09:00:05Z"), "sessionId": IDLE, "content": xmsg})
+        append(IDLE, {"type": "user", "isMeta": True, "timestamp": stamp("2026-10-19T09:00:06Z"),
                       "message": {"role": "user", "content": "Another Claude session sent a message:\n" + xmsg}})
         await wait(page, "(i) => { const x = window.__dbg.bgLook().find((y) => y.id === i); return x.state === 'background' && !x.call && x.headset; }",
                    "the call over, the headset back", arg=ids[BACK], timeout=30000)
