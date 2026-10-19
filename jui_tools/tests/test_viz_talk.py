@@ -514,6 +514,12 @@ def test_the_hub_steps_off_the_event_loop_and_answers_requests(tmp_path):
         badges = [f for f in other.sent if f["type"] == "talk.badges"]
         assert badges and C.validate(badges[-1]) == [] and badges[-1]["counts"] == {B: 1}
         assert not [f for f in other.sent if f["type"] == "talk.update"]      # only the socket that opened A
+        # talk.seen: the badge goes out at once, not only at the next step (no tick between)
+        hub._last = 10**15
+        await hub.handle(sock, {"type": "talk.seen", "reqId": 6, "agentId": B, "convId": cid, "upTo": T0 + 200_000})
+        assert sock.sent[-1] == {"type": "ack", "reqId": 6, "ok": True}
+        await hub.flush({sock: {}, other: {}})
+        assert other.sent[-1] == {"type": "talk.badges", "counts": {}}
 
     try:
         asyncio.run(go())
