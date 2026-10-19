@@ -14,6 +14,7 @@ import os
 import re
 import socket
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -292,7 +293,11 @@ def test_a_symlink_swapped_in_never_lets_outside_through(tmp_path):
     t = threading.Thread(target=_race, args=(target, good, link, stop), daemon=True)
     t.start()
     try:
-        seen = [json.dumps(data_docs.read(_project(root)), ensure_ascii=False) for _ in range(300)]
+        # At least 300 reads, and on until one read lands on the good file (a slow CI runner can spend 300 reads on
+        # the symlink side, 2.3.5 PR #38); 15 s without one is still red below.
+        seen, deadline = [], time.monotonic() + 15
+        while len(seen) < 300 or (not any("Users API" in x for x in seen) and time.monotonic() < deadline):
+            seen.append(json.dumps(data_docs.read(_project(root)), ensure_ascii=False))
         counted = [data_docs.counts(_project(root)) for _ in range(100)]
     finally:
         stop.set()
