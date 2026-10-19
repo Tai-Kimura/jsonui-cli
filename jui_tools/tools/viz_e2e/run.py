@@ -13,6 +13,7 @@ Exit status 0 only when every check passed; each failed check is printed on its 
 stops on an exception (a wait's timeout, or anything else) is one FAIL line, its traceback is written next to its
 results (<suite>-traceback.txt), and the next suite runs (common.suite_guard; ticket
 2026-10-20-jui-viz-e2e-one-suite-exception-stops-the-run). `--only` may be given more than once.
+One run at a time on the machine: run.py waits for /tmp/jui-viz-e2e-<uid>.lock first (e2e_lock.py).
 """
 
 from __future__ import annotations
@@ -420,6 +421,8 @@ def main(argv=None) -> int:
                     import tower_press
                     await tower_press.run_tower_press(pw, out, failures, RealServer)
 
+    import e2e_lock
+    held = e2e_lock.hold()   # one viz e2e at a time on the machine; let go when this process exits (e2e_lock.py)
     asyncio.run(go())
     if a.record_demo:
         return 0
