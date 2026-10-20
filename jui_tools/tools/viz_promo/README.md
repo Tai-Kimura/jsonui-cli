@@ -19,6 +19,7 @@ e2e's machine lock, so it never runs beside a browser-test run.
 - The data is a sample (`timeline.py`): fictional rooms (`demo-shop`, a copy of the jsonui-demo-shop workdir;
   `demo-admin`, `demo-docs`), 15 sessions, their names, prompts, commands, the question, the talk and the test cases
   — every word from `WORDS[lang]`.
+- The relay is connected as the plugin connects it: each session's process is a stand-in (it only sleeps) whose argv carries `--dangerously-load-development-channels plugin:jui-viz@jsonui`, and the script does what the plugin's `channel.py` does for it — `POST /channel/hello` (session id, that process as ppid, `accepts: ["prompt"]`, `via: "plugin"`), a long poll on `/channel/poll`, and a permission prompt as `POST /channel/request` — so the page shows every session relay-connected; nothing in the viz is changed.
 - The device pane lists nothing: stand-ins for `xcrun` and `adb` that report no device are first on the server's
   PATH (the machine's simulators are not part of the sample).
 - **The cursor is an overlay.** The plan (§2.6) shows the mouse. Headless Chromium draws none, so the driver adds one

@@ -29,11 +29,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import http.client
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 import uuid
@@ -46,7 +48,7 @@ if str(E2E) not in sys.path:
 
 from common import ISOLATE, LAUNCH_ARGS, Watch, robot_point  # noqa: E402  (viz_e2e)
 from viz_promo.rooms import cleanup, make_home, make_rooms, write_sessions  # noqa: E402
-from viz_promo.timeline import FPS, SESSIONS, SUBAGENT, WORDS, frame_count, frame_time, session_id, session_pid  # noqa: E402
+from viz_promo.timeline import FPS, SESSIONS, SUBAGENT, WORDS, frame_count, frame_time, session_id  # noqa: E402
 
 VIEWPORT = {"width": 1920, "height": 1080}
 GLIDE_SEC = 0.7
@@ -143,7 +145,17 @@ class Stage:
         # the rooms under the server's HOME: the page writes a path there as ~/work/<room> (viz/rooms.py tilde),
         # never the temporary folder's
         self.rooms = {k: v.resolve() for k, v in make_rooms(self.home / "work", lang, demo_shop).items()}
-        self.transcripts = write_sessions(self.paths, self.rooms, lang)
+        # each session's process: a stand-in started as the plugin's sessions are (Relay), its pid in the session file
+        self.standins = {key: subprocess.Popen([sys.executable, *STANDIN_ARGV], stdin=subprocess.DEVNULL, start_new_session=True)
+                         for key, _, _ in SESSIONS}
+        try:
+            self.pids = {key: p.pid for key, p in self.standins.items()}
+            self.transcripts = write_sessions(self.paths, self.rooms, lang, self.pids)
+            self.relay = Relay(self)
+        except Exception:
+            for p in self.standins.values():
+                p.kill()   # our own stand-ins
+            raise
         self.jt = Path(jui_root).resolve() / "jui_tools"
         self.forward = self.jt / "jui_cli" / "viz" / "forward.py"
         drop = ISOLATE + ("PYTHONPATH", "CLAUDE_CONFIG_DIR", "ANDROID_HOME", "ANDROID_SDK_ROOT")
@@ -176,6 +188,10 @@ class Stage:
         raise PromoError(f"jui viz serve did not start: {(self.base / 'serve.log').read_text()[-800:]}")
 
     def stop(self):
+        self.relay.close()
+        for p in self.standins.values():
+            p.kill()   # our own stand-ins
+            p.wait(timeout=5)
         for p in self.asks.values():
             if p.poll() is None:
                 p.kill()   # our own forward.py --ask
@@ -227,6 +243,85 @@ class Stage:
         rec = {"v": 1, "t": int(time.time() * 1000), "platform": "web", "run": self.run_id(run), "event": event, **fields}
         with open(self.paths["progress"] / f"{self.run_id(run)}.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+# A session's process as the jui-viz plugin's sessions are started (sources/launch.py reads its argv): the flag that
+# names the plugin's channel, so the page says a prompt from it reaches the session. It only sleeps.
+STANDIN_ARGV = ["-I", "-S", "-c", "import time\nwhile True: time.sleep(3600)",
+                "--dangerously-load-development-channels", "plugin:jui-viz@jsonui"]
+CHANNEL_VERSION = "2"     # channel.py VERSION: takes prompts from the page
+POLL_TIMEOUT_SEC = 35     # channel.py: the server holds a poll up to 25 s
+
+
+class Relay:
+    """Every session's jui-viz channel, connected as the plugin's channel.py connects it: POST /channel/hello (the
+    session's id, its process as ppid, accepts prompt, via plugin), then a long poll on /channel/poll that keeps it
+    alive (the server drops a channel not seen for 60 s), and a permission prompt as the CLI relays it, POST
+    /channel/request (a 5-letter request id, the tool, the input as its preview). The page then shows the sessions as
+    relay-connected, as it does for anyone with the plugin. Nothing is answered back to a session here."""
+
+    def __init__(self, stage: "Stage"):
+        self.stage = stage
+        self.ids: dict = {}
+        self.pending: list = []
+        self.stopping = threading.Event()
+        self.threads: list = []
+        self.n = 0
+
+    def _call(self, method: str, path: str, body: dict | None = None, timeout: float = 5):
+        info = json.loads((self.stage.paths["viz"] / "server.json").read_text(encoding="utf-8"))
+        conn = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=timeout)
+        try:
+            headers = {"X-Jui-Viz-Token": str(info.get("token", "")), "Host": f"127.0.0.1:{info['port']}"}
+            payload = None
+            if body is not None:
+                payload = json.dumps(body).encode("utf-8")
+                headers["Content-Type"] = "application/json"
+            conn.request(method, path, body=payload, headers=headers)
+            res = conn.getresponse()
+            return res.status, res.read()
+        finally:
+            conn.close()
+
+    def connect(self):
+        st = self.stage
+        for key, _, room in SESSIONS:
+            if key in self.ids:
+                continue
+            body = {"ppid": st.pids[key], "cwd": str(st.rooms[room]), "sessionId": session_id(key), "version": CHANNEL_VERSION,
+                    "accepts": ["prompt"], "via": "plugin"}
+            status, data = self._call("POST", "/channel/hello", body)
+            if status != 200:
+                raise PromoError(f"channel hello for {key}: HTTP {status}")
+            self.ids[key] = json.loads(data.decode("utf-8"))["channelId"]
+            t = threading.Thread(target=self._poll, args=(self.ids[key],), daemon=True)
+            t.start()
+            self.threads.append(t)
+        for key, item in self.pending:
+            self._call("POST", "/channel/request", dict(item, channelId=self.ids[key]))
+        self.pending = []
+
+    def _poll(self, channel_id: str):
+        while not self.stopping.is_set():
+            try:
+                status, _ = self._call("GET", f"/channel/poll?channelId={channel_id}", timeout=POLL_TIMEOUT_SEC)
+            except OSError:
+                status = 0
+            if status != 200:
+                self.stopping.wait(1.0)
+
+    def request(self, key: str, tool: str, tool_input: dict):
+        self.n += 1
+        rid = "".join("abcdefghijkmnopqrstuvwxyz"[(self.n * 7 + k * 11) % 25] for k in range(5))
+        item = {"request_id": rid, "tool_name": tool, "description": tool_input.get("description") or tool,
+                "input_preview": json.dumps(tool_input, ensure_ascii=False)}
+        if key in self.ids:
+            self._call("POST", "/channel/request", dict(item, channelId=self.ids[key]))
+        else:
+            self.pending.append((key, item))   # sent once the channel is connected (channel.py's outbox)
+
+    def close(self):
+        self.stopping.set()
 
 
 class Driver:
@@ -298,6 +393,8 @@ class Driver:
     async def prelude(self, events):
         for ev in events:
             await self.fire(ev, advance=True)
+        # every session's channel, once its session is known to the server (a hello finds it by its id)
+        await asyncio.get_running_loop().run_in_executor(None, self.stage.relay.connect)
         if self.sky_ms is not None:   # the sky's hour, before frame 0 so its change is not filmed
             await self.page.evaluate("(ms) => window.__dbg.setClock(ms)", self.sky_ms)
         await self.settle()
@@ -345,6 +442,7 @@ class Driver:
             uid = st.use_id(a["key"])
             st.send(st.body(a["key"], "PreToolUse", tool_name="Bash", tool_input=inp, tool_use_id=uid))
             st.send(st.body(a["key"], "PermissionRequest", tool_name="Bash", tool_input=inp))
+            st.relay.request(a["key"], "Bash", inp)   # the CLI's permission prompt, through the session's channel
         elif k in ("ask_pending", "ask"):
             q = dict(a["question"], multiSelect=False)
             pre = st.body(a["key"], "PreToolUse", tool_name="AskUserQuestion", tool_use_id=a["use_id"], tool_input={"questions": [q]})
@@ -505,7 +603,7 @@ class Driver:
                   {"type": "user", "timestamp": iso(at + 100), "uuid": str(uuid.uuid4()),
                    "toolUseResult": {"success": True, "message": "ok", "msg_id": msg_id},
                    "message": {"content": [{"type": "tool_result", "tool_use_id": use, "content": "ok"}]}})
-        origin = {"kind": "peer", "from": f"uds:/tmp/promo-socks/{session_pid(frm)}.sock", "verifiedPeerPid": session_pid(frm),
+        origin = {"kind": "peer", "from": f"uds:/tmp/promo-socks/{st.pids[frm]}.sock", "verifiedPeerPid": st.pids[frm],
                   "msg_id": msg_id, "name": w["names"][frm], "fromMode": "prompting", "body": text}
         st.append(to, {"type": "user", "isMeta": True, "timestamp": iso(at + 800), "uuid": str(uuid.uuid4()), "origin": origin,
                        "message": {"content": f"<cross-session-message>\n{text}\n</cross-session-message>"}})

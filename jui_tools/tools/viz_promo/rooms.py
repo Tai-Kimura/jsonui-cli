@@ -113,18 +113,19 @@ def make_home(home: Path) -> dict:
     return paths
 
 
-def write_sessions(paths: dict, rooms: dict, lang: str) -> dict:
-    """The CLI's sessions/<pid>.json for every session (its name is the robot's tag) and an empty transcript.
-    Returns {key: transcript path}."""
+def write_sessions(paths: dict, rooms: dict, lang: str, pids: dict | None = None) -> dict:
+    """The CLI's sessions/<pid>.json for every session (its name is the robot's tag) and an empty transcript. `pids`:
+    each session's process (capture.py's stand-ins; default: numbers no process has). Returns {key: transcript path}."""
     now = int(time.time() * 1000)
     transcripts = {}
     for key, _, room in SESSIONS:
         cwd = rooms[room]
         sid = session_id(key)
-        entry = {"pid": session_pid(key), "sessionId": sid, "cwd": str(cwd), "kind": "interactive", "entrypoint": "cli",
+        pid = (pids or {}).get(key, session_pid(key))
+        entry = {"pid": pid, "sessionId": sid, "cwd": str(cwd), "kind": "interactive", "entrypoint": "cli",
                  "status": "busy", "name": WORDS[lang]["names"][key], "startedAt": now - 1_800_000,
-                 "messagingSocketPath": f"/tmp/promo-socks/{session_pid(key)}.sock"}
-        (paths["sessions"] / f"{session_pid(key)}.json").write_text(json.dumps(entry, ensure_ascii=False), encoding="utf-8")
+                 "messagingSocketPath": f"/tmp/promo-socks/{pid}.sock"}
+        (paths["sessions"] / f"{pid}.json").write_text(json.dumps(entry, ensure_ascii=False), encoding="utf-8")
         folder = paths["projects"] / project_slug(cwd)
         folder.mkdir(parents=True, exist_ok=True)
         transcripts[key] = folder / f"{sid}.jsonl"

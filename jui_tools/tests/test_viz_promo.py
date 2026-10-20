@@ -186,6 +186,32 @@ def test_1a_puts_the_spec_document_before_the_hand_written_body(tmp_path):
     assert "html" not in files[0]
 
 
+def test_the_stand_in_sessions_are_launched_as_the_plugins_sessions_are():
+    # the page reads a session's argv (sources/launch.py): the stand-in's must classify as a session the plugin's
+    # channel hands a prompt to, with no "start it with ..." reason on its cards
+    from jui_cli.viz.sources import launch
+    from viz_promo import capture
+    argv = ["/usr/bin/python3", *capture.STANDIN_ARGV]
+    assert launch.classify(argv, "cli", "plugin") == "dev"
+    assert launch.classify(["/usr/bin/python3", "-I", "-S", "-c", "x"], "cli", "plugin") == "no-flag"
+
+
+def test_a_relayed_permission_request_has_the_channels_shape(tmp_path):
+    from viz_promo import capture
+    stage = type("S", (), {})()
+    relay = capture.Relay(stage)
+    sent = []
+    relay._call = lambda method, path, body=None, timeout=5: sent.append((method, path, body)) or (204, b"")
+    relay.request("s03", "Bash", {"command": "jui build --ios-only", "description": "build"})
+    assert sent == [] and relay.pending[0][0] == "s03", "before the channel connects it waits, as channel.py's outbox"
+    relay.ids["s03"] = "ch1"
+    relay.request("s03", "Bash", {"command": "jui build --ios-only"})
+    method, path, body = sent[0]
+    assert (method, path, body["channelId"], body["tool_name"]) == ("POST", "/channel/request", "ch1", "Bash")
+    assert len(body["request_id"]) == 5 and body["request_id"].isalpha() and "l" not in body["request_id"]
+    assert json.loads(body["input_preview"]) == {"command": "jui build --ios-only"}
+
+
 def test_frame_intervals_are_summed_as_percentiles():
     from viz_promo import capture
     got = capture.percentiles([16.0] * 8 + [50.0, 120.0])
