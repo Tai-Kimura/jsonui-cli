@@ -534,3 +534,21 @@ def test_a_commented_wrangler_jsonc_is_read_by_the_shared_reader_and_compares_cl
     (root / "docs" / "infra" / "draft.json").write_text(json.dumps(doc))
     iac = IC.run_infra_iac(SimpleNamespace(gate=False, ignore_types=[]), root).results
     assert [(r.target, r.status) for r in iac if r.status != "ok"] == [] and sum(r.status == "ok" for r in iac) == 2
+
+
+def test_seed_withholds_a_name_exactly_when_the_model_says_it_is_a_value(tmp_path):
+    """One rule (model.secret_findings) for the model, check and seed: an IPv4 address written with "_" inside an
+    environment name is withheld; build_1_2_3_4, which the model decided is not a value, is drafted as it is."""
+    assert M.secret_findings("REDIS_10_0_0_5_URL") and not M.secret_findings("build_1_2_3_4")   # the model's decision
+    root = tmp_path / "names"
+    (root / "infra").mkdir(parents=True)
+    (root / "infra" / "main.tf").write_text('resource "aws_sqs_queue" "build_1_2_3_4" {}\n')
+    (root / "api").mkdir()
+    (root / "api" / "pyproject.toml").write_text("[project]\nname = 'api'\n")
+    (root / "api" / "app.py").write_text('import os\n\nREDIS = os.getenv("REDIS_10_0_0_5_URL")\n')
+    doc, rep = S.draft(root)
+    node = _by_iac(doc)["aws_sqs_queue.build_1_2_3_4"]
+    assert node["id"] == "sqs-build_1_2_3_4" and node["label"].startswith("build_1_2_3_4")
+    assert "10_0_0_5" not in json.dumps([doc, rep])
+    assert [s for s in _strings([doc, rep]) if M.secret_findings(s)] == []
+    assert S.check_draft(doc) == []

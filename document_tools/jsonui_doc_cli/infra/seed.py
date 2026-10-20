@@ -28,7 +28,7 @@ What it never does:
   O_NOFOLLOW one part at a time (a symlinked draft, report or folder is refused, --force or not);
 - write a value: an ARN, an account id, an IP address or CIDR block, a connection string, a key or token. Labels are
   ids, resource names and the names of environment variables. Every string goes through ``value_shaped``
-  (``model.secret_findings``, and an IPv4 address inside a name) and the finished draft through ``model.check_file``
+  (``model.secret_findings``, nothing of seed's own) and the finished draft through ``model.check_file``
   and ``model.merge``: a draft with any error is not written. A value-shaped id becomes ``withheld`` and a
   value-shaped evidence file is left out, so one such name withholds itself, not the whole draft; the report's
   ``withheldFrom`` says which input and line each came from, its path masked only where the value is;
@@ -78,14 +78,11 @@ REGION_RX = re.compile(M.schema()["$defs"]["group"]["properties"]["region"]["pat
 FOLDED = set(M.FOLDED_BY_DEFAULT)
 WITHHELD = "(withheld: value-shaped)"
 
-# An IPv4 address written with "_" or "-" between its parts inside a name (REDIS_10_0_0_5_URL, ip-10-0-0-5): seed
-# withholds it too, over what model.secret_findings says (the model's own rule is (A)'s; this only masks more).
-NAME_IPV4 = re.compile(r"(?<![0-9])[0-9]{1,3}([_-])[0-9]{1,3}\1[0-9]{1,3}\1[0-9]{1,3}(?![0-9])")
-
 
 def value_shaped(text: str) -> bool:
-    """A string seed never writes: a secret's shape (model.secret_findings), or an IPv4 address inside a name."""
-    return bool(M.secret_findings(text)) or bool(NAME_IPV4.search(text))
+    """A string seed never writes: a secret's shape, as model.secret_findings says (one rule for the model, check and
+    seed; seed adds none of its own)."""
+    return bool(M.secret_findings(text))
 
 
 def mask_tokens(text: str) -> str:
