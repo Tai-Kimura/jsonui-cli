@@ -161,14 +161,16 @@ def test_every_meter_is_in_a_price_unit_and_every_rule_has_its_page():
             new = rule.id in ("aws/nat", "aws/ipv4", "aws/cloudwatch-alarm", "aws/aurora", "aws/docdb", "aws/msk",
                               "aws/kms", "aws/ssm", "cloudflare/kv", "cloudflare/access", "cloudflare/lb",
                               "aws/ecr", "firebase/rtdb", "aws/stepfunctions", "aws/apprunner", "aws/lightsail",
-                              "aws/lightsail-database", "aws/gwlb", "aws/classic-lb", "aws/eventbridge")
+                              "aws/lightsail-database", "aws/gwlb", "aws/classic-lb", "aws/eventbridge") \
+                or rule.provider in ("azure", "gcp")   # every Azure and GCP rule: read 10-21
             assert rule.source.startswith("https://") and rule.checked == ("2026-10-21" if new else "2026-10-20"), rule.id
 
 
 def test_the_most_specific_provider_rule_is_found():
     assert RULES.lookup({"category": "compute.function", "providerResolved": "aws", "service": "lambda"}).id == "aws/lambda"
     assert RULES.lookup({"category": "load_balancer", "providerResolved": "aws", "service": "elb.nlb"}).id == "aws/nlb"
-    assert RULES.lookup({"category": "compute.function", "providerResolved": "gcp", "service": "functions"}).id == "generic/compute.function"
+    assert RULES.lookup({"category": "compute.function", "providerResolved": "gcp", "service": "functions"}).id == "gcp/functions"
+    assert RULES.lookup({"category": "compute.function", "providerResolved": "digitalocean", "service": "functions"}).id == "generic/compute.function"
 
 
 # ---------------------------------------------------------------- the official examples

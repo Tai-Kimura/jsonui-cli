@@ -31,12 +31,12 @@ from jsonui_doc_cli.infra.cost import pricebook as PB
 BOOK = PB.Book(bundled=PB.bundled_rows())
 ON = "2027-06-01"
 AWS_REGIONS = ("ap-northeast-1", "us-east-1")
+#: each provider's bundled regions (a global row serves them all)
+REGIONS = {"aws": AWS_REGIONS, "azure": ("japaneast", "eastus"), "gcp": ("asia-northeast1", "us-east1")}
 SEED_FIX = Path(__file__).resolve().parent / "fixtures" / "infra_seed"
 
 #: Providers with no bundled table (closed): their prices are the fetched ones or a person's file.
 NOT_BUNDLED = {
-    "azure": "fetched (Azure Retail Prices, fetch.py); no bundled table — the requester decides whether to bundle",
-    "gcp": "no bundled table and no fetch yet — the requester decides",
     "digitalocean": "no bundled table", "heroku": "no bundled table", "kubernetes": "priced by its cluster's provider",
     "netlify": "no bundled table", "vercel": "no bundled table",
 }
@@ -64,6 +64,22 @@ NOT_YET = {
                                          "Workers, priced on the Workers rows)",
     ("cloudflare", "pages", "storage"): "as instance", ("cloudflare", "pages", "egress"): "Pages' data out is free",
     ("cloudflare", "zone", "queries"): "Cloudflare DNS: free",
+    # GCP: the services not bundled yet (stage C), and two that the catalog does not give as the rules count
+    **{("gcp", svc, sku): "GCP stage C: not bundled yet (the generic rule; a person's price file prices it)" for svc, sku in [
+        ('apigateway', 'requests'), ('appengine', 'instance'), ('appengine', 'storage'), ('armor', 'requests'),
+        ('armor', 'rule'), ('bigquery', 'capacity'), ('bigquery', 'instance'), ('bigquery', 'instance:multi-az'),
+        ('bigquery', 'rows-read'), ('bigquery', 'rows-written'), ('bigquery', 'storage'),
+        ('bigquery', 'storage:multi-az'), ('bigtable', 'capacity'), ('bigtable', 'read'), ('bigtable', 'storage'),
+        ('bigtable', 'write'), ('cloudtasks', 'requests'), ('filestore', 'storage'), ('identityplatform', 'mau'),
+        ('lb', 'hour'), ('lb', 'lcu'), ('monitoring', 'alarm'), ('scheduler', 'requests'), ('spanner', 'capacity'),
+        ('spanner', 'instance'), ('spanner', 'instance:multi-az'), ('spanner', 'rows-read'),
+        ('spanner', 'rows-written'), ('spanner', 'storage'), ('spanner', 'storage:multi-az'),
+    ]},
+    ("gcp", "firestore", "read"): "the catalog lists no Standard-edition operations for the bundled regions "
+                                  "(Enterprise units only)",
+    ("gcp", "firestore", "write"): "as read", ("gcp", "firestore", "storage"): "as read",
+    ("gcp", "firestore", "capacity"): "Firestore has no provisioned capacity",
+    ("gcp", "pubsub", "requests"): "Pub/Sub bills the data delivered (TiB); the rule counts messages",
     # Firebase's pricing page: past the no-cost quota these are "Google Cloud pricing" (GCP: no bundled table)
     ("firebase", "firestore", "read"): "Google Cloud pricing past the no-cost quota",
     ("firebase", "firestore", "write"): "as read", ("firebase", "firestore", "storage"): "as read",
@@ -77,7 +93,11 @@ NOT_YET = {
 TYPE_OF = {"ec2": "t3.micro", "ec2.asg": "t3.micro", "rds.mysql": "db.t3.micro", "rds.postgres": "db.t3.micro",
            "rds.mariadb": "db.t3.micro", "aurora.mysql": "db.t4g.medium", "aurora.postgres": "db.t4g.medium",
            "elasticache": "cache.t4g.micro", "opensearch": "t3.small.search", "docdb": "db.t4g.medium",
-           "msk": "kafka.m7g.large", "lightsail": "micro_3_0"}
+           "msk": "kafka.m7g.large", "lightsail": "micro_3_0",
+           # Azure (the IaC's spelling of a size) and GCP (a machine type, a Cloud SQL tier)
+           "vm": "Standard_B2s", "vmss": "Standard_B2s", "appservice": "B1", "mysql": "B_Standard_B1ms",
+           "postgresql": "B_Standard_B1ms", "sql": "GP_Gen5_2", "redis": "Basic_C0", "search": "basic",
+           "gce": "e2-medium", "gce.mig": "e2-medium", "cloudsql": "db-custom-2-7680"}
 
 
 def drafted() -> list[tuple[str, str, str]]:
@@ -125,7 +145,7 @@ def unpriced() -> dict[tuple, list[str]]:
     for prov, cat, svc in drafted():
         if prov in NOT_BUNDLED:
             continue
-        regions = AWS_REGIONS if prov == "aws" else ("global",)
+        regions = REGIONS.get(prov, ("global",))
         for m in meters(prov, cat, svc):
             missing = [r for r in regions if not found(prov, svc, m, r)]
             if missing and not m.optional:
@@ -143,7 +163,7 @@ def test_the_not_yet_list_names_only_meters_still_unpriced():
 
 def test_every_drafted_provider_is_bundled_or_said_not_to_be():
     provs = {p for p, _, _ in drafted()}
-    assert provs - set(NOT_BUNDLED) == {"aws", "cloudflare", "firebase"}
+    assert provs - set(NOT_BUNDLED) == {"aws", "azure", "cloudflare", "firebase", "gcp"}
     assert set(NOT_BUNDLED) - provs == set()
 
 
@@ -421,8 +441,9 @@ def test_the_page_rows_are_the_bundled_ones():
     table has them, on the days the table says: a free standard parameter is a price of 0, not "no price"."""
     key = lambda r: (r["provider"], r["service"], r["sku"], r["unit"])
     bundled = {key(r): r for r in json.loads(PB.BUNDLED_PATH.read_text(encoding="utf-8"))["prices"]
-               if r["provider"] in ("cloudflare", "firebase") or r["source"] in (BB.R53, BB.SSM)}
-    built = BB.aws_page_rows("2026-10-21") + BB.cloudflare_rows("2026-10-20", "2026-10-21") + BB.firebase_rows("2026-10-21")
+               if r["provider"] in ("cloudflare", "firebase") or r["source"] in (BB.R53, BB.SSM, BB.KEY_VAULT)}
+    built = (BB.aws_page_rows("2026-10-21") + BB.cloudflare_rows("2026-10-20", "2026-10-21") + BB.firebase_rows("2026-10-21")
+             + BB.azure_page_rows("2026-10-21"))
     assert {key(r): r for r in built} == bundled
     ssm = {r["sku"]: r["price_usd"] for r in built if r["service"] == "ssm"}
     assert ssm == {"secret": 0.0, "api": 0.0, "secret:advanced": 0.05}

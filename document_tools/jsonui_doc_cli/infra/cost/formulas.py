@@ -84,9 +84,9 @@ def egress(h: Hour) -> list[Meter]:
 def per_month(h: Hour, sku: str, unit: str, quantity: str | None = None, count: float = 1.0, optional: bool = False,
               name: str | None = None) -> list[Meter]:
     """A monthly charge spread over the month's hours (a plan's fee, a secret kept, a monthly active user)."""
-    n = h.q[quantity] if quantity else count
-    if quantity and quantity not in h.q:
+    if quantity and quantity not in h.q:   # before reading it: a quantity the load does not give is no charge
         return []
+    n = h.q[quantity] if quantity else count
     return [Meter(name or sku, n / h.hours_in_month, unit, sku, quantity, optional=optional)]
 
 

@@ -2,7 +2,7 @@
  "$schema": "https://jsonui.dev/schemas/infra-prices/v0.json",
  "version": 0,
  "id": "bundled",
- "label": "同梱の単価（AWS ap-northeast-1・us-east-1、Cloudflare と Firebase、オンデマンド）",
+ "label": "同梱の単価（AWS ap-northeast-1・us-east-1、Azure japaneast・eastus、GCP asia-northeast1・us-east1、Cloudflare と Firebase、オンデマンド）",
  "currency": "USD",
  "prices": [
   {
@@ -5426,6 +5426,4091 @@
    "note": "HTTPS, viewers in ME"
   },
   {
+   "provider": "azure",
+   "service": "functions",
+   "sku": "requests",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2017-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Functions%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Total+Executions%27",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "Consumption plan"
+  },
+  {
+   "provider": "azure",
+   "service": "functions",
+   "sku": "requests",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2017-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Functions%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Total+Executions%27",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "Consumption plan"
+  },
+  {
+   "provider": "azure",
+   "service": "functions",
+   "sku": "compute",
+   "region": "japaneast",
+   "unit": "GB-second",
+   "effective": "2017-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Functions%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Execution+Time%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 400000.0
+    },
+    {
+     "from": 400000.0,
+     "price_usd": 1.6e-05
+    }
+   ],
+   "note": "Consumption plan"
+  },
+  {
+   "provider": "azure",
+   "service": "functions",
+   "sku": "compute",
+   "region": "eastus",
+   "unit": "GB-second",
+   "effective": "2017-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Functions%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Execution+Time%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 400000.0
+    },
+    {
+     "from": 400000.0,
+     "price_usd": 1.6e-05
+    }
+   ],
+   "note": "Consumption plan"
+  },
+  {
+   "provider": "azure",
+   "service": "storage",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2017-02-03",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Hot+LRS+Data+Stored%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.02,
+     "to": 51200.0
+    },
+    {
+     "from": 51200.0,
+     "price_usd": 0.0192,
+     "to": 512000.0
+    },
+    {
+     "from": 512000.0,
+     "price_usd": 0.0184
+    }
+   ],
+   "note": "Hot, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "storage",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2017-02-03",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Hot+LRS+Data+Stored%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0208,
+     "to": 51200.0
+    },
+    {
+     "from": 51200.0,
+     "price_usd": 0.019968,
+     "to": 512000.0
+    },
+    {
+     "from": 512000.0,
+     "price_usd": 0.019136
+    }
+   ],
+   "note": "Hot, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "storage",
+   "sku": "get",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2016-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Hot+Read+Operations%27",
+   "per_units": 10000,
+   "price_usd": 0.004,
+   "note": "Hot, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "storage",
+   "sku": "get",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2016-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Hot+Read+Operations%27",
+   "per_units": 10000,
+   "price_usd": 0.004,
+   "note": "Hot, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "storage",
+   "sku": "put",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2016-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Hot+LRS+Write+Operations%27",
+   "per_units": 10000,
+   "price_usd": 0.05,
+   "note": "Hot, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "storage",
+   "sku": "put",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2016-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Hot+LRS+Write+Operations%27",
+   "per_units": 10000,
+   "price_usd": 0.05,
+   "note": "Hot, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "servicebus",
+   "sku": "requests",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2017-08-15",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Service+Bus%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Messaging+Operations%27",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 13000000.0
+    },
+    {
+     "from": 13000000.0,
+     "price_usd": 0.8,
+     "to": 100000000.0
+    },
+    {
+     "from": 100000000.0,
+     "price_usd": 0.5,
+     "to": 2500000000.0
+    },
+    {
+     "from": 2500000000.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "Standard tier"
+  },
+  {
+   "provider": "azure",
+   "service": "servicebus",
+   "sku": "requests",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2017-08-15",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Service+Bus%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Messaging+Operations%27",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 13000000.0
+    },
+    {
+     "from": 13000000.0,
+     "price_usd": 0.8,
+     "to": 100000000.0
+    },
+    {
+     "from": 100000000.0,
+     "price_usd": 0.5,
+     "to": 2500000000.0
+    },
+    {
+     "from": 2500000000.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "Standard tier"
+  },
+  {
+   "provider": "azure",
+   "service": "keyvault",
+   "sku": "api",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2015-08-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Key+Vault%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Operations%27",
+   "per_units": 10000,
+   "price_usd": 0.03,
+   "note": "Standard, secret operations"
+  },
+  {
+   "provider": "azure",
+   "service": "keyvault",
+   "sku": "api",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2015-08-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Key+Vault%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Operations%27",
+   "per_units": 10000,
+   "price_usd": 0.03,
+   "note": "Standard, secret operations"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "read",
+   "region": "japaneast",
+   "unit": "read_unit",
+   "effective": "2023-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%271M+RUs%27",
+   "per_units": 1000000,
+   "price_usd": 0.285,
+   "note": "serverless: a read's request units"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "read",
+   "region": "eastus",
+   "unit": "read_unit",
+   "effective": "2021-07-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%271M+RUs%27",
+   "per_units": 1000000,
+   "price_usd": 0.25,
+   "note": "serverless: a read's request units"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "write",
+   "region": "japaneast",
+   "unit": "write_unit",
+   "effective": "2023-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%271M+RUs%27",
+   "per_units": 1000000,
+   "price_usd": 0.285,
+   "note": "serverless: a write's request units"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "write",
+   "region": "eastus",
+   "unit": "write_unit",
+   "effective": "2021-07-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%271M+RUs%27",
+   "per_units": 1000000,
+   "price_usd": 0.25,
+   "note": "serverless: a write's request units"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2016-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Data+Stored%27",
+   "price_usd": 0.2825,
+   "note": "transactional storage"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2016-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Data+Stored%27",
+   "price_usd": 0.25,
+   "note": "transactional storage"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "capacity",
+   "region": "japaneast",
+   "unit": "capacity_unit-hour",
+   "effective": "2016-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27100+RU%2Fs%27",
+   "price_usd": 0.009,
+   "note": "provisioned, a capacity unit is 100 RU/s"
+  },
+  {
+   "provider": "azure",
+   "service": "cosmosdb",
+   "sku": "capacity",
+   "region": "eastus",
+   "unit": "capacity_unit-hour",
+   "effective": "2016-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cosmos+DB%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27100+RU%2Fs%27",
+   "price_usd": 0.008,
+   "note": "provisioned, a capacity unit is 100 RU/s"
+  },
+  {
+   "provider": "azure",
+   "service": "data-transfer",
+   "sku": "egress",
+   "region": "japaneast",
+   "unit": "GB",
+   "effective": "2022-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Bandwidth%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 100.0
+    },
+    {
+     "from": 100.0,
+     "price_usd": 0.12,
+     "to": 10335.0
+    },
+    {
+     "from": 10335.0,
+     "price_usd": 0.085,
+     "to": 51295.0
+    },
+    {
+     "from": 51295.0,
+     "price_usd": 0.082,
+     "to": 153695.0
+    },
+    {
+     "from": 153695.0,
+     "price_usd": 0.08,
+     "to": 512095.0
+    },
+    {
+     "from": 512095.0,
+     "price_usd": 0.08
+    }
+   ],
+   "note": "to the internet over Microsoft's network"
+  },
+  {
+   "provider": "azure",
+   "service": "data-transfer",
+   "sku": "egress",
+   "region": "eastus",
+   "unit": "GB",
+   "effective": "2022-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Bandwidth%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 100.0
+    },
+    {
+     "from": 100.0,
+     "price_usd": 0.087,
+     "to": 10335.0
+    },
+    {
+     "from": 10335.0,
+     "price_usd": 0.083,
+     "to": 51295.0
+    },
+    {
+     "from": 51295.0,
+     "price_usd": 0.07,
+     "to": 153695.0
+    },
+    {
+     "from": 153695.0,
+     "price_usd": 0.05,
+     "to": 512095.0
+    },
+    {
+     "from": 512095.0,
+     "price_usd": 0.05
+    }
+   ],
+   "note": "to the internet over Microsoft's network"
+  },
+  {
+   "provider": "azure",
+   "service": "data-transfer",
+   "sku": "transfer-regional",
+   "region": "japaneast",
+   "unit": "GB",
+   "effective": "2021-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Bandwidth%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Inter-Availability+Zone+Data+Transfer+Out%27",
+   "price_usd": 0.01,
+   "note": "across availability zones"
+  },
+  {
+   "provider": "azure",
+   "service": "data-transfer",
+   "sku": "transfer-regional",
+   "region": "eastus",
+   "unit": "GB",
+   "effective": "2021-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Bandwidth%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Inter-Availability+Zone+Data+Transfer+Out%27",
+   "price_usd": 0.01,
+   "note": "across availability zones"
+  },
+  {
+   "provider": "azure",
+   "service": "data-transfer",
+   "sku": "transfer-inter-region",
+   "region": "japaneast",
+   "unit": "GB",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Bandwidth%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Inter-Region+Data+Transfer%27",
+   "price_usd": 0.08,
+   "note": "to another Azure region"
+  },
+  {
+   "provider": "azure",
+   "service": "data-transfer",
+   "sku": "transfer-inter-region",
+   "region": "eastus",
+   "unit": "GB",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Bandwidth%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Inter-Region+Data+Transfer%27",
+   "price_usd": 0.02,
+   "note": "to another Azure region"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B1s",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B1s%27+and+armSkuName+eq+%27Standard_B1s%27",
+   "price_usd": 0.0136,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B1s",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B1s%27+and+armSkuName+eq+%27Standard_B1s%27",
+   "price_usd": 0.0104,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B1s",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B1s%27+and+armSkuName+eq+%27Standard_B1s%27",
+   "price_usd": 0.0136,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B1s",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B1s%27+and+armSkuName+eq+%27Standard_B1s%27",
+   "price_usd": 0.0104,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B1ms",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B1ms%27+and+armSkuName+eq+%27Standard_B1ms%27",
+   "price_usd": 0.0272,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B1ms",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B1ms%27+and+armSkuName+eq+%27Standard_B1ms%27",
+   "price_usd": 0.0207,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B1ms",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B1ms%27+and+armSkuName+eq+%27Standard_B1ms%27",
+   "price_usd": 0.0272,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B1ms",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B1ms%27+and+armSkuName+eq+%27Standard_B1ms%27",
+   "price_usd": 0.0207,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B2s",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B2s%27+and+armSkuName+eq+%27Standard_B2s%27",
+   "price_usd": 0.0544,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B2s",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B2s%27+and+armSkuName+eq+%27Standard_B2s%27",
+   "price_usd": 0.0416,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B2s",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B2s%27+and+armSkuName+eq+%27Standard_B2s%27",
+   "price_usd": 0.0544,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B2s",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B2s%27+and+armSkuName+eq+%27Standard_B2s%27",
+   "price_usd": 0.0416,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B2ms",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B2ms%27+and+armSkuName+eq+%27Standard_B2ms%27",
+   "price_usd": 0.109,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_B2ms",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B2ms%27+and+armSkuName+eq+%27Standard_B2ms%27",
+   "price_usd": 0.0832,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B2ms",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B2ms%27+and+armSkuName+eq+%27Standard_B2ms%27",
+   "price_usd": 0.109,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_B2ms",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B2ms%27+and+armSkuName+eq+%27Standard_B2ms%27",
+   "price_usd": 0.0832,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_D2s_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27D2s+v5%27+and+armSkuName+eq+%27Standard_D2s_v5%27",
+   "price_usd": 0.124,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_D2s_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27D2s+v5%27+and+armSkuName+eq+%27Standard_D2s_v5%27",
+   "price_usd": 0.096,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_D2s_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27D2s+v5%27+and+armSkuName+eq+%27Standard_D2s_v5%27",
+   "price_usd": 0.124,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_D2s_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27D2s+v5%27+and+armSkuName+eq+%27Standard_D2s_v5%27",
+   "price_usd": 0.096,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_D4s_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27D4s+v5%27+and+armSkuName+eq+%27Standard_D4s_v5%27",
+   "price_usd": 0.248,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_D4s_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27D4s+v5%27+and+armSkuName+eq+%27Standard_D4s_v5%27",
+   "price_usd": 0.192,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_D4s_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27D4s+v5%27+and+armSkuName+eq+%27Standard_D4s_v5%27",
+   "price_usd": 0.248,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_D4s_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27D4s+v5%27+and+armSkuName+eq+%27Standard_D4s_v5%27",
+   "price_usd": 0.192,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_D2as_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27D2as+v5%27+and+armSkuName+eq+%27Standard_D2as_v5%27",
+   "price_usd": 0.112,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vm",
+   "sku": "Standard_D2as_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27D2as+v5%27+and+armSkuName+eq+%27Standard_D2as_v5%27",
+   "price_usd": 0.086,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_D2as_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27D2as+v5%27+and+armSkuName+eq+%27Standard_D2as_v5%27",
+   "price_usd": 0.112,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "vmss",
+   "sku": "Standard_D2as_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Virtual+Machines%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27D2as+v5%27+and+armSkuName+eq+%27Standard_D2as_v5%27",
+   "price_usd": 0.086,
+   "note": "Linux, pay as you go"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "B1",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2019-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B1%27",
+   "price_usd": 0.019,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "B1",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2019-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B1%27",
+   "price_usd": 0.017,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "B2",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2019-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B2%27",
+   "price_usd": 0.037,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "B2",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2019-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B2%27",
+   "price_usd": 0.034,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "S1",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2018-05-11",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27S1+App%27",
+   "price_usd": 0.112,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "S1",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2018-05-11",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27S1+App%27",
+   "price_usd": 0.095,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "P0v3",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2024-08-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P0v3+App%27",
+   "price_usd": 0.094,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "P0v3",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2024-08-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P0v3+App%27",
+   "price_usd": 0.0775,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "P1v3",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2020-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P1+v3+App%27",
+   "price_usd": 0.188,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "appservice",
+   "sku": "P1v3",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2020-10-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P1+v3+App%27",
+   "price_usd": 0.155,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "aci",
+   "sku": "vcpu",
+   "region": "japaneast",
+   "unit": "vCPU-hour",
+   "effective": "2019-03-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Container+Instances%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+vCPU+Duration%27",
+   "price_usd": 0.0506,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "aci",
+   "sku": "vcpu",
+   "region": "eastus",
+   "unit": "vCPU-hour",
+   "effective": "2019-03-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Container+Instances%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+vCPU+Duration%27",
+   "price_usd": 0.0405,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "aci",
+   "sku": "memory",
+   "region": "japaneast",
+   "unit": "GB-hour",
+   "effective": "2019-03-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Container+Instances%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Memory+Duration%27",
+   "price_usd": 0.00553,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "aci",
+   "sku": "memory",
+   "region": "eastus",
+   "unit": "GB-hour",
+   "effective": "2019-03-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Container+Instances%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Memory+Duration%27",
+   "price_usd": 0.00445,
+   "note": "Linux"
+  },
+  {
+   "provider": "azure",
+   "service": "containerapps",
+   "sku": "vcpu",
+   "region": "japaneast",
+   "unit": "vCPU-hour",
+   "effective": "2022-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Container+Apps%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+vCPU+Active+Usage%27",
+   "price_usd": 0.0864,
+   "free": {
+    "amount": 50,
+    "period": "month",
+    "pool": "azure:container-apps-grant-vcpu"
+   },
+   "note": "Consumption, active; free: https://azure.microsoft.com/pricing/details/container-apps/ (read 2026-10-21)"
+  },
+  {
+   "provider": "azure",
+   "service": "containerapps",
+   "sku": "vcpu",
+   "region": "eastus",
+   "unit": "vCPU-hour",
+   "effective": "2022-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Container+Apps%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+vCPU+Active+Usage%27",
+   "price_usd": 0.0864,
+   "free": {
+    "amount": 50,
+    "period": "month",
+    "pool": "azure:container-apps-grant-vcpu"
+   },
+   "note": "Consumption, active; free: https://azure.microsoft.com/pricing/details/container-apps/ (read 2026-10-21)"
+  },
+  {
+   "provider": "azure",
+   "service": "containerapps",
+   "sku": "memory",
+   "region": "japaneast",
+   "unit": "GB-hour",
+   "effective": "2022-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Container+Apps%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Memory+Active+Usage%27",
+   "price_usd": 0.0108,
+   "free": {
+    "amount": 100,
+    "period": "month",
+    "pool": "azure:container-apps-grant-memory"
+   },
+   "note": "Consumption, active, per GiB; free: https://azure.microsoft.com/pricing/details/container-apps/ (read 2026-10-21)"
+  },
+  {
+   "provider": "azure",
+   "service": "containerapps",
+   "sku": "memory",
+   "region": "eastus",
+   "unit": "GB-hour",
+   "effective": "2022-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Container+Apps%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Memory+Active+Usage%27",
+   "price_usd": 0.0108,
+   "free": {
+    "amount": 100,
+    "period": "month",
+    "pool": "azure:container-apps-grant-memory"
+   },
+   "note": "Consumption, active, per GiB; free: https://azure.microsoft.com/pricing/details/container-apps/ (read 2026-10-21)"
+  },
+  {
+   "provider": "azure",
+   "service": "staticwebapps",
+   "sku": "plan",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2024-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+App%27",
+   "price_usd": 9.0,
+   "note": "Standard, an app a month"
+  },
+  {
+   "provider": "azure",
+   "service": "staticwebapps",
+   "sku": "plan",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2021-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27eastus2%27+and+meterName+eq+%27Standard+App%27",
+   "price_usd": 9.0,
+   "note": "Standard, an app a month"
+  },
+  {
+   "provider": "azure",
+   "service": "staticwebapps",
+   "sku": "bandwidth",
+   "region": "japaneast",
+   "unit": "GB",
+   "effective": "2024-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Bandwidth+Usage%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 100.0
+    },
+    {
+     "from": 100.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "Standard; the first 100 GB are the meter's free step (the page: per subscription)"
+  },
+  {
+   "provider": "azure",
+   "service": "staticwebapps",
+   "sku": "bandwidth",
+   "region": "eastus",
+   "unit": "GB",
+   "effective": "2021-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+App+Service%27+and+armRegionName+eq+%27eastus2%27+and+meterName+eq+%27Standard+Bandwidth+Usage%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 100.0
+    },
+    {
+     "from": 100.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "Standard; the first 100 GB are the meter's free step (the page: per subscription)"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "plan",
+   "region": "global",
+   "unit": "month",
+   "effective": "2022-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Base+Fees%27",
+   "price_usd": 35.0,
+   "note": "Standard base fee, a profile a month: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "aks",
+   "sku": "cluster",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2020-09-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Kubernetes+Service%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Uptime+SLA%27",
+   "price_usd": 0.1,
+   "note": "Standard tier (the Free tier's control plane is not charged)"
+  },
+  {
+   "provider": "azure",
+   "service": "aks",
+   "sku": "cluster",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2020-03-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Kubernetes+Service%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Uptime+SLA%27",
+   "price_usd": 0.1,
+   "note": "Standard tier (the Free tier's control plane is not charged)"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "B_Standard_B1ms",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B1MS%27",
+   "price_usd": 0.026,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "B_Standard_B1ms",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B1MS%27",
+   "price_usd": 0.017,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "B_Standard_B2s",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B2S%27",
+   "price_usd": 0.104,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "B_Standard_B2s",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B2S%27",
+   "price_usd": 0.068,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "GP_Standard_D2ads_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-07-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.235,
+   "note": "Flexible Server, 2 vCores"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "GP_Standard_D2ads_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-07-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.171,
+   "note": "Flexible Server, 2 vCores"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Storage+Data+Stored%27",
+   "price_usd": 0.138,
+   "note": "LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "mysql",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+MySQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Storage+Data+Stored%27",
+   "price_usd": 0.115,
+   "note": "LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "B_Standard_B1ms",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B1MS%27",
+   "price_usd": 0.026,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "B_Standard_B1ms",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B1MS%27",
+   "price_usd": 0.017,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "B_Standard_B2s",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27B2S%27",
+   "price_usd": 0.104,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "B_Standard_B2s",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27B2S%27",
+   "price_usd": 0.068,
+   "note": "Flexible Server, Burstable"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "GP_Standard_D2ds_v5",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2024-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.244,
+   "note": "Flexible Server, 2 vCores"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "GP_Standard_D2ds_v5",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2024-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.178,
+   "note": "Flexible Server, 2 vCores"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Storage+Data+Stored%27",
+   "price_usd": 0.138,
+   "note": "LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "postgresql",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2021-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Database+for+PostgreSQL%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Storage+Data+Stored%27",
+   "price_usd": 0.115,
+   "note": "LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "sql",
+   "sku": "GP_Gen5_2",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27SQL+Database%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.34401,
+   "note": "General Purpose, provisioned"
+  },
+  {
+   "provider": "azure",
+   "service": "sql",
+   "sku": "GP_Gen5_2",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27SQL+Database%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.304434,
+   "note": "General Purpose, provisioned"
+  },
+  {
+   "provider": "azure",
+   "service": "sql",
+   "sku": "GP_Gen5_4",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2025-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27SQL+Database%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.68802,
+   "note": "General Purpose, provisioned"
+  },
+  {
+   "provider": "azure",
+   "service": "sql",
+   "sku": "GP_Gen5_4",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2025-06-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27SQL+Database%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27vCore%27",
+   "price_usd": 0.608868,
+   "note": "General Purpose, provisioned"
+  },
+  {
+   "provider": "azure",
+   "service": "sql",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2018-08-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27SQL+Database%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27General+Purpose+Data+Stored%27",
+   "price_usd": 0.138,
+   "note": "General Purpose"
+  },
+  {
+   "provider": "azure",
+   "service": "sql",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2018-07-15",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27SQL+Database%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27General+Purpose+Data+Stored%27",
+   "price_usd": 0.115,
+   "note": "General Purpose"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Basic_C0",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27C0+Cache%27",
+   "price_usd": 0.022,
+   "note": "Basic C0"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Basic_C0",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27C0+Cache%27",
+   "price_usd": 0.022,
+   "note": "Basic C0"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Basic_C1",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27C1+Cache%27",
+   "price_usd": 0.055,
+   "note": "Basic C1"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Basic_C1",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27C1+Cache%27",
+   "price_usd": 0.055,
+   "note": "Basic C1"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Standard_C0",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27C0+Cache%27",
+   "price_usd": 0.055,
+   "note": "Standard C0"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Standard_C0",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27C0+Cache%27",
+   "price_usd": 0.055,
+   "note": "Standard C0"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Standard_C1",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27C1+Cache%27",
+   "price_usd": 0.138,
+   "note": "Standard C1"
+  },
+  {
+   "provider": "azure",
+   "service": "redis",
+   "sku": "Standard_C1",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2014-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Redis+Cache%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27C1+Cache%27",
+   "price_usd": 0.138,
+   "note": "Standard C1"
+  },
+  {
+   "provider": "azure",
+   "service": "search",
+   "sku": "basic",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2019-07-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cognitive+Search%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Basic+Unit%27",
+   "price_usd": 0.133
+  },
+  {
+   "provider": "azure",
+   "service": "search",
+   "sku": "basic",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2016-08-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cognitive+Search%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Basic+Unit%27",
+   "price_usd": 0.101
+  },
+  {
+   "provider": "azure",
+   "service": "search",
+   "sku": "standard",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2019-07-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cognitive+Search%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+S1+Unit%27",
+   "price_usd": 0.444,
+   "note": "Standard S1"
+  },
+  {
+   "provider": "azure",
+   "service": "search",
+   "sku": "standard",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2015-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Cognitive+Search%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+S1+Unit%27",
+   "price_usd": 0.336,
+   "note": "Standard S1"
+  },
+  {
+   "provider": "azure",
+   "service": "dns",
+   "sku": "zone",
+   "region": "global",
+   "unit": "month",
+   "effective": "2016-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+DNS%27+and+armRegionName+eq+%27Zone+1%27+and+meterName+eq+%27Public+Zone%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.5,
+     "to": 25.0
+    },
+    {
+     "from": 25.0,
+     "price_usd": 0.1
+    }
+   ],
+   "note": "public zone"
+  },
+  {
+   "provider": "azure",
+   "service": "dns",
+   "sku": "queries",
+   "region": "global",
+   "unit": "request",
+   "effective": "2016-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+DNS%27+and+armRegionName+eq+%27Zone+1%27+and+meterName+eq+%27Public+Queries%27",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.4,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "public queries"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "egress-north_america",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+1%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0825,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.065002,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.056001,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.014083,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.00693,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.005742,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.005404
+    }
+   ],
+   "note": "Standard, edge to client, Zone 1; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "requests-north_america",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+1%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.009,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0081,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.00729,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.006561
+    }
+   ],
+   "note": "Standard, Zone 1"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "egress-north_america",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+1%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0825,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.065002,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.056001,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.014083,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.00693,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.005742,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.005404
+    }
+   ],
+   "note": "Standard, edge to client, Zone 1; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "requests-north_america",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+1%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.009,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0081,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.00729,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.006561
+    }
+   ],
+   "note": "Standard, Zone 1"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "egress-japan",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.115,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.0975,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.089,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.025,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.00923,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.00714,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.00665
+    }
+   ],
+   "note": "Standard, edge to client, Zone 2; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "requests-japan",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0108,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0097,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.008748,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.007873
+    }
+   ],
+   "note": "Standard, Zone 2"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "egress-japan",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.115,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.0975,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.089,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.025,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.00923,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.00714,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.00665
+    }
+   ],
+   "note": "Standard, edge to client, Zone 2; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "requests-japan",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0108,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0097,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.008748,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.007873
+    }
+   ],
+   "note": "Standard, Zone 2"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "egress-asia",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.115,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.0975,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.089,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.025,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.00923,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.00714,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.00665
+    }
+   ],
+   "note": "Standard, edge to client, Zone 2; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "requests-asia",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0108,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0097,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.008748,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.007873
+    }
+   ],
+   "note": "Standard, Zone 2"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "egress-asia",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.115,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.0975,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.089,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.025,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.00923,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.00714,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.00665
+    }
+   ],
+   "note": "Standard, edge to client, Zone 2; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "requests-asia",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+2%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0108,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0097,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.008748,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.007873
+    }
+   ],
+   "note": "Standard, Zone 2"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "egress-south_america",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+3%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.11,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.0825,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.075,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.03594,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.01128,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.00951,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.00852
+    }
+   ],
+   "note": "Standard, edge to client, Zone 3; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "requests-south_america",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+3%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0199,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0179,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.016119,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.014507
+    }
+   ],
+   "note": "Standard, Zone 3"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "egress-south_america",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+3%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.11,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.0825,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.075,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.03594,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.01128,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.00951,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.00852
+    }
+   ],
+   "note": "Standard, edge to client, Zone 3; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "requests-south_america",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+3%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0199,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0179,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.016119,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.014507
+    }
+   ],
+   "note": "Standard, Zone 3"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "egress-australia",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+4%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.112,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.094,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.085,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.02485,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.0097,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.0085,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.0072
+    }
+   ],
+   "note": "Standard, edge to client, Zone 4; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "requests-australia",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+4%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0113,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0102,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.009153,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.008238
+    }
+   ],
+   "note": "Standard, Zone 4"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "egress-australia",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+4%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.112,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.094,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.085,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.02485,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.0097,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.0085,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.0072
+    }
+   ],
+   "note": "Standard, edge to client, Zone 4; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "requests-australia",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+4%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0113,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0102,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.009153,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.008238
+    }
+   ],
+   "note": "Standard, Zone 4"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "egress-india",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+5%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.109,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.084998,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.082001,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.02858,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.010104,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.009102,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.008001
+    }
+   ],
+   "note": "Standard, edge to client, Zone 5; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "frontdoor",
+   "sku": "requests-india",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+5%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0108,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0097,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.008748,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.007873
+    }
+   ],
+   "note": "Standard, Zone 5"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "egress-india",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+5%27+and+meterName+eq+%27Standard+Data+Transfer+Out%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.109,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.084998,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.082001,
+     "to": 150000.0
+    },
+    {
+     "from": 150000.0,
+     "price_usd": 0.02858,
+     "to": 500000.0
+    },
+    {
+     "from": 500000.0,
+     "price_usd": 0.010104,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.009102,
+     "to": 5000000.0
+    },
+    {
+     "from": 5000000.0,
+     "price_usd": 0.008001
+    }
+   ],
+   "note": "Standard, edge to client, Zone 5; zones: https://azure.microsoft.com/pricing/details/frontdoor/"
+  },
+  {
+   "provider": "azure",
+   "service": "cdn",
+   "sku": "requests-india",
+   "region": "global",
+   "unit": "request",
+   "effective": "2022-03-29",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Front+Door+Service%27+and+armRegionName+eq+%27Zone+5%27+and+meterName+eq+%27Standard+Requests%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0108,
+     "to": 250000000.0
+    },
+    {
+     "from": 250000000.0,
+     "price_usd": 0.0097,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.008748,
+     "to": 5000000000.0
+    },
+    {
+     "from": 5000000000.0,
+     "price_usd": 0.007873
+    }
+   ],
+   "note": "Standard, Zone 5"
+  },
+  {
+   "provider": "azure",
+   "service": "waf",
+   "sku": "hour",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Fixed+Cost%27",
+   "price_usd": 0.522,
+   "note": "Application Gateway WAF v2, the gateway's hours"
+  },
+  {
+   "provider": "azure",
+   "service": "waf",
+   "sku": "hour",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Fixed+Cost%27",
+   "price_usd": 0.36,
+   "note": "Application Gateway WAF v2, the gateway's hours"
+  },
+  {
+   "provider": "azure",
+   "service": "waf",
+   "sku": "capacity",
+   "region": "japaneast",
+   "unit": "capacity_unit-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Capacity+Units%27",
+   "price_usd": 0.0144,
+   "note": "Application Gateway WAF v2"
+  },
+  {
+   "provider": "azure",
+   "service": "waf",
+   "sku": "capacity",
+   "region": "eastus",
+   "unit": "capacity_unit-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Capacity+Units%27",
+   "price_usd": 0.0144,
+   "note": "Application Gateway WAF v2"
+  },
+  {
+   "provider": "azure",
+   "service": "appgateway",
+   "sku": "hour",
+   "region": "japaneast",
+   "unit": "instance-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Fixed+Cost%27",
+   "price_usd": 0.29,
+   "note": "Standard v2"
+  },
+  {
+   "provider": "azure",
+   "service": "appgateway",
+   "sku": "hour",
+   "region": "eastus",
+   "unit": "instance-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Fixed+Cost%27",
+   "price_usd": 0.2,
+   "note": "Standard v2"
+  },
+  {
+   "provider": "azure",
+   "service": "appgateway",
+   "sku": "lcu",
+   "region": "japaneast",
+   "unit": "LCU-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Capacity+Units%27",
+   "price_usd": 0.008,
+   "note": "Standard v2, a capacity unit"
+  },
+  {
+   "provider": "azure",
+   "service": "appgateway",
+   "sku": "lcu",
+   "region": "eastus",
+   "unit": "LCU-hour",
+   "effective": "2019-05-09",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Application+Gateway%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Capacity+Units%27",
+   "price_usd": 0.008,
+   "note": "Standard v2, a capacity unit"
+  },
+  {
+   "provider": "azure",
+   "service": "lb",
+   "sku": "hour",
+   "region": "global",
+   "unit": "instance-hour",
+   "effective": "2018-04-11",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Load+Balancer%27+and+armRegionName+eq+%27Global%27+and+meterName+eq+%27Standard+Included+LB+Rules+and+Outbound+Rules%27",
+   "price_usd": 0.025,
+   "note": "Standard, the first 5 rules"
+  },
+  {
+   "provider": "azure",
+   "service": "lb",
+   "sku": "processed",
+   "region": "global",
+   "unit": "GB",
+   "effective": "2018-04-11",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Load+Balancer%27+and+armRegionName+eq+%27Global%27+and+meterName+eq+%27Standard+Data+Processed%27",
+   "price_usd": 0.005,
+   "note": "Standard"
+  },
+  {
+   "provider": "azure",
+   "service": "apim",
+   "sku": "requests",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2024-03-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27API+Management%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Basic+v2+Calls%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 10000000.0
+    },
+    {
+     "from": 10000000.0,
+     "price_usd": 0.03
+    }
+   ],
+   "note": "Basic v2 (its unit's hours are not counted)"
+  },
+  {
+   "provider": "azure",
+   "service": "apim",
+   "sku": "requests",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2024-03-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27API+Management%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Basic+v2+Calls%27",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 10000000.0
+    },
+    {
+     "from": 10000000.0,
+     "price_usd": 0.03
+    }
+   ],
+   "note": "Basic v2 (its unit's hours are not counted)"
+  },
+  {
+   "provider": "azure",
+   "service": "loganalytics",
+   "sku": "ingest",
+   "region": "japaneast",
+   "unit": "GB",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Analytics+Logs+Data+Ingestion%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 5.0
+    },
+    {
+     "from": 5.0,
+     "price_usd": 3.34
+    }
+   ],
+   "note": "Analytics Logs; the first 5 GB a month are the meter's free step"
+  },
+  {
+   "provider": "azure",
+   "service": "loganalytics",
+   "sku": "ingest",
+   "region": "eastus",
+   "unit": "GB",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Analytics+Logs+Data+Ingestion%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 5.0
+    },
+    {
+     "from": 5.0,
+     "price_usd": 2.3
+    }
+   ],
+   "note": "Analytics Logs; the first 5 GB a month are the meter's free step"
+  },
+  {
+   "provider": "azure",
+   "service": "loganalytics",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Analytics+Logs+Data+Retention%27",
+   "price_usd": 0.15,
+   "note": "Analytics Logs retention"
+  },
+  {
+   "provider": "azure",
+   "service": "loganalytics",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Analytics+Logs+Data+Retention%27",
+   "price_usd": 0.1,
+   "note": "Analytics Logs retention"
+  },
+  {
+   "provider": "azure",
+   "service": "appinsights",
+   "sku": "ingest",
+   "region": "japaneast",
+   "unit": "GB",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Analytics+Logs+Data+Ingestion%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 5.0
+    },
+    {
+     "from": 5.0,
+     "price_usd": 3.34
+    }
+   ],
+   "note": "a workspace-based Application Insights ingests into Log Analytics"
+  },
+  {
+   "provider": "azure",
+   "service": "appinsights",
+   "sku": "ingest",
+   "region": "eastus",
+   "unit": "GB",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Analytics+Logs+Data+Ingestion%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 5.0
+    },
+    {
+     "from": 5.0,
+     "price_usd": 2.3
+    }
+   ],
+   "note": "a workspace-based Application Insights ingests into Log Analytics"
+  },
+  {
+   "provider": "azure",
+   "service": "appinsights",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Analytics+Logs+Data+Retention%27",
+   "price_usd": 0.15,
+   "note": "a workspace-based Application Insights"
+  },
+  {
+   "provider": "azure",
+   "service": "appinsights",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Log+Analytics%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Analytics+Logs+Data+Retention%27",
+   "price_usd": 0.1,
+   "note": "a workspace-based Application Insights"
+  },
+  {
+   "provider": "azure",
+   "service": "monitor",
+   "sku": "alarm",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Monitor%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Alerts+Metric+Monitored%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 10.0
+    },
+    {
+     "from": 10.0,
+     "price_usd": 0.1
+    }
+   ],
+   "note": "metric alert rule; the first 10 a month are the meter's free step"
+  },
+  {
+   "provider": "azure",
+   "service": "monitor",
+   "sku": "alarm",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-02-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Azure+Monitor%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Alerts+Metric+Monitored%27",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 10.0
+    },
+    {
+     "from": 10.0,
+     "price_usd": 0.1
+    }
+   ],
+   "note": "metric alert rule; the first 10 a month are the meter's free step"
+  },
+  {
+   "provider": "azure",
+   "service": "eventgrid",
+   "sku": "requests",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2018-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Event+Grid%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Operations%27",
+   "per_units": 100000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 100000.0
+    },
+    {
+     "from": 100000.0,
+     "price_usd": 0.06
+    }
+   ],
+   "note": "Standard operations"
+  },
+  {
+   "provider": "azure",
+   "service": "eventgrid",
+   "sku": "requests",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2018-04-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Event+Grid%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Operations%27",
+   "per_units": 100000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 100000.0
+    },
+    {
+     "from": 100000.0,
+     "price_usd": 0.06
+    }
+   ],
+   "note": "Standard operations"
+  },
+  {
+   "provider": "azure",
+   "service": "eventhubs",
+   "sku": "shard",
+   "region": "japaneast",
+   "unit": "capacity_unit-hour",
+   "effective": "2014-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Event+Hubs%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Throughput+Unit%27",
+   "price_usd": 0.03,
+   "note": "Standard, a throughput unit"
+  },
+  {
+   "provider": "azure",
+   "service": "eventhubs",
+   "sku": "shard",
+   "region": "eastus",
+   "unit": "capacity_unit-hour",
+   "effective": "2014-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Event+Hubs%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Throughput+Unit%27",
+   "price_usd": 0.03,
+   "note": "Standard, a throughput unit"
+  },
+  {
+   "provider": "azure",
+   "service": "eventhubs",
+   "sku": "put",
+   "region": "japaneast",
+   "unit": "request",
+   "effective": "2014-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Event+Hubs%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27Standard+Ingress+Events%27",
+   "per_units": 1000000,
+   "price_usd": 0.028,
+   "note": "Standard ingress events"
+  },
+  {
+   "provider": "azure",
+   "service": "eventhubs",
+   "sku": "put",
+   "region": "eastus",
+   "unit": "request",
+   "effective": "2014-12-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Event+Hubs%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27Standard+Ingress+Events%27",
+   "per_units": 1000000,
+   "price_usd": 0.028,
+   "note": "Standard ingress events"
+  },
+  {
+   "provider": "azure",
+   "service": "files",
+   "sku": "storage",
+   "region": "japaneast",
+   "unit": "GB-month",
+   "effective": "2017-09-19",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27LRS+Data+Stored%27",
+   "price_usd": 0.06,
+   "note": "Standard (transaction optimized), LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "files",
+   "sku": "storage",
+   "region": "eastus",
+   "unit": "GB-month",
+   "effective": "2017-09-19",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27LRS+Data+Stored%27",
+   "price_usd": 0.06,
+   "note": "Standard (transaction optimized), LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E4",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2019-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E4+LRS+Disk%27",
+   "price_usd": 2.4,
+   "note": "Standard SSD Managed Disks, 32 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E4",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2019-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E4+LRS+Disk%27",
+   "price_usd": 2.4,
+   "note": "Standard SSD Managed Disks, 32 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E6",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2019-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E6+LRS+Disk%27",
+   "price_usd": 4.8,
+   "note": "Standard SSD Managed Disks, 64 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E6",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2019-01-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E6+LRS+Disk%27",
+   "price_usd": 4.8,
+   "note": "Standard SSD Managed Disks, 64 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E10",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E10+LRS+Disk%27",
+   "price_usd": 9.6,
+   "note": "Standard SSD Managed Disks, 128 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E10",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E10+LRS+Disk%27",
+   "price_usd": 9.6,
+   "note": "Standard SSD Managed Disks, 128 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E15",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E15+LRS+Disk%27",
+   "price_usd": 19.2,
+   "note": "Standard SSD Managed Disks, 256 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E15",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E15+LRS+Disk%27",
+   "price_usd": 19.2,
+   "note": "Standard SSD Managed Disks, 256 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E20",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E20+LRS+Disk%27",
+   "price_usd": 38.4,
+   "note": "Standard SSD Managed Disks, 512 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E20",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E20+LRS+Disk%27",
+   "price_usd": 38.4,
+   "note": "Standard SSD Managed Disks, 512 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E30",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E30+LRS+Disk%27",
+   "price_usd": 76.8,
+   "note": "Standard SSD Managed Disks, 1024 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E30",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E30+LRS+Disk%27",
+   "price_usd": 76.8,
+   "note": "Standard SSD Managed Disks, 1024 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E40",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E40+LRS+Disk%27",
+   "price_usd": 153.6,
+   "note": "Standard SSD Managed Disks, 2048 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E40",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E40+LRS+Disk%27",
+   "price_usd": 153.6,
+   "note": "Standard SSD Managed Disks, 2048 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E50",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27E50+LRS+Disk%27",
+   "price_usd": 307.2,
+   "note": "Standard SSD Managed Disks, 4096 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "E50",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-11-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27E50+LRS+Disk%27",
+   "price_usd": 307.2,
+   "note": "Standard SSD Managed Disks, 4096 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P4",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P4+LRS+Disk%27",
+   "price_usd": 6.0724,
+   "note": "Premium SSD Managed Disks, 32 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P4",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P4+LRS+Disk%27",
+   "price_usd": 5.2795,
+   "note": "Premium SSD Managed Disks, 32 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P6",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P6+LRS+Disk%27",
+   "price_usd": 11.7399,
+   "note": "Premium SSD Managed Disks, 64 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P6",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P6+LRS+Disk%27",
+   "price_usd": 10.207,
+   "note": "Premium SSD Managed Disks, 64 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P10",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P10+LRS+Disk%27",
+   "price_usd": 22.67,
+   "note": "Premium SSD Managed Disks, 128 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P10",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P10+LRS+Disk%27",
+   "price_usd": 19.71,
+   "note": "Premium SSD Managed Disks, 128 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P15",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P15+LRS+Disk%27",
+   "price_usd": 43.720714,
+   "note": "Premium SSD Managed Disks, 256 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P15",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P15+LRS+Disk%27",
+   "price_usd": 38.012142,
+   "note": "Premium SSD Managed Disks, 256 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P20",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P20+LRS+Disk%27",
+   "price_usd": 84.2,
+   "note": "Premium SSD Managed Disks, 512 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P20",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P20+LRS+Disk%27",
+   "price_usd": 73.22,
+   "note": "Premium SSD Managed Disks, 512 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P30",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P30+LRS+Disk%27",
+   "price_usd": 155.44,
+   "note": "Premium SSD Managed Disks, 1024 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P30",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P30+LRS+Disk%27",
+   "price_usd": 135.17,
+   "note": "Premium SSD Managed Disks, 1024 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P40",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P40+LRS+Disk%27",
+   "price_usd": 297.9486,
+   "note": "Premium SSD Managed Disks, 2048 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P40",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P40+LRS+Disk%27",
+   "price_usd": 259.0457,
+   "note": "Premium SSD Managed Disks, 2048 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P50",
+   "region": "japaneast",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27japaneast%27+and+meterName+eq+%27P50+LRS+Disk%27",
+   "price_usd": 569.9886,
+   "note": "Premium SSD Managed Disks, 4096 GB, LRS"
+  },
+  {
+   "provider": "azure",
+   "service": "disk",
+   "sku": "P50",
+   "region": "eastus",
+   "unit": "month",
+   "effective": "2018-05-01",
+   "source": "https://prices.azure.com/api/retail/prices?%24filter=serviceName+eq+%27Storage%27+and+armRegionName+eq+%27eastus%27+and+meterName+eq+%27P50+LRS+Disk%27",
+   "price_usd": 495.5657,
+   "note": "Premium SSD Managed Disks, 4096 GB, LRS"
+  },
+  {
+   "provider": "gcp",
+   "service": "artifactregistry",
+   "sku": "storage",
+   "region": "global",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/149C-F9EC-3994/skus",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 0.5
+    },
+    {
+     "from": 0.5,
+     "price_usd": 0.1
+    }
+   ],
+   "note": "the first 0.5 GiB is the catalog's free step"
+  },
+  {
+   "provider": "gcp",
+   "service": "run",
+   "sku": "vcpu",
+   "region": "asia-northeast1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.0864,
+   "note": "request-based billing (the free vCPU grant is not counted)"
+  },
+  {
+   "provider": "gcp",
+   "service": "run",
+   "sku": "memory",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.009,
+   "note": "request-based billing, per GiB (the free memory grant is not counted)"
+  },
+  {
+   "provider": "gcp",
+   "service": "run.job",
+   "sku": "vcpu",
+   "region": "asia-northeast1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.0648
+  },
+  {
+   "provider": "gcp",
+   "service": "run.job",
+   "sku": "memory",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.0072,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "run",
+   "sku": "vcpu",
+   "region": "us-east1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.0864,
+   "note": "request-based billing (the free vCPU grant is not counted)"
+  },
+  {
+   "provider": "gcp",
+   "service": "run",
+   "sku": "memory",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.009,
+   "note": "request-based billing, per GiB (the free memory grant is not counted)"
+  },
+  {
+   "provider": "gcp",
+   "service": "run.job",
+   "sku": "vcpu",
+   "region": "us-east1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.0648
+  },
+  {
+   "provider": "gcp",
+   "service": "run.job",
+   "sku": "memory",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "price_usd": 0.0072,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "run",
+   "sku": "requests",
+   "region": "global",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/152E-C115-5142/skus",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 2000000.0
+    },
+    {
+     "from": 2000000.0,
+     "price_usd": 0.4
+    }
+   ],
+   "note": "the first 2 million a month are the catalog's free step"
+  },
+  {
+   "provider": "gcp",
+   "service": "functions",
+   "sku": "compute",
+   "region": "asia-northeast1",
+   "unit": "GB-second",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/29E7-DA93-CA13/skus",
+   "price_usd": 2.5e-06,
+   "note": "per GiB-second"
+  },
+  {
+   "provider": "gcp",
+   "service": "functions",
+   "sku": "compute",
+   "region": "us-east1",
+   "unit": "GB-second",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/29E7-DA93-CA13/skus",
+   "price_usd": 2.5e-06,
+   "note": "per GiB-second"
+  },
+  {
+   "provider": "gcp",
+   "service": "functions",
+   "sku": "requests",
+   "region": "global",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/29E7-DA93-CA13/skus",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 2000000.0
+    },
+    {
+     "from": 2000000.0,
+     "price_usd": 0.4
+    }
+   ],
+   "note": "the first 2 million a month are the catalog's free step"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "basic:m1",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.065,
+   "note": "Basic, 1-4 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "basic:m2",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.04,
+   "note": "Basic, 5-10 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "standard:m1",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.114,
+   "note": "Standard (replicated), 1-4 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "standard:m2",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.075,
+   "note": "Standard (replicated), 5-10 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "basic:m1",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.049,
+   "note": "Basic, 1-4 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "basic:m2",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.027,
+   "note": "Basic, 5-10 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "standard:m1",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.064,
+   "note": "Standard (replicated), 1-4 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "memorystore",
+   "sku": "standard:m2",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/5AF5-2C11-D467/skus",
+   "price_usd": 0.054,
+   "note": "Standard (replicated), 5-10 GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "e2:vcpu",
+   "region": "asia-northeast1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.02802642
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "e2:ram",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.00373911,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "n2:vcpu",
+   "region": "asia-northeast1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.040618
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "n2:ram",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.005419,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "storage",
+   "region": "asia-northeast1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.13,
+   "note": "Balanced PD, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "pd",
+   "sku": "storage",
+   "region": "asia-northeast1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.13,
+   "note": "Balanced PD, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "data-transfer",
+   "sku": "egress",
+   "region": "asia-northeast1",
+   "unit": "GB",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.12,
+     "to": 1024.0
+    },
+    {
+     "from": 1024.0,
+     "price_usd": 0.11,
+     "to": 10240.0
+    },
+    {
+     "from": 10240.0,
+     "price_usd": 0.085
+    }
+   ],
+   "note": "premium tier, to the region's own continent, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "e2:vcpu",
+   "region": "us-east1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.02181159
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "e2:ram",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.00292353,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "n2:vcpu",
+   "region": "us-east1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.031611
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "n2:ram",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.004237,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gce",
+   "sku": "storage",
+   "region": "us-east1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.1,
+   "note": "Balanced PD, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "pd",
+   "sku": "storage",
+   "region": "us-east1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "price_usd": 0.1,
+   "note": "Balanced PD, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "data-transfer",
+   "sku": "egress",
+   "region": "us-east1",
+   "unit": "GB",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 1.0
+    },
+    {
+     "from": 1.0,
+     "price_usd": 0.12,
+     "to": 1024.0
+    },
+    {
+     "from": 1024.0,
+     "price_usd": 0.11,
+     "to": 10240.0
+    },
+    {
+     "from": 10240.0,
+     "price_usd": 0.08
+    }
+   ],
+   "note": "premium tier, to the region's own continent, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gcs",
+   "sku": "storage",
+   "region": "asia-northeast1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/95FF-2EF5-5EA1/skus",
+   "price_usd": 0.023,
+   "note": "Standard, regional"
+  },
+  {
+   "provider": "gcp",
+   "service": "gcs",
+   "sku": "storage",
+   "region": "us-east1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/95FF-2EF5-5EA1/skus",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 5.0
+    },
+    {
+     "from": 5.0,
+     "price_usd": 0.02
+    }
+   ],
+   "note": "Standard, regional"
+  },
+  {
+   "provider": "gcp",
+   "service": "gcs",
+   "sku": "put",
+   "region": "global",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/95FF-2EF5-5EA1/skus",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 5000.0
+    },
+    {
+     "from": 5000.0,
+     "price_usd": 0.05
+    }
+   ]
+  },
+  {
+   "provider": "gcp",
+   "service": "gcs",
+   "sku": "get",
+   "region": "global",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/95FF-2EF5-5EA1/skus",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 50000.0
+    },
+    {
+     "from": 50000.0,
+     "price_usd": 0.004
+    }
+   ]
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "vcpu",
+   "region": "asia-northeast1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.0537
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "ram",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.0091,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "vcpu:multi-az",
+   "region": "asia-northeast1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.1074,
+   "note": "regional (high availability)"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "ram:multi-az",
+   "region": "asia-northeast1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.0182,
+   "note": "regional (high availability), per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "storage",
+   "region": "asia-northeast1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.221,
+   "note": "SSD, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "storage:multi-az",
+   "region": "asia-northeast1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.442,
+   "note": "SSD, regional, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "vcpu",
+   "region": "us-east1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.0413
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "ram",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.007,
+   "note": "per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "vcpu:multi-az",
+   "region": "us-east1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.0826,
+   "note": "regional (high availability)"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "ram:multi-az",
+   "region": "us-east1",
+   "unit": "GB-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.014,
+   "note": "regional (high availability), per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "storage",
+   "region": "us-east1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.17,
+   "note": "SSD, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "cloudsql",
+   "sku": "storage:multi-az",
+   "region": "us-east1",
+   "unit": "GB-month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/9662-B51E-5089/skus",
+   "price_usd": 0.34,
+   "note": "SSD, regional, per GiB"
+  },
+  {
+   "provider": "gcp",
+   "service": "gke",
+   "sku": "cluster",
+   "region": "global",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/CCD8-9BF1-090E/skus",
+   "price_usd": 0.1,
+   "note": "cluster management fee (the monthly free credit per billing account is not counted)"
+  },
+  {
+   "provider": "gcp",
+   "service": "kms",
+   "sku": "key",
+   "region": "asia-northeast1",
+   "unit": "month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE2F-D110-890C/skus",
+   "price_usd": 0.06
+  },
+  {
+   "provider": "gcp",
+   "service": "kms",
+   "sku": "api",
+   "region": "asia-northeast1",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE2F-D110-890C/skus",
+   "per_units": 10000,
+   "price_usd": 0.03
+  },
+  {
+   "provider": "gcp",
+   "service": "kms",
+   "sku": "key",
+   "region": "us-east1",
+   "unit": "month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE2F-D110-890C/skus",
+   "price_usd": 0.06
+  },
+  {
+   "provider": "gcp",
+   "service": "kms",
+   "sku": "api",
+   "region": "us-east1",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE2F-D110-890C/skus",
+   "per_units": 10000,
+   "price_usd": 0.03
+  },
+  {
+   "provider": "gcp",
+   "service": "secretmanager",
+   "sku": "secret",
+   "region": "asia-northeast1",
+   "unit": "secret",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE82-7A5E-871C/skus",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 6.0
+    },
+    {
+     "from": 6.0,
+     "price_usd": 0.06
+    }
+   ]
+  },
+  {
+   "provider": "gcp",
+   "service": "secretmanager",
+   "sku": "api",
+   "region": "asia-northeast1",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE82-7A5E-871C/skus",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.03
+    }
+   ]
+  },
+  {
+   "provider": "gcp",
+   "service": "secretmanager",
+   "sku": "secret",
+   "region": "us-east1",
+   "unit": "secret",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE82-7A5E-871C/skus",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 6.0
+    },
+    {
+     "from": 6.0,
+     "price_usd": 0.06
+    }
+   ]
+  },
+  {
+   "provider": "gcp",
+   "service": "secretmanager",
+   "sku": "api",
+   "region": "us-east1",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/EE82-7A5E-871C/skus",
+   "per_units": 10000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.03
+    }
+   ]
+  },
+  {
+   "provider": "gcp",
+   "service": "clouddns",
+   "sku": "zone",
+   "region": "global",
+   "unit": "month",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/FA26-5236-B8B5/skus",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.2,
+     "to": 25.0
+    },
+    {
+     "from": 25.0,
+     "price_usd": 0.1,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.03
+    }
+   ]
+  },
+  {
+   "provider": "gcp",
+   "service": "clouddns",
+   "sku": "queries",
+   "region": "global",
+   "unit": "request",
+   "effective": "2026-10-20",
+   "source": "https://cloudbilling.googleapis.com/v1/services/FA26-5236-B8B5/skus",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.4,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.2
+    }
+   ]
+  },
+  {
    "provider": "aws",
    "service": "route53",
    "sku": "zone",
@@ -5731,6 +9816,17 @@
    "effective": "2026-10-21",
    "source": "https://firebase.google.com/pricing",
    "note": "Realtime Database: GB downloaded; 360 MB/day no-cost, ~10 GB a month"
+  },
+  {
+   "provider": "azure",
+   "service": "keyvault",
+   "sku": "secret",
+   "region": "global",
+   "unit": "secret",
+   "price_usd": 0.0,
+   "effective": "2026-10-21",
+   "source": "https://azure.microsoft.com/pricing/details/key-vault/",
+   "note": "Standard: secrets are billed per operation, not per secret stored"
   }
  ]
 }

@@ -6,7 +6,7 @@ refreshes the table downloads the files (aws_offers.OFFER_URL) and runs
     python -m jsonui_doc_cli.infra.cost.build_bundled <folder> <the day Cloudflare's pages were read> [<the day
         AWS's pages (Route 53's hosted zone, Parameter Store) were read; the first day when not given> [<the day
         Cloudflare's KV, Zero Trust and Load Balancing pages were read; the first day when not given> [<the day
-        Firebase's page was read; the first day when not given>]]]
+        Firebase's and Azure's pages (Key Vault) were read; the first day when not given>]]]
 
 Every row keeps its source (the offer file's URL, or the page) and its effective date (the offer's publication date,
 or the day the page was read).
@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 
 from . import aws_offers as A
+from . import azure_prices as AZ
+from . import gcp_prices as GCP
 
 REGIONS = ("ap-northeast-1", "us-east-1")
 CF_WORKERS = "https://developers.cloudflare.com/workers/platform/pricing/"
@@ -30,6 +32,7 @@ CF_LB = "https://www.cloudflare.com/plans/network-cdn/"
 R53 = "https://aws.amazon.com/route53/pricing/"
 SSM = "https://aws.amazon.com/systems-manager/pricing/"
 FIREBASE = "https://firebase.google.com/pricing"
+KEY_VAULT = "https://azure.microsoft.com/pricing/details/key-vault/"
 #: The EC2 instance types bundled (the offer has hundreds; the rest come from the fetch's large "ec2"): the small and
 #: the usual ones of a backend's first years. NAT gateway and gp3 rows come from the same file.
 EC2_TYPES = ("t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.nano", "t4g.micro", "t4g.small",
@@ -138,13 +141,30 @@ def aws_rows(folder: Path) -> tuple[list[dict], list[str]]:
     return rows, missing
 
 
+def azure_page_rows(checked: str) -> list[dict]:
+    """Azure prices no Retail Prices meter holds, as the page said them on ``checked``: a Key Vault secret kept is not
+    charged (Standard: billed per operation, not per stored secret) — a price of 0, so the total says it."""
+    return [{"provider": "azure", "service": "keyvault", "sku": "secret", "region": "global", "unit": "secret",
+             "price_usd": 0.0, "effective": checked, "source": KEY_VAULT,
+             "note": "Standard: secrets are billed per operation, not per secret stored"}]
+
+
 def build(folder: Path, checked: str, aws_checked: str | None = None, cf_checked_b: str | None = None,
-          firebase_checked: str | None = None) -> tuple[dict, list[str]]:
+          firebase_checked: str | None = None, notices: list[str] | None = None) -> tuple[dict, list[str]]:
+    """The table from the downloaded files in ``folder`` (AWS's offers, <folder>/azure as azure_prices.download wrote
+    it, <folder>/gcp as gcp_prices.download wrote it). No GCP download (no key) is a notice, not a gap."""
     rows, missing = aws_rows(folder)
+    az_rows, az_missing = AZ.rows_from_folder(folder)
+    gcp_rows, gcp_missing, gcp_none = GCP.rows_from_folder(folder)
+    rows += az_rows + gcp_rows
+    missing += az_missing + gcp_missing
+    if gcp_none and notices is not None:
+        notices.append(gcp_none)
     doc = {"$schema": "https://jsonui.dev/schemas/infra-prices/v0.json", "version": 0, "id": "bundled",
-           "label": "同梱の単価（AWS ap-northeast-1・us-east-1、Cloudflare と Firebase、オンデマンド）", "currency": "USD",
+           "label": "同梱の単価（AWS ap-northeast-1・us-east-1、Azure japaneast・eastus、GCP asia-northeast1・us-east1、"
+                    "Cloudflare と Firebase、オンデマンド）", "currency": "USD",
            "prices": rows + aws_page_rows(aws_checked or checked) + cloudflare_rows(checked, cf_checked_b)
-           + firebase_rows(firebase_checked or checked)}
+           + firebase_rows(firebase_checked or checked) + azure_page_rows(firebase_checked or checked)}
     return doc, missing
 
 
@@ -152,13 +172,16 @@ def main(argv: list[str]) -> int:
     if len(argv) not in (2, 3, 4, 5):   # the days are the person's to say (the pages they read), never the machine's clock
         print("usage: build_bundled <folder of offer files> <YYYY-MM-DD Cloudflare's pages were read> "
               "[<YYYY-MM-DD AWS's pages were read> [<YYYY-MM-DD Cloudflare's KV, Zero Trust and Load Balancing pages "
-              "were read> [<YYYY-MM-DD Firebase's page was read>]]]", file=sys.stderr)
+              "were read> [<YYYY-MM-DD Firebase's and Azure's pages were read>]]]", file=sys.stderr)
         return 2
     folder, checked = Path(argv[0]), argv[1]
-    doc, missing = build(folder, checked, *argv[2:])
+    notices: list[str] = []
+    doc, missing = build(folder, checked, *argv[2:], notices=notices)
     out = Path(__file__).with_name("bundled-prices.json")
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"wrote {out} ({len(doc['prices'])} prices)")
+    for n in notices:
+        print(n, file=sys.stderr)
     for m in missing:
         print(f"missing: {m}", file=sys.stderr)
     return 1 if missing else 0

@@ -164,9 +164,11 @@
             },
             "pool": {
               "enum": [
-                "aws:data-transfer-out"
+                "aws:data-transfer-out",
+                "azure:container-apps-grant-vcpu",
+                "azure:container-apps-grant-memory"
               ],
-              "description": "A free amount the provider gives the account across rows (regions, services): taken once from one total for the pool, not per row. A closed list; an unknown pool is an error. aws:data-transfer-out: AWS's 100 GB a month out to the internet, all regions and services together (CloudFront's own free tier aside)."
+              "description": "A free amount the provider gives the account across rows (regions, services): taken once from one total for the pool, not per row. A closed list; an unknown pool is an error. aws:data-transfer-out: AWS's 100 GB a month out to the internet, all regions and services together (CloudFront's own free tier aside). azure:container-apps-grant-vcpu / -memory: Azure Container Apps' Consumption grant, 180,000 vCPU-seconds and 360,000 GiB-seconds a month per subscription, across apps and regions."
             }
           },
           "required": [
