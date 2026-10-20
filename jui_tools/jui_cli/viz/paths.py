@@ -124,6 +124,12 @@ def claude_settings() -> Path:
     return claude_home() / "settings.json"
 
 
+def claude_installed_plugins() -> Path:
+    """Claude Code's record of installed plugins: {"plugins": {"<name>@<marketplace>": [{"installPath", "version",
+    "scope", ...}]}} (read only — never written by jui)."""
+    return claude_home() / "plugins" / "installed_plugins.json"
+
+
 def claude_sessions_dir() -> Path:
     # Holds <pid>.json (read) and <pid>.<hash>.key (peer tokens: never read).
     return claude_home() / "sessions"

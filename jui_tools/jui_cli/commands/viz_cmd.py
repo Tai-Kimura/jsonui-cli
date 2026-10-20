@@ -1142,6 +1142,36 @@ def _cmd_statusline(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ask_timeout_problems(info: dict) -> list:
+    """(check name, NG text) for each --ask hook whose timeout cuts a choice of the page short (ticket 2026-10-20
+    doctor-misses-old-plugin-ask-timeout): the settings.json hooks of jui viz hooks install, and the enabled plugin's
+    hooks.json. Which choices are cut comes from config.ask_choices_cut_short, not from a list."""
+    from ..viz.config import ask_choice_text, ask_choices_cut_short, load_config
+
+    config = load_config()
+    out = []
+
+    def cut(timeout) -> str:
+        return "・".join(ask_choice_text(c) for c in ask_choices_cut_short(timeout, config))
+
+    if info.get("askTimeout") is not None and ask_choices_cut_short(info["askTimeout"], config):
+        out.append(("askTimeout", f"質問のフック（settings.json）の timeout が {info['askTimeout']:g} 秒のままです。"
+                    f"{cut(info['askTimeout'])}を選ぶと途中で切れます。jui viz hooks install を撃ち直してください"
+                    "（Claude Code のセッションの再起動が要ります）"))
+    plugin = info.get("pluginAsk") or {}
+    if plugin.get("state") == "found" and ask_choices_cut_short(plugin["askTimeout"], config):
+        out.append(("pluginAskTimeout", f"プラグイン {plugin['plugin']}（{plugin['version']}）の質問のフックの timeout が "
+                    f"{plugin['askTimeout']:g} 秒です。{cut(plugin['askTimeout'])}を選ぶと途中で切れます。"
+                    "/plugin で jui-viz を更新し、Claude Code のセッションを起動し直してください"))
+    elif plugin.get("state") == "not-found":
+        out.append(("pluginAskTimeout", f"プラグイン {plugin['plugin']} は有効ですが、入っている場所が {plugin['record']} に"
+                    "見つかりません（質問のフックの timeout を確かめられません）。/plugin で入れ直してください"))
+    elif plugin.get("state") == "unreadable":
+        out.append(("pluginAskTimeout", f"プラグイン {plugin['plugin']}（{plugin['version']}）の hooks.json に質問のフックが"
+                    f"読めません（{plugin['installPath']}）。/plugin で jui-viz を更新してください"))
+    return out
+
+
 def _cmd_hooks(args: argparse.Namespace) -> int:
     from ..viz import hooks_installer as hi
 
@@ -1165,9 +1195,8 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
             print(f"  入っていないイベント: {', '.join(missing)}")
         for command in info["broken"]:
             print(f"  NG  python か forward.py が見つかりません: {command}（jui viz hooks install で入れ直す）")
-        if info.get("askTimeout") is not None and info["askTimeout"] < hi.ASK_TIMEOUT_SEC:
-            print(f"  NG  質問のフックの timeout が {info['askTimeout']:g} 秒のままです。長い待ち時間（30 分・答えるまで）が途中で切れます"
-                  "（jui viz hooks install で入れ直す）")
+        for _, text in _ask_timeout_problems(info):
+            print(f"  NG  {text}")
         if info["disableAllHooks"]:
             print("  NG  フックが全体で無効になっています（disableAllHooks: true）")
         if info["otherHooks"]:
@@ -1522,9 +1551,13 @@ def _doctor_checks() -> list[dict]:
         else:
             ok = hooks["installed"] == total and not hooks["broken"]
             add("hooks", ok, f"{hooks['installed']}/{total} イベント" + ("" if ok else "（/plugin install jui-viz@jsonui、または jui viz hooks install）"))
-            if hooks.get("askTimeout") is not None and hooks["askTimeout"] < hooks_installer.ASK_TIMEOUT_SEC:
-                add("askTimeout", False, f"質問のフックの timeout が {hooks['askTimeout']:g} 秒のままです。長い待ち時間（30 分・答えるまで）が"
-                    "途中で切れます。jui viz hooks install を撃ち直してください（Claude Code のセッションの再起動が要ります）")
+        problems = _ask_timeout_problems(hooks)
+        for name, text in problems:
+            add(name, False, text)
+        plugin_ask = hooks.get("pluginAsk") or {}
+        if plugin_ask.get("state") == "found" and not any(n == "pluginAskTimeout" for n, _ in problems):
+            add("pluginAskTimeout", True, f"プラグイン {plugin_ask['plugin']}（{plugin_ask['version']}）の質問のフック "
+                f"{plugin_ask['askTimeout']:g} 秒")
         if hooks.get("progressEnv") in hooks_installer.legacy_progress_values():
             add("progressEnv", False, f"settings.json の {hooks_installer.PROGRESS_ENV} が古い場所（{hooks['progressEnv']}）のままです。"
                 "jui viz hooks install を撃ち直すと新しい場所に書き換わります")

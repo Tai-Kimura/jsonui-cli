@@ -64,6 +64,28 @@ def ask_hook_wait_sec(config: "VizConfig") -> float:
     return float(min(longest, ASK_UNTIL_ANSWERED_SEC))
 
 
+#: forward.py --ask waits askHookWaitSec + this (its socket timeout), so the hook needs that long before Claude Code
+#: cancels it.
+ASK_FORWARD_GRACE_SEC = 5
+
+
+def ask_choices_cut_short(timeout: float, config: "VizConfig") -> list:
+    """The page's choices that a --ask hook with this timeout cannot wait out (ticket 2026-10-20
+    doctor-misses-old-plugin-ask-timeout): the server's askHookWaitSec for the choice + ASK_FORWARD_GRACE_SEC over
+    the timeout. 600 s cuts 10 min (600 + 5), 30 min and "until answered"."""
+    from dataclasses import replace
+
+    return [c for c in ASK_WAIT_CHOICES
+            if ask_hook_wait_sec(replace(config, askWaitSec=c)) + ASK_FORWARD_GRACE_SEC > float(timeout)]
+
+
+def ask_choice_text(sec: float) -> str:
+    """A choice as the page names it: 20 秒, 10 分, 答えるまで."""
+    if sec <= 0:
+        return "答えるまで"
+    return f"{int(sec)} 秒" if sec < 60 else f"{sec / 60:g} 分"
+
+
 def ask_server_info(config: "VizConfig") -> dict:
     """server.json's keys for forward.py --ask: askHookWaitSec is what it waits (askMaxSec stays for an older
     forward.py, which waits askMaxSec + 5)."""

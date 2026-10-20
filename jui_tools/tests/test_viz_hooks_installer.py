@@ -266,7 +266,107 @@ def test_status_and_doctor_name_an_ask_hook_left_at_the_old_timeout(home, capsys
     main(["viz", "doctor", "--json"])
     checks = {c["name"]: c for c in json.loads(capsys.readouterr().out)["checks"]}
     assert checks["askTimeout"]["ok"] is False and "600" in checks["askTimeout"]["detail"]
+    # 600 s cuts 10 min too (600 + forward.py's 5 s), named from the rule, not a list (ticket doctor-misses-old-plugin)
+    assert "10 分・30 分・答えるまで" in checks["askTimeout"]["detail"] and "3 分" not in checks["askTimeout"]["detail"]
     hi.install(python=PY)
     assert hi.status()["askTimeout"] == hi.ASK_TIMEOUT_SEC
     main(["viz", "doctor", "--json"])
     assert "askTimeout" not in {c["name"] for c in json.loads(capsys.readouterr().out)["checks"]}
+
+
+# ---- the enabled plugin's --ask hook (ticket 2026-10-20 doctor-misses-old-plugin-ask-timeout) ----
+
+REPO_HOOKS = Path(__file__).resolve().parents[2] / "plugins" / "jui-viz" / "hooks" / "hooks.json"
+
+
+def _fake_plugin(home: Path, version: str, ask_timeout, record=True) -> Path:
+    """A plugin installed as Claude Code records it, under the temporary HOME: enabledPlugins in settings.json,
+    plugins/installed_plugins.json, and the copy's hooks/hooks.json with this --ask timeout (None: no timeout key)."""
+    _write({"enabledPlugins": {"jui-viz@jsonui": True}})
+    root = home / ".claude" / "plugins" / "cache" / "jsonui" / "jui-viz" / version
+    (root / "hooks").mkdir(parents=True)
+    hooks = json.loads(REPO_HOOKS.read_text())
+    for g in hooks["hooks"]["PreToolUse"]:
+        for h in g["hooks"]:
+            if h.get("args", [])[-1:] == ["--ask"]:
+                if ask_timeout is None:
+                    h.pop("timeout", None)
+                else:
+                    h["timeout"] = ask_timeout
+    (root / "hooks" / "hooks.json").write_text(json.dumps(hooks))
+    if record:
+        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps(
+            {"version": 2, "plugins": {"jui-viz@jsonui": [{"scope": "user", "installPath": str(root), "version": version}]}}))
+    return root
+
+
+def _doctor(capsys, monkeypatch) -> dict:
+    from jui_cli.cli import main
+    monkeypatch.setenv("PATH", "")
+    main(["viz", "doctor", "--json"])
+    return {c["name"]: c for c in json.loads(capsys.readouterr().out)["checks"]}
+
+
+@pytest.fixture()
+def plain_home(home, monkeypatch):
+    monkeypatch.delenv("JUI_VIZ_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    return home
+
+
+def test_a_plugin_left_at_600_seconds_is_named_with_the_choices_it_cuts(plain_home, capsys, monkeypatch):
+    _fake_plugin(plain_home, "1.2.1", 600)
+    assert hi.status()["pluginAsk"] == {"state": "found", "plugin": "jui-viz@jsonui", "version": "1.2.1", "askTimeout": 600}
+    check = _doctor(capsys, monkeypatch)["pluginAskTimeout"]
+    assert check["ok"] is False and "1.2.1" in check["detail"] and "/plugin で jui-viz を更新" in check["detail"]
+    assert "10 分・30 分・答えるまで" in check["detail"] and "3 分" not in check["detail"]
+    from jui_cli.cli import main
+    main(["viz", "hooks", "status"])
+    out = capsys.readouterr().out
+    assert "NG" in out and "10 分・30 分・答えるまで" in out
+
+
+def test_a_plugin_hook_without_a_timeout_is_claude_codes_default_600(plain_home, capsys, monkeypatch):
+    _fake_plugin(plain_home, "1.2.0", None)
+    assert hi.status()["pluginAsk"]["askTimeout"] == hi.COMMAND_HOOK_DEFAULT_TIMEOUT_SEC == 600
+    assert _doctor(capsys, monkeypatch)["pluginAskTimeout"]["ok"] is False
+
+
+def test_a_plugin_at_86400_seconds_is_ok(plain_home, capsys, monkeypatch):
+    _fake_plugin(plain_home, "1.2.2", 86400)
+    check = _doctor(capsys, monkeypatch)["pluginAskTimeout"]
+    assert check["ok"] is True and "1.2.2" in check["detail"]
+
+
+def test_the_boundary_is_the_longest_wait_plus_five_seconds(plain_home, capsys, monkeypatch):
+    from jui_cli.viz.config import ASK_UNTIL_ANSWERED_SEC, VizConfig, ask_choices_cut_short
+    edge = ASK_UNTIL_ANSWERED_SEC + 5
+    assert ask_choices_cut_short(edge, VizConfig()) == []
+    assert ask_choices_cut_short(edge - 1, VizConfig()) == [0]
+    assert ask_choices_cut_short(605, VizConfig()) == [1800, 0] and ask_choices_cut_short(604, VizConfig()) == [600, 1800, 0]
+    _fake_plugin(plain_home, "1.2.2", edge)
+    assert _doctor(capsys, monkeypatch)["pluginAskTimeout"]["ok"] is True
+
+
+def test_no_plugin_installed_is_a_clear_state_not_a_crash(plain_home, capsys, monkeypatch):
+    assert hi.status()["pluginAsk"] == {"state": "not-enabled"}     # no settings.json at all
+    _write({"enabledPlugins": {"jui-viz@jsonui": True}})              # enabled, but Claude Code records no copy
+    got = hi.status()["pluginAsk"]
+    assert got["state"] == "not-found" and got["record"].endswith("installed_plugins.json")
+    check = _doctor(capsys, monkeypatch)["pluginAskTimeout"]
+    assert check["ok"] is False and "見つかりません" in check["detail"]
+
+
+def test_a_plugin_whose_hooks_json_is_broken_is_unreadable(plain_home):
+    root = _fake_plugin(plain_home, "1.2.2", 86400)
+    (root / "hooks" / "hooks.json").write_text("{not json")
+    assert hi.status()["pluginAsk"]["state"] == "unreadable"
+
+
+def test_the_check_only_reads(plain_home, capsys, monkeypatch):
+    root = _fake_plugin(plain_home, "1.2.1", 600)
+    files = [root / "hooks" / "hooks.json", plain_home / ".claude" / "plugins" / "installed_plugins.json", _settings()]
+    before = [(f.read_bytes(), f.stat().st_mtime_ns) for f in files]
+    _doctor(capsys, monkeypatch)
+    hi.status()
+    assert [(f.read_bytes(), f.stat().st_mtime_ns) for f in files] == before

@@ -335,6 +335,57 @@ def plugin_enabled(data: dict | None = None) -> str | None:
     return None
 
 
+#: Claude Code's timeout for a command hook that sets none (hooks reference, Common fields: "600 for `command`")
+COMMAND_HOOK_DEFAULT_TIMEOUT_SEC = 600
+
+
+def _plugin_ask_timeout(install_path: Path) -> float | None:
+    """The --ask hook's timeout in an installed plugin's hooks/hooks.json, or None when it cannot be read."""
+    try:
+        data = json.loads((install_path / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        groups = data["hooks"]["PreToolUse"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    found = []
+    for g in groups if isinstance(groups, list) else []:
+        if not isinstance(g, dict) or g.get("matcher") != "AskUserQuestion":
+            continue
+        for h in g.get("hooks") or []:
+            if isinstance(h, dict) and "--ask" in [str(a) for a in (h.get("args") or [])] + str(h.get("command", "")).split():
+                t = h.get("timeout", COMMAND_HOOK_DEFAULT_TIMEOUT_SEC)
+                if isinstance(t, (int, float)) and not isinstance(t, bool):
+                    found.append(float(t))
+    return min(found) if found else None
+
+
+def plugin_ask_status(data: dict | None = None) -> dict:
+    """The enabled jui-viz plugin's --ask hook as Claude Code installed it (ticket 2026-10-20
+    doctor-misses-old-plugin-ask-timeout), read only from paths.claude_installed_plugins() and each install's
+    hooks/hooks.json. state: "not-enabled" (no plugin in use), "not-found" (enabled, but no installed copy is
+    recorded), "unreadable" (a copy whose hooks.json has no readable --ask hook), "found" (askTimeout: the shortest
+    over the recorded copies)."""
+    key = plugin_enabled(data)
+    if key is None:
+        return {"state": "not-enabled"}
+    record = paths.claude_installed_plugins()
+    try:
+        installed = json.loads(record.read_text(encoding="utf-8"))
+        entries = installed["plugins"][key]
+    except (OSError, ValueError, KeyError, TypeError):
+        entries = None
+    entries = [e for e in entries if isinstance(e, dict) and isinstance(e.get("installPath"), str)] if isinstance(entries, list) else []
+    if not entries:
+        return {"state": "not-found", "plugin": key, "record": str(record)}
+    timeouts, versions = [], []
+    for e in entries:
+        versions.append(str(e.get("version", "?")))
+        t = _plugin_ask_timeout(Path(e["installPath"]))
+        if t is None:
+            return {"state": "unreadable", "plugin": key, "version": versions[-1], "installPath": e["installPath"]}
+        timeouts.append(t)
+    return {"state": "found", "plugin": key, "version": ", ".join(versions), "askTimeout": min(timeouts)}
+
+
 def install(dry_run: bool = False, python: str | None = None) -> Result:
     handler = our_handler(python)
     decide_handler = our_decide_handler(python)
@@ -416,6 +467,7 @@ def status() -> dict:
         "plugin": plugin_enabled(data),
         "decide": decide,
         "ask": ask,
+        "pluginAsk": plugin_ask_status(data),
         "askTimeout": min((t for t in ask_timeouts if isinstance(t, (int, float)) and not isinstance(t, bool)), default=None),
         "readable": True,
         "path": str(path),
