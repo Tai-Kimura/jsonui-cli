@@ -566,6 +566,12 @@ def test_app_runner_says_an_hour_with_requests_is_counted_active_through_the_hou
     assert len(got) == 1 and got[0]["node"] == "web" and "the most it can be" in got[0]["message"]
     idle, _ = _run([node], [{"node": "web", "quantities": {"vcpu": 1, "memory_gb": 2}}])
     assert _notices(idle, "cost.apprunner_active_upper_bound") == []   # provisioned only: nothing assumed
+    # requests only in hours nothing runs (the environment stopped all day): no active hour was counted
+    off = {"off": {"default": 0, "rules": []}}
+    stopped, _ = _run([node], [{"node": "web", "schedule": "off",
+                                "quantities": {"requests": _per_hour(100_000), "vcpu": 1, "memory_gb": 2}}], schedules=off)
+    assert max(next(r for r in stopped.nodes if r.node == "web").running) == 0
+    assert _notices(stopped, "cost.apprunner_active_upper_bound") == []
 
 
 def test_a_standard_workflow_with_requests_and_no_transitions_is_named_as_priced_0():
@@ -577,6 +583,10 @@ def test_a_standard_workflow_with_requests_and_no_transitions_is_named_as_priced
     assert sum(v for r in bare.nodes for m in r.meters.values() for v in m["usd"] if v is not None) == 0.0
     with_t, _ = _run([node], [{"node": "flow", "quantities": {"requests": _per_hour(10_000),
                                                               "state_transitions": _per_hour(50_000)}}])
-    express, _ = _run([dict(node, spec=[{"key": "workflow_type", "value": "express"}])],
-                      [{"node": "flow", "quantities": {"requests": _per_hour(10_000)}}])
-    assert _notices(with_t, "cost.stepfunctions_no_transitions") == [] == _notices(express, "cost.stepfunctions_no_transitions")
+    assert _notices(with_t, "cost.stepfunctions_no_transitions") == []
+    # Express, as the rule reads it: spec workflow_type or type (the priced and the said agree)
+    for key in ("workflow_type", "type"):
+        express, _ = _run([dict(node, spec=[{"key": key, "value": "express"}])],
+                          [{"node": "flow", "quantities": {"requests": _per_hour(10_000)}}])
+        assert _notices(express, "cost.stepfunctions_no_transitions") == [], key
+        assert sum(v for r in express.nodes for m in r.meters.values() for v in m["usd"] if v is not None) > 0, key
