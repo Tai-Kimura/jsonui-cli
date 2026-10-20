@@ -88,14 +88,11 @@ function devClose(back = true) {
   const to = DEV.opener; DEV.opener = null;
   if (back && to && document.contains(to)) to.focus({ preventScroll: true });
 }
-/* A row with its robot: that robot's room, the robot picked. The room remembers it first, so the switch's own pick
-   (robotToPick) is this robot, not the one last picked there. */
+/* A row with its robot: the robot picked as any pick is (selectRobot, 50-panel.js) — outside the view, its room is
+   remembered first and switched to, so the switch's own pick is this robot, not the one last picked there. */
 function devGoRobot(label, opener) {
-  const proj = projectOfRobot(label);
   devClose(false);
-  if (proj) LAST_ROBOT.set(proj, label);
-  if (proj && PROJECT[proj] && UI.project !== proj) setProject(proj, { camera: false });
-  if (rbState.id !== label) openRobot(label, opener);
+  selectRobot(label, opener);
 }
 $('btn-devices').addEventListener('click', (e) => (devPane.hidden ? devOpen(e.currentTarget) : devClose()));
 $('dev-close').addEventListener('click', () => devClose());

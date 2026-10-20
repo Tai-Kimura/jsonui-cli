@@ -832,7 +832,10 @@ def _open_robot_callers(src: str) -> list:
 
 
 def test_only_select_robot_and_the_switch_open_a_robot():
-    for name in ("40-scene.js", "50-panel.js", "53-waits.js", "55-history.js", "58-talk.js", "60-log.js", "70-main.js"):
+    # every part but the tests' hook: a list named here missed the device pane when it came (53-devices.js)
+    names = sorted(p.name for p in WEB.joinpath("js").iterdir() if p.name.endswith(".js") and p.name != "80-dbg.js")
+    assert "53-devices.js" in names and "58-talk.js" in names, names
+    for name in names:
         callers = set(_open_robot_callers(web_text("js", name)))
         assert callers <= OPEN_ROBOT_CALLERS, f"{name}: openRobot called from {sorted(callers - OPEN_ROBOT_CALLERS)} (pick through selectRobot)"
     assert sorted(_open_robot_callers(web_text("js", "50-panel.js"))) == ["selectRobot", "setProject"]
