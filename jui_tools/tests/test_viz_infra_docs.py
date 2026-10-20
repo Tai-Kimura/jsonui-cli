@@ -240,3 +240,97 @@ def test_the_room_row_gets_its_count_from_the_worker(tmp_path):
         time.sleep(0.05)
     assert row.get("infraDocs") == {"files": 2, "dir": "docs/infra"}
     assert any(t.name.startswith("jui-viz-infra") for t in threading.enumerate())
+
+
+# ---- the guards dd's verification found without an arm (P2–P7, P9, P10, P12; 2026-10-20) ----
+
+def _chunked(data: bytes):
+    """A body sent chunked (no Content-Length, so the declared-length check cannot refuse it): only the read's own cap can."""
+    async def gen():
+        for i in range(0, len(data), 1024):
+            yield data[i:i + 1024]
+    return gen()
+
+
+def test_the_icon_route_takes_the_same_checks_and_reads_only_configured_keys(tmp_path, monkeypatch):
+    """P2: the icon route refuses a wrong token and a foreign Origin itself (not only through the model's route).
+    P5: a projectId is an id, never a folder: the room's own path and a relative one are unknown rooms.
+    P6: a key the settings do not name is not read, though a file of that name is in the room.
+    P4/P12: the length caps of projectId and key. P3: a chunked body (no Content-Length) over the cap is refused (413).
+    P7: an icon is never cached."""
+    import io
+    root = _room(tmp_path, "compose-and-cloud")
+    world, pid = _world(root)
+    monkeypatch.chdir(tmp_path)   # so the relative paths below name the real room folder (a reader of paths would find it)
+    model = I.read(root)[1]
+    key = sorted(model["icons"])[0]
+    icon_file = model["icons"][key] if isinstance(model["icons"][key], str) else None
+    cfg = json.loads((root / "jui.config.json").read_text())
+    icon_file = icon_file or next(iter(cfg["infra"]["icons"].values()))
+    assert (root / icon_file).is_file()
+
+    def calls(own):
+        ok = {"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+        icon = json.dumps({"projectId": pid, "key": key})
+        return [("POST", "/api/infra-icon", {**ok, "X-Jui-Viz-Token": "x" * 43}, icon),                      # P2
+                ("POST", "/api/infra-icon", {**ok, "Origin": "http://evil.example"}, icon),                    # P2
+                ("POST", "/api/infra-docs", ok, json.dumps({"projectId": "./compose-and-cloud"})),             # P5
+                ("POST", "/api/infra-docs", ok, json.dumps({"projectId": "compose-and-cloud"})),               # P5
+                ("POST", "/api/infra-docs", ok, json.dumps({"projectId": "o/compose-and-cloud"})),             # P5
+                ("POST", "/api/infra-icon", ok, json.dumps({"projectId": pid, "key": icon_file})),             # P6
+                ("POST", "/api/infra-docs", ok, json.dumps({"projectId": "p" * 65})),                          # P4
+                ("POST", "/api/infra-icon", ok, json.dumps({"projectId": pid, "key": ""})),                    # P12
+                ("POST", "/api/infra-icon", ok, json.dumps({"projectId": pid, "key": "k" * 201})),             # P12
+                ("POST", "/api/infra-docs", ok, _chunked(b'{"projectId": "' + b"x" * 20_000 + b'"}')),         # P3
+                ("POST", "/api/infra-icon", ok, icon)]                                                        # P7
+    got = _serve(world, calls)
+    assert [g[0] for g in got] == [401, 403, 404, 404, 404, 404, 400, 400, 400, 413, 200]
+    assert all(b"nodes" not in g[2] for g in got[2:5])                     # no model for a path given as an id
+    assert got[10][3].get("Cache-Control") == "no-store"
+
+
+def test_the_model_is_read_off_the_event_loop(tmp_path, monkeypatch):
+    """P9: a slow read (1.5 s here) does not hold the server: /health, asked 0.2 s after the press, answers at once."""
+    root = _room(tmp_path, "aws-three-tier")
+    world, pid = _world(root)
+    real = I.read
+    monkeypatch.setattr(I, "read", lambda r, seq=None: (time.sleep(1.5), real(r, seq))[1])
+    from jui_cli.viz.config import VizConfig
+    from jui_cli.viz.server import ServerContext, make_app
+    port = _port()
+    own = f"127.0.0.1:{port}"
+
+    async def run():
+        ctx = ServerContext(config=VizConfig(), port=port, token=TOKEN, state=world.state, world=world, publish=world.publish)
+        client = TestClient(TestServer(make_app(ctx), host="127.0.0.1", port=port))
+        await client.start_server()
+        try:
+            ok = {"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+            press = asyncio.ensure_future(client.post("/api/infra-docs", headers=ok, data=json.dumps({"projectId": pid})))
+            # the client shares the server's loop: a read on the loop would hold this sleep too, so the clock starts first
+            t0 = time.monotonic()
+            await asyncio.sleep(0.2)
+            health = await client.get("/health", headers={"Host": own})
+            took = time.monotonic() - t0
+            res = await press
+            return health.status, took, res.status
+        finally:
+            await client.close()
+    status, took, read_status = asyncio.run(run())
+    assert status == 200 and read_status == 200 and took < 1.0, (status, took)   # 1.5 s if the read held the loop
+
+
+def test_the_rooms_are_counted_every_few_seconds_not_every_tick(tmp_path, monkeypatch):
+    """P10: the door's count (a listing of each room's infra folder) runs once per INFRA_EVERY_MS, however often the
+    world ticks."""
+    from jui_cli.viz.ingest import INFRA_EVERY_MS
+    root = _room(tmp_path, "aws-three-tier")
+    world, pid = _world(root)
+    calls = []
+    real = I.counts
+    monkeypatch.setattr(I, "counts", lambda r, cache=None: (calls.append(1), real(r, cache))[1])
+    t0 = 10_000_000
+    for k in range(40):   # 2 s of ticks, 50 ms apart, well inside one INFRA_EVERY_MS
+        world.tick(t0 + k * 50)
+        time.sleep(0.02)
+    assert INFRA_EVERY_MS >= 2_000 and len(calls) == 1, len(calls)
