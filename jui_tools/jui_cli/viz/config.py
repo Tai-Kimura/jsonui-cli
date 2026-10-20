@@ -44,8 +44,9 @@ ASK_WAIT_CHOICES = (20, 60, 180, 600, 1800, 0)
 #: The timeout of the synchronous AskUserQuestion hook (forward.py --ask), in the installer's hooks
 #: (hooks_installer.ASK_TIMEOUT_SEC) and the plugin's hooks.json alike: Claude Code cancels the hook there. Ticket
 #: 2026-10-20 question-window-over-5-min: it was 600 s, under the 30 min and "until answered" choices. Claude Code's
-#: hooks reference states no maximum for a command hook's timeout (default 600 s), and a timeout of 1800 / 3600 /
-#: 86400 s was measured not to be cut short (see the ticket's work note).
+#: hooks reference states no maximum for a command hook's timeout (default 600 s); measured on Claude Code 2.1.304
+#: (10-20, the ticket's work note): a timeout of 1800 s and of 3600 s ends the hook at exactly that second, so the
+#: value is used as written, not capped at 600.
 ASK_HOOK_TIMEOUT_SEC = 86400
 #: The hook's own margin: forward.py waits the server's limit + 5 s, and the server ends its wait before that.
 ASK_HOOK_MARGIN_SEC = 60
