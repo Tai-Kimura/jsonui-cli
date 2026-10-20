@@ -388,8 +388,17 @@ async def run_server_room(pw, out, failures):
         await page.click("#sr-cost [data-src-act='play']")
         await until(page, "() => window.__dbg.srCost().day.hour >= 5", "played on", timeout=10000)
         played = (await page.evaluate(COST))["day"]
-        await page.click("#sr-cost [data-src-act='stop']")
         check(failures, played["hour"] >= 5, f"再生 moves the hour on: {played['hour']}")
+        # it stops at 23:00 on its own, the button says 再生 again, and the hour stays 23 (it never wraps to 0)
+        await until(page, "() => !window.__dbg.srCost().day.playing", "played to the end", timeout=15000)
+        end = (await page.evaluate(COST))["day"]
+        t = await page.evaluate("() => performance.now()")
+        await until(page, "(t) => performance.now() > t + 600", "a while after the end", arg=t)
+        still = (await page.evaluate(COST))["day"]
+        play_btn = await page.evaluate("() => !!document.querySelector(\"#sr-cost [data-src-act='play']\")")
+        res["costPlayEnd"] = {"end": end["hour"], "later": still["hour"], "clock": still["clock"], "playButton": play_btn}
+        check(failures, end["hour"] == 23 and still["hour"] == 23 and still["clock"] == "23:00" and play_btn and not still["playing"],
+              f"再生 stops at 23:00 and the button says 再生 again: {res['costPlayEnd']}")
         await page.click("#sr-cost [data-src-seg]")
         await until(page, "() => window.__dbg.srCost().day.price !== ''", "the price's trace")
         price = (await page.evaluate(COST))["day"]["price"]
@@ -948,6 +957,20 @@ async def run_server_room(pw, out, failures):
         check(failures, a["stars"] == b["stars"] and (a["bubble"] or {}).get("text") == "サーバー構成を読み込んでいます",
               f"reduced motion: the * stand still and the bubble shows: {res['reduced']}")
         await until(p2, "() => window.__dbg.sr().open", "open (reduced motion)", timeout=15000)
+        # the cost's day under reduced motion: no play (the button disabled, pressing it moves nothing), the slider only
+        await p2.click("#sr-mode-cost")
+        await until(p2, "() => { const c = window.__dbg.srCost(); return c.month && c.month.bars === c.month.days; }", "the month (reduced motion)", timeout=20000)
+        await p2.click("#sr-cost [data-src-date]")
+        await until(p2, "() => { const c = window.__dbg.srCost(); return c.day && c.day.rows > 0; }", "a day (reduced motion)", timeout=20000)
+        btn = await p2.evaluate("() => { const b = document.querySelector(\"#sr-cost [data-src-act='play']\"); return b ? { disabled: b.disabled } : null; }")
+        h0 = (await p2.evaluate("() => window.__dbg.srCost()"))["day"]["hour"]
+        await p2.evaluate("() => { window.__dbg.srCostPlayMs(100); const b = document.querySelector(\"#sr-cost [data-src-act='play']\"); b.disabled = false; b.click(); }")
+        t = await p2.evaluate("() => performance.now()")
+        await until(p2, "(t) => performance.now() > t + 700", "700 ms (reduced motion)", arg=t)
+        d2 = (await p2.evaluate("() => window.__dbg.srCost()"))["day"]
+        res["costReduced"] = {"button": btn, "hour": [h0, d2["hour"]], "playing": d2["playing"]}
+        check(failures, btn and btn["disabled"] and d2["hour"] == h0 and not d2["playing"],
+              f"reduced motion: the day does not play (the button disabled, a press moves no hour): {res['costReduced']}")
         await ctx2.close()
 
         # 8. the demo (and so export-demo): shop-app/'s door opens the made-up layout, the IAM role and the alarm folded
