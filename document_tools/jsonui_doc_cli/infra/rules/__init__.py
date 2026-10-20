@@ -55,4 +55,16 @@ def lookup(node: dict) -> Rule | None:
     return best
 
 
+def provider_rule(id: str, category: str, provider: str, service: str, cost: Callable, source: str, checked: str,
+                  **extra) -> Rule:
+    """A provider's rule for a category: what it reads and whether it is billed by the hour as the generic rule says
+    (``reads`` / ``hourly`` in extra change them), its formula, and the official page it follows."""
+    from .generic import GENERIC   # noqa: PLC0415
+    reads, hourly = GENERIC[category]
+    return register(Rule(id=id, category=category, provider=provider, service=service, reads=extra.pop("reads", reads),
+                         hourly=extra.pop("hourly", hourly), source=source, checked=checked, extra=extra, cost=cost))
+
+
 from . import generic  # noqa: E402,F401  (registers the generic rules)
+from . import aws  # noqa: E402,F401
+from . import cloudflare  # noqa: E402,F401

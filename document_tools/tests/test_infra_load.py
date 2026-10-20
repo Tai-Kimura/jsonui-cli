@@ -340,14 +340,14 @@ def test_region_resolved_follows_the_groups_up_to_a_logical_one():
 def test_the_most_specific_rule_wins_and_a_rule_is_replaced_by_its_id():
     saved = list(RULES.REGISTRY)
     try:
-        node = {"category": "compute.function", "providerResolved": "aws", "service": "lambda.edge"}
+        node = {"category": "compute.function", "providerResolved": "acme", "service": "lambda.edge"}
         assert RULES.lookup(node).id == "generic/compute.function"
-        RULES.register(Rule(id="aws/functions", category="compute.function", provider="aws", reads=("requests",)))
-        assert RULES.lookup(node).id == "aws/functions"
-        RULES.register(Rule(id="aws/lambda", category="compute.function", provider="aws", service="lambda", reads=("requests",)))
-        assert RULES.lookup(node).id == "aws/lambda"           # "lambda" is the head of "lambda.edge"
-        RULES.register(Rule(id="aws/lambda", category="compute.function", provider="aws", service="lambda", reads=()))
-        assert [r.id for r in RULES.REGISTRY].count("aws/lambda") == 1 and RULES.lookup(node).reads == ()
+        RULES.register(Rule(id="acme/functions", category="compute.function", provider="acme", reads=("requests",)))
+        assert RULES.lookup(node).id == "acme/functions"
+        RULES.register(Rule(id="acme/lambda", category="compute.function", provider="acme", service="lambda", reads=("requests",)))
+        assert RULES.lookup(node).id == "acme/lambda"           # "lambda" is the head of "lambda.edge"
+        RULES.register(Rule(id="acme/lambda", category="compute.function", provider="acme", service="lambda", reads=()))
+        assert [r.id for r in RULES.REGISTRY].count("acme/lambda") == 1 and RULES.lookup(node).reads == ()
         assert RULES.lookup({"category": "no.such"}) is None
     finally:
         RULES.REGISTRY[:] = saved
@@ -495,3 +495,15 @@ def test_seed_keeps_a_declared_nodes_id_and_reads_its_region(tmp_path):
     assert next(n for k, n in again.items() if "google_redis_instance.cache" in k)["id"] == taken
     assert next(n for k, n in again.items() if "google_storage_bucket.redis" in k)["id"] != taken
     assert M.errors(M.check_file("draft.json", json.dumps(S.draft(root)[0]).encode())[1]) == []
+
+
+def test_a_fixed_rows_sku_and_a_ladders_per_are_carried(tmp_path):
+    """L-B's additions: loads[].sku (the type a fixed row runs) and vertical.per (what the steps' amounts are per)."""
+    doc = _scenario(loads=[{"node": "db-prod", "sku": "db.r6g.large", "quantities": {"storage_gb": 1}},
+                           {"node": "api-prod", "quantities": {"requests": 1},
+                            "vertical": {"quantity": "requests", "per": "second", "ladder": LADDER}}])
+    got = _one(tmp_path, doc)
+    assert _codes(got, "error") == [], got["problems"]
+    assert _row(got, "db-prod")["sku"] == "db.r6g.large" and _row(got, "api-prod")["vertical"]["per"] == "second"
+    assert "load.target" not in _codes(_one(tmp_path / "b", _scenario(loads=[{"node": "cdn", "sku": "x y"}])))
+    assert "schema" in _codes(_one(tmp_path / "c", _scenario(loads=[{"node": "cdn", "sku": "x y"}])), "error")

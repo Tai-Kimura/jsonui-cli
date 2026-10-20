@@ -119,6 +119,7 @@
   },
   {
    "node": "db-prod",
+   "sku": "db.r6g.large",
    "quantities": {
     "storage_gb": 200
    }

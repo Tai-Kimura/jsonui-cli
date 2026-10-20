@@ -180,6 +180,7 @@
    },
    "vertical": {
     "quantity": "requests",
+    "per": "second",
     "ladder": [
      {
       "sku": "db.r6g.large",

@@ -716,6 +716,10 @@
             "horizontal_first"
           ],
           "default": "schedule_vertical"
+        },
+        "per": {
+          "$ref": "#/$defs/per",
+          "description": "The steps' amounts are per this (default hour), as autoscale's per_instance."
         }
       },
       "required": [
@@ -746,6 +750,10 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1000
+        },
+        "sku": {
+          "$ref": "#/$defs/sku",
+          "description": "The type a fixed row runs (an instance type, a class), priced by this sku. A vertical row's steps say theirs."
         },
         "quantities": {
           "$ref": "#/$defs/quantities"

@@ -546,7 +546,7 @@ def normalize(name: str, doc: dict, model: dict) -> tuple[dict, list[dict]]:
         running = count if count is not None else (auto["maxByHour"] if auto else None)
         problems += check_stopped(name, i, nid, qs, mult, running, hours)
         region, region_from = region_of(node, doc)
-        out_rows.append({"node": nid, "row": i, "rule": rule.id if rule else None, "hourly": hourly,
+        out_rows.append({"node": nid, "row": i, "rule": rule.id if rule else None, "hourly": hourly, "sku": row.get("sku"),
                          "region": region, "regionFrom": region_from, "schedule": row.get("schedule"),
                          "profile": row.get("profile"), "quantities": qs, "multiplier": mult, "count": count,
                          "autoscale": auto, "vertical": vert})

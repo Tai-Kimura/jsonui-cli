@@ -1,7 +1,9 @@
-"""The generic rules: one per category, what a node of that kind reads and whether it is billed by the hour. No
-formula yet (L-B adds the costs, and a provider's own rules beside these)."""
+"""The generic rules: one per category, what a node of that kind reads, whether it is billed by the hour, and its
+formula (infra/cost/formulas.py) under the conventional skus: a price file written with those names prices any
+provider. A provider's own rules (aws.py, cloudflare.py) sit beside these and win by being more specific."""
 from __future__ import annotations
 
+from ..cost import formulas as F
 from . import Rule, register
 
 LB = ("lcu", "new_connections", "active_connections", "processed_gb", "rule_evaluations", "requests")
@@ -40,4 +42,4 @@ GENERIC: dict[str, tuple[tuple[str, ...], bool]] = {   # category: (reads, hourl
 }
 
 for _cat, (_reads, _hourly) in GENERIC.items():
-    register(Rule(id=f"generic/{_cat}", category=_cat, reads=_reads, hourly=_hourly))
+    register(Rule(id=f"generic/{_cat}", category=_cat, reads=_reads, hourly=_hourly, cost=F.BY_CATEGORY.get(_cat)))
