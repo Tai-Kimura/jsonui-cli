@@ -370,3 +370,27 @@ def test_the_check_only_reads(plain_home, capsys, monkeypatch):
     _doctor(capsys, monkeypatch)
     hi.status()
     assert [(f.read_bytes(), f.stat().st_mtime_ns) for f in files] == before
+
+
+def test_a_disabled_plugin_is_not_checked(plain_home, capsys, monkeypatch):
+    """/plugin can turn the plugin off: enabledPlugins then says false. Its old copy (600 s) is not in use, so no
+    NG for it (the same lookup guards hooks install against forwarding twice: the next arm)."""
+    _fake_plugin(plain_home, "1.2.1", 600)
+    _write({"enabledPlugins": {"jui-viz@jsonui": False}})
+    assert hi.plugin_enabled() is None
+    assert hi.status()["pluginAsk"] == {"state": "not-enabled"}
+    checks = _doctor(capsys, monkeypatch)
+    assert "pluginAskTimeout" not in checks
+    from jui_cli.cli import main
+    main(["viz", "hooks", "status"])
+    out = capsys.readouterr().out
+    assert "プラグイン" not in out and "NG" not in out
+
+
+def test_a_disabled_plugin_does_not_block_hooks_install(plain_home):
+    """The same settings: hooks install puts the hooks in; it does not take the plugin as on."""
+    _fake_plugin(plain_home, "1.2.1", 600)
+    _write({"enabledPlugins": {"jui-viz@jsonui": False}})
+    result = hi.install(python=PY)
+    assert result.changed and hi.status()["installed"] == len(hi.EVENTS) and hi.status()["ask"] is True
+    assert _read()["enabledPlugins"] == {"jui-viz@jsonui": False}      # the person's setting is kept as it was
