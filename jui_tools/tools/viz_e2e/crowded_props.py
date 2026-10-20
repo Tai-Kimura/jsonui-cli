@@ -313,6 +313,29 @@ async def run_crowded_props(pw, out, failures):
             return { id: t.id, q, onTag: !!(e && e.closest('[data-robot]')) }; }).filter((t) => t.onTag)""", sorted(over))
         res["freeTag"] = free[:1]
         check(failures, free, f"a tag over nothing to press, to press: {free}")
+        # a wait's bubble that crosses nothing to press stays as it is (pressable, not faint): made on purpose here, so the
+        # arm does not hang on where the bell's robot's bubble happened to land (its box crossed the rack in one run, not
+        # in the next; a bubble always let through passed then)
+        res["freeBubble"] = None
+        for t in free[:4]:
+            fid = (await page.evaluate("(l) => window.__dbg.overFixture(l)", t["id"]))["realId"]
+            hook(fid, hook_event_name="Notification", notification_type="permission_prompt", message="permission")
+            await wait(page, "(l) => { const o = window.__dbg.overFixture(l); return o && o.waitBox; }", label="a free robot's bubble", arg=t["id"])
+            await settled(page, "the free bubble placed", timeout=30000)
+            o = await page.evaluate("(l) => window.__dbg.overFixture(l)", t["id"])
+            fx = await page.evaluate("() => window.__dbg.fixRects()")
+            wb = o["waitBox"]
+            crosses = any(wb[0] < f[1] and f[0] < wb[1] and wb[2] < f[3] and f[2] < wb[3] for f in fx)
+            centre = [round((wb[0] + wb[1]) / 2), round((wb[2] + wb[3]) / 2)]
+            top = await page.evaluate("(p) => { const e = document.elementFromPoint(p[0], p[1]); return e ? e.className : null; }", centre)
+            hook(fid, hook_event_name="UserPromptSubmit", prompt="next")
+            hook(fid, hook_event_name="Stop")
+            await wait(page, "(l) => { const o = window.__dbg.overFixture(l); return o && !o.waitBox; }", label="the free bubble gone", arg=t["id"])
+            if not crosses:
+                res["freeBubble"] = {"id": t["id"], "class": o["wait"], "top": top}
+                break
+        check(failures, res["freeBubble"] and not res["freeBubble"]["class"] and "wait-bubble" in (res["freeBubble"]["top"] or ""),
+              f"a bubble over nothing to press is not let through and takes a press: {res['freeBubble']}")
         if free:
             await page.mouse.click(*free[0]["q"])
             await wait(page, f"() => window.__dbg.view().card === '{free[0]['id']}'", label="a tag over nothing selects its robot")
