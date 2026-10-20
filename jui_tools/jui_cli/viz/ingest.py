@@ -1241,19 +1241,21 @@ class World:
     def devices_slice(self, at: int) -> list[dict]:
         """The devices, each with who uses it when that can be told, and how it was told (strongest first)."""
         busy = {t["deviceId"]: t["agentId"] for t in self.running_tests() if t.get("deviceId")}
+        here = lambda aid: aid in self.agents and "leftAt" not in self.agents[aid]   # a robot gone or walking out: nobody
         out = []
         for dev in self.devices:
             row = dict(dev)
             used = None
             if dev["id"] in busy:
-                row["busyBy"] = busy[dev["id"]]
+                row["busyBy"] = busy[dev["id"]]   # the test pane's field, as before
+            if dev["id"] in busy and here(busy[dev["id"]]):
                 used = {"agentId": busy[dev["id"]], "how": "test"}
-            elif any(sid in self.agents for sid in self.device_procs.get(dev["id"], [])):
-                sids = [sid for sid in self.device_procs[dev["id"]] if sid in self.agents]
+            elif any(here(sid) for sid in self.device_procs.get(dev["id"], [])):
+                sids = [sid for sid in self.device_procs[dev["id"]] if here(sid)]
                 used = {"agentId": sids[0], "how": "process", "others": sids[1:]}
             elif dev["id"] in self.device_cmds:
                 agent_id, when = self.device_cmds[dev["id"]]
-                if agent_id in self.agents and at - when <= devices_mod.COMMAND_KEPT_MS:
+                if here(agent_id) and at - when <= devices_mod.COMMAND_KEPT_MS:
                     used = {"agentId": agent_id, "how": "command", "at": when}
             if used:
                 row["usedBy"] = used

@@ -184,3 +184,37 @@ def test_a_test_started_before_its_device_was_seen_is_tied_when_it_shows(tmp_pat
     world.publish()
     assert _used(state)[UDID] == {"agentId": "s1", "how": "test"}
     assert state.slices["tests"][0]["deviceId"] == UDID
+
+
+def test_the_command_estimate_holds_for_exactly_thirty_minutes(tmp_path):
+    state, world = _world(tmp_path)
+    _bash(world, "s2", f"xcrun simctl io {UDID} screenshot b.png", 950_000)
+    world.wall_ms = lambda: 950_000 + devices.COMMAND_KEPT_MS   # the boundary itself: still told
+    world.apply_devices([SIM, EMU])
+    world.publish()
+    assert _used(state)[UDID] == {"agentId": "s2", "how": "command", "at": 950_000}
+
+
+def test_a_session_that_ended_names_nobody(tmp_path):
+    state, world = _world(tmp_path)
+    _bash(world, "s2", f"xcrun simctl io {UDID} screenshot b.png", 950_000)
+    world.pid_to_session.update({100: "s1"})
+    world.apply_device_procs([(100, 1, "claude"), (300, 100, "adb -s emulator-5554 logcat")])
+    world.publish()
+    assert _used(state)[UDID]["agentId"] == "s2" and _used(state)["emulator-5554"]["agentId"] == "s1"
+    for sid in ("s1", "s2"):   # the real path: SessionEnd (the robot walks out, still in the agents for a while)
+        world.apply_hook({"session_id": sid, "cwd": "/", "hook_event_name": "SessionEnd", "reason": "other"}, 960_000)
+    world.apply_devices([SIM, EMU])
+    world.publish()
+    assert _used(state) == {UDID: None, "emulator-5554": None}
+
+
+def test_a_running_test_of_a_session_that_ended_names_nobody(tmp_path):
+    state, world = _world(tmp_path)
+    _bash(world, "s2", f"xcodebuild test -destination id={UDID}", 950_000, use="t")
+    world.publish()
+    assert _used(state)[UDID] == {"agentId": "s2", "how": "test"}
+    world.apply_hook({"session_id": "s2", "cwd": "/", "hook_event_name": "SessionEnd", "reason": "other"}, 960_000)
+    world.apply_devices([SIM, EMU])   # the next device scan (every 10 s) puts the slice right
+    world.publish()
+    assert _used(state)[UDID] is None
