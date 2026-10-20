@@ -119,7 +119,7 @@ def test_nothing_is_fetched_from_outside():
 def test_the_vendored_files_are_the_ones_vendor_md_records():
     md = web_text("vendor", "VENDOR.md")
     rows = re.findall(r"^\| `([^`]+)` \| `[^`]+` \| `([0-9a-f]{64})` \|$", md, re.M)
-    assert len(rows) == 9
+    assert len(rows) == 12
     for rel, digest in rows:
         parts = rel.split("/")
         f = WEB.joinpath(*(parts[1:] if parts[0] == ".." else ["vendor", *parts]))

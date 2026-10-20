@@ -15,9 +15,15 @@ and the sha512 integrity match the registry's `dist` record).
 | `three-0.160.0/three.module.min.js` | `package/build/three.module.min.js` | `3e690ac7d180b0aadf0891bea39eec643e29e2d3e75c99b18689518665f69ba6` |
 | `three-0.160.0/addons/controls/OrbitControls.js` | `package/examples/jsm/controls/OrbitControls.js` | `5a44a9e86a2a0fb11933eed69bc2cd33c76a496854c1aed6ed776efa87d7b064` |
 | `three-0.160.0/addons/geometries/RoundedBoxGeometry.js` | `package/examples/jsm/geometries/RoundedBoxGeometry.js` | `d20aeaf7077c459a8d952d215738d7b44fba028440bb862d84b622a34f0c80bb` |
+| `three-0.160.0/addons/loaders/GLTFLoader.js` | `package/examples/jsm/loaders/GLTFLoader.js` | `d073b438e6a07e1359741dd5d6c76c953420cc0d4fd84eb1bdde94315540e6a3` |
+| `three-0.160.0/addons/utils/BufferGeometryUtils.js` | `package/examples/jsm/utils/BufferGeometryUtils.js` | `9be041e96308775d00e2695cc607645b9a9b64fd7c0e759dd8f7c00a8d92becb` |
+| `three-0.160.0/addons/utils/SkeletonUtils.js` | `package/examples/jsm/utils/SkeletonUtils.js` | `83748c5072a5ce96e9d68d8efda908a1f1a06c0b5fd2618edc3e54a361a8fd5b` |
 | `three-0.160.0/LICENSE` | `package/LICENSE` | `852e0e8699169bf9f6fdc6bda3e682d078dcbc738b5d33e74df594721bff271d` |
 
-The import map in `index.html` points `three` and `three/addons/` here. The two addons import only `three`.
+The import map in `index.html` points `three` and `three/addons/` here. The addons import only `three`, except
+GLTFLoader, which also imports `../utils/BufferGeometryUtils.js` (vendored beside it). GLTFLoader and SkeletonUtils
+(fetched 2026-10-21 from the same tarball, its sha256 checked again) read the skill spirits' .glb models
+(viz/spirits.py); the page hands GLTFLoader the bytes (`parse`), never a URL.
 
 ## Mermaid 11.17.2 (MIT)
 

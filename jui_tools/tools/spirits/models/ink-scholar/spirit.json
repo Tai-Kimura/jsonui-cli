@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "name": {"ja": "墨の書生", "en": "Ink Scholar"},
+  "weight": 1,
+  "spirit": {
+    "file": "spirit.glb", "at": "back", "scale": 0.8, "opacity": 0.55, "tint": "#7fe0c8",
+    "clips": {"appear": "appear", "loop": "loop", "leave": "leave"},
+    "material": {"kind": "ghost", "rim": "#bff5e6", "shade": "#1c2430", "rimK": 1.4, "pow": 2.2, "yFade": 0.4, "yFadeLen": 1.2},
+    "outline": {"color": "#0b1016", "width": 0.02}
+  },
+  "parts": [
+    {"file": "robot-glasses.glb", "at": "head"},
+    {"file": "prop-scroll.glb", "at": "handL"}
+  ],
+  "robot": {"eyes": {"shape": "narrow", "color": "#7fe0c8"}, "pose": "book", "tag": "auto"},
+  "effects": {"sparks": {"color": "#10161e", "rate": 3, "rise": 0.4}},
+  "bubble": {"text": {"ja": "筆を執る", "en": "Taking up the brush"}, "ruby": {"ja": "レビュー", "en": "review"}, "target": "spirit", "font": "mincho", "showSec": 4}
+}
