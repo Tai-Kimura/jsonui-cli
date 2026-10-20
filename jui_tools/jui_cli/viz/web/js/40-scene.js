@@ -1924,7 +1924,7 @@ function liveRooms() {
   const solo = liveSolo();
   return Object.entries(LIVE3D.rooms).filter(([id]) => !solo || id === solo).map(([, R]) => R);
 }
-// What a press in the live office can pick, nearest first by the ray (liveHit; __dbg.under reads the same list).
+// What a press in the live office can pick, nearest first by the ray (liveHit; the e2e hook reads the same list).
 function liveTargets() {
   const solo = liveSolo();
   return [...liveRooms().flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.filter((R) => R.robot.root.visible).map((R) => R.robot.root),
