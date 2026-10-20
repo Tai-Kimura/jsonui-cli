@@ -2849,11 +2849,12 @@ function placeTag(el, p) {
    robot showing じゃんけん lifts its tag clear of the hand. Cost per frame: TAGS.stats (the e2e reads it). */
 const TAGS = { gap: 3, ease: 0.35, measureMs: 500, maxPasses: 12, rpsLift: 0.55, stats: { n: 0, sumMs: 0, maxMs: 0, frames: 0 } };
 const tagNdc = new THREE.Vector3();
-/* A tag over a thing to press (2.3.10, ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room, cd's
-   ruling 10-20 on the requester's 2.3.9 choice that the bell and the rack are pressed even behind a robot's desk):
-   while a robot's tag (or its bill) crosses the call bell, the data server's rack or the server room's door on the
-   page, it lets the press through to the canvas (liveFirstHit then takes the thing) and is drawn faint, its name
-   still readable (.over-fixture, app.css). A tag over nothing to press selects its robot as before (2.3.7). */
+/* A tag over a thing to press (2.3.10, ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room, the
+   ruling of 10-20, after the requester's 2.3.9 choice that the bell and the rack are pressed even behind a robot's
+   desk): while a robot's tag (or its bill) crosses the call bell, the data server's rack or the server room's door on
+   the page, it lets the press through to the canvas (liveFirstHit then takes the thing) and is drawn faint, its name
+   still readable (.over-fixture, app.css). The wait's bubble (53-waits.js) goes by its own box the same way. A tag
+   over nothing to press selects its robot as before (2.3.7). */
 const tagFixBox = new THREE.Box3(), tagFixV = new THREE.Vector3();
 function tagFixtureRects(W, H) {
   const objs = [];
@@ -2940,6 +2941,12 @@ function placeRobotTags(dt = 1 / 60) {
       const above = it.R.tagSize.h + (it.bill ? it.R.billSize.h + BILL.gap + BILL.rise : 0) + BILL.gap;
       it.wait.style.visibility = 'visible';
       it.wait.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy - above).toFixed(1)}px) translate(-50%, -100%)`;
+      // the bubble by its own box (tagFixtureRects): over a thing to press, it lets the press through and is faint as
+      // the tag is; over nothing to press it stays as it is, though the tag under it be faint (a wait is not dimmed
+      // for a thing it does not cover)
+      const ww = it.R.waitSize.w, wy1 = it.y - it.R.tagDy - above, wy0 = wy1 - it.R.waitSize.h;
+      const wover = fix.some((f) => it.x - ww / 2 < f[1] && f[0] < it.x + ww / 2 && wy0 < f[3] && f[2] < wy1);
+      if (it.wait.classList.contains('over-fixture') !== wover) it.wait.classList.toggle('over-fixture', wover);
     } else if (it.R.waitEl) it.R.waitEl.style.visibility = 'hidden';
   }
   const ms = performance.now() - t0, S0 = TAGS.stats;

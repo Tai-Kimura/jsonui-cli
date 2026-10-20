@@ -162,6 +162,11 @@ window.__dbg = {
   // desk spots (the floor room's coordinates, 0.1 apart) whose robot's tag would hold the page point pt in the room up
   // close: the robot at seatPos, its tag at + TAG_UP projected as placeRobotTags puts it, a tag's size as one drawn now
   // (the e2e pins one, so a tag covers the call bell in every run: ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room)
+  // the things to press as tagFixtureRects sees them now, in page coordinates ([x0, x1, y0, y1] each), and which of a
+  // robot's tag, bill and wait bubble are let through over one (.over-fixture)
+  fixRects: () => { const r = canvas.getBoundingClientRect(); return tagFixtureRects(canvas.clientWidth, canvas.clientHeight).map(([x0, x1, y0, y1]) => [x0 + r.left, x1 + r.left, y0 + r.top, y1 + r.top]); },
+  overFixture: (label) => { const R = robots.find((x) => x.def.id === label); if (!R) return null; const box = (e) => { if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return [b.left, b.right, b.top, b.bottom]; };
+    return { tag: R.tag.classList.contains('over-fixture'), bill: !!(R.bill && R.bill.classList.contains('over-fixture')), wait: !!(R.waitEl && R.waitEl.classList.contains('over-fixture')), waitBox: box(R.waitEl), tagBox: box(R.tag), realId: R.def.realId || null }; },
   tagPinsOver: (pt) => {
     if (SOURCE.mode !== 'live') return null;   // the seats are the live source's (30-source-live.js)
     const room = PROJECT[liveSolo()], t = robots.find((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden);

@@ -50,8 +50,8 @@ FIND = """([p, kind]) => { const PICK = (u) => { u = u || []; const fx = ['bell'
     const e = document.elementFromPoint(q[0], q[1]);
     if (e === document.querySelector('canvas') && PICK(window.__dbg.under(q)) === kind) return q; }
   return null; }"""
-# A robot's tag over a thing to press (ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room; cd's ruling
-# 10-20: the press goes through to the thing): the points inside a visible tag where the 3D's nearest is `kind`. The
+# A robot's tag over a thing to press (ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room; the ruling
+# of 10-20: the press goes through to the thing): the points inside a visible tag where the 3D's nearest is `kind`. The
 # robots' desks are pinned (TAG_PINS, the page's desk memory) so a tag stands over the bell in every run.
 COVER = """(kind) => { const PICK = (u) => { u = u || []; const fx = ['bell', 'rack', 'door']; return u[0] && u[0].startsWith('robot:') ? (u.find((k) => fx.includes(k)) || u[0]) : u[0]; }; const out = [];
   for (const t of window.__dbg.tags()) for (let x = Math.ceil(t.x0) + 2; x < t.x1 - 2; x += 3) for (let y = Math.ceil(t.y0) + 2; y < t.y1 - 2; y += 3) {
@@ -264,6 +264,27 @@ async def run_crowded_props(pw, out, failures):
             await page.keyboard.press("Escape")
             await wait(page, "() => document.getElementById('call').hidden && !window.__dbg.view().card", label="closed after the tag over the bell")
             await until(page, "() => !window.__dbg.view().tween && !window.__dbg.view().zoomed", "the camera back after the tag over the bell", timeout=20000)
+        # the wait's bubble over that tag (a permission prompt): by its own box (40-scene.js placeRobotTags) — faint and let
+        # through only when it crosses a thing to press itself; the tag under it stays let through
+        if covers["bell"]:
+            lab = covers["bell"][0]["id"]
+            rid = (await page.evaluate("(l) => window.__dbg.overFixture(l)", lab))["realId"]
+            hook(rid, hook_event_name="Notification", notification_type="permission_prompt", message="permission")
+            await wait(page, "(l) => { const o = window.__dbg.overFixture(l); return o && o.waitBox; }", label="the wait's bubble over the tag", arg=lab)
+            await settled(page, "the bubble placed", timeout=30000)
+            o = res["bubble"] = await page.evaluate("(l) => window.__dbg.overFixture(l)", lab)
+            fx = res["fixRects"] = await page.evaluate("() => window.__dbg.fixRects()")
+            wb = o["waitBox"]
+            crosses = any(wb[0] < f[1] and f[0] < wb[1] and wb[2] < f[3] and f[2] < wb[3] for f in fx)
+            centre = [round((wb[0] + wb[1]) / 2), round((wb[2] + wb[3]) / 2)]
+            top = res["bubbleTop"] = await page.evaluate("(p) => { const e = document.elementFromPoint(p[0], p[1]); return e ? e.className : null; }", centre)
+            res["bubbleCrosses"] = crosses
+            check(failures, o["tag"], f"the tag under the bubble is still let through over the bell: {o}")
+            check(failures, o["wait"] == crosses, f"the bubble is let through exactly when its own box crosses a thing to press: crosses {crosses}, class {o['wait']}, {wb} {fx}")
+            check(failures, ("wait-bubble" in (top or "")) != crosses, f"the bubble takes a press at its centre only when it crosses nothing: top {top!r}, crosses {crosses}")
+            hook(rid, hook_event_name="UserPromptSubmit", prompt="next")
+            hook(rid, hook_event_name="Stop")
+            await wait(page, "(l) => { const o = window.__dbg.overFixture(l); return o && !o.waitBox; }", label="the bubble gone", arg=lab)
         over = {x["id"] for k in covers for x in covers[k]}
         free = await page.evaluate("""(over) => window.__dbg.tags().filter((t) => !over.includes(t.id)).map((t) => {
             const q = [Math.round((t.x0 + t.x1) / 2), Math.round((t.y0 + t.y1) / 2)], e = document.elementFromPoint(q[0], q[1]);
