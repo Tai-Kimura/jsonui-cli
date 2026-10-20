@@ -785,7 +785,7 @@ function transitionKind(type, dest) {
 }
 const transitionTag = (dest, type) => {
   const [key, label] = transitionKind(type, dest);
-  return `<span class="scr tk tk-${esc(key)}" data-tk="${esc(key)}" title="${esc(dest)}"><span class="tk-k">${esc(label.split('（')[0])}</span>${esc(SCREEN_JA[dest] || dest)}</span>`;
+  return `<span class="scr tk tk-${esc(key)}" data-tk="${esc(key)}" title="${esc(dest)}"><span class="tk-k">${esc(label.split('（')[0])}</span><span class="tk-d">${esc(SCREEN_JA[dest] || dest)}</span></span>`;
 };
 const TYPE_KINDS = [   // [key, label, sample, test] — Optional first: String? is an Optional
   ['optional', 'Optional（T?）', 'String?', (t) => /\?\s*$/.test(t)],

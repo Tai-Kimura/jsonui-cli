@@ -556,11 +556,14 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .wb-legend b { font-family: var(--font-mono); }
 .lg-writing { color: var(--wb-violet); }
 .lg-empty { padding: 0 6px; border: 1px dashed var(--wb-faint); border-radius: 4px; }
-.wb-sheet { position: relative; display: grid; flex: 1 1 auto; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 12px; min-height: 0; overflow: auto; padding: 14px 16px 28px; }
+.wb-sheet { position: relative; display: grid; flex: 1 1 auto; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 12px; min-height: 0; overflow: auto; padding: 14px 16px 28px; }
 .wb-sheet:focus-visible { outline-offset: -3px; }
 
 .sc { display: grid; align-content: start; gap: 10px; min-width: 0; padding: 12px 14px 14px; border: 1.5px solid var(--wb-line); border-radius: 12px; background: var(--wb-card); }
 .sc.wide { grid-column: 1 / -1; }
+/* every section one under another at the sheet's full width (requester 10-20: 「遷移と横並びじゃなくて縦並びで」), its text
+   wrapping inside its frame — a long word too — so nothing pushes the sheet sideways (ticket 2026-10-20-jui-viz-spec-sheet-overflows-sideways) */
+.sc { overflow-wrap: anywhere; }
 .sc header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .sc h3 { margin: 0; color: var(--wb-ink); font: 700 15px/1.3 var(--font-body); }
 .sc header code { color: var(--wb-faint); font: 500 11px/1.5 var(--font-mono); }
@@ -1220,8 +1223,10 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
     --tk-other-fg: #e4ecf8; --tk-other-bg: #15243a;
   --ty-string: #ff9a8f; --ty-bool: #d7b4ff; --ty-number: #7ce8bd; --ty-color: #ffbc85; --ty-array: #9ccbff; --ty-optional: #f2d27e; --ty-custom: #c6d1de;
 }
-.scr.tk { border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-weight: 600; }
-.tk .tk-k { margin-right: 6px; padding-right: 6px; border-right: 1px solid color-mix(in srgb, currentColor 35%, transparent); font: 700 10.5px/1.5 var(--font-body); }
+/* the kind label one unbroken chunk, the destination wrapping inside the tag, the tag no wider than its row (ticket 2026-10-20-jui-viz-spec-sheet-overflows-sideways) */
+.scr.tk { display: inline-flex; align-items: baseline; max-width: 100%; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-weight: 600; white-space: normal; vertical-align: baseline; }
+.tk .tk-d { min-width: 0; overflow-wrap: anywhere; }
+.tk .tk-k { flex: none; white-space: nowrap; margin-right: 6px; padding-right: 6px; border-right: 1px solid color-mix(in srgb, currentColor 35%, transparent); font: 700 10.5px/1.5 var(--font-body); }
 .scr.tk-push { color: var(--tk-push-fg); background: var(--tk-push-bg); }
 .scr.tk-modal { color: var(--tk-modal-fg); background: var(--tk-modal-bg); }
 .scr.tk-back { color: var(--tk-back-fg); background: var(--tk-back-bg); }
