@@ -112,6 +112,38 @@ async def run_usage(pw, out, failures):
               f"{tag}: a stale note keeps every chip at {h}px: {[(c['name'], c['h']) for c in stale]}")
         check(failures, all(abs(c["mid"] - c["textMid"]) <= 2 for c in stale),
               f"{tag}: each chip's text sits in its middle: {[(c['name'], c['mid'], c['textMid']) for c in stale]}")
+    async def buttons_right(page, tag: str, wrap: bool = False) -> None:
+        """通知 and パネルを閉じる stay at the header's right edge, on the first line or wrapped to the next, and nothing
+        sticks out sideways (requester 10-20, ticket 2026-10-20-jui-viz-header-buttons-right-aligned). With wrap, the
+        widest width (from 1400 down, 20 px a step) at which the buttons leave the first line is found first."""
+        js = """() => {
+          const bar = document.querySelector('.topbar'), b = bar.getBoundingClientRect(), cs = getComputedStyle(bar);
+          const right = b.right - parseFloat(cs.paddingRight), brand = document.querySelector('.brand').getBoundingClientRect();
+          const box = (id) => { const e = document.getElementById(id); if (!e || e.offsetParent === null) return null;
+            const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+          const side = box('btn-side'), bell = box('btn-notify');
+          return { w: innerWidth, right, side, bell, wrapped: !!side && side.top >= brand.bottom - 0.5,
+                   scrollW: document.documentElement.scrollWidth, innerW: innerWidth };
+        }"""
+        if wrap:
+            vp = page.viewport_size
+            for w in range(1400, 680, -20):
+                await page.set_viewport_size({"width": w, "height": vp["height"]})
+                await page.wait_for_timeout(120)
+                if (await page.evaluate(js))["wrapped"]:
+                    break
+        await page.wait_for_timeout(300)
+        g = res[f"buttons-{tag}"] = await page.evaluate(js)
+        await page.screenshot(path=str(out / f"header-buttons-{tag}.png"), clip={"x": 0, "y": 0, "width": g["w"], "height": 140})
+        if wrap:
+            check(failures, g["wrapped"], f"{tag}: the buttons wrapped to a line of their own at {g['w']} px (else this arm proves nothing): {g}")
+        side, bell = g["side"], g["bell"]
+        check(failures, side is not None and abs(side["right"] - g["right"]) <= 1,
+              f"{tag}: パネルを閉じる ends at the header's right edge ({g['right']}): {side}")
+        check(failures, bell is None or (bell["right"] <= side["left"] + 0.5 and abs(bell["top"] - side["top"]) <= 2 and side["left"] - bell["right"] <= 12),
+              f"{tag}: 通知 sits just left of パネルを閉じる, on its line: {bell} {side}")
+        check(failures, g["scrollW"] <= g["innerW"], f"{tag}: nothing sticks out sideways: scrollWidth {g['scrollW']} > {g['innerW']}")
+
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     t0 = time.monotonic()
     try:
@@ -191,6 +223,10 @@ async def run_usage(pw, out, failures):
         await page.evaluate("() => window.__dbg.setClock(null)")
         await wait(page, "() => window.__dbg.usage()[0].note === ''", label="fresh again")
         await chips_hold(page, "light", 1440)
+        await buttons_right(page, "wide-light")
+        await buttons_right(page, "wrap-light", wrap=True)
+        await chips_hold(page, "wrap-light", page.viewport_size["width"])
+        await page.set_viewport_size(DESKTOP["viewport"])
         # past a window's reset with no newer value: no share (it is not this window's any more)
         feed(42, 18, five_reset=int(time.time()) + 60)
         await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42%, resets in a minute")
@@ -206,6 +242,10 @@ async def run_usage(pw, out, failures):
         check(failures, dark[0]["num"] == dark[0]["pc"] and 50 < hue(dark[0]["num"]) < 90, f"dark: the same hue rule: {dark}")
         await page.screenshot(path=str(out / "header-dark.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
         await chips_hold(page, "dark", 1440)
+        await buttons_right(page, "wide-dark")
+        await buttons_right(page, "wrap-dark", wrap=True)
+        await chips_hold(page, "wrap-dark", page.viewport_size["width"])
+        await page.set_viewport_size(DESKTOP["viewport"])
         for scheme in ("light", "dark"):                             # and on a phone, where the chips wrap
             phone = await new_page(browser, watch, f"usage-phone-{scheme}", **PHONE)
             await phone.emulate_media(color_scheme=scheme)
@@ -213,6 +253,7 @@ async def run_usage(pw, out, failures):
             await ready(phone)
             await wait(phone, "() => window.__dbg.usage().length === 2", label=f"phone {scheme}: the chips")
             await chips_hold(phone, f"phone-{scheme}", 390)
+            await buttons_right(phone, f"phone-{scheme}")
             await phone.close()
         check(failures, not watch.console and not watch.foreign and not watch.csp, f"no console error, nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
         await page.close()

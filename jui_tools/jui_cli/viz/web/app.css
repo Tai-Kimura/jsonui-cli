@@ -208,7 +208,9 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 /* border 0 (2.3.5): a chip that is a <button> (質問の窓 chip-askwait) kept the browser's 2 px border, stood 4 px taller,
    and the row stretched every other chip to its height with the text left at the top (2.6 px off the middle). */
 .chip.demo { background: var(--warn-bg); color: var(--warn); font-family: var(--font-body); font-weight: 700; }
-.controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+/* margin-left auto + flex-end (2.3.7, requester 10-20): when the chips fill the line, the buttons wrap to the next one and
+   used to fall to its left edge; now they keep to the right, there and when they wrap among themselves on a phone. */
 .controls button { padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); cursor: pointer; }
 
 .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); min-height: 0; }
