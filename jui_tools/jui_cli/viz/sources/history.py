@@ -332,6 +332,9 @@ def items_of(rec, results: dict, off: int | None = None) -> list[dict]:
                 sent_n += len(files)                          # n counts every call's files in the record, in order
                 if isinstance(inp.get("caption"), str) and inp["caption"].strip():
                     item["caption"] = _cut(inp["caption"], 600)[0]
+            if item["name"] in FILE_TOOLS and isinstance(inp.get(FILE_TOOLS[item["name"]]), str) and inp[FILE_TOOLS[item["name"]]]:
+                # the file it names, by its name and the call's line (2.3.12): the page asks Finder for it by (off, id), never by path
+                item["file"] = {"name": os.path.basename(inp[FILE_TOOLS[item["name"]]])[:200] or "?", "off": off}
             if item["name"] == "SendMessage" and isinstance(inp.get("to"), str):
                 # the folded row says who it went to and what about (2.3.6): input.summary, else the message's first line
                 first = next((ln.strip() for ln in str(inp.get("message") or "").splitlines() if ln.strip()), "")
@@ -408,7 +411,11 @@ def _sent_path(fd: int, off, n) -> tuple[int, str]:
             files += [f for f in inp.get("files") or [] if isinstance(f, str)][:SENT_FILES_MAX]   # every call's, in order (items_of counts so)
     if n >= len(files):
         return 404, "no such file"
-    path = files[n]
+    return _resolve(files[n], rec)
+
+
+def _resolve(path: str, rec: dict) -> tuple[int, str]:
+    """A path a record names, as it is read or shown: none with a ".." part, a relative one from the record's cwd."""
     if ".." in Path(path).parts:
         return 403, "not this path"
     if not os.path.isabs(path):
@@ -419,13 +426,12 @@ def _sent_path(fd: int, off, n) -> tuple[int, str]:
     return 200, path
 
 
-def sent_reveal_at(fd: int, off, n) -> tuple[int, str]:
-    """The path of the n-th file a SendUserFile call sent, to show in Finder (2.3.12, requester 10-21: 「画像以外はファイル
-    名出してリンクっぽくして、押したらfinderでそのファイル選択してウィンドウ開く」): the same path as sent_file_at reads,
-    any kind of file, a regular file only and not a symlink last (lstat). (200, path), (404, "gone"), or (status, reason)."""
-    status, path = _sent_path(fd, off, n)
-    if status != 200:
-        return status, path
+# the tools whose input names one file, and the key it is under (2.3.12: the row shows it as a link to Finder)
+FILE_TOOLS = {"Read": "file_path", "Edit": "file_path", "Write": "file_path", "NotebookEdit": "notebook_path"}
+
+
+def _shown(path: str) -> tuple[int, str]:
+    """A resolved path to show in Finder: a regular file, not a symlink last (lstat)."""
     try:
         st = os.lstat(path)
     except FileNotFoundError:
@@ -435,6 +441,36 @@ def sent_reveal_at(fd: int, off, n) -> tuple[int, str]:
     if not stat.S_ISREG(st.st_mode):
         return 403, "not a file to show"           # a symlink, a folder, a device
     return 200, path
+
+
+def tool_file_reveal_at(fd: int, off, use_id) -> tuple[int, str]:
+    """The file a Read / Edit / Write / NotebookEdit call names (FILE_TOOLS), to show in Finder (2.3.12, the requester's
+    「画像以外はファイル名出してリンクっぽく」 and the ruling of 10-21: the files the history shows): the tool_use with this
+    id in the assistant record at byte off, its input's path, resolved as a sent file's is. (200, path), (404, "gone"),
+    or (status, reason)."""
+    if not isinstance(use_id, str) or not use_id:
+        return 404, "no such call"
+    status, rec = _line_at(fd, off, SENT_LINE_MAX)
+    if status is not None:
+        return status, rec
+    msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "assistant" else None
+    for b in msg.get("content") if isinstance(msg, dict) and isinstance(msg.get("content"), list) else []:
+        if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id") == use_id and b.get("name") in FILE_TOOLS:
+            inp = b.get("input") if isinstance(b.get("input"), dict) else {}
+            path = inp.get(FILE_TOOLS[b["name"]])
+            if not isinstance(path, str) or not path:
+                return 404, "no such file"
+            status, path = _resolve(path, rec)
+            return (status, path) if status != 200 else _shown(path)
+    return 404, "no such call"
+
+
+def sent_reveal_at(fd: int, off, n) -> tuple[int, str]:
+    """The path of the n-th file a SendUserFile call sent, to show in Finder (2.3.12, requester 10-21: 「画像以外はファイル
+    名出してリンクっぽくして、押したらfinderでそのファイル選択してウィンドウ開く」): the same path as sent_file_at reads,
+    any kind of file, a regular file only and not a symlink last (lstat). (200, path), (404, "gone"), or (status, reason)."""
+    status, path = _sent_path(fd, off, n)
+    return (status, path) if status != 200 else _shown(path)
 
 
 def sent_file_at(fd: int, off, n) -> tuple[int, object]:
@@ -680,7 +716,21 @@ def reader(projects: Path) -> Callable[..., dict | None]:
                 os.close(fd)
         return 404, "no transcript"
 
+    def tool_reveal(session_id: str, cwd: str | None, given: str | None, agent_id: str | None, agent_given: str | None,
+                    off, use_id) -> tuple[int, str]:
+        """The file a file tool's call of the same transcript names, to show in Finder (tool_file_reveal_at)."""
+        for path in paths(session_id, cwd, given, agent_id, agent_given):
+            fd = safe_open(projects, path)
+            if fd is None:
+                continue
+            try:
+                return tool_file_reveal_at(fd, off, use_id)
+            finally:
+                os.close(fd)
+        return 404, "no transcript"
+
     read.image = image
     read.sent_file = sent_file
     read.sent_reveal = sent_reveal
+    read.tool_reveal = tool_reveal
     return read

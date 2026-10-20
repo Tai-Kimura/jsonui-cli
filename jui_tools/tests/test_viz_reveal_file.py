@@ -141,3 +141,60 @@ def test_not_on_macos_nothing_is_run(tmp_path, opened, monkeypatch):
     monkeypatch.setattr(srv.sys, "platform", "linux")
     got = _serve(world, lambda own: [("POST", _ok_headers(own), json.dumps({"sent": {"agentId": SID, "off": s[1], "n": 1}}))])
     assert got[0][0] == 501 and opened() == []
+
+
+def _tool(name, inp, use_id, ts="2026-10-20T09:20:00Z", cwd=CWD):
+    return {"type": "assistant", "timestamp": ts, "cwd": cwd, "message": {"id": f"m-{use_id}", "role": "assistant", "content": [
+        {"type": "tool_use", "id": use_id, "name": name, "input": inp}]}}
+
+
+def test_a_file_tools_path_is_named_by_its_call_and_shown_by_the_rule_of_a_sent_file(tmp_path):
+    """Read / Edit / Write / NotebookEdit (the ruling of 10-21): the row carries the file's name and the call's line, never the
+    path; the server takes the path from that call's input by its id, resolved as a sent file's (.., relative from cwd,
+    a symlink or a folder refused); any other tool, or an id that is not there, is nothing."""
+    d = _files(tmp_path)
+    recs = [_tool("Read", {"file_path": str(d / "notes.md")}, "r1"), _tool("Edit", {"file_path": str(d / "secret.txt"), "old_string": "a", "new_string": "b"}, "e1"),
+            _tool("Write", {"file_path": "sent/notes.md", "content": "x"}, "w1", cwd=str(tmp_path)),
+            _tool("NotebookEdit", {"notebook_path": str(d / "gone.ipynb"), "new_source": ""}, "n1"),
+            _tool("Read", {"file_path": str(d / "link.png")}, "r2"), _tool("Read", {"file_path": f"{d}/../sent/notes.md"}, "r3"),
+            _tool("Bash", {"command": f"cat {d / 'secret.txt'}"}, "b1")]
+    p = _write(tmp_path / "t.jsonl", recs)
+    starts = [0]
+    for line in p.read_bytes().split(b"\n")[:-1]:
+        starts.append(starts[-1] + len(line) + 1)
+    items = []
+    for off, line in zip(starts, p.read_bytes().split(b"\n")[:-1]):
+        items += H.items_of(json.loads(line), {}, off)
+    tools = [i for i in items if i["kind"] == "tool"]
+    assert [t.get("file") for t in tools] == [{"name": "notes.md", "off": starts[0]}, {"name": "secret.txt", "off": starts[1]}, {"name": "notes.md", "off": starts[2]},
+                                               {"name": "gone.ipynb", "off": starts[3]}, {"name": "link.png", "off": starts[4]}, {"name": "notes.md", "off": starts[5]}, None]
+    assert str(d) not in json.dumps([t["file"] for t in tools if t.get("file")])
+    fd = os.open(p, os.O_RDONLY)
+    try:
+        assert H.tool_file_reveal_at(fd, starts[0], "r1") == (200, str(d / "notes.md"))
+        assert H.tool_file_reveal_at(fd, starts[1], "e1") == (200, str(d / "secret.txt"))
+        assert H.tool_file_reveal_at(fd, starts[2], "w1") == (200, os.path.join(str(tmp_path), "sent/notes.md"))
+        assert H.tool_file_reveal_at(fd, starts[3], "n1") == (404, "gone")
+        assert H.tool_file_reveal_at(fd, starts[4], "r2")[0] == 403     # a symlink last
+        assert H.tool_file_reveal_at(fd, starts[5], "r3")[0] == 403     # a ".." part
+        assert H.tool_file_reveal_at(fd, starts[6], "b1")[0] == 404     # a Bash call names no file
+        assert H.tool_file_reveal_at(fd, starts[0], "e1")[0] == 404     # another call's id on this line
+        assert H.tool_file_reveal_at(fd, starts[0] + 2, "r1")[0] == 404  # not the start of a line
+    finally:
+        os.close(fd)
+
+
+def test_the_route_shows_a_file_tools_file_by_the_call_and_never_a_path(tmp_path, opened):
+    d = _files(tmp_path)
+    recs = [_tool("Read", {"file_path": str(d / "notes.md")}, "r1"), _tool("Read", {"file_path": str(d / "gone.md")}, "r2")]
+    p = _write(tmp_path / ".claude" / "projects" / "-work-sent-app" / f"{SID}.jsonl", recs)
+    world = World(VizState())
+    world.history_reader = H.reader(tmp_path / ".claude" / "projects")
+    world.apply_hook({"hook_event_name": "SessionStart", "session_id": SID, "cwd": CWD, "transcript_path": str(p)}, 1)
+    second = len(p.read_bytes().split(b"\n")[0]) + 1
+    tool = lambda off, i, **kw: json.dumps({"tool": {"agentId": SID, "off": off, "id": i, **kw}})   # noqa: E731
+    got = _serve(world, lambda own: [("POST", _ok_headers(own), tool(0, "r1")), ("POST", _ok_headers(own), tool(second, "r2")),
+                                     ("POST", _ok_headers(own), tool(0, "r1", path=str(d / "secret.txt"))), ("POST", _ok_headers(own), tool(0, "nope"))])
+    assert [g[0] for g in got] == [200, 200, 200, 404], [g[0] for g in got]
+    assert json.loads(got[0][1]) == {"ok": True} and json.loads(got[1][1]) == {"gone": True}
+    assert opened() == [["-R", str(d / "notes.md")], ["-R", str(d / "notes.md")]]   # the extra path key is not read

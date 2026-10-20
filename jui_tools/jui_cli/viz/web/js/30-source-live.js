@@ -231,13 +231,14 @@ const SOURCE = {
       return { ok: true, blob: await res.blob() };
     } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
   },
-  /* A file of the history shown in Finder (POST /api/reveal-file, 2.3.12): { sent: { off, n } } of the robot's
-     transcript or { attach: { sessionId, id, ext } } — never a path; under the prompt's checks. { ok }, { gone: true }
+  /* A file of the history shown in Finder (POST /api/reveal-file, 2.3.12): { sent: { off, n } } or { tool: { off, id } }
+     of the robot's transcript, or { attach: { sessionId, id, ext } } — never a path; under the prompt's checks. { ok }, { gone: true }
      when the file is no longer there, or { ok: false, status, error }. */
   async revealFile(label, ref) {
     try {
+      const agentId = (DEF[label] && DEF[label].realId) || label;
       const body = ref.attach ? { attach: { sessionId: ref.attach.sessionId, id: ref.attach.id, ext: ref.attach.ext } }
-        : { sent: { agentId: (DEF[label] && DEF[label].realId) || label, off: ref.sent.off, n: ref.sent.n } };
+        : ref.tool ? { tool: { agentId, off: ref.tool.off, id: ref.tool.id } } : { sent: { agentId, off: ref.sent.off, n: ref.sent.n } };
       const res = await fetch('/api/reveal-file', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: JSON.stringify(body),

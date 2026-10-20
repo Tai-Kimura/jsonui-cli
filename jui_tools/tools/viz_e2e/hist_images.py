@@ -193,6 +193,31 @@ async def run_hist_images(pw, out, failures):
         await page.click("[data-rb-hist] .h-sent .h-filelink >> text=gone.md")
         await wait(page, "() => [...document.querySelectorAll('[data-rb-hist] .h-sent .h-filelink')].some((b) => b.disabled && b.textContent === '📎 gone.md（もう無い）')", label="gone.md says it is gone")
         check(failures, (reveal_log.read_text().splitlines() if reveal_log.exists() else []) == shown, "a file that is gone shows nothing in Finder")
+        # ---- the file a Read / Edit / Write / NotebookEdit names (the ruling of 10-21): its name a link in the row's head, there with
+        # the row closed; the server takes the path from that call (by its line and id), never from the page
+        with open(st.paths[A], "a") as f:
+            f.write(json.dumps({"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {
+                "id": "m-write", "role": "assistant", "content": [{"type": "tool_use", "id": "tu-write", "name": "Write",
+                                                                 "input": {"file_path": str(sent_dir / "notes.md"), "content": "# notes"}}]}}) + "\n")
+        HEADFILE = """(name) => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === name);
+          const b = d && d.querySelector('summary .h-head-file'); return b ? { open: d.open, text: b.textContent, disabled: b.disabled } : null; }"""
+        await wait(page, f"() => !!({HEADFILE})('Write')", timeout=20000, label="the Write row's file link")
+        await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].forEach((d) => { if (/^(Read|Write)$/.test(d.querySelector('summary .h-tname').textContent)) d.open = false; })")
+        rl = res["readHeadFile"] = await page.evaluate(HEADFILE, "Read")
+        check(failures, rl == {"open": False, "text": "📎 shot.png", "disabled": False}, f"the closed Read row's head names its file as a link: {rl}")
+        await page.click("[data-rb-hist] .h-tool summary .h-head-file >> text=shot.png")
+        await wait(page, f"() => {{ const r = ({HEADFILE})('Read'); return r && r.disabled; }}", label="shot.png is gone")
+        rl2 = res["readHeadFileGone"] = await page.evaluate(HEADFILE, "Read")
+        check(failures, rl2 == {"open": False, "text": "📎 shot.png（もう無い）", "disabled": True}, f"a press on it: gone, the row stays closed: {rl2}")
+        await page.click("[data-rb-hist] .h-tool summary .h-head-file >> text=notes.md")
+        for _ in range(50):
+            if reveal_log.exists() and len(reveal_log.read_text().splitlines()) > len(shown):
+                break
+            await page.wait_for_timeout(100)
+        shown2 = res["revealedWrite"] = reveal_log.read_text().splitlines() if reveal_log.exists() else []
+        wl = await page.evaluate(HEADFILE, "Write")
+        check(failures, shown2 == shown + [str(sent_dir / "notes.md")] and wl and not wl["open"],
+              f"a press on the Write row's notes.md shows that file, the row stays closed: {shown2} {wl}")
         await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').scrollIntoView({ block: 'center' })")
         await page.screenshot(path=str(out / "closed-row-mark.png"))
         await page.close()

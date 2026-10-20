@@ -970,6 +970,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-filelink { padding: 0; border: 0; background: none; color: var(--info); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; text-align: left; }
 .h-filelink:hover { color: var(--ink); }
 .h-filelink:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.h-tool summary > .h-head-file { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h-filelink.h-file-gone { color: var(--ink-soft); text-decoration: line-through; cursor: default; }
 .h-imgmark { flex: none; padding: 0 6px; border: 1px solid var(--info); border-radius: 3px; color: var(--info); font-size: 11px; line-height: 1.5; white-space: nowrap; }
 .h-io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 0 8px 8px; }

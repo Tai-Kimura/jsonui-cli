@@ -745,8 +745,9 @@ def make_app(ctx: ServerContext) -> web.Application:
         """A file of the 応答の履歴 shown in Finder, selected in its folder's window (2.3.12, requester 10-21: 「画像以外は
         ファイル名出してリンクっぽくして、押したらfinderでそのファイル選択してウィンドウ開く」; ticket 2026-10-21-jui-viz-hist-
         tool-row-shows-no-image-when-closed). {"sent": {"agentId", "off", "n"}} — a file a SendUserFile call sent, the
-        path that call holds (sources/history.sent_reveal_at) — or {"attach": {"sessionId", "id", "ext"}} — a file sent
-        from this page (attachments.reveal_path); never a path. The checks of /api/prompt. `open -R <path>` (no shell,
+        path that call holds (sources/history.sent_reveal_at) —, {"tool": {"agentId", "off", "id"}} — the file a Read /
+        Edit / Write / NotebookEdit call names (sources/history.tool_file_reveal_at) — or {"attach": {"sessionId", "id",
+        "ext"}} — a file sent from this page (attachments.reveal_path); never a path. The checks of /api/prompt. `open -R <path>` (no shell,
         an absolute path). A file no longer there is {"gone": true} with 200; not on macOS, 501."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
@@ -764,6 +765,12 @@ def make_app(ctx: ServerContext) -> web.Application:
             if not isinstance(agent_id, str) or not agent_id or type(off) is not int or type(n) is not int:
                 return web.Response(status=400, text="agentId, off and n are required\n")
             status, path = await loop.run_in_executor(None, ctx.world.history_reveal, agent_id, off, n)
+        elif isinstance(body.get("tool"), dict):
+            tool = body["tool"]
+            agent_id, off, use_id = tool.get("agentId"), tool.get("off"), tool.get("id")
+            if not isinstance(agent_id, str) or not agent_id or type(off) is not int or not isinstance(use_id, str) or not use_id:
+                return web.Response(status=400, text="agentId, off and id are required\n")
+            status, path = await loop.run_in_executor(None, ctx.world.history_tool_reveal, agent_id, off, use_id)
         elif isinstance(att, dict):
             sid, fid, ext = att.get("sessionId"), att.get("id"), att.get("ext")
             if not isinstance(sid, str) or not isinstance(fid, str) or not isinstance(ext, str):

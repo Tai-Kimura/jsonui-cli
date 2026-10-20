@@ -251,6 +251,12 @@ function histItem(item) {
       const to = hNode('span', 'h-to'); to.append('→ ', histPeerName(item.to, item.toSession));
       title.splice(1, 1, to, hNode('span', 'h-head', item.summary || first));
     }
+    // the file a Read / Edit / Write / NotebookEdit names (2.3.12, the ruling of 10-21): its name as a link to Finder, in
+    // the head, so it is there with the row closed; a press on it is the link's own (the row does not toggle)
+    if (item.file && typeof item.file.name === 'string') {
+      const link = histFileLink({ tool: { off: item.file.off, id: item.id } }, item.file.name, 'h-head-file');
+      if (item.description) title.splice(1, 0, link); else title.splice(1, 1, link);   // no description: the name takes the input's first line's place
+    }
     if (item.error) title.push(hNode('span', 'h-err', 'エラー'));
     if (item.out === undefined) title.push(hNode('span', 'h-run', '結果待ち'));
     // Pictures inside, seen with the row closed (2.3.12, requester 10-21: 「閉じてる時でも画像があるってわかるように」,
