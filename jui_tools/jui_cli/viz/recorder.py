@@ -12,7 +12,8 @@ import os
 from pathlib import Path
 from typing import Callable, Iterator
 
-WARNING = "記録を取ります。ツールの入力（ファイルの中身やコマンド）とプロンプトが含まれます。確認が終わったら消してください"
+WARNING = ("recording: it holds the tools' input (files' contents, commands) and the prompts. Delete it once you have "
+           "checked what you needed")
 
 
 class Recorder:

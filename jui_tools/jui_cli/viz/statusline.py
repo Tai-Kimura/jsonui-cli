@@ -41,14 +41,15 @@ def _post(body: bytes) -> None:
 
 
 def own_line(status: dict) -> str:
-    """5h 42% · 週 18% (上限到達 when a window is at 100); the model's name when there are no limits."""
+    """5h 42% · 7d 18% ("limit" when a window is at 100); the model's name when there are no limits. Claude Code's
+    status line is the terminal: English, whatever the page's language."""
     limits = status.get("rate_limits") if isinstance(status.get("rate_limits"), dict) else {}
     parts = []
-    for key, label in (("five_hour", "5h"), ("seven_day", "週")):
+    for key, label in (("five_hour", "5h"), ("seven_day", "7d")):
         w = limits.get(key)
         if isinstance(w, dict) and isinstance(w.get("used_percentage"), (int, float)):
             pct = float(w["used_percentage"])
-            parts.append(f"{label} 上限到達" if pct >= 100 else f"{label} {int(pct)}%")   # floored: 99.5 is not 100
+            parts.append(f"{label} limit" if pct >= 100 else f"{label} {int(pct)}%")   # floored: 99.5 is not 100
     if parts:
         return " · ".join(parts)
     model = status.get("model") if isinstance(status.get("model"), dict) else {}

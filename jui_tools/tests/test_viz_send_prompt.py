@@ -437,10 +437,10 @@ def test_doctor_names_the_sessions_whose_plugin_cannot_receive_and_those_started
     s = viz.sessions()
     assert "1 session(s) reached (4 with the relay / 5 in all)" in check["detail"], check
     assert "1 session(s) with a jui-viz plugin older than 1.2.0" in check["detail"] and s[S_OLD]["label"] in check["detail"]
-    assert f"1 not reached ({s[S_PLAIN]['label']}): 起動に channel の指定が無い" in check["detail"]
-    assert f"1 not reached ({s[S_IDE]['label']}): VS Code 拡張" in check["detail"]
+    assert f"1 not reached ({s[S_PLAIN]['label']}): started naming no channel" in check["detail"]
+    assert f"1 not reached ({s[S_IDE]['label']}): a VS Code extension session" in check["detail"]
     assert "claude --dangerously-load-development-channels plugin:jui-viz@jsonui" in check["detail"]
-    assert "claude --channels plugin:jui-viz@jsonui（警告なし）" in check["detail"]
+    assert "claude --channels plugin:jui-viz@jsonui (no warning)" in check["detail"]
     assert '"allowedChannelPlugins": [{"plugin": "jui-viz", "marketplace": "jsonui"}]' in check["detail"] and "channelsEnabled" in check["detail"]
 
 

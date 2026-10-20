@@ -46,7 +46,7 @@ def test_export_refuses_a_folder_that_is_not_empty(tmp_path, capsys, monkeypatch
     monkeypatch.setenv("HOME", str(tmp_path / "home"))  # a viz command: never the real home
     (tmp_path / "keep.txt").write_text("x")
     assert main(["viz", "export-demo", "--out", str(tmp_path)]) == 1
-    assert "空ではありません" in capsys.readouterr().err
+    assert "is not empty" in capsys.readouterr().err
     assert (tmp_path / "keep.txt").read_text() == "x"
 
 

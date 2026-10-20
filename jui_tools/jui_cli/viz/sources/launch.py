@@ -39,25 +39,27 @@ START_DEV = f"claude {DEV_FLAG} plugin:{PLUGIN}@{MARKETPLACE}"
 START_DEV_SERVER = f"claude {DEV_FLAG} server:{SERVER}"
 START_CHANNELS = f"claude {CHANNELS_FLAG} plugin:{PLUGIN}@{MARKETPLACE}"
 MANAGED_SETTINGS = '{"channelsEnabled": true, "allowedChannelPlugins": [{"plugin": "jui-viz", "marketplace": "jsonui"}]}'
-#: How to start a session that a prompt reaches, in the words doctor and the page use.
-HOW_TO_START = (f"ターミナルで {START_DEV}（起動のたびに確認が出る。jui viz relay install で入れたなら server:{SERVER}）、"
-                f"または managed settings（macOS: /Library/Application Support/ClaudeCode/managed-settings.json）に "
-                f"{MANAGED_SETTINGS} を載せて {START_CHANNELS}（警告なし）。組織のアカウントは channelsEnabled が要る。"
-                "VS Code 拡張とデスクトップアプリでは使えない")
+#: How to start a session that a prompt reaches, as doctor says it (the terminal: English, whatever the page's language;
+#: the page has its own words, 55-history.js).
+HOW_TO_START = (f"in a terminal, {START_DEV} (it asks to confirm at every start; server:{SERVER} if installed with jui viz "
+                f"relay install), or put {MANAGED_SETTINGS} in managed settings (macOS: /Library/Application Support/"
+                f"ClaudeCode/managed-settings.json) and {START_CHANNELS} (no warning). An organisation's account needs "
+                "channelsEnabled. Not in the VS Code extension or the desktop app")
 IDE_ENTRYPOINTS = {"claude-vscode": "vscode", "claude-desktop": "desktop"}
 
 #: Why a session can or cannot take a prompt. ok: the CLI hands the channel's text to it. maybe: named with
 #: --channels, which works only if an organisation put jui-viz on its allowlist.
+#: The words are doctor's (the terminal: English); the page says them in its language (55-history.js LAUNCH_WHY).
 REASONS = {
-    "dev": (True, "ターミナルで開発用 channel の指定つきで起動（届く）"),
-    "channels": (True, "--channels で指定（managed settings の allowedChannelPlugins に jui-viz が載っていれば届く）"),
-    "no-flag": (False, "起動に channel の指定が無い"),
-    "other": (False, "起動の channel の指定に jui-viz が無い"),
-    "form": (False, "起動の指定の形が、この channel のつながり方と合わない"),
-    "server-channels": (False, "server: の指定は --channels では効かない（--dangerously-load-development-channels が要る）"),
-    "vscode": (False, "VS Code 拡張のセッションは起動の指定を足せないので届かない"),
-    "desktop": (False, "デスクトップアプリのセッションは起動の指定を足せないので届かない"),
-    "unreadable": (False, "セッションのプロセスの起動の引数を読めない（届くか確かめられない）"),
+    "dev": (True, "started in a terminal naming the development channel (reached)"),
+    "channels": (True, "named with --channels (reached if managed settings put jui-viz in allowedChannelPlugins)"),
+    "no-flag": (False, "started naming no channel"),
+    "other": (False, "started naming channels, not jui-viz"),
+    "form": (False, "the channel is named in a form that does not match how this channel connects"),
+    "server-channels": (False, "server: does not work with --channels (it needs --dangerously-load-development-channels)"),
+    "vscode": (False, "a VS Code extension session cannot be started naming a channel, so it is not reached"),
+    "desktop": (False, "a desktop app session cannot be started naming a channel, so it is not reached"),
+    "unreadable": (False, "the session's process arguments cannot be read (whether it is reached is unknown)"),
 }
 
 

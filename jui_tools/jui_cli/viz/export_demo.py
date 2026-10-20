@@ -62,7 +62,7 @@ def export(out: Path, language: str = i18n.DEFAULT_LANGUAGE) -> dict:
         raise ExportError(f"--lang must be one of {', '.join(i18n.LANGUAGES)}")
     out = Path(out)
     if out.exists() and any(out.iterdir()):
-        raise ExportError(f"{out} が空ではありません（空のフォルダか、無いパスを指定してください）")
+        raise ExportError(f"{out} is not empty (name an empty folder or a path that does not exist)")
     out.mkdir(parents=True, exist_ok=True)
     html = page_html(language)
     app = bundle.build("demo", e2e=False)
@@ -71,11 +71,11 @@ def export(out: Path, language: str = i18n.DEFAULT_LANGUAGE) -> dict:
         leaked = [m for m in LIVE_ONLY if m in text]
         if leaked:
             shutil.rmtree(out)
-            raise ExportError(f"{name} に live の部品が残っています: {', '.join(leaked)}")
+            raise ExportError(f"{name} still holds live parts: {', '.join(leaked)}")
         absolute = re.findall(r'(?:src|href)="/(?!/)|url\("/', text)
         if absolute:
             shutil.rmtree(out)
-            raise ExportError(f"{name} に絶対パスが残っています（{len(absolute)} か所）")
+            raise ExportError(f"{name} still holds absolute paths ({len(absolute)})")
         (out / name).write_text(text, encoding="utf-8")
     files = 3 + _copy_tree(_web() / "vendor", out / "vendor") + _copy_tree(_web() / "fonts", out / "fonts")
     size = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())

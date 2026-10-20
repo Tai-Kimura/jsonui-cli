@@ -347,7 +347,7 @@ def apply_op(path: Path, op: str, model: str, row=None, default: dict | None = N
         del models[model]
         msg = f"{model}: back to the shipped price" if shipped else f"{model}: removed"
     data.setdefault("about", "jui viz: your own prices (USD per million tokens). They override and add to the shipped "
-                             "table; null takes a model out. `jui viz prices` or the page's 単価 sheet edit it.")
+                             "table; null takes a model out. `jui viz prices` or the page's price sheet edit it.")
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".prices.{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)

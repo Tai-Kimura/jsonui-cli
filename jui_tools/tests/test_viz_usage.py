@@ -88,9 +88,9 @@ def test_the_windows_are_read_checked_and_kept(home):
 
 
 def test_on_its_own_it_prints_a_short_line(home):
-    assert _line(home, _status(42.4, 18)).stdout.decode() == "5h 42% · 週 18%"
-    assert _line(home, _status(100, 18)).stdout.decode() == "5h 上限到達 · 週 18%"
-    assert _line(home, _status(99.7, 18)).stdout.decode() == "5h 99% · 週 18%"            # floored: only 100 is the limit
+    assert _line(home, _status(42.4, 18)).stdout.decode() == "5h 42% · 7d 18%"
+    assert _line(home, _status(100, 18)).stdout.decode() == "5h limit · 7d 18%"
+    assert _line(home, _status(99.7, 18)).stdout.decode() == "5h 99% · 7d 18%"            # floored: only 100 is the limit
     assert _line(home, _status()).stdout.decode() == "Opus"                    # no limits (API key, or before the first call)
     done = _line(home, b"{not json")
     assert done.returncode == 0 and done.stderr == b""                         # never loud
