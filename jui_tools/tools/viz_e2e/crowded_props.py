@@ -154,7 +154,12 @@ async def run_crowded_props(pw, out, failures):
         res["floorWood"] = await page.evaluate(floor_of)
         rect_w = await page.evaluate(rect)
         await page.evaluate("() => { window.__dbg.play({ idleMs: 1000 }); window.__dbg.brk({ p: { smoke: 1, vend: 0 }, smokeMinSec: 120, smokeMaxSec: 120, restMinSec: 0, restMaxSec: 0 }); }")
-        await wait(page, "() => window.__dbg.brk().robots.some((x) => x.kind === 'smoke' && x.at)", timeout=60000, label="a robot smoking at ten")
+        # a break under way is what the arm needs (going or at the booth): arriving took past 60 s in 2 of 6 runs (00:06)
+        try:
+            await wait(page, "() => window.__dbg.brk().robots.some((x) => x.kind === 'smoke')", timeout=60000, label="a robot on a cigarette break at ten")
+        except Exception:
+            res["brkWhy"] = await page.evaluate("() => { const b = window.__dbg.brk(); return { ends: b.ends.slice(-5), robots: b.robots.map((x) => [x.id, x.kind, x.phase, x.vis, x.path, x.play, x.solo]) }; }")
+            raise
         await page.evaluate("() => window.__dbg.propsMax(5)")
         await wait(page, "() => !window.__dbg.props().fun", label="the looks gone under the limit")
         await page.wait_for_timeout(300)
