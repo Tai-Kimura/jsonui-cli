@@ -228,8 +228,9 @@ class Stage:
 class Driver:
     """One chapter's page: the prelude, then the frames."""
 
-    def __init__(self, page, stage: Stage, lang: str, watch: Watch, sky_time: str | None):
+    def __init__(self, page, stage: Stage, lang: str, watch: Watch, sky_time: str | None, fake_clock: bool = True):
         self.page, self.stage, self.lang, self.watch = page, stage, lang, watch
+        self.fake = fake_clock     # False: the page runs on its own clock (--measure-fps)
         self.w = WORDS[lang]
         self.labels: dict = {}
         self.cursor = [VIEWPORT["width"] / 2, VIEWPORT["height"] / 2]
@@ -251,7 +252,7 @@ class Driver:
                 return v
             if time.monotonic() > deadline:
                 raise PromoError(f"waiting for {what or js[:80]} ({timeout:.0f} s)")
-            if advance:
+            if advance and self.fake:
                 await self.page.clock.run_for(100)
             await asyncio.sleep(0.05)
 
@@ -300,11 +301,17 @@ class Driver:
     async def settle(self):
         """Before frame 0: let the page's clock run until the robots have arrived (or SETTLE_PAGE_SEC of it)."""
         for _ in range(int(SETTLE_PAGE_SEC * 10)):
-            await self.page.clock.run_for(100)
-            await asyncio.sleep(0.02)
+            if self.fake:
+                await self.page.clock.run_for(100)
+                await asyncio.sleep(0.02)
+            else:
+                await asyncio.sleep(0.1)
             if await self.page.evaluate("() => !window.__dbg.settle || window.__dbg.settle()"):
                 break
-        await self.page.clock.run_for(1000)
+        if self.fake:
+            await self.page.clock.run_for(1000)
+        else:
+            await asyncio.sleep(1.0)
 
     # ---- the events ----
     async def fire(self, ev, advance: bool):
@@ -614,4 +621,63 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
             stage.stop()
     if res["frames"]:
         (out / "manifest.json").write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return res
+
+
+# ---- --measure-fps: the floor with every robot, on the page's own clock ----
+
+# every frame's time (the robots' update calls it at the end of each frame: 80-dbg.js afterFrame, the hook
+# frame_gaps.py and waits.frame_log_js record with), kept for one window of sampling
+FRAME_TIMES_JS = """() => { window.__promoFrames = []; window.__dbg.afterFrame(() => { window.__promoFrames.push(performance.now()); }); return true; }"""
+FRAME_STOP_JS = """() => { window.__dbg.afterFrame(null); const t = window.__promoFrames || []; return t.slice(1).map((v, i) => v - t[i]); }"""
+MEASURE_SEC = 10.0
+
+
+def percentiles(gaps: list) -> dict:
+    """p50 / p90 / max of frame intervals (ms), nearest rank."""
+    if not gaps:
+        return {"frames": 0, "p50": None, "p90": None, "max": None}
+    s = sorted(gaps)
+    rank = lambda q: s[min(len(s) - 1, max(0, int(round(q * len(s))) - 1))]  # noqa: E731
+    return {"frames": len(s) + 1, "p50": round(rank(0.5), 1), "p90": round(rank(0.9), 1), "max": round(s[-1], 1)}
+
+
+async def measure_fps(pw, lang: str, jui_root: Path, demo_shop: Path, out: Path, theme: str = "dark", sec: float = MEASURE_SEC) -> dict:
+    """The floor with all SESSIONS in real time (no fake clock), at 1920x1080 under the e2e's software GL: frame
+    intervals for `sec` seconds far (the whole floor) and near (demo-shop up close). Written to out/fps-<lang>.json."""
+    from viz_promo.timeline import chapters, up_close
+    script = chapters(lang)["hook"]
+    res = {"lang": lang, "jui_root": str(jui_root), "robots": len(SESSIONS), "sec": sec, "viewport": VIEWPORT}
+    stage = browser = None
+    try:
+        stage = Stage(lang, jui_root, demo_shop)
+        stage.start()
+        browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+        ctx = await browser.new_context(viewport=VIEWPORT, device_scale_factor=1, color_scheme=theme, reduced_motion="no-preference")
+        page = await ctx.new_page()
+        watch = Watch(origin=stage.url)
+        watch.attach(page, "fps")
+        drv = Driver(page, stage, lang, watch, None, fake_clock=False)
+        await drv.boot(())
+        await drv.prelude(script.prelude)
+        res["robotsShown"] = await page.evaluate("() => window.__dbg.robots.length")
+        for view, events in (("far", []), ("near", up_close("demo-shop"))):
+            for ev in events:
+                await drv.fire(ev, advance=True)
+            if events:
+                await drv.settle()
+            await page.evaluate(FRAME_TIMES_JS)
+            await asyncio.sleep(sec)
+            res[view] = percentiles(await page.evaluate(FRAME_STOP_JS))
+        res["console"] = watch.console
+        res["warnings"] = drv.warnings
+    except Exception as e:  # noqa: BLE001 - reported, as a chapter's failure is
+        res["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        if browser:
+            await browser.close()
+        if stage:
+            stage.stop()
+    Path(out).mkdir(parents=True, exist_ok=True)
+    (Path(out) / f"fps-{lang}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return res

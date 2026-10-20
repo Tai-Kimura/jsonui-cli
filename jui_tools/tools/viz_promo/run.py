@@ -2,10 +2,12 @@
 
     python tools/viz_promo/run.py --lang ja --chapters hook,2,3,4 --jui-root ~/resource/jsonui-cli
     python tools/viz_promo/run.py --lang en --chapters 1a,1b --out /tmp/caps --jui-root PATH --promo PATH
+    python tools/viz_promo/run.py --lang ja --measure-fps --jui-root PATH --out /tmp/fps     # frame intervals, 30 robots
 
 Writes <out>/<lang>/<chapter>/00000.png … (frame 0 = the chapter's start, (end - start) x 30 frames, the bounds from
 <promo>/src/timeline.json) and a manifest.json beside them. --out defaults to <promo>/public/captures, where the
-promo's CaptureSlot reads them. --jui-root is the jsonui-cli checkout whose jui_tools/bin/jui serves and whose
+promo's CaptureSlot reads them. A window segment inside a viz chapter (5-json: the load definition in the editor,
+74–77 s) goes to a folder of its own, captured whenever its chapter is. --jui-root is the jsonui-cli checkout whose jui_tools/bin/jui serves and whose
 forward.py takes the hooks (a tree with the server room's flow player for chapter 4, with the cost view for 5).
 A chapter whose feature the tree lacks is reported and skipped; the others are captured.
 
@@ -26,7 +28,7 @@ TOOLS = Path(__file__).resolve().parent.parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))   # viz_promo is a package under tools/ (viz_e2e has a rooms.py and a run.py too)
 
-from viz_promo.timeline import ALL, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
+from viz_promo.timeline import ALL, CAPTURE_IDS, SEGMENTS, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
 
 PROMO = Path.home() / "resource" / "jsonui-promo"
 DEMO_SHOP = Path.home() / "resource" / "jsonui-demo-shop"
@@ -35,7 +37,10 @@ DEMO_SHOP = Path.home() / "resource" / "jsonui-demo-shop"
 def parse(argv=None):
     ap = argparse.ArgumentParser(description="Capture the promo video's real-app chapters as numbered frames")
     ap.add_argument("--lang", choices=["ja", "en"], required=True)
-    ap.add_argument("--chapters", default=",".join(ALL), help=f"comma-separated, of {', '.join(ALL)} (default: all)")
+    ap.add_argument("--chapters", default=",".join(ALL), help=f"comma-separated, of {', '.join(CAPTURE_IDS)} (default: all; "
+                    "a chapter brings its window segments: 5 captures 5-json too)")
+    ap.add_argument("--measure-fps", action="store_true", help="instead of capturing: the floor with every robot in real time, "
+                    "frame intervals far and near (p50 / p90 / max ms) into <out>/fps-<lang>.json")
     ap.add_argument("--jui-root", required=True, type=Path, help="the jsonui-cli checkout to serve and forward with")
     ap.add_argument("--promo", type=Path, default=PROMO, help=f"the jsonui-promo project (default {PROMO})")
     ap.add_argument("--out", type=Path, default=None, help="where the frames go (default <promo>/public/captures)")
@@ -45,9 +50,12 @@ def parse(argv=None):
     ap.add_argument("--keep", action="store_true", help="keep each chapter's temporary HOME and rooms (for debugging)")
     a = ap.parse_args(argv)
     a.chapters = [c.strip() for c in a.chapters.split(",") if c.strip()]
-    unknown = [c for c in a.chapters if c not in ALL]
+    unknown = [c for c in a.chapters if c not in CAPTURE_IDS]
     if unknown:
-        ap.error(f"unknown chapter(s) {', '.join(unknown)}; known: {', '.join(ALL)}")
+        ap.error(f"unknown chapter(s) {', '.join(unknown)}; known: {', '.join(CAPTURE_IDS)}")
+    for seg, (chapter, *_rest) in SEGMENTS.items():
+        if chapter in a.chapters and seg not in a.chapters:
+            a.chapters.insert(a.chapters.index(chapter), seg)
     if not (a.jui_root / "jui_tools" / "bin" / "jui").is_file():
         ap.error(f"--jui-root {a.jui_root}: no jui_tools/bin/jui there")
     a.out = a.out or a.promo / "public" / "captures"
@@ -56,8 +64,18 @@ def parse(argv=None):
 
 async def main_async(a) -> int:
     from playwright.async_api import async_playwright
-    from viz_promo.capture import capture_chapter
+    from viz_promo.capture import capture_chapter, measure_fps
     from viz_promo.term import capture_term
+
+    if a.measure_fps:
+        async with async_playwright() as pw:
+            r = await measure_fps(pw, a.lang, a.jui_root, a.demo_shop, a.out, theme=a.theme)
+        for view in ("far", "near"):
+            v = r.get(view) or {}
+            print(f"{a.lang} {view}: {r.get('robotsShown')} robots, {v.get('frames')} frames, p50 {v.get('p50')} ms, p90 {v.get('p90')} ms, max {v.get('max')} ms")
+        if r.get("error"):
+            print(f"FAIL {r['error']}", file=sys.stderr)
+        return 0 if not r.get("error") else 1
 
     promo = promo_timeline(a.promo)
     drift = check_bounds(promo)
@@ -69,7 +87,9 @@ async def main_async(a) -> int:
     async with async_playwright() as pw:
         for cid in a.chapters:
             print(f"{a.lang}/{cid}: capturing", flush=True)
-            if cid in TERM_CHAPTER_IDS:
+            if cid in SEGMENTS:
+                r = await capture_term(pw, cid, SEGMENTS[cid][1:3], a.out, a.lang, a.jui_root, a.demo_shop, keep=a.keep)
+            elif cid in TERM_CHAPTER_IDS:
                 r = await capture_term(pw, cid, promo[cid], a.out, a.lang, a.jui_root, a.demo_shop, keep=a.keep)
             else:
                 r = await capture_chapter(pw, script[cid], promo[cid], a.out, a.lang, a.jui_root, a.demo_shop, theme=a.theme,

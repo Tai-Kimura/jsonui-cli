@@ -32,18 +32,29 @@ FPS = 30
 CHAPTER_IDS = ("hook", "2", "3", "4", "5", "6")   # 1a / 1b: term.py
 TERM_CHAPTER_IDS = ("1a", "1b")
 ALL = TERM_CHAPTER_IDS + CHAPTER_IDS
+#: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
+#: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
+SEGMENTS = {"5-json": ("5", 74.0, 77.0, "docs/infra/load/weekend-campaign.json")}
+#: what run.py captures: the promo's chapters and the segments (a chapter brings its segments with it)
+CAPTURE_IDS = ALL + tuple(SEGMENTS)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
 BOUNDS = {"hook": (0, 4), "1a": (4, 16), "1b": (16, 32), "2": (32, 44), "3": (44, 54), "4": (54, 74), "5": (74, 88), "6": (88, 96)}
 
-ROOMS = ("demo-shop", "demo-admin", "demo-docs")
+ROOMS = ("demo-shop", "demo-admin", "demo-docs", "demo-api", "demo-mobile")
 
-# (key, the first two hex digits of its session id — the label the view shows —, room). 15 robots: nine in demo-shop.
+# (key, the first two hex digits of its session id — the label the view shows —, room). 30 robots: ten in demo-shop,
+# five in each small room (a room of more than ten drops its decor, crowded_props.py; five rooms keep one floor).
 SESSIONS = (
     ("s01", "a0", "demo-shop"), ("s02", "b4", "demo-shop"), ("s03", "c2", "demo-shop"), ("s04", "d8", "demo-shop"),
     ("s05", "e1", "demo-shop"), ("s06", "f3", "demo-shop"), ("s07", "1a", "demo-shop"), ("s08", "2b", "demo-shop"),
     ("s09", "3c", "demo-shop"),
     ("s10", "4d", "demo-admin"), ("s11", "5e", "demo-admin"), ("s12", "6f", "demo-admin"),
     ("s13", "7a", "demo-docs"), ("s14", "8b", "demo-docs"), ("s15", "9c", "demo-docs"),
+    ("s16", "ab", "demo-shop"), ("s17", "bc", "demo-admin"), ("s18", "cd", "demo-admin"),
+    ("s19", "de", "demo-docs"), ("s20", "ef", "demo-docs"),
+    ("s21", "0f", "demo-api"), ("s22", "1e", "demo-api"), ("s23", "2d", "demo-api"), ("s24", "3b", "demo-api"), ("s25", "4a", "demo-api"),
+    ("s26", "5c", "demo-mobile"), ("s27", "6d", "demo-mobile"), ("s28", "7e", "demo-mobile"), ("s29", "8f", "demo-mobile"),
+    ("s30", "9a", "demo-mobile"),
 )
 SUBAGENT = ("a3f19c2e8b7d4a601", "jsonui-test")
 #: the event kinds the driver knows (capture.Driver.fire)
@@ -69,7 +80,11 @@ WORDS = {
         "names": {"s01": "仕様の担当", "s02": "テストの担当", "s03": "iOS の実装", "s04": "Android の実装", "s05": "Web の実装",
                   "s06": "API の担当", "s07": "文言の担当", "s08": "リリースの担当", "s09": "レビューの担当",
                   "s10": "管理画面の実装", "s11": "管理画面のテスト", "s12": "権限の担当",
-                  "s13": "ドキュメントの担当", "s14": "翻訳の担当", "s15": "サイトの公開"},
+                  "s13": "ドキュメントの担当", "s14": "翻訳の担当", "s15": "サイトの公開",
+                  "s16": "アクセシビリティ", "s17": "管理画面の文言", "s18": "CSV の書き出し", "s19": "API の解説",
+                  "s20": "スクリーンショット", "s21": "注文 API", "s22": "在庫 API", "s23": "認証の担当",
+                  "s24": "API のテスト", "s25": "負荷の見積もり", "s26": "通知の実装", "s27": "オフライン対応",
+                  "s28": "端末のテスト", "s29": "ストアの申請", "s30": "クラッシュの調査"},
         "prompts": {"spec": "カート画面の spec に数量の上限を足して", "tests": "カートのテストを通して", "ios": "カート画面を iOS で仕上げて",
                     "android": "商品詳細を Android で仕上げて", "web": "注文完了画面を Web で仕上げて", "api": "在庫なしの 409 を API に足して",
                     "strings": "英語の文言をそろえて", "release": "リリースの準備をして", "review": "今日の変更を見て",
@@ -90,13 +105,23 @@ WORDS = {
         "cases": ["カートが空のとき", "1 個入れたとき", "上限まで入れたとき", "在庫なしのとき", "通信に失敗したとき", "合計の表示"],
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
         "sub_done": "カートのテストを書き終えた",
-        "room_readme": {"demo-admin": "demo-admin — 見本の管理画面（架空）\n", "demo-docs": "demo-docs — 見本のドキュメント（架空）\n"},
+        "room_readme": {"demo-admin": "demo-admin — 見本の管理画面（架空）\n", "demo-docs": "demo-docs — 見本のドキュメント（架空）\n",
+                        "demo-api": "demo-api — 見本の API（架空）\n", "demo-mobile": "demo-mobile — 見本のスマホアプリ（架空）\n"},
+        "prompts2": {"a11y": "読み上げのラベルを見直して", "admin_strings": "管理画面の文言をそろえて", "csv": "注文を CSV で書き出せるようにして",
+                     "api_docs": "API の解説を書いて", "shots": "ストア用のスクリーンショットを撮って", "orders_api": "注文 API にページ送りを足して",
+                     "stock_api": "在庫 API の 409 を直して", "auth": "ログインの期限を見直して", "api_tests": "API の契約テストを足して",
+                     "load": "週末のキャンペーンの負荷を見積もって", "push": "発送の通知を足して", "offline": "オフラインでもカートを見られるようにして",
+                     "device_tests": "小さい画面で崩れないか見て", "store": "ストアの申請を準備して", "crash": "起動時のクラッシュを調べて"},
     },
     "en": {
         "names": {"s01": "spec-owner", "s02": "test-runner", "s03": "ios-builder", "s04": "android-builder", "s05": "web-builder",
                   "s06": "api-owner", "s07": "strings-owner", "s08": "release-prep", "s09": "reviewer",
                   "s10": "admin-builder", "s11": "admin-tests", "s12": "roles-owner",
-                  "s13": "docs-writer", "s14": "translator", "s15": "site-publisher"},
+                  "s13": "docs-writer", "s14": "translator", "s15": "site-publisher",
+                  "s16": "a11y-checker", "s17": "admin-strings", "s18": "csv-export", "s19": "api-docs",
+                  "s20": "screenshots", "s21": "orders-api", "s22": "stock-api", "s23": "auth-owner",
+                  "s24": "api-tests", "s25": "load-estimator", "s26": "push-notifications", "s27": "offline-mode",
+                  "s28": "device-tests", "s29": "store-submission", "s30": "crash-triage"},
         "prompts": {"spec": "Add a quantity limit to the cart spec", "tests": "Get the cart tests passing", "ios": "Finish the cart screen on iOS",
                     "android": "Finish product detail on Android", "web": "Finish order complete on the web", "api": "Add the out-of-stock 409 to the API",
                     "strings": "Align the English strings", "release": "Prepare the release", "review": "Review today's changes",
@@ -117,14 +142,22 @@ WORDS = {
         "cases": ["empty cart", "one item", "up to the limit", "out of stock", "network failure", "total shown"],
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
         "sub_done": "Finished writing the cart tests",
-        "room_readme": {"demo-admin": "demo-admin: a sample admin console (fictional)\n", "demo-docs": "demo-docs: a sample docs site (fictional)\n"},
+        "room_readme": {"demo-admin": "demo-admin: a sample admin console (fictional)\n", "demo-docs": "demo-docs: a sample docs site (fictional)\n",
+                        "demo-api": "demo-api: a sample API (fictional)\n", "demo-mobile": "demo-mobile: a sample mobile app (fictional)\n"},
+        "prompts2": {"a11y": "Review the screen reader labels", "admin_strings": "Align the admin strings", "csv": "Let orders export as CSV",
+                     "api_docs": "Write the API guide", "shots": "Take the store screenshots", "orders_api": "Add paging to the orders API",
+                     "stock_api": "Fix the stock API's 409", "auth": "Revisit the login expiry", "api_tests": "Add API contract tests",
+                     "load": "Estimate the weekend campaign's load", "push": "Add the shipping notification", "offline": "Keep the cart readable offline",
+                     "device_tests": "Check small screens for breakage", "store": "Prepare the store submission", "crash": "Look into the crash at launch"},
     },
 }
 
 # the prompt each session is working on (WORDS[lang]["prompts"] keys)
 WORK = {"s01": "spec", "s02": "tests", "s03": "ios", "s04": "android", "s05": "web", "s06": "api", "s07": "strings",
         "s08": "release", "s09": "review", "s10": "admin", "s11": "admin_tests", "s12": "roles", "s13": "docs",
-        "s14": "translate", "s15": "site"}
+        "s14": "translate", "s15": "site", "s16": "a11y", "s17": "admin_strings", "s18": "csv", "s19": "api_docs",
+        "s20": "shots", "s21": "orders_api", "s22": "stock_api", "s23": "auth", "s24": "api_tests", "s25": "load", "s26": "push",
+        "s27": "offline", "s28": "device_tests", "s29": "store", "s30": "crash"}
 
 
 @dataclass
@@ -154,12 +187,17 @@ def P(kind, **args) -> Event:
 
 # ---- the pieces the chapters share ----
 
+def prompt(w: dict, key: str) -> str:
+    return w["prompts"].get(WORK[key]) or w["prompts2"][WORK[key]]
+
+
+
 def floor(w: dict) -> list:
     """Every session in, each on its prompt; most of them in a tool (typing at their desks)."""
     out = []
     for key, _, _ in SESSIONS:
         out.append(P("start", key=key))
-        out.append(P("prompt", key=key, text=w["prompts"][WORK[key]]))
+        out.append(P("prompt", key=key, text=prompt(w, key)))
     tools = {"s01": ("Edit", {"file_path": "@demo-shop/" + w["files"]["spec"]}),
              "s03": ("Read", {"file_path": "@demo-shop/ios/ios/View/Cart/CartGeneratedView.swift"}),
              "s04": ("Edit", {"file_path": "@demo-shop/android/app/src/main/kotlin/com/example/demoshop/viewmodels/ProductDetailViewModel.kt"}),
@@ -170,7 +208,15 @@ def floor(w: dict) -> list:
              "s11": ("Read", {"file_path": "@demo-admin/README.md"}),
              "s13": ("Write", {"file_path": "@demo-docs/getting-started.md", "content": "x"}),
              "s14": ("Read", {"file_path": "@demo-docs/README.md"}),
-             "s15": ("Bash", {"command": "git status", "description": "status"})}
+             "s15": ("Bash", {"command": "git status", "description": "status"}),
+             "s18": ("Write", {"file_path": "@demo-admin/src/export.ts", "content": "x"}),
+             "s19": ("Edit", {"file_path": "@demo-docs/README.md"}),
+             "s21": ("Edit", {"file_path": "@demo-api/README.md"}),
+             "s22": ("Read", {"file_path": "@demo-api/README.md"}),
+             "s24": ("Bash", {"command": "git diff --stat", "description": "diff"}),
+             "s26": ("Write", {"file_path": "@demo-mobile/src/push.ts", "content": "x"}),
+             "s27": ("Read", {"file_path": "@demo-mobile/README.md"}),
+             "s30": ("Bash", {"command": "git log --oneline -3", "description": "log"})}
     for key, (tool, inp) in sorted(tools.items()):
         out.append(P("tool", key=key, tool=tool, input=inp))
     return out + [P("settle")]
@@ -268,12 +314,14 @@ def chapters(lang: str) -> dict:
         E(73.2, "click", target={"css": "#sr-choices [data-sr-choice='ok']"}, ready=choice, arg="ok"),
     ], needs=("rooms", "server_room", "flows"))
 
-    # 5 (74–88): the cost simulator — the month, then one day played
-    out["5"] = Chapter("5", 74, 88, floor(w) + up_close("demo-shop") + [P("door"), P("dbg", call="srCostPlayMs", ms=250)], [
-        E(74.8, "click", target={"css": "#sr-mode-cost"}, expect="cost_month"),
-        E(77.6, "select", target={"css": "#sr-scn"}, value="launch-buzz", expect="cost_month"),
-        E(80.4, "click", target={"cost_day": "busiest"}, expect="cost_day"),
-        E(81.6, "click", target={"css": "#sr-cost [data-src-act='play']"}),
+    # 5 (74–88): the cost simulator. 74–77 is the load definition in the editor (term.py, captures/<lang>/5-json:
+    # SEGMENTS); this capture covers the whole chapter, and its cost page starts after that window: the month, then
+    # one day played (24 hours at 200 ms an hour)
+    out["5"] = Chapter("5", 74, 88, floor(w) + up_close("demo-shop") + [P("door"), P("dbg", call="srCostPlayMs", ms=200)], [
+        E(77.3, "click", target={"css": "#sr-mode-cost"}, expect="cost_month"),
+        E(79.4, "select", target={"css": "#sr-scn"}, value="weekend-campaign", expect="cost_month"),
+        E(81.6, "click", target={"cost_day": "busiest"}, expect="cost_day"),
+        E(82.6, "click", target={"css": "#sr-cost [data-src-act='play']"}),
     ], needs=("rooms", "server_room", "cost"))
 
     # 6 (88–96): back to the whole floor

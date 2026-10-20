@@ -90,10 +90,27 @@ def test_the_words_are_the_same_shape_in_both_languages():
     keys = {k for k, _, _ in T.SESSIONS}
     for lang in T.WORDS:
         assert set(T.WORDS[lang]["names"]) == keys
-        assert set(T.WORK.values()) <= set(T.WORDS[lang]["prompts"])
+        assert set(T.WORK.values()) <= set(T.WORDS[lang]["prompts"]) | set(T.WORDS[lang]["prompts2"])
+        assert all(T.prompt(T.WORDS[lang], k) for k in keys)
         assert T.WORDS[lang]["answer"] in [o["label"] for o in T.WORDS[lang]["question"]["options"]]
         names = list(T.WORDS[lang]["names"].values())
         assert len(set(names)) == len(names), "a talk row is found by its name"
+
+
+def test_thirty_robots_on_one_floor_and_no_room_crowded():
+    rooms = [room for _, _, room in T.SESSIONS]
+    assert len(rooms) == 30 and set(rooms) == set(T.ROOMS)
+    assert len(T.ROOMS) <= 6, "a floor holds six rooms"
+    assert max(rooms.count(r) for r in T.ROOMS) <= 10, "a room of more than ten drops its decor"
+
+
+def test_the_segments_lie_inside_their_chapter_and_its_events_come_after():
+    for seg, (chapter, s, e, rel) in T.SEGMENTS.items():
+        cs, ce = T.BOUNDS[chapter]
+        assert cs <= s < e <= ce and T.frame_count(s, e) == 90 and rel.startswith("docs/infra/load/")
+        assert seg in T.CAPTURE_IDS
+        for lang in T.WORDS:
+            assert all(ev.at >= e for ev in T.chapters(lang)[chapter].events), (lang, seg)
 
 
 def test_session_ids_carry_their_labels_and_are_distinct():
@@ -152,8 +169,28 @@ def test_the_gates_and_files_are_there():
     for shown, (launcher, *_), _keep in term.GATES:
         assert (root / launcher).is_file(), launcher
         assert shown.split()[0] == Path(launcher).name
-    assert sum(sec for _, sec in term.GENERATED + term.HAND_WRITTEN) <= T.BOUNDS["1a"][1] - T.BOUNDS["1a"][0]
+    assert sum(sec for _, sec in term.GENERATED + term.HAND_WRITTEN) + term.SPEC_HTML[2] <= T.BOUNDS["1a"][1] - T.BOUNDS["1a"][0]
     assert "verify" in term.GATES[1][0] and term.GATES[1][2]
+    branch = [g for g in term.GATES if "branch-tests" in g[0]]
+    assert len(term.GATES) == 6 and len(branch) == 1 and "-p" not in branch[0][1], "branch-tests on the web only"
+
+
+def test_1a_puts_the_spec_document_before_the_hand_written_body(tmp_path):
+    from viz_promo import term
+    for rel, _ in term.GENERATED + term.HAND_WRITTEN:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("// @generated\n" if "Generated" in rel or rel.endswith(".json") else "body\n")
+    files = term.read_files(tmp_path, "<html><body>doc</body></html>")
+    assert [f["path"] for f in files][-2:] == [term.SPEC_HTML[1], term.HAND_WRITTEN[0][0]]
+    assert files[-2]["html"].startswith("<html>") and not files[-1]["generated"]
+    assert "html" not in files[0]
+
+
+def test_frame_intervals_are_summed_as_percentiles():
+    from viz_promo import capture
+    got = capture.percentiles([16.0] * 8 + [50.0, 120.0])
+    assert got == {"frames": 11, "p50": 16.0, "p90": 50.0, "max": 120.0}
+    assert capture.percentiles([])["p50"] is None
 
 
 def test_the_term_pages_carry_their_data():

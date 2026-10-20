@@ -1,4 +1,5 @@
-"""Chapters 1a and 1b: the editor and the terminal (plan §2 rows 1a / 1b, §2.6: no invented text).
+"""Chapters 1a and 1b and chapter 5's load window: the editor and the terminal (plan §2 rows 1a / 1b / 5, §2.6: no
+invented text).
 
 1b runs the real gates in a copy of demo-shop (rooms.copy_demo_shop: the tracked files, one commit) with --jui-root's
 launchers, keeps what each printed (stdout and stderr, in order), and types them out in a terminal window drawn in
@@ -7,7 +8,10 @@ with two things changed, both said in the README: colour codes taken out, and th
 relative to it (the copy lives in a temporary folder whose path means nothing to a viewer).
 
 1a opens real files of the same copy in an editor-like window, one after another (GENERATED: files that carry the
-@generated header; HAND_WRITTEN: a view model's body, written by hand), each scrolled slowly.
+@generated header; then the screen's spec document, generated at capture time by `jsonui-doc generate spec` into a
+temporary folder and shown rendered (the HTML carries no @generated header to show as source; the folder is deleted
+after the capture); HAND_WRITTEN: a view model's body, written by hand), each scrolled slowly. 5-json opens the load
+definition timeline.SEGMENTS names in the same window (the English copy's file is make_load.py --lang en's output).
 
 Both windows are pure functions of the video time (window.render(t)); the capture sets t frame by frame, so there is
 no clock to drive.
@@ -25,7 +29,7 @@ import tempfile
 from pathlib import Path
 
 from viz_promo.rooms import cleanup, copy_demo_shop
-from viz_promo.timeline import frame_count, frame_time
+from viz_promo.timeline import SEGMENTS, frame_count, frame_time
 
 PROMPT = "demo-shop $ "
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
@@ -38,29 +42,24 @@ GATES = (
     ("jsonui-test generate branch-tests --check --out-dir web/tests/unit/generated --harness-dir web/tests/unit/branch-harness",
      ("test_tools/jsonui-test", "generate", "branch-tests", "--check", "--out-dir", "web/tests/unit/generated",
       "--harness-dir", "web/tests/unit/branch-harness"), None),
-    ("jsonui-test generate branch-tests --check -p android --package com.example.demoshop "
-     "--out-dir android/app/src/test/java/com/example/demoshop --harness-dir android/app/src/test/java/com/example/demoshop",
-     ("test_tools/jsonui-test", "generate", "branch-tests", "--check", "-p", "android", "--package", "com.example.demoshop",
-      "--out-dir", "android/app/src/test/java/com/example/demoshop", "--harness-dir", "android/app/src/test/java/com/example/demoshop"), None),
-    ("jsonui-test generate branch-tests --check -p ios --module DemoShop --out-dir ios/Tests/Generated --harness-dir ios/Tests/BranchHarness",
-     ("test_tools/jsonui-test", "generate", "branch-tests", "--check", "-p", "ios", "--module", "DemoShop",
-      "--out-dir", "ios/Tests/Generated", "--harness-dir", "ios/Tests/BranchHarness"), None),
     ("jsonui-test validate tests", ("test_tools/jsonui-test", "validate", "tests"), None),
     ("jsonui-doc check", ("document_tools/jsonui-doc", "check"), None),
 )
 
 # 1a: the files opened, in order (relative to demo-shop), with the seconds each stays
 GENERATED = (
-    ("docs/screens/json/cart.spec.json", 1.6),
-    ("docs/screens/layouts/cart.json", 1.1),
-    ("ios/ios/View/Cart/CartGeneratedView.swift", 1.1),
-    ("android/app/src/main/kotlin/com/example/demoshop/views/cart/CartGeneratedView.kt", 1.1),
-    ("web/src/generated/components/Cart.tsx", 1.1),
-    ("ios/ios/ViewModel/Protocol/CartViewModelProtocol.swift", 1.0),
-    ("ios/ios/Model/Generated/CartLineDto.swift", 1.0),
-    ("ios/Tests/Generated/CartBranchesTest.swift", 1.0),
+    ("docs/screens/json/cart.spec.json", 1.5),
+    ("docs/screens/layouts/cart.json", 1.0),
+    ("ios/ios/View/Cart/CartGeneratedView.swift", 1.0),
+    ("android/app/src/main/kotlin/com/example/demoshop/views/cart/CartGeneratedView.kt", 1.0),
+    ("web/src/generated/components/Cart.tsx", 1.0),
+    ("ios/ios/ViewModel/Protocol/CartViewModelProtocol.swift", 0.9),
+    ("ios/ios/Model/Generated/CartLineDto.swift", 0.9),
+    ("ios/Tests/Generated/CartBranchesTest.swift", 0.9),
 )
-HAND_WRITTEN = (("ios/ios/ViewModel/CartViewModel.swift", 3.0),)
+# the spec document: (the spec it is made from, the name it is shown as, seconds)
+SPEC_HTML = ("docs/screens/json/cart.spec.json", "cart.html", 1.3)
+HAND_WRITTEN = (("ios/ios/ViewModel/CartViewModel.swift", 2.5),)
 
 
 def clean(text: str, root: Path) -> str:
@@ -82,12 +81,35 @@ def run_gates(jui_root: Path, shop: Path, home: Path) -> list:
     return out
 
 
-def read_files(shop: Path) -> list:
-    files = []
-    for rel, sec in GENERATED + HAND_WRITTEN:
-        text = (shop / rel).read_text(encoding="utf-8")
-        files.append({"path": rel, "sec": sec, "text": text, "generated": "@generated" in text[:2000]})
-    return files
+def doc_env(home: Path) -> dict:
+    env = {k: v for k, v in os.environ.items() if k not in ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR", "PYTHONPATH")}
+    env.update(HOME=str(home), NO_COLOR="1")
+    return env
+
+
+def spec_html(jui_root: Path, shop: Path, folder: Path, home: Path) -> str:
+    """The spec's HTML document, made now by --jui-root's jsonui-doc into `folder` (the caller deletes it)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / SPEC_HTML[1]
+    argv = [sys.executable, str(Path(jui_root) / "document_tools" / "jsonui-doc"), "generate", "spec", SPEC_HTML[0],
+            "-o", str(target), "--format", "html"]
+    p = subprocess.run(argv, cwd=shop, env=doc_env(home), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=300)
+    if p.returncode != 0 or not target.is_file():
+        raise RuntimeError(f"jsonui-doc generate spec failed ({p.returncode}): {p.stdout[-600:]}")
+    return target.read_text(encoding="utf-8")
+
+
+def editor_file(shop: Path, rel: str, sec: float) -> dict:
+    text = (shop / rel).read_text(encoding="utf-8")
+    return {"path": rel, "sec": sec, "text": text, "generated": "@generated" in text[:2000]}
+
+
+def read_files(shop: Path, html_doc: str | None) -> list:
+    """1a's files in order; the spec document after the generated ones, rendered (html)."""
+    files = [editor_file(shop, rel, sec) for rel, sec in GENERATED]
+    if html_doc is not None:
+        files.append({"path": SPEC_HTML[1], "sec": SPEC_HTML[2], "html": html_doc, "text": "", "generated": True})
+    return files + [editor_file(shop, rel, sec) for rel, sec in HAND_WRITTEN]
 
 
 STYLE = """
@@ -122,6 +144,14 @@ function open(i) {
   const f = FILES[i];
   tabs.innerHTML = FILES.slice(0, i + 1).slice(-5).map((g) => `<div class="tab${g === f ? ' on' : ''}">${esc(g.path.split('/').pop())}</div>`).join('');
   path.textContent = f.path;
+  if (f.html !== undefined) {   // a document: shown rendered, as a browser shows it
+    lines.innerHTML = '<iframe id="doc" style="border:0;width:100%;height:960px;background:#fff"></iframe>';
+    const d = document.getElementById('doc');
+    d.onload = () => { d.dataset.loaded = '1'; };
+    d.srcdoc = f.html;
+    shown = i;
+    return;
+  }
   lines.innerHTML = f.text.split('\\n').map((l, n) => `<div class="ln${l.includes('@generated') ? ' gen' : ''}"><i>${n + 1}</i>${esc(l) || ' '}</div>`).join('');
   shown = i;
 }
@@ -129,6 +159,12 @@ window.render = (t) => {
   let at = t - T0, i = 0;
   while (i < FILES.length - 1 && at >= FILES[i].sec) { at -= FILES[i].sec; i += 1; }
   if (i !== shown) open(i);
+  if (FILES[i].html !== undefined) {   // the document scrolls inside its frame
+    const d = document.getElementById('doc'), w = d && d.contentWindow, k = Math.min(1, Math.max(0, (at - 0.3) / Math.max(0.1, FILES[i].sec - 0.3)));
+    if (w && w.document && w.document.documentElement) w.scrollTo(0, Math.round((w.document.documentElement.scrollHeight - 960) * 0.5 * k * k * (3 - 2 * k)));
+    lines.style.transform = '';
+    return;
+  }
   const f = FILES[i], rows = f.text.split('\\n').length, view = Math.floor((1080 - 120) / LINE_PX);
   const room = Math.max(0, rows - view), k = Math.min(1, Math.max(0, (at - 0.4) / Math.max(0.1, f.sec - 0.4)));
   lines.style.transform = `translateY(${-Math.round(Math.min(room, view * 0.6 * f.sec) * LINE_PX * k * k * (3 - 2 * k))}px)`;
@@ -170,9 +206,9 @@ window.render = (t) => {
 
 
 def page_html(kind: str, data, t0: float, t1: float) -> str:
-    js = (EDITOR_JS if kind == "1a" else TERM_JS).replace("__DATA__", json.dumps(data, ensure_ascii=False)).replace(
+    js = (TERM_JS if kind == "1b" else EDITOR_JS).replace("__DATA__", json.dumps(data, ensure_ascii=False)).replace(
         "__T0__", repr(t0)).replace("__T1__", repr(t1)).replace("__PROMPT__", json.dumps(PROMPT))
-    if kind == "1a":
+    if kind != "1b":
         inner = '<div class="tabs" id="tabs"></div><div class="path" id="path"></div><div class="code"><div class="lines" id="lines"></div></div>'
     else:
         inner = '<div class="term"><div class="body" id="body"></div></div>'
@@ -182,7 +218,8 @@ def page_html(kind: str, data, t0: float, t1: float) -> str:
 
 async def capture_term(pw, chapter_id: str, bounds: tuple, out_root: Path, lang: str, jui_root: Path, demo_shop: Path,
                        keep: bool = False) -> dict:
-    """1a or 1b into out_root/<lang>/<id>/%05d.png; returns its manifest (also written beside the frames)."""
+    """1a, 1b or a window segment (5-json) into out_root/<lang>/<id>/%05d.png; returns its manifest (also written
+    beside the frames)."""
     start, end = bounds
     out = Path(out_root) / lang / chapter_id
     res = {"chapter": chapter_id, "lang": lang, "start": start, "end": end, "frames": 0, "ok": False, "jui_root": str(jui_root)}
@@ -194,9 +231,17 @@ async def capture_term(pw, chapter_id: str, bounds: tuple, out_root: Path, lang:
             (base / "home").mkdir()
             data = run_gates(jui_root, shop, base / "home")
             res["gates"] = [{k: g[k] for k in ("shown", "argv", "code")} for g in data]
-        else:
-            data = read_files(shop)
+        elif chapter_id == "1a":
+            (base / "home").mkdir()
+            try:
+                data = read_files(shop, spec_html(jui_root, shop, base / "spec-html", base / "home"))
+            finally:
+                cleanup(base / "spec-html")   # the generated document goes once it is read (also with --keep)
             res["files"] = [f["path"] for f in data]
+        else:
+            rel = SEGMENTS[chapter_id][3]
+            data = [editor_file(shop, rel, end - start)]
+            res["files"] = [rel]
         doc = page_html(chapter_id, data, start, end)
         browser = await pw.chromium.launch()
         try:
@@ -208,6 +253,9 @@ async def capture_term(pw, chapter_id: str, bounds: tuple, out_root: Path, lang:
                 old.unlink()
             n = frame_count(start, end)
             for i in range(n):
+                await page.evaluate("(t) => window.render(t)", frame_time(start, i))
+                # a document's frame is filmed once it has loaded (its first frame waits for it)
+                await page.wait_for_function("() => { const d = document.getElementById('doc'); return !d || d.dataset.loaded === '1'; }", timeout=20000)
                 await page.evaluate("(t) => window.render(t)", frame_time(start, i))
                 await page.screenshot(path=str(out / f"{i:05d}.png"))
             res["frames"] = n

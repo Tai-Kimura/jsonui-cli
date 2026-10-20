@@ -24,9 +24,17 @@ e2e's machine lock, so it never runs beside a browser-test run.
 - **The cursor is an overlay.** The plan (§2.6) shows the mouse. Headless Chromium draws none, so the driver adds one
   small arrow element (`#promo-cursor`) at the position of the mouse it drives. It is the only thing in the frames
   the app did not draw.
-- 1a / 1b (`term.py`): the editor shows real files of a demo-shop copy; the terminal types the real gates and shows
-  what they printed in that copy, with colour codes taken out and the copy's absolute path written relative to it.
-  The prompt is `demo-shop $`. `gates.json` beside the frames keeps each command and its output.
+- 1a / 1b (`term.py`): the editor shows real files of a demo-shop copy, and the cart screen's spec document, made at
+  capture time by `jsonui-doc generate spec … --format html` into a temporary folder that is deleted once read; it is
+  shown rendered (the HTML has no @generated header to show as source). The terminal types the real gates (build,
+  verify, lint-strings, web branch-tests --check, validate, doc check) and shows what they printed in that copy, with
+  colour codes taken out and the copy's absolute path written relative to it. The prompt is `demo-shop $`.
+  `gates.json` beside the frames keeps each command and its output.
+- **5-json is a window segment.** Chapter 5 opens on the load definition (`docs/infra/load/weekend-campaign.json` of
+  the copy; for `--lang en` the copy's file is `tools/make_load.py --lang en`'s output) in the editor window, 74–77 s,
+  captured to `captures/<lang>/5-json/` (90 frames, frame 0 = 74 s). The promo frames it as a window, then shows
+  `captures/<lang>/5/` from its frame 90 on: chapter 5's own capture still covers 74–88 s, and its cost page starts
+  after 77 s. Capturing 5 captures 5-json too.
 
 ## Frames and the clock
 
@@ -35,6 +43,13 @@ Frame 0 is the chapter's start; there are (end − start) × 30 frames, the boun
 (`page.clock.install`): the page animates only when the driver runs it, 1/30 s per frame. Hooks and the server run
 in real time; after an event the driver waits for the page to take it in before the next frame. The sky shows
 `--sky-time` (default 14:00) through `__dbg.setClock`.
+
+## Measuring the floor
+
+`run.py --measure-fps --lang ja --jui-root PATH --out DIR` starts the floor with all 30 robots on the page's own clock
+(no fake clock), records every frame's time through `__dbg.afterFrame` (the hook `frame_gaps.py` uses) for 10 s on the
+whole floor and 10 s up close on demo-shop, and prints p50 / p90 / max of the intervals in ms
+(`DIR/fps-<lang>.json`). Headless Chromium under the e2e's software GL, 1920x1080.
 
 A chapter whose feature the tree lacks (the flow player for 4, the cost view for 5, the language switch for
 `--lang en`) is reported and skipped. Each chapter writes `manifest.json` (events and the frame each fired on,
