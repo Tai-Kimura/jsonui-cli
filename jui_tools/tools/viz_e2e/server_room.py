@@ -354,6 +354,26 @@ async def run_server_room(pw, out, failures):
         check(failures, s["shown"]["cross"] > 0 and s["cross"]["dashed"] and s["cross"]["drawn"] == s["shown"]["cross"],
               f"provider-crossing cables drawn apart, dashed: {s['shown']} {s['cross']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"multi up close: no far box over the floors: {s['lod']} {s['layers']}")
+        # fewer lines (2.3.10 item 1): faint by default; a chosen node's cables strong; the switch hides the rest
+        ln = {"default": await page.evaluate("() => window.__dbg.srLines()")}
+        node = await page.evaluate("() => { const ids = window.__dbg.srNodeEnvs().map((x) => x[0]); return ids.sort((a, b) => window.__dbg.srEdgesOf(b) - window.__dbg.srEdgesOf(a))[0]; }")
+        want = await page.evaluate("(id) => window.__dbg.srEdgesOf(id)", node)
+        await page.evaluate("(id) => window.__dbg.srSelect(id)", node)
+        ln["chosen"] = {**(await page.evaluate("() => window.__dbg.srLines()")), "node": node, "edges": want}
+        await page.screenshot(path=str(out / "lines-chosen-light.png"))
+        for mode in ("cross", "focus"):
+            await page.select_option("#sr-lines", mode)
+            await until(page, "(m) => window.__dbg.srLines().mode === m", f"lines: {mode}", arg=mode)
+            ln[mode] = await page.evaluate("() => window.__dbg.srLines()")
+        await page.screenshot(path=str(out / "lines-focus-light.png"))
+        await page.select_option("#sr-lines", "all")
+        await page.evaluate("() => window.__dbg.srSelect(null)")
+        res["lines"] = ln
+        d, c = ln["default"], ln["chosen"]
+        check(failures, d["plainOpacity"] <= 0.3 and d["focus"] == 0 and d["plainVisible"] and d["crossVisible"], f"lines faint by default, none strong: {d}")
+        check(failures, want > 0 and c["focus"] == want, f"a chosen node's cables drawn strong, all of them: {c}")
+        check(failures, not ln["cross"]["plainVisible"] and ln["cross"]["crossVisible"] and ln["cross"]["focus"] == want, f"crossing lines only: {ln['cross']}")
+        check(failures, not ln["focus"]["plainVisible"] and not ln["focus"]["crossVisible"] and ln["focus"]["focus"] == want, f"the chosen node's lines only: {ln['focus']}")
         await page.screenshot(path=str(out / "multi-light.png"))
         await page.keyboard.press("Escape")
         await up_close("icons")

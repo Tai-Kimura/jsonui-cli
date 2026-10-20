@@ -32,6 +32,9 @@ const SR = {
   fastMs: 300, starMs: 140, okMs: 700, failMs: 9000,
   lod: { far: 9, near: 13 }, labels: { max: 110, nodes: 80 }, stats: null,
   closed: new Set(), selected: null, selectedGroup: null, zoomStep: 1.4,
+  // fewer lines (2.3.10, requester 10-20: 「線減らす工夫欲しいね」): all cables faint, the pressed and the pointed node's
+  // drawn strong on a layer of their own; a switch for all (faint) / crossing ones only / the chosen node's only
+  lines: 'all', hover: null, plainOpacity: 0.18, crossOpacity: 0.55,
 };
 const srEl = $('sr'), srBubbleEl = $('sr-bubble');
 function srNow() { return performance.now(); }
@@ -230,7 +233,8 @@ function srShow(model) {
   $('sr-env').innerHTML = envs.length ? envs.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('') : '<option value="">（環境の指定なし）</option>';
   $('sr-env').disabled = envs.length < 2;
   $('sr-fold').checked = false;
-  SR.closed = new Set(); SR.selected = null; SR.selectedGroup = null;
+  SR.closed = new Set(); SR.selected = null; SR.selectedGroup = null; SR.hover = null;
+  $('sr-lines').value = SR.lines;
   srBuild();
   $('sr-back').focus({ preventScroll: true });
 }
@@ -320,9 +324,13 @@ function srBuild() {
     (crossing ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
   }
   const lines = (arr, mat) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); const l = new THREE.LineSegments(g, mat); if (mat.isLineDashedMaterial) l.computeLineDistances(); return l; };
-  V.plainLines = lines(plain, new THREE.LineBasicMaterial({ color: isDark() ? 0x7f8ea3 : 0x5c6b7f, transparent: true, opacity: 0.7 }));
-  V.crossLines = lines(cross, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 0.5, gapSize: 0.3 }));
-  V.near.add(V.plainLines, V.crossLines);
+  V.plainLines = lines(plain, new THREE.LineBasicMaterial({ color: isDark() ? 0x7f8ea3 : 0x5c6b7f, transparent: true, opacity: SR.plainOpacity }));
+  V.crossLines = lines(cross, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 0.5, gapSize: 0.3, transparent: true, opacity: SR.crossOpacity }));
+  // the strong layer: the pressed and the pointed node's cables (srFocusLines fills it)
+  V.focusLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: isDark() ? 0x7cb4ff : 0x1d4ed8 }));
+  V.focusCross = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xd63fb0 }));
+  V.focusLines.renderOrder = V.focusCross.renderOrder = 2;
+  V.near.add(V.plainLines, V.crossLines, V.focusLines, V.focusCross);
   // far: the top groups as boxes, the cables bundled between them
   const tops = L.tops, topIndex = new Map(tops.map((G, i) => [G, i]));
   const boxMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, tops.length));
@@ -365,9 +373,18 @@ function srBuild() {
   V.ro = new ResizeObserver(() => srResize(V)); V.ro.observe(box);
   srResize(V);
   SR.view = V;
+  srLinesMode(V);
+  srFocusLines(V);
   srFit(true);
   srCounts(L);
   cv.onpointerdown = (e) => { V.downAt = [e.clientX, e.clientY]; };
+  cv.onpointermove = (e) => {   // the pointed node's cables, strong (at most every 60 ms)
+    if (e.buttons || srNow() - (V.hoverAt || 0) < 60) return;
+    V.hoverAt = srNow();
+    const id = srNodeAt(V, e);
+    if (id !== SR.hover) { SR.hover = id; srFocusLines(V); }
+  };
+  cv.onpointerleave = () => { if (SR.hover) { SR.hover = null; srFocusLines(V); } };
   cv.onpointerup = (e) => { if (V.downAt && Math.hypot(e.clientX - V.downAt[0], e.clientY - V.downAt[1]) < 5) srPick(e); V.downAt = null; };
   const loop = () => {
     V.raf = requestAnimationFrame(loop);
@@ -469,16 +486,49 @@ async function srIcons(V) {
     V.iconCount = (V.iconCount || 0) + list.length;
   }
 }
-function srPick(e) {
-  const V = SR.view;
-  if (!V || V.lod !== 'near') return;
+function srHitAt(V, e) {
   const r = V.renderer.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), V.camera);
   const hit = ray.intersectObjects(V.pick, false)[0];
-  const ud = hit && hit.instanceId !== undefined ? hit.object.userData : {};
-  SR.selected = ud.nodes ? ud.nodes[hit.instanceId] : null;
-  SR.selectedGroup = ud.groups ? ud.groups[hit.instanceId] || null : null;
+  return hit && hit.instanceId !== undefined ? { ud: hit.object.userData, i: hit.instanceId } : null;
+}
+function srNodeAt(V, e) {
+  if (V.lod !== 'near') return null;
+  const h = srHitAt(V, e);
+  return h && h.ud.nodes ? h.ud.nodes[h.i] : null;
+}
+function srPick(e) {
+  const V = SR.view;
+  if (!V || V.lod !== 'near') return;
+  const h = srHitAt(V, e);
+  srSelect(h && h.ud.nodes ? h.ud.nodes[h.i] : null, h && h.ud.groups ? h.ud.groups[h.i] || null : null);
+}
+function srSelect(node, group = null) {
+  SR.selected = node; SR.selectedGroup = node ? null : group;
+  if (SR.view) srFocusLines(SR.view);
   srRenderBoard();
+}
+/* The strong layer: every cable of the pressed node and of the pointed one (both ends drawn). */
+function srFocusLines(V) {
+  const ids = new Set([SR.selected, SR.hover].filter(Boolean)), plain = [], cross = [];
+  if (ids.size) {
+    for (const e of V.L.edges) {
+      if (!ids.has(e.from) && !ids.has(e.to)) continue;
+      const a = V.L.pos.get(e.from), b = V.L.pos.get(e.to), y = e.crossProvider ? 2.62 : 1.72;
+      (e.crossProvider ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
+    }
+  }
+  for (const [layer, arr] of [[V.focusLines, plain], [V.focusCross, cross]]) {
+    layer.geometry.dispose();
+    layer.geometry = new THREE.BufferGeometry();
+    layer.geometry.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+  }
+  V.focusCount = (plain.length + cross.length) / 6;
+}
+/* The lines switch: all (faint) / crossing ones only / the chosen node's only. */
+function srLinesMode(V) {
+  V.plainLines.visible = SR.lines === 'all';
+  V.crossLines.visible = SR.lines !== 'focus';
 }
 /* Moves in on a node or a group (its floor's middle, near enough to see what it holds). */
 function srFocus(x, z, r) {
@@ -547,6 +597,11 @@ function srRenderLog() {
 $('sr-back').addEventListener('click', srClose);
 $('sr-fit').addEventListener('click', () => srFit(false));
 $('sr-zin').addEventListener('click', () => srZoomBy(1 / SR.zoomStep));
+$('sr-lines').addEventListener('change', () => {
+  SR.lines = $('sr-lines').value;
+  srLog(`線: ${$('sr-lines').selectedOptions[0].textContent}`);
+  if (SR.view) srLinesMode(SR.view);
+});
 $('sr-zout').addEventListener('click', () => srZoomBy(SR.zoomStep));
 $('sr-board').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sr-act]');

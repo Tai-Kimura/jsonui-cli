@@ -25,6 +25,10 @@ window.__dbg = {
   srIconKeys: () => (SR.view ? { ...(SR.view.iconKeys || {}) } : {}),
   srNodeEnvs: () => (SR.view ? SR.view.L.nodes.map((n) => [n.id, Array.isArray(n.environments) ? n.environments : []]) : []),
   srAlive: () => !!SR.view,
+  srLines: () => { const V = SR.view; return V ? { mode: SR.lines, plainOpacity: V.plainLines.material.opacity, crossOpacity: V.crossLines.material.opacity,
+    plainVisible: V.plainLines.visible, crossVisible: V.crossLines.visible, focus: V.focusCount || 0, selected: SR.selected } : null; },
+  srSelect: (id) => { srSelect(id); return SR.view ? SR.view.focusCount || 0 : null; },
+  srEdgesOf: (id) => (SR.view ? SR.view.L.edges.filter((e) => e.from === id || e.to === id).length : null),
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
   // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in
   // front of the door from this view (D2: the door must still take the press, as the bell and the rack do)
