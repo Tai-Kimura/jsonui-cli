@@ -17,6 +17,7 @@ from pathlib import Path
 from . import clockout, data_docs, gitbox, prices, robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
+from .attachments import Attachments
 from .calls import CallBook, peer_name
 from .permissions import PROMPTS_QUEUED_MAX, PermissionBook
 from .questions import QuestionBook
@@ -139,6 +140,13 @@ DATA_DOCS_EVERY_MS = 5_000
 DATA_DOCS_QUIET_MS = 500
 
 
+def attachment_line(record: dict) -> str:
+    """The prompt's line for one attached file: its absolute path, then the shown name, media type and size."""
+    size = record["size"]
+    shown = f"{size} B" if size < 1024 else f"{size / 1024:.0f} KB" if size < 1024 * 1024 else f"{size / 1048576:.1f} MB"
+    return f"添付: {record['path']}（{record['name']}、{record['media']}、{shown}）"
+
+
 class World:
     def __init__(self, state: VizState, tool_input_max: int = 2000, session_start=None) -> None:
         self.state = state
@@ -147,6 +155,8 @@ class World:
         # A session gets ``since`` only from it; never the time the server first saw the session.
         self.session_start = session_start
         self._since_tries: dict[str, int] = {}
+        # files attached to prompts from the page (attachments.py); viz_cmd replaces it with the configured place
+        self.attachments = Attachments()
         # session id -> (cwd, transcript path from a hook); the transcript's usage tail; tokens per message id
         self.transcript_path = None
         # session id, cwd, transcript path, agent id, agent transcript path -> the 応答の履歴 tab (sources/history.py)
@@ -344,6 +354,7 @@ class World:
         self._background_off(session, at)
         self.perms.session_stopped(sid, at)
         self._dirty.add("perms")
+        self.attachments.session_ended(sid, at)
         if self.questions.session_stopped(sid, at):
             self._dirty.add("questions")
         if self.calls.session_ended(sid, at):
@@ -527,6 +538,8 @@ class World:
         cwd = _s(payload.get("cwd"))
         session = self._session(sid, cwd, at)
         self._find_since(session, cwd, _s(payload.get("transcript_path")))
+        if kind != "SessionEnd":
+            self.attachments.ended.pop(sid, None)   # resumed within the hour: its attachments stay
         root = self.rooms.root_of(session["projectId"])
         aid = _s(payload.get("agent_id"))
         agent_type = _s(payload.get("agent_type"))
@@ -968,10 +981,31 @@ class World:
         self._argv[proc] = argv
         return argv
 
-    def send_prompt(self, sid: str, text: str, at: int) -> tuple[int, str] | None:
+    def send_prompt(self, sid: str, text: str, at: int, attached: list[dict] | None = None) -> tuple[int, str] | None:
         """A prompt typed in the page for this session (POST /api/prompt, after its checks): queued for that session's
         channel only, and the event log gets when, to whom and the first PROMPT_HEAD characters — never the whole
-        text, which lives only in the channel's queue until its next poll. Returns None, or (HTTP status, why)."""
+        text, which lives only in the channel's queue until its next poll. ``attached`` (attachments.Attachments.take)
+        adds one line per file with its absolute path, which the session opens with Read. Returns None, or
+        (HTTP status, why)."""
+        refused = self.prompt_refusal(sid)
+        if refused is not None:
+            return refused
+        session = self.sessions[sid]
+        channel = self.perms.prompt_channel(sid)
+        if len(channel.inbox) >= PROMPTS_QUEUED_MAX:
+            return 429, "earlier prompts have not been taken yet"
+        lines = [attachment_line(a) for a in attached or []]
+        full = "\n".join([text.rstrip(), *lines]).strip() if lines else text
+        channel.inbox.append({"text": full, "at": at})
+        head = " ".join(text.split()) or f"添付 {len(lines)} 個"
+        head = head if len(head) <= PROMPT_HEAD else head[: PROMPT_HEAD - 1] + "…"
+        extra = f"（添付 {len(lines)} 個）" if lines and text.strip() else ""
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "PromptSent", "cat": "perm",
+                              "text": f"ブラウザからプロンプトを送信 → {session['label']}「{head}」{extra}"})
+        return None
+
+    def prompt_refusal(self, sid: str) -> tuple[int, str] | None:
+        """Why a prompt (or an attachment for one) cannot go to this session now, or None."""
         session = self.sessions.get(sid)
         if session is None or session["status"] == "ended":
             return 404, "no such session"
@@ -985,13 +1019,6 @@ class World:
             # The CLI drops a channel's text unless the channel was named at launch (2.3.4): refuse here, so the
             # page never says "sent" for a prompt that cannot arrive.
             return 409, f"this session was not started with the channel named ({why}): {launch.START_DEV}"
-        if len(channel.inbox) >= PROMPTS_QUEUED_MAX:
-            return 429, "earlier prompts have not been taken yet"
-        channel.inbox.append({"text": text, "at": at})
-        head = " ".join(text.split())
-        head = head if len(head) <= PROMPT_HEAD else head[: PROMPT_HEAD - 1] + "…"
-        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "PromptSent", "cat": "perm",
-                              "text": f"ブラウザからプロンプトを送信 → {session['label']}「{head}」"})
         return None
 
     def channel_request(self, channel_id: str, request: dict, at: int) -> bool:
@@ -1306,6 +1333,11 @@ class World:
         if self.calls.tick(at):
             self._dirty.add("calls")
         self._data_docs_tick(at)
+        for sid in self.attachments.due(at):   # an hour after the session ended (a few files: done here)
+            try:
+                self.attachments.drop(sid)
+            except OSError:
+                pass
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]

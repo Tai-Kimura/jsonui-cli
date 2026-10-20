@@ -874,6 +874,20 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-confirm-text { margin: 0; max-height: 8em; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 500 12.5px/1.5 var(--font-body); }
 .h-confirm-acts { display: flex; gap: 8px; }
 .h-compose .wb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.h-compose.h-drop { outline: 2px dashed var(--ink-soft); outline-offset: -4px; }
+.h-compose-row .h-attach-pick { margin-left: auto; }
+.h-attach { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.h-attach[hidden] { display: none; }
+.h-attach-item { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 4px 3px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 500 12px/1.4 var(--font-body); }
+.h-attach-thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
+.h-attach-name { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h-attach-meta { color: var(--ink-soft); white-space: nowrap; }
+.h-attach-up .h-attach-meta { font-style: italic; }
+.h-attach-err { border-color: var(--warn); }
+.h-attach-err .h-attach-meta { color: var(--warn); }
+.h-attach-x { border: 0; background: transparent; color: var(--ink-soft); font: 700 14px/1 var(--font-body); padding: 2px 6px; cursor: pointer; border-radius: 6px; }
+.h-attach-x:hover, .h-attach-x:focus-visible { background: var(--line); color: var(--ink); }
+.h-attach-sent { margin-top: 4px; }
 .h-confirm-go { border-color: var(--info); background: var(--info); color: var(--bg); }
 .h-item { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .h-user { padding: 8px 10px; border-radius: 10px; background: var(--chip); }

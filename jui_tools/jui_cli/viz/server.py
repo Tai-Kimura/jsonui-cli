@@ -11,6 +11,8 @@ Routes (design: dev-guide, 05 §3):
   POST /hook        hook payloads from forward.py (token; no Origin; 2 MB)
   GET  /api/snapshot  the whole state (token)
   POST /api/prompt    a prompt typed in the page for one session (prompt_checks: the page's own origin only)
+  POST /api/attach    one file for a prompt, kept in <viz home>/uploads/<session>/ (the same checks, octet-stream)
+  POST /api/attach-remove  an attachment taken off before sending (the same checks)
   POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
@@ -24,13 +26,14 @@ import os
 import re
 import sys
 import time
+import urllib.parse
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import callcmd, clockout, paths, security
+from . import attachments, callcmd, clockout, paths, security
 from .config import ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec, save_setting
 from .state import VizState, now_ms
 
@@ -516,16 +519,75 @@ def make_app(ctx: ServerContext) -> web.Application:
             return body
         sid = body.get("sessionId") if isinstance(body, dict) else None
         text = body.get("text") if isinstance(body, dict) else None
-        if not isinstance(sid, str) or not sid or not isinstance(text, str) or not text.strip():
+        ids = body.get("attachments", []) if isinstance(body, dict) else []
+        if not isinstance(sid, str) or not sid or not isinstance(text, str) or (not text.strip() and not ids):
             return web.Response(status=400, text="sessionId and text are required\n")
         if ctx.world is None:
             return web.Response(status=503, text="no world\n")
-        refused_by = ctx.world.send_prompt(sid, text, now_ms())
+        try:
+            attached = ctx.world.attachments.take(sid, ids) if ids else []
+        except attachments.Refused as exc:
+            return web.Response(status=exc.status, text=f"{exc}\n")
+        except OSError:
+            return web.Response(status=404, text="no such attachment\n")
+        refused_by = ctx.world.send_prompt(sid, text, now_ms(), attached)
         if refused_by is not None:
             return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
         if ctx.publish:
             ctx.publish()
         return web.json_response({"ok": True})
+
+    async def api_attach(request: web.Request) -> web.Response:
+        """One file attached to a prompt (ticket 2026-10-20 prompt-attach): the bytes as application/octet-stream, the
+        session in X-Jui-Viz-Session, the shown name (percent-encoded) in X-Jui-Viz-Name, a pasted image's media type
+        in X-Jui-Viz-Media. The checks of /api/prompt (prompt_checks) with this route's size and type; then the
+        session must be one a prompt can go to now (World.prompt_refusal). attachments.Attachments.save keeps it in
+        the private folder off the event loop. Answers {id, name, media, size}; the path goes only into the prompt."""
+        refused = prompt_checks(request, ctx, attachments.FILE_MAX, "application/octet-stream")
+        if refused is not None:
+            log(f"拒否: /api/attach（{refused.text.strip()}）")
+            return refused
+        sid = request.headers.get("X-Jui-Viz-Session", "")
+        name = urllib.parse.unquote(request.headers.get("X-Jui-Viz-Name", ""), errors="replace")
+        media = request.headers.get("X-Jui-Viz-Media", "")
+        raw = b""
+        while len(raw) <= attachments.FILE_MAX:   # a chunked body has no Content-Length: stop reading past the cap
+            chunk = await request.content.read(attachments.FILE_MAX + 1 - len(raw))
+            if not chunk:
+                break
+            raw += chunk
+        if len(raw) > attachments.FILE_MAX:
+            return web.Response(status=413, text="file too large\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        refused_by = ctx.world.prompt_refusal(sid)
+        if refused_by is not None:
+            return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
+        try:
+            record = await asyncio.get_running_loop().run_in_executor(
+                None, ctx.world.attachments.save, sid, name, media, raw)
+        except attachments.Refused as exc:
+            return web.Response(status=exc.status, text=f"{exc}\n")
+        except OSError as exc:
+            log(f"添付を保存できません: {type(exc).__name__}")
+            return web.Response(status=409, text="the attachment could not be kept\n")
+        return web.json_response({k: record[k] for k in ("id", "name", "media", "size")})
+
+    async def api_attach_remove(request: web.Request) -> web.Response:
+        """× on an attachment not sent yet: {sessionId, id}; the checks of /api/prompt."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            return refused
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        sid, fid = body.get("sessionId"), body.get("id")
+        if not isinstance(sid, str) or not isinstance(fid, str):
+            return web.Response(status=400, text="sessionId and id are required\n")
+        gone = await asyncio.get_running_loop().run_in_executor(None, ctx.world.attachments.remove, sid, fid)
+        return web.json_response({"ok": gone})
 
     async def api_call_command(request: web.Request) -> web.Response:
         """The call button's command (2.3.5, callcmd.py): {"projectId", "name", "role"} -> {"command", "flag", "root"}.
@@ -730,6 +792,8 @@ def make_app(ctx: ServerContext) -> web.Application:
 
     # Before the static catch-all: every method reaches the handler, which answers 405 to all but POST.
     app.router.add_route("*", "/api/prompt", api_prompt)
+    app.router.add_route("*", "/api/attach", api_attach)
+    app.router.add_route("*", "/api/attach-remove", api_attach_remove)
     app.router.add_route("*", "/api/history-image", api_history_image)
     app.router.add_route("*", "/api/data-docs", api_data_docs)
     app.router.add_route("*", "/api/prices", api_prices)
@@ -780,7 +844,8 @@ def _data_docs_pool():
     return _DATA_DOCS_POOL[0]
 
 
-def prompt_checks(request: web.Request, ctx: ServerContext, max_body: int = PROMPT_MAX_BODY) -> web.Response | None:
+def prompt_checks(request: web.Request, ctx: ServerContext, max_body: int = PROMPT_MAX_BODY,
+                  content_type: str = "application/json") -> web.Response | None:
     """The checks of POST /api/prompt — and of POST /api/session/end, with its own ``max_body`` — each on its own
     (the requester's ruling, 10-19; none may be dropped):
 
@@ -792,7 +857,8 @@ def prompt_checks(request: web.Request, ctx: ServerContext, max_body: int = PROM
         request without one is not the page (CSRF from another site carries that site's origin).
       * X-Jui-Viz-Token, the per-start token from the served page (401).
       * Content-Type application/json (415): another site's form can only post the three "simple" types without a
-        preflight, which this route never answers with CORS headers.
+        preflight, which this route never answers with CORS headers. POST /api/attach takes
+        application/octet-stream instead (``content_type``), which is not a "simple" type either.
       * a declared body over ``max_body`` (413); the read in the handler (_capped_json) stops at max_body + 1 bytes too.
     The server binds 127.0.0.1 only and has no option to bind anything else (viz_cmd._serve), so no other machine
     reaches it. What it does not stop: another process of this user (security.py says why)."""
@@ -805,8 +871,9 @@ def prompt_checks(request: web.Request, ctx: ServerContext, max_body: int = PROM
         return web.Response(status=403, text="origin must be the page's own\n")
     if not security.token_ok(request.headers.get(security.TOKEN_HEADER), ctx.token):
         return web.Response(status=401, text="unauthorized\n")
-    if request.content_type != "application/json":
-        return web.Response(status=415, text="application/json only\n")
+    # aiohttp reads a missing Content-Type as application/octet-stream: the header itself must be there
+    if "Content-Type" not in request.headers or request.content_type != content_type:
+        return web.Response(status=415, text=f"{content_type} only\n")
     if request.content_length is not None and request.content_length > max_body:
         return web.Response(status=413, text="too large\n")
     return None

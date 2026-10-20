@@ -70,15 +70,41 @@ const SOURCE = {
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
   /* A prompt typed in the 応答の履歴 tab, for this robot's session (POST /api/prompt; server.prompt_checks says what it
      must carry: the page's own Host and Origin, which the browser sets, the token, JSON). Resolves { ok, status, error }. */
-  async sendPrompt(label, text) {
+  async sendPrompt(label, text, attachments) {
     try {
+      const body = { sessionId: SESSION_UUID[label] || '', text };
+      if (attachments && attachments.length) body.attachments = attachments;
       const res = await fetch('/api/prompt', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
-        body: JSON.stringify({ sessionId: SESSION_UUID[label] || '', text }),
+        body: JSON.stringify(body),
       });
       return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
     } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
+  /* One file attached to the next prompt for this robot's session (POST /api/attach: the checks of /api/prompt, the bytes
+     as application/octet-stream; the server keeps it under its own name). Resolves { ok, id, name, media, size } or
+     { ok: false, status, error }. */
+  async attachFile(label, file) {
+    try {
+      const res = await fetch('/api/attach', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/octet-stream', 'X-Jui-Viz-Token': NET.token,
+          'X-Jui-Viz-Session': SESSION_UUID[label] || '', 'X-Jui-Viz-Name': encodeURIComponent(file.name || ''),
+          'X-Jui-Viz-Media': file.type || '' },
+        body: file,
+      });
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      return { ok: true, ...(await res.json()) };
+    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
+  /* × on an attachment not sent yet (POST /api/attach-remove). Nothing to wait for. */
+  attachRemove(label, id) {
+    fetch('/api/attach-remove', {
+      method: 'POST', cache: 'no-store', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+      body: JSON.stringify({ sessionId: SESSION_UUID[label] || '', id }),
+    }).catch(() => {});
   },
   /* 退勤 (50-panel.js): POST /api/session/end with the same page-only checks as /api/prompt; the server checks the session,
      the robot (a main one) and the process again, sends SIGTERM once and answers when it has gone. Resolves { ok, status, error }. */

@@ -713,6 +713,8 @@ const SOURCE = {
   },
   history() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no transcripts
   historyImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
+  attachFile() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
+  attachRemove() {},
   notifyPresence() { return Promise.resolve(); },
   callCommand() { return Promise.resolve({ ok: false, why: 'デモでは使えません（プロジェクトのフォルダがありません）' }); },
   setWeather() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo asks nobody about the weather

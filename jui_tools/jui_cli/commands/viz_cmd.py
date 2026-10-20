@@ -600,6 +600,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     world.history_reader = history.reader(claude_home() / "projects")
     from ..viz import prices as prices_mod
     world.prices = prices_mod.PriceBook()
+    from ..viz.attachments import Attachments
+    world.attachments = Attachments()
+    for gone in world.attachments.sweep_private(time.time()):   # left by a server that stopped before its hour was up
+        log(f"添付の掃除: uploads/{gone}")
     world._dirty.add("prices")
     started_at = now_ms()
     sources: dict[str, dict] = {}

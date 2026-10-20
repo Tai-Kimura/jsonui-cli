@@ -13,7 +13,8 @@ const HIST_POLL_MS = 3000;
    whole card (keyed) whenever its key changes, and the new pane starts at scrollTop 0 (measured 10-19: every new turn of
    a working session sent the reader to the top). newer: answers came while the reader was above (the 新しい応答 marker). */
 const HIST = { tab: 'now', id: null, data: null, error: '', timer: 0, busy: false, node: null, sig: '',
-  atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null, wide: false, imgs: new Map(), box: null };
+  atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null, wide: false, imgs: new Map(), box: null,
+  attach: [], attachThumbs: new Map() };
 
 function hNode(tag, cls, text) {
   const n = document.createElement(tag);
@@ -227,7 +228,10 @@ function histItem(item) {
     const n = hNode('div', 'h-item h-user h-channel');
     const head = hNode('p', 'h-who', /(^|:)jui-viz$/.test(String(item.server || '')) ? 'ページから（jui-viz の channel）' : `channel ${item.server || ''}`);
     head.appendChild(at); n.appendChild(head);
-    n.appendChild(hNode('p', 'h-plain', item.text));
+    const lines = String(item.text).split('\n'), files = lines.filter((l) => HIST_ATTACH_LINE.test(l));
+    const rest = lines.filter((l) => !HIST_ATTACH_LINE.test(l)).join('\n');
+    if (rest.trim()) n.appendChild(hNode('p', 'h-plain', rest));
+    if (files.length) n.appendChild(histAttachMarks(files));
     const cut = histCutNote(item); if (cut) n.appendChild(cut);
     return n;
   }
@@ -410,9 +414,33 @@ rbEl.addEventListener('click', (e) => {
    so what is typed survives a rebuild. A session without the relay, or with a jui-viz plugin older than 1.2.0 (its
    channel cannot deliver), gets the box disabled and the reason. */
 const PROMPT_MAX_BYTES = 8192;   // server.PROMPT_MAX_BODY: the JSON body, not only the text
-const composeBytes = (label, text) => new TextEncoder().encode(JSON.stringify({ sessionId: SESSION_UUID[label] || '', text })).length;
+const composeBytes = (label, text) => new TextEncoder().encode(JSON.stringify({ sessionId: SESSION_UUID[label] || '', text,
+  attachments: HIST.attach.map((a) => a.id || '0000000000000000') })).length;
+/* Files attached to the prompt (ticket 2026-10-20 prompt-attach): the 添付… button, a drop on the box, or an image pasted
+   into the text (Ctrl/⌘+V). Each goes to the server at once (SOURCE.attachFile, POST /api/attach); the prompt names their
+   ids and the server adds a line with each file's path, which the receiver opens with Read (its own permission check:
+   the permission board shows it). Limits as the server's (attachments.py). */
+const ATTACH_MAX = 10, ATTACH_FILE_MAX = 20 * 1024 * 1024, ATTACH_THUMBS_MAX = 60;
+const attachReady = () => HIST.attach.filter((a) => a.id);
+const attachBusy = () => HIST.attach.some((a) => a.up);
+const attachSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 const RELAY_HOW_TEXT = RELAY_HOW.replace(/<[^>]+>/g, '');   // the same how-to as on a permission card, as plain text
 const composeNorm = (t) => String(t || '').split(/\s+/).join(' ').trim();
+/* the server's line for one attached file (ingest.attachment_line): 添付: <path>（<name>、<media>、<size>） */
+const HIST_ATTACH_LINE = /^添付: (\/\S*?([0-9a-f]{16})\.[a-z]+)（(.*)、([^、]*)、([^、]*)）$/;
+function histAttachMarks(lines) {
+  const ul = hNode('ul', 'h-attach h-attach-sent');
+  for (const line of lines) {
+    const m = HIST_ATTACH_LINE.exec(line), li = hNode('li', 'h-attach-item');
+    li.title = m[1];
+    const thumb = HIST.attachThumbs.get(m[2]);
+    if (thumb) { const img = hNode('img', 'h-attach-thumb'); img.src = thumb; img.alt = ''; li.appendChild(img); }
+    li.appendChild(hNode('span', 'h-attach-name', `📎 ${m[3]}`));
+    li.appendChild(hNode('span', 'h-attach-meta', m[5]));
+    ul.appendChild(li);
+  }
+  return ul;
+}
 /* Whether the CLI hands the channel's text to the session (sources/launch.py, 2.3.4): it does only for a session started
    naming the channel. The server's sessions slice says which case (launch); the words here are the same as the server's. */
 const PROMPT_START = 'claude --dangerously-load-development-channels plugin:jui-viz@jsonui';
@@ -485,7 +513,11 @@ function composeBuild() {
   const row = hNode('div', 'h-compose-row');
   const state = hNode('span', 'h-compose-state'); state.dataset.hState = ''; state.setAttribute('aria-live', 'polite');
   const send = hNode('button', 'wb-btn h-compose-send', '送信…'); send.type = 'button'; send.dataset.hSend = ''; send.dataset.fk = 'rb-prompt-send';
-  row.append(state, send);
+  const pick = hNode('button', 'wb-btn h-attach-pick', '添付…'); pick.type = 'button'; pick.dataset.hPick = ''; pick.dataset.fk = 'rb-prompt-attach';
+  pick.title = 'ファイルを添付（欄へのドロップ、画像の貼り付けでも添付できる）';
+  const input = hNode('input', ''); input.type = 'file'; input.multiple = true; input.hidden = true; input.dataset.hFile = '';
+  const list = hNode('ul', 'h-attach'); list.dataset.hAttach = ''; list.setAttribute('aria-label', '添付');
+  row.append(state, pick, send, input);
   const confirm = hNode('div', 'h-confirm'); confirm.dataset.hConfirm = ''; confirm.hidden = true;
   confirm.setAttribute('role', 'group'); confirm.setAttribute('aria-label', '送信の確認');
   const to = hNode('p', 'h-confirm-to'); to.dataset.hTo = '';
@@ -495,8 +527,26 @@ function composeBuild() {
   const back = hNode('button', 'wb-btn', 'やめる'); back.type = 'button'; back.dataset.hBack = '';
   acts.append(go, back);
   confirm.append(to, preview, acts);
-  box.append(head, area, row, confirm);
+  box.append(head, area, list, row, confirm);
   area.addEventListener('input', () => composePaint());
+  pick.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { attachAdd([...input.files]); input.value = ''; });
+  box.addEventListener('dragover', (e) => {
+    if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); box.classList.add('h-drop'); }
+  });
+  box.addEventListener('dragleave', (e) => { if (!box.contains(e.relatedTarget)) box.classList.remove('h-drop'); });
+  box.addEventListener('drop', (e) => {
+    box.classList.remove('h-drop');
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+    e.preventDefault(); attachAdd([...e.dataTransfer.files]);
+  });
+  area.addEventListener('paste', (e) => {   // an image copied to the clipboard; text pastes as usual
+    const cd = e.clipboardData;
+    const files = cd ? [...cd.items].filter((it) => it.kind === 'file').map((it) => it.getAsFile()).filter(Boolean) : [];
+    if (!files.length) return;
+    if (!cd.types.includes('text/plain')) e.preventDefault();
+    attachAdd(files);
+  });
   area.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); composeAsk(); }
   });
@@ -508,13 +558,73 @@ function composeBuild() {
 function composeEls() {
   const b = HIST.compose;
   const q = (k) => b.querySelector(`[data-${k}]`);
-  return { box: b, head: q('h-head'), why: q('h-why'), noteX: q('h-note-x'), area: q('h-text'), state: q('h-state'), send: q('h-send'), confirm: q('h-confirm'), to: q('h-to'), preview: q('h-preview'), go: q('h-go') };
+  return { box: b, head: q('h-head'), why: q('h-why'), noteX: q('h-note-x'), area: q('h-text'), state: q('h-state'), send: q('h-send'), confirm: q('h-confirm'), to: q('h-to'), preview: q('h-preview'), go: q('h-go'),
+    pick: q('h-pick'), list: q('h-attach') };
+}
+function attachAdd(files) {
+  const id = HIST.compose && HIST.compose._for;
+  if (!id || composeTarget(id).why) return;
+  for (const file of files) {
+    if (HIST.attach.length >= ATTACH_MAX) { showToast(`添付は 1 回に ${ATTACH_MAX} 個まで`); break; }
+    const a = { key: Math.random().toString(36).slice(2), name: file.name || (file.type.startsWith('image/') ? '貼り付けた画像' : '添付'),
+      size: file.size, media: file.type || '', up: true, error: '', id: '',
+      thumb: /^image\/(png|jpeg|gif|webp)$/.test(file.type) ? URL.createObjectURL(file) : '' };
+    HIST.attach.push(a);
+    if (file.size === 0) { a.up = false; a.error = '空のファイル'; continue; }
+    if (file.size > ATTACH_FILE_MAX) { a.up = false; a.error = `大きすぎる（1 個 ${attachSize(ATTACH_FILE_MAX)} まで）`; continue; }
+    SOURCE.attachFile(id, file).then((got) => {
+      a.up = false;
+      if (!HIST.attach.includes(a)) { if (got.ok) SOURCE.attachRemove(id, got.id); return; }   // × pressed while it went up
+      if (got.ok) { a.id = got.id; a.name = got.name; a.size = got.size; a.media = got.media; }
+      else a.error = got.status === 413 ? '大きすぎる' : got.error || `HTTP ${got.status}`;
+      composePaint();
+    });
+  }
+  composePaint();
+}
+function attachRemove(a) {
+  HIST.attach = HIST.attach.filter((x) => x !== a);
+  if (a.id) SOURCE.attachRemove(HIST.compose._for, a.id);
+  if (a.thumb) URL.revokeObjectURL(a.thumb);
+  composePaint();
+}
+function attachDropAll(label) {
+  for (const a of HIST.attach) { if (a.id && label) SOURCE.attachRemove(label, a.id); if (a.thumb) URL.revokeObjectURL(a.thumb); }
+  HIST.attach = [];
+}
+/* A sent image's thumbnail stays (by its server id) for the history's own line of it; the oldest go first. */
+function attachKeepThumb(a) {
+  if (!a.thumb) return;
+  if (!a.id) { URL.revokeObjectURL(a.thumb); return; }
+  HIST.attachThumbs.set(a.id, a.thumb);
+  while (HIST.attachThumbs.size > ATTACH_THUMBS_MAX) {
+    const [old, url] = HIST.attachThumbs.entries().next().value;
+    URL.revokeObjectURL(url); HIST.attachThumbs.delete(old);
+  }
+}
+function attachPaint(E) {
+  const sig = HIST.attach.map((a) => `${a.key}:${a.id}:${a.up}:${a.error}`).join('|');
+  E.list.hidden = !HIST.attach.length;
+  if (E.list._sig === sig) return;
+  E.list._sig = sig;
+  E.list.replaceChildren(...HIST.attach.map((a) => {
+    const li = hNode('li', 'h-attach-item' + (a.error ? ' h-attach-err' : a.up ? ' h-attach-up' : ''));
+    li.dataset.hAttachItem = a.id || '';
+    if (a.thumb) { const img = hNode('img', 'h-attach-thumb'); img.src = a.thumb; img.alt = ''; li.appendChild(img); }
+    li.appendChild(hNode('span', 'h-attach-name', a.name));
+    li.appendChild(hNode('span', 'h-attach-meta', a.error ? a.error : a.up ? '送っている…' : attachSize(a.size)));
+    const x = hNode('button', 'h-attach-x', '×'); x.type = 'button'; x.setAttribute('aria-label', `${a.name} を外す`);
+    x.addEventListener('click', () => attachRemove(a));
+    li.appendChild(x);
+    return li;
+  }));
 }
 /* After every histSync: the box under the history pane of the card shown, and its state. */
 function composePlace(pane, id) {
   if (!HIST.compose) HIST.compose = composeBuild();
   const { box } = composeEls();
   if (HIST.compose._for !== id) {   // another robot: nothing typed for the last one goes to this one
+    attachDropAll(HIST.compose._for);
     HIST.compose._for = id;
     composeEls().area.value = '';
     composeClose(false);
@@ -539,8 +649,10 @@ function composePaint() {
   E.head.hidden = E.why.hidden;
   E.area.disabled = !!t.why;
   E.area.readOnly = asking;
-  const text = E.area.value, bytes = text.trim() ? composeBytes(id, text) : 0;
-  E.send.disabled = !!t.why || !text.trim() || bytes > PROMPT_MAX_BYTES || asking;
+  const text = E.area.value, files = attachReady().length, bytes = text.trim() || files ? composeBytes(id, text) : 0;
+  E.send.disabled = !!t.why || (!text.trim() && !files) || attachBusy() || bytes > PROMPT_MAX_BYTES || asking;
+  E.pick.disabled = !!t.why || asking || HIST.attach.length >= ATTACH_MAX;
+  attachPaint(E);
   const sent = HIST.sent && HIST.sent.id === id ? HIST.sent : null;
   const phase = sent && !sent.error ? composePhase(sent) : '';
   E.state.textContent = bytes > PROMPT_MAX_BYTES ? `長すぎる（${bytes.toLocaleString('ja-JP')} / ${PROMPT_MAX_BYTES.toLocaleString('ja-JP')} バイト）`
@@ -561,10 +673,12 @@ function composePhase(sent) {
   return now - sent.at > PROMPT_WAIT.notArrivedMs && sent.quietSince && now - sent.quietSince > PROMPT_WAIT.quietMs ? 'missing' : 'sending';
 }
 function composeAsk() {
-  const E = composeEls(), id = HIST.compose._for, t = composeTarget(id), text = E.area.value;
-  if (t.why || !text.trim() || composeBytes(id, text) > PROMPT_MAX_BYTES || !E.confirm.hidden) return;
+  const E = composeEls(), id = HIST.compose._for, t = composeTarget(id), text = E.area.value, files = attachReady();
+  if (t.why || (!text.trim() && !files.length) || attachBusy() || composeBytes(id, text) > PROMPT_MAX_BYTES || !E.confirm.hidden) return;
   E.to.textContent = `送り先: ${t.name}`;
-  E.preview.textContent = text.length > 400 ? `${text.slice(0, 400)}…` : text;
+  const listed = files.map((a) => `添付: ${a.name}（${attachSize(a.size)}）`).join('\n');
+  const shown = text.length > 400 ? `${text.slice(0, 400)}…` : text;
+  E.preview.textContent = [shown, listed].filter(Boolean).join('\n');
   E.confirm.hidden = false;
   E.box._askedAt = Date.now();
   composePaint();
@@ -577,14 +691,17 @@ function composeClose(focusBack) {
   if (focusBack) E.area.focus({ preventScroll: true });
 }
 async function composeSend() {
-  const E = composeEls(), id = HIST.compose._for, text = E.area.value;
-  if (composeTarget(id).why || !text.trim()) return;
+  const E = composeEls(), id = HIST.compose._for, text = E.area.value, files = attachReady();
+  if (composeTarget(id).why || (!text.trim() && !files.length)) return;
   E.go.disabled = true;
-  const got = await SOURCE.sendPrompt(id, text);
+  const got = await SOURCE.sendPrompt(id, text, files.map((a) => a.id));
   E.go.disabled = false;
   composeClose(!got.ok);
-  if (got.ok) { HIST.sent = { id, text, at: Date.now() }; E.area.value = ''; }
-  else HIST.sent = { id, text, at: Date.now(), error: got.error || `HTTP ${got.status}` };
+  if (got.ok) {
+    HIST.sent = { id, text, at: Date.now() }; E.area.value = '';
+    for (const a of HIST.attach) attachKeepThumb(a);
+    HIST.attach = [];
+  } else HIST.sent = { id, text, at: Date.now(), error: got.error || `HTTP ${got.status}` };
   composePaint();
 }
 /* The prompt sent shows in the receiver's transcript as a channel item of jui-viz (sources/history.py: the CLI's own
@@ -593,7 +710,7 @@ async function composeSend() {
 function composeArrived(items) {
   const sent = HIST.sent;
   if (!sent || sent.error || sent.arrivedAt || sent.id !== HIST.id || !Array.isArray(items)) return;
-  const want = composeNorm(sent.text).slice(0, 120);
+  const want = composeNorm(sent.text).slice(0, 120) || '添付:';   // only files: the server's first line
   const fresh = (x) => !(Number(x.at) < sent.at - 60000);   // an older item with the same words is not this one
   const ours = (x) => x.kind === 'channel' && /(^|:)jui-viz$/.test(String(x.server || ''));
   if (items.some((x) => ours(x) && fresh(x) && composeNorm(x.text).startsWith(want))) { sent.arrivedAt = Date.now(); composePaint(); }
