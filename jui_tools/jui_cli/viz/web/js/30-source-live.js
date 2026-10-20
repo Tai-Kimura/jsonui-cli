@@ -961,9 +961,16 @@ function rebuildQuestions() {
   QUESTIONS.splice(0, QUESTIONS.length, ...rows);
   notifyWaiting('ask', QUESTIONS);   // 2.3.6
 }
+/* Slices one pane reads for itself and the scene never does (the デバイス pane, 53-devices.js, reads LIVE.slices.machine
+   every second): a push that carries only these is stored and nothing is rebuilt. The machine's load changes every
+   5 s, and a full rebuild that often reset the robots' timed looks — the whistle, the sweat — and held a break's
+   waiting trip (the e2e suites hist-wide and gitbox, red with the デバイス pane in 2.3.11's gate). */
+const PAGE_ONLY_SLICES = new Set(['machine', 'cloudPrices']);
 function liveApply(changed, replace) {
   if (replace) LIVE.slices = {};
   for (const [k, v] of Object.entries(changed || {})) LIVE.slices[k] = v;
+  const keys = Object.keys(changed || {});
+  if (!replace && keys.length && keys.every((k) => PAGE_ONLY_SLICES.has(k))) return;
   if (changed && changed.settings) notifySettingsShow(changed.settings);   // 2.3.6: the question window, as the server has it
   const before = layoutSignature();
   rebuildRooms();
