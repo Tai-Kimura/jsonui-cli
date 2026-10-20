@@ -28,6 +28,7 @@ function billEl(R) {
   if (R.bill) return R.bill;
   const el = document.createElement('div');
   el.className = 'bill';
+  el.dataset.robot = R.def.id;   // a click on the bill selects the robot, as on its tag (40-scene.js, tagPress)
   el.hidden = true;
   el.innerHTML = `<span class="bill-in">${BILL_ICON_HTML}<b></b></span>`;
   tagsEl.append(el);

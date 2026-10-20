@@ -463,7 +463,8 @@ function buildDemoOffice() {
     if (d.id === 'a2') { robot.drawPhone = drawCartUI; ensureProps(robot, 'phone'); }
     robot.root.userData.robotId = d.id;
     scene.add(robot.root);
-    const tag = addTag('', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
+    const tag = addTag('bot', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
+    tag.dataset.robot = d.id;   // a click on the tag selects the robot (tagPress in build3D)
     robots.push({ def: d, robot, tag, text: tag.lastElementChild, act: '' });
   }
 }
@@ -540,6 +541,36 @@ function build3D() {
     else if (h.kind === 'data') openDataDocs(h.project, canvas);
     else { fit(h.project); openWhiteboard(-1, canvas, h.project); }
   });
+  /* A robot's tag and its bill select the robot (ticket 2026-10-20-jui-viz-robot-name-tag-click-selects): a press on
+     one is handed to the canvas as it is (the camera's controls take the pointer from there, so a drag that starts on
+     a tag turns the camera as a drag anywhere else does), and a release within 6 px of the press opens that robot's
+     card as a click on its body does. The tag's press, not what lies under it, decides the robot. The wheel over any
+     tag goes to the canvas too (a tag must not stop the zoom). */
+  let tagPress = null;
+  const handOn = (ev) => ({ bubbles: false, cancelable: true, composed: true, pointerId: ev.pointerId, pointerType: ev.pointerType,
+    isPrimary: ev.isPrimary, width: ev.width, height: ev.height, pressure: ev.pressure, button: ev.button, buttons: ev.buttons,
+    clientX: ev.clientX, clientY: ev.clientY, screenX: ev.screenX, screenY: ev.screenY,
+    ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, altKey: ev.altKey, metaKey: ev.metaKey });
+  tagsEl.addEventListener('pointerdown', (ev) => {
+    const el = ev.target.closest('[data-robot]');
+    if (!el) return;
+    tagPress = { id: el.dataset.robot, x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId };
+    canvas.dispatchEvent(new PointerEvent('pointerdown', handOn(ev)));
+  });
+  tagsEl.addEventListener('contextmenu', (ev) => { if (ev.target.closest('[data-robot]')) ev.preventDefault(); });   // a right drag pans
+  tagsEl.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    canvas.dispatchEvent(new WheelEvent('wheel', { ...handOn(ev), deltaX: ev.deltaX, deltaY: ev.deltaY, deltaZ: ev.deltaZ, deltaMode: ev.deltaMode }));
+  }, { passive: false });
+  // before the canvas's own pointerup (capture, on window): a press that began on a tag is the tag's, not the 3D's
+  window.addEventListener('pointerup', (ev) => {
+    if (!tagPress || ev.pointerId !== tagPress.pointerId) return;
+    const { id, x, y } = tagPress;
+    tagPress = null; downAt = null;
+    if (Math.hypot(ev.clientX - x, ev.clientY - y) > 6 || (zoom.zoomed && !rbState.id)) return;
+    if (robots.some((R) => R.def.id === id)) openRobot(id, canvas);
+  }, true);
+  window.addEventListener('pointercancel', (ev) => { if (tagPress && ev.pointerId === tagPress.pointerId) tagPress = null; }, true);
   canvas.addEventListener('pointermove', (ev) => {
     if (ev.buttons || (zoom.zoomed && !rbState.id)) return;
     const h = hitAt(ev);
@@ -685,7 +716,8 @@ function liveAddRobot(d, i) {
   robot.root.position.set(start[0], 0, start[1]); robot.root.rotation.y = d.ry || 0;
   robot.root.userData.robotId = d.id;
   scene.add(robot.root);
-  const tag = addTag('', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
+  const tag = addTag('bot', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
+  tag.dataset.robot = d.id;   // a click on the tag selects the robot (tagPress in build3D)
   const R = { def: d, robot, tag, text: tag.lastElementChild, act: '', path: [], room: d.room, seatKey: '', exitAt: 0 };
   if (route.length) R.path = route.slice(1);
   d.enter = false;
@@ -2680,11 +2712,15 @@ function placeRobotTags(dt = 1 / 60) {
     }
     placed.push({ x0, x1, y0: bottom - h, y1: bottom });
     it.target = it.y - bottom;
+    it.front = placed.length;   // 1 = the nearest: its tag (and bill) is drawn over, and takes the click from, any farther one
   }
   for (const it of list) {   // the writes
     const el = it.R.tag;
     if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; if (it.R.bill) it.R.bill.style.visibility = 'hidden'; continue; }
     el.style.visibility = 'visible';
+    const zi = String(-it.front);   // negative: under the rooms' signs (z-index 1), inside .tags (isolation: isolate)
+    if (el.style.zIndex !== zi) el.style.zIndex = zi;
+    if (it.R.bill && it.R.bill.style.zIndex !== zi) it.R.bill.style.zIndex = zi;
     const dy = it.R.tagDy === undefined ? it.target : it.R.tagDy + (it.target - it.R.tagDy) * ease;
     it.R.tagDy = Math.abs(dy - it.target) < 0.5 ? it.target : dy;
     it.R.tagTarget = it.target;   // where the tag is going (the e2e reads a tag once tagDy has reached it: the settle hook of 80-dbg.js)

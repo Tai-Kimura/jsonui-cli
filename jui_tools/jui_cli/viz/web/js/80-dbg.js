@@ -98,6 +98,11 @@ window.__dbg = {
   // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
   tags: () => robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !tagsEl.hidden).map((R) => {
     const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; }),
+  // tags left on each other (2.3.6, the click on a tag): false turns off keeping them apart, so the e2e can put one
+  // robot's tag over another's and check the nearer takes the click; true (or nothing) puts the passes back
+  tagsApart: (on) => { if (TAGS.passesAsBuilt === undefined) TAGS.passesAsBuilt = TAGS.maxPasses; TAGS.maxPasses = on === false ? 0 : TAGS.passesAsBuilt; return TAGS.maxPasses; },
+  // a bill over robot `label` now (54-bills.js), without a response: the click-on-a-bill arm
+  billShow: (label, usd) => { billShow(label, { id: `e2e-${label}-${performance.now()}`, usd, tokens: 1200, model: 'e2e-model', from: 'default' }); return !!(robots.find((x) => x.def.id === label) || {}).bill; },
   // placeRobotTags' own CPU time, k placements in a row in this call (2.3.5): the cost arm reads this, not the frames a
   // loaded machine happened to draw (1–2 in 3 s at load 90–130). The frame stats are left as they were.
   tagBench: (k) => { const keep = { ...TAGS.stats }; let sum = 0, max = 0;

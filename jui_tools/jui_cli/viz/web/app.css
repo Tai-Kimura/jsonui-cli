@@ -218,7 +218,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .main.side-closed > .side { display: none; }
 .scene { position: relative; min-height: 0; overflow: hidden; background: var(--scene); }
 #scene-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
-.tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; isolation: isolate; }
 .tag {
   position: absolute;
   left: 0;
@@ -240,6 +240,11 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .tag > .nm { flex: none; max-width: 13em; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
 .tag > .pill[hidden] { display: none; }
 .tag.named { padding-left: 9px; }
+/* A robot's tag selects the robot (ticket 2026-10-20-jui-viz-robot-name-tag-click-selects): the whole tag takes the
+   click, its hover rings it. The nearest robot's tag is in front (z-index from placeRobotTags, negative, so the rooms'
+   signs stay over every tag). The bill over a robot (.bill, 54-bills.js) does the same. */
+.tag.bot, .bill { pointer-events: auto; cursor: pointer; }
+.tag.bot:hover { box-shadow: 0 0 0 2px var(--info), 0 1px 4px var(--shadow); }
 /* A room's name is a sign, not a robot's name tag (requester 10-18: the two blended in a crowded room): square corners,
    a frame and the info hue always on, an opaque ground, and in front of the tags (a later sibling would paint over it). */
 .tag.room { z-index: 1; padding: 2px 8px; border: 1.5px solid var(--info); border-radius: 3px; background: var(--panel); color: var(--info); font: 700 12px/1.5 var(--font-mono); box-shadow: 0 1px 4px var(--shadow); pointer-events: auto; cursor: pointer; }
@@ -1230,7 +1235,8 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 
 /* The bill over a robot (2.3.6): a banknote and the estimated cost of its responses, above its name tag (placeRobotTags
    keeps the room for it inside the tag's box, so it never covers a tag); it rises a little and goes. ? = no price. */
-.bill { position: absolute; left: 0; top: 0; pointer-events: none; }
+.bill { position: absolute; left: 0; top: 0; }
+.bill:hover .bill-in { box-shadow: 0 0 0 2px var(--info), 0 1px 4px var(--shadow); }
 .bill-in { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 5px; border: 1.5px solid var(--ok); border-radius: 999px; background: var(--ok-bg); color: var(--ok); font: 700 11.5px/1.5 var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px var(--shadow); }
 .bill.unknown .bill-in { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
 .bill-ico { flex: none; width: 18px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; }
