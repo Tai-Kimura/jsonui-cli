@@ -856,6 +856,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-clock-why { grid-column: 1 / -1; margin: 0; padding: 4px 10px; border-radius: 8px; background: var(--chip); color: var(--ink-soft); font: 600 11.5px/1.5 var(--font-body); overflow-wrap: anywhere; }
 .rb-clock-why[hidden] { display: none; }
 .rb-clock-why.rb-clock-err { background: var(--bad-bg); color: var(--bad); }
+.rb-moved { grid-column: 1 / -1; margin: 0; padding: 4px 10px; border-radius: 8px; background: var(--chip); color: var(--ink-soft); font: 600 11.5px/1.5 var(--font-body); overflow-wrap: anywhere; }
 .clk-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0 0 10px; font-size: 13px; }
 .clk-facts dt { color: var(--ink-soft); font-weight: 700; }
 .clk-facts dd { margin: 0; overflow-wrap: anywhere; }

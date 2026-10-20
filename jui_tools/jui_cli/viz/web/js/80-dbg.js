@@ -385,6 +385,8 @@ window.__dbg = {
   },
   // the card and the camera agree (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch): how far what the camera
   // looks at is from the open robot, and how far the camera is from the room's (or the floor's) own view
+  // rbFollow (50-panel.js): the card's mark when its robot moved and the view did not follow, and the last switch by hand
+  follow: () => ({ moved: rbState.moved, seen: rbState.seen, handAt: FOLLOW.handAt, toast: document.getElementById('toast').textContent }),
   camOn: () => {
     const t = zoom.zoomed ? viewTarget : controls.target, R = rbState.id ? robots.find((x) => x.def.id === rbState.id) : null;
     const room = roomPose(UI.project);

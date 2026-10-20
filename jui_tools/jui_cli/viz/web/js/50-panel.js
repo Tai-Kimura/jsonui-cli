@@ -32,6 +32,9 @@ const UI = {
 };
 if (!['all', 'active', 'waiting', 'asking', 'background', 'idle'].includes(UI.sessFilter)) UI.sessFilter = 'all';
 const inScope = (project) => UI.project === 'all' || UI.project === project;
+// rbFollow (below): busy while it switches the view itself; handAt: the last switch by hand (setProject)
+const FOLLOW = { busy: false, handAt: 0 };
+const FOLLOW_HAND_MS = 3000;
 const scopeLabel = () => (UI.project === 'all' ? 'すべて' : PROJECT[UI.project].name);
 function sessionBadge(s) {
   const kinds = new Set(s.robots.map(robotBadgeKind));
@@ -307,6 +310,7 @@ function robotToPick(id) {
 }
 function setProject(id, { camera: moveCamera = true } = {}) {
   if (!(id === 'all' || PROJECT[id]) || UI.project === id) return;
+  if (!FOLLOW.busy) FOLLOW.handAt = Date.now();   // a switch by hand (rbFollow does not follow right after one)
   // only a picked robot carries over: with none picked, the room is shown and nothing opens
   const pick = rbState.id ? robotToPick(id) : undefined;
   // The card closes and the next opens with the 3D held (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch):
@@ -1355,7 +1359,8 @@ const rawDetails = (p) => {
 
 /* ---------- a robot up close: what it is doing, its tasks and its prompts ---------- */
 const rbEl = $('rb');
-const rbState = { id: null };
+// seen: the robot whose room rbFollow last saw, and that room; moved: the card's mark when it does not follow (rbFollow)
+const rbState = { id: null, seen: null, moved: null };
 /* The chat icon of トーク (58-talk.js): a speech bubble, drawn with the text's colour. */
 const TALK_ICON = '<svg class="rb-talk-icon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h9A2.5 2.5 0 0 1 17 4.5v6a2.5 2.5 0 0 1-2.5 2.5H9l-4 3.5V13h0A2 2 0 0 1 3 11z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7" cy="7.6" r="1" fill="currentColor"/><circle cx="10" cy="7.6" r="1" fill="currentColor"/><circle cx="13" cy="7.6" r="1" fill="currentColor"/></svg>';
 const CAM_DIR = new THREE.Vector3(0.25, 0.42, 0.87).normalize();
@@ -1525,6 +1530,7 @@ const focusing = () => has3D && !!rbState.id && zoom.zoomed && !camTween;
 }
 function openRobot(id, opener) {
   if (projectOfRobot(id)) LAST_ROBOT.set(projectOfRobot(id), id);   // whichever way it was opened (list, tag, card, notification)
+  rbState.seen = { id, room: projectOfRobot(id) || null, name: (PROJECT[projectOfRobot(id)] || {}).name || '' }; rbState.moved = null;
   NOTIFY.opened.set(id, Date.now());   // the session looked at since its turn's end: no 入力待ち reminder (notifyIdle)
   holdView('rb');
   if (wb.open) closeWhiteboard();
@@ -1599,11 +1605,47 @@ function selectRobot(id, opener) {
   // switched to. A robot not in the scene yet sets it when it gets the camera (rbZoomWhenBuilt).
   if (away && from && has3D && zoom.zoomed) zoom.returnPose = roomPose(viewRoom());
 }
+/* The open card's robot moved to another room (ticket 2026-10-21-jui-viz-camera-does-not-follow-robot-walking-rooms;
+   the ruling of 10-21): a room in view, it walks there and the camera follows it each frame (40-scene.js). A room out of
+   the view (the one-room view, another floor) put it out of the 3D and the camera stayed where it was: now the view
+   follows it as selectRobot does, and a toast says so. Not right after a switch by hand (FOLLOW_HAND_MS): the card
+   says where it went, with a button to go there. Its room closed: the card stays open and says so. Only while its card
+   is open; called after each liveSync, never inside it (setProject lays the rooms out again). */
+function rbFollow() {
+  const id = rbState.id;
+  if (SOURCE.mode !== 'live' || !id) return;
+  const room = projectOfRobot(id) || null, seen = rbState.seen;
+  if (!seen || seen.id !== id) { rbState.seen = { id, room, name: room && PROJECT[room] ? PROJECT[room].name : '' }; rbState.moved = null; return; }   // ← →: another robot
+  if (!room || !PROJECT[room]) {   // its room closed: its project gone (the same id, or none)
+    if (rbState.moved && rbState.moved.closed !== undefined) return;
+    const was = seen.name || '';
+    seen.room = room;
+    rbState.moved = { closed: was };
+    renderRobot(latestModel);
+    showToast(`${id} の部屋${was ? `（${was}）` : ''}が閉じました`);
+    return;
+  }
+  if (seen.room === room) return;
+  seen.room = room; seen.name = PROJECT[room].name;
+  rbState.moved = null;
+  if (roomsInView().includes(room)) { renderRobot(latestModel); return; }
+  if (Date.now() - FOLLOW.handAt < FOLLOW_HAND_MS) { rbState.moved = { room }; renderRobot(latestModel); return; }
+  rbFollowTo(id, room);
+}
+function rbFollowTo(id, room) {
+  FOLLOW.busy = true;
+  try { selectRobot(id); } finally { FOLLOW.busy = false; }
+  showToast(`${id} を追って ${PROJECT[room].name} へ移りました`);
+}
+rbEl.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-rb-moved-go]') || !rbState.id || !rbState.moved || !rbState.moved.room) return;
+  selectRobot(rbState.id);   // pressed by hand: a switch by hand, as the project menu
+});
 function closeRobot({ byHand = false } = {}) {
   zoom.waitFor = null;
   if (!rbState.id) { releaseView('rb'); return; }
   if (byHand && projectOfRobot(rbState.id)) LAST_ROBOT.set(projectOfRobot(rbState.id), null);   // closed by hand: none is remembered
-  rbState.id = null;
+  rbState.id = null; rbState.seen = null; rbState.moved = null;
   hideOverlay(rbEl);
   histSync();
   talkSync();
@@ -1702,6 +1744,14 @@ rbEl.addEventListener('keydown', (e) => {
   const again = [...rbEl.querySelectorAll('[role="tab"]')].find((b) => b.dataset.fk === want);   // the card may have been rebuilt
   if (again) again.focus();
 });
+/* The card's mark when its robot moved and the view did not follow (rbFollow). */
+function rbMovedHTML() {
+  const m = rbState.moved;
+  if (!m) return '';
+  if (m.room === undefined) return `<p class="rb-moved" data-rb-moved>部屋${m.closed ? `（${esc(m.closed)}）` : ''}が閉じた</p>`;
+  const name = PROJECT[m.room] ? PROJECT[m.room].name : m.room;
+  return `<p class="rb-moved" data-rb-moved>${esc(name)} へ移った <button type="button" class="link-btn" data-rb-moved-go data-fk="rb-moved-go">そこへ移る</button></p>`;
+}
 function renderRobot(model) {
   const id = rbState.id;
   if (!id || rbEl.hidden) return;
@@ -1711,13 +1761,13 @@ function renderRobot(model) {
   const order = { doing: 0, wait: 1, todo: 2, done: 3 };
   const owned = model.tasks.filter((x) => (isMain ? x.list === id : x.owner === id)).sort((a, b) => order[a.col] - order[b.col] || a.id - b.id);
   const subs = isMain ? (SESSIONS.find((s) => s.id === id) || { robots: [] }).robots.filter((r) => r !== id) : [];
-  keyed(rbEl, JSON.stringify([id, NAMES.rev, permSig(pending), specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}:${x.subject}`)]), () => {
+  keyed(rbEl, JSON.stringify([id, NAMES.rev, projectOfRobot(id) || '', rbState.moved, permSig(pending), specIdx, owned.map((x) => `${x.key}:${x.col}:${x.perm ? 1 : 0}:${x.subject}`)]), () => {
     const room = (SESSIONS.find((s) => s.id === sess) || { room: (PROJECT[projectOfRobot(id)] || {}).name || '' }).room;
     const tasksHTML = owned.length ? `<ul class="rb-tasks">${owned.map((x) => {
       const [c, l] = x.perm ? ['st-waiting', '許可待ち'] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
       return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
     }).join('')}</ul>` : `<p class="rb-none">${isMain ? 'このセッションのタスク一覧は空' : '担当しているタスクはない'}</p>`;
-    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? `${id} のメインセッション · ${d.head}` : d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-side"><div class="rb-menu"><button type="button" class="wb-btn rb-talk" data-rb-talk data-fk="rb-talk" aria-pressed="false" aria-label="トーク" title="トーク（SendMessage の会話）">${TALK_ICON}<span>トーク</span><span class="rb-talk-n" data-rb-talk-n hidden></span></button><button type="button" class="wb-btn rb-clock" data-rb-clock data-fk="rb-clock" aria-haspopup="dialog" aria-describedby="rb-clock-why">退勤…</button></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div><p class="rb-clock-why" id="rb-clock-why" data-rb-clock-why hidden></p></div>
+    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || `${id} のメインセッション` : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? `${id} のメインセッション · ${d.head}` : d.agent} · ${room}` : `${ROLE_JA[d.role]} · ${sess} セッションのサブエージェント · ${room}`)}</p></div><div class="rb-side"><div class="rb-menu"><button type="button" class="wb-btn rb-talk" data-rb-talk data-fk="rb-talk" aria-pressed="false" aria-label="トーク" title="トーク（SendMessage の会話）">${TALK_ICON}<span>トーク</span><span class="rb-talk-n" data-rb-talk-n hidden></span></button><button type="button" class="wb-btn rb-clock" data-rb-clock data-fk="rb-clock" aria-haspopup="dialog" aria-describedby="rb-clock-why">退勤…</button></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="前のロボット（←）" title="前のロボット（←）">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="次のロボット（→）" title="次のロボット（→）">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">← 3D に戻る</button></div></div><p class="rb-clock-why" id="rb-clock-why" data-rb-clock-why hidden></p>${rbMovedHTML()}</div>
 <div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" hidden>広げる</button><button type="button" class="wb-btn rb-low-btn" data-rb-low data-fk="rb-low" aria-pressed="false" hidden>下を広げる</button><div class="rb-tablist" role="tablist" aria-label="表示"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">今の様子</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">応答の履歴</button></div></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="応答の履歴" tabindex="0"></div>
 <div class="rb-body" tabindex="0" aria-label="今の様子">

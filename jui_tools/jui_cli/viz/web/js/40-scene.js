@@ -763,6 +763,7 @@ function liveSync() {
   }
   redrawBoards(latestModel, performance.now() / 1000, true);
   rbZoomWhenBuilt();   // 50-panel.js: a card opened before its robot was put here gets the camera now
+  queueMicrotask(rbFollow);   // 50-panel.js: the open card's robot in another room — after this layout, not inside it
   const empty = $('live-empty');
   if (empty) empty.hidden = !!SESSIONS.length || !SOURCE.connected;
 }
