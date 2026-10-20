@@ -33,8 +33,7 @@ from ..infra import model as M
 from ..infra import room as R
 from .report import CheckReport, ResultItem, compute_input_hashes
 
-SKIP_DIRS = {".git", "node_modules", "vendor", "build", "dist", ".terraform", ".venv", "venv", "__pycache__", "Pods",
-             ".next", ".wrangler", "target", ".gradle", "DerivedData"}   # cdk.out is read: a synthesized CDK app
+SKIP_DIRS = T.SKIP_DIRS   # which file is what lives in iac_tables (one copy with seed); the name stays for seed until (C) imports T
 MAX_FILES = 5000
 MAX_BYTES = 1_000_000
 
@@ -79,43 +78,23 @@ def _text_or_why(p: Path) -> tuple[str | None, str]:
         return None, f"unreadable ({exc.strerror or type(exc).__name__})"
 
 
-def _iac_provider(name: str, rel: str) -> str:
-    """Whose an IaC file is, by its kind ("*" when it can be anyone's: Terraform names many providers)."""
-    if name.endswith(".bicep"):
-        return "azure"
-    if "/cdk.out/" in f"/{rel}" or name.endswith(".template.json") or name.startswith("template."):
-        return "aws"
-    if COMPOSE_NAMES.match(name):
-        return "docker"
-    if WRANGLER.match(name):
-        return "cloudflare"
-    return "*"
-
-
 HEAD_BYTES = 65_536
-_CFN_RESOURCES = re.compile(r'^[\'"]?Resources[\'"]?\s*:|"Resources"\s*:', re.M)   # YAML (quoted too) or JSON
-_CFN_TYPE = re.compile(r"\"?Type\"?\s*:\s*[\"']?AWS::")
-
-
-def _is_cfn(text: str) -> bool:
-    """A CloudFormation / SAM template: its version line, or Resources with a Type of AWS:: (YAML or JSON, spaced or
-    compact). A note that only mentions "AWS::" somewhere is not one."""
-    return "AWSTemplateFormatVersion" in text or bool(_CFN_RESOURCES.search(text) and _CFN_TYPE.search(text))
+_is_cfn = T.is_cfn   # the name stays for seed until (C) imports T
 
 
 def _iac_by_head(p: Path) -> str | None:
     """Whose IaC a file too big to read is, by its first bytes (a name like stack.yaml or app.yaml says nothing):
     a CloudFormation template (aws), a Kubernetes manifest, a Terraform JSON configuration; None when it is none."""
-    if not p.name.endswith((".yaml", ".yml", ".json")):
+    if T.iac_kind(p.name) != "by_text":   # a YAML or JSON the name says nothing about
         return None
     try:
         with open(p, "rb") as f:
             head = f.read(HEAD_BYTES).decode("utf-8-sig", errors="replace")
     except OSError:
         return None
-    if _is_cfn(head):
+    if T.is_cfn(head):
         return "aws"
-    if re.search(r"^apiVersion:", head, re.M) and re.search(r"^kind:", head, re.M) or ('"apiVersion"' in head and '"kind"' in head):
+    if T.is_k8s(p.name, head) or ('"apiVersion"' in head and '"kind"' in head):   # a big .yaml holding JSON too
         return "kubernetes"
     if p.name.endswith(".json") and '"resource"' in head and '"terraform"' in head:
         return "*"
@@ -142,11 +121,6 @@ def _tf_json_counted(data) -> bool:
     return False
 
 
-def _iac_name(name: str) -> bool:
-    return (name.endswith((".tf", ".tofu", ".tf.json", ".bicep", ".template.json")) or bool(COMPOSE_NAMES.match(name))
-            or bool(WRANGLER.match(name)) or name in ("template.yaml", "template.yml", "template.json"))
-
-
 def _tf_json_resources(data) -> list[tuple[str, str]]:
     """(type, name) of the resources of a Terraform JSON configuration (resource: {type: {name: ...}}, or a list of
     such objects, as CDKTF writes it)."""
@@ -168,8 +142,6 @@ def _rel(p: Path, root: Path) -> str:
 
 # The tables live in infra/iac_tables.py, shared with seed (ticket 2026-10-20-jui-infra-seed-and-check-tables-disagree);
 # check spells no IaC type of its own.
-COMPOSE_NAMES = re.compile(r"^(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$")
-WRANGLER = re.compile(r"^wrangler\.(?:toml|json|jsonc)$")
 # platform settings (firebase.json, serverless.yml, ...): seed reads them, check does not compare them (yet)
 NOT_COMPARED = {name: (provider or "*") for name, (provider, _platform) in T.PAAS_FILES.items()}
 
@@ -191,7 +163,7 @@ def _yaml():
 
 def _app_engine(text: str | None) -> bool:
     """app.yaml is App Engine's only with a runtime and no apiVersion: a Kubernetes manifest is often named so too."""
-    return bool(text) and bool(re.search(r"^runtime:", text, re.M)) and not re.search(r"^apiVersion:", text, re.M)
+    return bool(text) and bool(re.search(r"^runtime:", text, re.M)) and not T.is_k8s("app.yaml", text)
 
 
 def _node(found, address, provider, mapping, source, type_):
@@ -212,7 +184,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
         if why not in unverified[provider]:
             unverified[provider].append(why)
 
-    names = lambda n: n.endswith((".tf", ".tofu", ".yaml", ".yml", ".json", ".toml", ".jsonc", ".bicep")) or n == "Procfile"  # noqa: E731
+    names = lambda n: T.iac_kind(n) is not None or n in NOT_COMPARED  # noqa: E731 — IaC by the table, and the platform settings
     files, capped = _walk(root, names)
     if capped:
         note("*", f"more than {MAX_FILES} candidate files: the rest were not read")
@@ -239,12 +211,14 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
             continue
         if text is None:
             # an IaC file not read is a range not checked: said, never silent — by its name, else by its head
-            who = _iac_provider(name, rel) if _iac_name(name) else _iac_by_head(p)
+            kind = T.iac_kind(rel)
+            who = T.iac_provider(rel) if kind not in (None, "by_text") else _iac_by_head(p)
             if who:
                 not_read(who, f"{rel}: {why}: not read")
             continue
-        if name.endswith((".tf", ".tofu", ".tf.json")):
-            if name.endswith(".tf.json"):
+        kind = T.iac_kind(rel)
+        if kind in ("terraform", "terraform_json"):
+            if kind == "terraform_json":
                 try:
                     tfj = json.loads(text)
                     pairs = _tf_json_resources(tfj)
@@ -267,7 +241,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                     unmapped.setdefault(provider, set()).add(t)
                     continue
                 _node(found, T.tf_address(t, n), provider, m, rel, t)
-            if name.endswith(".tf.json"):
+            if kind == "terraform_json":
                 for mname, src in _tf_json_modules(tfj):
                     if not src.startswith(("./", "../")):
                         note("*", f"{rel}: module \"{mname}\" comes from outside the project: its resources were not read")
@@ -282,7 +256,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
             if re.search(r"^\s*(?:count|for_each)\s*=", text, re.M):
                 who = next(iter(file_providers)) if len(file_providers) == 1 else "*"
                 note(who, f"{rel}: count / for_each are not evaluated (a static read; no plan): how many is not checked")
-        elif name.endswith(".bicep"):
+        elif kind == "bicep":
             for sym, t in re.findall(r"^\s*resource\s+([A-Za-z_][A-Za-z0-9_]*)\s+'([^'@]+)@", text, re.M):
                 m = T.bicep_mapping(t)
                 if m == "part":
@@ -292,9 +266,9 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                     unmapped.setdefault("azure", set()).add(t)
                     continue
                 _node(found, T.bicep_address(sym), "azure", m, rel, t)
-        elif WRANGLER.match(name):
+        elif kind == "wrangler":
             _wrangler(p, rel, text, found, not_read)
-        elif COMPOSE_NAMES.match(name):
+        elif kind == "compose":
             if y is None:
                 note("docker", f"{rel}: PyYAML is not installed: not read")
                 continue
@@ -307,11 +281,11 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                 image = str((spec or {}).get("image") or "") if isinstance(spec, dict) else ""
                 _node(found, T.compose_address(rel, svc), "docker", (T.compose_category(image), "compose.service"), rel,
                       "compose.service")
-        elif name.endswith((".yaml", ".yml", ".json")):
-            if "/cdk.out/" in f"/{rel}" and name.endswith(".template.json") or _is_cfn(text):
+        elif kind in ("cfn", "by_text"):
+            kind = T.iac_kind_by_text(rel, text) if kind == "by_text" else kind
+            if kind == "cfn":
                 _cfn(p, rel, text, y, found, not_read, unmapped, part)
-            elif (re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M)) or \
-                    (name.endswith(".json") and '"apiVersion"' in text and '"kind"' in text):
+            elif kind == "k8s":
                 _k8s(rel, text, y, found, not_read, unmapped, part)
     for provider, n in sorted(parts.items()):
         note(provider, f"{n} resource(s) that are parts of another (attachments, rules, routes, records, ...): not nodes, "

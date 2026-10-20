@@ -505,3 +505,43 @@ def test_a_provider_is_not_said_to_have_none_when_a_file_of_no_known_provider_wa
     _r2, rep2 = _mini(tmp_path / "plain", {"k8s/a.yaml": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: a\n"},
                       [{"id": "q", "category": "queue", "provider": "aws", "iac": ["aws_sqs_queue.q"]}])
     assert any("no IaC found" in w for w in rep2.target_extra["unverified"]["aws"])   # nothing unread: still said
+
+
+def test_which_file_is_what_is_one_table():
+    """R3 / (C)'s request: iac_tables says which file is IaC, of which kind and whose; check spells none of it."""
+    from jsonui_doc_cli.infra import iac_tables as T
+    want = {"infra/main.tf": ("terraform", "*"), "infra/main.tofu": ("terraform", "*"), "a.tf.json": ("terraform_json", "*"),
+            "m.bicep": ("bicep", "azure"), "wrangler.jsonc": ("wrangler", "cloudflare"), "docker-compose.yml": ("compose", "docker"),
+            "compose.prod.yaml": ("compose", "docker"), "template.yaml": ("cfn", "aws"), "api.template.json": ("cfn", "aws"),
+            "net.cfn.yml": ("cfn", "aws"), "cdk.out/S.template.json": ("cfn", "aws"), "k8s/app.json": ("by_text", "*"),
+            "stack.yaml": ("by_text", "*"), "Procfile": (None, "*"), "app.py": (None, "*")}
+    assert {r: (T.iac_kind(r), T.iac_provider(r)) for r in want} == want
+    assert T.iac_kind_by_text("k8s/app.json", '{"apiVersion": "v1", "kind": "List", "items": []}') == "k8s"
+    assert T.iac_kind_by_text("s.yaml", "Resources:   # the stack\n  Q:\n    Type: AWS::SQS::Queue\n") == "cfn"
+    assert T.iac_kind_by_text("notes.yaml", "we use AWS::SQS::Queue\n") is None
+    assert C.SKIP_DIRS is T.SKIP_DIRS and C._is_cfn is T.is_cfn          # the names seed imports today are the table's
+    src = Path(C.__file__).read_text()
+    for spelled in ("Resources[", "Resources\\\\s", "^apiVersion:", '".tofu"', "compose(?:", "wrangler\\\\.(?:", '"DerivedData"',
+                    '".template.json"', '"template.yaml"'):
+        assert spelled not in src, spelled
+
+
+def test_a_template_named_so_is_aws_even_when_its_head_says_nothing(tmp_path, monkeypatch):
+    """A *.cfn.yaml too big to read, whose first bytes hold no Resources: whose it is comes from its name."""
+    monkeypatch.setattr(C, "MAX_BYTES", 200)
+    monkeypatch.setattr(C, "HEAD_BYTES", 40)
+    _r, rep = _mini(tmp_path, {"infra/net.cfn.yaml": "Description: " + "x" * 300 + "\nResources:\n  Q:\n    Type: AWS::SQS::Queue\n"},
+                    [{"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]}])
+    assert any("net.cfn.yaml" in w and "not read" in w for w in rep.target_extra["unverified"].get("aws", []))
+    assert _by_target(rep)["aws/q"].status == "skipped"
+
+
+def test_a_big_template_with_a_bom_is_known_by_its_head(tmp_path, monkeypatch):
+    """Q2 in the head read too: a template over the size, a BOM first and no version line, is aws's (not read; its
+    node skipped, never missing)."""
+    monkeypatch.setattr(C, "MAX_BYTES", 200)
+    r, _ = _mini(tmp_path, {"infra/main.tf": 'resource "aws_sqs_queue" "other" {}\n'}, [{"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]}])
+    (r / "infra" / "stack.yaml").write_bytes(("\ufeffResources:\n  Q:\n    Type: AWS::SQS::Queue\n" + "#" * 300 + "\n").encode("utf-8"))
+    rep = C.run_infra_iac(_decls(r)["iac"], r)
+    assert any("stack.yaml" in w and "not read" in w for w in rep.target_extra["unverified"].get("aws", []))
+    assert _by_target(rep)["aws/q"].status == "skipped"

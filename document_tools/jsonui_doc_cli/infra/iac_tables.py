@@ -349,6 +349,73 @@ def compose_address(rel: str, service: str) -> str:
     return f"{rel}#services.{service}"  # rel: the compose file's path inside the room
 
 
+# ---------------------------------------------------------------- which file is what (one copy: seed and check)
+# dd's fourth verification R3 and (C)'s request: check and seed told IaC files apart each their own way (check read
+# .tofu, k8s JSON, a CFN JSON not named template, "Resources:   # a note"; seed did not), so a draft from seed was
+# warned about by check. What decides whether a file is IaC, of which kind and whose, lives here. (Which files hold
+# values and are never opened — tfstate, .env, Pulumi stack and Helm values — is seed's own rule: check never opens
+# them either, as it reads IaC and code by name only.)
+
+#: folders neither reads (no symlink is followed, and hidden folders are left out too)
+SKIP_DIRS = frozenset({".git", "node_modules", "vendor", "build", "dist", ".terraform", ".venv", "venv", "__pycache__",
+                       "Pods", ".next", ".wrangler", "target", ".gradle", "DerivedData"})   # cdk.out is read: a synthesized CDK app
+COMPOSE_NAMES = re.compile(r"^(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$")
+WRANGLER_NAMES = re.compile(r"^wrangler\.(?:toml|json|jsonc)$")
+_CFN_NAMED = re.compile(r"^(?:template|.+\.template|.+\.cfn)\.(?:json|ya?ml)$")
+CFN_RESOURCES = re.compile(r'^[\'"]?Resources[\'"]?\s*:|"Resources"\s*:', re.M)   # YAML (quoted too) or JSON
+CFN_TYPE = re.compile(r"\"?Type\"?\s*:\s*[\"']?AWS::")
+
+
+def is_cfn(text: str) -> bool:
+    """A CloudFormation / SAM template: its version line, or Resources with a Type of AWS:: (YAML or JSON, spaced or
+    compact). A note that only mentions "AWS::" somewhere, or only one of the two, is not one."""
+    return "AWSTemplateFormatVersion" in text or bool(CFN_RESOURCES.search(text) and CFN_TYPE.search(text))
+
+
+def is_k8s(name: str, text: str) -> bool:
+    """A Kubernetes manifest (or a List of them): apiVersion and kind at the line start in YAML, or as keys in JSON."""
+    if re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M):
+        return True
+    return name.endswith(".json") and '"apiVersion"' in text and '"kind"' in text
+
+
+def iac_kind(rel: str) -> str | None:
+    """What an IaC file is by its name: terraform (.tf, .tofu), terraform_json (.tf.json), bicep, wrangler, compose,
+    cfn (a template by name, a synthesized CDK template), by_text (another YAML or JSON: iac_kind_by_text decides), or
+    None (not IaC)."""
+    name = rel.rsplit("/", 1)[-1]
+    if name.endswith(".tf.json"):
+        return "terraform_json"
+    if name.endswith((".tf", ".tofu")):
+        return "terraform"
+    if name.endswith(".bicep"):
+        return "bicep"
+    if WRANGLER_NAMES.match(name):
+        return "wrangler"
+    if COMPOSE_NAMES.match(name):
+        return "compose"
+    if ("/cdk.out/" in f"/{rel}" and name.endswith(".template.json")) or _CFN_NAMED.match(name):
+        return "cfn"
+    if name.endswith((".yaml", ".yml", ".json")):
+        return "by_text"
+    return None
+
+
+def iac_kind_by_text(rel: str, text: str) -> str | None:
+    """A YAML or JSON file of kind by_text: cfn, k8s, or None (not IaC)."""
+    if is_cfn(text):
+        return "cfn"
+    if is_k8s(rel.rsplit("/", 1)[-1], text):
+        return "k8s"
+    return None
+
+
+def iac_provider(rel: str) -> str:
+    """Whose an IaC file is by its name ("*": anyone's — Terraform names many providers; a YAML or JSON by its text)."""
+    kind = iac_kind(rel)
+    return {"bicep": "azure", "cfn": "aws", "compose": "docker", "wrangler": "cloudflare"}.get(kind or "", "*")
+
+
 def parse_jsonc(text: str):
     """wrangler.jsonc as `npm create cloudflare` writes it: JSON with // and /* */ comments and a "," after the last
     item. Strings are kept whole (a "//" or ",}" inside one is text); comments and a trailing "," are dropped; then
