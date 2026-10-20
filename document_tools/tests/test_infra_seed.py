@@ -515,3 +515,22 @@ def test_code_is_not_read_under_a_folder_seed_reads_only_iac_in(tmp_path):
     (root / "tmp" / "extra.tf").write_text('resource "aws_sqs_queue" "tmp_q" {}\n')
     doc, _rep = S.draft(root)
     assert {n.get("provider") for n in doc["nodes"]} == {"aws"}
+
+
+def test_a_commented_wrangler_jsonc_is_read_by_the_shared_reader_and_compares_clean(tmp_path):
+    """wrangler.jsonc as `npm create cloudflare` writes it (a block comment on top, a line comment after a value, a ","
+    after the last item) read by iac_tables.parse_jsonc, the reader check uses too: a ",}" inside a string is text."""
+    root = tmp_path / "cf"
+    root.mkdir()
+    (root / "wrangler.jsonc").write_text(
+        '/**\n * For more details on how to configure Wrangler, refer to:\n * https://developers.cloudflare.com/\n */\n'
+        '{\n  "name": "edge,}", // the worker\n  "main": "src/index.ts",\n'
+        '  "kv_namespaces": [{ "binding": "CACHE" },],\n}\n')
+    doc, _rep = S.draft(root)
+    by_iac = _by_iac(doc)
+    assert by_iac["wrangler.jsonc"]["label"] == "edge,}"
+    assert "wrangler.jsonc#kv_namespaces.CACHE" in by_iac
+    (root / "docs" / "infra").mkdir(parents=True)
+    (root / "docs" / "infra" / "draft.json").write_text(json.dumps(doc))
+    iac = IC.run_infra_iac(SimpleNamespace(gate=False, ignore_types=[]), root).results
+    assert [(r.target, r.status) for r in iac if r.status != "ok"] == [] and sum(r.status == "ok" for r in iac) == 2

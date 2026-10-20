@@ -58,12 +58,13 @@ LIST_CAP = 200                # items listed per provider in the report (the cou
 DRAFT_NAME = "draft.json"
 REPORT_NAME = "seed-report.json"
 
-SKIP_DIRS = {
-    ".git", ".hg", ".svn", "node_modules", ".terraform", ".terragrunt-cache", "vendor", "venv", ".venv", "__pycache__",
-    "dist", "build", ".next", ".nuxt", ".svelte-kit", "target", "Pods", "DerivedData", ".gradle", "coverage", ".tox",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", "site-packages", ".idea", ".vscode", ".serverless", ".aws-sam",
-    ".wrangler", ".vercel", ".netlify", ".firebase", "bower_components", ".cache", "tmp",
-}
+# The folders seed leaves out beyond iac_tables.SKIP_DIRS (the ones check leaves out too): caches and scratch, where
+# seed reads no code; IaC in the ones that are not hidden is still read (check reads it), see _iac_only_dirs.
+SEED_ONLY_SKIP_DIRS = frozenset({
+    ".hg", ".svn", ".terragrunt-cache", ".nuxt", ".svelte-kit", "coverage", ".tox", ".mypy_cache", ".pytest_cache",
+    ".ruff_cache", "site-packages", ".idea", ".vscode", ".serverless", ".aws-sam", ".vercel", ".netlify", ".firebase",
+    "bower_components", ".cache", "tmp",
+})
 KEEP_HIDDEN_DIRS = {".github"}
 
 ENV_LOCAL = {"id": "local", "label": "local (Docker Compose)", "kind": "local"}
@@ -378,15 +379,10 @@ def _scrub(value):
 
 # ================================================================ walking the project
 
-def _check():
-    from ..check import infra_check as IC  # noqa: PLC0415 — check's own reading of "which file is what"
-    return IC
-
-
 def _iac_only_dirs() -> set[str]:
     """Folders seed leaves out for code (caches, scratch) but check kind=infra reads IaC in (tmp, coverage, ...): seed
     reads only IaC there, so a draft taken as it is compares clean with check. Hidden folders neither reads."""
-    return {n for n in SKIP_DIRS if n not in _check().SKIP_DIRS and not n.startswith(".")}
+    return {n for n in SEED_ONLY_SKIP_DIRS if n not in T.SKIP_DIRS and not n.startswith(".")}
 
 
 def _walk(root: Path, exclude: list[Path], d: Draft) -> list[tuple[str, bool]]:
@@ -405,7 +401,7 @@ def _walk(root: Path, exclude: list[Path], d: Draft) -> list[tuple[str, bool]]:
         for n in sorted(dirnames):
             if n.startswith(".") and n not in KEEP_HIDDEN_DIRS or str((Path(dirpath) / n).resolve()) in ex:
                 continue
-            if n in SKIP_DIRS and n not in iac_only_dirs:
+            if (n in T.SKIP_DIRS or n in SEED_ONLY_SKIP_DIRS) and n not in iac_only_dirs:
                 continue
             iac_only_at[os.path.join(dirpath, n)] = here or n in iac_only_dirs
             keep.append(n)
@@ -425,8 +421,7 @@ PULUMI_STACK = re.compile(r"^pulumi\.[\w.-]+\.ya?ml$")                      # Pu
 HELM_VALUES = re.compile(r"^values([.-][\w.-]+)?\.ya?ml$")
 SECRET_NAMES = re.compile(r"^(secrets?|credentials)([.-][\w.-]+)?\.(json|ya?ml|toml)$|service[-_]?account.*\.json$|"
                           r"adminsdk.*\.json$")
-IAC_ONLY_KINDS = {"terraform", "terraform_json", "compose", "bicep", "wrangler", "cfn", "yaml", "json"}
-COMPOSE = re.compile(r"^(docker-)?compose(\.[\w-]+)?\.ya?ml$")
+IAC_ONLY_KINDS = {"terraform", "terraform_json", "compose", "bicep", "wrangler", "cfn", "by_text"}
 
 
 def classify(rel: str) -> str | None:
@@ -447,31 +442,17 @@ def classify(rel: str) -> str | None:
         return "never:Helm values (may hold values)"
     if SECRET_NAMES.search(low):
         return "never:a secrets or credentials file"
-    if COMPOSE.match(low):
-        return "compose"
-    if low.endswith(".tf.json"):
-        return "terraform_json"
-    if low.endswith((".tf", ".tofu")):
-        return "terraform"
-    if low.endswith(".bicep"):
-        return "bicep"
-    if low in ("wrangler.toml", "wrangler.json", "wrangler.jsonc"):
-        return "wrangler"
+    iac = T.iac_kind(rel)                            # which IaC a file is by its name: the table check reads
+    if iac not in (None, "by_text"):
+        return iac                                   # terraform, terraform_json, bicep, wrangler, compose, cfn
     if name in T.PAAS_FILES and T.PAAS_FILES[name][1] != "appengine":
         return T.PAAS_FILES[name][1]                 # firebase, render, serverless, vercel, netlify, fly, procfile
     if low == "pulumi.yaml" or low == "pulumi.yml":
         return "pulumi"
-    if "/cdk.out/" in f"/{rel}" and low.endswith(".template.json"):
-        return "cfn"
-    if low.endswith((".template.json", ".template.yaml", ".template.yml", ".cfn.json", ".cfn.yaml", ".cfn.yml")) or \
-            low in ("template.yaml", "template.yml", "template.json"):
-        return "cfn"
     if rel.startswith(".github/workflows/") and low.endswith((".yml", ".yaml")):
         return "workflow"
-    if low.endswith((".yml", ".yaml")):
-        return "yaml"
-    if low.endswith(".json"):
-        return "json"                                # a CloudFormation template or a Kubernetes manifest, by its text
+    if iac == "by_text":
+        return "by_text"                             # another YAML or JSON: iac_kind_by_text reads its text
     ext = os.path.splitext(low)[1]
     if ext in C.CODE_EXT and not low.endswith((".d.ts", ".min.js")):
         return "code"
@@ -526,29 +507,11 @@ def _toml(text: str):
         return None
 
 
-def _jsonc(text: str):
-    out, i, n = [], 0, len(text)
-    while i < n:
-        c = text[i]
-        if c == '"':
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == "\\" else 1
-            out.append(text[i:j + 1])
-            i = j + 1
-        elif text.startswith("//", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
-        elif text.startswith("/*", i):
-            j = text.find("*/", i + 2)
-            i = n if j < 0 else j + 2
-        else:
-            out.append(c)
-            i += 1
-    s = re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+def _jsonc_or_none(text: str):
+    """iac_tables.parse_jsonc (the one reader check uses too), None when the file is still not JSON."""
     try:
-        return json.loads(s)
-    except ValueError:
+        return T.parse_jsonc(text)
+    except (ValueError, RecursionError):
         return None
 
 
@@ -918,7 +881,7 @@ def seed_cfn(d: Draft, rel: str, resources: dict, text: str, source: str = "clou
 # ================================================================ wrangler, PaaS files, Bicep
 
 def seed_wrangler(d: Draft, rel: str, text: str) -> None:
-    cfg = _toml(text) if rel.endswith(".toml") else _jsonc(text)
+    cfg = _toml(text) if rel.endswith(".toml") else _jsonc_or_none(text)
     if not isinstance(cfg, dict):
         d.miss("cloudflare", rel, rel, "not readable (TOML needs Python 3.11+)" if rel.endswith(".toml") else "not readable")
         return
@@ -989,7 +952,7 @@ def _paas_node(d: Draft, provider: str, rel: str, name: str, text: str, cat="com
 
 
 def seed_vercel(d: Draft, rel: str, text: str) -> None:
-    cfg = _jsonc(text)
+    cfg = _jsonc_or_none(text)
     if not isinstance(cfg, dict):
         d.miss("vercel", rel, rel, "not JSON")
         return
@@ -1203,7 +1166,6 @@ def draft(root: Path, exclude: list[Path] | None = None) -> tuple[dict, dict]:
     code = _Code(d)
     code_n = 0
     workflow_hits: dict[str, list[tuple[str, int]]] = {}
-    IC = _check()
     for rel, iac_only in files:
         kind = classify(rel)
         if kind is None or iac_only and not (kind in IAC_ONLY_KINDS or kind.startswith("never:")):
@@ -1223,20 +1185,15 @@ def draft(root: Path, exclude: list[Path] | None = None) -> tuple[dict, dict]:
             d.skipped.append({"file": rel, "why": "a symlink, not a regular file, unreadable, or over "
                                                   f"{FILE_CAP} bytes"})
             continue
-        if kind == "json":
-            # as check reads a .json: a CloudFormation template (check's own test), else a Kubernetes manifest or List
-            if IC._is_cfn(text):
+        if kind == "by_text":
+            # as check reads a YAML or JSON (iac_tables.iac_kind_by_text): a CloudFormation template, a Kubernetes
+            # manifest or List; else an App Engine app.yaml or a Helm chart (seed only), else nothing
+            by_text = T.iac_kind_by_text(rel, text)
+            if by_text == "cfn":
                 kind = "cfn"
-            elif '"apiVersion"' in text and '"kind"' in text:
-                kind = "k8s_json"
-            else:
-                continue
-        if kind == "yaml":
-            if IC._is_cfn(text):
-                kind = "cfn"
-            elif re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M):
-                kind = "k8s"
-            elif iac_only:
+            elif by_text == "k8s":
+                kind = "k8s_json" if rel.endswith(".json") else "k8s"
+            elif iac_only or rel.endswith(".json"):
                 continue
             elif T.PAAS_FILES.get(rel.rsplit("/", 1)[-1], (None, ""))[1] == "appengine" and \
                     re.search(r"^runtime:", text, re.M) and not re.search(r"^apiVersion:", text, re.M):
