@@ -115,9 +115,11 @@ def test_the_sent_bubble_is_as_it_was():
 # もう少しくらい色がいいな」): #e5e7eb → slate-300 #cbd5e1, the link, soft text, code ground, lines and error with it.
 # Light then took the requester's sample A (「ライトはAでいいよ」): #ffffff → #e8ecf1, the text #13233a, code #d5dbe3, the
 # grey edge kept (cd).
-CHOSEN = {"bg": ("#e8ecf1", "#cbd5e1"), "edge": ("#6b7a90", "#cbd5e1"), "ink": ("#13233a", "#111827"),
-          "soft": ("#4b5563", "#374151"), "link": ("#1d4ed8", "#1e40af"), "code-bg": ("#d5dbe3", "#b6c2d1"),
-          "line": ("#c9d1dc", "#94a3b8"), "warn": ("#9a3412", "#7c2d12")}
+# Dark then took the requester's sample C (ticket 2026-10-20-jui-viz-talk-bubble-dark-v2, 「トークのデザインはCで」): a navy a
+# little deeper than the sent bubble, white text, a violet edge.
+CHOSEN = {"bg": ("#e8ecf1", "#0f2747"), "edge": ("#6b7a90", "#c4b5fd"), "ink": ("#13233a", "#ffffff"),
+          "soft": ("#4b5563", "#cbd5e1"), "link": ("#1d4ed8", "#93c5fd"), "code-bg": ("#d5dbe3", "#0a1a33"),
+          "line": ("#c9d1dc", "#2f4a72"), "warn": ("#9a3412", "#fdba74")}
 
 
 def test_the_tokens_are_the_chosen_ones():

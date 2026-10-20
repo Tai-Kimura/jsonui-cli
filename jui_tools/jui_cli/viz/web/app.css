@@ -1347,8 +1347,10 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 /* A received talk bubble (2.3.8, ticket 2026-10-20-jui-viz-talk-bubble-colours; requester 10-20: 「トークの吹き出しの色が背景と
    どうかしててわかりづらい」「相手側ね」): its ground, edge, text and what is inside it (links and 全文を表示, `code` and code
    blocks, notes and quotes, table lines, a code block's error). Light: a pale grey bubble (#e8ecf1, the requester's
-   sample A: 「ライトはAでいいよ」) with a grey edge (the edge 3:1+ on the panel); dark: a slate-300 bubble with dark text, as a chat app's (one step darker, requester 10-20: 「ダークモード
-   もう少しくらい色がいいな」). The text 4.5:1+ on its ground; apart from the sent bubble by its fill or its edge
+   sample A: 「ライトはAでいいよ」) with a grey edge (the edge 3:1+ on the panel); dark: a navy a little deeper than the
+   sent bubble (#0f2747 against #15305a) with white text and a violet edge, the requester's sample C (ticket
+   2026-10-20-jui-viz-talk-bubble-dark-v2: 「右側のより少しだけ濃い背景に白文字、縁の色を変えてわかりやすく」, 「トークのデザインはCで」):
+   the fills are close by design (1.14:1), so the edge (violet against the sent blue) and the side tell them apart. The text 4.5:1+ on its ground; apart from the sent bubble by its fill or its edge
    (ΔE2000 ≥ 8 on either: in light the fills are 5.9 apart, the grey and the blue edges 14.1). The sent bubble keeps --info-bg / --info / --ink. Measured by tools/viz_e2e/talk_ui.py. */
 :root {
   --talk-in-bg: #e8ecf1; --talk-in-edge: #6b7a90; --talk-in-ink: #13233a; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
@@ -1356,13 +1358,13 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --talk-in-bg: #cbd5e1; --talk-in-edge: #cbd5e1; --talk-in-ink: #111827; --talk-in-soft: #374151; --talk-in-link: #1e40af;
-    --talk-in-code-bg: #b6c2d1; --talk-in-line: #94a3b8; --talk-in-warn: #7c2d12;
+    --talk-in-bg: #0f2747; --talk-in-edge: #c4b5fd; --talk-in-ink: #ffffff; --talk-in-soft: #cbd5e1; --talk-in-link: #93c5fd;
+    --talk-in-code-bg: #0a1a33; --talk-in-line: #2f4a72; --talk-in-warn: #fdba74;
   }
 }
 :root[data-theme="dark"] {
-  --talk-in-bg: #cbd5e1; --talk-in-edge: #cbd5e1; --talk-in-ink: #111827; --talk-in-soft: #374151; --talk-in-link: #1e40af;
-  --talk-in-code-bg: #b6c2d1; --talk-in-line: #94a3b8; --talk-in-warn: #7c2d12;
+  --talk-in-bg: #0f2747; --talk-in-edge: #c4b5fd; --talk-in-ink: #ffffff; --talk-in-soft: #cbd5e1; --talk-in-link: #93c5fd;
+  --talk-in-code-bg: #0a1a33; --talk-in-line: #2f4a72; --talk-in-warn: #fdba74;
 }
 .rb-talk { position: relative; display: inline-flex; align-items: center; gap: 5px; background: var(--panel); color: var(--ink); }
 .rb-talk[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }

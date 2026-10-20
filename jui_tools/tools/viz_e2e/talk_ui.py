@@ -89,7 +89,8 @@ BUBBLE_PAINT = """() => {
 # ΔE2000 between the received and the sent bubbles, on the fills or on the edges (either is enough). The fills alone
 # were the first rule; the requester then picked light's sample A by name (#e8ecf1, 「ライトはAでいいよ」), 5.9 from the
 # sent fill, and 8 was our own guide, so its grey edge against the sent blue edge (14.1) keeps them apart. Before the
-# fix: fills 3.6 light, 4.2 dark.
+# fix: fills 3.6 light, 4.2 dark. Dark's sample C (ticket 2026-10-20-jui-viz-talk-bubble-dark-v2): fills 3.8 apart by
+# design (a navy a little deeper than the sent one), the violet edge against the sent blue 16.0.
 IN_OUT_DE = 8.0
 # the sent bubble, unchanged by the received bubble's colours (2.3.8): fill, text, edge, link, per theme
 SENT = {"light": ("#dde8fb", "#13233a", "#2a62c9", "#2a62c9"), "dark": ("#15305a", "#e4ecf8", "#86b8ff", "#86b8ff")}
