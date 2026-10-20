@@ -588,3 +588,21 @@ def test_a_spec_difference_is_a_warning_unless_gate(tmp_path):
     (root / "jui.config.json").write_text(json.dumps({"checks": [{"name": "iac", "type": "builtin:infra-iac"}]}))
     rep = C.run_infra_iac(_decls(root)["iac"], root)
     assert _by_target(rep)["aws/w#spec.instance_type"].status == "warning"
+
+
+SECRET_RUNTIME = "postgres://admin:hunter2pass@db.internal:5432/app"
+
+
+@pytest.mark.parametrize("files, iac", [
+    ({"main.tf": f'resource "aws_lambda_function" "fn" {{\n  runtime = "{SECRET_RUNTIME}"\n}}\n'}, "aws_lambda_function.fn"),
+    ({"cfn/template.yaml": f"Resources:\n  Fn:\n    Type: AWS::Lambda::Function\n    Properties:\n      Runtime: {SECRET_RUNTIME}\n"}, "Fn"),
+])
+def test_a_spec_value_read_from_iac_with_a_secret_shape_is_masked_in_every_field(tmp_path, files, iac):
+    """A spec difference names the IaC's value (actual): one with a secret's shape is masked, in the result and in the
+    report as a whole (the independent check found no arm on this path: a mutation not masking actual stayed green)."""
+    _r, rep = _mini(tmp_path, files, [{"id": "fn", "category": "compute.function", "provider": "aws", "iac": [iac],
+                                       "spec": [{"key": "runtime", "value": "python3.12"}]}])
+    item = _by_target(rep)["aws/fn#spec.runtime"]
+    assert item.status == "mismatch" and item.expected == "python3.12" and item.actual.startswith("<masked")
+    dumped = json.dumps(rep.to_dict()) + "\n".join(rep.warnings)
+    assert SECRET_RUNTIME not in dumped and "hunter2pass" not in dumped and "db.internal" not in dumped
