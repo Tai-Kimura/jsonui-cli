@@ -29,6 +29,12 @@ Checked:
   * the peers' marks (2.3.7, ticket 2026-10-20-jui-viz-talk-pill-contrast-and-version-comments), in the list and the
     header: each the pill's pair of its robot's role (as pill() draws it, __dbg.rolePills), white on main's #0369a1,
     every one 4.5:1 or more; and the demo phones' headers (drawPhoneUI, drawCartUI) per role: the pill's pair, >= 4.5:1.
+  * the list's two tabs (ticket 2026-10-21-jui-viz-talk-panel-tabs-and-robot-list; requester: 「ここ上にタブでトーク履歴が
+    あるのと履歴がない今動いてるロボットの一覧を切り替えて…一覧からロボットに移動できるリンクもつけて、それクリックで3dも移動」):
+    トーク履歴 is the list as before, with ロボットへ移る on the rows whose robot is on the page; ロボット一覧 is the robots on
+    the page with no talk here, room by room; ロボットへ移る on a robot of another room, with shop-app/ shown: its project
+    shown, its card open (the talk closed), the camera on it (__dbg.camOn), and closing goes back to its room; from the
+    talk history the same; Tab moves between the two tabs.
 Waits are on page state (waits.until); nothing is sampled on the wall clock.
 """
 
@@ -171,6 +177,10 @@ async def run_talk_ui(pw, out, failures, Server):
                 await one_scheme(browser, watch, srv.url, scheme, out, r, failures)
             except WaitTimeout as e:
                 failures.append(f"talk-ui: {scheme}: {e}")
+        try:
+            await tabs(browser, watch, srv.url, out, res, failures)
+        except WaitTimeout as e:
+            failures.append(f"talk-ui: tabs: {e}")
         try:
             await phone(browser, watch, srv.url, out, res, failures)
         except WaitTimeout as e:
@@ -355,6 +365,74 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
           f"{scheme}: the requests sent: {kinds}")
     bad = [(f, p) for f in sent for p in [talk_contract.validate(f)] if p]
     check(failures, not bad, f"{scheme}: requests that break the contract: {bad[:3]}")
+    await page.close()
+
+
+TABS = """() => ({ tabs: [...document.querySelectorAll('#rb [data-tk-tab]')].map((b) => [b.dataset.tkTab, b.textContent, b.getAttribute('aria-selected')]),
+  robots: [...document.querySelectorAll('#rb [data-tk-robot]')].map((n) => n.dataset.tkRobot),
+  rowGo: [...document.querySelectorAll('#rb .talk-item')].filter((li) => li.querySelector('.talk-row')).map((li) => (li.querySelector('[data-tk-go]') || {}).dataset ? (li.querySelector('[data-tk-go]') || { dataset: {} }).dataset.tkGo || null : null),
+  robotGo: [...document.querySelectorAll('#rb .talk-item')].filter((li) => li.querySelector('[data-tk-robot]')).map((li) => (li.querySelector('[data-tk-go]') || { dataset: {} }).dataset.tkGo || null) })"""
+CAM = "() => window.__dbg.camOn()"
+PICKED = """(l) => { const c = window.__dbg.camOn(); return (document.querySelector('#rb .rb-badge') || {}).textContent === l && !document.getElementById('rb').hidden
+  && !window.__dbg.talk().on && c.card === l && c.zoomed && !c.tween && c.inScene && c.toRobot !== null && c.toRobot < 1.5; }"""
+
+
+async def pick_project(page, pid):
+    await page.click("[data-scope-btn]")
+    await page.click(f"#pop [data-pick-project='{pid}']")
+    await until(page, "(p) => window.__dbg.project() === p && !window.__dbg.camOn().tween", f"project {pid}", arg=pid)
+
+
+async def tabs(browser, watch, url, out, res, failures):
+    page = await new_page(browser, watch, "talk-ui-tabs", color_scheme="light", **DESKTOP)
+    await page.goto(f"{url}/?demo=1&talkhold=1")
+    await ready(page)
+    await page.click("#btn-play")
+    r = res["tabs"] = {}
+
+    async def go(label, project, step):
+        await page.click(f"#rb [data-tk-go='{label}']")
+        try:
+            await until(page, PICKED, f"{step}: {label} picked", arg=label, why=CAM)
+        except WaitTimeout as e:
+            failures.append(f"talk-ui: tabs: {e}")
+            return
+        got = r[step] = {"project": await page.evaluate("() => window.__dbg.project()"), "cam": await page.evaluate(CAM)}
+        check(failures, got["project"] == project and got["cam"]["returnToRoom"] is not None and got["cam"]["returnToRoom"] < 0.5,
+              f"tabs: {step}: {label}'s project {project} shown, closing goes back to its room: {got}")
+        await page.screenshot(path=str(out / f"ui-after-{step}-light.png"))
+
+    # トーク履歴: the rows' links (4f, b4, a3, d8 are on the page; the peer outside the machine has none); 4f's, with
+    # shop-app/ shown, goes to jsonui-cli/
+    await pick_project(page, "shop")
+    await open_card(page, "a0")
+    await open_talk(page)
+    t = r["history"] = await page.evaluate(TABS)
+    check(failures, t["tabs"] == [["talks", "トーク履歴", "true"], ["robots", "ロボット一覧", "false"]], f"tabs: two tabs, トーク履歴 picked: {t['tabs']}")
+    check(failures, t["rowGo"] == ["4f", "b4", None, "a3", "d8"], f"tabs: ロボットへ移る on the rows whose robot is here: {t['rowGo']}")
+    await go("4f", "cli", "history-go")
+
+    # ロボット一覧: the robots on the page with no talk with a0, room by room
+    await pick_project(page, "shop")
+    await open_card(page, "a0")
+    await open_talk(page)
+    await page.click("#rb [data-tk-tab='robots']")
+    await until(page, "() => document.querySelectorAll('#rb [data-tk-robot]').length > 0", "the robot list", why=TABS)
+    t = r["robots"] = await page.evaluate(TABS)
+    want = ["a2", "a5", "a7", "e6", "f2", "7c", "c9", "e1"]   # not a0 (the card's), not 4f / b4 / a3 / d8 (talked with)
+    check(failures, t["robots"] == want and t["robotGo"] == want, f"tabs: ロボット一覧 is the robots with no talk, room by room: {t['robots']}, {t['robotGo']}")
+    check(failures, [x[2] for x in t["tabs"]] == ["false", "true"], f"tabs: ロボット一覧 picked: {t['tabs']}")
+    await page.screenshot(path=str(out / "ui-after-robot-list-light.png"))
+    # Tab on the first tab selects the second (as the card's tabs do); Shift+Tab back
+    await page.focus("#rb [data-tk-tab='talks']")
+    await page.keyboard.press("Tab")
+    focus = await page.evaluate("() => [document.activeElement.dataset.tkTab, document.querySelector('#rb [data-tk-tab=robots]').getAttribute('aria-selected')]")
+    await page.keyboard.press("Shift+Tab")
+    back = await page.evaluate("() => [document.activeElement.dataset.tkTab, document.querySelector('#rb [data-tk-tab=talks]').getAttribute('aria-selected')]")
+    check(failures, focus == ["robots", "true"] and back == ["talks", "true"], f"tabs: Tab / Shift+Tab move between the tabs: {focus}, {back}")
+    await page.click("#rb [data-tk-tab='robots']")
+    await until(page, "() => document.querySelectorAll('#rb [data-tk-robot]').length > 0", "the robot list (2)", why=TABS)
+    await go("7c", "cli", "robots-go")
     await page.close()
 
 

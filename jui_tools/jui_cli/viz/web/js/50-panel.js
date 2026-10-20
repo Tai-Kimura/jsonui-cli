@@ -257,7 +257,7 @@ document.addEventListener('click', (e) => {
   if (!t) return;
   if (t.dataset.do) decide(t.dataset.perm, t.dataset.do, t);
   else if (t.dataset.open) openTaskBoard(t, t.dataset.open);
-  else if (t.dataset.robotOpen) openRobot(t.dataset.robotOpen, t);
+  else if (t.dataset.robotOpen) selectRobot(t.dataset.robotOpen, t);
   else if (t.dataset.specOpen !== undefined) openWhiteboard(Number(t.dataset.specOpen), t);
   else if (t.dataset.logRobot) openLogFor(t.dataset.logRobot, t);
   else if (t.hasAttribute('data-close-detail')) closeTaskDetail();
@@ -1562,7 +1562,42 @@ function rbZoomWhenBuilt() {
   const id = zoom.waitFor;
   if (!id) return;
   if (rbState.id !== id) { zoom.waitFor = null; return; }
-  if (robots.some((x) => x.def.id === id)) zoomToRobot(id);
+  if (!robots.some((x) => x.def.id === id)) return;
+  const from = !zoom.zoomed;
+  zoomToRobot(id);
+  // Not zoomed, the camera was still on (or flying from) the room before: closing goes back to the room shown now.
+  if (from) zoom.returnPose = roomPose(viewRoom());
+}
+/* The room the camera shows with no card open: the project picked, or the floor (as liveSync chooses). */
+function viewRoom() {
+  return UI.project === 'all' || !PROJECT[UI.project] || (SOURCE.mode === 'live' && !PROJECT[UI.project].shown) ? 'all' : UI.project;
+}
+/* The rooms in view: the project picked, or the rooms of the floor shown. */
+function roomsInView() {
+  const live = SOURCE.mode === 'live';
+  return ROOMS.filter((r) => inScope(r.id) && (!live || UI.project !== 'all' || !LIVE.shown.length || LIVE.shown.includes(r.id))).map((r) => r.id);
+}
+/* Picking a robot, from anywhere outside its card (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch; with
+   2026-10-21-jui-viz-talk-panel-tabs-and-robot-list): the lists, the 3D, the notifications, a talk. Every way ends as a
+   press on the robot in the 3D does — its room shown, its card open, the camera on it. A robot outside the view (another
+   project's room, another floor) is remembered in its room and its project switched to: with a card open, the switch
+   opens it with the view held (setProject); with none, it opens after the switch and the camera goes to it when the
+   scene has put it there (rbZoomWhenBuilt). openRobot is the part inside: only this and setProject call it. */
+function selectRobot(id, opener) {
+  if (!DEF[id]) return;
+  const p = projectOfRobot(id);
+  const away = !!p && !!PROJECT[p] && !roomsInView().includes(p);
+  if (away) {
+    LAST_ROBOT.set(p, id);
+    if (rbState.id) setProject(p);
+    else setProject(p, { camera: false });
+    if (rbState.id === id) return;
+  }
+  const from = !zoom.zoomed;
+  openRobot(id, opener);
+  // From no card, the camera was still on the room before (or wherever it was turned): closing goes back to the room
+  // switched to. A robot not in the scene yet sets it when it gets the camera (rbZoomWhenBuilt).
+  if (away && from && has3D && zoom.zoomed) zoom.returnPose = roomPose(viewRoom());
 }
 function closeRobot({ byHand = false } = {}) {
   zoom.waitFor = null;
@@ -1582,7 +1617,7 @@ function closeRobot({ byHand = false } = {}) {
    flies with the existing zoomTo (the camera itself is 40-scene.js's). */
 function robotCycle() {
   const live = SOURCE.mode === 'live';
-  const rooms = ROOMS.filter((r) => inScope(r.id) && (!live || UI.project !== 'all' || !LIVE.shown.length || LIVE.shown.includes(r.id))).map((r) => r.id);
+  const rooms = roomsInView();
   return ROBOT_DEFS.filter((d) => rooms.includes(projectOfRobot(d.id)) && !(live && LIVE.leaving[d.id]))
     .sort((a, b) => rooms.indexOf(projectOfRobot(a.id)) - rooms.indexOf(projectOfRobot(b.id)) || a.id.localeCompare(b.id, 'ja', { numeric: true }))
     .map((d) => d.id);
@@ -1663,8 +1698,8 @@ rbEl.addEventListener('keydown', (e) => {
   if (!next) return;                                  // the last tab forward, the first back: the browser's order
   e.preventDefault();
   next.click();
-  const want = next.dataset.rbTab;
-  const again = [...rbEl.querySelectorAll('[role="tab"]')].find((b) => b.dataset.rbTab === want);   // the card may have been rebuilt
+  const want = next.dataset.fk;   // the card's tabs, or the talk list's (58-talk.js)
+  const again = [...rbEl.querySelectorAll('[role="tab"]')].find((b) => b.dataset.fk === want);   // the card may have been rebuilt
   if (again) again.focus();
 });
 function renderRobot(model) {
@@ -2023,7 +2058,7 @@ function notifyViewing(kind, ref) {
 }
 function notifyOpen(kind, ref) {
   try { window.focus(); } catch (err) { /* the OS may keep it behind */ }
-  if (kind === 'done' || kind === 'idle') { NOTIFY.opened.set(ref.who, Date.now()); if (DEF[ref.who]) openRobot(ref.who, document.getElementById('scene-canvas')); }
+  if (kind === 'done' || kind === 'idle') { NOTIFY.opened.set(ref.who, Date.now()); if (DEF[ref.who]) selectRobot(ref.who, document.getElementById('scene-canvas')); }
   else if (kind === 'perm') openTaskBoard(null, ref.task || `perm:${ref.id}`);
   else { tb.waitView = true; openTaskBoard(null); }
 }

@@ -539,7 +539,7 @@ function build3D() {
     const fit = (proj) => { if (proj && UI.project !== 'all' && UI.project !== proj) setProject(proj, { camera: false }); };
     if (h.kind === 'floor') { if (SOURCE.mode === 'live') towerLeave(h.k, h.project); else towerLeave(0); }   // the demo has one office
     else if (h.kind === 'room') setProject(h.project);
-    else if (h.kind === 'robot') openRobot(h.id, canvas);
+    else if (h.kind === 'robot') selectRobot(h.id, canvas);
     else if (h.kind === 'call') openCall(h.project, canvas);
     else if (h.kind === 'tasks') { fit(h.project); openTaskBoard(canvas, undefined, h.project); }
     else if (h.kind === 'spec') { fit(SPECS[h.i].project); openWhiteboard(h.i, canvas); }
@@ -574,7 +574,7 @@ function build3D() {
     const { id, x, y } = tagPress;
     tagPress = null; downAt = null;
     if (Math.hypot(ev.clientX - x, ev.clientY - y) > 6 || (zoom.zoomed && !rbState.id)) return;
-    if (robots.some((R) => R.def.id === id)) openRobot(id, canvas);
+    if (robots.some((R) => R.def.id === id)) selectRobot(id, canvas);
   }, true);
   window.addEventListener('pointercancel', (ev) => { if (tagPress && ev.pointerId === tagPress.pointerId) tagPress = null; }, true);
   canvas.addEventListener('pointermove', (ev) => {

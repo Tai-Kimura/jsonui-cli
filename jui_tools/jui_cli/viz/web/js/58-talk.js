@@ -58,6 +58,7 @@ const TALK = {
   list: null, more: false, listError: '', listAt: 0,
   conv: null,                  // the talk shown in detail (convId), or null: the list
   want: null,                  // a talk to show once the card has switched to the peer (the header's press)
+  tab: 'talks',                // the list's tab: 'talks' (トーク履歴) or 'robots' (ロボット一覧); kept across robots
   msgs: new Map(),             // convId -> { items, more, busy, error, loaded }
   seenSent: new Map(),         // `${agent}|${convId}` -> upTo sent
   seenWant: new Map(),         // `${agent}|${convId}` -> the newest at seen on screen, not sent yet
@@ -213,8 +214,7 @@ function talkToEnd() {
 }
 function talkPaintNewer() { const b = TALK.node && TALK.node.querySelector('[data-tk-newer]'); if (b) b.hidden = !(TALK.newer && TALK.conv); }
 
-function talkPeerMark(peer) {
-  const label = SOURCE.talkLabel(peer.agentId);
+function talkPeerMark(peer, label = SOURCE.talkLabel(peer.agentId)) {
   const span = hNode('span', 'talk-mark');
   span.setAttribute('aria-hidden', 'true');
   if (label && DEF[label]) {   // the robot's mark, as pill() draws it (built as nodes here)
@@ -233,7 +233,7 @@ function talkGoneText(peer) {
 function talkHead() {
   const head = TALK.node.querySelector('[data-tk-head]');
   const conv = TALK.conv && TALK.list ? TALK.list.find((c) => c.id === TALK.conv) : null;
-  const sig = JSON.stringify([TALK.owner, TALK.conv, conv && conv.peer, NAMES.rev]);
+  const sig = JSON.stringify([TALK.owner, TALK.conv, conv && conv.peer, NAMES.rev, TALK.tab]);
   if (head._sig === sig) return;
   head._sig = sig;
   const fk = head.contains(document.activeElement) ? document.activeElement.dataset.fk : undefined;
@@ -241,7 +241,13 @@ function talkHead() {
   if (!TALK.conv) {
     const back = hNode('button', 'wb-btn talk-back', tl('talk.back.card')); back.type = 'button'; back.dataset.tkClose = ''; back.dataset.fk = 'talk-close';
     const title = hNode('h3', 'talk-title', tl('talk.title'));
-    kids.push(back, title);
+    const tabs = hNode('div', 'talk-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', tl('talk.tabs.aria'));
+    for (const [k, text] of TALK_TABS) {
+      const b = hNode('button', 'talk-tab', text); b.type = 'button'; b.dataset.tkTab = k; b.dataset.fk = `talk-tab-${k}`;
+      b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(TALK.tab === k));
+      tabs.appendChild(b);
+    }
+    kids.push(back, title, tabs);
   } else {
     const back = hNode('button', 'wb-btn talk-back', tl('talk.back.list')); back.type = 'button'; back.dataset.tkBack = ''; back.dataset.fk = 'talk-back';
     back.setAttribute('aria-label', tl('talk.back.list.aria'));
@@ -276,6 +282,52 @@ function talkRow(c) {
   b.append(talkPeerMark(c.peer), text);
   b.setAttribute('aria-label', tl('talk.row.aria', { name: c.peer.name, at: talkTime(c.lastAt), unread: c.unread ? tl('talk.row.unread', { n: c.unread }) : '', preview: c.preview }));
   return b;
+}
+/* ---------- the list's two tabs (2026-10-21-jui-viz-talk-panel-tabs-and-robot-list; requester: 「ここ上にタブでトーク履歴が
+   あるのと履歴がない今動いてるロボットの一覧を切り替えて他のロボットに移動しやすくしたい。一覧からロボットに移動できるリンクもつけて、
+   それクリックで3dも移動」) ----------
+   トーク履歴 is the talks as before; ロボット一覧 is the robots on the page now (not leaving, not this card's robot) that
+   have no talk with this robot. A row on either names its robot with ロボットへ移る: pressed, that robot is picked as a
+   press on it in the 3D picks it (selectRobot: its room shown, the card on it, the camera on it), the talk closed. */
+const TALK_TABS = [['talks', tl('talk.tab.talks')], ['robots', tl('talk.tab.robots')]];
+function talkRobotName(id) {
+  const d = DEF[id];
+  return SESSION_OF[id] === id ? d.title || tl('talk.robot.main', { id }) : d.agent;
+}
+/* The robot a row goes to: on the page, not leaving, not the card's own. */
+function talkGoable(label) {
+  return !!label && !!DEF[label] && label !== TALK.owner && ROBOT_DEFS.some((d) => d.id === label)
+    && !(SOURCE.mode === 'live' && LIVE.leaving[label]);
+}
+function talkGoButton(label, name) {
+  const b = hNode('button', 'link-btn talk-go', tl('talk.go')); b.type = 'button';
+  b.dataset.tkGo = label; b.dataset.fk = `talk-go-${label}`;
+  b.setAttribute('aria-label', tl('talk.go.aria', { name }));
+  return b;
+}
+/* ロボット一覧: the robots with no talk here, room by room in the rooms' order, then by label. */
+function talkRobots() {
+  const talked = new Set((TALK.list || []).map((c) => SOURCE.talkLabel(c.peer.agentId)).filter(Boolean));
+  const rooms = ROOMS.map((r) => r.id);
+  return ROBOT_DEFS.filter((d) => talkGoable(d.id) && !talked.has(d.id))
+    .sort((a, b) => rooms.indexOf(projectOfRobot(a.id)) - rooms.indexOf(projectOfRobot(b.id)) || a.id.localeCompare(b.id, 'ja', { numeric: true }))
+    .map((d) => d.id);
+}
+function talkRobotRow(id) {
+  const li = hNode('li', 'talk-item');
+  const who = hNode('div', 'talk-robot');
+  who.dataset.tkRobot = id;
+  const text = hNode('span', 'talk-row-text');
+  const name = talkRobotName(id), room = (PROJECT[projectOfRobot(id)] || {}).name || '';
+  text.append(hNode('span', 'talk-row-name', name), hNode('span', 'talk-row-pre', [ROLE_JA[DEF[id].role], room].filter(Boolean).join(' · ')));
+  who.append(talkPeerMark({ kind: 'session' }, id), text);
+  li.append(who, talkGoButton(id, name));
+  return li;
+}
+function talkGo(label, opener) {
+  if (!talkGoable(label)) { showToast(tl('talk.go.absent')); return; }
+  TALK.on = false; TALK.conv = null; TALK.note = '';
+  selectRobot(label, opener);
 }
 const TALK_STATE = { read: tl('talk.state.read'), delivered: tl('talk.state.delivered'), sent: tl('talk.state.sent'), undelivered: tl('talk.state.undelivered') };
 function talkMsgSig(m) { return JSON.stringify([m.id, m.state, m.readAt, m.deliveredAt, m.text, m.cut, m.merged, m.dir]); }
@@ -338,6 +390,10 @@ function talkClick(e) {
   if (row) { talkOpenConv(row.dataset.tkConv); return; }
   const peer = t.closest('[data-tk-peer]');
   if (peer) { talkSwitch(peer.dataset.tkPeer); return; }
+  const tab = t.closest('[data-tk-tab]');
+  if (tab) { TALK.tab = tab.dataset.tkTab; talkRender(); return; }
+  const go = t.closest('[data-tk-go]');
+  if (go) { talkGo(go.dataset.tkGo, go); return; }
   if (t.closest('[data-tk-newer]')) { talkToEnd(); return; }
   if (t.closest('[data-tk-older]')) { talkLoad(TALK.conv, true); return; }
   const more = t.closest('[data-tk-more]');
@@ -363,24 +419,44 @@ function talkSwitch(agentId) {
   const label = SOURCE.talkLabel(agentId);
   if (!label || !DEF[label]) { showToast(tl('talk.robot.absent')); return; }
   if (label === TALK.owner) return;
-  TALK.want = TALK.conv;
-  openRobot(label);
+  const conv = TALK.conv;
+  TALK.want = conv;
+  selectRobot(label);
+  // A robot in another room: the project switch closed the card and opened it again (the talk with it). Open the talk again.
+  if (rbState.id === label && TALK.owner === label && !(TALK.on && TALK.conv === conv)) {
+    TALK.on = true; TALK.conv = conv; TALK.want = null; TALK.atEnd = true;
+    talkSync();
+  }
 }
 function talkBody() {
   const pane = talkPane();
   if (!TALK.conv) {
-    const sig = JSON.stringify(['list', TALK.list, TALK.listError, TALK.note, TALK.more]);
+    const robots = TALK.tab === 'robots' && TALK.list ? talkRobots() : null;
+    const goable = (TALK.list || []).map((c) => talkGoable(SOURCE.talkLabel(c.peer.agentId)));
+    const sig = JSON.stringify(['list', TALK.tab, TALK.list, TALK.listError, TALK.note, TALK.more, goable, robots && robots.map((id) => [id, talkRobotName(id), projectOfRobot(id)]), NAMES.rev]);
     if (pane._sig === sig) return;
     pane._sig = sig;
     const fk = pane.contains(document.activeElement) ? document.activeElement.dataset.fk : undefined;
     const kids = [];
     if (TALK.note) kids.push(hNode('p', 'talk-empty talk-gone-note', TALK.note));
-    if (TALK.listError) kids.push(hNode('p', 'talk-empty talk-error', TALK.listError));
+    if (TALK.tab === 'robots' && !TALK.listError && TALK.list) {
+      if (!robots.length) kids.push(hNode('p', 'talk-empty', tl('talk.robots.empty')));
+      else {
+        const ul = hNode('ul', 'talk-list');
+        for (const id of robots) ul.appendChild(talkRobotRow(id));
+        kids.push(ul);
+      }
+    } else if (TALK.listError) kids.push(hNode('p', 'talk-empty talk-error', TALK.listError));
     else if (!TALK.list) kids.push(hNode('p', 'talk-empty', tl('talk.loading')));
     else if (!TALK.list.length) kids.push(hNode('p', 'talk-empty', tl('talk.list.empty')));
     else {
       const ul = hNode('ul', 'talk-list');
-      for (const c of TALK.list) { const li = hNode('li'); li.appendChild(talkRow(c)); ul.appendChild(li); }
+      for (const c of TALK.list) {
+        const li = hNode('li', 'talk-item'), label = SOURCE.talkLabel(c.peer.agentId);
+        li.appendChild(talkRow(c));
+        if (talkGoable(label)) li.appendChild(talkGoButton(label, c.peer.name || label));
+        ul.appendChild(li);
+      }
       kids.push(ul);
       if (TALK.more) kids.push(hNode('p', 'talk-empty', tl('talk.list.newest', { n: TALK.list.length })));
     }

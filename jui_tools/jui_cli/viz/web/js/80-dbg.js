@@ -342,6 +342,7 @@ window.__dbg = {
   },
   towerLines: (text) => { const f = towerNameFit(makeCanvas(8, 8).getContext('2d'), text, towerBays()[0].w - 8); return [f.size, ...f.lines]; },
   openRobot: (id) => openRobot(id, document.getElementById('scene-canvas')),
+  selectRobot: (id) => selectRobot(id, document.getElementById('scene-canvas')),   // a pick from outside the view (a talk, a notification)
   // a robot's wait as 3D shows it (53-waits.js): its kind, lamp, pose and bubble; what a bubble's press picked
   waitLook: (id) => { const R = robots.find((x) => x.def.id === id); if (!R) return null; const b = R.waitEl;
     return { kind: R.robot.waitKind || null, lamp: R.robot.lampKey || null, pose: R.robot.poseName || null,

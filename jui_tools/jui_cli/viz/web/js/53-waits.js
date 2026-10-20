@@ -53,7 +53,7 @@ function waitDrop(R) { if (R.waitEl) { R.waitEl.remove(); R.waitEl = null; } }
    session's talk. WAIT.picked says what was picked (the e2e reads it). */
 function waitOpen(id, kind) {
   if (kind === 'input') {
-    openRobot(id, document.getElementById('scene-canvas'));
+    selectRobot(id, document.getElementById('scene-canvas'));
     const until = Date.now() + 4000;
     const talk = () => { if (rbState.id !== id) return; if (rbEl.hidden) { if (Date.now() < until) requestAnimationFrame(talk); return; } talkShow(true); WAIT.picked = { kind, id }; };
     requestAnimationFrame(talk);

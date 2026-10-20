@@ -1441,6 +1441,14 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .talk-error { color: var(--bad); font-weight: 700; }
 .talk-gone-note { padding: 6px 10px; border-radius: 8px; background: var(--chip); color: var(--ink); }
 .talk-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.talk-tabs { display: flex; gap: 4px; margin-left: auto; }
+.talk-head:has(.talk-tabs) { flex-wrap: wrap; row-gap: 6px; }
+.talk-tab { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink-soft); font: 700 12px/1.5 var(--font-body); cursor: pointer; white-space: nowrap; }
+.talk-tab[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+.talk-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.talk-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+.talk-robot { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; padding: 8px 8px; color: var(--ink); }
+.talk-go { flex: none; white-space: nowrap; padding: 4px 8px; }
 .talk-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; padding: 8px 8px; border: 0; border-radius: 10px; background: none; color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
 .talk-row:hover { background: var(--chip); }
 .talk-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

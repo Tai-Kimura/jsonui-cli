@@ -812,6 +812,45 @@ def test_the_undefined_call_gate_catches_the_live_check_shape():
     assert undefined_calls("const f = (a) => a; f(1); `${g(2)}`; 'h(3)'; // k(4)\nfunction g(x) { return x; }") == set()
 
 
+# ---- picking a robot: one way in (tickets 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch and
+# 2026-10-21-jui-viz-talk-panel-tabs-and-robot-list) -----------------------------------------------------------------
+# Every way to pick a robot from outside its card (the lists, the 3D, the notifications, the bubbles, a talk) goes through
+# selectRobot, which shows the robot's room first when it is outside the view. openRobot is its part inside: only
+# selectRobot and setProject (a switch reopening the robot remembered there) call it; 80-dbg.js is the tests' hook.
+OPEN_ROBOT_CALLERS = {"selectRobot", "setProject"}
+
+
+def _open_robot_callers(src: str) -> list:
+    code = _code_only(src)
+    out = []
+    for m in re.finditer(r"(?<![\w$.])openRobot\s*\(", code):
+        if code[max(0, m.start() - 9):m.start()] == "function ":
+            continue
+        fn = [f for f in re.finditer(r"function\s+([\w$]+)\s*\(", code[:m.start()])]
+        out.append(fn[-1].group(1) if fn else "<top>")
+    return out
+
+
+def test_only_select_robot_and_the_switch_open_a_robot():
+    for name in ("40-scene.js", "50-panel.js", "53-waits.js", "55-history.js", "58-talk.js", "60-log.js", "70-main.js"):
+        callers = set(_open_robot_callers(web_text("js", name)))
+        assert callers <= OPEN_ROBOT_CALLERS, f"{name}: openRobot called from {sorted(callers - OPEN_ROBOT_CALLERS)} (pick through selectRobot)"
+    assert sorted(_open_robot_callers(web_text("js", "50-panel.js"))) == ["selectRobot", "setProject"]
+
+
+def test_the_open_robot_gate_catches_a_list_calling_it_directly():
+    shape = "function selectRobot(id) { openRobot(id); }\nfunction notifyOpen(r) { if (r) openRobot(r.who, null); }\nfunction openRobot(id) { return id; }"
+    assert _open_robot_callers(shape) == ["selectRobot", "notifyOpen"]
+
+
+def test_the_talk_go_link_and_the_header_pick_through_select_robot():
+    src = _code_only(web_text("js", "58-talk.js"))
+    for fn in ("talkGo", "talkSwitch"):
+        start = src.index(f"function {fn}(")
+        body = src[start:_match(src, src.index("{", start)) + 1]
+        assert "selectRobot(" in body, f"{fn} does not pick through selectRobot"
+
+
 # ---- the floors: six rooms to a floor, the active rooms on 1F (requester's ruling, 10-18) ---------------------------
 # assignFloors as the page has it (cut out of 30-source-live.js and run in node, as the browser would run it).
 def _assign_floors(cases: list) -> list:

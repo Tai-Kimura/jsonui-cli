@@ -14,6 +14,9 @@ project picker, as a person does. Checked, in order:
   * b2 picked → A: nothing picked (closed by hand is remembered)
   * a1 picked again → B (b2) → a1's session ends and its robot walks out → A: nothing picked
   * with a robot picked, another opened from the list → すべて: nothing picked
+  * a robot of another project picked from outside the view (selectRobot: a talk's ロボットへ移る, a notification), with a
+    card open and with none (the camera turned by hand first): its project shown, its card open, the camera on it, and
+    closing goes back to that room (ticket 2026-10-21-jui-viz-talk-panel-tabs-and-robot-list)
   * at each step the 3D agrees with the card (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch): a card open is
     the camera on its robot, closing goes back to the room shown; no card is the camera on the room (or the floor) shown
 No console error; nothing outside the server.
@@ -33,6 +36,8 @@ from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
 SIDS = {"a1": "e2e00000-0000-4000-8000-0000000000a1", "b1": "e2e00000-0000-4000-8000-0000000000b1",
         "b2": "e2e00000-0000-4000-8000-0000000000b2"}
 CWDS = {"a1": "/work/switch-a", "b1": "/work/switch-b", "b2": "/work/switch-b"}
+CARD_ON = "(l) => window.__dbg.board().robot === l && !document.getElementById('rb').hidden"
+CARD_OFF = "() => !window.__dbg.board().robot && document.getElementById('rb').hidden"
 STATE = "() => ({ robot: window.__dbg.board().robot, project: window.__dbg.project(), card: !document.getElementById('rb').hidden })"
 
 
@@ -146,6 +151,23 @@ async def run_project_switch(pw, out, failures):
         await open_robot("a1")
         await pick_project(B)
         await state("a1 picked → B: b2", "b2", B)
+        # a robot of another project picked from outside the view (a talk's ロボットへ移る, a notification): selectRobot
+        await page.evaluate("(l) => window.__dbg.selectRobot(l)", who["a1"])
+        await wait(page, CARD_ON, arg=who["a1"], label="a1's card (selectRobot, a card open)")
+        await state("b2's card open in B, a1 picked from outside the view: A, a1", "a1", A)
+        await page.click("#rb [data-rb-close]")
+        await wait(page, CARD_OFF, label="a1 closed by hand (2)")
+        await pick_project(B)
+        await state("nothing picked → B (2)", None, B)
+        # the camera turned by hand, no card: the pick still comes back to the room it switched to when closed
+        await page.evaluate("() => { const c = window.__dbg.camera; c.position.add(new window.__dbg.THREE.Vector3(9, 4, -7)); }")
+        await page.evaluate("(l) => window.__dbg.selectRobot(l)", who["a1"])
+        await wait(page, CARD_ON, arg=who["a1"], label="a1's card (selectRobot, no card)")
+        await state("no card in B, a1 picked from outside the view: A, a1", "a1", A)
+        await page.click("#rb [data-rb-close]")
+        await wait(page, CARD_OFF, label="a1 closed by hand (3)")
+        await state("a1 closed: the camera back on A", None, A)
+        await pick_project(B)
         hook("a1", hook_event_name="SessionEnd", reason="other")
         await wait(page, "(l) => !Object.keys(window.__dbg.robotState()).includes(l) || !document.querySelector(`#sessions [data-robot-open='${l}']`)",
                    arg=who["a1"], timeout=40000, label="a1 gone")

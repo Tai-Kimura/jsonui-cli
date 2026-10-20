@@ -1070,5 +1070,7 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   e.preventDefault();
   e.stopPropagation();
-  goRobot(b.dataset.hGo);
+  const id = b.dataset.hGo, p = projectOfRobot(id);
+  if (p && !roomsInView().includes(p)) selectRobot(id, b);   // another project's robot: its room, as any pick
+  else goRobot(id);
 });
