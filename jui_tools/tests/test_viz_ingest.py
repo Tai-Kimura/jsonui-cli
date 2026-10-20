@@ -230,6 +230,18 @@ def test_idle_prompt_after_a_permission_prompt_idles_the_robot():
     assert state.slices["sessions"][0]["status"] == "idle"
 
 
+def test_a_notifications_event_carries_its_type_for_the_page():
+    """The page rings 入力待ち on idle_prompt (2.3.7, ticket 2026-10-20-jui-viz-notify-waiting-for-input): the event says
+    which notification it was; other events carry no such field."""
+    world, state = _world()
+    world.apply_hook(_hook("Notification", notification_type="idle_prompt", message="Claude is waiting for your input"), 1)
+    world.apply_hook(_hook("Stop"), 2)
+    world.publish()
+    by_kind = {e["kind"]: e for e in state.events}
+    assert by_kind["Notification"]["ntype"] == "idle_prompt"
+    assert "ntype" not in by_kind["Stop"]
+
+
 
 def test_a_busy_session_quiet_for_30_s_is_thinking_then_works_then_stops():
     """10-18 live check: thinking was idle with another act, so the page drew it asleep."""

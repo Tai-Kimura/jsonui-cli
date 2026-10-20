@@ -935,6 +935,7 @@ function liveEvents(items, older, replay = false) {
     const item = liveEvent(raw);
     if (item) add.push(item);
     if (!older && item && (raw.kind === 'Stop' || raw.kind === 'StopFailure')) notifyStop(raw, item, replay);   // 2.3.6: the replay is seen, never rung
+    if (!older && item && raw.kind === 'Notification' && raw.ntype === 'idle_prompt') notifyIdle(raw, item, replay);   // 2.3.7: 入力待ち
     if (!older) LIVE.seenSeq = Math.max(LIVE.seenSeq, Number(raw.seq) || 0);
   }
   add.sort((a, b) => a.srvSeq - b.srvSeq);

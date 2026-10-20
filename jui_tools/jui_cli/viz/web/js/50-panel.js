@@ -1485,6 +1485,7 @@ const focusing = () => has3D && !!rbState.id && zoom.zoomed && !camTween;
   }, { passive: false });
 }
 function openRobot(id, opener) {
+  NOTIFY.opened.set(id, Date.now());   // the session looked at since its turn's end: no 入力待ち reminder (notifyIdle)
   holdView('rb');
   if (wb.open) closeWhiteboard();
   if (tb.open) closeTaskBoard();
@@ -1932,10 +1933,10 @@ callEl.addEventListener('keydown', (e) => {
    - while question notifications can be shown (permission granted, the kind on) the page says so to the server every
      4 s and whenever the server asks (notify.ping): then a question waits for an answer though the page is hidden
      (cd's ruling 10-19; it lapses notifyPresenceSec after the last word, a closed tab included). */
-const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask', 'chime'];
+const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask', 'idle', 'chime'];
 // the chime's loudness (requester 10-20: 「音が少し小さいね」): the tones' peak gain, 中 by default (0.08 before)
 const NOTIFY_VOLUMES = { low: 0.1, mid: 0.2, high: 0.35 };
-const NOTIFY = { on: { done: true, perm: true, ask: true, chime: true }, volume: 'mid', audio: null, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0,
+const NOTIFY = { on: { done: true, perm: true, ask: true, idle: true, chime: true }, lastStop: new Map(), opened: new Map(), volume: 'mid', audio: null, seen: new Set(), based: { perm: false, ask: false }, said: false, settings: null, pings: 0,
   tab: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, peers: new Map(), yieldMs: 1500 };
 function notifyLoadPrefs() {
   try {
@@ -1953,19 +1954,19 @@ const notifyGranted = () => notifyCan() && Notification.permission === 'granted'
 const notifyName = (who) => String((DEF[who] && (DEF[who].title || DEF[who].agent)) || who).slice(0, 40);
 function notifyViewing(kind, ref) {
   if (document.visibilityState !== 'visible' || !document.hasFocus()) return false;
-  if (kind === 'done') return rbState.id === ref.who;
+  if (kind === 'done' || kind === 'idle') return rbState.id === ref.who;
   if (kind === 'perm') return tb.open && (tb.detail === `perm:${ref.id}` || (!!ref.task && tb.detail === ref.task) || (tb.waitView && !tb.detail));
   return tb.open && !!(qStripEl && qStripEl.querySelector(`[data-qcard="${CSS.escape(ref.id)}"]`));
 }
 function notifyOpen(kind, ref) {
   try { window.focus(); } catch (err) { /* the OS may keep it behind */ }
-  if (kind === 'done') { if (DEF[ref.who]) openRobot(ref.who, document.getElementById('scene-canvas')); }
+  if (kind === 'done' || kind === 'idle') { NOTIFY.opened.set(ref.who, Date.now()); if (DEF[ref.who]) openRobot(ref.who, document.getElementById('scene-canvas')); }
   else if (kind === 'perm') openTaskBoard(null, ref.task || `perm:${ref.id}`);
   else { tb.waitView = true; openTaskBoard(null); }
 }
 /* The one place a notification is made. */
-function notifyOut(key, body, onClick) {
-  const n = new Notification('jui viz', { body, tag: key });
+function notifyOut(key, body, onClick, title = 'jui viz') {
+  const n = new Notification(title, { body, tag: key });
   n.onclick = () => { n.close(); onClick(); };
   return n;
 }
@@ -2060,14 +2061,14 @@ function notifyRungTake(key) {
   try { localStorage.setItem(NOTIFY_RUNG, JSON.stringify(rung.slice(-300))); } catch (err) { /* the next tab may ring it too */ }
   return true;
 }
-function notifyEvent(kind, key, ref, body) {
+function notifyEvent(kind, key, ref, body, title) {
   if (NOTIFY.seen.has(key)) return;
   NOTIFY.seen.add(key);
   if (!NOTIFY.on[kind] || !notifyGranted()) return;
   // quiet (this very thing on screen, in front): the key is taken without a ring, so a tab that comes to it later does
   // not ring it either (tabs take an event in no fixed order: one that came first may already have rung it)
   const quiet = notifyViewing(kind, ref);
-  const ring = () => { if (notifyRungTake(key) && !quiet) { notifyOut(key, body, () => notifyOpen(kind, ref)); notifyChime(kind); } };   // the sound: the same one tab
+  const ring = () => { if (notifyRungTake(key) && !quiet) { notifyOut(key, body, () => notifyOpen(kind, ref), title); notifyChime(kind); } };   // the sound: the same one tab
   const locked = (fn) => (navigator.locks && navigator.locks.request ? navigator.locks.request('jui-viz-notify', fn).catch(() => {}) : fn());
   locked(() => {
     // this tab cannot sound and another says it can: that one rings it; this one only if nobody has, a moment later
@@ -2080,10 +2081,26 @@ const notifyServer = () => (typeof LIVE !== 'undefined' && LIVE.slices.server &&
 function notifyStop(raw, item, replay = false) {
   if (replay) { NOTIFY.seen.add(`${notifyServer()}:done:${raw.seq}`); return; }   // sent again after a snapshot: seen, not rung
   if (!item || !DEF[item.who] || DEF[item.who].kind !== 'main' || !(Date.now() - (Number(raw.at) || 0) < 120_000)) return;
+  NOTIFY.lastStop.set(item.who, Date.now());
   notifyEvent('done', `${notifyServer()}:done:${raw.seq}`, { who: item.who }, `${notifyName(item.who)} が完了${raw.kind === 'StopFailure' ? '（失敗で止まった）' : ''}`);
 }
 const NOTIFY_ASK_GRACE_MS = 1500;
 NOTIFY.askFirst = new Map();
+/* 入力待ち (2.3.7, ticket 2026-10-20-jui-viz-notify-waiting-for-input; requester: 「入力待ち…検知出来るなら許可とかと同じ
+   ように通知鳴らして欲しい」). Claude Code sends Notification idle_prompt 60 s after a turn's end that nobody answered
+   (measured by the requester 10-20 10:36: Stop 10:36:45, idle_prompt 10:37:45, "Claude is waiting for your input").
+   cd's ruling: a reminder — not rung when, since that turn's end, its 完了 notification was clicked or the session was
+   opened on the page (NOTIFY.opened, by openRobot and by a click on the notification); otherwise once, with the chime,
+   by the same one-tab, yield and quiet rules; its own switch. A replay after a snapshot is seen, never rung. */
+function notifyIdle(raw, item, replay = false) {
+  const key = `${notifyServer()}:idle:${raw.seq}`;
+  if (replay) { NOTIFY.seen.add(key); return; }
+  if (!item || !DEF[item.who] || DEF[item.who].kind !== 'main' || !(Date.now() - (Number(raw.at) || 0) < 120_000)) return;
+  const stop = NOTIFY.lastStop.get(item.who) || 0, opened = NOTIFY.opened.get(item.who) || 0;
+  if (stop && opened >= stop) { NOTIFY.seen.add(key); return; }   // looked at since the turn's end: no reminder
+  const name = notifyName(item.who);
+  notifyEvent('idle', key, { who: item.who }, `${name} が返事を待っています`, `入力待ち: ${name}`);
+}
 function notifyWaiting(kind, rows) {
   const waiting = rows.filter((x) => x.status === 'pending');
   if (!NOTIFY.based[kind]) {   // the first look after loading: what already waits was there before this page

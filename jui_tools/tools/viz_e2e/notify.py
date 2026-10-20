@@ -40,7 +40,7 @@ STUB = r"""(() => {
     constructor(title, opts) {
       this.title = title; this.body = (opts && opts.body) || ''; this.tag = (opts && opts.tag) || ''; this.onclick = null;
       window.__shown.push(this);
-      try { const a = JSON.parse(localStorage.getItem('e2e-shown') || '[]'); a.push({ tag: this.tag, body: this.body }); localStorage.setItem('e2e-shown', JSON.stringify(a)); } catch (e) {}
+      try { const a = JSON.parse(localStorage.getItem('e2e-shown') || '[]'); a.push({ tag: this.tag, body: this.body, title: this.title }); localStorage.setItem('e2e-shown', JSON.stringify(a)); } catch (e) {}
     }
     close() {}
   }

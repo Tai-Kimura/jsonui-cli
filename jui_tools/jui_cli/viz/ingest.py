@@ -798,6 +798,8 @@ class World:
         }
         if tool:
             event["tool"] = tool
+        if kind == "Notification" and _s(payload.get("notification_type")):   # the page rings idle_prompt (2.3.7)
+            event["ntype"] = _head(payload.get("notification_type"), 40)
         if tool_input:
             event["detail"] = clip_strings(tool_input, self.tool_input_max)
         return self.state.add_event(event)
