@@ -147,3 +147,41 @@ def test_scan_lists_the_lines_left(web, capsys):
     out = capsys.readouterr()
     assert out.out.splitlines()[0].strip().startswith("2: const a = '待機';")
     assert "js/x.js: 4 lines" in out.err
+
+
+# ---- index.html and app.css: words moved into marks ----------------------------------------------------------------
+
+HTML_OLD = '<p title="題 &amp; 名">本文</p><button aria-label="閉じる">×</button>'
+HTML_NEW = ('<p title="{{tl:x.title}}題 &amp; 名{{/tl}}">{{tl:x.body}}本文{{/tl}}</p>'
+            '<button aria-label="{{tl:x.close}}閉じる{{/tl}}">×</button>')
+HTML_JA = {"x.title": "題 & 名", "x.body": "本文", "x.close": "閉じる"}
+HTML_EN = {"x.title": "Title & name", "x.body": "Body", "x.close": "Close"}
+
+
+def test_an_html_move_into_marks_passes():
+    assert move.check("index.html", HTML_OLD, HTML_NEW, HTML_JA, HTML_EN) == []
+    assert finder.chars("index.html", HTML_NEW) == []
+
+
+def test_an_html_mark_whose_words_differ_from_the_table_is_red():
+    ja = dict(HTML_JA, **{"x.close": "閉じます"})
+    problems = move.check("index.html", HTML_OLD, HTML_NEW, ja, HTML_EN)
+    assert "index.html: x.close is written '閉じる', the Japanese words are '閉じます'" in problems
+    assert "x.close: '閉じます' is not in index.html as it was" in problems
+
+
+def test_an_html_mark_with_no_key_in_the_table_is_red():
+    problems = move.check("index.html", HTML_OLD, HTML_NEW.replace("x.close", "x.shut"), HTML_JA, HTML_EN)
+    assert "index.html: x.shut is not in the table" in problems
+
+
+def test_a_css_move_into_a_variable_passes_and_a_changed_word_is_red():
+    old = ".a::after { content: '読み込み中…'; }"
+    new = ".a::after { content: var(--tl-hist-loading, '読み込み中…'); }"
+    ja, en = {"css.hist.loading": "読み込み中…"}, {"css.hist.loading": "Loading…"}
+    assert move.check("app.css", old, new, ja, en) == []
+    assert move.check("app.css", old, new, {"css.hist.loading": "読込中…"}, en)[0] == (
+        "app.css: css.hist.loading is written '読み込み中…', the Japanese words are '読込中…'")
+    bad = new.replace("--tl-hist-loading", "--tl-Hist-Loading")
+    assert any("a css key is css. and lower-case" in p for p in move.check(
+        "app.css", old, bad, {"css.Hist.Loading": "読み込み中…"}, {"css.Hist.Loading": "Loading…"}))

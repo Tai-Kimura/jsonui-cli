@@ -17,6 +17,7 @@ So a word changed, dropped or added in the move is red, and so is a Japanese wor
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 import runpy
@@ -69,7 +70,7 @@ def _as_code(text: str) -> str:
 
 def _js_forms(text: str) -> set:
     """The words as a JS string may write them: as they are, and with \\n, \\' and \\" escapes."""
-    return {text, text.replace("\n", "\\n"),
+    return {text, text.replace("\n", "\\n"), html.escape(text, quote=True), html.escape(text, quote=False),
             text.replace("\\", "\\\\").replace("\n", "\\n").replace("'", "\\'").replace('"', '\\"')}
 
 
@@ -91,8 +92,10 @@ def _found(text: str, old: str) -> bool:
 def check(name: str, old: str, new: str, ja: dict, en: dict) -> list[str]:
     """What breaks 'the Japanese words kept letter for letter' in this move of ``name`` (old -> new)."""
     problems = []
+    marked_old, marked_new = ({k for k, *_ in finder.marks(name, t)} for t in (old, new))
     quoted = lambda key, text: f"'{key}'" in text or f'"{key}"' in text  # noqa: E731
-    added = [k for k in ja if quoted(k, new) and not quoted(k, old)]
+    problems += finder.mark_problems(name, new, ja, en)
+    added = [k for k in ja if (quoted(k, new) or k in marked_new) and not (quoted(k, old) or k in marked_old)]
     for key in added:
         if (name, key) in KNOWN:
             continue

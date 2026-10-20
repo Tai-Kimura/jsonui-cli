@@ -63,15 +63,64 @@ def _outside(text: str, start: str, end: str) -> list[int]:
     return out
 
 
+#: The words as written beside a key, kept for a table that lacks it (the gate holds them to the Japanese table):
+#: index.html's {{tl:key}}…{{/tl}} (viz/i18n.py fill_words) and app.css's var(--tl-name, '…') (web/js/05-i18n.js).
+HTML_MARK = re.compile(r"\{\{(?:tl|tlhtml):([\w.\-]+)\}\}(.*?)\{\{/tl\}\}", re.S)
+CSS_MARK = re.compile(r"var\(--tl-([\w-]+),\s*'((?:\\.|[^'\\])*)'\s*\)")
+
+
+def marks(name: str, text: str) -> list[tuple[str, str, int, int]]:
+    """(key, the words as written, start, end of those words) for each key mark of an .html or .css part."""
+    if name.endswith(".html"):
+        return [(m.group(1), m.group(2), m.start(2), m.end(2)) for m in HTML_MARK.finditer(text)]
+    if name.endswith(".css"):
+        return [("css." + m.group(1).replace("-", "."), m.group(2), m.start(2), m.end(2)) for m in CSS_MARK.finditer(text)]
+    return []
+
+
+def _code(text: str) -> str:
+    return re.sub(r"`([^`]*)`", r"<code>\1</code>", text)
+
+
+def mark_problems(name: str, text: str, ja: dict, en: dict) -> list[str]:
+    """Each key mark of the part names a key of the table, and its words as written are the Japanese words letter for
+    letter (index.html: HTML-escaped, a tlhtml mark's `…` as <code>; app.css: as a CSS string writes them)."""
+    import html as html_mod
+
+    out = []
+    for key, written, start, _ in marks(name, text):
+        if key not in en or key not in ja:
+            out.append(f"{name}: {key} is not in the table")
+            continue
+        if not isinstance(ja[key], str):
+            out.append(f"{name}: {key} changes with a count; a mark takes plain words")
+            continue
+        if name.endswith(".html"):
+            want = html_mod.escape(ja[key], quote=True)
+            if text.startswith("{{tlhtml:", text.rfind("{{", 0, start)):
+                want = _code(want)
+        else:
+            if not re.fullmatch(r"css\.[a-z0-9]+(?:\.[a-z0-9]+)*", key):
+                out.append(f"{name}: {key}: a css key is css. and lower-case words joined by dots")
+            want = ja[key].replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\A ")
+        if written != want:
+            out.append(f"{name}: {key} is written {written!r}, the Japanese words are {want!r}")
+    return out
+
+
 def positions(name: str, text: str) -> list[int]:
-    """The offsets of the Japanese a part says, by its kind (its name's extension)."""
+    """The offsets of the Japanese a part says, by its kind (its name's extension). The words as written beside a
+    key are not counted: the key says them."""
     if name.endswith(".js"):
         return _js(text)
     if name.endswith(".html"):
-        return _outside(text, "<!--", "-->")
-    if name.endswith(".css"):
-        return _outside(text, "/*", "*/")
-    raise ValueError(f"{name}: not a .js, .html or .css part")
+        found = _outside(text, "<!--", "-->")
+    elif name.endswith(".css"):
+        found = _outside(text, "/*", "*/")
+    else:
+        raise ValueError(f"{name}: not a .js, .html or .css part")
+    held = [(a, b) for _, _, a, b in marks(name, text)]
+    return [k for k in found if not any(a <= k < b for a, b in held)]
 
 
 def chars(name: str, text: str) -> list[str]:

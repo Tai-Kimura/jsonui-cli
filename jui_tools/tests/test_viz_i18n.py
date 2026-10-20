@@ -90,10 +90,26 @@ def test_every_key_asked_for_is_in_the_table():
     assert sorted((name, key) for name, key in asked if key not in en) == []
 
 
+WEB = VIZ / "web"
+MARKED = ("index.html", "app.css")
+
+
+def marked_keys() -> set:
+    return {k for name in MARKED for k, *_ in finder.marks(name, (WEB / name).read_text(encoding="utf-8"))}
+
+
 def test_every_key_in_the_table_is_asked_for():
-    """A key is used when its name stands in the code as a quoted literal (tl('k') or a table of keys like BADGES)."""
-    texts = "\n".join(code_texts().values())
-    assert sorted(k for k in i18n.bundled("en") if f"'{k}'" not in texts and f'"{k}"' not in texts) == []
+    """A key is used when its name stands in the code as a quoted literal (tl('k') or a table of keys like BADGES),
+    or in a mark of index.html or app.css."""
+    texts, marked = "\n".join(code_texts().values()), marked_keys()
+    assert sorted(k for k in i18n.bundled("en") if f"'{k}'" not in texts and f'"{k}"' not in texts and k not in marked) == []
+
+
+def test_the_page_and_css_marks_say_the_japanese_words_letter_for_letter():
+    """index.html's {{tl:key}}…{{/tl}} and app.css's var(--tl-name, '…') keep the words for a table without the key:
+    those words are the Japanese table's, as HTML or CSS writes them, and the key is in the table."""
+    ja, en = i18n.bundled("ja"), i18n.bundled("en")
+    assert [p for name in MARKED for p in finder.mark_problems(name, (WEB / name).read_text(encoding="utf-8"), ja, en)] == []
 
 
 def js_code_japanese(text: str) -> list[str]:
@@ -361,3 +377,43 @@ def test_a_session_badge_is_the_same_in_every_language(locale, table):
         ["st-busy", w["status.thinking"]], ["st-asking", w["status.asking"]], ["st-waiting", w["status.waiting"]],
         ["st-bg", w["status.background"]],
     ]
+
+
+# ---- index.html's marks (filled by the server) and app.css's (CSS variables from 05-i18n.js) -----------------------
+
+def test_a_mark_takes_the_tables_words_html_escaped():
+    words = i18n.Strings(language="en", table={"a.t": 'Say "hi" & <b>', "a.c": "run `jui viz` now"})
+    page = '<p title="{{tl:a.t}}題{{/tl}}">{{tl:a.t}}本文{{/tl}} {{tlhtml:a.c}}x{{/tl}}</p>'
+    assert i18n.fill_words(page, words) == ('<p title="Say &quot;hi&quot; &amp; &lt;b&gt;">Say &quot;hi&quot; &amp; '
+                                            '&lt;b&gt; run <code>jui viz</code> now</p>')
+
+
+def test_a_key_the_table_lacks_keeps_the_words_as_written():
+    words = i18n.Strings(language="en", table={})
+    assert i18n.fill_words('<p title="{{tl:no.key}}題 &amp; 名{{/tl}}">{{tl:no.key}}元の文{{/tl}}</p>', words) \
+        == '<p title="題 &amp; 名">元の文</p>'
+
+
+def test_a_persons_words_cannot_break_out_of_a_mark(home):
+    """A person's file may say anything: it lands escaped, and a {{/tl}} in it ends nothing."""
+    write_config({"language": "en", "strings": own_words({"status.idle": "{{/tl}}</p><script>x</script>"})})
+    page = i18n.page_html('<p>{{tl:status.idle}}待機{{/tl}} {{tl:status.busy}}作業中{{/tl}}</p>', i18n.from_config(load_config()))
+    assert page == "<p>{{/tl}}&lt;/p&gt;&lt;script&gt;x&lt;/script&gt; Working</p>"
+
+
+def css_vars(table: dict) -> dict:
+    node = shutil.which("node")
+    assert node, "node is needed (the jui_tools job has it)"
+    blob = json.dumps({"language": "en", "locale": "en-US", "strings": table})
+    prelude = ("const set = {};\nglobalThis.document = { getElementById: () => ({ textContent: " + json.dumps(blob) + " }),"
+               " documentElement: { style: { setProperty: (k, v) => { set[k] = v; } } } };\n")
+    out = subprocess.run([node, "-e", prelude + (WEB_JS / "05-i18n.js").read_text(encoding="utf-8")
+                          + "\nprocess.stdout.write(JSON.stringify(set));"], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+def test_the_css_words_are_set_as_css_strings():
+    got = css_vars({"css.hist.loading": "Loading…", "css.q": 'say "hi" \\ back\nnext', "status.idle": "Idle",
+                    "css.n": {"one": "{n} x", "other": "{n} xs"}})
+    assert got == {"--tl-hist-loading": '"Loading…"', "--tl-q": '"say \\"hi\\" \\\\ back\\A next"'}

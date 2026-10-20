@@ -33,6 +33,16 @@ function tlHTML(key, params) {
     return tlEsc(part).replace(/&#96;/g, '\x60');
   }).join('').replace(TL_CODE, '<code>$1</code>');
 }
+/* app.css's words: `content: var(--tl-name, 'the words as written')`. Each key css.name of the table is set on
+   :root as --tl-name, a CSS string (its backslashes and quotes escaped, a line break as \A); a key the table lacks
+   keeps the words as written. The gate holds the words as written to the Japanese table, letter for letter. */
+const TL_CSS_ESC = new RegExp('[\\\\"]', 'g');
+const tlCss = (v) => '"' + String(v).replace(TL_CSS_ESC, (c) => '\\' + c).replace(/\n/g, '\\A ') + '"';
+if (document.documentElement) {
+  for (const [key, v] of Object.entries(I18N.strings)) {
+    if (key.startsWith('css.') && typeof v === 'string') document.documentElement.style.setProperty('--tl-' + key.slice(4).replace(/\./g, '-'), tlCss(v));
+  }
+}
 /* Times and counts in the language's own form */
 const fmtTime = (d, opts) => new Date(d).toLocaleTimeString(LOCALE, opts);
 const fmtNum = (n, opts) => Number(n).toLocaleString(LOCALE, opts);

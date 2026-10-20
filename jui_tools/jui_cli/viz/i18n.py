@@ -22,6 +22,7 @@ wrong shape, or slots that differ from the bundled words are each left out with 
 """
 from __future__ import annotations
 
+import html as html_mod
 import json
 import os
 import re
@@ -165,9 +166,25 @@ def tl(key: str, **params) -> str:
     return lookup(active(), key, params)
 
 
+#: index.html's words: {{tl:key}}the words as written{{/tl}}, in text or in an attribute's value. The server puts the
+#: table's words there, HTML-escaped; {{tlhtml:key}}…{{/tl}} also draws `…` as <code>…</code>. A key the table does not
+#: have keeps the words as written. The gate holds the words as written to the Japanese table, letter for letter.
+WORDS_MARK = re.compile(r"\{\{(tl|tlhtml):([\w.\-]+)\}\}(.*?)\{\{/tl\}\}", re.S)
+
+
+def fill_words(html: str, strings: Strings) -> str:
+    def one(m):
+        kind, key, written = m.groups()
+        if key not in strings.table:
+            return written
+        words = html_mod.escape(lookup(strings, key), quote=True)
+        return re.sub(r"`([^`]*)`", r"<code>\1</code>", words) if kind == "tlhtml" else words
+    return WORDS_MARK.sub(one, html)
+
+
 def page_html(html: str, strings: Strings) -> str:
-    """index.html with its language and its words: <html lang> and the JSON the page's tl() reads. ``</`` is written
-    ``<\\/`` so no word can end the script element."""
+    """index.html with its language and its words: <html lang>, the {{tl:…}} marks, and the JSON the page's tl()
+    reads. ``</`` is written ``<\\/`` so no word can end the script element."""
     blob = json.dumps({"language": strings.language, "locale": strings.locale, "strings": strings.table},
                       ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    return html.replace(LANG_SLOT, strings.language).replace(STRINGS_SLOT, blob)
+    return fill_words(html, strings).replace(LANG_SLOT, strings.language).replace(STRINGS_SLOT, blob)
