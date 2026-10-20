@@ -217,11 +217,15 @@ def test_the_bootstrap_moves_the_old_folder_before_it_deletes_the_install_folder
     assert (old / "config.json").exists() and not (old / "backups").exists()
 
 
-def test_the_bootstrap_calls_the_move_right_before_its_rm():
+def test_the_bootstrap_calls_the_move_before_it_swaps_the_install_folder_out():
+    # Since 2.3.8 the install folder is renamed aside and deleted after a fresh clone is swapped in
+    # (test_bootstrap_swaps_in_a_fresh_clone.py); the move still has to come first.
     lines = [line.strip() for line in BOOTSTRAP.read_text().splitlines()]
-    rm = [i for i, line in enumerate(lines) if line == 'rm -rf "$INSTALL_DIR"']
-    assert len(rm) == 1, "one place deletes the install folder; a new one needs the move too"
-    assert lines[rm[0] - 1] == 'migrate_viz_state "$INSTALL_DIR"'
+    assert 'rm -rf "$INSTALL_DIR"' not in lines, "the live install folder is never emptied in place"
+    aside = [i for i, line in enumerate(lines) if line.startswith('mv "$INSTALL_DIR" ')]
+    assert len(aside) == 1, "one place moves the install folder out; a new one needs the move too"
+    moves = [i for i, line in enumerate(lines) if line == 'migrate_viz_state "$INSTALL_DIR"']
+    assert len(moves) == 1 and moves[0] < aside[0]
 
 
 def test_the_first_viz_command_moves_the_old_folder(home, capsys):

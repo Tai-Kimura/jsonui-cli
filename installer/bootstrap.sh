@@ -211,6 +211,62 @@ migrate_viz_state() {
 }
 # <<< viz-state
 
+# 🚨 CLONE NEXT TO THE INSTALL FOLDER, THEN SWAP IT IN. Never empty the live
+# folder first. Until 2.3.7 the re-install was `rm -rf "$INSTALL_DIR"` then
+# `git clone` into it. A running viz server (2.2.0 and later) re-creates
+# <install dir>/viz/server.json every 2 s for the jui-viz plugin 1.0.0 whenever
+# the install folder exists (viz_cmd._legacy_mirror_write). `rm -rf` removes
+# the contents first and the folder last; a write in between made that last
+# rmdir fail, rm exited 1, `set -e` ended the script, and the folder was left
+# holding only viz/server.json (2026-10-20 13:11:18, the 2.3.7 distribution).
+# A failed clone also left nothing to go back to.
+#
+# Now: clone into a new folder beside it (same parent, so a rename never
+# crosses a file system). Only when the clone succeeded: move what 2.1.0 left
+# to the state folder (migrate_viz_state), copy what remains of <install>/viz
+# (the running server's mirror) into the clone, rename the old folder aside,
+# rename the clone into place, then delete the old one. The viz writes by path,
+# so after the rename it writes into the new folder and nothing writes into
+# the old one while it is deleted. A process that holds a file of the old tree
+# open keeps reading it until it closes it (unlinked, not truncated). Between
+# the two renames (microseconds) the path does not exist: a `jui` started in
+# that instant fails once; one started any other time finds a whole tree.
+clone_and_swap_in() {
+    # Not `name`/`old`/`new`/`item`: migrate_viz_state assigns those, and bash scoping is dynamic, so it
+    # would rewrite a local of ours of the same name (measured: the folder set aside was named after server.json).
+    local swap_dir swap_base staging aside
+    swap_dir="$(dirname "$INSTALL_DIR")"
+    swap_base="$(basename "$INSTALL_DIR")"
+    mkdir -p "$swap_dir" || error "Could not create $swap_dir"
+    staging="$(mktemp -d "$swap_dir/.${swap_base#.}.new.XXXXXX")" || error "Could not create a folder beside $INSTALL_DIR"
+    if ! git clone --depth 1 "$REPO_URL" "$staging"; then
+        rm -rf "$staging"
+        if [ -e "$INSTALL_DIR" ]; then
+            error "git clone failed — $INSTALL_DIR was not touched (still the previous install)"
+        fi
+        error "git clone failed — nothing was installed"
+    fi
+    if [ ! -e "$INSTALL_DIR" ] && [ ! -L "$INSTALL_DIR" ]; then
+        mv "$staging" "$INSTALL_DIR" || error "Could not move the clone to $INSTALL_DIR (it is at $staging)"
+        return 0
+    fi
+    migrate_viz_state "$INSTALL_DIR"
+    if [ -d "$INSTALL_DIR/viz" ] && [ ! -L "$INSTALL_DIR/viz" ] && [ ! -e "$staging/viz" ]; then
+        cp -pR "$INSTALL_DIR/viz" "$staging/viz" || warning "Could not copy $INSTALL_DIR/viz into the new install"
+    fi
+    aside="$(mktemp -d "$swap_dir/.${swap_base#.}.old.XXXXXX")" || error "Could not create a folder beside $INSTALL_DIR (the clone is at $staging)"
+    mv "$INSTALL_DIR" "$aside/tree" || error "Could not move $INSTALL_DIR aside — it was not touched (the clone is at $staging)"
+    if ! mv "$staging" "$INSTALL_DIR"; then
+        mv "$aside/tree" "$INSTALL_DIR"
+        error "Could not move the clone to $INSTALL_DIR — the previous install was put back (the clone is at $staging)"
+    fi
+    if [ -e "$INSTALL_DIR/${staging##*/}" ]; then
+        # BSD mv has no -T: a folder created at the path between the two renames received the clone inside it.
+        error "Something created $INSTALL_DIR during the swap; the clone is at $INSTALL_DIR/${staging##*/}, the previous install at $aside/tree"
+    fi
+    rm -rf "$aside" || warning "Could not delete the previous install at $aside — delete it by hand"
+}
+
 # Clone or update repository
 info "Installing to $INSTALL_DIR..."
 
@@ -223,16 +279,14 @@ if [ -d "$INSTALL_DIR" ]; then
         git reset --hard origin/main
         success "Updated to latest version"
     else
-        # No .git directory - remove and re-clone
+        # No .git directory - clone afresh and swap it in
         info "Re-installing (previous .git was cleaned up)..."
-        migrate_viz_state "$INSTALL_DIR"
-        rm -rf "$INSTALL_DIR"
-        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+        clone_and_swap_in
         success "Re-cloned repository"
     fi
 else
     info "Cloning repository..."
-    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+    clone_and_swap_in
     success "Cloned repository"
 fi
 
