@@ -177,6 +177,7 @@ BUILDERS = {
         "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
         "liveTestsHTML", "questionHTML", "robotTestsHTML", "robotRunHTML",
         "transitionTag", "typeCell",   # 2.3.5: a transition's tag and a type's cell (their templates are checked here too)
+        "rowText", "wfTree", "levelHTML",   # 2.3.7: the 構造's row text and its nested boxes (ticket 2026-10-20-jui-viz-spec-structure-shows-no-nesting)
     },
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
 }

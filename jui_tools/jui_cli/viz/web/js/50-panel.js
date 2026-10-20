@@ -911,7 +911,7 @@ function markOf(s, model, k, i) {
   if (i === n && s.implIdx === k) return ['●', 'm-doing', 'is-doing'];
   return ['○', 'm-todo', ''];
 }
-function wfElement([type, id, desc], state) {
+function wfElement([type, id, desc], state, idx) {
   let shapeHTML;
   if (type === 'Button') shapeHTML = `<b class="wf-btn">${esc(desc)}</b>`;
   else if (type === 'TextField' || type === 'TextView') shapeHTML = `<span class="wf-input">${esc(desc)}</span>`;
@@ -922,7 +922,51 @@ function wfElement([type, id, desc], state) {
   else if (type === 'Image' || type === 'NetworkImage') shapeHTML = '<span class="wf-img"></span>';
   else if (type === 'Switch' || type === 'CheckBox') shapeHTML = `<span class="wf-check"><span class="bar short"></span><i class="${type === 'CheckBox' ? 'cb' : ''}"></i></span>`;
   else shapeHTML = `<span class="bar${type === 'Label' ? ' short' : ''}"></span>`;
-  return `<div class="wf s-${esc(state)}"><span class="wf-id">${esc(id)}</span>${shapeHTML}</div>`;
+  return `<div ${idx === undefined ? '' : `data-wf="${esc(idx)}" `}class="wf s-${esc(state)}"><span class="wf-id">${esc(id)}</span>${shapeHTML}</div>`;
+}
+/* The structure as a tree (ticket 2026-10-20-jui-viz-spec-structure-shows-no-nesting). The server sends each
+   component as [type, id, desc, depth], depth-first (sheet.py); a row's parent is the nearest row above it one level
+   up. TREE_STEP: the list's indent per level. WF_PAD: a box's inner padding in the phone frame by its depth — the cap
+   that keeps a deep tree readable in the 196 px frame: 6 px at depths 0–2, 2 px at 3–5, none from 6 (a 1 px border
+   only), so a box at depth 4 is still about 110 px wide and one at depth 15 about 80 px. */
+const TREE_STEP = 14;
+const WF_PAD = (depth) => (depth < 3 ? 6 : depth < 6 ? 2 : 0);
+const hasDepths = (rows) => rows.some((c) => Array.isArray(c) && Number.isInteger(c[3]));
+// The depths as drawn: the first row at 0, a row never more than one level below the row above it (a bad depth from
+// the wire cannot make a row without a parent).
+function treeDepths(rows) {
+  let prev = -1;
+  return rows.map((c) => { const raw = Number.isInteger(c[3]) && c[3] > 0 ? c[3] : 0; prev = Math.min(raw, prev + 1); return prev; });
+}
+// The list's tree lines for each row: one cell per level above it — 'v' (an ancestor's later sibling below: a line
+// down), 'e' (none) — and its own 't' (a later sibling: ├) or 'l' (the last: └). Depth 0: none.
+function treeGuides(depths) {
+  const later = depths.map((d, i) => { for (let j = i + 1; j < depths.length; j++) { if (depths[j] < d) return false; if (depths[j] === d) return true; } return false; });
+  const open = [];
+  return depths.map((d, i) => {
+    open.length = d;
+    const cells = [];
+    for (let k = 1; k < d; k++) cells.push(open[k] ? 'v' : 'e');
+    if (d > 0) cells.push(later[i] ? 't' : 'l');
+    open[d] = later[i];
+    return cells;
+  });
+}
+// The phone frame: a box per row, a child's box inside its parent's.
+function wfTree(nodes) {
+  let i = 0;
+  const levelHTML = (depth) => {
+    let outHTML = '';
+    while (i < nodes.length && nodes[i].depth === depth) {
+      const n = nodes[i++];
+      const kidsHTML = i < nodes.length && nodes[i].depth > depth ? levelHTML(depth + 1) : '';
+      if (!kidsHTML) { outHTML += wfElement(n.c, n.state, n.idx); continue; }
+      const [type, id] = n.c, pad = WF_PAD(depth);
+      outHTML += `<div data-wf="${esc(n.idx)}" class="wf wf-box${depth >= 6 ? ' wf-deep' : ''} s-${esc(n.state)}" style="padding:${esc(pad + 2)}px ${esc(pad)}px ${esc(pad)}px"><span class="wf-id">${esc(id || type)}</span>${kidsHTML}</div>`;
+    }
+    return outHTML;
+  };
+  return levelHTML(0);
 }
 function renderNav(s) {
   if (wbNav._idx !== wb.idx) { wbNav.innerHTML = SECTIONS.map((label, k) => `<button type="button" data-sec="${k}"><span>${esc(label)}</span><small></small></button>`).join(''); wbNav._idx = wb.idx; }
@@ -952,7 +996,7 @@ function renderSheet(model, force) {
 
   let activeKey = null;
   const actAttr = (cls, key) => ((cls === 'is-doing' || cls === 'is-testing') && activeKey === null ? (activeKey = key, ' data-act') : '');
-  const li = (m, key, innerHTML) => `<li class="rw ${esc(m[2])}"${actAttr(m[2], key)}><span class="mk ${esc(m[1])}">${esc(m[0])}</span><span>${innerHTML}</span></li>`;
+  const li = (m, key, innerHTML, depth) => `<li ${depth === undefined ? '' : `data-depth="${esc(depth)}" `}class="rw ${depth === undefined ? '' : 'rw-tree '}${esc(m[2])}"${actAttr(m[2], key)}><span class="mk ${esc(m[1])}">${esc(m[0])}</span><span>${innerHTML}</span></li>`;
   const tr = (m, key, cellsHTML) => `<tr class="${esc(m[2])}"${actAttr(m[2], key)}><td class="mk ${esc(m[1])}">${esc(m[0])}</td>${cellsHTML}</tr>`;
   // The first n items of a section; while it is being written the newest one is highlighted instead of marked.
   const pick = (k, arr, n, fresh) => arr.slice(0, n).map((x, i) => [x, i, fresh ? ['', '', i === n - 1 ? 'is-new' : ''] : markOf(s, model, k, i)]);
@@ -966,13 +1010,23 @@ function renderSheet(model, force) {
       const COMP_MAX = 60, compAll = reveal(d.components.length, w);
       const items = pick(1, d.components, Math.min(COMP_MAX, compAll), writing);
       const moreHTML = compAll > COMP_MAX ? `<p class="sc-note">ほか ${compAll - COMP_MAX} 個の部品（Layout が大きいので先頭の ${COMP_MAX} 個だけ）</p>` : '';
-      const rowsHTML = items.map(([[type, id, desc], i, m]) => li(m, `c${i}`, `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> <span class="desc">${esc(desc)}</span>`)).join('');
-      const byId = new Map(items.map((x) => [x[0][1], x]));
-      const wfHTML = d.layoutChildren.filter((id) => byId.has(id)).map((id) => {
-        const [c, , m] = byId.get(id);
-        const state = writing ? (m[2] === 'is-new' ? 'writing' : 'defined') : !s.implPhase ? 'defined' : m[1] === 'm-done' ? 'done' : m[1] === 'm-doing' ? 'doing' : 'todo';
-        return wfElement(c, state);
-      }).join('');
+      const wfState = (m) => (writing ? (m[2] === 'is-new' ? 'writing' : 'defined') : !s.implPhase ? 'defined' : m[1] === 'm-done' ? 'done' : m[1] === 'm-doing' ? 'doing' : 'todo');
+      const rowText = (type, id, desc) => `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> <span class="desc">${esc(desc)}</span>`;
+      let rowsHTML, wfHTML;
+      if (hasDepths(d.components)) {
+        // a tree: the list indented by depth with its lines, the phone frame's boxes nested
+        const depths = treeDepths(items.map((x) => x[0])), guides = treeGuides(depths);
+        rowsHTML = items.map(([[type, id, desc], i, m]) => {
+          const gHTML = guides[i].length ? `<span class="tg" aria-hidden="true">${guides[i].map((k) => `<i class="g-${esc(k)}"></i>`).join('')}</span>` : '';
+          return li(m, `c${i}`, `${gHTML}<span class="tr-in" style="padding-left:${esc(depths[i] * TREE_STEP)}px">${rowText(type, id, desc)}</span>`, depths[i]);
+        }).join('');
+        wfHTML = wfTree(items.map(([c, i, m]) => ({ c, idx: i, depth: depths[i], state: wfState(m) })));
+      } else {
+        // no depths (the demo's screens): one level, the wireframe in layoutChildren's order
+        rowsHTML = items.map(([[type, id, desc], i, m]) => li(m, `c${i}`, rowText(type, id, desc))).join('');
+        const byId = new Map(items.map((x) => [x[0][1], x]));
+        wfHTML = d.layoutChildren.filter((id) => byId.has(id)).map((id) => { const [c, , m] = byId.get(id); return wfElement(c, wfState(m)); }).join('');
+      }
       return `<div class="st-grid"><div class="wf-phone" role="img" aria-label="${esc((d.components[0] || [])[1] || '')} の中に並ぶ部品の配置図">${wfHTML}</div><ul class="rows">${rowsHTML}</ul></div>${moreHTML}`;
     },
     (w, writing) => {

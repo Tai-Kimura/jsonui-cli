@@ -619,6 +619,18 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .wf.s-doing { border-color: var(--wb-blue); box-shadow: 0 0 0 3px var(--wb-blue-bg); }
 .wf.s-todo { border-style: dashed; border-color: var(--wb-faint); opacity: 0.6; }
 .wf.s-writing { border-color: var(--wb-violet); box-shadow: 0 0 0 3px var(--wb-violet-bg); }
+/* the structure as a tree (ticket 2026-10-20-jui-viz-spec-structure-shows-no-nesting): the list's lines, the frame's nested boxes (padding: WF_PAD in 50-panel.js) */
+.rw-tree { position: relative; }
+.rw-tree .tg { position: absolute; top: -1px; bottom: -1px; left: calc(12px + 1.4em); display: flex; pointer-events: none; }
+.rw-tree .tg i { position: relative; flex: none; width: 14px; }
+.tg .g-v::before, .tg .g-t::before, .tg .g-l::before { content: ""; position: absolute; top: 0; bottom: 0; left: 6px; border-left: 1.5px solid var(--wb-faint); }
+.tg .g-l::before { bottom: auto; height: 15px; }
+.tg .g-t::after, .tg .g-l::after { content: ""; position: absolute; top: 15px; left: 6px; right: 2px; border-top: 1.5px solid var(--wb-faint); }
+.rw-tree .tr-in { display: block; }
+.wf-box { gap: 4px; min-width: 0; }
+.wf-deep { border-width: 1px; }
+.wf-box.s-todo { opacity: 1; }   /* the dashed border says it; an opacity would compound down a deep tree */
+.wf-box.s-todo > .wf-id { opacity: 0.6; }
 .vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .vt th { padding: 4px 6px; border-bottom: 1px solid var(--wb-line); color: var(--wb-soft); font: 700 11px/1.5 var(--font-body); text-align: left; }
 .vt td { padding: 5px 6px; border-bottom: 1px dashed var(--wb-line); color: var(--wb-ink); vertical-align: baseline; }

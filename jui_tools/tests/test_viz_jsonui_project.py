@@ -203,6 +203,7 @@ def test_sheet_doc_has_the_renderers_shape(tmp_path):
     doc = sheet_for(project, "p:auth/login.spec.json")
     assert [c[:2] for c in doc["components"]] == [["SafeAreaView", "login_root"], ["Label", "title"], ["View", ""],
                                                    ["TextField", "email"], ["Button", "submit"]]
+    assert [c[3] for c in doc["components"]] == [0, 1, 1, 2, 2]   # the Layout's depth, as a number (2026-10-20)
     assert doc["layoutChildren"] == ["login_root", "title", "email", "submit"]
     assert doc["uiVariables"] == [["email", "String", ""]] and doc["vmMethods"] == ["onSubmit"]
     assert doc["repositories"] == ["AuthRepository"] and doc["apis"][0][1:] == ["POST", "/login"]

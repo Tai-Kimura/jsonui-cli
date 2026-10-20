@@ -4,9 +4,12 @@ The page's sheet renderer (prototype ``renderSheet``) reads one ``doc``
 object; this builds it from a real spec so the renderer ports unchanged:
 
   metadata        {name, displayName, description, platforms, layoutFile}
-  components      [[type, id, description]]   (the Layout file's tree when the
-                                               spec lists no components — the usual case)
-  layoutChildren  [id]                        (the wireframe's order)
+  components      [[type, id, description, depth]]   (the Layout file's tree when the spec lists no
+                                               components — the usual case — depth-first, depth 0 at its
+                                               top; listed components in structure.layout's order: _listed_tree.
+                                               The page rebuilds the tree from the order and the depths: a
+                                               row's parent is the nearest row above it one level up)
+  layoutChildren  [id]                        (the wireframe's order when there are no depths: the demo)
   uiVariables     [[name, type, initial]]
   eventHandlers   [[name, description]]
   vmMethods       [name]      vmVars [name]   repositories [name]
@@ -82,6 +85,48 @@ def _name(item) -> str:
     return _t(item)
 
 
+def _listed_tree(listed: list[dict], layout: dict) -> list[list]:
+    """structure.components as [type, id, description, depth], in the order of structure.layout's tree.
+
+    The tree is structure.layout: ``root`` (an id) and ``children`` (ids, or {id, children} for a nested one). A
+    listed component's depth is how many listed components are above it on that tree, so the list stays a
+    depth-first order whose depth never grows by more than one from a row to the next (the page rebuilds the tree
+    from it). Listed components the tree does not name follow at depth 0, in the spec's order. The rows are the
+    listed components, each once — the same count section_items gives.
+    """
+    by_id: dict[str, dict] = {}
+    for c in listed:
+        if isinstance(c.get("id"), str) and c["id"] not in by_id:
+            by_id[c["id"]] = c
+    order: list[tuple[dict, int]] = []
+    seen: set[int] = set()
+
+    def visit(node, above: int) -> None:
+        if isinstance(node, str):
+            ident, kids = node, []
+        elif isinstance(node, dict):
+            ident, kids = node.get("id"), node.get("children")
+        else:
+            return
+        comp = by_id.get(ident) if isinstance(ident, str) else None
+        if comp is not None and id(comp) not in seen:
+            seen.add(id(comp))
+            order.append((comp, above))
+            above += 1
+        for kid in kids if isinstance(kids, list) else []:
+            visit(kid, above)
+
+    root = layout.get("root")
+    top = layout.get("children")
+    if isinstance(root, str) and root:
+        visit({"id": root, "children": top}, 0)
+    elif isinstance(top, list):
+        for kid in top:
+            visit(kid, 0)
+    order += [(c, 0) for c in listed if id(c) not in seen]
+    return [[_t(c.get("type")), _t(c.get("id")), _t(c.get("description")), depth] for c, depth in order]
+
+
 def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], impl: dict) -> dict:
     meta = _d(spec.get("metadata"))
     st = _d(spec.get("structure"))
@@ -91,9 +136,9 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
 
     listed = [c for c in _list(st.get("components")) if isinstance(c, dict)]
     if listed:
-        components = [[_t(c.get("type")), _t(c.get("id")), _t(c.get("description"))] for c in listed]
+        components = _listed_tree(listed, _d(st.get("layout")))
     else:
-        components = [[_t(n["type"]), _t(n.get("id", "")), "  " * n.get("depth", 0) + _t(n["type"])]
+        components = [[_t(n["type"]), _t(n.get("id", "")), _t(n["type"]), int(n.get("depth", 0))]
                       for n in layout_nodes[:MAX_ITEMS]]
     layout_children = [c[1] for c in components if c[1]]
 
