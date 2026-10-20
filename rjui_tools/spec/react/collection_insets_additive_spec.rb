@@ -8,7 +8,7 @@ require 'react/converters/collection_converter'
 # own box, the scroll container (the SSoT's Collection.insets): 1, 2 or 4
 # values, an array or a `|` string, read as `paddings` reads them; any other
 # value pads nothing. insetHorizontal and insetVertical are ADDED per edge, as
-# iOS and both Compose paths draw them, and the values are exact (4f round 6,
+# iOS and both Compose paths draw them, and the values are exact (the orchestrator's round 6,
 # jsonui-cli 1.9.0). Measured in Chromium (300 x 60 Collections): until then
 # rjui rounded them to Tailwind's spacing scale (insets [0, 0, 0, 30] put the
 # first cell at 28), four values replaced insetHorizontal / insetVertical, two

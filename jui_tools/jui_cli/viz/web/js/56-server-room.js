@@ -32,10 +32,10 @@ const SR = {
   fastMs: 300, starMs: 140, okMs: 700, failMs: 9000,
   lod: { far: 9, near: 13 }, labels: { max: 110, nodes: 80 }, stats: null,
   closed: new Set(), selected: null, selectedGroup: null, zoomStep: 1.4,
-  // fewer lines (2.3.10, requester 10-20: 「線減らす工夫欲しいね」): all cables faint, the pressed and the pointed node's
+  // fewer lines (2.3.9, requester 10-20: 「線減らす工夫欲しいね」): all cables faint, the pressed and the pointed node's
   // drawn strong on a layer of their own; a switch for all (faint) / crossing ones only / the chosen node's only
   lines: 'all', hover: null, plainOpacity: 0.18, crossOpacity: 0.55,
-  only: new Set(),   // the clouds chosen on the board's legend (2.3.10 item 3; empty: all)
+  only: new Set(),   // the clouds chosen on the board's legend (2.3.9, item 3; empty: all)
 };
 const srEl = $('sr'), srBubbleEl = $('sr-bubble');
 function srNow() { return performance.now(); }
@@ -72,7 +72,7 @@ function srFail(got) {
   for (const p of (got.problems || []).slice(0, 30)) lines.push(`${p.file || ''}${p.line ? `:${p.line}` : ''} ${p.short || p.message || ''}`.trim());
   Object.assign(SR, { phase: 'failed', why: short, full: lines.filter(Boolean).join('\n'), until: srNow() + SR.failMs });
   srBubble(short, 'error', SR.full);
-  // gone after SR.failMs by its own timer, wherever the view is (dd's verification D1, 10-20: it was cleared from the
+  // gone after SR.failMs by its own timer, wherever the view is (the independent verification D1, 10-20: it was cleared from the
   // keypad's tick, which runs only for the door in sight, and stayed on the floor view after a failure)
   clearTimeout(SR.failTimer);
   const seq = SR.seq;
@@ -147,7 +147,7 @@ function srShape(category) {
   return 'small';
 }
 const SR_PALETTE = ['#f29a38', '#4f8ef7', '#3fb26b', '#e2574c', '#a26bd6', '#26a5b8', '#d4a72c', '#7d8a99', '#e06fa8', '#5c6bc0'];
-/* The 3D's colours (2.3.10 item 2, requester 10-20: 「ダークでも背景が白なの嫌だね 背景は暗めにして欲しい」): in dark the
+/* The 3D's colours (2.3.9, item 2, requester 10-20: 「ダークでも背景が白なの嫌だね 背景は暗めにして欲しい」): in dark the
    background is near-black and every floor at least 3:1 against it; the light set is as before. */
 const SR_PAL = {
   light: { bg: '#eef2f7', logical: '#c9b8e8', public: '#dfe7f2', private: '#9fb0c4', neutral: '#cfd6df', strip: 0xe9e2f5, plain: 0x5c6b7f, focus: 0x1d4ed8 },
@@ -169,7 +169,7 @@ function srLayout(model, env, showFold, closed = new Set(), only = new Set()) {
   const roots = [];
   for (const G of groups.values()) { const p = G.g.parent && groups.get(G.g.parent); (p ? p.kids : roots).push(G); }
   const loose = { g: { id: '', kind: 'logical', label: 'グループなし' }, kids: [], nodes: [], level: 0 }, ext = [];
-  // clouds chosen on the board (2.3.10 item 3): only their nodes; one with no provider is out while any is chosen
+  // clouds chosen on the board (2.3.9, item 3): only their nodes; one with no provider is out while any is chosen
   const nodes = (model.nodes || []).filter((n) => srVisible(n, env) && (showFold || !n.fold) && (!only.size || only.has(n.providerResolved || n.provider)));
   for (const n of nodes) {
     if (n.external || n.category === 'external.saas') { ext.push(n); continue; }
@@ -276,7 +276,7 @@ function srBuild() {
   srDispose();
   const model = SR.model, env = $('sr-env').value || '', fold = $('sr-fold').checked;
   const L = srLayout(model, env, fold, SR.closed, SR.only);
-  // a chosen or pointed node not drawn now (another environment, a cloud not chosen, folded) is let go (dd's verification)
+  // a chosen or pointed node not drawn now (another environment, a cloud not chosen, folded) is let go (the independent verification)
   for (const k of ['selected', 'hover']) if (SR[k] && !(L.pos.has(SR[k]) && !L.pos.get(SR[k]).hiddenIn)) SR[k] = null;
   const cv = $('sr-canvas'), box = cv.parentElement;
   const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
@@ -376,7 +376,7 @@ function srBuild() {
     (B.cross ? bc : bp).push(B.a.x + B.a.w / 2, ya, B.a.z + B.a.d / 2, B.b.x + B.b.w / 2, yb, B.b.z + B.b.d / 2);
   }
   V.bundles = [...bundles.values()];
-  // the far view's bundles: as faint as the near cables, and the lines switch holds there too (dd's verification of item 1)
+  // the far view's bundles: as faint as the near cables, and the lines switch holds there too (the independent verification of item 1)
   V.farPlain = lines(bp, new THREE.LineBasicMaterial({ color: PAL.plain, transparent: true, opacity: SR.plainOpacity }));
   V.farCross = lines(bc, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 1.2, gapSize: 0.7, transparent: true, opacity: SR.crossOpacity }));
   V.far.add(V.farPlain, V.farCross);
@@ -617,7 +617,7 @@ ${probs.length ? `<h3>問題 ${probs.length} 件</h3><ul class="sr-problems">${p
 function srRenderLog() {
   setHTML($('sr-log'), `<ol>${SR.log.map((l) => `<li><time>${esc(new Date(l.at).toTimeString().slice(0, 8))}</time> ${esc(l.text)}</li>`).join('')}</ol>`);
 }
-/* The theme changing while the server room is open (the OS's light and dark, or the page's own switch; dd's verification
+/* The theme changing while the server room is open (the OS's light and dark, or the page's own switch; the independent verification
    D3): the 3D is made again in the new colours, the camera where it was. */
 function srRetheme() {
   const V = SR.view;

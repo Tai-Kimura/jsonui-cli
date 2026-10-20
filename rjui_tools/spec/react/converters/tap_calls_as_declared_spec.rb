@@ -7,7 +7,7 @@ require 'react/data_model_generator'
 require 'react/include_paths'
 require 'core/layout_path'
 
-# A tap calls its handler as the layout's data declares the closure (4f's
+# A tap calls its handler as the layout's data declares the closure (the orchestrator's
 # ruling on control-onclick-is-called-differently-on-every-path, jsonui-cli
 # 1.9.0 — sjui's no_value_call, kjui's call as declared): `(String)` with the
 # viewId (JsonUIShared::LayoutPath.view_id: the id, else the drawn type and

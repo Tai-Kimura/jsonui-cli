@@ -300,9 +300,9 @@ def notice_text(ticket: Path) -> str:
 def notify_route(ticket: Path) -> list[str]:
     """Tell the orchestrator. Measured 10-19: a script has no way to send a cross-session message (the CLI has no such
     command; that channel exists only inside a running session), and viz has no notice endpoint (its /hook would make
-    a robot). What reaches cd from a script: the ticket in docs/bugs (cd's queue), and the desktop notification the
+    a robot). What reaches the orchestrator from a script: the ticket in docs/bugs (the orchestrator's queue), and the desktop notification the
     user sees (they forward it). On top of both (10-19 ruling), red_ticket_hook.sh, a UserPromptSubmit hook cd installs
-    in its own session (`watch.py print-hook`), puts every unseen red ticket in cd's context at its next prompt.
+    in its own session (`watch.py print-hook`), puts every unseen red ticket in the orchestrator's context at its next prompt.
     Returns what was done."""
     done = [f"ticket {ticket}"]
     if shutil.which("osascript"):
@@ -391,7 +391,7 @@ def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, f
     return result
 
 
-# ------------------------------------------------------------------ cd's side: the hook and "seen"
+# ------------------------------------------------------------------ the orchestrator's side: the hook and "seen"
 HOOK = HERE / "red_ticket_hook.sh"
 UNSEEN = re.compile(r"^status: open\b.*$", re.M)
 
@@ -407,7 +407,7 @@ def mark_seen(ticket: Path, now: dt.datetime | None = None) -> bool:
 
 
 def hook_settings(repo: Path) -> dict:
-    """The hook finds the tickets through *repo*, never the session's working folder (cd's session starts in another
+    """The hook finds the tickets through *repo*, never the session's working folder (the orchestrator's session starts in another
     project): the path is made absolute here, and both paths are shell-quoted (a folder name may hold a space)."""
     repo = Path(repo).expanduser().resolve()
     return {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command",
@@ -431,7 +431,7 @@ def add_hook(settings_file: Path, repo: Path) -> bool:
 def plist(repo: Path, state: Path, live: bool = True, python: str = sys.executable, hour: int = 8, minute: int = 30,
           here: Path = HERE) -> bytes:
     """The LaunchAgent. It runs with --live (the throwaway session) by default: measured green twice on 10-19 and
-    verified by dd; the requester wants the checks against the real thing and accepted the cost (~0.03 USD a day).
+    independently verified; the requester wants the checks against the real thing and accepted the cost (~0.03 USD a day).
     `--no-live` leaves only the version compare and the help probes."""
     return plistlib.dumps({
         "Label": LABEL,

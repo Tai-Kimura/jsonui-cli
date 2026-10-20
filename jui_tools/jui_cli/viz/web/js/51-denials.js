@@ -4,7 +4,7 @@
    and counted by the 止められた chip. 「実行してよいと伝える…」 opens a confirmation that shows the exact words the server
    will send (the card's prompt); only its 送る sends, and the page names the card, never the words (POST /api/denial).
    That prompt is all: no rule, no setting, no answer to a hook — whether the next try passes is Claude Code's call.
-   cd's ruling (10-20 15:30): what this claims is that the person's judgement reaches the receiver unmistaken, not
+   The orchestrator's ruling (10-20 15:30): what this claims is that the person's judgement reaches the receiver unmistaken, not
    that the receiver goes on — it may rightly ask for a confirmation in the terminal. Once sent, the card says 伝えた
    and shows the receiver's next response under it.
    A session whose channel cannot take a prompt gets the reason instead of the button. 「そのまま」 closes the card. */
@@ -23,7 +23,7 @@ function rebuildDenials() {
   if (DEN.asking && !DENIALS.some((d) => d.id === DEN.asking.split('|')[0] && d.status === 'pending')) DEN.asking = null;
   denialsNotify();
 }
-/* The same rule as a permission (c2's notification rules, kind perm): one ring per card; what waited before the page
+/* The same rule as a permission (the author's notification rules, kind perm): one ring per card; what waited before the page
    loaded is not rung. */
 function denialsNotify() {
   const waiting = DENIALS.filter((d) => d.status === 'pending');

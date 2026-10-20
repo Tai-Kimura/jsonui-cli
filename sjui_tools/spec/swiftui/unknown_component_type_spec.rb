@@ -8,7 +8,7 @@ require_relative '../support/emitted_swift'
 # AttributeValidatorCore.unknown_component_type_message; kjui's
 # spec/core/unknown_component_type_spec.rb holds the rule): sjui says it in
 # the build and writes it in a comment where the node would be, drawing
-# nothing — not the node, not its children (4f's ruling, jsonui-cli 1.9.0: a
+# nothing — not the node, not its children (the orchestrator's ruling, jsonui-cli 1.9.0: a
 # red Text holding it put a build's words on a release screen). A type the
 # validator knows that no converter draws is another sentence, drawn as a View.
 RSpec.describe 'sjui: unknown component type' do

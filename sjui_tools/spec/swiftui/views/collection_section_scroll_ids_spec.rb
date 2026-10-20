@@ -2,13 +2,13 @@
 
 require 'swiftui/views/collection_converter'
 
-# Two or more sections in one Collection (4f round 9):
+# Two or more sections in one Collection (the orchestrator's round 9):
 # - With cellIdProperty, a section after the first gives its cells ids of
 #   their own — "<section>:" + the key until round 16, the structured
 #   [section, key] since (no key can spell another section's id). Keys two sections share were one id to
 #   the lazy stack / TabView the sections share, which dropped the later
 #   section's cell, as `\.offset` did before 9ef11908. With scrollTo, a
-#   cell's loop id is its scroll target instead (4f round 13): its key, else
+#   cell's loop id is its scroll target instead (the orchestrator's round 13): its key, else
 #   its place — an IndexPath, which no String equals.
 # - Without it, a scrolled-to index is a cell's place among the drawn
 #   sections' cells: a later section's cells are `.id(sectionStart + index)`.
@@ -38,7 +38,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   describe 'cellIdProperty: a later section qualifies its keys' do
-    # A keyed loop's ids with no direct scroll to a key (4f round 16): each
+    # A keyed loop's ids with no direct scroll to a key (the orchestrator's round 16): each
     # cell's key in its section, the structured [section, key], when no
     # earlier cell of the loop has it; else its place.
     def keyed_ids(block, list, cell, data, index, section)
@@ -70,9 +70,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       end
     end
 
-    # With scrollTo a cell's loop id is its scroll target (4f round 13): its
+    # With scrollTo a cell's loop id is its scroll target (the orchestrator's round 13): its
     # key when no cell before it in section order has it — no earlier drawn
-    # section (4f ruling 2026-09-27, round 10: scrollTo names the FIRST cell,
+    # section (the orchestrator's ruling 2026-09-27, round 10: scrollTo names the FIRST cell,
     # in section order, whose key it is) and no earlier cell of its own
     # section (round 14) — else its place, an IndexPath: a cell with no key
     # has no key, and no value a scrollTo sends (a String, an Int) equals an

@@ -240,7 +240,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
 
   # scrollAnchor says where the target lands along the scroll axis (the SSoT's
   # Collection.scrollAnchor): on a horizontal Collection, top / center /
-  # bottom are `.leading` / `.center` / `.trailing` (4f ruling 2026-09-27).
+  # bottom are `.leading` / `.center` / `.trailing` (the orchestrator's ruling 2026-09-27).
   # Until jsonui-cli 1.9.0 they were `.top` / `.center` / `.bottom`, whose x
   # is 0.5: every anchor put the target's middle at the viewport's middle —
   # measured on the codegen host (ScrollRouteProbeUITests' seventh page).

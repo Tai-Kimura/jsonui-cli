@@ -621,7 +621,7 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include('data.onDayChange?.(e.target.value)')
       end
 
-      # A Date SelectBox's value is its selectedDate alone (4f's ruling,
+      # A Date SelectBox's value is its selectedDate alone (the orchestrator's ruling,
       # jsonui-cli 1.9.0): selectedValue and the undeclared `value` were read
       # after it, and not by sjui.
       # selectItemType as written (the SSoT enum): "date" is a list box here as

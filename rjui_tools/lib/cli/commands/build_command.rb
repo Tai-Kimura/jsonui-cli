@@ -571,7 +571,7 @@ module RjuiTools
         # it: when it is init's copy unchanged — the init mark, and the
         # template of its language byte for byte — this language's copy is
         # written and the old one deleted; otherwise it is named and kept
-        # (4f ruling 2026-09-26, round 8). The mark alone is not the test here,
+        # (the orchestrator's ruling 2026-09-26, round 8). The mark alone is not the test here,
         # as it is for NetworkImage: build refreshes NetworkImage whenever it
         # differs, so its mark means the tool owns every byte; EmbedContainer
         # is never refreshed, and an edit below its header comment would be

@@ -7,7 +7,7 @@ require_relative '../../spec_helper'
 require_relative '../../support/typescript_compiler'
 require 'react/converters/collection_converter'
 
-# A paging Collection's item addresses count across the sections (4f ruling
+# A paging Collection's item addresses count across the sections (the orchestrator's ruling
 # 2026-09-26, round 7): `<id>_item_<n>` is the page's place among all the
 # pages — sjui's page tag and accessibility identifier, and kjui's pager test
 # tag, count the same way. Until jsonui-cli 1.9.0 each section's items were

@@ -447,7 +447,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
         by_provider.setdefault(f["provider"], []).append(f)
     declared_providers = {n["providerResolved"] or "?" for n in nodes}
     # unread: its files are there. A file not read whose provider is not known ("*" in unread: over the size, not
-    # parsed) may be this provider's: then "none found" is not said (dd's fourth verification Q4), only that some were
+    # parsed) may be this provider's: then "none found" is not said (the independent fourth verification Q4), only that some were
     # not read. ("*" notes that are no unread file — a PaaS setting, a module from outside — change nothing here.)
     for provider in sorted(declared_providers - set(by_provider) - {"?"} - unread):
         unverified.setdefault(provider, []).append(

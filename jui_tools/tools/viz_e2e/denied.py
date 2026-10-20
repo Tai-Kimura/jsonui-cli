@@ -36,7 +36,7 @@ PREFIX = "Permission for this action was denied by the Claude Code auto mode cla
 SOURCE = "[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]"
 TAIL = ("この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。\n"
         "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。")
-# cd's ruling (10-20 15:30): what is claimed is the words reaching the receiver with the card's call and reason as
+# The orchestrator's ruling (10-20 15:30): what is claimed is the words reaching the receiver with the card's call and reason as
 # they are — not that it goes on (that is the requester's one real check)
 WORDS1 = f"{SOURCE}\n止められた操作: Bash: {CMD1}\n止めた理由（自動モードの判定）: [Unrequested Commit in a Connected App]\n{TAIL}"
 WORDS2 = f"{SOURCE}\n止められた操作: Bash: {CMD2}\n止めた理由（自動モードの判定）: [Irreversible Remote Destruction]\n{TAIL}"

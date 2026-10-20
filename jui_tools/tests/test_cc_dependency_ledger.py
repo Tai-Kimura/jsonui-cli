@@ -248,7 +248,7 @@ def test_changelog_lines_keep_only_the_range_and_the_ledger_words():
     assert W.changelog_lines(text, "2.1.303", "2.1.304") == ["2.1.304: - statusLine gets cost"]
 
 
-# ------------------------------------------------------------------ cd's side: the hook, "seen", the notice
+# ------------------------------------------------------------------ the orchestrator's side: the hook, "seen", the notice
 import os  # noqa: E402
 import subprocess  # noqa: E402
 import time  # noqa: E402
@@ -456,7 +456,7 @@ def test_a_lost_login_ticket_carries_the_login_steps(world):
     assert W.TOKEN_HELP in t.read_text()
 
 
-# ------------------------------------------------------------------ the widened marks (dd's survey, 10-19)
+# ------------------------------------------------------------------ the widened marks (the independent check's survey, 10-19)
 @pytest.mark.parametrize("line", M.SURVEY)
 def test_every_surveyed_shape_hits_a_mark(line):
     assert [k for k, rx in M.COMPILED.items() if rx.search(line)], line
@@ -608,7 +608,7 @@ def test_the_repo_must_be_given_and_is_not_the_install_dir(installed, tmp_path):
 
 
 def test_the_hook_finds_the_repo_by_its_absolute_path_from_any_working_folder(tmp_path, monkeypatch):
-    """cd's session starts in another project: the written command must not depend on the working folder, and a
+    """The orchestrator's session starts in another project: the written command must not depend on the working folder, and a
     folder name with a space must survive the shell."""
     repo = tmp_path / "my repo" / "jsonui-cli"
     t = red_ticket(repo, "2026-10-20-cc-dependency-watch-red.md")

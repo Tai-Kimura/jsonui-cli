@@ -10,7 +10,7 @@ frames, not after the dozens of frames a per-frame step needed:
     'playing', one for the game's clock; ticket 2026-10-20-jui-viz-arrivals-and-rolls-wait-for-frames), counted in
     frames (waits.frame_log_js).
 
-And never faster than its real time either (dd, 10-20: a walk that skipped every point closer than the frame's step
+And never faster than its real time either (the independent check, 10-20: a walk that skipped every point closer than the frame's step
 went green in every arm, which bounded walks only from above): a walk along a zigzag of short pieces, at frames as they
 come and at frames 3 s apart, takes at least 0.8 x its length / the walking speed (both read from the page), counted in
 the walk's own time - the real time its frames gave it (LIVE3D.lastWalk from the frame before to the frame it arrived).

@@ -121,7 +121,7 @@ module SjuiTools
         # as the data declares it (get_event_handler_invocation). It was an
         # `.onChange(of:)` on a bound selectedIndex — the view model's writes
         # called it as well — which called the optional closure without `?`,
-        # and an unbound segment's was not read at all (4f's ruling).
+        # and an unbound segment's was not read at all (the orchestrator's ruling).
         def value_change_call(id)
           handler = @component['valueChange']
           return nil unless handler.is_a?(String) && !handler.strip.empty?

@@ -487,7 +487,7 @@ module SjuiTools
         # 'false', or the bound userInteractionEnabled values of the nodes
         # around it and its own, joined. The tap rule stops a node and
         # everything in it, links included, and a binding gates them as it
-        # gates a tap (4f ruling, jsonui-cli 1.9.0). `.allowsHitTesting`
+        # gates a tap (the orchestrator's ruling, jsonui-cli 1.9.0). `.allowsHitTesting`
         # stops a touch; a link is also an accessibility element of its own.
         # canTap and enabled are the Label's own tap and state, not read here.
         # Only a Label with links gets it (TapAccessibility.linked_text?).

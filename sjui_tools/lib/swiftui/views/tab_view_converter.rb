@@ -211,7 +211,7 @@ module SjuiTools
 
         private
 
-        # `enabled` stops the tab items, not the tab view (4f's ruling,
+        # `enabled` stops the tab items, not the tab view (the orchestrator's ruling,
         # jsonui-cli 1.9.0 — kjui's NavigationBarItem `enabled`, web's
         # `<button disabled>` per tab): the tab view's control is its row of
         # tabs, and what a tab shows is a layout of its own, which

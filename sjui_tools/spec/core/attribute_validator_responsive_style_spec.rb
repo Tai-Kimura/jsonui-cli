@@ -5,7 +5,7 @@ require 'core/attribute_validator'
 # A `style` named inside a responsive override is applied by no path — sjui /
 # kjui codegen, rjui and both Dynamic runtimes did not, jui's normalizer did
 # (the hotloader drew what no build draws) — so every path names it in one
-# sentence (4f's ruling, 1.9.0). The shared validator core, the same bytes in
+# sentence (the orchestrator's ruling, 1.9.0). The shared validator core, the same bytes in
 # sjui, kjui and rjui.
 RSpec.describe 'attribute validator: a style inside a responsive override' do
   let(:validator) { SjuiTools::Core::AttributeValidator.new(:swiftui) }

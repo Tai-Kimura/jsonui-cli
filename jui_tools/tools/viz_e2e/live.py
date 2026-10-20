@@ -760,7 +760,7 @@ async def run_real(pw, out, failures, RealServer):
         res["ticker"] = await page.evaluate("() => [...document.querySelectorAll('#ticker li')].map((l) => l.textContent)")
         await page.screenshot(path=f"{out}/real-end.png")
         check(failures, res["rooms"] == ["shop-app/", "jsonui-cli/"], f"real: rooms {res['rooms']}")
-        # The server goes away and comes back on the same port with a new token (dd's P3 review): the page shows
+        # The server goes away and comes back on the same port with a new token (the independent check's P3 review): the page shows
         # 再接続中…, fetches the new token itself and is connected again — the same page, never reloaded.
         await page.evaluate("() => { window.__notReloaded = true; }")
         before = srv.token()
@@ -872,7 +872,7 @@ async def run_real_decide(pw, out, failures):
             res[answer] = _json.loads(outp) if outp else None
             if answer == "deny":
                 await page.keyboard.press("Escape"); await page.keyboard.press("Escape")
-        # dd's shapes (P4–P6 review): a 2,500-character command whose tail is the part that matters, runs of spaces
+        # The independent check's shapes (P4–P6 review): a 2,500-character command whose tail is the part that matters, runs of spaces
         # and a line break — the card shows it verbatim (whitespace kept, the box scrolls); past 20,000 characters the
         # browser gets no buttons; a long Write says how much of its content is shown.
         long_cmd = "echo start" + "   x  y" * 350 + "\n  && echo two  spaces; rm -rf ~/tail-hidden"

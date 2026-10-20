@@ -7,7 +7,7 @@ require 'tmpdir'
 # where the lexical scope is the top level — at the top of a file, or inside
 # `RSpec.describe … do`, since a block opens no constant scope — is Object's:
 # two files that define the same name share one constant, and which value an
-# example sees depends on the order the files load (4f round 9). It happened:
+# example sees depends on the order the files load (the orchestrator's round 9). It happened:
 # two Collection specs each defined SECTIONS, and the second's values ran the
 # first's examples. A value a spec needs is scoped — a `let`, a local of the
 # describe block, or a constant inside a module named for the file.

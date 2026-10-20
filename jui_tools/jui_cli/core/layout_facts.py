@@ -349,7 +349,7 @@ def layout_ids_every_platform(name: str, *, layouts_dir: Path, styles_dir: Path)
 def fold(name: str) -> str:
     """`sample_toggle` / `sampleToggle` -> `sampletoggle`. The
     toolchain has three snake->camel functions that disagree on segments with
-    capitals; folding both sides is no fourth one (ee, 2026-09-25)."""
+    capitals; folding both sides is no fourth one (2026-09-25)."""
     return name.lower().replace("_", "")
 
 

@@ -9,7 +9,7 @@ require 'react/react_generator'
 # AttributeValidatorCore.unknown_component_type_message; kjui's
 # spec/core/unknown_component_type_spec.rb holds the rule): rjui says it, and
 # draws nothing for the node — the sentence in a JSX comment, at the root and
-# as a child (4f's ruling, jsonui-cli 1.9.0; it drew a plain View, and named
+# as a child (the orchestrator's ruling, jsonui-cli 1.9.0; it drew a plain View, and named
 # a child nowhere). A type the validator knows that no converter draws is
 # another sentence, drawn as a View. The rjui profile knows the types its
 # registry draws — the converter_mappings.rb the generator reads, the

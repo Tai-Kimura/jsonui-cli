@@ -266,7 +266,7 @@ module RjuiTools
           # in the validator's sentence (JsonUIShared::AttributeValidatorCore
           # .unknown_component_type_message) and drawn as nothing — the
           # sentence in a JSX comment where the node would be, as kjui and
-          # sjui draw it. It was drawn as a View (4f's ruling, jsonui-cli
+          # sjui draw it. It was drawn as a View (the orchestrator's ruling, jsonui-cli
           # 1.9.0). The child path, BaseConverter#create_converter_for_child,
           # follows the same rule.
           if unknown_type_validator.known_component_type?(type.to_s)

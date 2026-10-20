@@ -28,7 +28,7 @@ TYPES = ["optional", "array", "string", "bool", "number", "color", "custom"]
 TRANSITIONS = [["保存しない", "遷移なし（画面内）", ""], ["ヘルプ", "外部ブラウザ（https://example.invalid）", ""],
                ["戻るボタン", "前の画面に戻る（pop）", ""], ["ログアウト", "Login", "replace"], ["フィルタ", "FilterSheet", "sheet"],
                ["詳細を見る", "Detail", "push"], ["何か", "Somewhere", ""], ["閉じる", "Home", "dismiss"], ["地図を開く", "地図アプリ", ""],
-               # the type decides over another kind's word in the destination (dd, from the requester's specs)
+               # the type decides over another kind's word in the destination (the independent check, from the requester's specs)
                ["店舗を編集", "StoreEditSheetView", "navigationDestination"], ["ホームへ", "HomeViewController（SS MAP表示）", "delegate(switchToHome)"],
                ["詳細を出す", "遷移なし（同画面上に詳細を sheet 表示）", "sheet"],
                # no kind written: a named screen is 画面へ; a destination that names nothing is grey (the ruling, 10-19)

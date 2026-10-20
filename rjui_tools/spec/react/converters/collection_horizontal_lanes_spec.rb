@@ -8,7 +8,7 @@ require 'react/converters/collection_converter'
 require_relative '../../support/typescript_compiler'
 require_relative '../../support/headless_chromium'
 
-# A horizontal Collection's lanes and spacing on the web (4f ruling,
+# A horizontal Collection's lanes and spacing on the web (the orchestrator's ruling,
 # 2026-09-26; the rule sjui codegen and SwiftJsonUI Dynamic dde0628 draw):
 # - Lanes: a section has more than one lane when its own `columns`, else the
 #   Collection's, is above 1; a bound `columns` keeps the grid even at 1 lane,

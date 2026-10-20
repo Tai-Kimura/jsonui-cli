@@ -67,7 +67,7 @@ SOURCE_LINE = "[jui viz の「止められた操作」の札から、依頼者�
 
 
 def prompt_text(card: dict) -> str:
-    """The words 「実行してよいと伝える」 sends (cd's ruling 10-20 15:30: the receiver may answer in the terminal, and
+    """The words 「実行してよいと伝える」 sends (the orchestrator's ruling 10-20 15:30: the receiver may answer in the terminal, and
     that is right — its care with a channel's words is not to be talked around). Where they come from; the call that
     was stopped and the reason, each taken from the card as it is; the person's judgement; and the way left open to
     ask for a confirmation in the terminal. What viz claims is that the person's judgement reaches the receiver

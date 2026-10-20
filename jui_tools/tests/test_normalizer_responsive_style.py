@@ -2,7 +2,7 @@
 
 sjui / kjui codegen, rjui and both Dynamic runtimes did not apply it; the
 normalizer's StyleMerger did (it walked every dict value), so the hotloader
-drew what no build draws. 4f's ruling (1.9.0): named on every path, applied
+drew what no build draws. The orchestrator's ruling (1.9.0): named on every path, applied
 by none. The override keeps its own attributes; the style is dropped and the
 sentence said once — the same as the shared validator's and SwiftJsonUI
 Dynamic's ResponsiveResolver's.

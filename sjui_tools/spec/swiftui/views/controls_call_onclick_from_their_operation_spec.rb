@@ -8,7 +8,7 @@ require 'json'
 
 # A control's declared onClick is called ONCE, from the control's own
 # operation, after its own update (ticket
-# control-onclick-is-called-differently-on-every-path; 4f's ruling): a
+# control-onclick-is-called-differently-on-every-path; the orchestrator's ruling): a
 # Switch / Toggle's flip, a CheckBox's check, a Radio's selection, a Segment's
 # segment, the end of a Slider's change, a SelectBox's pick. No plain tap
 # around them; canTap gates the call; `enabled: false` stops the operation and
@@ -182,7 +182,7 @@ RSpec.describe 'sjui: a control calls its declared onClick from its own operatio
   end
 
   # Segment.valueChange — the selector spelling, its own attribute — is
-  # reported by the same rule (4f's ruling): from the user's choice, after the
+  # reported by the same rule (the orchestrator's ruling): from the user's choice, after the
   # write and before onClick, where no onValueChange is declared, as kjui and
   # rjui call it. It was an `.onChange(of:)` on a bound selectedIndex only.
   describe 'Segment valueChange' do

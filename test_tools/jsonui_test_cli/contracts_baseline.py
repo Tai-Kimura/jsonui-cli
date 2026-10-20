@@ -32,7 +32,7 @@ is closed over time.
   matched nor stale, and the command keeps it. (Dropping it was the loss the
   "nothing written" guard exists for; these causes are baselinable, so the
   guard did not see them.) So is one under what the run holds but cannot
-  EVALUATE (ee review 4 (a)): a screen whose spec cannot be read, a status a
+  EVALUATE (review 4 (a)): a screen whose spec cannot be read, a status a
   row reaches that does not bind or reads a `@response` path the body lacks.
   Fixing the spec or the row brings it back as it was; those causes are
   not baselinable, so they fail the gate on their own.
@@ -46,7 +46,7 @@ is closed over time.
   removing or re-keying it is done by hand, where the diff shows it — the
   user's decision. Dropping an endpoint, a status or a platform is no longer
   a way out of the debt — a platform the config no longer declares included
-  (ee review 4 (b)): only `--platform` narrows the comparison.
+  (review 4 (b)): only `--platform` narrows the comparison.
   baselined = matched + stale + hidden + vanished.
 """
 from __future__ import annotations
@@ -151,7 +151,7 @@ def load(path: Path):
     if not path.is_file():
         return None
     # Every way it cannot be read names the file and whose call the repair is
-    # (v4.21, ee): a conflict-marked file used to surface as a bare
+    # (v4.21): a conflict-marked file used to surface as a bare
     # "Expecting value: line 1 column 1".
     repair = "repairing it is the user's decision"
     try:

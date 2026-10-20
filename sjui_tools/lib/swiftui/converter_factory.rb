@@ -270,7 +270,7 @@ module SjuiTools
           # No case draws it. A type the validator knows (an extension
           # definition with no converter, say) is named in its own sentence
           # and drawn as a View, its children in it; an unknown type is named
-          # and drawn as nothing (DefaultConverter). 4f's ruling, jsonui-cli 1.9.0.
+          # and drawn as nothing (DefaultConverter). The orchestrator's ruling, jsonui-cli 1.9.0.
           type = component['type'].to_s
           if unknown_type_validator.known_component_type?(type)
             SjuiTools::Core::Logger.warn(SjuiTools::Core::AttributeValidator.declared_without_drawer_message(type, 'SwiftUI'))
@@ -347,7 +347,7 @@ module SjuiTools
     # parent puts after a child's code has a view to take. Not its children.
     # It was a red Text holding the sentence (the words of a build on a
     # release screen), and before that "Unsupported component: <type>";
-    # kjui and rjui draw nothing there too (4f's ruling, jsonui-cli 1.9.0).
+    # kjui and rjui draw nothing there too (the orchestrator's ruling, jsonui-cli 1.9.0).
     # The factory hands it the sentence (ConverterFactory#unknown_type_validator).
     class DefaultConverter < Views::BaseViewConverter
       def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil, sentence: nil)

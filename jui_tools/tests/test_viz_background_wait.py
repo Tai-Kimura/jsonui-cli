@@ -1,6 +1,6 @@
 """Waiting on background work (requester, 10-18): the light stays on while a session's background work runs.
 
-Signals, as lane 4d measured them on a live machine (10-18 14:1x): Stop's background_tasks arrives filled for the
+Signals, as a lane measured them on a live machine (10-18 14:1x): Stop's background_tasks arrives filled for the
 sessions that have background work (4 of 4, no false positive in 20); the work runs in a shell-snapshot shell
 under the session's process; the sessions file and `claude agents` report idle all the while.
 """

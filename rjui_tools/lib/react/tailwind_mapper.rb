@@ -449,7 +449,7 @@ module RjuiTools
         # `text-left` for left; nil otherwise. The flex `justify-*` above
         # places the text's box; a wrapped or multi-line text fills its row,
         # and only text-align places its lines (the SSoT's Label.textAlign,
-        # 4f round 6: until jsonui-cli 1.9.0 they stayed at the start).
+        # The orchestrator's round 6: until jsonui-cli 1.9.0 they stayed at the start).
         def label_gravity_text_align(gravity, text_align = nil)
           return nil if text_align.is_a?(String) && !text_align.empty?
 

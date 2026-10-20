@@ -234,7 +234,7 @@ module KjuiTools
             # flow_scrolls_if_parent_bounded?), a SubcomposeLayout: under an
             # IntrinsicSize.Min parent it threw "Asking for intrinsic
             # measurements of SubcomposeLayout layouts is not supported"
-            # (measured on the Android codegen host, 4f round 13). Paging
+            # (measured on the Android codegen host, the orchestrator's round 13). Paging
             # horizontal uses HorizontalPager which IS SubcomposeLayout-based.
             # Everything else is Lazy.
             layout = node['layout'] || node['orientation'] || 'vertical'
@@ -349,7 +349,7 @@ module KjuiTools
           parent_orientation == 'Row' ? :width : :height
         end
 
-        # Where a Label's text sits in a frame taller than it (4f ruling
+        # Where a Label's text sits in a frame taller than it (the orchestrator's ruling
         # 2026-09-27, round 17; attribute_semantics.json gravityDefaults ->
         # leafOwnFrameChannel): its gravity's vertical part — top, bottom, or
         # the middle for center / centerVertical — and the middle when the
@@ -532,7 +532,7 @@ module KjuiTools
           #
           # A Label's text is placed vertically in a frame taller than it by
           # its gravity — label_vertical_alignment, applied by the Label's own
-          # chain inside its background and padding (4f ruling 2026-09-27,
+          # chain inside its background and padding (the orchestrator's ruling 2026-09-27,
           # round 17). It was paired with the height here, before the
           # background, so a Label with a minHeight drew its background only
           # as tall as its text; and a numeric height was not paired at all.
@@ -1214,7 +1214,7 @@ module KjuiTools
         # left out), 'false', or the bound userInteractionEnabled values of
         # the nodes around it and its own, joined. `userInteractionEnabled`
         # stops a node and everything in it, links included, and a binding
-        # gates them as it gates a tap (the tap rule; 4f ruling, jsonui-cli
+        # gates them as it gates a tap (the tap rule; the orchestrator's ruling, jsonui-cli
         # 1.9.0). The pointer blocker stopped a touch on a link, but each link
         # is a semantics node of its own whose action TalkBack's double tap
         # still called (measured, API 35 emulator). canTap and enabled are the

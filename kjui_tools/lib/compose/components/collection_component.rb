@@ -42,14 +42,14 @@ module KjuiTools
         # defaultScrollAnchor (center / bottom): where the list starts, applied
         # once, when it first has cells. The cell is counted by the scrollTo
         # rule — across the drawn sections, headers, footers and fillers not
-        # counted — and scrolled to as the lazy item that holds it (4f ruling
+        # counted — and scrolled to as the lazy item that holds it (the orchestrator's ruling
         # 2026-09-27, round 11). Until jsonui-cli 1.9.0 the count was the first
         # data section's cells and the result the lazy item index, so a header
         # moved the anchor and a later section was not counted.
         # `route` / `grid_columns` / `is_horizontal` as scroll_target_code.
         #
         # Under reverseLayout a lazy list rests at its visual bottom, so top
-        # and bottom trade places, as they do for scrollAnchor (4f ruling
+        # and bottom trade places, as they do for scrollAnchor (the orchestrator's ruling
         # 2026-09-27, round 12 — where iOS lands, which draws the same order
         # from bottom-anchored content): bottom is where the list rests and
         # moves nothing; top goes to the cell drawn at the visual top — the
@@ -249,7 +249,7 @@ module KjuiTools
           end
         end
 
-        # What `scrollTo` names, as the lazy item index to scroll to (4f ruling
+        # What `scrollTo` names, as the lazy item index to scroll to (the orchestrator's ruling
         # 2026-09-27; the SSoT's Collection.scrollTo, jsonui-cli 1.9.0): an
         # Int is a CELL counted across the drawn sections in section order —
         # a section's header or footer item, and the grid's filler item that
@@ -279,7 +279,7 @@ module KjuiTools
         # section's cells when the row before is part filled (`gridLineFill`
         # in the grid body, whose arithmetic this repeats).
         #
-        # The declared class decides what the value names (4f ruling
+        # The declared class decides what the value names (the orchestrator's ruling
         # 2026-09-27, round 14; the SSoT's Collection.scrollTo): a number is a
         # cell's index, counted across the drawn sections, with or without
         # cellIdProperty; a String is a cell's key — its `cellId`, else its
@@ -291,7 +291,7 @@ module KjuiTools
         # the lazy item index, never as a cell (round 11).
         #
         # A value that names no cell scrolls nowhere — with one exception, ruled
-        # (4f 2026-09-27, round 11): a String that is no cell's key and is
+        # (the orchestrator, 2026-09-27, round 11): a String that is no cell's key and is
         # `<digits>` or `<digits>#<anything>` is read as the legacy lazy item
         # index, and a debuggable app is told so, with the migration (a key, or
         # the cell index). The lazy routes read it (list, grid, pager — a page
@@ -470,7 +470,7 @@ module KjuiTools
         # shape has nothing to scroll to. `state` is the route's state
         # variable, declared by the caller.
         #
-        # It runs on a CHANGE of the bound value (4f ruling 2026-09-27, round
+        # It runs on a CHANGE of the bound value (the orchestrator's ruling 2026-09-27, round
         # 11): the value a Collection first composes with names no scroll, as
         # SwiftUI's `.onChange(of:)` reads it — a list with a header and an
         # initial 0 stays at its top. Until jsonui-cli 1.9.0 the first
@@ -634,7 +634,7 @@ module KjuiTools
         end
 
         # The scroll of a container that is not a lazy list — the EAGER
-        # CollectionStack, the wrapContent Column (4f rulings 2026-09-27, round
+        # CollectionStack, the wrapContent Column (the orchestrator's rulings 2026-09-27, round
         # 12) — for its scrollTo and defaultScrollAnchor: its ScrollState, the
         # viewport's and each cell's coordinates as they are laid out (the
         # cells by their place among the drawn cells), and
@@ -717,7 +717,7 @@ module KjuiTools
         # (:x / :y); nil for a LazyColumn / LazyRow's Int.
         # Until jsonui-cli 1.9.0 the offset was the viewport or half of it,
         # so `bottom` put the target's top at the viewport's bottom edge
-        # (measured, 4f round 11). Until 1.9.23 an item not laid out was
+        # (measured, the orchestrator's round 11). Until 1.9.23 an item not laid out was
         # sized as the laid-out items' average; a cell taller than the
         # viewport on screen pushed the target out of it, and the correction
         # for a laid-out target never ran
@@ -866,7 +866,7 @@ module KjuiTools
         # The keys of a section's cells as one lazy list may hold them: a
         # cell's key (cellId, else the cellIdProperty value, else its index),
         # and a key an earlier cell of the section already took gets "#2",
-        # "#3"… (4f ruling 2026-09-27, round 11) — Compose throws "Key … was
+        # "#3"… (the orchestrator's ruling 2026-09-27, round 11) — Compose throws "Key … was
         # already used" on a key two items share, and two cells of one
         # section sharing a key took the list down once both were composed
         # (measured on the Android conformance host). CellIdGenerator's
@@ -884,13 +884,13 @@ module KjuiTools
         # ("Key … was already used") — two sections sharing a cell key, or
         # two keyless cells answering the same index, took the list down
         # once both were composed (measured on KotlinJsonUI Dynamic, which
-        # keys its items the same way; 4f round 10). sjui's later sections
+        # keys its items the same way; the orchestrator's round 10). sjui's later sections
         # carry "<section>:" ids for the same reason (jsonui-cli round 9).
         def self.lazy_key(expr, section_index)
           section_index.to_i.positive? ? "\"#{section_index}:\" + (#{expr})" : expr
         end
 
-        # Spacing on every horizontal Collection, one lane or many (4f ruling,
+        # Spacing on every horizontal Collection, one lane or many (the orchestrator's ruling,
         # 2026-09-26, the rule SwiftJsonUI Dynamic dde0628 and sjui codegen
         # draw): along the scroll axis lineSpacing (its alias sectionSpacing),
         # else itemSpacing, else 0; between lanes columnSpacing, else
@@ -909,7 +909,7 @@ module KjuiTools
         # or — `non_lazy` — a container that is not one (the declared anchor).
         # scrollEnabled as a Kotlin Boolean ('true' when undeclared): it stops
         # the user's scrolling only; a programmatic scroll still moves the
-        # container (4f ruling 2026-09-27, round 13 — as iOS's scrollDisabled).
+        # container (the orchestrator's ruling 2026-09-27, round 13 — as iOS's scrollDisabled).
         def self.user_scroll_enabled_expr(json_data)
           return 'true' unless json_data.key?('scrollEnabled')
 
@@ -928,7 +928,7 @@ module KjuiTools
 
         # A vertical list, not reversed, whose defaultScrollAnchor is bottom:
         # content shorter than the list sits at its bottom, where iOS draws it
-        # (4f ruling 2026-09-27, round 14; it sat at the top).
+        # (the orchestrator's ruling 2026-09-27, round 14; it sat at the top).
         def self.content_at_bottom?(json_data)
           json_data['defaultScrollAnchor'] == 'bottom' && json_data['reverseLayout'] != true
         end
@@ -938,10 +938,10 @@ module KjuiTools
         # (the end under reverseLayout, which the lazy containers already
         # take): defaultScrollAnchor center — its middle; bottom — its end.
         # iOS draws a short row at its leading edge / middle / trailing edge by
-        # the anchor (4f ruling 2026-09-27, round 15; measured on sjui codegen
+        # the anchor (the orchestrator's ruling 2026-09-27, round 15; measured on sjui codegen
         # and SwiftJsonUI Dynamic); every Compose row sat at its start.
         # A vertical list with defaultScrollAnchor center whose content is
-        # shorter than the list sits in its middle, as iOS draws it (4f ruling
+        # shorter than the list sits in its middle, as iOS draws it (the orchestrator's ruling
         # 2026-09-27, round 16; measured round 15 on sjui codegen and
         # SwiftJsonUI Dynamic): 'Alignment.CenterVertically', or nil — the top,
         # the bottom under reverseLayout or a bottom anchor (content_at_bottom?).
@@ -1028,7 +1028,7 @@ module KjuiTools
           end
 
           # A section's header / cell / footer names its layout. A node written
-          # inline there is declared nowhere and drawn by no path (4f's ruling,
+          # inline there is declared nowhere and drawn by no path (the orchestrator's ruling,
           # 1.9.0; the validator names it — inline_layout?): it is set aside,
           # where its Hash reached `.split` and the build stopped.
           if json_data['sections'].is_a?(Array)
@@ -1090,7 +1090,7 @@ module KjuiTools
 
           # wrapContent height on vertical Collection → use Column instead of LazyVerticalGrid
           # to avoid crash when nested inside another LazyVerticalGrid (infinite height constraint).
-          # It scrolls inside the height its parent bounds it to (4f ruling
+          # It scrolls inside the height its parent bounds it to (the orchestrator's ruling
           # 2026-09-27, round 12; generate_non_lazy's scroll_within_bounds).
           height_value = json_data['height']
           if !is_horizontal && height_value == 'wrapContent'
@@ -1194,7 +1194,7 @@ module KjuiTools
             # The scroll axis fell back to columnSpacing and the lanes were
             # never spaced until jsonui-cli 1.9.0.
             # A short reversed grid sits at its end, as the reversed list does
-            # (4f ruling 2026-09-27, round 13; spacedBy alone packs to the start).
+            # (the orchestrator's ruling 2026-09-27, round 13; spacedBy alone packs to the start).
             # A short grid sits where defaultScrollAnchor says (row_content_alignment,
             # round 15); with no spacing the grid's own default is the start,
             # the end when reversed.
@@ -1230,7 +1230,7 @@ module KjuiTools
             # Vertical scroll: lineSpacing = vertical spacing between rows,
             # columnSpacing = horizontal spacing between columns
             # A short reversed grid sits at its bottom — where iOS draws such a
-            # list, bottom-anchored (4f ruling 2026-09-27, round 13). With no
+            # list, bottom-anchored (the orchestrator's ruling 2026-09-27, round 13). With no
             # spacing the grid's own default is already Bottom when reversed;
             # spacedBy alone packed it to the top. Not reversed, defaultScrollAnchor
             # bottom puts short content at the bottom too, as iOS draws it (round 14).
@@ -1455,7 +1455,7 @@ module KjuiTools
           items.is_a?(String) ? items[/\A@\{([^}]+)\}\z/, 1] : nil
         end
 
-        # Collection.items is a CollectionDataSource or an array (4f ruling,
+        # Collection.items is a CollectionDataSource or an array (the orchestrator's ruling,
         # 2026-09-26). An items property the layout DECLARES a list —
         # `Array`, `[T]` (AttributeTypes.list_element) — is one section:
         # every element with cellClasses[0], on the routes a one-section data
@@ -1566,7 +1566,7 @@ module KjuiTools
         # (`.frame(maxWidth: .infinity, alignment: .leading)`). Until
         # jsonui-cli 1.9.0 the view itself was handed `Modifier.fillMaxWidth()`,
         # and a fixed-width root (`requiredWidth`, modifier_builder) answers a
-        # fill constraint by centring itself in the row (4f ruling 2026-09-26,
+        # fill constraint by centring itself in the row (the orchestrator's ruling 2026-09-26,
         # round 8; the flow's edges took this shape in round 7).
         def self.edge_view_call(edge_class, view_model, depth)
           indent("Box(modifier = Modifier.fillMaxWidth()) { #{edge_class}View(viewModel = #{view_model}) }", depth)
@@ -1875,7 +1875,7 @@ module KjuiTools
                 if cell_id_prop && !use_hoisted
                   # The section's disambiguated key (lazyKeys): two cells sharing
                   # a key shared one ViewModel, and the later one's data drew in
-                  # both (measured, 4f round 11).
+                  # both (measured, the orchestrator's round 11).
                   code += "\n" + indent("val cellId = lazyKeys[cellIndex]", depth + 5)
                   code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellId}_\${viewModel.hashCode()}\")", depth + 5)
                 elsif cell_id_prop
@@ -1992,7 +1992,7 @@ module KjuiTools
 
           code = ""
 
-          # One page per cell, every drawn section's cells in order (4f ruling
+          # One page per cell, every drawn section's cells in order (the orchestrator's ruling
           # 2026-09-26, round 6; what sjui, rjui and both Dynamic renderers
           # draw). One declared section keeps the text this emitter always
           # wrote. Until jsonui-cli 1.9.0 the pager read data section 0 only —
@@ -2060,7 +2060,7 @@ module KjuiTools
           end
 
           # scrollTo: the page is the cell the value names, counted across the
-          # sources (4f ruling 2026-09-27, round 11). The pager read no
+          # sources (the orchestrator's ruling 2026-09-27, round 11). The pager read no
           # scrollTo until jsonui-cli 1.9.0.
           code += scroll_to_effect(json_data, sections, depth, required_imports, target: :pager, is_horizontal: true, pager_legs: pager_legs)
 
@@ -2350,7 +2350,7 @@ module KjuiTools
           # scrolls. The static emit cannot see the parent, so matchParent is
           # left to the parent too; the dynamic renderer checks the parent's
           # constraints at runtime for that one shape.
-          # scrollTo on a flow that scrolls (4f ruling 2026-09-27, round 11):
+          # scrollTo on a flow that scrolls (the orchestrator's ruling 2026-09-27, round 11):
           # the scroll state is the flow's own, the scrolled content and each
           # cell record where they were laid out, and the effect scrolls to the
           # cell by scrollAnchor (flow_scroll_code). A flow read no scrollTo
@@ -2368,7 +2368,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           padding_modifiers = Helpers::ModifierBuilder.build_padding(json_data)
           # contentPadding / insets pad the cells, after the node's padding and
-          # inside the scroll where the flow scrolls (4f ruling 2026-09-27,
+          # inside the scroll where the flow scrolls (the orchestrator's ruling 2026-09-27,
           # round 15), as KotlinJsonUI Dynamic's flow pads them. A flow applied
           # none until jsonui-cli 1.9.0.
           content_padding = non_lazy_content_padding(json_data, is_horizontal: false)
@@ -2383,7 +2383,7 @@ module KjuiTools
           # every section, so section 2 continued section 1's last row
           # (measured on 6bdb6aba, 2026-09-26). The node's own modifiers stay
           # on the outer container, a Column then.
-          # A section's declared header and footer (4f ruling 2026-09-26,
+          # A section's declared header and footer (the orchestrator's ruling 2026-09-26,
           # round 7) are rows of their own, full width, above and below the
           # section's wrap — so a Collection that declares one takes the
           # Column too. Rows (header, wrap, footer) and section blocks are
@@ -2603,7 +2603,7 @@ module KjuiTools
         # whose height wraps its content, `lazy` lazy or eager): it scrolls
         # inside the height its parent bounds it to, and under a parent that
         # does not bound it (a scrolling ancestor) it is its content's height,
-        # with nothing of its own to scroll (4f ruling 2026-09-27, round 12:
+        # with nothing of its own to scroll (the orchestrator's ruling 2026-09-27, round 12:
         # what iOS — a ScrollView as tall as its parent lets it be — and the
         # web — a fit-content box a flex parent shrinks, overflow auto — draw,
         # measured on both). The layout step hands the verticalScroll a
@@ -2656,7 +2656,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           # contentPadding / insets pad the cells, inside the scroll where the
-          # Column scrolls (4f ruling 2026-09-27, round 15), as KotlinJsonUI
+          # Column scrolls (the orchestrator's ruling 2026-09-27, round 15), as KotlinJsonUI
           # Dynamic's Column and the lazy routes pad them. Until jsonui-cli
           # 1.9.0 the wrapContent and `lazy: none` Columns applied none.
           content_padding = non_lazy_content_padding(json_data, is_horizontal: false)
@@ -3032,7 +3032,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           # The EAGER container scrolls to its cells by the rule the lazy one
-          # follows (4f ruling 2026-09-27, round 12): an Int the counted cell,
+          # follows (the orchestrator's ruling 2026-09-27, round 12): an Int the counted cell,
           # a String a key, on a change, landed by scrollAnchor; and
           # defaultScrollAnchor applies. Its scroll is the caller's
           # (eagerScrollState) and its cells are found where they were laid out
@@ -3127,7 +3127,7 @@ module KjuiTools
           # spacers on the EAGER and NONE rows — so insetVertical and the safe
           # area dropped there, and a spaced EAGER row put its spacing after the
           # leading spacer too. KotlinJsonUI Dynamic's rows pad by contentPadding
-          # (4f ruling 2026-09-27, round 17).
+          # (the orchestrator's ruling 2026-09-27, round 17).
           if reverse_layout
             code += "\n" + indent("reverseLayout = true,", depth + 1)
           end
@@ -3187,7 +3187,7 @@ module KjuiTools
         # horizontal]; four, [top, right, bottom, left]. KotlinJsonUI Dynamic
         # reads the same (parseCollectionPadding). Until jsonui-cli 1.9.0 this
         # read four values as [top, left, bottom, right], only an array of
-        # four, and no string (4f ruling 2026-09-27, round 16).
+        # four, and no string (the orchestrator's ruling 2026-09-27, round 16).
         def self.content_padding_values(value)
           values = case value
                    when Numeric then [value]

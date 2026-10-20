@@ -320,7 +320,7 @@ module KjuiTools
           # output byte for byte.
           if has_image && show_text
             # The icon and the text move together, placed across the button by
-            # textAlign (4f ruling 2026-09-27, round 18; measured on iOS: the
+            # textAlign (the orchestrator's ruling 2026-09-27, round 18; measured on iOS: the
             # icon + text group at the start / end / middle of a 200pt
             # button): the Row takes the button's width and arranges the pair.
             # It sat in the middle whatever textAlign said.
@@ -425,7 +425,7 @@ module KjuiTools
                   TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'Button')
           required_imports&.add(:text_align) if align
           align_arg = align ? "\n" + indent("textAlign = #{align},", depth + 1) : ''
-          # The text is placed across the button by textAlign (4f ruling
+          # The text is placed across the button by textAlign (the orchestrator's ruling
           # 2026-09-27, round 17; centre by default): the Text takes the
           # button's width, which the button's content Row centred a wrap-width
           # Text in, so TextAlign.Start / End drew it in the middle. Only a

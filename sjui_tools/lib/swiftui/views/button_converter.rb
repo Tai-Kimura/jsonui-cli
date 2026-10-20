@@ -324,7 +324,7 @@ module SjuiTools
 
             # textAlign places the label across the button (the SSoT: a
             # Button's text is placed horizontally by textAlign alone, default
-            # centre; 4f ruling 2026-09-27). The environment modifier below
+            # centre; the orchestrator's ruling 2026-09-27). The environment modifier below
             # aligns the lines of a multi-line label but not the label in the
             # button's frame, so until jsonui-cli 1.9.0 `Left` and `Right`
             # stood in the middle. The last parameter, after image/imageTint.

@@ -226,7 +226,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
 
     # A Label's text in a frame taller than it sits by its gravity's vertical
     # part — top, bottom, the middle for center / centerVertical — and in the
-    # middle when the gravity names none (4f ruling 2026-09-27, round 17;
+    # middle when the gravity names none (the orchestrator's ruling 2026-09-27, round 17;
     # gravityDefaults -> leafOwnFrameChannel), as iOS places it. The Label's
     # own chain appends it inside its background and padding
     # (label_vertical_alignment); build_size no longer pairs it with the

@@ -9,7 +9,7 @@ require 'swiftui/views/network_image_converter'
 # (`semantics.image.defaultContentMode`, the 2026-08-03 user ruling), and
 # every path's no-contentMode drawing is bound to it here: the value is read
 # from the file, so a changed ruling moves the expectation and turns this red
-# until the converter follows (4f ruling, 2026-09-26; ticket
+# until the converter follows (the orchestrator's ruling, 2026-09-26; ticket
 # image-content-mode-default-differs-by-path).
 RSpec.describe 'sjui SwiftUI codegen: an image with no contentMode' do
   shared_core = File.expand_path('../../../../shared/core', __dir__)

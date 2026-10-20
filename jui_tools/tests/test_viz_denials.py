@@ -26,7 +26,7 @@ USE = "toolu_01DENIED"
 CMD = "gh pr merge 242 --squash --delete-branch"
 DENIED_TEXT = (f"{DENIED_PREFIX} Reason: [Unrequested Commit in a Connected App]. If you have other tasks that don't "
                "depend on this action, continue working on those.")
-#: cd's ruling (10-20 15:30): where the words come from, the stopped call and the reason as the card has them, the
+#: The orchestrator's ruling (10-20 15:30): where the words come from, the stopped call and the reason as the card has them, the
 #: person's judgement, and the way left open to ask in the terminal — written out here so a change shows
 WORDS = ("[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]\n"
          "止められた操作: Bash: gh pr merge 242 --squash --delete-branch\n"
@@ -110,7 +110,7 @@ def test_the_transcript_alone_makes_the_card():
 
 
 def test_the_words_say_where_they_come_from_quote_the_card_and_leave_the_terminal_open():
-    """cd's ruling: never a claim that the sender was verified, nor that no confirmation is needed; the call and the
+    """The orchestrator's ruling: never a claim that the sender was verified, nor that no confirmation is needed; the call and the
     reason as the card has them (a clipped input keeps its "…"); no reason recorded is said so."""
     card = {"tool": "Write", "input": "/w/.claude/settings.json", "reason": ""}
     lines = prompt_text(card).split("\n")
@@ -217,7 +217,7 @@ def test_the_book_keeps_at_most_its_cap_and_drops_answered_ones_first():
 
 
 def test_viz_changes_no_rule_no_setting_and_answers_no_hook():
-    """cd's ruling: the button only sends the person's words. Nothing in this feature writes a permission rule or a
+    """The orchestrator's ruling: the button only sends the person's words. Nothing in this feature writes a permission rule or a
     setting, or answers PermissionDenied (no retry)."""
     src = Path(den.__file__).read_text(encoding="utf-8")
     code = src.split('"""', 2)[2]
@@ -331,7 +331,7 @@ def test_a_hook_without_a_tool_use_id_and_the_transcript_make_one_card():
 
 def test_two_sessions_stopped_on_the_same_command_keep_a_card_each():
     """Two robots of two sessions stopped on the same command within the window, one hook without a tool_use_id: two
-    cards, each on its own session (dd's G1, 10-20: matched across sessions, one session's card was gone and it could
+    cards, each on its own session (the independent check's G1, 10-20: matched across sessions, one session's card was gone and it could
     not be told to go on)."""
     other = "e2e00000-0000-4000-8000-00000000c002"
     w = _world()
@@ -348,7 +348,7 @@ def test_two_sessions_stopped_on_the_same_command_keep_a_card_each():
 
 def test_another_command_or_another_tool_on_the_same_input_keeps_its_own_card():
     """The same session within the window, one source without a tool_use_id: another command, or another tool on the
-    same path, is another call — its own card (the family of dd's G1: each condition of the match is needed)."""
+    same path, is another call — its own card (the family of the independent check's G1: each condition of the match is needed)."""
     w = _world()
     w._denied_records(SID, SID, [(USE, "Bash", {"command": CMD}, DENIED_TEXT, 1000)], 1001)
     w.apply_hook({"hook_event_name": "PermissionDenied", "session_id": SID, "cwd": "/w", "tool_name": "Bash",

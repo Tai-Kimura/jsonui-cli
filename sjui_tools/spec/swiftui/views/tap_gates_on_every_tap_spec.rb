@@ -111,7 +111,7 @@ RSpec.describe 'sjui canTap stops the tap handler and nothing else' do
 
       if type == 'TabView'
         # A TabView's `enabled` stops its tab items, not the tab view
-        # (tab_view_converter.rb, 4f's ruling, jsonui-cli 1.9.0): no
+        # (tab_view_converter.rb, the orchestrator's ruling, jsonui-cli 1.9.0): no
         # `.disabled`, and its own tap is masked by the binding as a bound
         # canTap masks one.
         it 'a bound enabled masks its tap, and disables nothing' do

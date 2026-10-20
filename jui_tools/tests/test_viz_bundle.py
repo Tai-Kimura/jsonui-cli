@@ -152,9 +152,9 @@ def test_the_unsanitized_mermaid_hook_is_the_tests_only():
 
 # ---- nothing reaches the HTML unescaped (plan 07 §6) -----------------------------------------------------------
 # The page builds HTML from template literals. A value the server sent that lands in that HTML must go through esc(),
-# or a crafted id / name / command breaks the markup (dd's P3 review). This arm is an allow-list: every ${…} in HTML is
+# or a crafted id / name / command breaks the markup (the independent check's P3 review). This arm is an allow-list: every ${…} in HTML is
 # caught unless it is one of the forms below, so a new field, a .slice(), a String(x), a DEF[…] lookup or a bare local
-# is red until it is escaped or reviewed here (dd's P4–P6 review found ten shapes a deny-list of field names missed).
+# is red until it is escaped or reviewed here (the independent check's P4–P6 review found ten shapes a deny-list of field names missed).
 #
 # What is HTML: a template whose own text has "<" or `="` (markup, an attribute selector) and every template inside
 # it; the right-hand side of every assignment to a name ending in HTML (`rowsHTML = …`, `xHTML.push(…)`), of
@@ -628,7 +628,7 @@ def test_nothing_reaches_the_html_unescaped():
     assert bad == [], "into HTML without esc() or a reviewed reason:\n" + "\n".join(sorted(bad))
 
 
-# dd's ten shapes the field-name deny-list could not see, and the shapes that must pass.
+# The independent check's ten shapes the field-name deny-list could not see, and the shapes that must pass.
 CAUGHT = [
     "`<b>${DEF[x.id].agent}</b>`", "`<b>${x.name.slice(0, 4)}</b>`", "`<b>${String(x.name)}</b>`",
     "`<b>${[x.name].join()}</b>`", "`<b>${x.message}</b>`", "`<b>${p.toolName}</b>`", "`<b>${x.name.toUpperCase()}</b>`",

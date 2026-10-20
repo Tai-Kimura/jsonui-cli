@@ -4,7 +4,7 @@ The duplicate-id gate in `jui build`, the spec validator and coverage all read
 a layout through `jui_cli.core.layout_facts`; SwiftUI and Compose code is
 generated from the Ruby expanders (sjui / kjui `include_expander.rb`). If the
 two expanded an include differently, the gate would count ids no platform
-has. ee's six collision specimens go through all three, and the id
+has. the review's six collision specimens go through all three, and the id
 multisets — counts included, since a duplicate is what the gate is for —
 must be equal. Needs `ruby` (every CI image carries it); without it the arm
 skips and says so.

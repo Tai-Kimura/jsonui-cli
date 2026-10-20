@@ -355,7 +355,7 @@ async def run_notify(pw, out, failures):
         check(failures, res["yield"] == {"a": 0, "b": 1, "shown": 1, "chimes": 1},
               f"the tab that can sound rings it, the one that cannot leaves it: {res['yield']}")
 
-        # 3h. quiet in the tab that can sound (dd, 10-20): b in front, showing that robot's card, takes the event without a
+        # 3h. quiet in the tab that can sound (the independent check, 10-20): b in front, showing that robot's card, takes the event without a
         # ring; a left it to b, and a moment later finds it taken — neither shows it, no sound
         await b.bring_to_front()
         await b.evaluate("(id) => window.__dbg.openRobot(id)", rid)

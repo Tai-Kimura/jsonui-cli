@@ -103,7 +103,7 @@ async def run_play(pw, out, failures):
     t0 = time.monotonic()
     try:
         import urllib.request
-        for _ in range(400):   # 40 s: under a load average of 30-40 the server took longer than the 10 s this waited (e1, 10-18)
+        for _ in range(400):   # 40 s: under a load average of 30-40 the server took longer than the 10 s this waited (a library lane, 10-18)
             try:
                 urllib.request.urlopen(f"{url}/health", timeout=1).read()
                 break

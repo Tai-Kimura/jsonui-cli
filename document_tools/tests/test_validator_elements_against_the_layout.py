@@ -1,7 +1,7 @@
 """`visibleElements` and `displayLogic` element ids are checked against the LAYOUT.
 
 Ticket doc-validate-spec-checks-visibleelements-against-nothing-when-layoutfile-is-set
-(ee, 2026-09-25): `_validate_cross_references` returned at once for a spec with a
+(2026-09-25): `_validate_cross_references` returned at once for a spec with a
 `layoutFile` — 86 of 93 specs with contracts across five faces — so an id the
 layout does not have (a typo, a removed element) was never reported. Now the ids
 come from `jui_cli.core.layout_facts` (includes expanded with their prefixes,
@@ -126,7 +126,7 @@ def test_web_s_spelling_cannot_be_checked_and_names_the_release_s(tmp_path, at, 
     # resolved layout holds) and `hint` on web, which does not flatten
     # includes — and gives the partial's root (`box`) the include's id,
     # `side`. Against one resolution neither can be told right: CANNOT CHECK,
-    # not missing (ee, design v4.20), naming what web spells it as from the
+    # not missing (design v4.20), naming what web spells it as from the
     # release (U8).
     at("1.8.119")                      # below INCLUDE_ID_PREFIX_GATE_FROM
     spec = _face(tmp_path, visible=["summary", spelling])
@@ -152,7 +152,7 @@ def test_uikit_camel_cases_the_include_id_before_it_joins(tmp_path, at, spelling
     # UIKit (SwiftJsonUI SJUIViewCreator.swift: `convertBindingIdToCamelCase`
     # on the include's id, then `"\(bindingId!)_\(id)"`): `side_panel` +
     # `hint` is `sidePanel_hint`, not `side_panel_hint`. Transcribed from the
-    # Swift source, not run — UIKit has no host here (ee, review 4 (c)).
+    # Swift source, not run — UIKit has no host here (review 4 (c)).
     at("1.8.119")
     _face(tmp_path, visible=["summary", spelling])
     layout = tmp_path / "docs/screens/layouts/detail.json"
@@ -310,7 +310,7 @@ class TestWhatIsNotAMissingId:
 
 
 class TestCandidates:
-    """A spelling that matches only when folded is NOT a match (ee, design
+    """A spelling that matches only when folded is NOT a match (design
     v4.20): the runtime id is the layout's spelling, on every platform and in
     every driver. The mismatch names what a person may have meant."""
 

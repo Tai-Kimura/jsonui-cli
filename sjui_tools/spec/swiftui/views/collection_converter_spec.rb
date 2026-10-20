@@ -25,7 +25,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
 
     # A node written inline (no className) names no layout: not drawn — the
-    # validator says so (inline_layout?; 4f's ruling, 1.9.0). It raised
+    # validator says so (inline_layout?; the orchestrator's ruling, 1.9.0). It raised
     # NoMethodError, and the build stopped.
     it 'names no layout for a node written inline' do
       expect(converter.send(:extract_view_name, { 'type' => 'Label', 'text' => 'x' })).to be_nil
@@ -177,7 +177,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           expect(code).to include('spacing: 8')
         end
 
-        # The horizontal rule (4f ruling, 2026-09-26; jsonui-cli 1.9.0): along
+        # The horizontal rule (the orchestrator's ruling, 2026-09-26; jsonui-cli 1.9.0): along
         # the scroll axis lineSpacing, else itemSpacing, else 0 — columnSpacing
         # spaces the lanes (collection_horizontal_lanes_spec.rb). This preferred
         # itemSpacing over lineSpacing.
@@ -277,7 +277,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         expect(code).to include('verticalSpacing: 14')
       end
 
-      # attribute_semantics.json -> collectionSpacing (4f ruling 2026-09-26):
+      # attribute_semantics.json -> collectionSpacing (the orchestrator's ruling 2026-09-26):
       # 0, flow included. This kept a symmetric 8 until jsonui-cli 1.9.0.
       it 'draws 0 when nothing is declared' do
         code = described_class.new(flow_component).convert

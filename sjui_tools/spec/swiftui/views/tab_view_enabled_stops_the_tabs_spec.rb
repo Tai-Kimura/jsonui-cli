@@ -6,7 +6,7 @@ require_relative '../../support/swift_compiler'
 require 'core/tap_accessibility'
 require 'json'
 
-# A TabView's `enabled` stops its tab items, not the tab view (4f's ruling,
+# A TabView's `enabled` stops its tab items, not the tab view (the orchestrator's ruling,
 # jsonui-cli 1.9.0 — kjui's NavigationBarItem `enabled`, web's
 # `<button disabled>` per tab). The tab view's control is its row of tabs;
 # what a tab shows is a layout of its own, which `userInteractionEnabled`

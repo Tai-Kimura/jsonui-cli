@@ -1562,7 +1562,7 @@ module RjuiTools
         end
 
         # A tap's handler, called as the layout's data declares its closure
-        # (4f's ruling on control-onclick-is-called-differently-on-every-path,
+        # (the orchestrator's ruling on control-onclick-is-called-differently-on-every-path,
         # jsonui-cli 1.9.0 — sjui's no_value_call, kjui's call as declared):
         # `(String)` with the viewId (view_id_expr: the id, else the drawn type
         # and the position), `(Event)` with the element's event (the React
@@ -1828,7 +1828,7 @@ module RjuiTools
           # definition with no converter, say) is named in its own sentence
           # and drawn as a View, its children in it; an unknown type is named
           # and drawn as nothing (UnknownTypeConverter). It was drawn as a
-          # View here and named nowhere (4f's ruling, jsonui-cli 1.9.0).
+          # View here and named nowhere (the orchestrator's ruling, jsonui-cli 1.9.0).
           type = drawn['type'].to_s
           if type_validator.known_component_type?(type)
             RjuiTools::Core::Logger.warn(RjuiTools::Core::AttributeValidator.declared_without_drawer_message(type, 'web'))
@@ -3101,7 +3101,7 @@ module RjuiTools
       # A type the validator does not know, drawn as nothing: the sentence in
       # a JSX comment where the node would be — not the node, not its
       # children, and no visibility wrap (a comment is no element to gate).
-      # kjui and sjui draw nothing there too (4f's ruling, jsonui-cli 1.9.0).
+      # kjui and sjui draw nothing there too (the orchestrator's ruling, jsonui-cli 1.9.0).
       class UnknownTypeConverter < BaseConverter
         def initialize(json, config, sentence)
           super(json, config)

@@ -130,7 +130,7 @@ def test_serve_in_the_foreground_leaves_the_launch_folder_too(home):
 # ---------------------------------------------------------------- stop
 
 def test_stop_ends_a_server_holding_a_page_and_a_waiting_hook_without_kill(home):
-    """cd's arm: a WebSocket from a visible page and a --decide hook waiting on it; stop ends it within TERM."""
+    """The orchestrator's arm: a WebSocket from a visible page and a --decide hook waiting on it; stop ends it within TERM."""
     port = _free_port()
     started = _jui(home, "viz", "start", "--port", str(port), "--json")
     assert started.returncode == 0, started.stderr

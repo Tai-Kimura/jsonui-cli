@@ -484,7 +484,7 @@ const PERM_STATUS = { pending: 'pending', sent: 'sent', allow: 'allow', deny: 'd
 /* The fields the decision is about, exactly as the server got them (card.exact: command, file_path, old_string,
    new_string … uncut up to 20,000 characters, whitespace kept; Write's content as its first 2,000). The card shows
    these and nothing else: a summary or the 2,000-character preview once hid the tail of a long command
-   ("…; rm -rf ~/tail-hidden") and folded runs of spaces (dd's review, 10-18). */
+   ("…; rm -rf ~/tail-hidden") and folded runs of spaces (the independent review, 10-18). */
 const EXACT_KEYS = ['command', 'file_path', 'notebook_path', 'url', 'pattern', 'old_string', 'new_string', 'content'];
 function exactOf(x) {
   const e = x.exact && typeof x.exact === 'object' ? x.exact : null;

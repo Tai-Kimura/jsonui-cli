@@ -8,7 +8,7 @@ A gate here is switched by the running VERSION, not by a flag, so a suite
 green at this stamp can be red at the next: raised to 1.8.121 on a copy,
 test_tools went 16 red and nothing had run it there before the stamp's own
 CI (2026-09-26). The leg runs the suites at the next patch only when that
-patch turns a gate on that the current stamp leaves off (4f's ruling (b)).
+patch turns a gate on that the current stamp leaves off (the orchestrator's ruling (b)).
 
 The literals are read by the tag gate's own collector
 (validate_gate_version.collect — every tracked Python file, with its control

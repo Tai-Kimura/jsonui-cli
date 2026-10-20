@@ -337,7 +337,7 @@ def test_a_stub_that_extends_itself_ends_as_unknown(tmp_path):
 
 
 def test_generation_from_a_stub_says_the_rules_were_not_read(tmp_path):
-    # jsonui-test does not follow `extends` (4f 2026-09-25: run from the app's
+    # jsonui-test does not follow `extends` (the orchestrator, 2026-09-25: run from the app's
     # config directory). Run from the stub with the spec and mocks given, the
     # "no endpoint declaration" error must not read as advice to name an op
     # the rules already name: it says the rules were not read, and why.

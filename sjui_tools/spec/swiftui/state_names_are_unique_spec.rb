@@ -10,7 +10,7 @@ require_relative '../support/emitted_swift'
 # stamped on the include-expanded, style-merged tree the build converts) —
 # and a name two nodes declare stops the layout's generation instead of
 # folding into one state (ticket
-# sjui-codegen-state-declarations-collide-by-name; 4f's ruling).
+# sjui-codegen-state-declarations-collide-by-name; the orchestrator's ruling).
 #
 # Before, an id-less node was named by its kind alone (`toggleIsOn`,
 # `selectedSegment`, `sliderValue`, …) and the view kept `.uniq` of whole

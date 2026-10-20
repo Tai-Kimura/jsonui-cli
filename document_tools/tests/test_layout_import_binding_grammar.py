@@ -1,6 +1,6 @@
 """The spec-doc layout import reads bindings with the one grammar.
 
-Ticket spec-doc-layout-import-reads-bindings-by-whole-value-only (ee,
+Ticket spec-doc-layout-import-reads-bindings-by-whole-value-only (
 2026-09-25): `_node_to_component` treated a value as a binding only when it was
 wholly `@{...}` and took the text inside the braces as the variable's name —
 `@{!isOn}` imported a variable `!isOn`, `@{a ?? 'x'}` one named `a ?? 'x'`,

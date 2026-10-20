@@ -151,7 +151,7 @@ class ServerContext:
 
     def page_can_answer(self) -> bool:
         """A page that can answer a question now: one visible, or one whose question notifications are on (it shows
-        the question on screen even when hidden, and someone comes from it) — cd's ruling 10-19, both time-limited."""
+        the question on screen even when hidden, and someone comes from it) — the orchestrator's ruling 10-19, both time-limited."""
         return self.browser_present() or self.notify_present()
     # Each authed socket and the (rev, seq) it has already been sent, so a
     # change made before it connected is not delivered twice.
@@ -672,7 +672,7 @@ def make_app(ctx: ServerContext) -> web.Application:
                                  headers={"Cache-Control": "no-store"})
 
     async def api_notify_presence(request: web.Request) -> web.Response:
-        """A page whose question notifications are on says so (2.3.6, cd's ruling 10-19): {"ask": true} — the page
+        """A page whose question notifications are on says so (2.3.6, the orchestrator's ruling 10-19): {"ask": true} — the page
         sends it only when Notification.permission is granted and the question kind is on — holds for
         notifyPresenceSec; {"ask": false} ends it at once. The checks of /api/prompt (prompt_checks)."""
         refused = prompt_checks(request, ctx, NOTIFY_MAX_BODY)
@@ -797,7 +797,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         if ctx.world.data_docs_room(project_id) is None:
             return web.Response(status=404, text="no such JsonUI room\n")
         # read off the event loop (up to 8 MB of JSON): the page, the hooks and /health go on meanwhile. In an executor of
-        # its own, two threads: a read that is held up (dd's review 2: a FIFO swapped in) never takes the default one,
+        # its own, two threads: a read that is held up (the independent review 2: a FIFO swapped in) never takes the default one,
         # which processes, 退勤, the mock and the git box share
         status, got = await asyncio.get_running_loop().run_in_executor(_data_docs_pool(), ctx.world.data_docs, project_id)
         if status != 200:

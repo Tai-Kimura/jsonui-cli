@@ -6,7 +6,7 @@ require 'json'
 
 # A partialAttributes range's handler in both declared spellings: `onClick`
 # (a binding) is canonical, `onclick` (a selector) its alias. Every path reads
-# both, the canonical one first (TapAccessibility.range_handler; 4f ruling,
+# both, the canonical one first (TapAccessibility.range_handler; the orchestrator's ruling,
 # jsonui-cli 1.9.0). The normalizer folds `onclick` into `onClick` (its declared
 # alias), so onClick may hold a method name as well as a binding. sjui read `onClick` only, on the Label and the Button.
 RSpec.describe 'sjui: a range\'s handler in either spelling' do

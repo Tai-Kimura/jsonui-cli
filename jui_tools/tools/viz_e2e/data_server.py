@@ -231,7 +231,7 @@ async def run_data_server(pw, out, failures, jt=None, shots_only=False):
         await wait(page, "() => document.getElementById('ds').hidden", label="closed")
 
         # 200 documents of 1 MB (200 MB) written and rewritten three times while the rack is pressed again and again
-        # (dd's review, 10-19: counted on the event loop for each watcher event, with no total cap, and the press read
+        # (the independent review, 10-19: counted on the event loop for each watcher event, with no total cap, and the press read
         # on it too, /health was held for seconds): the server answers within 1 s all along, and the count (up to
         # its 8 MB) shows on the page
         bulk = room_a / "docs" / "api" / "bulk"

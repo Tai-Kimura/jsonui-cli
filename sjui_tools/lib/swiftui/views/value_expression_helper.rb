@@ -156,7 +156,7 @@ module SjuiTools
         # has nothing to emit.
         # *exact*: *map* is keyed by the declared spellings themselves
         # (declared_vocabulary) and the bound value is looked up as it is — a
-        # value is its declared spelling, case and all (4f's ruling, 1.9.0).
+        # value is its declared spelling, case and all (the orchestrator's ruling, 1.9.0).
         def bound_enum(value, map, default:, type:, exact: false)
           return nil unless bound_value?(value)
           return nil if map.nil? || map.empty?

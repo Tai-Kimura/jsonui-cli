@@ -344,7 +344,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
     end
 
     context 'DateSelectBox' do
-      # A Date SelectBox's value is its selectedDate alone (4f's ruling,
+      # A Date SelectBox's value is its selectedDate alone (the orchestrator's ruling,
       # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by selectItemType):
       # it fell back to selectedItem / selectedValue / selectedIndex / bind,
       # which sjui never read.

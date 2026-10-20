@@ -468,7 +468,7 @@ module KjuiTools
           # No case draws it: a type the validator knows (an extension
           # definition with no component, say) is named in its own sentence
           # and drawn as a View, its children in it; an unknown type is named
-          # and drawn as nothing (4f's ruling, jsonui-cli 1.9.0).
+          # and drawn as nothing (the orchestrator's ruling, jsonui-cli 1.9.0).
           if code.nil?
             if unknown_type_validator.known_component_type?(component_type)
               Core::Logger.warn(Core::AttributeValidator.declared_without_drawer_message(component_type, 'Compose'))
@@ -630,7 +630,7 @@ module KjuiTools
       # Radio's rows (`.clickable`) and RadioButtons, a Segment's Tabs, a
       # CheckBox's Checkbox — read `disabled()` as its root does. The root's
       # `disabled()` is its node's alone: each of these is a node with its own
-      # click action, which TalkBack reached and read as enabled (4f's
+      # click action, which TalkBack reached and read as enabled (the orchestrator's
       # ruling, jsonui-cli 1.9.0: a stopped control does not say it is
       # operable, down to its items). `chain` is the root's modifier element;
       # a composable's own `modifier` takes it in front, or gets it.
@@ -1168,7 +1168,7 @@ module KjuiTools
       # container's content: the effects before the node's code, where the
       # node's visibility wrapper (applied after this, at the same exit)
       # holds them — so a `gone` node, not in the tree, does not call them
-      # and an `invisible` one does (4f's ruling; the container's are at the
+      # and an `invisible` one does (the orchestrator's ruling; the container's are at the
       # start of its content, inside the same wrapper). Each exit that draws
       # a node calls this: generate_component (a declared type, an app's
       # component, a responsive Embed / Collection), a responsive branch's

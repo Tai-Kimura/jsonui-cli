@@ -11,7 +11,7 @@ require 'compose/helpers/resource_resolver'
 # declared once, in shared/core/attribute_semantics.json
 # (`semantics.image.defaultContentMode`, the 2026-08-03 user ruling), and
 # every path's no-contentMode drawing is bound to it here: the value is read
-# from the file, so a changed ruling moves the expectation (4f ruling,
+# from the file, so a changed ruling moves the expectation (the orchestrator's ruling,
 # 2026-09-26; ticket image-content-mode-default-differs-by-path).
 #
 # The no-contentMode emit passes no contentScale, so the library's own
@@ -55,7 +55,7 @@ RSpec.describe 'kjui Compose codegen: an image with no contentMode' do
   end
 
   # CircleImage is an Image spelling (type_synonyms.json render_as) and
-  # follows its contentMode (4f ruling, 2026-09-26); it drew Crop whatever
+  # follows its contentMode (the orchestrator's ruling, 2026-09-26); it drew Crop whatever
   # the mode was.
   it 'draws CircleImage with the scale Image draws, mode for mode' do
     [nil, declared, 'AspectFill', 'fill', 'center', 'top'].each do |mode|

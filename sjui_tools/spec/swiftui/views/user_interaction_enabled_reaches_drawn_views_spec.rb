@@ -85,7 +85,7 @@ RSpec.describe 'sjui userInteractionEnabled reaches what is drawn in a view of i
       expect(tap.drawn_elsewhere({ 'type' => 'TableView', 'cellClasses' => ['h'] })).to eq([])
     end
 
-    # Type names are case-sensitive, as the codegen dispatches them (4f's
+    # Type names are case-sensitive, as the codegen dispatches them (the orchestrator's
     # ruling, 1.9.0): a lowercase spelling of a declared type is drawn as
     # nothing, so it draws nothing elsewhere. Round 2 of the tap rule read
     # `collection`, `table`, `embed` and `tabview` too.

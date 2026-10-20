@@ -3,7 +3,7 @@
 require 'swiftui/views/collection_converter'
 
 # A flow Collection's three gaps (attribute_semantics.json -> collectionSpacing,
-# 4f ruling 2026-09-26): between the cells of a line columnSpacing, else
+# The orchestrator's ruling 2026-09-26): between the cells of a line columnSpacing, else
 # itemSpacing; between lines lineSpacing, else itemSpacing; between the
 # section blocks as between lines (sectionSpacing is lineSpacing's alias).
 # Undeclared, each is 0 — flow included, on every route and path. Until
@@ -57,7 +57,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
 
       # sectionSpacing is lineSpacing's alias (SSoT `aliases`), as an
       # unnormalised layout may spell it: alone it is lineSpacing; with both,
-      # the canonical lineSpacing wins (4f ruling 2026-09-26, round 6 — the
+      # the canonical lineSpacing wins (the orchestrator's ruling 2026-09-26, round 6 — the
       # blocks took sectionSpacing until jsonui-cli 1.9.0).
       it 'sectionSpacing alone is lineSpacing: the lines and the blocks' do
         expect(gaps(convert(extra.merge('sectionSpacing' => 12)))).to eq(%w[0 12 12])

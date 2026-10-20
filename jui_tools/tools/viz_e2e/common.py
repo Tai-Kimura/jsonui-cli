@@ -64,7 +64,7 @@ def project_id(cwd) -> str:
 # Taken out of every environment a suite gives its server and its hooks: each would point the throwaway server at the
 # real one's state (its folder, the progress a runner writes, the saved results) — 10-18.
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
-# The real server's progress folder (cd's gate, 10-18: driver web's jest once wrote 480 files there from a test).
+# The real server's progress folder (the orchestrator's gate, 10-18: driver web's jest once wrote 480 files there from a test).
 # Every suite runs in a throwaway HOME; after each, this folder must not have grown. The folder is a parameter so a
 # pytest arm can show the gate turns red on a temporary one (tests/test_viz_e2e_gate.py) without writing to the real.
 REAL_PROGRESS = Path.home() / ".local" / "state" / "jui-viz" / "test-progress"

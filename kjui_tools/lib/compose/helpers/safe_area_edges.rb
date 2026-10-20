@@ -6,7 +6,7 @@ module KjuiTools
       # `safeAreaInsetPositions` — the edges a node reserves, for the plain
       # node (ModifierBuilder) and SafeAreaView (ComposeBuilder) alike.
       #
-      # The six declared words, as written (4f ruling, 2026-09-26, the same
+      # The six declared words, as written (the orchestrator's ruling, 2026-09-26, the same
       # on every path): `top` / `bottom` are that edge; `leading` is where
       # reading starts and `trailing` where it ends (WindowInsetsSides.Start /
       # End); `vertical` is top and bottom; `all` is every edge. Any other

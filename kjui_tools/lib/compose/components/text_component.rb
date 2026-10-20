@@ -358,7 +358,7 @@ module KjuiTools
           # padding/paddings for Label = internal padding (after background)
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           # The text sits in a taller frame by its gravity, inside the background
-          # and the padding (label_vertical_alignment; 4f ruling 2026-09-27, round 17).
+          # and the padding (label_vertical_alignment; the orchestrator's ruling 2026-09-27, round 17).
           valign = Helpers::ModifierBuilder.label_vertical_alignment(json_data, parent_type)
           if valign
             required_imports&.add(:alignment)
@@ -850,7 +850,7 @@ module KjuiTools
           # took none — the Label's onClick was dropped, and a touch on a
           # detected link went through `false`. A tap on a link calls the link
           # only; a tap elsewhere calls the Label's onClick (measured on an API
-          # 35 emulator: the two do not compete; 4f ruling, jsonui-cli 1.9.0).
+          # 35 emulator: the two do not compete; the orchestrator's ruling, jsonui-cli 1.9.0).
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
 
           # Handle edgeInset for text-specific padding
@@ -864,7 +864,7 @@ module KjuiTools
           else
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
             # The text sits in a taller frame by its gravity, inside the background
-            # and the padding (label_vertical_alignment; 4f ruling 2026-09-27, round 17).
+            # and the padding (label_vertical_alignment; the orchestrator's ruling 2026-09-27, round 17).
             valign = Helpers::ModifierBuilder.label_vertical_alignment(json_data, parent_type)
             if valign
               required_imports&.add(:alignment)
@@ -1023,7 +1023,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           # The text sits in a taller frame by its gravity, inside the background
-          # and the padding (label_vertical_alignment; 4f ruling 2026-09-27, round 17).
+          # and the padding (label_vertical_alignment; the orchestrator's ruling 2026-09-27, round 17).
           valign = Helpers::ModifierBuilder.label_vertical_alignment(json_data, parent_type)
           if valign
             required_imports&.add(:alignment)

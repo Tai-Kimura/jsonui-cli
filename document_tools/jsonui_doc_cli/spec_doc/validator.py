@@ -130,7 +130,7 @@ GATE_UNREADABLE_FAILS = (
 #: Announced by v1.8.120 as "1.8.121"; that release shipped as 1.9.0. The literal stays what was announced (check-tag xxxi).
 LAYOUT_ID_GATE_FROM: str | None = "1.8.121"
 
-#: ee's text (design v4.20).
+#: The review's text (design v4.20).
 LAYOUT_ID_NOTICE = ("from jsonui-cli {version}, spec element ids not in the layout "
                     "become WARNING")
 
@@ -3982,7 +3982,7 @@ class SpecValidator:
         spec that authors them, and — since P2.5 — the LAYOUT for one with a
         `layoutFile` (the parent's, for a sub-spec). Until then a spec with a
         layout returned here unchecked: 86 of 93 specs with contracts across
-        five consumer faces (ee, 2026-09-25), and on one face 71 names that
+        five consumer faces (2026-09-25), and on one face 71 names that
         exist in neither spelling. The layout's ids come from
         `jui_cli.core.layout_facts` — includes expanded with their prefixes,
         every platform — the one reader the coverage data axis uses too.

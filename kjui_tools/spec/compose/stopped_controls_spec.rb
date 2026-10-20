@@ -142,7 +142,7 @@ RSpec.describe 'kjui a control a stop holds' do
     expect(call.scan('modifier =').size).to eq(1), code
   end
 
-  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, 4f's
+  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, the orchestrator's
   # ruling, jsonui-cli 1.9.0): a Picker is drawn as a SelectBox — a control —
   # and a TableView as a Collection, a container.
   it 'a synonym spelling is the control or the container it is drawn as' do

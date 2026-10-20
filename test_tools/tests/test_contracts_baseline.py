@@ -287,7 +287,7 @@ def _drop_scenario(root: Path, op: str, scenario: str) -> None:
 
 
 class TestV421:
-    """Design v4.21 (ee, the second review of P3b): two fail-open gaps, what
+    """Design v4.21 (the second review of P3b): two fail-open gaps, what
     define needs to see, and the first recording as the user's decision."""
 
     def test_1_no_scenario_is_per_status(self, tmp_path, run):
@@ -538,7 +538,7 @@ def _row_on_401(then: dict, when: str = "error_401"):
 
 
 class TestUnderWhatCannotBeEvaluated:
-    """ee review 4 (a), 4f 11:24. A baselined entry under a screen or a row
+    """review 4 (a), the orchestrator 11:24. A baselined entry under a screen or a row
     the run holds but cannot evaluate is HIDDEN, not vanished: fixing the
     spec or the row brings it back as it was, so "remove or re-key it by
     hand" would have the user delete debt that is still there. What cannot
@@ -603,7 +603,7 @@ def _declare_platforms(root: Path, platforms) -> None:
 
 
 class TestAPlatformDroppedFromTheConfig:
-    """ee review 4 (b), 4f 11:24. The debt of a platform the config no longer
+    """review 4 (b), the orchestrator 11:24. The debt of a platform the config no longer
     declares is VANISHED — red, and kept in the file: dropping a platform is
     not a way out of it (the module docstring). Naming platforms with
     `--platform` is a narrower run, not a drop: the others are not compared."""
@@ -645,7 +645,7 @@ class TestAPlatformDroppedFromTheConfig:
 
 
 class TestTheGateLineNamesEveryCause:
-    """ee, 2026-09-25: from the release the gate line is what validate prints
+    """2026-09-25: from the release the gate line is what validate prints
     about the gate, and it had not named vanished. Every cause the gate fails
     on is produced here by a real run, and the line must name each — so a
     cause added to the gate and not to the line turns this red."""

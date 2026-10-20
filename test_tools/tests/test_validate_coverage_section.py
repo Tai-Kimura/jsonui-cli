@@ -243,7 +243,7 @@ class TestTheGateVersion:
     # A literal that is not a release number never gates, however far the
     # running version is past it. `version_key` read "withdrawn" as () and "1.8"
     # as (1, 8) — prefixes every version is at or above, so each of these was
-    # ON (ee, 2026-09-25). "1.8.l20" read as 1.8.20.
+    # ON (2026-09-25). "1.8.l20" read as 1.8.20.
     @pytest.mark.parametrize("literal, state", [
         ("withdrawn", "withdrawn"), ("next", "unreadable"), ("1.8", "unreadable"),
         ("1.8.l20", "unreadable"), ("v1.8.120", "unreadable"), ("1.8.120rc1", "unreadable")])
@@ -328,7 +328,7 @@ class TestXxxiAtTheTag:
         assert ok and "gates since" in why, why
 
     def test_the_first_release_setting_it_to_n_is_red(self):
-        # ee, v4.14: in N — the first release with the section — a literal
+        # v4.14: in N — the first release with the section — a literal
         # <= N would switch the gate on with no release having announced it.
         ok, why = _tag_check().verdict("1.8.119", self._src('"1.8.119"'), previous="no section here\n")
         assert not ok and "had no section" in why, why

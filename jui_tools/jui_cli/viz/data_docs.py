@@ -8,7 +8,7 @@ the ER diagram's Mermaid builder; is_swagger_file's rule is applied to bytes thi
 the same answers), reached through jui's routes to document_tools (core/document_tools_import) — one copy.
 
 Every file is opened once, one path part at a time from the room's real root with O_NOFOLLOW, and the open fd is what
-is checked (a regular file, under the cap) and read (dd's review, 10-19: a symlink swapped in between a check of the
+is checked (a regular file, under the cap) and read (the independent review, 10-19: a symlink swapped in between a check of the
 path and an open of it let a file from outside the room through, and a file over the cap).
 
 What the room says without reading a document: ``counts`` (how many API and schema documents there are), cached by
@@ -42,7 +42,7 @@ def _doc():
 
 
 def _open_inside(root: Path, rel: Path) -> int | None:
-    """An fd of ``root / rel`` opened one part at a time from the room's real root, each part with O_NOFOLLOW (dd's
+    """An fd of ``root / rel`` opened one part at a time from the room's real root, each part with O_NOFOLLOW (the independent check's
     review, 10-19: a check on the path and a later open of the same path could be raced by a symlink swapped in
     between). A symlink anywhere below the root, a part that is not there or the wrong kind: None."""
     flags_dir = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
@@ -56,7 +56,7 @@ def _open_inside(root: Path, rel: Path) -> int | None:
             if part in ("", ".", ".."):
                 return None
             last = k == len(parts) - 1
-            # the file: O_NONBLOCK too, so a FIFO put in its place never holds the open (dd's review 2, 10-19); the
+            # the file: O_NONBLOCK too, so a FIFO put in its place never holds the open (the independent review 2, 10-19); the
             # caller fstats it before reading (a regular file only; O_NONBLOCK does not change how one is read)
             nxt = os.open(part, (os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK) if last else flags_dir, dir_fd=fd)
             os.close(fd)

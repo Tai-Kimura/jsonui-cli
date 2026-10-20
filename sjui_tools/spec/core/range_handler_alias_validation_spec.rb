@@ -4,7 +4,7 @@ require 'core/attribute_validator'
 
 # A partialAttributes range's `onclick` is the declared alias of its
 # `onClick` (attribute_definitions.json, `items.properties.onClick.aliases`;
-# 4f ruling, jsonui-cli 1.9.0). As for a node's own aliases: accepted on an L0
+# The orchestrator's ruling, jsonui-cli 1.9.0). As for a node's own aliases: accepted on an L0
 # layout, folded by the normalizer, so an L1 layout carries `onClick` only.
 # onClick holds a binding or — the alias folded — a method name.
 RSpec.describe 'a range\'s onclick, the alias of its onClick' do

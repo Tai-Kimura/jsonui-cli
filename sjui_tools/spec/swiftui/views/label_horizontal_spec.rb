@@ -8,7 +8,7 @@ require_relative '../../support/emitted_swift'
 # Where a Label's text sits across a frame wider than it: textAlign, else the
 # horizontal part of its gravity (center / centerHorizontal, right, left), else
 # the start — the SSoT's Label.textAlign; the user ruled "align iOS to start"
-# (4f round 6, 2026-09-27). The lines of a multi-line Label follow the same
+# (the orchestrator's round 6, 2026-09-27). The lines of a multi-line Label follow the same
 # rule (PartialAttributedText's textAlignment). Measured 2026-09-27
 # (ConformanceHost, iOS 26.5): until jsonui-cli 1.9.0 a fixed-width Label with
 # neither textAlign nor gravity drew its text in the middle ("Mon" in 50,

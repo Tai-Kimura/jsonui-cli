@@ -9,7 +9,7 @@ require_relative '../../support/kotlin_compiler'
 require_relative '../../support/compose_bounded_scroll_stubs'
 
 # A Collection's header or footer view sits in a row of its own: the ROW is
-# full width and the view keeps its own size at the row's start (4f ruling
+# full width and the view keeps its own size at the row's start (the orchestrator's ruling
 # 2026-09-26, round 8) — as KotlinJsonUI Dynamic draws it (the view in its
 # row, no fill of its own) and sjui (`.frame(maxWidth: .infinity, alignment:
 # .leading)`). Until jsonui-cli 1.9.0 the list, grid, non-lazy and class-list

@@ -122,7 +122,7 @@ module EmittedSwift
   #
   # `CollectionContentFit` (Classes/SwiftUI/CollectionContentFit.swift) wraps
   # every scrolling Collection whose scroll-axis size is wrapContent or
-  # undeclared (4f ruling 2026-09-27), so most Collection emits touch it: the
+  # undeclared (the orchestrator's ruling 2026-09-27), so most Collection emits touch it: the
   # Layout as the library declares it, `init(axis:along:across:)` (SwiftJsonUI
   # 10.29.0; `across` fits a horizontal row's wrapContent height), and the
   # `contentFit(_:)` modifier a wrapContent axis with a max emits, and nothing

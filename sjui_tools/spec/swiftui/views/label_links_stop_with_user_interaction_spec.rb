@@ -9,7 +9,7 @@ require 'json'
 # A Label's links — a partialAttributes range with an onClick, and a link
 # `linkable` detects — stop with `userInteractionEnabled`: `false` on the
 # Label or on a view around it stops them, a binding gates them (the tap rule,
-# shared/core/tap_accessibility.rb; 4f ruling, jsonui-cli 1.9.0). sjui passes
+# shared/core/tap_accessibility.rb; the orchestrator's ruling, jsonui-cli 1.9.0). sjui passes
 # that to PartialAttributedText as `linksEnabled` (SwiftJsonUI sets no `.link`
 # while it is false): `.allowsHitTesting` stops a touch, and a link is also an
 # accessibility element of its own. canTap and enabled are the Label's own tap

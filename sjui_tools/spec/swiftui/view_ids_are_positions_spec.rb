@@ -6,7 +6,7 @@ require_relative '../support/emitted_swift'
 
 # The viewId a handler is handed is the node's id, else its drawn type and its
 # position — JsonUIShared::LayoutPath.view_id (`switch_0_1`, `selectBox_0_3`),
-# the name every path gives it (4f's ruling on
+# the name every path gives it (the orchestrator's ruling on
 # sjui-codegen-state-declarations-collide-by-name, 1.9.0). An id-less node's
 # viewId was a per-kind word — `toggle`, `checkbox`, `segment`, `slider`,
 # `selectBox`, `textField`, `textEditor`, `button`, `image`, or `""` for a

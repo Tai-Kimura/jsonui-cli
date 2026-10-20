@@ -50,7 +50,7 @@ module KjuiTools
           
           # contentMode, as on Image (CircleImage is an Image spelling —
           # type_synonyms.json render_as — and follows its contentMode, default
-          # fit, attribute_semantics.json#image; 4f ruling, 2026-09-26). This
+          # fit, attribute_semantics.json#image; the orchestrator's ruling, 2026-09-26). This
           # emitted ContentScale.Crop for every mode, so a CircleImage drew
           # cropped on Android and fit on iOS and web. No contentMode: nothing
           # is emitted and Compose's own default (Fit) draws, as for Image.

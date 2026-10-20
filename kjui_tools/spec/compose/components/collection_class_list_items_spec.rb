@@ -5,11 +5,11 @@ require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../support/kotlin_compiler'
 require_relative '../../support/compose_bounded_scroll_stubs'
 
-# Collection.items is a CollectionDataSource or an array (4f ruling,
+# Collection.items is a CollectionDataSource or an array (the orchestrator's ruling,
 # 2026-09-26). A class-list Collection (cellClasses, no `sections`) whose items
 # property the layout DECLARES a list — `Array`, `[T]` — is one section: every
 # element with cellClasses[0], on the routes a one-section data source draws
-# (paging too — a page per element since 4f's round-6 ruling, 2026-09-26). Any other declaration, or none, is the
+# (paging too — a page per element since the orchestrator's round-6 ruling, 2026-09-26). Any other declaration, or none, is the
 # canonical CollectionDataSource, emitted as before. Until jsonui-cli 1.9.0
 # every class-list route read `.sections`, which a List does not have.
 #

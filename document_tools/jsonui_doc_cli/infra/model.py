@@ -61,7 +61,7 @@ def vocabulary(name: str) -> list[str]:
 # that has a digit or a sign, or is 16 or more long. Not a sentence ("password: stored in Secrets Manager", "password:
 # 90-day rotation" — a word with more after it), not a word ("Forgot password: link"), not a mask (********), a
 # placeholder (${DB_PASSWORD}, {{ .pw }}, <pw>) or a path (pwd: /home/app). (Password=value is the connection-string
-# shape.) dd's fourth verification Q1: nor letters joined by "-", "/" or "." with no digit (N/A, auto-generated,
+# shape.) the independent fourth verification Q1: nor letters joined by "-", "/" or "." with no digit (N/A, auto-generated,
 # IAM-auth, e.g., Vault.), a word in "(" (secret), a place named by a scheme (ssm:/prod/db/password, vault:secret/db),
 # or a name of capitalised words 16 or more long (AWSSecretsManager). Still a password: hunter2, P@ssw0rd, Summer2026,
 # 16 or more letters that are no such name. Missed (boundary §3): a passphrase of words joined by "-" with no digit.
@@ -125,7 +125,7 @@ _IPV4 = re.compile(r"(?<![A-Za-z0-9])(?<!\d\.)(?<![A-Za-z][-@](?=\d\.))"
 # the same address written with "-" or "_": AWS's host names (ip-10-0-0-5, ec2-54-12-34-56.compute-1.amazonaws.com),
 # a name (host-10-0-0-5, db_10_0_0_5, db_10_0_0_5_url) or alone (10-0-0-5). As with ".": after a letter and "-" or "_"
 # the first number must be 10 or more (build_1_2_3_4 and release-1-2-3-4 are versions); never inside a longer run of
-# numbers (ip-10-0-0-5-6, ip-10-0-0-500). dd's fourth verification Q3.
+# numbers (ip-10-0-0-5-6, ip-10-0-0-500). The independent fourth verification Q3.
 _OCTET = r"(?:25[0-5]|2[0-4]\d|1?\d?\d)"
 _BIG = r"(?=[1-9]\d)"   # a first number of 10 or more
 _IPV4_OTHER = re.compile(
@@ -136,7 +136,7 @@ _IPV4_OTHER = re.compile(
     rf"|(?<=[A-Za-z]_){_BIG}{_OCTET}(?:_{_OCTET}){{3}}(?!\d|_\d)")
 # no one's IPv6 addresses: the IPv4 forms (::a.b.c.d, ::ffff:a.b.c.d) of no one's IPv4 — 0/8 (so ::, ::1, ::2 and the
 # rest of ::/104: unspecified, this machine, reserved), 127/8, the reserved 240/4 (::ffff:0 is ::255.255.0.0). A run of hex letters with no digit (a::b,
-# Db::Feed, dead::beef — Ruby's and C++'s names) is not taken for one. dd's fourth verification Q3.
+# Db::Feed, dead::beef — Ruby's and C++'s names) is not taken for one. The independent fourth verification Q3.
 _IPV6 = re.compile(r"(?<![\w:.])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])")
 _INVISIBLE = re.compile(r"[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]")
 

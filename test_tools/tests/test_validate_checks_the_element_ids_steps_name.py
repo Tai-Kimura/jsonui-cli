@@ -451,7 +451,7 @@ def test_without_gate_versions_every_id_on_a_layout_still_passes(tmp_path, at, m
 @pytest.mark.parametrize("element, hint", [("sample_toggle", False), ("zz_unrelated", True)])
 def test_the_declaration_hint_only_where_no_layout_id_is_near(tmp_path, at, element, hint):
     # Beside a near spelling the fix is the spelling; the hint would offer a
-    # way to declare the typo instead (ee, pack review).
+    # way to declare the typo instead (pack review).
     at("1.8.121")
     _, msgs = _one(tmp_path, element)
     assert ("test.appOwnedIds" in msgs[0][1]) is hint, msgs

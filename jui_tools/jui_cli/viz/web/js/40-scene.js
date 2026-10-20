@@ -508,7 +508,7 @@ function build3D() {
     if (SOURCE.mode === 'live') return liveHit(ray);
     const hits = ray.intersectObjects([boardMesh, kbMesh, trayGroup, ...PBOARDS.map((pb) => pb.mesh), ...robots.map((R) => R.robot.root),
       ...(DEMO_SRDOOR ? [DEMO_SRDOOR.D.root, DEMO_SRDOOR.D.pad] : [])], true);
-    // the server room's door behind a robot still takes the press, as in the live office (liveFirstHit; dd's re-verification)
+    // the server room's door behind a robot still takes the press, as in the live office (liveFirstHit; the independent re-verification)
     const hit = hits.length && robotOf(hits[0].object) !== undefined ? hits.find((h) => h.object.userData.serverDoor) || hits[0] : hits[0];
     if (!hit) return null;
     if (hit.object.userData.serverDoor) return { kind: 'serverroom', project: DEMO_SRDOOR.room, title: 'サーバールームに入る（構成を読み込む）' };
@@ -1325,7 +1325,7 @@ function propsSpot() {
    takes (z0 to z0 + SEAT.back): BELL.x from the back-left corner, past the smoking booth (BOOTH.w) and short of the
    shredder near the middle. No robot walks to it: a click (or the header's button, 50-panel.js) opens the dialog with
    the command to copy; viz runs nothing (callcmd.py). Its footprint is propsPlace's bell row, in the breaks arm's 12
-   room configs with the others (row callButton; b8's data server, row dataServer, stands just to its right), and the vacuum keeps off it (propsBoxes). */
+   room configs with the others (row callButton; the author's data server, row dataServer, stands just to its right), and the vacuum keeps off it (propsBoxes). */
 const BELL = { x: 3.3, z: 0.5, w: 0.36, h: 1.0 };
 function bellSpot(r) {
   const x = r.x0 + BELL.x, z = r.z0 + BELL.z, h = BELL.w / 2;
@@ -1481,7 +1481,7 @@ function gitSaid(R, st) {
   if (!trip || !trip.label || (trip.stopped && !R.git)) return '';
   return R.git || vizNow() - (trip.at || 0) < GITBOX.showMs ? trip.label : '';
 }
-/* What the box's desk overlaps in its room (the arm, and dd's check against the smoking room when it lands). */
+/* What the box's desk overlaps in its room (the arm, and the independent check against the smoking room when it lands). */
 function gitDeskOverlaps() {
   if (!PROPS.gitDesk || !PROPS.room) return null;
   const rm = PROJECT[PROPS.room], P = PROPS.place, G = P.git, out = [];
@@ -1780,7 +1780,7 @@ const SHRED = { w: 0.8, d: 0.55, h: 1.1, bitsMax: 24, feedSec: 1.2, bitsSec: 2.0
    「dbとapiのファイルがある場合は部屋にデータサーバーっぽいもの置いてそれクリックでDB仕様書とAPI仕様書みれるようにしてほしい」.
    With the room's other props (the one-room view, PROPS.max robots or fewer), only in a room whose docs/api or docs/db
    hold a specification (PROJECT[id].dataDocs, counted by the server: data_docs.counts); it comes and goes with them.
-   Against the back wall, DATASRV.fromLeft from the room's left edge: right of the call button's stand (c2, 2.3.5),
+   Against the back wall, DATASRV.fromLeft from the room's left edge: right of the call button's stand (the author, 2.3.5),
    left of the shredder and its feeder in the smallest room. No robot walks to it. Pressed (liveHit: kind 'data'), the
    big sheet opens (50-panel.js openDataDocs) and the documents are read from the server then (POST /api/data-docs). */
 const DATASRV = { fromLeft: 4.25, w: 0.6, d: 0.5, h: 1.75, blinkSec: 0.6 };
@@ -2025,7 +2025,7 @@ function liveTargets() {
 }
 const robotOf = (obj) => { let o = obj; while (o && o.userData.robotId === undefined && o.parent) o = o.parent; return o && o.userData.robotId !== undefined ? o.userData.robotId : undefined; };
 const isFixture = (obj) => { for (let q = obj; q; q = q.parent) if (q.userData.callBell || q.userData.serverDoor) return true; return !!obj.userData.dataServer; };
-/* The call bell, the data server's rack and the server room's door and keypad (dd's verification D2, 10-20) are small and stand against the back wall: a robot's desk drawn in front of
+/* The call bell, the data server's rack and the server room's door and keypad (the independent verification D2, 10-20) are small and stand against the back wall: a robot's desk drawn in front of
    one (or a robot walking past) covered all of it, and the press opened the robot's card (ticket
    2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk). A fixture the ray reaches behind a robot wins over that robot,
    from any camera; the robot is still opened by the rest of its body and by its name tag. Boards are not fixtures here

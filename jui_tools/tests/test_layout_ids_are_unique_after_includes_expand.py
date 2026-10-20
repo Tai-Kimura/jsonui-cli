@@ -4,7 +4,7 @@ An include's id prefixes the ids inside it (`hero` + `type_badge` ->
 `heroTypeBadge`), so different spellings can land on one id. The runtime and
 every driver find an element by its id as written; neither dynamic runtime
 treats a duplicate as an error, so this generation-time check is the gate.
-ee's collision specimens 1, 2 and 6 (the same include id twice) are red;
+The review's collision specimens 1, 2 and 6 (the same include id twice) are red;
 6 with different include ids, and a platform-only node, are not.
 """
 from __future__ import annotations

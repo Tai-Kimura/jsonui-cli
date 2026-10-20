@@ -359,7 +359,7 @@ module SjuiTools
         private
 
         # onValueChange's call for a pick, by the parameters the data declares
-        # for it (4f's ruling on control-onclick-is-called-differently-on-every-
+        # for it (the orchestrator's ruling on control-onclick-is-called-differently-on-every-
         # path, 1.9.0): one String — the picked item (`newValue`, the item
         # SelectBoxView reports), even with selectedIndex bound; one Int — the
         # item's index; a String then an Int — the viewId and the index; two
@@ -367,7 +367,7 @@ module SjuiTools
         # the bound selectedIndex, else the item's place in `items`; a date has
         # none, and a handler declared to take one — `(Int)`, `(String, Int)` —
         # is not called: an `// ERROR:` comment keeps its place, and the build
-        # says it (BindingValidatorCore.date_pick_handler_problem; 4f's ruling,
+        # says it (BindingValidatorCore.date_pick_handler_problem; the orchestrator's ruling,
         # 1.9.0). It was handed the date string for its Int, which does not
         # compile. Any other declaration (an Event type, none at all) keeps the
         # generic reading: the viewId where it takes one, and the index where

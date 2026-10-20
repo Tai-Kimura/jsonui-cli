@@ -184,7 +184,7 @@ def test_references_across_files():
     ("-----BEGIN PRIVATE KEY-----", {"private_key"}), ("998877665544", {"account_id"}),
     ("mysql 8.4", set()), ("v1.2.3", set()), ("ap-northeast-1", set()), ("https://example.com/docs", set()),
     ("postgres 17", set()), ("Cloud SQL (Postgres)", set()), ("port 5432", set()), ("1.2.3.4.5", set()),
-    # dd's verification, 10-20: what slipped through ...
+    # The independent verification, 10-20: what slipped through ...
     ("host 10.0.0.5.", {"ip_address"}), ("2001:db8::1", {"ip_address"}), ("fe80::1ff:fe23:4567:890a", {"ip_address"}),
     ("1234-5678-9012", {"account_id"}), ("github_pat_" + "a1" * 11, {"token"}), ("glpat-" + "x" * 20, {"token"}),
     ("-----begin rsa private key-----", {"private_key"}), ("arn\u200b:aws:s3:::b", {"arn"}),
@@ -193,7 +193,7 @@ def test_references_across_files():
     ("0.0.0.0:8080", set()), ("127.0.0.1", set()), ("::1", set()), ("postgresql://", set()), ("redis://", set()),
     ("Password=", set()), ("Server=", set()), ("Data Source=", set()), ("v1.25.3.1", set()), ("12:30:45", set()),
     ("da39a3ee5e6b4b0d3255bfef95601890afd80709", set()), ("docs/infra/icons/database-relational-01.svg", set()),
-    # dd's re-verification, 10-20 (N2, N4, V01, V02, V03, V12)
+    # The independent re-verification, 10-20 (N2, N4, V01, V02, V03, V12)
     ("PaymentWebhookHandlerServiceRole3C1A9F2B", set()), ("OrderProcessingServiceProductionCluster1", set()),
     ("AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", {"token"}),
     ("aws_secret_access_key = A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0", {"token"}),
@@ -202,7 +202,7 @@ def test_references_across_files():
     ('"password":"hunter2"', {"password"}),
     ("release-1.2.3.4", set()), ("pkg@1.2.3.4", set()), ("::ffff", set()), ("listen [::]:80", set()),
     ("127.1.2.3", set()), ("password rotation monthly", set()),
-    # dd's third verification, 10-20 (P1, P2, P3, W1, O03, O04, and the HCL "secret =")
+    # The independent third verification, 10-20 (P1, P2, P3, W1, O03, O04, and the HCL "secret =")
     ("DB password: stored in Secrets Manager", set()), ("Password: rotated monthly", set()), ("Forgot password: link", set()),
     ("Password: ********", set()), ("password: ${DB_PASSWORD}", set()), ("pwd: /home/app", set()),
     ("passwd: hunter2", {"password"}), ("pwd: hunter2", {"password"}), ("password: correcthorsebatterystaple", {"password"}),
@@ -240,7 +240,7 @@ def test_the_room_keeps_the_limits_across_files():
 
 
 
-# ---------------------------------------------------------------- dd's verification (10-20): environments, groups, limits
+# ---------------------------------------------------------------- the independent verification (10-20): environments, groups, limits
 
 def _all_rooms():
     for room, folder in (("aws-three-tier", "docs/infra"), ("multi-provider", "docs/infra"),
@@ -332,7 +332,7 @@ def test_deep_nesting_is_a_json_problem_not_an_exception():
 
 
 
-# ---------------------------------------------------------------- dd's re-verification (10-20)
+# ---------------------------------------------------------------- the independent re-verification (10-20)
 
 def test_a_cdk_logical_id_in_iac_keeps_its_file():
     """N2: an id of exactly 40 characters (a name and 8 hex) took the file out as a secret."""
@@ -366,7 +366,7 @@ def test_a_sentence_about_a_password_keeps_its_file():
     assert problems == [] and [n["id"] for n in m["nodes"]] == ["db"]
 
 
-# ---------------------------------------------------------------- dd's fourth verification (2026-10-20 14:42)
+# ---------------------------------------------------------------- the independent fourth verification (2026-10-20 14:42)
 
 def _pw(text):
     return "password" in M.secret_findings(text)

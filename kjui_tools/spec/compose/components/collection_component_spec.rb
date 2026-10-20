@@ -359,7 +359,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           expect(result).to include('spacing = 8.dp')
         end
 
-        # The horizontal rule (4f ruling, 2026-09-26; jsonui-cli 1.9.0): along
+        # The horizontal rule (the orchestrator's ruling, 2026-09-26; jsonui-cli 1.9.0): along
         # the scroll axis lineSpacing, else itemSpacing — this preferred
         # itemSpacing (collection_horizontal_spacing_spec.rb).
         it 'prefers lineSpacing over itemSpacing in horizontal' do
@@ -760,7 +760,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         end
 
         # The last / middle CELL, counted as scrollTo counts them, scrolled to
-        # as the lazy item that holds it (4f ruling 2026-09-27, round 11; the
+        # as the lazy item that holds it (the orchestrator's ruling 2026-09-27, round 11; the
         # run arm is collection_scroll_to_cell_spec).
         it 'scrolls to the last cell for bottom' do
           result = grid('bottom')
@@ -827,7 +827,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
 
   # Since jsonui-cli 1.9.0 the offset takes the item's own size — bottom puts
   # its end at the viewport's end, center its middle at the middle
-  # (anchored_scroll_code; 4f ruling 2026-09-27, round 11). It was the
+  # (anchored_scroll_code; the orchestrator's ruling 2026-09-27, round 11). It was the
   # viewport or half of it, which put the item's top at the bottom edge.
   def anchor_lines(json)
     described_class.generate(json, 0, Set.new, nil)

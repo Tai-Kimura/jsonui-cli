@@ -3,7 +3,7 @@
 require 'swiftui/views/collection_converter'
 require_relative '../../support/emitted_swift'
 
-# A wrapContent Collection sizes to its content (4f ruling 2026-09-27, the
+# A wrapContent Collection sizes to its content (the orchestrator's ruling 2026-09-27, the
 # user's "size to content"): the SSoT's wrapContent is "size to content, up to
 # the parent's bound, then scroll", as web and Compose draw it. A SwiftUI
 # ScrollView takes every point it is offered, so until jsonui-cli 1.9.0 a

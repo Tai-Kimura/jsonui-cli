@@ -3,12 +3,12 @@
 require 'stringio'
 require 'swiftui/views/collection_converter'
 
-# Collection.items is a CollectionDataSource or an array (4f ruling,
+# Collection.items is a CollectionDataSource or an array (the orchestrator's ruling,
 # 2026-09-26). A class-list Collection (cellClasses, no `sections`) whose items
 # property the layout DECLARES a list — `Array`, `[T]` — is one section: every
 # element with cellClasses[0], on the routes a one-section data source draws
 # (List, grid, lazy:none, horizontal, flow, and paging — a page per element
-# since 4f's round-6 ruling, 2026-09-26; it drew none). Any other
+# since the orchestrator's round-6 ruling, 2026-09-26; it drew none). Any other
 # declaration, or none, is the canonical CollectionDataSource,
 # emitted as before. Until jsonui-cli 1.9.0 every class-list route read
 # `.sections`, which a list does not have.

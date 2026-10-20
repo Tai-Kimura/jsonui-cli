@@ -250,7 +250,7 @@ def test_the_route_gives_the_documents_to_the_page_and_nothing_to_anyone_else(tm
         assert b"Users API" not in b                      # a refusal carries no document
 
 
-# ---- the open is the check (dd's review, 10-19) --------------------------------------------------------------------
+# ---- the open is the check (the independent review, 10-19) --------------------------------------------------------------------
 
 @pytest.mark.parametrize("body", [json.dumps(API), json.dumps({"swagger": "2.0", "paths": {}}), json.dumps({"not": "openapi"}),
                                   json.dumps([1, 2]), "{broken", b"\xff\xfe"])
@@ -333,7 +333,7 @@ def test_a_big_file_swapped_in_never_passes_the_cap(tmp_path, monkeypatch):
 
 
 def test_the_counts_are_taken_off_the_calling_thread_and_once_for_a_burst(tmp_path, monkeypatch):
-    """dd's review (10-19): each watcher event used to count on the event loop. A burst of changes marks the room;
+    """The independent review (10-19): each watcher event used to count on the event loop. A burst of changes marks the room;
     one count runs, on the worker thread, once the burst is quiet."""
     world, root, pid = _world(tmp_path)
     calls = []
@@ -348,7 +348,7 @@ def test_the_counts_are_taken_off_the_calling_thread_and_once_for_a_burst(tmp_pa
     assert len(calls) == 1 and calls[0].startswith("jui-viz-data-docs"), calls
 
 
-# ---- a FIFO swapped in, and a held read (dd's review 2, 10-19) ---------------------------------------------------
+# ---- a FIFO swapped in, and a held read (the independent review 2, 10-19) ---------------------------------------------------
 
 def _fifo_race(path: Path, good: Path, fifo_src: Path, stop: threading.Event):
     tmp_a, tmp_b = path.with_name(".a.tmp"), path.with_name(".f.tmp")
@@ -495,7 +495,7 @@ def test_only_a_regular_file_is_read_whatever_its_name(tmp_path):
         os.close(w)
 
 
-# ---- each guard on its own (dd / c2, 10-19: the guards are doubled; an arm per layer, so dropping one shows) --------
+# ---- each guard on its own (the independent check and the author, 10-19: the guards are doubled; an arm per layer, so dropping one shows) --------
 
 def test_layer_regular_file_check_refuses_a_fifo_whose_writer_wrote_and_left(tmp_path, monkeypatch):
     """S_ISREG alone: a FIFO opened for reading, then a writer writes a document and closes. Its bytes are there, then

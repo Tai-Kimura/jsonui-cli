@@ -71,7 +71,7 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
     end
   end
 
-  # cellClasses and no `items` (4f ruling 2026-09-26, round 5): no cell is
+  # cellClasses and no `items` (the orchestrator's ruling 2026-09-26, round 5): no cell is
   # drawn — the class-list cells come from `items` on every path, and sjui,
   # kjui and both Dynamic renderers draw none. Until jsonui-cli 1.9.0 this
   # path drew one cell with no data (`<ItemCard />`) on every route, paging

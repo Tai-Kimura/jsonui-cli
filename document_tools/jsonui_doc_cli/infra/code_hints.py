@@ -1,7 +1,7 @@
 """What a project's code says about the services it talks to — one copy, read by seed (drafting) and check (comparing).
 
 Ticket 2026-10-20-jui-infra-seed-and-check-tables-disagree (the code-hint half, found by the seed lane): seed had
-SDK_PY / SDK_JS / ENV_RULES and check its own SDK_HINTS / ENV_HINTS. The tables below are seed's, moved here by b8;
+SDK_PY / SDK_JS / ENV_RULES and check its own SDK_HINTS / ENV_HINTS. The tables below are seed's, moved here;
 ``scan_text`` reads one file the way seed read it, without a draft: the SDK imports (Python and JavaScript /
 TypeScript), the AWS SDK clients, and the *names* of the environment variables the code reads (never a value).
 Other languages are not read (the caller says so).

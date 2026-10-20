@@ -1,6 +1,6 @@
 """Processes under a Claude Code session, for "waiting on background work" (requester, 10-18).
 
-Measured on a live machine (lane 4d, 10-18 14:1x): a background Bash runs as a child of the session's
+Measured on a live machine (10-18 14:1x): a background Bash runs as a child of the session's
 process, ``/bin/zsh -c source ~/.claude/shell-snapshots/snapshot-zsh-….sh …``, with the work (xcodebuild,
 gradle, a sleep loop …) under it. The only child that lives as long as the session is the MCP server, which
 is not such a shell. So "a shell-snapshot shell is still under the session" means its background work runs.

@@ -7,7 +7,7 @@ require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../../lib/compose/generators/cell_generator'
 require_relative '../../support/kotlin_compiler'
 
-# A paging Collection's pages (4f ruling, 2026-09-26, round 6): one page per
+# A paging Collection's pages (the orchestrator's ruling, 2026-09-26, round 6): one page per
 # cell, every drawn section's cells in order — what sjui, rjui and both
 # Dynamic renderers draw. Until jsonui-cli 1.9.0 the pager read data section
 # 0 only (its page count and its cells: `….firstOrNull()?.cells`), so a

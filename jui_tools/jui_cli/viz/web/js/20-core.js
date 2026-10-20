@@ -49,7 +49,7 @@ function loadMermaid() {
   }
   return MERMAID.loading;
 }
-/* What a diagram may not set for itself (dd's review, 10-19): Mermaid reads an init / config directive (%%{…}%%) and a
+/* What a diagram may not set for itself (the independent review, 10-19): Mermaid reads an init / config directive (%%{…}%%) and a
    front-matter config (--- config: … ---) from the text and lets them change everything but its six `secure` keys —
    htmlLabels back on (an <img> in a label, fetched), themeCSS with url() (fetched). The text is the spec's: both are
    taken out before it is drawn, with Mermaid's own patterns (11.17.2), and anything left of a directive is broken
@@ -60,7 +60,7 @@ const MERMAID_SECURE = ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize',
   'theme', 'themeCSS', 'themeVariables', 'darkMode', 'fontFamily', 'altFontFamily', 'look', 'layout', 'markdownAutoWrap', 'dompurifyConfig', 'deterministicIds'];
 function mermaidSafeText(text) {
   // until nothing more comes off: a directive taken out can leave a front matter at the start, and the other way
-  // round (dd's review 2, 10-19: "%%{x}%%---\nconfig: …" passed one round of each)
+  // round (the independent review 2, 10-19: "%%{x}%%---\nconfig: …" passed one round of each)
   let t = String(text), prev = null;
   for (let k = 0; k < 50 && t !== prev; k++) { prev = t; t = t.replace(MERMAID_FRONT, '').replace(MERMAID_DIRECTIVE, ''); }
   if (t !== prev) return '';                                  // still changing after 50 rounds: no diagram
@@ -69,7 +69,7 @@ function mermaidSafeText(text) {
 }
 /* A url() that is not a reference inside the diagram (#…) becomes one to nothing, and @import goes: in the text before
    it is drawn — Mermaid puts the SVG in the page to measure it, and a style or classDef of a class or state diagram
-   (fill:url(/x)) was fetched then (dd's review 2) — and in the SVG it gave back. Every kind of diagram goes through. */
+   (fill:url(/x)) was fetched then (the independent review 2) — and in the SVG it gave back. Every kind of diagram goes through. */
 function mermaidNoUrl(t) {
   return String(t).replace(/url\(\s*(?!['"]?\s*#)/gi, 'url(#blocked-').replace(/@import/gi, '@blocked');
 }

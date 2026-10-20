@@ -1,6 +1,6 @@
 """Collections whose sections declare a header and a footer: a flow and a list.
 
-Ruling (4f, 2026-09-26, round 7): a section's declared header and footer are
+Ruling (the orchestrator, 2026-09-26, round 7): a section's declared header and footer are
 drawn on a flow too, as full-width rows of their own — the header above the
 section's wrap, the footer below it — on every path (sjui / kjui / rjui
 codegen, SwiftJsonUI and KotlinJsonUI Dynamic, lazy and ``lazy: "none"``).
@@ -24,7 +24,7 @@ cells only — the flow's section blocks without their edges. A platform that
 ignores a flow section's header and footer renders the fixture like its
 control, and the control-diff verdict names it.
 
-The list pair (round 8, 4f 2026-09-26): the same edges on a vertical list,
+The list pair (round 8, the orchestrator, 2026-09-26): the same edges on a vertical list,
 where kjui codegen handed each header / footer view `Modifier.fillMaxWidth()`
 and a fixed-width view centred itself in its row, while every other path
 draws it at the row's start. The corpus held no section header on a list or

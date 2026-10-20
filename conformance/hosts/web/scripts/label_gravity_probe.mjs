@@ -4,7 +4,7 @@
 //
 //   npm run label-gravity-probe
 //
-// The rule (4f 2026-09-27): a Label's text sits at the vertical its gravity
+// The rule (the orchestrator, 2026-09-27): a Label's text sits at the vertical its gravity
 // names (top, bottom, centerVertical / center), else the middle — the canon's
 // leafOwnFrameChannel default; across, at textAlign's position, else at the
 // horizontal its gravity names (left, right, centerHorizontal / center), else
@@ -13,7 +13,7 @@
 // the text at the bottom, `bottom` at the bottom end, and `centerVertical` in
 // the middle across as well.
 //
-// The lines of a multi-line Label follow the same rule across (4f round 6,
+// The lines of a multi-line Label follow the same rule across (the orchestrator's round 6,
 // 2026-09-27): textAlign, else the horizontal part of gravity, else the
 // start. The `ml_*` labels are wrapContent-wide with two lines of different
 // lengths (a `\n`); the `wrap_*` ones 150px wide with a text that wraps.

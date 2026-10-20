@@ -242,7 +242,7 @@ async def run_ask_board(pw, out, failures):
             pc2.communicate(timeout=30)
         except subprocess.TimeoutExpired:
             pass
-        # one project picked in the header (dd, 10-19): a question waiting in another project is counted on the chip;
+        # one project picked in the header (the independent check, 10-19): a question waiting in another project is counted on the chip;
         # the board shows the one in scope and says how many wait elsewhere, and 「すべてのプロジェクトを表示」 shows them all
         await page.keyboard.press("Escape")
         await wait(page, "() => document.getElementById('tb').hidden", label="closed before the projects")

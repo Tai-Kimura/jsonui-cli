@@ -118,7 +118,7 @@ def test_icons_inside_the_room_only(tmp_path):
 
 
 def test_an_icon_that_is_a_symlink_is_never_read(tmp_path):
-    """The boundary's "no symlink" for icons too (dd's re-verification N8): an icon file that is a symlink — to a file
+    """The boundary's "no symlink" for icons too (the independent re-verification N8): an icon file that is a symlink — to a file
     outside the room or inside it — is not followed, so nothing outside the room reaches the page through an icon."""
     outside = tmp_path / "outside.svg"
     outside.write_text("<svg>outside</svg>")
@@ -201,7 +201,7 @@ def test_a_secret_never_reaches_the_short_line_nor_the_full_text(tmp_path, fixtu
 
 
 
-# ---------------------------------------------------------------- dd's verification (10-20): the reading's arms
+# ---------------------------------------------------------------- the independent verification (10-20): the reading's arms
 
 def test_a_symlink_anywhere_on_the_way_is_not_followed(tmp_path):
     """M11: docs itself a symlink (not only docs/infra)."""
@@ -278,7 +278,7 @@ def test_a_folder_or_fifo_named_json_is_said_not_read(tmp_path):
 
 
 
-# ---------------------------------------------------------------- dd's re-verification (10-20)
+# ---------------------------------------------------------------- the independent re-verification (10-20)
 
 @pytest.mark.parametrize("key", ["service:aws/10.0.0.1", "service:aws/123456789012", "provider:10.0.0.1"])
 def test_an_icon_key_of_the_forms_holding_a_secret_is_refused_and_masked(tmp_path, key):

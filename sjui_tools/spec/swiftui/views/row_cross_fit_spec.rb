@@ -5,7 +5,7 @@ require_relative '../../support/emitted_swift'
 
 # A horizontal scrolling Collection of wrapContent (or undeclared) height is
 # its cells' height, capped by its parent — across its scroll axis, as
-# CollectionContentFit sizes it along (4f 2026-09-27; the SSoT's wrapContent
+# CollectionContentFit sizes it along (the orchestrator, 2026-09-27; the SSoT's wrapContent
 # is "size to content"). A LazyHStack takes the height it is offered, so until
 # jsonui-cli 1.9.0 a lazy row filled its parent (99 of a 120pt View whose label
 # took the rest) where the eager row was its cells' 28 (ConformanceHost,

@@ -6,7 +6,7 @@ require_relative '../support/emitted_swift'
 
 # A handler that takes no value — a tap (onClick on any type, the onclick
 # selector), a long press, onAppear / onDisappear — is called as the data
-# declares it (4f's ruling on control-onclick-is-called-differently-on-every-
+# declares it (the orchestrator's ruling on control-onclick-is-called-differently-on-every-
 # path, 1.9.0): `(String)` with the viewId (the id, else the drawn type and
 # the position — JsonUIShared::LayoutPath.view_id), `()` with no argument.
 #
@@ -70,7 +70,7 @@ RSpec.describe 'sjui: a handler that takes no value is called as its declaration
     end
   end
 
-  # onAppear / onDisappear: `x`, `@{x}` and `x:` are the one name `x` (4f's
+  # onAppear / onDisappear: `x`, `@{x}` and `x:` are the one name `x` (the orchestrator's
   # ruling, 1.9.0). `@{x}` wrote `data.@{x}?()`, which does not parse; `x:`
   # handed `self`.
   %w[onAppear onDisappear].each do |key|

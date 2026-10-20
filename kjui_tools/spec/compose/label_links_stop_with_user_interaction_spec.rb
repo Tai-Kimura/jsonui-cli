@@ -12,7 +12,7 @@ require_relative '../support/compose_stub_universe'
 # A Label's links — a partialAttributes range with a handler, and a link
 # `linkable` detects — stop with `userInteractionEnabled`: `false` on the
 # Label or on a view around it stops them, a binding gates them (the tap rule,
-# shared/core/tap_accessibility.rb; 4f ruling, jsonui-cli 1.9.0).
+# shared/core/tap_accessibility.rb; the orchestrator's ruling, jsonui-cli 1.9.0).
 #
 # kjui passes that to the library's PartialAttributesText as `linksEnabled`,
 # because the pointer blocker is not enough: each link is a semantics node of
@@ -77,7 +77,7 @@ RSpec.describe 'kjui: a Label\'s links stop with userInteractionEnabled' do
   end
 
   # A linkable Label takes the Label's tap stage as the partialAttributes
-  # branch does (4f ruling, jsonui-cli 1.9.0): its onClick applies as on any
+  # branch does (the orchestrator's ruling, jsonui-cli 1.9.0): its onClick applies as on any
   # Label, canTap gates it, enabled disables it, the tap rule gives it its
   # role, userInteractionEnabled blocks it. A tap on a link calls the link
   # only (measured on an API 35 emulator: the two do not compete). It took

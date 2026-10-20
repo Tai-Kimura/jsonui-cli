@@ -9,7 +9,7 @@ require_relative '../support/kotlin_compiler'
 require_relative '../support/compose_stub_universe'
 
 # `safeAreaInsetPositions`: the six declared words mean one thing on every
-# path (4f ruling, 2026-09-26) — top / bottom that edge, leading / trailing
+# path (the orchestrator's ruling, 2026-09-26) — top / bottom that edge, leading / trailing
 # where reading starts / ends (WindowInsetsSides.Start / End), vertical top
 # and bottom, all every edge — and any other word reserves no edge.
 #

@@ -67,5 +67,5 @@ def test_the_readme_example_is_this_spec():
 
 
 def test_an_empty_unit_contracts_list_still_fails():
-    # ee, design v4.16: an empty unitContracts is an error, as before.
+    # design v4.16: an empty unitContracts is an error, as before.
     assert any(p.startswith("unitContracts") for p, _ in _errors(_app(unitContracts=[])))

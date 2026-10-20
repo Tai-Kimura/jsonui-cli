@@ -79,7 +79,7 @@ RSpec.describe 'sjui a control a stop holds' do
     end
   end
 
-  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, 4f's
+  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, the orchestrator's
   # ruling, jsonui-cli 1.9.0): a Picker is drawn as a SelectBox and a
   # SegmentedControl as a Segment — controls, as the Dynamic runtime already
   # read them — and a TableView or a List as a Collection, a container. An

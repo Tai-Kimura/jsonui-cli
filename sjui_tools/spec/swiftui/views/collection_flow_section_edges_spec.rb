@@ -2,7 +2,7 @@
 
 require 'swiftui/views/collection_converter'
 
-# A flow section's declared header and footer (4f ruling 2026-09-26, round 7):
+# A flow section's declared header and footer (the orchestrator's ruling 2026-09-26, round 7):
 # rows of their own — the header above the section's wrap, the footer below —
 # full width at the leading edge, siblings of the wrap in the section VStack
 # (so spaced as the lines). On the lazy and the lazy:none flow alike. Until

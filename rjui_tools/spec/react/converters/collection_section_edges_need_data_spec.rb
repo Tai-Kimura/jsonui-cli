@@ -8,7 +8,7 @@ require_relative '../../support/typescript_compiler'
 require 'react/converters/collection_converter'
 
 # A section's declared header or footer is drawn only when the section has
-# that data (4f ruling 2026-09-26, round 8) — as sjui (`if let headerData =
+# that data (the orchestrator's ruling 2026-09-26, round 8) — as sjui (`if let headerData =
 # section.header?.data`), kjui (`section.header?.let`) and both Dynamic
 # renderers draw it. Until jsonui-cli 1.9.0 the web drew it with `{}` for its
 # data when the section had none, on every route.

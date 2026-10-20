@@ -20,7 +20,7 @@ window.__dbg = {
   srSelectGroup: (id) => { SR.selected = null; SR.selectedGroup = id; srRenderBoard(); return !!document.querySelector('#sr-board [data-sr-act="toggle"]'); },
   srEdges: () => (SR.view ? SR.view.L.edges.map((e) => `${e.from}>${e.to}`) : []),
   mainFrames: () => renderer.info.render.frame,
-  // the server room's arms (dd's verification, 10-20): what is drawn and how, without changing anything
+  // the server room's arms (the independent verification, 10-20): what is drawn and how, without changing anything
   srTiming: () => ({ took: SR.took ?? null, waitMs: SR.waitMs ?? null, fastMs: SR.fastMs, okMs: SR.okMs }),
   srIconKeys: () => (SR.view ? { ...(SR.view.iconKeys || {}) } : {}),
   srNodeEnvs: () => (SR.view ? SR.view.L.nodes.map((n) => [n.id, Array.isArray(n.environments) ? n.environments : []]) : []),

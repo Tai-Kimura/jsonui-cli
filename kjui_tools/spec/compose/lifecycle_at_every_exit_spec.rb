@@ -47,7 +47,7 @@ module LifecycleProbes
 end
 
 # onAppear / onDisappear on every type kjui draws, at every exit that draws a
-# node (4f's ruling): called when the view enters / leaves the tree it is drawn
+# node (the orchestrator's ruling): called when the view enters / leaves the tree it is drawn
 # in — inside its visibility wrapper, so a `gone` view (not in the tree) does
 # not call them and an `invisible` one does. They were placed only at the start
 # of a container's content (handle_container_result): 5 of the 26 types drawn

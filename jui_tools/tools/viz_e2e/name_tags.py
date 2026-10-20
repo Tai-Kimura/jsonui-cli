@@ -120,7 +120,7 @@ async def run_name_tags(pw, out, failures, jt=None, shots_only=False):
                 res[label] = {"rects": rects, "cross": crossings(rects)}
             else:
                 # the settle hook says false while the tags have not been placed since the move (a hook that always says
-                # true would pass every read below: dd's mutation, 10-19)
+                # true would pass every read below: The independent check's mutation, 10-19)
                 check(failures, moving is False, f"{label}: right after the move (no placement yet), settle must say false; it said {moving}")
                 await settled(page, f"{label}: the tags after the move")
                 rects = await read(label)

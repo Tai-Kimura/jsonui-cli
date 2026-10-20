@@ -87,7 +87,7 @@ class ValueAliasFoldingTests(unittest.TestCase):
         self.assertEqual(set(flow[2]), {"flow", "Flow", "LeftAligned", "leftAligned"})
 
     def test_enum_exact_cases_route_alias_spellings_to_canonical_as_declared(self):
-        # A value is its declared spelling, case and all (4f's ruling,
+        # A value is its declared spelling, case and all (the orchestrator's ruling,
         # 1.9.0): every declared spelling routes to its case, and a spelling
         # declared in neither case (``leftaligned``) is not accepted.
         from jui_cli.generators.attr_codegen.swift_emitter import enum_exact_cases
@@ -101,7 +101,7 @@ class ValueAliasFoldingTests(unittest.TestCase):
         # Against the real SSoT: the generated Layout enum folds the alias
         # spellings — LEFT_ALIGNED disappears as a member, every declared
         # spelling is still accepted, as written, and routes to FLOW; one
-        # declared in no case (``leftaligned``) is not (4f's ruling, 1.9.0).
+        # declared in no case (``leftaligned``) is not (the orchestrator's ruling, 1.9.0).
         model = load_model()
         emitted = EMITTERS["kotlin"].emit(model)
         content = emitted["CollectionAttributes.kt"]

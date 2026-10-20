@@ -7,7 +7,7 @@ require 'swiftui/view_registry'
 require_relative '../../support/emitted_swift'
 
 # What a SelectBox's onValueChange is handed, by the parameters the data
-# declares for it (4f's ruling on control-onclick-is-called-differently-on-
+# declares for it (the orchestrator's ruling on control-onclick-is-called-differently-on-
 # every-path, 1.9.0): one String — the picked item, even with selectedIndex
 # bound; a String then an Int — the viewId and the index; two Strings — the
 # viewId and the item. The index is the bound selectedIndex, else the item's
@@ -95,7 +95,7 @@ RSpec.describe 'sjui SelectBox: onValueChange is handed what its declared parame
   end
 
   # A date has no index: a handler declared to take one is not called, and
-  # the comment says why where the call would be (4f's ruling, 1.9.0). It was
+  # the comment says why where the call would be (the orchestrator's ruling, 1.9.0). It was
   # handed the date string for its Int.
   it 'a date picker does not call a handler that takes an index' do
     date = { 'selectItemType' => 'Date', 'selectedDate' => '@{day}' }

@@ -25,7 +25,7 @@ class StyleMerger:
     """Resolves ``style`` references recursively across a layout tree.
 
     Not inside a ``responsive`` override: an override's attributes are its
-    own, and no path applies a style named there (4f's ruling on
+    own, and no path applies a style named there (the orchestrator's ruling on
     control-onclick-is-called-differently-on-every-path's style family,
     1.9.0 — sjui / kjui codegen, rjui and both Dynamic runtimes do not). It
     is dropped from the override and named once in :attr:`warnings`. This

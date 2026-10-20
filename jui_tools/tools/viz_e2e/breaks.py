@@ -417,7 +417,7 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
             callee = await page.evaluate("(room) => window.__dbg.robots.filter((R) => R.def.room === room).map((R) => R.def.id).sort()[0]", many_room)
         res["callee"] = callee
         # the callee and nobody else may go (the others resting): with joinP 0 another robot in the booth first kept it
-        # out for 60 s, and its own rest from an earlier break could outlast the wait (dd, 10-20: timed out at 60 s)
+        # out for 60 s, and its own rest from an earlier break could outlast the wait (the independent check, 10-20: timed out at 60 s)
         await page.evaluate("(c) => window.__dbg.robots.forEach((R) => { R.restUntil = R.def.id === c ? 0 : 1e12; })", callee)
         await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # to the booth, with frames 3 s apart
         await page.evaluate(SMOKE_JS, callee)

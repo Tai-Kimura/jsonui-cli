@@ -18,7 +18,7 @@ module KjuiTools
           # Check if this is a date picker
           is_date_picker = json_data['selectItemType'] == 'Date'
           
-          # A Date SelectBox's value is selectedDate alone (4f's ruling,
+          # A Date SelectBox's value is selectedDate alone (the orchestrator's ruling,
           # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by selectItemType):
           # it fell back to selectedItem / selectedValue / selectedIndex / bind,
           # which sjui never read — the shared validator now

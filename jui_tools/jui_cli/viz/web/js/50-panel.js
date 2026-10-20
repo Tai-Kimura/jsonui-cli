@@ -1465,7 +1465,7 @@ function focusFadeSync() {
 /* A room or a robot about to be taken down (40-scene.js liveDropRoom / liveDropRobot): what of it is faint gets its
    own material back first, so disposeTree works as if nothing had been faint — the room's own materials disposed,
    the shared ones left — and the faint copies go with it. Left faint, disposeTree disposed the copies and never the
-   own materials (5b's review, 10-18). */
+   own materials (a library lane's review, 10-18). */
 function focusRelease(root) {
   for (const [o, mat] of FOCUS.faded) {
     let inside = false;
@@ -1956,7 +1956,7 @@ callEl.addEventListener('keydown', (e) => {
      from the button in the settings, never on load.
    - while question notifications can be shown (permission granted, the kind on) the page says so to the server every
      4 s and whenever the server asks (notify.ping): then a question waits for an answer though the page is hidden
-     (cd's ruling 10-19; it lapses notifyPresenceSec after the last word, a closed tab included). */
+     (the orchestrator's ruling 10-19; it lapses notifyPresenceSec after the last word, a closed tab included). */
 const NOTIFY_PREFS = 'jui-viz-notify', NOTIFY_RUNG = 'jui-viz-notify-rung', NOTIFY_KINDS = ['done', 'perm', 'ask', 'idle', 'chime'];
 // the chime's loudness (requester 10-20: 「音が少し小さいね」): the tones' peak gain, 中 by default (0.08 before)
 const NOTIFY_VOLUMES = { low: 0.1, mid: 0.2, high: 0.35 };
@@ -2113,7 +2113,7 @@ NOTIFY.askFirst = new Map();
 /* 入力待ち (2.3.7, ticket 2026-10-20-jui-viz-notify-waiting-for-input; requester: 「入力待ち…検知出来るなら許可とかと同じ
    ように通知鳴らして欲しい」). Claude Code sends Notification idle_prompt 60 s after a turn's end that nobody answered
    (measured by the requester 10-20 10:36: Stop 10:36:45, idle_prompt 10:37:45, "Claude is waiting for your input").
-   cd's ruling: a reminder — not rung when, since that turn's end, its 完了 notification was clicked or the session was
+   The orchestrator's ruling: a reminder — not rung when, since that turn's end, its 完了 notification was clicked or the session was
    opened on the page (NOTIFY.opened, by openRobot and by a click on the notification); otherwise once, with the chime,
    by the same one-tab, yield and quiet rules; its own switch. A replay after a snapshot is seen, never rung. */
 function notifyIdle(raw, item, replay = false) {

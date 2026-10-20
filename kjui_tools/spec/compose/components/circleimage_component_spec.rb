@@ -103,7 +103,7 @@ RSpec.describe KjuiTools::Compose::Components::CircleImageComponent do
 
     # CircleImage is an Image spelling (type_synonyms.json render_as) and
     # follows its contentMode, default fit (attribute_semantics.json#image;
-    # 4f ruling, 2026-09-26). It emitted ContentScale.Crop for every mode.
+    # The orchestrator's ruling, 2026-09-26). It emitted ContentScale.Crop for every mode.
     context 'content scale' do
       it 'follows contentMode as Image does' do
         { 'AspectFill' => 'ContentScale.Crop', 'fit' => 'ContentScale.Fit',

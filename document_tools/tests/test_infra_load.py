@@ -257,7 +257,7 @@ def test_a_schedule_hour_by_hour():
 
 
 def test_two_rules_each_covering_half_an_hour_count_the_same_in_either_order():
-    """サポート7's verification of L-A: 8:00-9:30 at 2 and 9:30-18:00 at 4 is 3.0 instance-hours at 9, whatever the order."""
+    """The independent verification of L-A: 8:00-9:30 at 2 and 9:30-18:00 at 4 is 3.0 instance-hours at 9, whatever the order."""
     hour = next(h for h in L.month_hours({"month": "2026-11"}) if h["date"] == "2026-11-02" and h["hour"] == 9)
     a = {"days": WEEKDAYS, "from": "08:00", "to": "09:30", "count": 2}
     b = {"days": WEEKDAYS, "from": "09:30", "to": "18:00", "count": 4}
@@ -470,7 +470,7 @@ def _seeded(root: Path) -> dict:
 
 
 def test_a_name_drafted_first_never_takes_a_declared_id():
-    """サポート7's verification of L-A: another node named "web" drafted before the declared one does not take its id."""
+    """The independent verification of L-A: another node named "web" drafted before the declared one does not take its id."""
     d = S.Draft(Path("."), declared=[("aws_instance.b", "web")])
     assert d.new_id("web") == "web-2"
     assert d.declared_id("aws_instance.b") == "web"

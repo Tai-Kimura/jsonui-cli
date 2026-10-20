@@ -242,7 +242,7 @@ def test_the_room_row_gets_its_count_from_the_worker(tmp_path):
     assert any(t.name.startswith("jui-viz-infra") for t in threading.enumerate())
 
 
-# ---- the guards dd's verification found without an arm (P2–P7, P9, P10, P12; 2026-10-20) ----
+# ---- the guards the independent verification found without an arm (P2–P7, P9, P10, P12; 2026-10-20) ----
 
 def _chunked(data: bytes):
     """A body sent chunked (no Content-Length, so the declared-length check cannot refuse it): only the read's own cap can."""
@@ -337,7 +337,7 @@ def test_the_rooms_are_counted_every_few_seconds_not_every_tick(tmp_path, monkey
 
 
 def test_the_icon_and_model_routes_check_their_types_and_never_follow_a_symlink(tmp_path):
-    """dd's re-verification: N1 a seq that is not an int (true) comes back as null; N4 a key that is not a string is a
+    """The independent re-verification: N1 a seq that is not an int (true) comes back as null; N4 a key that is not a string is a
     bad request; N3 a room whose jui.config.json is broken has no icon (404, not a server error); N8 an icon that is a
     symlink to a file outside the room is not read (404, nothing of that file)."""
     root = _room(tmp_path, "compose-and-cloud")

@@ -29,7 +29,7 @@ HOSTILE = ("flowchart LR\n"
            '    click B "javascript:window.__pwned = 4"\n')
 
 
-# A diagram may not set its own config (dd's review, 10-19): each of these turned htmlLabels back on (a foreignObject
+# A diagram may not set its own config (the independent review, 10-19): each of these turned htmlLabels back on (a foreignObject
 # with the <img>, fetched) or put a url() in the CSS (fetched) before mermaidSafeText and the extra secure keys.
 LABEL = '    A["<img src=/ds-probe-{n}.png>a"] --> B'
 UNLOCKS = {
@@ -37,10 +37,10 @@ UNLOCKS = {
     "secure-emptied": '%%{init: {"secure": [], "htmlLabels": true, "flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n' + LABEL.format(n=2),
     "front-matter": '---\nconfig:\n  htmlLabels: true\n  flowchart:\n    htmlLabels: true\n---\nflowchart LR\n' + LABEL.format(n=3),
     "themeCSS": '%%{init: {"themeCSS": ".node rect { fill: url(/ds-probe-4.png); } .label { background: url(/ds-probe-4b.png); }"}}%%\nflowchart LR\n    A --> B',
-    # dd's review 2 (B): a directive taken out left a front matter at the start, which Mermaid then read
+    # The independent review 2 (B): a directive taken out left a front matter at the start, which Mermaid then read
     "directive-then-front-matter": '%%{x}%%---\nconfig:\n  htmlLabels: true\n  class:\n    htmlLabels: true\n  flowchart:\n    htmlLabels: true\n---\nflowchart LR\n' + LABEL.format(n=8),
 }
-# Keys not in 3f340439's fourteen secure names (c2's fourth check). sequence.mirrorActors is the one that shows: with
+# Keys not in 3f340439's fourteen secure names (the author's fourth check). sequence.mirrorActors is the one that shows: with
 # only the fourteen secure the directive turns it off (2 actor boxes, measured), with every key secure the diagram
 # keeps Mermaid's 4. class.htmlLabels (asked for) draws no foreignObject either way in 11.17.2 — its class diagrams
 # read the top-level htmlLabels, which the fourteen hold — so it guards the key without telling the two apart.
@@ -48,7 +48,7 @@ BEYOND_LIST = {
     "sequence.mirrorActors": ('%%{init: {"sequence": {"mirrorActors": false}}}%%\nsequenceDiagram\n    Alice->>Bob: hi', 4),
     "class.htmlLabels": ('%%{init: {"class": {"htmlLabels": true}}}%%\nclassDiagram\n    class U["<img src=/ds-probe-13.png>u"]\n    class V\n    U --> V', None),
 }
-# dd's review 2 (A): a style in the diagram's own syntax, kept by Mermaid as written: a url() fetched from the origin
+# The independent review 2 (A): a style in the diagram's own syntax, kept by Mermaid as written: a url() fetched from the origin
 URL_STYLES = {
     "classDiagram style": 'classDiagram\n    class U\n    class V\n    U --> V\n    style U fill:url(/ds-probe-6.png)',
     "stateDiagram classDef": 'stateDiagram-v2\n    [*] --> S\n    S --> [*]\n    classDef c fill:url(/ds-probe-7.png)\n    class S c',
@@ -132,7 +132,7 @@ async def run_mermaid(pw, out, failures):
         handed = res["handed"] = await page.evaluate("(t) => window.__dbg.mermaidSafeText(t)", UNLOCKS["directive-then-front-matter"])
         check(failures, "%%{" not in handed and not handed.lstrip(" \t").startswith("---") and "htmlLabels" not in handed,
               f"directive then front matter: neither is left in what Mermaid is handed: {handed[:160]!r}")
-        # each lock on its own (dd / c2, 10-19): the drawn SVG's cleaning, given an SVG straight; `secure`, given the
+        # each lock on its own (the independent check and the author, 10-19): the drawn SVG's cleaning, given an SVG straight; `secure`, given the
         # texts with mermaidSafeText skipped
         svg_in = ('<svg xmlns="http://www.w3.org/2000/svg"><style>@import "/ds-probe-10.css"; .a { fill: url(/ds-probe-11.png) }</style>'
                   '<rect style="fill:url( \'/ds-probe-12.png\')" marker-end="url(#arrow)"/></svg>')
@@ -147,7 +147,7 @@ async def run_mermaid(pw, out, failures):
             got = [x for x in asked[before:] if "mermaid.min.js" not in x]
             check(failures, u["foreignObjects"] == 0 and u["imgs"] == 0 and u["htmlLabels"] is False and not got,
                   f"secure alone, {name} drawn unsanitized: {u} {got}")
-        # keys outside 3f340439's fourteen (c2's fourth check): only `secure` = every key of Mermaid's config stops these
+        # keys outside 3f340439's fourteen (the author's fourth check): only `secure` = every key of Mermaid's config stops these
         for name, (text, actors) in BEYOND_LIST.items():
             before = len(asked)
             u = res[f"secureAll-{name}"] = await page.evaluate("(t) => window.__dbg.mermaidRenderUnsanitized(t)", text)

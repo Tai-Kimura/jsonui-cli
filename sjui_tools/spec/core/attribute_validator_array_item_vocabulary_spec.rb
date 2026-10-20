@@ -4,7 +4,7 @@ require 'core/attribute_validator'
 
 # An array whose items declare a vocabulary (safeAreaInsetPositions: top /
 # bottom / leading / trailing / vertical / all) names an item declared in no
-# case, as a top-level enum names a value (1.9.0; 4f's ruling on
+# case, as a top-level enum names a value (1.9.0; the orchestrator's ruling on
 # safeAreaInsetPositions: an undeclared word reserves nothing and is named).
 # The validator checked the items' type only, so `left` and `Top` passed.
 RSpec.describe 'attribute validator: an array item outside its declared vocabulary' do

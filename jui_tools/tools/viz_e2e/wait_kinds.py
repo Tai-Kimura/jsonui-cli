@@ -193,7 +193,7 @@ async def run_wait_kinds(pw, out, failures, jt=None):
             await page.click(f"[data-wait-robot='{rid[k]}']")
             return await until(page, f"() => {{ const c = ({CARD_JS})(); return c.picked && c.picked.id === '{rid[k]}' ? c : null; }}",
                                f"{k}: the press picked its card", timeout=10000, why=CARD_JS)
-        # the robot's card names the lamp and shows its colour: the question's violet, both (support 7's verification)
+        # the robot's card names the lamp and shows its colour: the question's violet, both (the independent verification)
         swatch = {}
         for k, name in (("perm", "黄（許可待ち）"), ("ask", "紫（質問に回答待ち）")):
             await page.evaluate("(id) => window.__dbg.openRobot(id)", rid[k])

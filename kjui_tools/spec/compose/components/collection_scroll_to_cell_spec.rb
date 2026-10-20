@@ -7,7 +7,7 @@ require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../../lib/compose/generators/cell_generator'
 require_relative '../../support/kotlin_compiler'
 
-# What a Collection's `scrollTo` names across sections (4f ruling 2026-09-27;
+# What a Collection's `scrollTo` names across sections (the orchestrator's ruling 2026-09-27;
 # the SSoT's Collection.scrollTo description, jsonui-cli 1.9.0): an Int is the
 # index of a CELL counted across the drawn sections in order — a section's
 # header or footer item, and a grid's filler item, is not counted; a String
@@ -415,7 +415,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'pagerKeys' => [emit(pager_node('cellIdProperty' => 'key')), { grid: true }, %w[k3 x2 0#77]],
       'flow' => [emit(node('layout' => 'flow', 'height' => 100)), {}, [0, 6]],
       'flowKeys' => [emit(node('layout' => 'flow', 'height' => 100, 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]],
-      # Round 12 (4f rulings 2026-09-27): the EAGER CollectionStack, declared
+      # Round 12 (the orchestrator's rulings 2026-09-27): the EAGER CollectionStack, declared
       # and bound; the wrapContent Column; defaultScrollAnchor under
       # reverseLayout.
       'eager' => [emit(node('lazy' => 'eager')), {}, [0, 6, 9, -1]],
@@ -436,7 +436,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
       'stackReversedAnchorCenter' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'center')), {}, [''], nil],
       'gridReversedAnchor' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil],
       'gridReversedAnchorTop' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), { grid: true }, [''], nil],
-      # Round 13 (4f rulings 2026-09-27): the reversed vertical EAGER container,
+      # Round 13 (the orchestrator's rulings 2026-09-27): the reversed vertical EAGER container,
       # scrollEnabled false, a bound `lazy` NONE on a wrapContent Column, a
       # short reversed grid.
       'eagerReversed' => [emit(node('lazy' => 'eager', 'reverseLayout' => true)), {}, [6, 0]],
@@ -672,7 +672,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     %w[stackKeys gridKeys].each do |route|
       # k3 is A3's key and B0's: the first section's. "0#77" is no key: read,
       # as before jsonui-cli 1.9.0, as the lazy item index — item 0, the
-      # header — and said (4f ruling, round 11). "nothing" scrolls nowhere.
+      # header — and said (the orchestrator's ruling, round 11). "nothing" scrolls nowhere.
       expect(%w[k3 x2 k1 0#77 nothing].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A3 B2 A1 H none]), lines.inspect
       expect(%w[k3 0#77 nothing].map { |t| read(lines, "#{route} #{t}")[:logs] }).to eq([0, 1, 0]), lines.inspect
       # An Int with cellIdProperty is the counted cell — A3 — not a key and
@@ -686,7 +686,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect([0, 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A1 @7]]), lines.inspect
   end
 
-  # Round 11 (4f ruling 2026-09-27).
+  # Round 11 (the orchestrator's ruling 2026-09-27).
   it 'a scroll runs on a change: the value the list first composes with scrolls nowhere' do
     lines = run_emitted(routes)
     expect(read(lines, 'stackInitial 6')[:index]).to eq(-1), lines.inspect
@@ -772,7 +772,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(%w[k3 x2 0#77].map { |t| read(lines, "flowKeys #{t}")[:index] }).to eq([40, 152, -1]), lines.inspect
   end
 
-  # Round 12 (4f rulings 2026-09-27). In the stubs a non-lazy container's
+  # Round 12 (the orchestrator's rulings 2026-09-27). In the stubs a non-lazy container's
   # viewport is laid out first, then its cells, each 28 below the last: cell
   # n at 28 (n + 1), in a 100 viewport scrolled to 0. What the scroll asks
   # for is the scroll position — bottom-anchored (the default) 28 (n + 1) - 72.
@@ -826,7 +826,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(read(lines, 'gridReversedAnchorTop ')[:at]).to eq('A4'), lines.inspect
   end
 
-  # Round 13 (4f rulings 2026-09-27).
+  # Round 13 (the orchestrator's rulings 2026-09-27).
   it 'the reversed vertical EAGER container draws reverseLayout: it rests at its bottom, a scroll counts from there' do
     lines = run_emitted(routes)
     # Emitted last-first (B's cells, then A's), laid out from the bottom: B0
@@ -862,7 +862,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(read(lines, 'gridSpaced 0')[:packed]).to eq('null'), lines.inspect
   end
 
-  # Round 14 (4f ruling 2026-09-27).
+  # Round 14 (the orchestrator's ruling 2026-09-27).
   it 'not reversed, defaultScrollAnchor bottom puts short content at the bottom — the stack and the grid' do
     lines = run_emitted(routes)
     %w[stackBottom gridBottom gridBottomSpaced].each do |route|
@@ -873,7 +873,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     expect(read(lines, 'stack 0')[:packed]).to eq('null'), lines.inspect
   end
 
-  # Round 15 (4f rulings 2026-09-27).
+  # Round 15 (the orchestrator's rulings 2026-09-27).
   it 'contentPadding / insets pad the cells of the containers that are not lazy lists — inside the scroll where they scroll' do
     lines = run_emitted(routes)
     # insets [12, 0, 6, 0]: top 12, bottom 6 (the stubs print top.start.bottom.end).
@@ -896,7 +896,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     end
   end
 
-  # Round 16 (4f rulings 2026-09-27).
+  # Round 16 (the orchestrator's rulings 2026-09-27).
   it 'insets are read as paddings are: 1, 2 or 4 values, an array or a |-separated string; four are [top, right, bottom, left]' do
     lines = run_emitted(routes)
     # cp(top.start.bottom.end): [8, 16, 4, 2] is top 8, right (end) 16, bottom 4, left (start) 2.
@@ -929,7 +929,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     end
   end
 
-  # Round 17 (4f rulings 2026-09-27).
+  # Round 17 (the orchestrator's rulings 2026-09-27).
   it 'a declared insets is added to insetHorizontal / insetVertical and the safe area; a binding in it binds; a row keeps them all' do
     lines = run_emitted(routes)
     # The stubs' safe area: top 24, bottom 48 (horizontal sides 0); t = 20.

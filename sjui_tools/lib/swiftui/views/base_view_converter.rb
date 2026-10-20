@@ -774,7 +774,7 @@ module SjuiTools
           apply_conformance_frame
           apply_accessibility_anchor
           # tintColor is the accent of the operable parts — a control's
-          # accent, a link's colour, the cursor (4f's ruling, 1.9.0) — never
+          # accent, a link's colour, the cursor (the orchestrator's ruling, 1.9.0) — never
           # the text colour: SwiftUI's `.tint`. It was drawn only through
           # apply_modifiers, so a Label's links, a TextView's cursor, a
           # Button and a SelectBox never took it (a bound one on a Label did,
@@ -1251,7 +1251,7 @@ module SjuiTools
         end
 
         # Types whose declared onClick is not a tap on the view (ticket
-        # control-onclick-is-called-differently-on-every-path; 4f's ruling). A
+        # control-onclick-is-called-differently-on-every-path; the orchestrator's ruling). A
         # control — Switch / Toggle, CheckBox, Radio, Segment, Slider,
         # SelectBox — calls it from its own operation, after its own update
         # (operation_click_call); a text field does not call it at all, its
@@ -1300,7 +1300,7 @@ module SjuiTools
         # the control's own writes: `value_call` (onValueChange, on
         # `newValue`) when the write changed the value, then `click`
         # (operation_click_call). The view model's change never goes through
-        # the control's binding, so it reports nothing — 4f's ruling: the
+        # the control's binding, so it reports nothing — the orchestrator's ruling: the
         # control's update, then onValueChange, then onClick, all from the
         # user's operation, as kjui calls them. The bound controls observed
         # the value with `.onChange(of:)` instead, which ran on the next update
@@ -1337,7 +1337,7 @@ module SjuiTools
 
         # The viewId this node's handlers are handed: its id, else its drawn
         # type and its position (JsonUIShared::LayoutPath.view_id —
-        # `switch_0_1`, `selectBox_0_3`), the name every path gives it (4f's
+        # `switch_0_1`, `selectBox_0_3`), the name every path gives it (the orchestrator's
         # ruling, 1.9.0). An id-less node's viewId was a per-kind word that
         # differed per path — `toggle`, `selectBox`, `textEditor`, `button`,
         # or `""` — the same for every node of the kind.
@@ -1675,7 +1675,7 @@ module SjuiTools
 
         # A handler that takes no value — a tap (onClick, the onclick
         # selector), a long press, onAppear / onDisappear — called as the data
-        # declares it (4f's ruling on control-onclick-is-called-differently-
+        # declares it (the orchestrator's ruling on control-onclick-is-called-differently-
         # on-every-path, 1.9.0): `(String)` with the viewId (view_id: the id,
         # else the drawn type and the position), anything else with no
         # argument; `name:`, the selector spelling with a sender, with `self`.
@@ -2234,7 +2234,7 @@ module SjuiTools
         # onAppear / onDisappear name their handler — `x`, `@{x}`, or `x:`
         # (UIKit's sender mark, which means nothing in SwiftUI) are the one
         # name `x` — and it is called as the data declares it (no_value_call;
-        # 4f's ruling on control-onclick-is-called-differently-on-every-path,
+        # The orchestrator's ruling on control-onclick-is-called-differently-on-every-path,
         # 1.9.0: every path reads the three alike). `@{x}` wrote
         # `data.@{x}?()`, which does not parse, and `x:` handed `self`.
         def build_lifecycle_handler_lines(modifier_name, handler)

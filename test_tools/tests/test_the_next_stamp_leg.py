@@ -3,7 +3,7 @@
 Raised to 1.8.121 on a copy, test_tools went 16 red, and nothing had run it
 there before the stamp's own CI (2026-09-26): the *_GATE_FROM literals switch
 behaviour by the running VERSION. The leg runs the python suites on a clone
-raised to the next patch when that patch switches a gate on (4f's ruling (b)).
+raised to the next patch when that patch switches a gate on (the orchestrator's ruling (b)).
   next_stamp_plan.py   which literals the next patch switches on — read by the
                        tag gate's own collector, never a list
   raise_stamp.py       the runbook's stamp predicate, applied to a clone

@@ -477,7 +477,7 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
     end
   end
 
-  # A scrollTo's class is the one its data declares (4f round 15; the SSoT's
+  # A scrollTo's class is the one its data declares (the orchestrator's round 15; the SSoT's
   # Collection.scrollTo): cellIdProperty decides what a key is, not what the
   # value is. Until jsonui-cli 1.9.0 a Collection with cellIdProperty and
   # scrollTo had its data's `PassthroughSubject<Int` rewritten to

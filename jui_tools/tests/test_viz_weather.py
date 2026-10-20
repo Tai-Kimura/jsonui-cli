@@ -166,7 +166,7 @@ def test_a_failure_keeps_the_last_answer_for_three_hours_then_the_season_alone(t
 
 
 def test_an_answer_that_comes_back_after_off_or_a_move_is_dropped(tmp_path):
-    """e1 10-18: the query runs on an executor thread; turned off meanwhile, its answer used to land in last and the
+    """reported 10-18: the query runs on an executor thread; turned off meanwhile, its answer used to land in last and the
     status file's lastOkAt."""
     clock = _Clock()
     book = None

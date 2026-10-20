@@ -210,7 +210,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
     end
 
     # No id: the drawn type and the position — on its own, the root `0`; it
-    # was `segment` for every id-less Segment (4f's ruling, 1.9.0).
+    # was `segment` for every id-less Segment (the orchestrator's ruling, 1.9.0).
     it 'hands an id-less segment its position as the viewId' do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
         'onTabChange' => { 'name' => 'onTabChange', 'class' => '((Event) -> Void)?' }

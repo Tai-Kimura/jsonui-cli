@@ -677,7 +677,7 @@ rm -rf "$CISHAPE"
 # there before the stamp's own CI: raised to 1.8.121 on a copy, test_tools
 # went 16 red (2026-09-26). This leg runs the three python suites on a clone
 # whose stamp is raised to the next patch — WHEN that patch switches a gate on
-# that this stamp leaves off (4f's ruling (b)); the literals come from the tag
+# that this stamp leaves off (the orchestrator's ruling (b)); the literals come from the tag
 # gate's own collector (next_stamp_plan.py), never a list here. Otherwise it
 # prints what it read and why it skipped. The clone borrows this checkout's
 # installed node toolchains, so its arms skip only where these do.

@@ -2566,7 +2566,7 @@ def main():
         help="Component specification file to validate (.component.json)"
     )
 
-    # Validate infra subcommand (the server room's declared infrastructure, 2.3.6)
+    # Validate infra subcommand (the server room's declared infrastructure, 2.3.9)
     validate_infra_parser = validate_subparsers.add_parser(
         "infra",
         help="Validate a room's declared infrastructure (docs/infra/*.json, or jui.config.json's infra.dir)"
@@ -2583,7 +2583,7 @@ def main():
                                  help="The project root (the folder with jui.config.json); default: the current folder")
         side_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
 
-    # Seed command: draft the infra model from IaC, config files and code (the server room, 2.3.6)
+    # Seed command: draft the infra model from IaC, config files and code (the server room, 2.3.9)
     seed_parser = subparsers.add_parser(
         "seed",
         help="Draft a model from what the project already says (a starting point to edit; never the display source)"

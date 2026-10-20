@@ -446,7 +446,7 @@ module SjuiTools
         # Where a Label's text sits across its frame: textAlign's position,
         # else the horizontal its gravity names (left / right /
         # centerHorizontal, center), else the start - 'leading', 'center' or
-        # 'trailing' (the SSoT's Label.textAlign, 4f ruling 2026-09-27). A
+        # 'trailing' (the SSoT's Label.textAlign, the orchestrator's ruling 2026-09-27). A
         # bound textAlign is textAlign's (its value is not known here: the
         # start). Until jsonui-cli 1.9.0 a Label's gravity did not place its
         # text across a frame wider than it, and one with neither sat in the
@@ -516,7 +516,7 @@ module SjuiTools
         # custom-component internals), which is not this ruling's subject.
         def container_content_node?
           # A Collection lays out its cells, not `child`: it is a container
-          # (4f ruling 2026-09-27). Its frame fell to SwiftUI's `.center`, so
+          # (the orchestrator's ruling 2026-09-27). Its frame fell to SwiftUI's `.center`, so
           # a `lazy: none` column narrower than a matchParent Collection stood
           # in the middle, and a bounded one in the middle of its height too,
           # where the lazy route's cells start at the top leading corner.

@@ -22,7 +22,7 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
   end
 
   describe '.generate' do
-    # 4f ruling 2026-09-27, round 17: a Button's text is placed across it by
+    # The orchestrator's ruling 2026-09-27, round 17: a Button's text is placed across it by
     # textAlign, centre by default. The content Row of a Material Button
     # centres a wrap-width Text, so TextAlign.Start / End drew it in the
     # middle: the Text takes the button's width when the button has one of its
@@ -42,7 +42,7 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       expect(beside.scan('Modifier.fillMaxWidth()').size).to eq(1)
     end
 
-    # Round 18 (4f ruling 2026-09-27): with an icon, the icon and the text
+    # Round 18 (the orchestrator's ruling 2026-09-27): with an icon, the icon and the text
     # move together — the Row takes a button's own width and textAlign
     # arranges the pair, as iOS places the group.
     it "places an icon button's icon and text together by textAlign" do

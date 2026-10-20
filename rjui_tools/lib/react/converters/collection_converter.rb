@@ -62,7 +62,7 @@ module RjuiTools
           %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
         end
 
-        # A horizontal Collection (4f ruling, 2026-09-26; the rule sjui
+        # A horizontal Collection (the orchestrator's ruling, 2026-09-26; the rule sjui
         # codegen and SwiftJsonUI Dynamic dde0628 draw): `columns` is its
         # number of lanes, and a section's own `columns` is that section
         # block's lanes. A section has more than one lane when its own
@@ -589,7 +589,7 @@ module RjuiTools
           attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
         end
 
-        # A grid per section (4f round 9): with two or more sections that
+        # A grid per section (the orchestrator's round 9): with two or more sections that
         # draw cells, or a declared header or footer, each section is a grid
         # of its own in a column of blocks — its header a full-width row above
         # it, its footer below — so a section's cells start a row of their
@@ -628,7 +628,7 @@ module RjuiTools
           "#{indent_str(indent)}<div className=\"#{classes.join(' ')}\"#{style}>"
         end
 
-        # A flow per section (4f ruling, 2026-09-26): with two or more
+        # A flow per section (the orchestrator's ruling, 2026-09-26): with two or more
         # sections that draw cells, each section wraps in a block of its own,
         # one under the other — sjui's FlowLayout per section in a VStack,
         # kjui's FlowRow per section in a Column (the same count decides it
@@ -743,7 +743,7 @@ module RjuiTools
             if items_binding && (flow_per_section? || grid_per_section?)
               # Each section: its header, a row of its own above the block;
               # the block of its cells — a wrap on the flow, a grid on the
-              # grid; its footer below (4f ruling 2026-09-26, round 7; the
+              # grid; its footer below (the orchestrator's ruling 2026-09-26, round 7; the
               # grid round 9) — rows of the flex column, full width, spaced
               # as the lines. Until jsonui-cli 1.9.0 the header and footer
               # sat inside the wrap / grid, items on the cells' line.
@@ -761,7 +761,7 @@ module RjuiTools
               end
             elsif items_binding
               # A pager's pages are its cells, every drawn section in order
-              # (4f ruling 2026-09-26, round 6) — a section's header and footer
+              # (the orchestrator's ruling 2026-09-26, round 6) — a section's header and footer
               # are not pages, as sjui's TabView, kjui's HorizontalPager and
               # both Dynamic pagers draw. Until jsonui-cli 1.9.0 they were
               # children of the snap container here, each a page of its own
@@ -783,7 +783,7 @@ module RjuiTools
         # A section's header or footer: its view with the section's data, and
         # only when the section has that data — as sjui (`if let headerData =
         # section.header?.data`), kjui (`section.header?.let`) and both Dynamic
-        # renderers draw it (4f ruling 2026-09-26, round 8). Until jsonui-cli
+        # renderers draw it (the orchestrator's ruling 2026-09-26, round 8). Until jsonui-cli
         # 1.9.0 it was drawn with `{}` when the section had none, on every
         # route.
         def section_edge_line(section, kind, section_index, items_binding, indent)
@@ -869,7 +869,7 @@ module RjuiTools
 
         # A paging Collection's item address counts across the sections — a
         # page's place among all the pages, as sjui's page tag and kjui's
-        # pager index do (4f ruling 2026-09-26, round 7): the cells of the
+        # pager index do (the orchestrator's ruling 2026-09-26, round 7): the cells of the
         # drawn sections before this one, then its own index. Until
         # jsonui-cli 1.9.0 each section's items were `<id>_item_0…` again.
         # Every other route, and a pager's first drawn section, keep
@@ -903,12 +903,12 @@ module RjuiTools
         # The class-list shape — `cellClasses` (with `headerClasses` /
         # `footerClasses`), `items` and no `sections` — drawn as sjui codegen
         # draws it (the route table kjui codegen and both Dynamic renderers
-        # follow, 4f ruling 2026-09-26), from the data's own sections:
+        # follow, the orchestrator's ruling 2026-09-26), from the data's own sections:
         #
         #   vertical (list, grid, lazy:none)   every data section; header before, footer after
         #   horizontal, flow, paging           the first data section; no header / footer
         #
-        # (paging: a snap child per cell — 4f ruling 2026-09-26, round 6; it
+        # (paging: a snap child per cell — the orchestrator's ruling 2026-09-26, round 6; it
         # drew nothing until jsonui-cli 1.9.0)
         #
         # A header / footer is its view with no data. No `items`: no cell
@@ -933,7 +933,7 @@ module RjuiTools
           items_binding = extract_collection_binding(attributes['items'])
           # An items property declared as a list (`Array`, `[T]`) is one
           # section — the cells mapped over it, as this path has always drawn
-          # it (4f ruling, 2026-09-26, Collection.items: a CollectionDataSource
+          # it (the orchestrator's ruling, 2026-09-26, Collection.items: a CollectionDataSource
           # or an array). Its header, footer and cells are written as they
           # were, on every route.
           return legacy_array_content(indent, cell_view, header_view, footer_view, items_binding) if legacy_items_list_element

@@ -194,7 +194,7 @@ async def run_tag_click(pw, out, failures, jt=None):
 
         # a drag from empty space turns the camera and selects nothing
         # rid: the drag starts on that robot's tag, read again once the camera is at rest (the tag moves with the camera;
-        # dd's mutation N1, 10-20: the press read before the rest landed on the bare canvas, so no tag ever had it)
+        # The independent check's mutation N1, 10-20: the press read before the rest landed on the bare canvas, so no tag ever had it)
         async def drag(label, x, y, rid=None):
             await page.mouse.move(x, y)
             still = 1e9

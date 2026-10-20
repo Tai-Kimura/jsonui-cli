@@ -252,7 +252,7 @@ def test_settings_seed_reads_are_said_not_compared(tmp_path):
     assert _by_target(rep)["firebase/h"].status == "skipped"
 
 
-# ---------------------------------------------------------------- dd's verification (10-20): nothing dropped in silence
+# ---------------------------------------------------------------- the independent verification (10-20): nothing dropped in silence
 
 def test_an_iac_file_not_read_is_said_and_never_gates(tmp_path, monkeypatch):
     """D4: a CDK template over the read limit made its declared node "missing_in_impl" (exit 1 with gate) and said
@@ -324,7 +324,7 @@ def test_code_is_read_through_the_shared_hints_and_other_languages_are_said(tmp_
 
 
 
-# ---------------------------------------------------------------- dd's re-verification (10-20)
+# ---------------------------------------------------------------- the independent re-verification (10-20)
 
 def test_a_big_iac_file_named_like_anything_is_said_by_its_head(tmp_path, monkeypatch):
     """N3 (a): stack.yaml over the limit: no name says it is CloudFormation; its head does."""
@@ -381,7 +381,7 @@ def test_every_field_of_the_report_is_masked(tmp_path):
 
 
 
-# ---------------------------------------------------------------- dd's third verification (10-20)
+# ---------------------------------------------------------------- the independent third verification (10-20)
 
 @pytest.mark.parametrize("rel, text, provider, node", [
     ("k8s/big.yaml", "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n", "kubernetes",
@@ -458,7 +458,7 @@ def test_a_provider_whose_files_were_not_read_is_not_said_to_have_none(tmp_path)
     assert any("not parsed" in w for w in un) and not any("no IaC found" in w for w in un)
 
 
-# ---------------------------------------------------------------- dd's fourth verification (2026-10-20 14:42)
+# ---------------------------------------------------------------- the independent fourth verification (2026-10-20 14:42)
 
 
 def test_a_wrangler_jsonc_as_npm_create_cloudflare_writes_it_is_read(tmp_path):
@@ -548,7 +548,7 @@ def test_a_big_template_with_a_bom_is_known_by_its_head(tmp_path, monkeypatch):
 
 
 def test_jsonc_keeps_an_escaped_quote_and_a_trailing_backslash_inside_a_string():
-    """dd's fifth verification X1: a \\" inside a string does not end it, so a // or ,} after it is still text; a
+    """The independent fifth verification X1: a \\" inside a string does not end it, so a // or ,} after it is still text; a
     string ending in an escaped backslash ends at its quote. A comment between the last "," and the close is skipped
     when deciding that the "," is the last."""
     from jsonui_doc_cli.infra import iac_tables as T

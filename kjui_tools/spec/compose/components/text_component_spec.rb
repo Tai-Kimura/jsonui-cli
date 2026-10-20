@@ -226,7 +226,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       expect(result).to include('.wrapContentHeight(align = Alignment.CenterVertically)')
     end
 
-    # Round 17 (4f ruling 2026-09-27): the text sits in its frame by its
+    # Round 17 (the orchestrator's ruling 2026-09-27): the text sits in its frame by its
     # gravity INSIDE the background and the padding — the last size step of
     # the chain — so the background fills the frame (a minHeight chip's was
     # only as tall as its text) and a numeric height centres too (its text

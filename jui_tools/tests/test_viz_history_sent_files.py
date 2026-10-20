@@ -172,7 +172,7 @@ def test_the_route_gives_a_sent_picture_to_the_page_and_says_gone_without_an_err
 
 
 def test_a_folder_or_a_fifo_named_png_and_a_riff_that_is_no_webp_are_refused(tmp_path):
-    """dd's U1 and U2 (10-20): a path named like a picture that is a folder or a FIFO is no file to read (403, never an
+    """The independent check's U1 and U2 (10-20): a path named like a picture that is a folder or a FIFO is no file to read (403, never an
     exception or a read that waits); a RIFF whose type is not WEBP (a WAVE named .webp) is no picture (415)."""
     d = tmp_path / "odd"
     d.mkdir()

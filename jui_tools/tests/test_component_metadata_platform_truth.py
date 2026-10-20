@@ -188,7 +188,7 @@ def rjui_supports(component: str, table: dict[str, str]) -> bool:
 
 # Either spelling of the arms: lowercased (`switch type.lowercased()`), or as
 # the SSoT writes the types — the dispatch matches type names as written
-# since 4f's ruling (jsonui-cli 1.9.0), and a lowercase-only pattern read an
+# since the orchestrator's ruling (jsonui-cli 1.9.0), and a lowercase-only pattern read an
 # as-written dispatch as no arm at all (ParserSanity's floor caught it).
 _SWIFT_CASE = re.compile(r'^\s*case ((?:"[A-Za-z0-9]+",\s*)*"[A-Za-z0-9]+"):\s*$')
 # Leaf arms call FooConverter.convert(...); container arms construct a

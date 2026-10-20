@@ -108,7 +108,7 @@ async def run_server_room(pw, out, failures):
         "large": _write(work, ex, "large-multi-provider", "sr-large"),
         "icons": _write(work, ex, "compose-and-cloud", "sr-icons"),
     }
-    # a room with no infra folder: no door (E13, dd's verification); six rooms stay one floor
+    # a room with no infra folder: no door (E13, the independent verification); six rooms stay one floor
     (work / "sr-none" / ".git").mkdir(parents=True, exist_ok=True)
     rooms["none"] = work / "sr-none"
     # the icons room: a category icon too for the node the service icon names, so the stronger key must win (E5)
@@ -223,7 +223,7 @@ async def run_server_room(pw, out, failures):
         s = res["opened"] = await page.evaluate(SR)
         check(failures, s["bubble"] is None and (s["shown"] or {}).get("nodes", 0) > 0 and s["stats"]["edges"] > 0, f"open: the model drawn, the bubble gone: {s['shown']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"open up close: the floors and shapes, not the far boxes over them: {s['lod']} {s['layers']}")
-        # the theme changing while it is open (D3) follows; dark is a dark ground with floors and labels that read (2.3.10 item 2)
+        # the theme changing while it is open (D3) follows; dark is a dark ground with floors and labels that read (2.3.9, item 2)
         res["theme"] = {}
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
@@ -337,7 +337,7 @@ async def run_server_room(pw, out, failures):
         await until(page, "() => !window.__dbg.sr().open", "back (instant reply)")
         await page.unroute("**/api/infra-docs", instant)
 
-        # 3c. a robot in front of the door (D2, dd's verification): the press still takes the door, as the bell's and the rack's
+        # 3c. a robot in front of the door (D2, the independent verification): the press still takes the door, as the bell's and the rack's
         placed = await page.evaluate("() => window.__dbg.srRobotBeforeDoor()")
         rid = placed and placed["id"]
         await page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
@@ -377,10 +377,10 @@ async def run_server_room(pw, out, failures):
                 check(failures, rect and rect[0] >= 0 and rect[1] >= 0 and rect[2] <= vw, f"the error bubble stays on the page: {rect} (width {vw})")
                 await page.screenshot(path=str(out / "failed-light.png"))
 
-        # 4b. away from the room after a failure: the bubble goes at once (D1, dd's verification; read from the page, not the
+        # 4b. away from the room after a failure: the bubble goes at once (D1, the independent verification; read from the page, not the
         # e2e hook). Staying: it goes after SR.failMs (9 s, E4)
         bubble_dom = "() => { const b = document.getElementById('sr-bubble'); return b.hidden ? null : b.querySelector('.sr-short').textContent; }"
-        # → to the next room (dd's re-verification X1: the floor was the only way out an arm took)
+        # → to the next room (the independent re-verification X1: the floor was the only way out an arm took)
         res["stepAfterFail"] = {"before": await page.evaluate(bubble_dom)}
         await page.keyboard.press("ArrowRight")
         await until(page, f"() => !!window.__dbg.solo() && window.__dbg.solo() !== '{pid['bad']}'", "the next room with →")
@@ -415,7 +415,7 @@ async def run_server_room(pw, out, failures):
         check(failures, s["shown"]["cross"] > 0 and s["cross"]["dashed"] and s["cross"]["drawn"] == s["shown"]["cross"],
               f"provider-crossing cables drawn apart, dashed: {s['shown']} {s['cross']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"multi up close: no far box over the floors: {s['lod']} {s['layers']}")
-        # fewer lines (2.3.10 item 1): faint by default; a chosen node's cables strong; the switch hides the rest
+        # fewer lines (2.3.9, item 1): faint by default; a chosen node's cables strong; the switch hides the rest
         ln = {"default": await page.evaluate("() => window.__dbg.srLines()")}
         node = await page.evaluate("() => { const ids = window.__dbg.srNodeEnvs().map((x) => x[0]); return ids.sort((a, b) => window.__dbg.srEdgesOf(b) - window.__dbg.srEdgesOf(a))[0]; }")
         want = await page.evaluate("(id) => window.__dbg.srEdgesOf(id)", node)
@@ -430,11 +430,11 @@ async def run_server_room(pw, out, failures):
         await page.select_option("#sr-lines", "all")
         await page.evaluate("() => window.__dbg.srSelect(null)")
         res["lines"] = ln
-        # filter by cloud (2.3.10 item 3): the legend's clouds toggle; only their nodes, no empty floor, 全部 back
+        # filter by cloud (2.3.9, item 3): the legend's clouds toggle; only their nodes, no empty floor, 全部 back
         pv = {"all": await page.evaluate("() => window.__dbg.srProviders()")}
         prov_all = {i: p for i, p in pv["all"]["drawn"]}
         gcp_node = next(i for i, p in pv["all"]["drawn"] if p == "gcp")
-        await page.evaluate("(id) => window.__dbg.srSelect(id)", gcp_node)   # chosen, then filtered out (dd's verification 4)
+        await page.evaluate("(id) => window.__dbg.srSelect(id)", gcp_node)   # chosen, then filtered out (the independent verification 4)
         await page.click("#sr-board [data-sr-prov='aws']")
         await until(page, "() => window.__dbg.srProviders().only.join() === 'aws'", "only aws")
         pv["aws"] = await page.evaluate("() => window.__dbg.srProviders()")
@@ -465,7 +465,7 @@ async def run_server_room(pw, out, failures):
               and all({prov_of.get(a_), prov_of.get(b_)} <= {"cloudflare", "gcp"} for a_, b_ in pv["cfGcp"]["cross"]),
               f"two clouds chosen: both, and every crossing between them: {f['cfGcp']} (want {len(want_cross)})")
         check(failures, f["back"]["nodes"] == f["all"]["nodes"] and f["back"]["groups"] == f["all"]["groups"], f"全部 brings every node back: {f['back']} vs {f['all']}")
-        # the lines switch holds through a rebuild (X3), and the far view's bundles follow it, faint (dd's verification 5)
+        # the lines switch holds through a rebuild (X3), and the far view's bundles follow it, faint (the independent verification 5)
         await page.select_option("#sr-lines", "cross")
         await page.check("#sr-fold")
         await until(page, "() => window.__dbg.srLines() && window.__dbg.srLines().mode === 'cross'", "rebuilt with crossing lines only")
@@ -475,7 +475,7 @@ async def run_server_room(pw, out, failures):
         res["linesFar"] = (await page.evaluate("() => window.__dbg.srLines()"))["far"]
         await page.select_option("#sr-lines", "all")
         res["linesFarAll"] = (await page.evaluate("() => window.__dbg.srLines()"))["far"]
-        # the chosen node's lines only: far, the crossing bundles go too (Z2, dd's check 20:30:51) — on a layer that
+        # the chosen node's lines only: far, the crossing bundles go too (Z2, the independent check 20:30:51) — on a layer that
         # draws at least one, so that "not seen" is not an empty layer's
         await page.select_option("#sr-lines", "focus")
         await until(page, "() => window.__dbg.srLines().mode === 'focus'", "far, the chosen node's lines only")

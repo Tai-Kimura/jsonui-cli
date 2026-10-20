@@ -135,13 +135,13 @@ def _settled_act(act: str, failed: bool) -> str:
         return "質問に回答なし" if failed else "質問の回答を受けた"
     return act
 
-#: The data server's counts (2.3.5) are never taken on the event loop (dd's review, 10-19: counted for each watcher
+#: The data server's counts (2.3.5) are never taken on the event loop (the independent review, 10-19: counted for each watcher
 #: event, 200 files rewritten held /health for 8.8 s): a change marks the room, tick hands the marked rooms to one
 #: worker thread once DATA_DOCS_QUIET_MS have passed without a new change, and applies what it found on a later tick.
 #: Every DATA_DOCS_EVERY_MS every room is marked (the watcher misses a docs/api or docs/db moved whole).
 DATA_DOCS_EVERY_MS = 5_000
 DATA_DOCS_QUIET_MS = 500
-#: The server room's door (2.3.6+, infra_docs.py): every room's model files are counted (a listing, nothing opened)
+#: The server room's door (2.3.9+, infra_docs.py): every room's model files are counted (a listing, nothing opened)
 #: this often, in a worker thread of their own; the model itself is read only when the door is pressed.
 INFRA_EVERY_MS = 5_000
 
@@ -966,7 +966,7 @@ class World:
         if session.pop("background", None) is None:
             return
         self._dirty.add("sessions")
-        # the turn that was waiting on the work is done with it (the card and the lamp agree; 4d's review, 10-18)
+        # the turn that was waiting on the work is done with it (the card and the lamp agree; the independent review, 10-18)
         self.tasks.turn_ended(session["id"], at, background=False, failed=False)
         self._dirty.add("tasks")
         agent = self.agents.get(session["id"])
@@ -1035,7 +1035,7 @@ class World:
         """The argv of a session's process, read once and kept while (pid, procStart) is the same. A read that failed is
         not kept: it is tried again at a later publish or send, ARGV_RETRY_FIRST s after, the wait doubling up to
         ARGV_RETRY_MAX s (never every frame). Once a failure was kept, and the session stayed "unreadable" — prompts
-        refused — until viz restarted (dd's review, 10-19)."""
+        refused — until viz restarted (the independent review, 10-19)."""
         if proc[2] in launch.IDE_ENTRYPOINTS:
             return None                      # told by its entrypoint; nothing to read
         if proc in self._argv:

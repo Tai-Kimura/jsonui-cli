@@ -14,7 +14,7 @@ require 'core/layout_path'
 # stamp. rjui does not expand an include — it calls the included layout's own
 # component — so the part of the path above the include comes in at run time:
 # a layout that takes it (React::IncludePaths) receives `jsonuiPath`, and the
-# include site hands it the include node's path. 4f's ruling (1.9.0): the web
+# include site hands it the include node's path. The orchestrator's ruling (1.9.0): the web
 # value must equal what sjui and kjui stamp.
 #
 # Each project below is built by a copied rjui (the tool is COPIED, links

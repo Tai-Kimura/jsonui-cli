@@ -7,7 +7,7 @@ require_relative '../support/kotlin_compiler'
 require 'json'
 
 # A node whose type the tool cannot draw is named by its type, in one sentence
-# (4f's ruling, jsonui-cli 1.9.0): the shared validator (4 byte-identical
+# (the orchestrator's ruling, jsonui-cli 1.9.0): the shared validator (4 byte-identical
 # copies), the kjui / sjui / rjui codegen where they draw nothing, and
 # KotlinJsonUI Dynamic (its own constant, held to this text by its arm). Type
 # names are matched as written. The types a tool draws are the SSoT's
@@ -64,7 +64,7 @@ RSpec.describe 'unknown component type' do
   end
 
   # The candidate comes from TypeSynonyms.case_only_match, the one search
-  # every caller asks (4f's ruling: the validator had a search of its own).
+  # every caller asks (the orchestrator's ruling: the validator had a search of its own).
   # Byte for byte the sentence its own search made, over what it is asked:
   # spellings the validator does not know — each known type in four cases,
   # and the vectors'. The app's types are in `known` in a build (the
@@ -174,7 +174,7 @@ RSpec.describe 'unknown component type' do
 
   # A type the validator knows — here by the project's extension definitions
   # — that no case draws: its own sentence, and a View with its children in
-  # it, as sjui and rjui draw it (4f's ruling, jsonui-cli 1.9.0).
+  # it, as sjui and rjui draw it (the orchestrator's ruling, jsonui-cli 1.9.0).
   it 'names a type the project declares but no component draws in its own sentence, and draws it as a View' do
     allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
     said = []

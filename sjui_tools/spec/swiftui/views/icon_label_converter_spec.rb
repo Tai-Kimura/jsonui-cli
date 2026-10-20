@@ -96,7 +96,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::IconLabelConverter do
       end
 
       # IconLabel.iconPosition declares Left / Right / Top / Bottom: a value
-      # is its declared spelling (4f's ruling, 1.9.0) — 'right' is declared
+      # is its declared spelling (the orchestrator's ruling, 1.9.0) — 'right' is declared
       # in no case and falls to the default, as an unknown value does.
       it 'takes the declared spelling only: a lowercase right is the default' do
         component = { 'type' => 'IconLabel', 'text' => 'Test', 'iconPosition' => 'right' }

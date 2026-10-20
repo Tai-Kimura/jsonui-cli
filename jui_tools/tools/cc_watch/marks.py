@@ -58,7 +58,7 @@ PATH_MARKS: dict[str, str] = {"plugin-path": r"(^|/)\.claude-plugin/"}
 EXCLUDE = re.compile(r"(^|/)(tests?|spec|specs|fixtures)/|^jui_tools/tools/viz_e2e/|^dev-guide/|\.md$|^conformance/")
 
 #: The areas that face the CLI directly. Default-deny: every tracked file here is either in a ledger entry or in
-#: ledger.json's not_relying with a reason, whatever the marks say (the marks are a net and miss shapes; 10-19 dd
+#: ledger.json's not_relying with a reason, whatever the marks say (the marks are a net and miss shapes; 10-19 the independent check
 #: found seven files they missed). viz (server, sources, page), the jui-viz plugin, the marketplace manifest, the
 #: `jui viz` command, and this watch. viz_e2e is the browser-test harness (tests only), so it is not an area.
 FACING = re.compile(r"^(?:jui_tools/jui_cli/viz/|plugins/jui-viz/|\.claude-plugin/|jui_tools/tools/cc_watch/"
@@ -83,7 +83,7 @@ SPECIMENS: dict[str, tuple[str, str]] = {
     "hook-output": ("tool/l.py", "print(json.dumps({'hookSpecificOutput': out}))\n"),
 }
 
-#: Realistic one-line shapes of relying on the CLI (dd's survey of 10-19, and the ones found while widening): each
+#: Realistic one-line shapes of relying on the CLI (the independent check's survey of 10-19, and the ones found while widening): each
 #: must hit some mark, so a narrowed regex that drops one turns the gate test red.
 SURVEY: list[str] = [
     'SESSIONS = Path.home() / ".claude" / "sessions"',

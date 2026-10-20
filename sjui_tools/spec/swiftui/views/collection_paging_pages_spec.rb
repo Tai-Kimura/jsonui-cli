@@ -4,7 +4,7 @@ require 'open3'
 require 'tempfile'
 require 'swiftui/views/collection_converter'
 
-# A paging Collection's pages (4f ruling, 2026-09-26, round 6): one page per
+# A paging Collection's pages (the orchestrator's ruling, 2026-09-26, round 6): one page per
 # cell, every drawn section's cells in order — what SwiftJsonUI Dynamic, rjui
 # and KotlinJsonUI Dynamic draw. A page's tag is its place among ALL the
 # pages, so a bound `currentPage` (TabView(selection:)) names exactly one

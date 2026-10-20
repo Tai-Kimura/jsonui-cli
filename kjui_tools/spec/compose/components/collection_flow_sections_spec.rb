@@ -162,7 +162,7 @@ RSpec.describe 'kjui codegen: a flow per section' do
     end
     expect(lines['oneSection']).to eq('A0A1A2'), lines.inspect
     # The header a line of its own above the section's region, the footer
-    # below (4f ruling 2026-09-26, round 7; the flow drew neither) — each in a
+    # below (the orchestrator's ruling 2026-09-26, round 7; the flow drew neither) — each in a
     # full-width row, the view at its own size.
     %w[edges edgesLazyNone edgesTracked].each { |route| expect(lines[route]).to eq('H|A0A1A2|F|B0B1'), lines.inspect }
     expect(lines['edgesOneSection']).to eq('H|A0A1A2'), lines.inspect

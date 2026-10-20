@@ -2,7 +2,7 @@
 
 require 'core/type_synonyms'
 
-# Type names are their SSoT spellings, case-sensitive (4f's ruling, 1.9.0).
+# Type names are their SSoT spellings, case-sensitive (the orchestrator's ruling, 1.9.0).
 # JsonUIShared::TypeSynonyms.case_only_match is where what names an unknown
 # type finds the spelling it offers ("did you mean"): the one that matches
 # only when case is ignored — among the types the caller draws, the table's

@@ -2,7 +2,7 @@
 
 require 'swiftui/views/collection_converter'
 
-# A horizontal Collection's lanes and spacing (4f ruling, 2026-09-26; the rule
+# A horizontal Collection's lanes and spacing (the orchestrator's ruling, 2026-09-26; the rule
 # SwiftJsonUI Dynamic dde0628 draws, word for word):
 # - Lanes: a section has more than one lane when its own `columns`, else the
 #   Collection's, is above 1. A bound `columns` keeps the grid even at 1 lane;

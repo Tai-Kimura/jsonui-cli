@@ -379,7 +379,7 @@ class ScreenResult:
     measured_statuses: set = field(default_factory=set)
     #: (method, op, status) the run holds but could not evaluate — a row that
     #: does not bind, or whose `@response` path the body lacks. A baselined
-    #: key under one is hidden, not vanished (ee review 4 (a)).
+    #: key under one is hidden, not vanished (review 4 (a)).
     unevaluated: set = field(default_factory=set)
     notes: list = field(default_factory=list)
     http_endpoints: int = 0
@@ -1150,7 +1150,7 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
     # Only what this run was asked about is compared: an entry for a platform
     # `--platform` did not name, or a screen `--screen` did not, is neither
     # matched nor stale here. A platform the config no longer declares is
-    # not narrowed away — its entries vanish (ee review 4 (b)): dropping a
+    # not narrowed away — its entries vanish (review 4 (b)): dropping a
     # platform is no way out of its debt.
     if recorded is not None:
         recorded = [e for e in recorded if (not platforms or e.get("platform") in chosen)
@@ -1365,7 +1365,7 @@ def to_json(report: CoverageReport) -> dict:
 #: の版は N を切るときに決めて文に書く"). Deliberately no default: one derived
 #: from the running version agrees with itself on every build, so the notice
 #: would pass red-check xxxi whatever it said, and a gate switched on by
-#: "running >= derived" would never switch on (ee, 2026-09-25). Unset, the
+#: "running >= derived" would never switch on (2026-09-25). Unset, the
 #: section says the version is not declared instead of announcing one. The
 #: tag gate (dev-guide/release/check-tag.sh) holds it to the release: the
 #: next patch when announcing, at or below the tag once gating.
@@ -1384,7 +1384,7 @@ def version_key(version: str) -> tuple:
     gates = _gates()
     return gates.version_key(version) if gates else ()
 
-#: ee's text (design v4.17 §6.1 P3c — the notice names the baseline: without
+#: The review's text (design v4.17 §6.1 P3c — the notice names the baseline: without
 #: it "fails unless coverage exits 0" would no longer be true; v4.21: the first
 #: recording needs --initial, and says whose decision it is).
 VALIDATE_NOTICE = (

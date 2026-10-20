@@ -10,7 +10,7 @@ require 'cli/commands/build_command'
 require_relative '../support/typescript_compiler'
 require_relative '../support/headless_chromium'
 
-# What a Collection's `scrollTo` names across sections (4f ruling 2026-09-27;
+# What a Collection's `scrollTo` names across sections (the orchestrator's ruling 2026-09-27;
 # the SSoT's Collection.scrollTo description, jsonui-cli 1.9.0):
 # - a number is the index of a CELL counted across all the drawn sections in
 #   order — a section's header or footer is not counted (the same n as the

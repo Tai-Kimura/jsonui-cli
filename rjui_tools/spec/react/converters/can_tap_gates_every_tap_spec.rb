@@ -48,7 +48,7 @@ RSpec.describe 'rjui: canTap gates every spelling of the tap' do
     end
   end
 
-  # Each handler is called as the layout's data declares it (4f's ruling,
+  # Each handler is called as the layout's data declares it (the orchestrator's ruling,
   # jsonui-cli 1.9.0 — tap_calls_as_declared_spec); none is declared here, so
   # each is called with nothing, and the gated click takes no event.
   it 'taps while a bound canTap holds' do

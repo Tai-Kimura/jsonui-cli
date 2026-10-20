@@ -116,7 +116,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
-  # No `items`: nothing drawn (4f ruling 2026-09-26, round 6). Until
+  # No `items`: nothing drawn (the orchestrator's ruling 2026-09-26, round 6). Until
   # jsonui-cli 1.9.0 this pinned an empty grid with each section's header and
   # footer drawn with no data around it.
   describe 'sections without an items binding' do

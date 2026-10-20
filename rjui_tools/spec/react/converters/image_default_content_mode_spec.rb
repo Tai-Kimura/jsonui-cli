@@ -9,7 +9,7 @@ require 'react/converters/network_image_converter'
 # declared once, in shared/core/attribute_semantics.json
 # (`semantics.image.defaultContentMode`, the 2026-08-03 user ruling), and
 # every path's no-contentMode drawing is bound to it here: the value is read
-# from the file, so a changed ruling moves the expectation (4f ruling,
+# from the file, so a changed ruling moves the expectation (the orchestrator's ruling,
 # 2026-09-26; ticket image-content-mode-default-differs-by-path).
 RSpec.describe 'rjui codegen: an image with no contentMode' do
   shared_core = File.expand_path('../../../../shared/core', __dir__)

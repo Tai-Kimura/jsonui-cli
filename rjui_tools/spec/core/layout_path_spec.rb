@@ -5,7 +5,7 @@ require 'core/layout_path'
 
 # A node's position and the viewId its handlers are handed
 # (JsonUIShared::LayoutPath, byte-identical to shared/core/layout_path.rb):
-# its id, else `<drawn type, first letter lowercased>_<path>` — 4f's ruling
+# its id, else `<drawn type, first letter lowercased>_<path>` — the orchestrator's ruling
 # on sjui-codegen-state-declarations-collide-by-name (1.9.0). The table is the
 # shared one, shared/core/layout_path_vectors.json, which the sjui and kjui
 # codegen and both Dynamic runtimes run too.

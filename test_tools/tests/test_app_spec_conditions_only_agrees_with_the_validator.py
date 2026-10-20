@@ -1,6 +1,6 @@
 """Coverage and the generator give the validator's answer on conditions-only app specs.
 
-ee, design v4.16: with apiOutcomeRules, unitContracts is required; without,
+design v4.16: with apiOutcomeRules, unitContracts is required; without,
 at least one of unitContracts / harnessConditions. The validator states the
 rule (document_tools); the P1 parser that coverage and the generator read with
 has no requirement of its own to agree or disagree — a rule's `verifiedBy`

@@ -10,7 +10,7 @@ node), and the address a node's ``iac`` holds for each kind of input.
 A mapping is (category, service); a category "group:<kind>" makes a group (a network, a cluster), not a node. The
 categories IAM, policy and alarm (model.FOLDED_BY_DEFAULT) are mapped, not dropped: seed draws them folded, and check
 compares them when the model declares them and says nothing when it does not (``optional``). Tables first written by
-the seed lane (dd's subagent), moved here by b8.
+the seed lane (a verification subagent), moved here.
 """
 from __future__ import annotations
 
@@ -350,7 +350,7 @@ def compose_address(rel: str, service: str) -> str:
 
 
 # ---------------------------------------------------------------- which file is what (one copy: seed and check)
-# dd's fourth verification R3 and (C)'s request: check and seed told IaC files apart each their own way (check read
+# The independent fourth verification R3 and (C)'s request: check and seed told IaC files apart each their own way (check read
 # .tofu, k8s JSON, a CFN JSON not named template, "Resources:   # a note"; seed did not), so a draft from seed was
 # warned about by check. What decides whether a file is IaC, of which kind and whose, lives here. (Which files hold
 # values and are never opened — tfstate, .env, Pulumi stack and Helm values — is seed's own rule: check never opens
@@ -420,7 +420,7 @@ def parse_jsonc(text: str):
     """wrangler.jsonc as `npm create cloudflare` writes it: JSON with // and /* */ comments and a "," after the last
     item. Strings are kept whole (a "//" or ",}" inside one is text); comments and a trailing "," are dropped; then
     json.loads. Raises ValueError when it is still not JSON (an unclosed string or comment included). One copy for
-    seed (drafting) and check (comparing): dd's fourth verification R1 found check reading only whole-line "//"."""
+    seed (drafting) and check (comparing): The independent fourth verification R1 found check reading only whole-line "//"."""
     import json
     out, i, n = [], 0, len(text)
     while i < n:

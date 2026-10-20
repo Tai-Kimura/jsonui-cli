@@ -114,7 +114,7 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
   # (kjui codegen and both Dynamic renderers follow the same table): every
   # data section on the vertical routes, the first on horizontal, flow and
   # paging (a snap child per cell; paging drew nothing until jsonui-cli 1.9.0 —
-  # 4f ruling 2026-09-26, round 6); the header and footer, with no data, on
+  # The orchestrator's ruling 2026-09-26, round 6); the header and footer, with no data, on
   # the vertical routes only. The cells mapped `items` itself — `data.rows?.map` — which
   # a CollectionDataSource does not have (tsc TS2339, measured on 798f6e64,
   # 2026-09-26); the header and footer were drawn on every route. The file
@@ -146,7 +146,7 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
     end
   end
 
-  # Collection.items is a CollectionDataSource or an array (4f ruling,
+  # Collection.items is a CollectionDataSource or an array (the orchestrator's ruling,
   # 2026-09-26). A class-list Collection whose items property is DECLARED a
   # list (`Array`, `[T]`) is one section: every item with cellClasses[0], the
   # header before and the footer after, on every route — what this path wrote
@@ -256,7 +256,7 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
   it 'draws a Collection from `items` only: `bind` is not its data source' do
     bound = generate([{ 'type' => 'Collection', 'id' => 'list', 'cellClasses' => ['row_cell'], 'bind' => '@{rows}' }])
     expect(bound).not_to include('data.rows')
-    # No items: no cell (4f ruling 2026-09-26, round 5); until jsonui-cli
+    # No items: no cell (the orchestrator's ruling 2026-09-26, round 5); until jsonui-cli
     # 1.9.0 this drew `<RowCell />`, a cell with no data.
     expect(bound).not_to include('<RowCell')
   end

@@ -233,7 +233,7 @@ async def run_weather(pw, out, failures):
 
 
 async def run_weather_few(pw, out, failures):
-    """Fewer than seven rooms: no building view, so the switch is the side panel's 設定 (cd's ruling, 10-18). It turns
+    """Fewer than seven rooms: no building view, so the switch is the side panel's 設定 (the orchestrator's ruling, 10-18). It turns
     the weather on, the position is asked only inside that click, and the state shows: when it was last read, and
     why it failed (the stand-in answers 500 after an off and on)."""
     from run import free_port

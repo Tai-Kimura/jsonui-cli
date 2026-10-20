@@ -449,7 +449,7 @@ RSpec.describe KjuiTools::Compose::Components::ContainerComponent do
 
     # A matchParent flow is a BoxWithConstraints (a SubcomposeLayout): an
     # IntrinsicSize.Min Row around it threw "Asking for intrinsic measurements
-    # of SubcomposeLayout layouts is not supported" on the device (4f round
+    # of SubcomposeLayout layouts is not supported" on the device (the orchestrator's round
     # 13). A flow of a numeric height is a FlowRow and keeps the Row's
     # intrinsic height.
     it 'skips IntrinsicSize.Min on Row when a descendant flow Collection takes the BoxWithConstraints arm' do

@@ -6,7 +6,7 @@ require 'swiftui/converter_factory'
 require_relative '../../support/emitted_swift'
 
 # A Button's text is placed across it by textAlign alone, default centre (the
-# SSoT's Button.textAlign, 4f ruling 2026-09-27); its gravity positions its
+# SSoT's Button.textAlign, the orchestrator's ruling 2026-09-27); its gravity positions its
 # content vertically only. StateAwareButtonView(textAlignment:) (SwiftJsonUI
 # 10.29.0) places the label in the button's frame; the environment
 # `.multilineTextAlignment` sjui already emitted aligns only the lines of a

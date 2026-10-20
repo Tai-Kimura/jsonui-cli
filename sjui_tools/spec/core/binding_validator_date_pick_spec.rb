@@ -4,7 +4,7 @@ require 'core/binding_validator'
 
 # A date SelectBox has no index: an onValueChange declared to take one —
 # `(Int)`, `(String, Int)` — is not called on any path, and the build says so
-# (BindingValidatorCore.date_pick_handler_problem; 4f's ruling on
+# (BindingValidatorCore.date_pick_handler_problem; the orchestrator's ruling on
 # control-onclick-is-called-differently-on-every-path, 1.9.0). The shared
 # core is the same bytes in sjui, kjui and rjui. sjui writes an `// ERROR:`
 # comment where the call would be (selectbox_on_value_change_arity_spec).

@@ -5,7 +5,7 @@ require 'core/attribute_validator'
 # A layout written inline where the declaration takes a layout's name — a
 # tab's `child` (a tab names its layout with `view`), a section's header /
 # cell / footer as a node — is declared nowhere and drawn by no path (sjui,
-# kjui, rjui, both Dynamic runtimes read names; 4f's ruling, 1.9.0). The
+# kjui, rjui, both Dynamic runtimes read names; the orchestrator's ruling, 1.9.0). The
 # shared validator names it once, in one sentence. sjui's build going on
 # without an inline cell: collection_converter_spec (extract_view_name).
 RSpec.describe 'an inline layout: named, not drawn' do

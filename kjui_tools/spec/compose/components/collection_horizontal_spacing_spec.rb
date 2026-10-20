@@ -4,7 +4,7 @@ require 'set'
 require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../support/kotlin_compiler'
 
-# Spacing on every horizontal Collection, one lane or many (4f ruling,
+# Spacing on every horizontal Collection, one lane or many (the orchestrator's ruling,
 # 2026-09-26; the rule SwiftJsonUI Dynamic dde0628 and sjui codegen draw):
 # along the scroll axis lineSpacing (its alias sectionSpacing), else
 # itemSpacing, else 0; between lanes columnSpacing, else itemSpacing, else 0.

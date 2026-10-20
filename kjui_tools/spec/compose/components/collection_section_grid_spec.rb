@@ -228,7 +228,7 @@ end
 
 # A section's header / cell / footer names its layout (attribute_definitions
 # Collection.sections: strings). A node written inline there is declared
-# nowhere and drawn by no path (4f's ruling, 1.9.0); the shared validator
+# nowhere and drawn by no path (the orchestrator's ruling, 1.9.0); the shared validator
 # names it (inline_layout?). kjui's build raised on it — the Hash reached
 # `.split` — and stopped; the section entry is set aside now, and a cell
 # named by its layout is drawn as before.

@@ -221,7 +221,7 @@ def test_no_token_or_a_wrong_one_is_refused(viz):
 def test_an_origin_that_is_not_the_page_is_refused(viz):
     for origin in ("http://evil.example", f"http://localhost:{viz.port}", f"http://127.0.0.1:{viz.port + 1}",
                    f"https://127.0.0.1:{viz.port}", "null", None,
-                   # shapes that start with the page's origin: equal, not a prefix (dd's attack script, 10-19)
+                   # shapes that start with the page's origin: equal, not a prefix (the independent check's attack script, 10-19)
                    f"http://127.0.0.1:{viz.port}/", f"http://127.0.0.1:{viz.port}1", f"http://127.0.0.1:{viz.port}.evil.example",
                    f"HTTP://127.0.0.1:{viz.port}"):
         assert viz.prompt(Origin=origin)[0] == 403, origin
@@ -577,7 +577,7 @@ def test_the_launch_is_told_from_the_command_line_alone():
 
 
 def test_a_failed_read_of_the_argv_is_tried_again_and_a_good_one_kept():
-    """dd's repro (10-19): a reader that fails once and then reads. The failure is not kept — the session was
+    """The independent check's repro (10-19): a reader that fails once and then reads. The failure is not kept — the session was
     "unreadable" (prompts refused) until viz restarted — the next read comes after a wait (never every frame), and the
     argv read is kept for the process."""
     world = World(VizState())

@@ -6,7 +6,7 @@ require 'react/converters/label_converter'
 
 # The lines of a multi-line or wrapped Label follow the Label rule across:
 # textAlign, else the horizontal part of gravity (center / centerHorizontal,
-# right, left), else the start (the SSoT's Label.textAlign, 4f round 6,
+# right, left), else the start (the SSoT's Label.textAlign, the orchestrator's round 6,
 # jsonui-cli 1.9.0). The flex `justify-*` of a single-run label places its
 # text's box; a wrapped text fills the row, and only text-align places its
 # lines — so gravity also gives `text-center` / `text-right` / `text-left`

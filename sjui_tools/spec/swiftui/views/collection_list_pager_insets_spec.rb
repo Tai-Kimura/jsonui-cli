@@ -5,7 +5,7 @@ require_relative '../../support/emitted_swift'
 
 # A Collection's insets are padding around the cells, inside its scroll (the
 # SSoT's Collection.insets) — on the List routes and the pager too, from
-# jsonui-cli 1.9.0 (4f round 6). A List pads its rows with safe-area padding
+# jsonui-cli 1.9.0 (the orchestrator's round 6). A List pads its rows with safe-area padding
 # on the List, which stays the Collection's size, on top of its own row insets;
 # a pager pads the cell on every page (a page is the pager's size). With
 # insetHorizontal / insetVertical added, per edge. Until jsonui-cli 1.9.0

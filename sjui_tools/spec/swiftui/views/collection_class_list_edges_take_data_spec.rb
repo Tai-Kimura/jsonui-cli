@@ -7,7 +7,7 @@ require 'swiftui/generators/collection_generator'
 # are cell views — `sjui g collection` writes them, and their one initializer
 # is `init(data: Any)`. They are drawn once, with no data of their own, and
 # called as every cell and section header is: `View(data: [String: Any]())`
-# (4f round 9). Until jsonui-cli 1.9.0 they were called `View()`, which does
+# (the orchestrator's round 9). Until jsonui-cli 1.9.0 they were called `View()`, which does
 # not compile against that initializer: the specs stubbed them with a
 # no-argument initializer, the shape the emit assumed.
 RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do

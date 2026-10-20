@@ -9,7 +9,7 @@ require_relative '../../support/typescript_compiler'
 require_relative '../../support/headless_chromium'
 
 # A flow Collection's sections, and a grid's and a flow's gaps, on the web
-# (4f ruling 2026-09-26, round 5; attribute_semantics.json ->
+# (the orchestrator's ruling 2026-09-26, round 5; attribute_semantics.json ->
 # collectionSpacing):
 # - Flow sections: with two or more sections that draw cells, each section is
 #   a wrap of its own, one under the other, the blocks spaced as the lines —

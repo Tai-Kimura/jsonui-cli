@@ -375,7 +375,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::ButtonConverter do
 
     # No id: the viewId is the drawn type and the node's position
     # (JsonUIShared::LayoutPath.view_id) — on its own, the root `0`. It was
-    # `button` for every id-less Button (4f's ruling, 1.9.0).
+    # `button` for every id-less Button (the orchestrator's ruling, 1.9.0).
     it 'hands an id-less button its position as the viewId' do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
         'onClick' => { 'name' => 'onClick', 'class' => '((Event) -> Void)?' }

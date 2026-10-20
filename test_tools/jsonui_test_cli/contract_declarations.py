@@ -44,7 +44,7 @@ such place:
   harness is built. Not ``when.cond``, which names a
   ``branchContracts.conditions`` witness that writes ViewModel state — the
   key is ``harness.`` rather than ``condition.`` so the two do not read
-  alike (ee, 2026-09-25).
+  alike (2026-09-25).
 
 Plus ``metadata.platforms`` on a screen: the platforms the screen exists on.
 

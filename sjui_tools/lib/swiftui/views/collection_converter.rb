@@ -113,7 +113,7 @@ module SjuiTools
           line_spacing_value || @component['itemSpacing'] || 0
         end
 
-        # A horizontal Collection (4f ruling, 2026-09-26, the rule SwiftJsonUI
+        # A horizontal Collection (the orchestrator's ruling, 2026-09-26, the rule SwiftJsonUI
         # Dynamic dde0628 draws): `columns` is its number of lanes — the SSoT
         # names LazyHorizontalGrid / LazyHGrid for Collection.columns — and a
         # section's own `columns` is that section block's lanes. A section has
@@ -494,7 +494,7 @@ module SjuiTools
             # a section's header, its grid, its footer, the next section —
             # spaced as the grid's rows (collectionSpacing: lineSpacing, else
             # itemSpacing, else 0), as the list routes and the other two
-            # tools space them (4f ruling 2026-09-27, round 10). Until
+            # tools space them (the orchestrator's ruling 2026-09-27, round 10). Until
             # jsonui-cli 1.9.0 they were the ScrollView's implicit stack:
             # centred, the system's spacing between them. A lone grid (one
             # section, no header or footer) is the one row the stack held
@@ -582,7 +582,7 @@ module SjuiTools
                   else
                     # No `items`: nothing to draw the section from — no
                     # header, cell or footer, as on every other route and
-                    # path (4f ruling 2026-09-26, round 6). Until jsonui-cli
+                    # path (the orchestrator's ruling 2026-09-26, round 6). Until jsonui-cli
                     # 1.9.0 this drew the section's header and footer with no
                     # data around an empty grid.
                     add_line "// Section #{index + 1}: no items, nothing drawn"
@@ -824,7 +824,7 @@ module SjuiTools
         end
 
         # The axis along which a scrolling Collection sizes to its content
-        # (4f ruling 2026-09-27, the user's "size to content"): its size on
+        # (the orchestrator's ruling 2026-09-27, the user's "size to content"): its size on
         # its scroll axis wrapContent, or undeclared — which sjui emits the
         # same — and not weighted; not the pager, whose TabView is its pages,
         # and not a List (`list_route`): a List reports no content height to
@@ -846,7 +846,7 @@ module SjuiTools
 
         # A horizontal scrolling Collection of wrapContent (or undeclared)
         # height is its cells' height, capped by its parent — across its
-        # scroll axis, as content_fit_axis sizes it along (4f 2026-09-27:
+        # scroll axis, as content_fit_axis sizes it along (the orchestrator, 2026-09-27:
         # the SSoT's wrapContent is "size to content"). A LazyHStack takes
         # the height it is offered, so until jsonui-cli 1.9.0 such a row filled
         # its parent (120 of a 120pt parent) where the eager row was its
@@ -1065,7 +1065,7 @@ module SjuiTools
           end
         end
 
-        # A flow section's declared header or footer (4f ruling 2026-09-26,
+        # A flow section's declared header or footer (the orchestrator's ruling 2026-09-26,
         # round 7): its view with the section's header / footer data, a row of
         # its own, full width, above / below the section's wrap — a sibling of
         # the wrap in the section VStack, so it is spaced as the lines. Until
@@ -1100,7 +1100,7 @@ module SjuiTools
         # lineSpacing as declared: `sectionSpacing` is its alias (SSoT
         # `aliases`), read when lineSpacing is absent — an unnormalised layout
         # may spell it either way. With both, the canonical lineSpacing wins
-        # (4f ruling 2026-09-26, round 6), as SwiftJsonUI Dynamic's typed
+        # (the orchestrator's ruling 2026-09-26, round 6), as SwiftJsonUI Dynamic's typed
         # attribute reads it. Until jsonui-cli 1.9.0 the flow's section
         # blocks took sectionSpacing over lineSpacing, and the vertical and
         # grid routes did not read the alias at all.
@@ -1625,7 +1625,7 @@ module SjuiTools
         # Collection.scrollAnchor: top — the target's leading edge at the
         # viewport's; center — its middle at the middle; bottom, the default —
         # its trailing edge at the trailing edge). A horizontal Collection's
-        # are `.leading` / `.center` / `.trailing` (4f ruling 2026-09-27). Until
+        # are `.leading` / `.center` / `.trailing` (the orchestrator's ruling 2026-09-27). Until
         # jsonui-cli 1.9.0 it was `.top` / `.bottom` there too, whose x is
         # 0.5: every anchor put the target's middle at the viewport's middle.
         def scroll_anchor_point
@@ -1678,7 +1678,7 @@ module SjuiTools
           has_scroll_to? && @component['cellIdProperty'].nil? && %w[String String?].include?(scroll_to_class)
         end
 
-        # What the value names is its declared class's (4f ruling 2026-09-27,
+        # What the value names is its declared class's (the orchestrator's ruling 2026-09-27,
         # round 14; the SSoT's Collection.scrollTo): a String is a key — the
         # cellId, else the cellIdProperty value — anything else (an Int) a
         # cell's place across the drawn sections. cellIdProperty decides what
@@ -1849,7 +1849,7 @@ module SjuiTools
           add_line 'guard let found else { return }'
         end
 
-        # The class-list shape with cellIdProperty (4f round 16): its cells'
+        # The class-list shape with cellIdProperty (the orchestrator's round 16): its cells'
         # loop ids are keyed_loop_ids, so the value is looked up by that rule
         # and the scroll goes to the found cell's loop id — a String the first
         # cell, in section order, whose key it is (the first of its section
@@ -1879,7 +1879,7 @@ module SjuiTools
           add_line 'guard let found else { return }'
         end
 
-        # An Int on a Collection with cellIdProperty (4f round 14): its cells'
+        # An Int on a Collection with cellIdProperty (the orchestrator's round 14): its cells'
         # loop ids are their keys, else their places (open_cell_foreach), so
         # the value — a cell's place across the drawn sections — is looked up
         # when it changes and the scroll goes to that cell's id (`found`),
@@ -1973,7 +1973,7 @@ module SjuiTools
         # `cells` as a keyed loop reads its keys: with autoChangeTrackingId
         # (and cellIdProperty), enriched — each cell's "cellId" the
         # CellIdGenerator's (open_cell_foreach's source). Every lookup reads
-        # a key so (4f round 15): until jsonui-cli 1.9.0 the pager's and the
+        # a key so (the orchestrator's round 15): until jsonui-cli 1.9.0 the pager's and the
         # class-list List's compared the data's own key, the loops the
         # enriched cellId — one String named a cell on one route and none on
         # the other.
@@ -2008,7 +2008,7 @@ module SjuiTools
         # repeat (`\.offset` from 0 in each) are one ForEach to a lazy stack
         # and a TabView, which dropped a later section's cells at an offset an
         # earlier section already had. Measured on the ConformanceHost codegen
-        # host (iOS 26.5, 4f round 8): a list of sections of 2 and 1 cells
+        # host (iOS 26.5, the orchestrator's round 8): a list of sections of 2 and 1 cells
         # drew A0 A1 and not B0; a pager of 2 + 3 stopped at page 1. The index
         # handed to the cell stays its place in its section (an address counts
         # per section on every route but the pager), except that
@@ -2039,7 +2039,7 @@ module SjuiTools
           # a cell's place among the drawn sections' cells, as a pager's page
           # is — `.id(sectionStart + index)`; it was `.id(index)`, so every
           # section answered 0… and scrollTo(n) reached the first section's
-          # cell n (4f round 9). A pager's later section already counts from
+          # cell n (the orchestrator's round 9). A pager's later section already counts from
           # its pageStart.
           # A keyed loop: cellIdProperty, or a String scrollTo with none (its
           # cells' cellIds are the keys).
@@ -2048,10 +2048,10 @@ module SjuiTools
           add_line "let sectionStart = #{section_start}" if section_start
           # A key an earlier drawn section has is that section's to answer: a
           # scrollTo names the FIRST cell, in section order, whose key it is
-          # (4f ruling 2026-09-27; the SSoT's Collection.scrollTo). A later
+          # (the orchestrator's ruling 2026-09-27; the SSoT's Collection.scrollTo). A later
           # section's cell takes its key as a scroll target only when no
           # earlier section has it — two views answering one id left
-          # SwiftUI to choose (4f round 10).
+          # SwiftUI to choose (the orchestrator's round 10).
           # A String scrollTo with no cellIdProperty: the same rule on the
           # cellIds. Not a pager's: its loop is by the page (below), and its
           # scrollTo turns the selection, so nothing would read the set.
@@ -2064,7 +2064,7 @@ module SjuiTools
               # Prefer the pre-enriched "cellId" when autoChangeTrackingId is on;
               # otherwise fall back to the user's primary key. The item's id is
               # not the loop's (`ids` / `targets` below are): until jsonui-cli
-              # 1.9.0 a later section's was "<section>:" + the key (4f round 9),
+              # 1.9.0 a later section's was "<section>:" + the key (the orchestrator's round 9),
               # a string a key could spell (round 16).
               add_line "IdentifiedCellItem(id: #{cell_key_expr('data', 'index')}, index: #{index_expr}, data: data)"
             end
@@ -2144,7 +2144,7 @@ module SjuiTools
         end
 
         # `let <name>: [AnyHashable]`, a keyed loop's ids with no direct scroll
-        # to a key (4f round 16): each cell's key in its section, as the
+        # to a key (the orchestrator's round 16): each cell's key in its section, as the
         # structured `[section, key]` — not a string a key could spell — when
         # no earlier cell of the loop has the key; else its place,
         # IndexPath(item:section:). `section` is a literal or, on the
@@ -2169,7 +2169,7 @@ module SjuiTools
         # header is, `View(data:)` (the initializer `sjui g collection` writes
         # is `init(data: Any)`), with an empty dictionary. It was `View()`, which
         # does not compile against a view whose only initializer takes data
-        # (4f round 9).
+        # (the orchestrator's round 9).
         def class_list_edge_call(view_name)
           "#{view_name}(data: [String: Any]())"
         end
@@ -2492,7 +2492,7 @@ module SjuiTools
             add_line guard
             indent do
               if cell_view && @component['cellIdProperty']
-                # cellIdProperty is the cells' identity here too (4f round 16):
+                # cellIdProperty is the cells' identity here too (the orchestrator's round 16):
                 # keyed_loop_ids over the section's cells as its lookup reads
                 # them (enriched_cells). Until jsonui-cli 1.9.0 this loop's ids
                 # were the offsets, whatever cellIdProperty said.
@@ -2532,7 +2532,7 @@ module SjuiTools
           add_line "}"
         end
 
-        # Collection.items is a CollectionDataSource or an array (4f ruling,
+        # Collection.items is a CollectionDataSource or an array (the orchestrator's ruling,
         # 2026-09-26). A class-list Collection (no `sections`) whose items
         # property the layout DECLARES a list — `Array`, `[T]`
         # (AttributeTypes.list_element) — is one section: every element with
@@ -2693,7 +2693,7 @@ module SjuiTools
         end
 
         # A grid's header or footer is a full-width row, the view at its
-        # start (4f ruling 2026-09-27, round 10) — kjui's full-span item and
+        # start (the orchestrator's ruling 2026-09-27, round 10) — kjui's full-span item and
         # the web's row of its own draw it so — inset as the grid is.
         def apply_grid_edge_row
           add_modifier_line ".frame(maxWidth: .infinity, alignment: .leading)"
@@ -2941,7 +2941,7 @@ module SjuiTools
             "scrollDisabled: #{scroll_disabled_expr}"
           ]
 
-          # defaultScrollAnchor on both axes (4f ruling 2026-09-27): until
+          # defaultScrollAnchor on both axes (the orchestrator's ruling 2026-09-27): until
           # jsonui-cli 1.9.0 a horizontal Collection's was not passed, and it
           # started at its leading edge whatever the anchor said.
           anchor_expr = collection_default_scroll_anchor_swift_expr
@@ -2986,7 +2986,7 @@ module SjuiTools
         # defaultScrollAnchor expressed as a UnitPoint? Swift expression. Returns
         # 'nil' when no anchor is configured. Along the scroll axis, as
         # scrollAnchor (scroll_anchor_point): on a horizontal Collection top /
-        # center / bottom are `.leading` / `.center` / `.trailing` (4f ruling
+        # center / bottom are `.leading` / `.center` / `.trailing` (the orchestrator's ruling
         # 2026-09-27) — `.top` / `.bottom` have x 0.5.
         def collection_default_scroll_anchor_swift_expr
           raw = @component['defaultScrollAnchor']

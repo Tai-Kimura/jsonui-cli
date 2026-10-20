@@ -121,7 +121,7 @@ ck "tag body states the commit count" "$(printf '%s' "$BODY" | grep -cE "RANGE: 
 LISTED=$(printf '%s' "$BODY" | grep -cE '^  [0-9a-f]{7,12} ')
 ck "tag body lists exactly that many" "$LISTED" "$CNT"
 # 🔻 LISTED, NOT MENTIONED. A merge's subject can name another range commit
-# ("Merge commit 'af04a42c' (support2/p2e) into …"), and an unanchored count
+# ("Merge commit 'af04a42c' (lane2/p2e) into …"), and an unanchored count
 # of the short SHA then reads 2 for a commit listed once — the v1.8.119
 # range had 6 such false reds, all from merge subjects. The claim is one
 # listing line per commit, so count the lines that START with the SHA in the

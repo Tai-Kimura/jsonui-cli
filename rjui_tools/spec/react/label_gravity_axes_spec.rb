@@ -9,7 +9,7 @@ require 'react/converters/view_converter'
 # its horizontal. Its text sits at the vertical its gravity names (top /
 # bottom / centerVertical, center), else the middle; across, at textAlign's
 # position, else at the horizontal its gravity names (left / right /
-# centerHorizontal, center), else the start (4f 2026-09-27). Until jsonui-cli
+# centerHorizontal, center), else the start (the orchestrator, 2026-09-27). Until jsonui-cli
 # 1.9.0 BaseConverter also mapped gravity as a COLUMN's onto the row — measured
 # in Chromium on 200 x 44 labels: `right` drew the text at the bottom,
 # `bottom` at the bottom end, `centerVertical` in the middle across as well,

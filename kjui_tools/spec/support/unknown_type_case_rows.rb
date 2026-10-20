@@ -9,7 +9,7 @@ require_relative '../../lib/core/attribute_validator'
 # it (the SSoT's sections and the type synonyms), and each row a spelling it
 # does not know — one of those types in another case — with the sentence it
 # says. A path that names an unknown type compares its own sentence with a
-# row's `expect`, byte for byte (4f's ruling: the words are a machine's, not
+# row's `expect`, byte for byte (the orchestrator's ruling: the words are a machine's, not
 # copied by hand). Regenerate after the SSoT or the synonyms change:
 #
 #   ruby -r ./kjui_tools/spec/support/unknown_type_case_rows -e 'UnknownTypeCaseRows.write!'

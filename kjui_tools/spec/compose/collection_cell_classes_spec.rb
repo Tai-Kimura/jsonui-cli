@@ -44,7 +44,7 @@ RSpec.describe 'Collection cellClasses with items and no sections (Compose)' do
     end
   end
 
-  # cellClasses and no `items` (4f ruling 2026-09-26, round 5): no cell is
+  # cellClasses and no `items` (the orchestrator's ruling 2026-09-26, round 5): no cell is
   # drawn on every path (rjui drew one with no data until jsonui-cli 1.9.0),
   # and the shared validator names the shape — this face's mirror of it.
   describe 'cellClasses and no items: the shared validator' do

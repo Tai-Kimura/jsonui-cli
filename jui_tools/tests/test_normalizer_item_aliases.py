@@ -2,7 +2,7 @@
 
 A partialAttributes range's handler: `onClick` is canonical and `onclick`
 its alias (`items.properties.onClick.aliases` in attribute_definitions.json;
-4f ruling, jsonui-cli 1.9.0). The canonicalizer rewrites `onclick` to
+The orchestrator's ruling, jsonui-cli 1.9.0). The canonicalizer rewrites `onclick` to
 `onClick` in each range, keeps `onClick` when both are set (with a warning),
 and leaves a node's own `onclick` alone — at the node, `onClick` and
 `onclick` are two attributes.

@@ -5,7 +5,7 @@ primary-constructor (a consumer lane, 2026-09-25): `KOTLIN_CLASS_HEADER_RE` acce
 only `@Ann constructor` before a primary constructor's parameters, so
 `class A internal constructor(…)` — the usual way to hand a test its own
 dependencies — stopped `jui build` with "Kotlin class 'A' not found in
-source". 4f reproduced it and found `class A constructor(…)` failing too.
+source". The orchestrator reproduced it and found `class A constructor(…)` failing too.
 
 Measured on the same regexes before the fix, the Swift side had the same
 kind of hole: an attribute on the class's own line (`@MainActor final class`,
@@ -28,7 +28,7 @@ KOTLIN_FOUND = [
     "class A internal constructor(x: Int) : B() {",                 # the ticket
     "class A private constructor(x: Int) : B() {",
     "class A @Inject internal constructor(x: Int) : B() {",
-    "class A constructor(x: Int) : B() {",                          # 4f's
+    "class A constructor(x: Int) : B() {",                          # the orchestrator's
     "class A protected constructor(x: Int) : B() {",
     "class A public constructor(x: Int) : B() {",
     "class A @Inject @JvmOverloads constructor(x: Int) : B() {",

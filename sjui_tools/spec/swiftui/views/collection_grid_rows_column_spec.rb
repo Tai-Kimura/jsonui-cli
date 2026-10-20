@@ -2,7 +2,7 @@
 
 require 'swiftui/views/collection_converter'
 
-# A sectioned grid's rows (4f ruling 2026-09-27, round 10): a section's header
+# A sectioned grid's rows (the orchestrator's ruling 2026-09-27, round 10): a section's header
 # and footer are full-width rows with the view at their start, and the rows —
 # header, grid, footer, the next section — are spaced as the grid's rows
 # (collectionSpacing: lineSpacing, else itemSpacing, else 0), as the list
@@ -27,7 +27,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     [[{ 'lineSpacing' => 4, 'itemSpacing' => 9 }, 4], [{ 'itemSpacing' => 9 }, 9], [{}, 0]].each do |spacing, gap|
       code = grid(spacing.merge('sections' => EDGED_GRID_SECTIONS))
       # (Inside CollectionContentFit when the grid's height is wrapContent or
-      # undeclared, 4f ruling 2026-09-27 — hence any indentation.)
+      # undeclared, the orchestrator's ruling 2026-09-27 — hence any indentation.)
       expect(code).to match(/ScrollView\(\.vertical, showsIndicators: true\) \{\n *VStack\(alignment: \.leading, spacing: #{gap}\) \{/), spacing.inspect
     end
   end

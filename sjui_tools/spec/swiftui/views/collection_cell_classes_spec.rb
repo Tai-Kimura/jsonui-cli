@@ -129,11 +129,11 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
     end
   end
 
-  # cellClasses and no `items` (4f ruling 2026-09-26, round 5): no cell is
+  # cellClasses and no `items` (the orchestrator's ruling 2026-09-26, round 5): no cell is
   # drawn on every path (rjui drew one with no data until jsonui-cli 1.9.0),
   # and the shared validator names the shape — this face's mirror of it.
   # `sections` and no `items`: nothing to draw them from — no header, cell or
-  # footer, on every route (4f ruling 2026-09-26, round 6; kjui and rjui draw
+  # footer, on every route (the orchestrator's ruling 2026-09-26, round 6; kjui and rjui draw
   # nothing either). Until jsonui-cli 1.9.0 the sectioned grid drew each
   # section's header and footer with no data around an empty grid.
   describe 'sections and no items' do
