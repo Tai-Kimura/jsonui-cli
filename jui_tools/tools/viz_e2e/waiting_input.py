@@ -89,8 +89,8 @@ async def run_waiting_input(pw, out, failures):
         await a.mouse.click(5, 880)   # a press: the sound may run (the browser's rule)
         await wait(a, "() => window.__dbg.notifyAudio() === 'running'", label="the sound woken")
 
-        async def settle(n_events):
-            await wait(a, f"() => window.__dbg.notifySeen().length >= {n_events}", label=f"{n_events} events seen")
+        async def taken(n):   # the page took in the events up to n (a guard that rings nothing leaves no other trace)
+            await wait(a, f"() => window.__dbg.liveSeenSeq() >= {n}", label=f"events up to {n} taken in")
             t = await a.evaluate("() => performance.now()")
             await wait(a, "(t) => performance.now() > t + 1200", arg=t, label="a moment for a ring")
 
@@ -102,14 +102,14 @@ async def run_waiting_input(pw, out, failures):
 
         async def case(name, before_idle=None):
             b0 = await counts()
-            seen0 = len(await a.evaluate("() => window.__dbg.notifySeen()"))
-            turn_then_idle(idle=False)
-            await settle(seen0 + 1)
+            seq0 = await a.evaluate("() => window.__dbg.liveSeenSeq()")
+            turn_then_idle(idle=False)   # two events: the prompt and the turn's end
+            await taken(seq0 + 2)
             if before_idle:
                 await before_idle()
             mid = await counts()
             hook(body(hook_event_name="Notification", notification_type="idle_prompt", message="Claude is waiting for your input"))
-            await settle(seen0 + 2)
+            await taken(seq0 + 3)
             b1 = await counts()
             res[name] = {"done": len(mid["done"]) - len(b0["done"]), "idle": len(b1["idle"]) - len(mid["idle"]), "chime": b1["chimes"] - mid["chimes"],
                          "text": [x["title"] + " / " + x["body"] for x in b1["idle"][len(mid["idle"]):]]}
@@ -119,6 +119,28 @@ async def run_waiting_input(pw, out, failures):
         c = await case("reminder")
         check(failures, c["done"] == 1 and c["idle"] == 1 and c["chime"] == 1 and "入力待ち" in c["text"][0],
               f"waiting for input after an unanswered turn end: one notification and its chime: {c}")
+
+        # 1b. an event over 2 minutes old by the page's clock (one delivered late, not a replay): not rung — right after 1,
+        # while nothing has been opened since a turn's end (that would keep it quiet for another reason)
+        await a.evaluate("() => { const real = Date.now; window.__realNow = real; Date.now = () => real() + 180000; }")
+        c = await case("stale")
+        await a.evaluate("() => { Date.now = window.__realNow; }")
+        check(failures, c["idle"] == 0 and c["chime"] == 0, f"a waiting for input over 2 minutes old: not rung: {c}")
+
+        # 1c. a subagent's Notification idle_prompt (a hook with agent_id goes to that subagent, ingest.py): not rung
+        n_robots = len(await a.evaluate("() => Object.keys(window.__dbg.robotState())"))
+        hook(body(hook_event_name="SubagentStart", agent_id="sub-idle", agent_type="Explore"))
+        await wait(a, f"() => Object.keys(window.__dbg.robotState()).length > {n_robots}", label="the subagent's robot")
+        before = await counts()
+        seq0 = await a.evaluate("() => window.__dbg.liveSeenSeq()")
+        hook(body(hook_event_name="Notification", agent_id="sub-idle", agent_type="Explore", notification_type="idle_prompt",
+                  message="Claude is waiting for your input"))
+        await wait(a, f"() => window.__dbg.liveSeenSeq() > {seq0}", label="the subagent's notification taken in")
+        t = await a.evaluate("() => performance.now()")
+        await wait(a, "(t) => performance.now() > t + 1200", arg=t, label="a moment for a ring")
+        after = await counts()
+        res["subagent"] = {"idle": len(after["idle"]) - len(before["idle"]), "chime": after["chimes"] - before["chimes"]}
+        check(failures, res["subagent"] == {"idle": 0, "chime": 0}, f"a subagent's waiting for input: not rung: {res['subagent']}")
 
         # 2. its 完了 notification clicked: no second ring
         async def click_done():
@@ -137,6 +159,18 @@ async def run_waiting_input(pw, out, failures):
             await wait(a, "() => !window.__dbg.board().robot", label="the card closed")
         c = await case("openedCard", open_card)
         check(failures, c["idle"] == 0 and c["chime"] == 0, f"the session opened on the page: waiting for input not rung: {c}")
+
+        # 3b. the card open since before the turn's end and still on screen (the page in front): quiet, not rung —
+        # opened before the Stop, so only "looking at it now" keeps it quiet
+        await a.bring_to_front()
+        await a.evaluate("(id) => window.__dbg.openRobot(id)", rid)
+        await wait(a, "(id) => window.__dbg.board().robot === id", arg=rid, label="the robot's card, before the turn's end")
+        focus = await a.evaluate("() => [document.visibilityState, document.hasFocus()]")
+        c = await case("viewing")
+        c["focus"] = focus
+        await a.keyboard.press("Escape")
+        await wait(a, "() => !window.__dbg.board().robot", label="the card closed")
+        check(failures, focus == ["visible", True] and c["idle"] == 0 and c["chime"] == 0, f"the card on screen since before the turn's end: not rung: {c}")
 
         # 4. switched off in the settings (the page's own switch): nothing
         await a.click("#btn-notify")
