@@ -5,7 +5,8 @@
     python3 tools/viz_i18n/move.py check js/58-talk.js --base REV [--head REV]
 
 A part is named from jui_cli/viz/web/ (js/58-talk.js, index.html, app.css), or, for the server's words, from
-jui_cli/viz/ with a leading "viz/" (viz/ingest.py, viz/sources/history.py). A spec is a Python file with
+jui_cli/viz/ with a leading "viz/" (viz/ingest.py, viz/sources/history.py), or from jui_tools/ with a leading
+"jui_cli/" (jui_cli/commands/viz_cmd.py: the page's words a command sets). A spec is a Python file with
 PART, EDITS = [(old, new), …] (each old found exactly once; (old, new, n): exactly n times, all replaced) and
 KEYS = {key: (en, ja)}; a key already in the table must keep its words.
 
@@ -39,11 +40,16 @@ REPO_PREFIX = "jui_tools/jui_cli/viz/web/"
 
 
 def part_path(name: str) -> Path:
-    """Where a part is: web/<name>, or jui_cli/viz/<rest> for a "viz/..." part (the server's)."""
+    """Where a part is: web/<name>, jui_cli/viz/<rest> for a "viz/..." part (the server's), jui_tools/<name> for a
+    "jui_cli/..." one."""
+    if name.startswith("jui_cli/"):
+        return JT / name
     return WEB.parent / name[4:] if name.startswith("viz/") else WEB / name
 
 
 def repo_path(name: str) -> str:
+    if name.startswith("jui_cli/"):
+        return f"jui_tools/{name}"
     return f"jui_tools/jui_cli/viz/{name[4:]}" if name.startswith("viz/") else REPO_PREFIX + name
 
 

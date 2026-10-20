@@ -220,6 +220,8 @@ def test_a_server_part_is_found_under_viz():
     assert move.part_path("viz/ingest.py") == move.WEB.parent / "ingest.py"
     assert move.part_path("js/58-talk.js") == move.WEB / "js" / "58-talk.js"
     assert move.repo_path("viz/sources/history.py") == "jui_tools/jui_cli/viz/sources/history.py"
+    assert move.part_path("jui_cli/commands/viz_cmd.py") == move.JT / "jui_cli" / "commands" / "viz_cmd.py"
+    assert move.repo_path("jui_cli/commands/viz_cmd.py") == "jui_tools/jui_cli/commands/viz_cmd.py"
 
 
 def test_apply_takes_an_edit_meant_for_n_places(web, capsys):
