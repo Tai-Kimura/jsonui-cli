@@ -274,6 +274,31 @@ def test_the_history_reads_the_english_line_and_the_japanese_one_of_older_transc
     assert json.loads(out.stdout) == [parts, parts, None, None]
 
 
+def test_a_prompt_of_files_only_is_marked_arrived_by_the_servers_line():
+    """Only files, no text: the receiver's transcript shows the server's lines (attachment_line), and 55-history.js's
+    composeArrived (run in node) marks the prompt arrived from them; another session's item or an older one does not."""
+    import shutil
+    import subprocess
+    from tests.test_viz_bundle import web_text
+    node = shutil.which("node")
+    assert node, "node is needed (the jui_tools job has it; a skip would hide the arm)"
+    src = web_text("js", "55-history.js")
+    norm = src[src.index("const composeNorm"):src.index("\n", src.index("const composeNorm"))]
+    start = src.index("function composeArrived(")
+    arrived = src[start:src.index("\n}\n", start) + 3]
+    line = attachment_line({"path": "/s/uploads/ab-1/0123456789abcdef.png", "name": "a.png", "media": "image/png",
+                            "size": 2048})
+    script = norm + "\n" + arrived + f"""
+let painted = 0; const composePaint = () => {{ painted += 1; }};
+const run = (items) => {{ HIST.sent = {{ id: 's1', text: '', at: 100000 }}; composeArrived(items); return !!HIST.sent.arrivedAt; }};
+const HIST = {{ id: 's1', sent: null }};
+const mine = {{ kind: 'channel', server: 'plugin:jui-viz:jui-viz', text: {json.dumps(line)}, at: 100500 }};
+process.stdout.write(JSON.stringify([run([mine]), run([{{ ...mine, server: 'other' }}]), run([{{ ...mine, at: 1000 }}]), painted]));"""
+    out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout) == [True, False, False, 1]
+
+
 def test_the_module_has_no_other_place_and_widens_nothing():
     """The requester's ruling (10-20, via cd): the private folder only; viz never writes the receiver's settings or
     permission rules and adds nothing like --add-dir."""
