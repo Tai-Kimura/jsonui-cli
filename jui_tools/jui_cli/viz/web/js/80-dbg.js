@@ -227,6 +227,9 @@ window.__dbg = {
   },
   towerLines: (text) => { const f = towerNameFit(makeCanvas(8, 8).getContext('2d'), text, towerBays()[0].w - 8); return [f.size, ...f.lines]; },
   openRobot: (id) => openRobot(id, document.getElementById('scene-canvas')),
+  // a session's main robot and a robot's project, as the page has them (tools/viz_e2e/project_switch.py)
+  labelOfSession: (sid) => (typeof SESSION_UUID === 'undefined' ? null : Object.keys(SESSION_UUID).find((l) => SESSION_UUID[l] === sid) || null),
+  robotProject: (id) => projectOfRobot(id) || null,
   // the box (2.3.4): its desk, what it overlaps, the papers in it, each robot's trip and the trips' ends
   gitBox: () => ({ room: PROPS.room, desk: !!PROPS.gitDesk, fill: PROPS.gitFill, spot: PROPS.place ? PROPS.place.git : null,
     overlaps: gitDeskOverlaps(), ends: GITBOX.ends.slice(),

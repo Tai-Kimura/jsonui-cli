@@ -256,7 +256,7 @@ document.addEventListener('click', (e) => {
   else if (t.dataset.logRobot) openLogFor(t.dataset.logRobot, t);
   else if (t.hasAttribute('data-close-detail')) closeTaskDetail();
   else if (t.hasAttribute('data-reset-rules')) { alwaysRules.clear(); showToast('このデモで足した常時許可を取り消した'); refreshNow(); }
-  else if (t.hasAttribute('data-rb-close')) closeRobot();
+  else if (t.hasAttribute('data-rb-close')) closeRobot({ byHand: true });
   else if (t.hasAttribute('data-set-all')) setProject('all');
 });
 $('chip-perm').addEventListener('click', (e) => { tb.waitView = true; openTaskBoard(e.currentTarget); });
@@ -287,14 +287,30 @@ function focusProject(id, instant) {
   controls.enabled = false;
   flyTo(pose.p, pose.t, controls.target, instant || reduceMotion ? 0 : 0.8, () => { controls.target.copy(pose.t); controls.enabled = true; controls.update(); });
 }
+/* The robot last picked in each project (ticket 2026-10-20-jui-viz-project-switch-keeps-last-robot-per-project;
+   requester: 「ロボット選択状態でプロジェクト切り替えた先のロボットに切り替えて欲しい。各プロジェクトで最後に選択してたロボット
+   覚えといて、それがいたらそれを選択、いなかったら未選択で部屋表示」): project id -> robot, or null when its card was closed
+   by hand. Kept in the page only (a label may name another robot after the server restarts). */
+const LAST_ROBOT = new Map();
+/* The robot to pick on switching to a project with a robot picked: the one last picked there if it is still in the
+   room (not gone, not walking out), else none. すべて: none. */
+function robotToPick(id) {
+  const want = id === 'all' ? null : LAST_ROBOT.get(id);
+  if (!want || !DEF[want] || !ROBOT_DEFS.some((d) => d.id === want) || projectOfRobot(want) !== id) return null;
+  return SOURCE.mode === 'live' && LIVE.leaving[want] ? null : want;
+}
 function setProject(id, { camera: moveCamera = true } = {}) {
   if (!(id === 'all' || PROJECT[id]) || UI.project === id) return;
+  // only a picked robot carries over: with none picked, the room is shown and nothing opens
+  const pick = rbState.id ? robotToPick(id) : undefined;
+  if (rbState.id) closeRobot();
   UI.project = id; writePref('project', id);
   if (wb.open && wb.idx >= 0 && !inScope(SPECS[wb.idx].project)) wb.idx = -1;
   if (tb.detail && !tb.detail.startsWith('perm:') && !inScope(PROJECT_OF[tb.detail.split('#')[0]])) tb.detail = null;
   if (SOURCE.mode === 'live' && has3D) liveShowFloorOf(id);   // a room on another floor: go there first
   if (SOURCE.mode === 'live') liveRelayout();                // one room at a time: the room picked, wider (or the floor again)
-  if (moveCamera) focusProject(id);
+  if (pick) openRobot(pick, document.getElementById('scene-canvas'));   // the camera goes to it, not to the room
+  else if (moveCamera) focusProject(id);
   paintScopeButtons();
   refreshNow();
   if (wb.open) { wbCode.scrollTop = 0; renderWhiteboard(latestModel, true); }
@@ -1490,6 +1506,7 @@ const focusing = () => has3D && !!rbState.id && zoom.zoomed && !camTween;
   }, { passive: false });
 }
 function openRobot(id, opener) {
+  if (projectOfRobot(id)) LAST_ROBOT.set(projectOfRobot(id), id);   // whichever way it was opened (list, tag, card, notification)
   NOTIFY.opened.set(id, Date.now());   // the session looked at since its turn's end: no 入力待ち reminder (notifyIdle)
   holdView('rb');
   if (wb.open) closeWhiteboard();
@@ -1508,8 +1525,9 @@ function openRobot(id, opener) {
     $('rb-close').focus({ preventScroll: true });
   });
 }
-function closeRobot() {
+function closeRobot({ byHand = false } = {}) {
   if (!rbState.id) { releaseView('rb'); return; }
+  if (byHand && projectOfRobot(rbState.id)) LAST_ROBOT.set(projectOfRobot(rbState.id), null);   // closed by hand: none is remembered
   rbState.id = null;
   hideOverlay(rbEl);
   histSync();

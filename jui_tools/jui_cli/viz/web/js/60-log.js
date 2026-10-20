@@ -104,7 +104,7 @@ document.addEventListener('keydown', (e) => {
   else if (ds.open) { e.preventDefault(); closeDataDocs(); }   // the data server's sheet (2.3.5)
   else if (pr.open) { e.preventDefault(); closePrices(); }   // the 単価 sheet (2.3.6)
   else if (rbState.id && HIST.wide) { e.preventDefault(); histSetWide(false); }   // the wide history: back to the card's width first
-  else if (rbState.id) { e.preventDefault(); closeRobot(); }
+  else if (rbState.id) { e.preventDefault(); closeRobot({ byHand: true }); }
   else if (wb.open) {
     e.preventDefault();
     if (narrowWb() && wbSideOpen) { wbSideOpen = false; applyWbSide(); } else closeWhiteboard();
