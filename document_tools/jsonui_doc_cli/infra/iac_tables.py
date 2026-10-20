@@ -349,6 +349,53 @@ def compose_address(rel: str, service: str) -> str:
     return f"{rel}#services.{service}"  # rel: the compose file's path inside the room
 
 
+def parse_jsonc(text: str):
+    """wrangler.jsonc as `npm create cloudflare` writes it: JSON with // and /* */ comments and a "," after the last
+    item. Strings are kept whole (a "//" or ",}" inside one is text); comments and a trailing "," are dropped; then
+    json.loads. Raises ValueError when it is still not JSON (an unclosed string or comment included). One copy for
+    seed (drafting) and check (comparing): dd's fourth verification R1 found check reading only whole-line "//"."""
+    import json
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            if j >= n:
+                raise ValueError("unclosed string")
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            if j < 0:
+                raise ValueError("unclosed comment")
+            i = j + 2
+        elif c == ",":
+            k = i + 1   # a "," whose next character, past spaces and comments, closes an object or a list is dropped
+            while k < n:
+                if text[k] in " \t\r\n":
+                    k += 1
+                elif text.startswith("//", k):
+                    e = text.find("\n", k)
+                    k = n if e < 0 else e
+                elif text.startswith("/*", k):
+                    e = text.find("*/", k + 2)
+                    k = n if e < 0 else e + 2
+                else:
+                    break
+            if k >= n or text[k] not in "}]":
+                out.append(c)
+            i += 1
+        else:
+            out.append(c)
+            i += 1
+    return json.loads("".join(out))
+
+
 def wrangler_address(rel: str, kind: str | None = None, handle: str | None = None) -> str:
     return rel if kind is None else f"{rel}#{kind}.{handle}"
 

@@ -74,7 +74,7 @@ def _text_or_why(p: Path) -> tuple[str | None, str]:
         size = p.stat().st_size
         if size > MAX_BYTES:
             return None, f"over {MAX_BYTES // 1_000_000} MB"
-        return p.read_text(encoding="utf-8", errors="replace"), ""
+        return p.read_text(encoding="utf-8-sig", errors="replace"), ""   # a BOM first is not text (Q2)
     except OSError as exc:
         return None, f"unreadable ({exc.strerror or type(exc).__name__})"
 
@@ -93,7 +93,7 @@ def _iac_provider(name: str, rel: str) -> str:
 
 
 HEAD_BYTES = 65_536
-_CFN_RESOURCES = re.compile(r'^Resources\s*:|"Resources"\s*:', re.M)
+_CFN_RESOURCES = re.compile(r'^[\'"]?Resources[\'"]?\s*:|"Resources"\s*:', re.M)   # YAML (quoted too) or JSON
 _CFN_TYPE = re.compile(r"\"?Type\"?\s*:\s*[\"']?AWS::")
 
 
@@ -110,7 +110,7 @@ def _iac_by_head(p: Path) -> str | None:
         return None
     try:
         with open(p, "rb") as f:
-            head = f.read(HEAD_BYTES).decode("utf-8", errors="replace")
+            head = f.read(HEAD_BYTES).decode("utf-8-sig", errors="replace")
     except OSError:
         return None
     if _is_cfn(head):
@@ -384,7 +384,7 @@ def _wrangler(p, rel, text, found, note):
             import tomllib
             data = tomllib.loads(text)
         else:
-            data = json.loads(re.sub(r"^\s*//.*$", "", text, flags=re.M))
+            data = T.parse_jsonc(text)   # comments and a last ",": the shared reader (seed reads the same way)
     except Exception:   # noqa: BLE001
         note("cloudflare", f"{rel}: not parsed: not read")
         return
@@ -470,8 +470,13 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
     for f in found:
         by_provider.setdefault(f["provider"], []).append(f)
     declared_providers = {n["providerResolved"] or "?" for n in nodes}
-    for provider in sorted(declared_providers - set(by_provider) - {"?"} - unread):   # unread: its files are there
-        unverified.setdefault(provider, []).append("no IaC found for this provider in the project: its nodes are not compared")
+    # unread: its files are there. A file not read whose provider is not known ("*" in unread: over the size, not
+    # parsed) may be this provider's: then "none found" is not said (dd's fourth verification Q4), only that some were
+    # not read. ("*" notes that are no unread file — a PaaS setting, a module from outside — change nothing here.)
+    for provider in sorted(declared_providers - set(by_provider) - {"?"} - unread):
+        unverified.setdefault(provider, []).append(
+            "no IaC read for this provider: some IaC files were not read (see *): its nodes are not compared" if "*" in unread
+            else "no IaC found for this provider in the project: its nodes are not compared")
     for n in nodes:
         provider = n["providerResolved"] or "?"
         target = f"{provider}/{n['id']}"

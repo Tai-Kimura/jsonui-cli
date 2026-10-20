@@ -456,3 +456,52 @@ def test_a_provider_whose_files_were_not_read_is_not_said_to_have_none(tmp_path)
                     [{"id": "w", "category": "compute.container", "provider": "kubernetes", "iac": ["Deployment/b"]}])
     un = rep.target_extra["unverified"]["kubernetes"]
     assert any("not parsed" in w for w in un) and not any("no IaC found" in w for w in un)
+
+
+# ---------------------------------------------------------------- dd's fourth verification (2026-10-20 14:42)
+
+
+def test_a_wrangler_jsonc_as_npm_create_cloudflare_writes_it_is_read(tmp_path):
+    """R1: a block comment first, "//" after a value, a "," after the last item — check read only whole-line "//"."""
+    jsonc = ('/**\n * For more details on how to configure Wrangler, refer to:\n * https://developers.cloudflare.com/workers/\n */\n'
+             '{\n\t"name": "my-worker", // the worker\n\t"main": "src/index.ts",\n\t"note": "a // and ,} in a string",\n'
+             '\t"kv_namespaces": [\n\t\t{ "binding": "CACHE", "id": "abc", },\n\t],\n}\n')
+    _r, rep = _mini(tmp_path, {"wrangler.jsonc": jsonc},
+                    [{"id": "w", "category": "compute.function", "provider": "cloudflare", "iac": ["wrangler.jsonc"]},
+                     {"id": "kv", "category": "database.kv", "provider": "cloudflare", "iac": ["wrangler.jsonc#kv_namespaces.CACHE"]}])
+    t = _by_target(rep)
+    assert (t["cloudflare/w"].status, t["cloudflare/kv"].status) == ("ok", "ok")
+    assert not any("not parsed" in w for w in rep.target_extra["unverified"].get("cloudflare", []))
+
+
+def test_a_template_with_a_bom_and_no_version_line_is_read(tmp_path):
+    """Q2: a BOM first hid "Resources" from the line-start match; a quoted 'Resources': too."""
+    for text in ("\ufeffResources:\n  Q:\n    Type: AWS::SQS::Queue\n", "'Resources':\n  Q:\n    Type: AWS::SQS::Queue\n"):
+        root = tmp_path / f"r{len(text)}"
+        root.mkdir()
+        r, _ = _mini(root, {"infra/main.tf": 'resource "aws_sqs_queue" "other" {}\n'}, [{"id": "q", "category": "queue", "provider": "aws", "iac": ["Q"]}])
+        (r / "infra" / "stack.yaml").write_bytes(text.encode("utf-8"))
+        rep = C.run_infra_iac(_decls(r)["iac"], r)
+        assert _by_target(rep)["aws/q"].status == "ok", text[:12]
+
+
+@pytest.mark.parametrize("notes", ["body: [broken\nType: AWS::SQS::Queue\n", "Resources:\n  body: [broken, no type\n"])
+def test_a_broken_note_with_only_one_half_of_a_template_is_not_one(tmp_path, notes):
+    """A14 / A15: each of the two conditions of P4 (b) — Resources and an AWS:: Type — is needed: a broken note with
+    only one of them is no template, so it never hides the aws nodes as "not read"."""
+    _r, rep = _mini(tmp_path, {"docs-notes/notes.yaml": notes, "infra/main.tf": 'resource "aws_sqs_queue" "q" {}\n'},
+                    [{"id": "gone", "category": "queue", "provider": "aws", "iac": ["aws_sqs_queue.gone"]}])
+    assert _by_target(rep)["aws/gone"].status == "missing_in_impl"
+
+
+def test_a_provider_is_not_said_to_have_none_when_a_file_of_no_known_provider_was_not_read(tmp_path, monkeypatch):
+    """Q4: a Terraform file over the size ("*": anyone's) and "no IaC found" for aws side by side."""
+    monkeypatch.setattr(C, "MAX_BYTES", 200)
+    _r, rep = _mini(tmp_path, {"infra/main.tf": "# " + "x" * 400 + '\nresource "aws_sqs_queue" "q" {}\n'},
+                    [{"id": "q", "category": "queue", "provider": "aws", "iac": ["aws_sqs_queue.q"]}])
+    un = rep.target_extra["unverified"]
+    assert any("not read" in w for w in un.get("*", []))
+    assert not any("no IaC found" in w for w in un.get("aws", [])) and any("see *" in w for w in un.get("aws", []))
+    _r2, rep2 = _mini(tmp_path / "plain", {"k8s/a.yaml": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: a\n"},
+                      [{"id": "q", "category": "queue", "provider": "aws", "iac": ["aws_sqs_queue.q"]}])
+    assert any("no IaC found" in w for w in rep2.target_extra["unverified"]["aws"])   # nothing unread: still said

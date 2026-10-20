@@ -364,3 +364,61 @@ def test_a_sentence_about_a_password_keeps_its_file():
                       "nodes": [{"id": "db", "category": "database.relational", "label": "Password: rotated monthly"}]}).encode()
     m, problems = M.merge([("a.json", raw)])
     assert problems == [] and [n["id"] for n in m["nodes"]] == ["db"]
+
+
+# ---------------------------------------------------------------- dd's fourth verification (2026-10-20 14:42)
+
+def _pw(text):
+    return "password" in M.secret_findings(text)
+
+
+def _ip(text):
+    return "ip_address" in M.secret_findings(text)
+
+
+@pytest.mark.parametrize("text", ["DB password: N/A", "Password: auto-generated", "password: IAM-auth", "password: AWSSecretsManager",
+                                  "password: ssm:/prod/db/password", "password: vault:secret/db", "password: (secret)",
+                                  "password: e.g.", "password: Vault."])
+def test_a_password_line_that_is_a_word_a_place_or_a_name_is_no_value(text):
+    """Q1: one word of a sentence (letters joined by - / . with no digit), a word in "(", a place named by a scheme,
+    a name of capitalised words — none is a password's value, and none may drop the whole file."""
+    assert not _pw(text)
+    assert M.secret_findings(text) == [] or "password" not in M.secret_findings(text)
+
+
+@pytest.mark.parametrize("text", ["password: hunter2", "password: P@ssw0rd", "pwd: Summer2026", "passwd: s3cr3t!",
+                                  "password: xKqzPwLmRtYvBnHs", "password: abcdefghijklmnop", '"password": "Sup3r"'])
+def test_a_password_value_is_still_one(text):
+    assert _pw(text)
+
+
+def test_the_boundaries_of_a_password_value():
+    """A01: a word with a digit and then a sentence is no value (P1's ruling: "a word with more after it" is outside
+    §3's promise). A05: 16 letters (no name) is a value, 15 is not."""
+    assert not _pw("password: 90-day rotation") and not _pw("password: hunter2 rotated monthly")
+    assert _pw("password: abcdefghijklmnop") and not _pw("password: abcdefghijklmno")
+
+
+def test_the_boundary_of_a_path_in_a_40_character_key():
+    """A07: three "/" make a 40-character run a path; two do not."""
+    three = "wJalrXUtnFEMI/K7MDENG/bPxRfi/YEXAMPLEKEY"
+    two = "wJalrXUtnFEMI/K7MDENGbPxRfi/YEXAMPLEKEYx"
+    assert len(three) == len(two) == 40
+    assert "token" not in M.secret_findings(three) and "token" in M.secret_findings(two)
+
+
+@pytest.mark.parametrize("text", ["IP-10-0-0-5", "IP-1-2-3-4", "ip-10-0-0-5", "10_0_0_5_url", "ec2-54-12-34-56.compute-1.amazonaws.com", "host-10-0-0-5",
+                                  "10-0-0-5", "db_10_0_0_5_url", "db_10_0_0_5", "10_0_0_5", "::a00:5", "64:ff9b::a00:5",
+                                  "::ffff:a00:5", "fe80::1", "2001:db8::1"])
+def test_an_address_written_another_way_is_one(text):
+    """A10 (ip- in any case names an address whatever its first number: IP-1-2-3-4), Q3's misses (ec2-, a name before "-", "_" and more after it)."""
+    assert _ip(text)
+
+
+@pytest.mark.parametrize("text", ["ip-127-0-0-1", "127_0_0_1", "0_0_0_0", "ip-10-0-0-5-6", "ip-10-0-0-500", "build_1_2_3_4",
+                                  "version_1_2_3_4", "release-1-2-3-4", "a::b", "Db::Feed", "::2", "::ffff:0", "::",
+                                  "::1", "::ffff", "::ffff:127.0.0.1", "::ffff:7f00:1", "::7f00:1", "listen [::]:80"])
+def test_no_ones_address_and_what_only_looks_like_one_is_none(text):
+    """A11 (127 and 0), A21 (more numbers after), A13 (::/112: ::2), Q3's false hits (a version after "_", hex
+    words joined by "::", ::ffff:0 = ::255.255.0.0)."""
+    assert not _ip(text)

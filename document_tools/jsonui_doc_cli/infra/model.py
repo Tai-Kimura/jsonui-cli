@@ -52,7 +52,36 @@ def vocabulary(name: str) -> list[str]:
 
 # ---------------------------------------------------------------- 1. the shapes of secrets
 
-SECRET_SHAPES: tuple[tuple[str, re.Pattern], ...] = (
+# A password written with its value: "password: hunter2", "pwd": "s3cr3t!" — one word after the colon, ending there,
+# that has a digit or a sign, or is 16 or more long. Not a sentence ("password: stored in Secrets Manager", "password:
+# 90-day rotation" — a word with more after it), not a word ("Forgot password: link"), not a mask (********), a
+# placeholder (${DB_PASSWORD}, {{ .pw }}, <pw>) or a path (pwd: /home/app). (Password=value is the connection-string
+# shape.) dd's fourth verification Q1: nor letters joined by "-", "/" or "." with no digit (N/A, auto-generated,
+# IAM-auth, e.g., Vault.), a word in "(" (secret), a place named by a scheme (ssm:/prod/db/password, vault:secret/db),
+# or a name of capitalised words 16 or more long (AWSSecretsManager). Still a password: hunter2, P@ssw0rd, Summer2026,
+# 16 or more letters that are no such name. Missed (boundary §3): a passphrase of words joined by "-" with no digit.
+_PASSWORD_VALUE = re.compile(
+    r"(?i)\b(?:password|passwd|pwd)\b[\"']?\s*:\s*[\"']?(?![$*{<\\/])([^\s\"',;]+)(?=[\"',;]|\s*$|\s*[\r\n])")
+_JOINED_WORDS = re.compile(r"[A-Za-z]+(?:[-/.][A-Za-z]*)+")
+_PLACE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
+_CAPITALISED_NAME = re.compile(r"(?:[A-Z]{2,}(?=[A-Z][a-z])|[A-Z][a-z]{2,})+")
+
+
+class _Password:
+    """A pattern-like object (search) for SECRET_SHAPES: the value's shape is judged in Python, not in one regex."""
+
+    @staticmethod
+    def search(text: str):
+        for m in _PASSWORD_VALUE.finditer(text):
+            v = m.group(1)
+            if _JOINED_WORDS.fullmatch(v) or v.startswith("(") or _PLACE.match(v) or _CAPITALISED_NAME.fullmatch(v):
+                continue
+            if any(ch.isdigit() for ch in v) or re.search(r"[^\w]", v) or len(v) >= 16:
+                return m
+        return None
+
+
+SECRET_SHAPES: tuple[tuple[str, object], ...] = (   # each has .search (a re.Pattern, or _Password)
     ("private_key", re.compile(r"(?i)-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("arn", re.compile(r"(?i)\barn:[a-z0-9-]+:[a-z0-9-]*:")),
     ("url_credentials", re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^/\s@]+@")),
@@ -74,13 +103,8 @@ SECRET_SHAPES: tuple[tuple[str, re.Pattern], ...] = (
         r"(?![A-Za-z0-9+]*/[A-Za-z0-9+]*/[A-Za-z0-9+]*/)[A-Za-z0-9/+]{40}"
         # ... or 40 of them after a secret key's name, whatever they hold (AWS_SECRET_ACCESS_KEY=..., .env's own form)
         r"|(?i:secret[_ ]?(?:access[_ ]?)?key|\bsecret)[\"']?\s*[=:]\s*[\"']?[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])")),
-    # a password written with its value: "password: hunter2", "pwd": "s3cr3t!" — one word after the colon that has a
-    # digit or a sign, or is 16 or more long. Not a sentence ("password: stored in Secrets Manager", "Password:
-    # rotated monthly"), not a word ("Forgot password: link"), not a mask (********), a placeholder (${DB_PASSWORD},
-    # {{ .pw }}, <pw>) or a path (pwd: /home/app). (Password=value is the connection-string shape above.)
-    ("password", re.compile(
-        r"(?i)\b(?:password|passwd|pwd)\b[\"']?\s*:\s*[\"']?(?![$*{<\\/])"
-        r"(?=[^\s\"',;]*(?:\d|[^\w\s\"',;])|[^\s\"',;]{16})[^\s\"',;]+(?=[\"',;]|\s*$|\s*[\r\n])")),
+    # a password written with its value: _Password below (one word after "password:" that is not a word of a sentence)
+    ("password", _Password()),
     ("account_id", re.compile(r"(?<![\d-])(?:\d{12}|\d{4}-\d{4}-\d{4})(?![\d-])")),
 )
 # an IPv4 address. A version is not one: four numbers right after a letter (v1.25.3.1), or after a letter and "-" or
@@ -90,11 +114,21 @@ SECRET_SHAPES: tuple[tuple[str, re.Pattern], ...] = (
 # interface, this machine) are no one's address.
 _IPV4 = re.compile(r"(?<![A-Za-z0-9])(?<!\d\.)(?<![A-Za-z][-@](?=\d\.))"
                    r"((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?!\.?\d)")
-# the same address written with "-" or "_" (AWS's internal host names ip-10-0-0-5, a name like db_10_0_0_5)
+# the same address written with "-" or "_": AWS's host names (ip-10-0-0-5, ec2-54-12-34-56.compute-1.amazonaws.com),
+# a name (host-10-0-0-5, db_10_0_0_5, db_10_0_0_5_url) or alone (10-0-0-5). As with ".": after a letter and "-" or "_"
+# the first number must be 10 or more (build_1_2_3_4 and release-1-2-3-4 are versions); never inside a longer run of
+# numbers (ip-10-0-0-5-6, ip-10-0-0-500). dd's fourth verification Q3.
 _OCTET = r"(?:25[0-5]|2[0-4]\d|1?\d?\d)"
-_IPV4_OTHER = re.compile(rf"(?i)\bip-{_OCTET}(?:-{_OCTET}){{3}}(?![\d-])|(?<![\dA-Za-z]){_OCTET}(?:_{_OCTET}){{3}}(?![\d_])")
-# no one's IPv6 addresses: :: (any) and ::1 (this machine), and ::ffff alone (the IPv4-mapped prefix, no address in it)
-_IPV6_NO_ONES = {"::", "::1", "::ffff"}
+_BIG = r"(?=[1-9]\d)"   # a first number of 10 or more
+_IPV4_OTHER = re.compile(
+    rf"(?i)\b(?:ip|ec2)-{_OCTET}(?:-{_OCTET}){{3}}(?![\d-]|-\d)"
+    rf"|(?<![\dA-Za-z_-]){_OCTET}(?:-{_OCTET}){{3}}(?!\d|-\d)"
+    rf"|(?<=[A-Za-z]-){_BIG}{_OCTET}(?:-{_OCTET}){{3}}(?!\d|-\d)"
+    rf"|(?<![\dA-Za-z_-]){_OCTET}(?:_{_OCTET}){{3}}(?!\d|_\d)"
+    rf"|(?<=[A-Za-z]_){_BIG}{_OCTET}(?:_{_OCTET}){{3}}(?!\d|_\d)")
+# no one's IPv6 addresses: the IPv4 forms (::a.b.c.d, ::ffff:a.b.c.d) of no one's IPv4 — 0/8 (so ::, ::1, ::2 and the
+# rest of ::/104: unspecified, this machine, reserved), 127/8, the reserved 240/4 (::ffff:0 is ::255.255.0.0). A run of hex letters with no digit (a::b,
+# Db::Feed, dead::beef — Ruby's and C++'s names) is not taken for one. dd's fourth verification Q3.
 _IPV6 = re.compile(r"(?<![\w:.])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])")
 _INVISIBLE = re.compile(r"[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]")
 
@@ -110,12 +144,16 @@ def _ip_found(text: str) -> bool:
         if not (nums[0] == "127" or set(nums) == {"0"}):
             return True
     for m in _IPV6.finditer(text):
+        if not any(ch.isdigit() for ch in m.group(1)):
+            continue
         try:
             ip = ipaddress.IPv6Address(m.group(1))
         except ValueError:
             continue
-        if ip.compressed not in _IPV6_NO_ONES:   # NAT64 64:ff9b::a00:5 and ::a00:5 carry an IPv4 address
-            return True
+        inner = ip.ipv4_mapped or (ipaddress.IPv4Address(int(ip)) if int(ip) < 1 << 32 else None)   # ::ffff:a.b.c.d, ::a.b.c.d
+        if inner is not None and (inner.is_reserved or inner.is_loopback or int(inner) >> 24 == 0):
+            continue
+        return True   # NAT64 64:ff9b::a00:5 and ::a00:5 carry an IPv4 address
     return False
 
 
