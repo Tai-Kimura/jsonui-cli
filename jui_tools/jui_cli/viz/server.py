@@ -37,7 +37,7 @@ from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import attachments, callcmd, clockout, i18n, infra_docs, paths, security
+from . import attachments, callcmd, clockout, i18n, infra_cost, infra_docs, paths, security
 from .config import ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec, save_setting
 from .state import VizState, now_ms
 
@@ -906,6 +906,20 @@ def make_app(ctx: ServerContext) -> web.Application:
         # POST only (no link opens it as a page); the page shows it through <img>, where an SVG runs no script
         return web.Response(body=data, content_type=media, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
+    async def api_infra_cost(request: web.Request) -> web.Response:
+        """The cost simulator (infra_cost.read → document_tools' infra.load, infra.cost): {"projectId", "seq",
+        "scenario"?, "date"?, "by"?} names a room and a scenario of its load definitions (the first when none); no date:
+        the month and the scenarios, a date: that day. The checks of /api/prompt; never a path from the client; off the
+        event loop; JSON, no-store."""
+        body, root = await _infra_room(request, "/api/infra-cost")
+        if root is None:
+            return body
+        seq = body.get("seq") if isinstance(body.get("seq"), int) and not isinstance(body.get("seq"), bool) else None
+        status, got = await asyncio.get_running_loop().run_in_executor(
+            _data_docs_pool(), lambda: infra_cost.read(root, seq, body.get("scenario"), body.get("date"),
+                                                       body.get("by", "provider")))
+        return web.json_response(got, status=status, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
     async def api_prices(request: web.Request) -> web.Response:
         """The page's 単価 sheet (2.3.6): {"op": set | remove | reset, "model", "row"?} changes the user's price
         table (prices.apply_op) — the checks of /api/prompt (prompt_checks) first. Written in the price table's own
@@ -983,6 +997,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/data-docs", api_data_docs)
     app.router.add_route("*", "/api/infra-docs", api_infra_docs)
     app.router.add_route("*", "/api/infra-icon", api_infra_icon)
+    app.router.add_route("*", "/api/infra-cost", api_infra_cost)
     app.router.add_route("*", "/api/prices", api_prices)
     app.router.add_route("*", "/api/session/end", api_session_end)
     app.router.add_route("*", "/api/call-command", api_call_command)

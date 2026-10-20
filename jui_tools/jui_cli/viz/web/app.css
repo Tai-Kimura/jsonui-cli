@@ -1522,6 +1522,53 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-fp-state { color: var(--ink-soft); }
 .sr-fp-chosen { display: flex; flex-wrap: wrap; gap: 4px 12px; width: 100%; margin: 0; padding-left: 18px; font-size: 12px; }
 .sr-flows { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
+/* the cost simulator over the stage (56-server-cost.js): the month's stacked days, a day's bars */
+.sr-mode { gap: 0; }
+.sr-mode .wb-btn { border-radius: 0; }
+.sr-mode .wb-btn:first-child { border-radius: 6px 0 0 6px; }
+.sr-mode .wb-btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.sr-mode .wb-btn[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+.sr-cost { position: absolute; inset: 0; overflow: auto; padding: 12px 16px; background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font-body); }
+.sr-cost[hidden] { display: none; }
+.src-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+.src-total { font: 700 22px/1.2 var(--font-mono); }
+.src-note, .src-hint { color: var(--ink-soft); font-size: 12px; }
+.src-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.src-chip { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: var(--panel); }
+.src-chip[data-some] summary b { color: #c0392b; }
+.src-chip ul { margin: 4px 0; padding-left: 18px; max-height: 160px; overflow: auto; font: 12px/1.5 var(--font-mono); }
+.src-month { display: block; max-width: 100%; }
+.src-tick line { stroke: var(--line); }
+.src-tick text, .src-dlabel { fill: var(--ink-soft); font: 10px var(--font-mono); }
+.src-day { cursor: pointer; }
+.src-day:focus-visible { outline: 2px solid var(--ink); }
+.src-hit { fill: transparent; }
+.src-over { fill: #d62728; }
+.src-flag { fill: var(--ink); font-size: 12px; }
+.src-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; font-size: 12px; }
+.src-key i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
+.src-dayhead { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.src-clock { font: 700 16px var(--font-mono); }
+.src-hoursum { color: var(--ink-soft); }
+.src-rows { display: grid; gap: 6px; }
+.src-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 150px; gap: 8px; align-items: center; }
+.src-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.src-name small { display: block; font-weight: 400; color: var(--ink-soft); }
+.src-bar { display: flex; align-items: center; min-height: 26px; background: var(--panel); border-radius: 4px; overflow: hidden; }
+.src-seg { display: block; height: 26px; padding: 0 4px; color: #fff; font: 11px/26px var(--font-mono); white-space: nowrap; overflow: hidden; cursor: pointer; }
+.src-seg:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.src-out { padding: 0 6px; color: var(--ink-soft); font: 11px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-usd { font-family: var(--font-mono); text-align: right; }
+.src-red { color: #d62728; font-weight: 700; }
+.src-overrow .src-name { color: #d62728; }
+.src-noted .src-name, .src-notetext { color: var(--ink-soft); }
+.src-step { margin-left: 4px; color: var(--ink); }
+.src-price { margin-top: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.src-price h4 { margin: 0 0 4px; }
+.src-price dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
+.src-price dt { color: var(--ink-soft); }
+.src-price dd { margin: 0; font-family: var(--font-mono); word-break: break-all; }
+.src-status { color: var(--ink-soft); }
 .sr-label { position: absolute; left: 0; top: 0; padding: 1px 6px; border-radius: 4px; background: var(--tag-bg); color: var(--ink); font: 500 11px/1.5 var(--font-mono); white-space: nowrap; }
 .sr-label[hidden] { display: none; }
 .sr-label[data-kind="group"] { font-weight: 700; background: var(--panel); border: 1px solid var(--line); }

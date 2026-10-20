@@ -179,6 +179,18 @@ const SOURCE = {
       return { ok: false, seq, reason: 'unreadable', message: `HTTP ${res.status}`, short: `読めなかった（HTTP ${res.status}）` };
     } catch (err) { return { ok: false, seq, reason: 'unreadable', message: 'サーバーにつながらない', short: 'サーバーにつながらない' }; }
   },
+  /* The cost simulator (56-server-cost.js): POST /api/infra-cost with the room and {seq, scenario, date, by}; the
+     server's shapes, or {ok: false, reason, message}. */
+  async infraCost(project, ask) {
+    try {
+      const res = await fetch('/api/infra-cost', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: JSON.stringify({ projectId: project, ...ask }) });
+      let body = null;
+      try { body = await res.json(); } catch (err) { body = null; }
+      if (body && typeof body === 'object' && typeof body.ok === 'boolean') return body;
+      return { ok: false, reason: 'unreadable', message: `HTTP ${res.status}` };
+    } catch (err) { return { ok: false, reason: 'unreadable', message: 'サーバーにつながらない' }; }
+  },
   /* One icon the room's settings name (POST /api/infra-icon): a Blob, or null (the neutral shape stays). */
   async infraIcon(project, key) {
     try {

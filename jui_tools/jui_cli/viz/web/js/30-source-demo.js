@@ -726,6 +726,7 @@ const SOURCE = {
   // service's values, requester 10-20), after a moment so the keypad's * are seen
   infraDocs(project, seq) { return new Promise((r) => setTimeout(() => r(project === 'shop' ? { ...demoInfra(), seq } : { ok: false, seq, reason: 'no_infra', message: 'デモのこの部屋には構成が無い', short: 'docs/infra がありません' }), 1200)); },
   infraIcon() { return Promise.resolve(null); },
+  infraCost() { return Promise.resolve({ ok: false, reason: 'demo', message: 'デモではコストを計算しない（jui viz の部屋で開いてください）' }); },
 };
 /* The demo's server room: a made-up web shop on one cloud, a CDN in front, a card payment service outside, two
    environments; the IAM role and the alarm are folded until asked for. */

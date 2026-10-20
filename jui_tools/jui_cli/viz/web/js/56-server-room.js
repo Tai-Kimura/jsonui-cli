@@ -313,6 +313,7 @@ function srClose() {
   SR.phase = 'idle';
   srBoxEnd();
   srBoxArm(false);
+  if (typeof srCostReset === 'function') srCostReset();
   srDispose();
   hideOverlay(srEl);
   SR.seq += 1;
@@ -479,7 +480,8 @@ function srBuild() {
   cv.onpointerleave = () => { if (SR.hover) { SR.hover = null; srFocusLines(V); } };
   cv.onpointerup = (e) => { if (V.downAt && Math.hypot(e.clientX - V.downAt[0], e.clientY - V.downAt[1]) < 5) srPick(e); V.downAt = null; };
   srFlowBuild(V);          // 59-sr-flows.js: the cones over the nodes that start a flow
-  const loop = () => {
+  const loop = () => {   // the cost view over the stage pauses it (SR.paused, 56-server-cost.js): no frame drawn meanwhile
+    if (SR.paused) { V.raf = 0; return; }
     V.raf = requestAnimationFrame(loop);
     const t = srNow();
     const dt = V.last ? Math.min(t - V.last, 100) : 16;
@@ -491,6 +493,7 @@ function srBuild() {
     if (t - V.labelAt > 100) { V.labelAt = t; srPlaceLabels(V); }
     renderer.render(scene, camera);
   };
+  V.loop = loop;
   loop();
   SR.stats = { firstMs: Math.round(srNow() - t0), nodes: L.nodes.length, edges: L.edges.length, floors: L.floors.length };
   srLog(`描いた: node ${L.nodes.length}・edge ${L.edges.length}・床 ${L.floors.length}（${SR.stats.firstMs} ms）${env ? `、環境 ${env}` : ''}`);

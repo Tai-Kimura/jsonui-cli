@@ -134,6 +134,8 @@
           <button type="button" class="wb-btn" id="sr-back">← 部屋に戻る（Esc）</button>
           <h2 id="sr-title">サーバールーム</h2>
           <span class="sr-room" id="sr-room"></span>
+          <span class="sr-ctl sr-mode" role="group" aria-label="表示"><button type="button" class="wb-btn" id="sr-mode-3d" aria-pressed="true">3D</button><button type="button" class="wb-btn" id="sr-mode-cost" aria-pressed="false">コスト</button></span>
+          <label class="sr-ctl" id="sr-scn-ctl" hidden>負荷 <select id="sr-scn"></select></label>
           <label class="sr-ctl">環境 <select id="sr-env"></select></label>
           <label class="sr-ctl"><input type="checkbox" id="sr-fold"> 細かいもの（IAM・アラームなど）</label>
           <span class="grow"></span>
@@ -146,7 +148,7 @@
           <button type="button" class="wb-btn" id="sr-log-btn" aria-pressed="false" aria-controls="sr-log">ログ</button>
         </header>
         <div class="sr-main">
-          <div class="sr-stage"><canvas id="sr-canvas" aria-label="インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす、Option＋ドラッグで範囲に寄る）"></canvas><div class="sr-box" id="sr-box" hidden></div><div class="sr-toasts" id="sr-toasts" aria-live="polite"></div><div class="sr-choices" id="sr-choices" hidden role="group" aria-label="分かれ道"></div><div class="sr-player" id="sr-player" hidden role="toolbar" aria-label="流れの再生"></div><div class="sr-labels" id="sr-labels" aria-hidden="true"></div></div>
+          <div class="sr-stage"><canvas id="sr-canvas" aria-label="インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす、Option＋ドラッグで範囲に寄る）"></canvas><div class="sr-box" id="sr-box" hidden></div><div class="sr-toasts" id="sr-toasts" aria-live="polite"></div><div class="sr-choices" id="sr-choices" hidden role="group" aria-label="分かれ道"></div><div class="sr-player" id="sr-player" hidden role="toolbar" aria-label="流れの再生"></div><div class="sr-labels" id="sr-labels" aria-hidden="true"></div><div class="sr-cost" id="sr-cost" hidden aria-label="コストのシミュレーション"></div></div>
           <aside class="sr-board" id="sr-board" aria-label="構成のボード"></aside>
         </div>
         <div class="sr-log" id="sr-log" hidden aria-label="サーバールームのログ"></div>

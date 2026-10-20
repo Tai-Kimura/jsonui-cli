@@ -71,6 +71,17 @@ window.__dbg = {
     const first = ray.intersectObjects([...robots.map((x) => x.robot.root), at.D.root, at.D.pad].filter(Boolean), true)[0];
     return { id: R.def.id, first: first ? (robotOf(first.object) !== undefined ? `robot:${robotOf(first.object)}` : first.object.userData.serverDoor ? 'door' : 'other') : null };
   },
+  // the cost simulator (L-C): the mode, the scenario, the month's shape drawn, the day's hour and rows, the 3D paused
+  srCost: () => ({ mode: SRC.mode, scenario: SRC.scenario, error: SRC.error, paused: !!SR.paused, raf: !!(SR.view && SR.view.raf),
+    month: SRC.month ? { usd: SRC.month.usd, days: SRC.month.days.length, bars: document.querySelectorAll('#sr-cost .src-day').length,
+      total: ($('sr-cost').querySelector('[data-src-total]') || {}).textContent || '', overDays: document.querySelectorAll('#sr-cost .src-over').length,
+      chips: [...document.querySelectorAll('#sr-cost [data-src-chip]')].map((c) => [c.dataset.srcChip, Number(c.querySelector('b').textContent)]) } : null,
+    day: SRC.day ? { date: SRC.date, hour: SRC.hour, playing: !!SRC.timer, rows: document.querySelectorAll('#sr-cost .src-row').length,
+      clock: ($('sr-cost').querySelector('[data-src-clock]') || {}).textContent || '',
+      segments: [...document.querySelectorAll('#sr-cost .src-seg')].map((s) => s.getAttribute('aria-label')),
+      red: [...document.querySelectorAll('#sr-cost [data-src-over]')].map((s) => s.textContent),
+      price: ($('sr-cost').querySelector('[data-src-price]') || {}).textContent || '' } : null }),
+  srCostPlayMs: (ms) => { SRC.playMs = ms; return ms; },
   srFramesReset: () => { if (SR.view) SR.view.frames = []; return !!SR.view; },
   // the box (2.3.11 item 6): the nodes on the page now (client px; null behind the camera), the camera, what the last box held
   srScreen: () => { const V = SR.view; if (!V) return null; V.camera.updateMatrixWorld(); const r = V.renderer.domElement.getBoundingClientRect();

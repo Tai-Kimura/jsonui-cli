@@ -362,6 +362,41 @@ async def run_server_room(pw, out, failures):
         s = res["opened"] = await page.evaluate(SR)
         check(failures, s["bubble"] is None and (s["shown"] or {}).get("nodes", 0) > 0 and s["stats"]["edges"] > 0, f"open: the model drawn, the bubble gone: {s['shown']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"open up close: the floors and shapes, not the far boxes over them: {s['lod']} {s['layers']}")
+
+        # 2c. the cost simulator (plan L-C): 3D / コスト, the scenarios, the month, a day played, its breakdown and the red
+        COST = "() => window.__dbg.srCost()"
+        await page.click("#sr-mode-cost")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.month && c.month.bars === c.month.days; }", "the month drawn", timeout=20000)
+        c = res["costMonth"] = await page.evaluate(COST)
+        chips = dict(c["month"]["chips"])
+        check(failures, c["paused"] and not c["raf"] and c["month"]["days"] == 30 and c["month"]["total"].startswith("$"),
+              f"コスト: the 3D paused, the month's 30 days and its sum: {c}")
+        check(failures, chips.get("noRule") == 3 and "noPrice" in chips and "loadUndefined" in chips, f"what is not priced is counted on the page: {chips}")
+        await page.select_option("#sr-scn", "sale")
+        await until(page, "(u) => { const c = window.__dbg.srCost(); return c.scenario === 'sale' && c.month && c.month.usd !== u; }",
+                    "another scenario's month", arg=c["month"]["usd"], timeout=20000)
+        sale = res["costSale"] = await page.evaluate(COST)
+        check(failures, sale["month"]["overDays"] >= 1, f"the sale's day over capacity is marked: {sale['month']}")
+        await page.click("#sr-cost [data-src-date='2026-11-27']")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.day && c.day.date === '2026-11-27' && c.day.rows > 0; }", "the day", timeout=20000)
+        await page.evaluate("() => { const r = document.getElementById('src-hour'); r.value = '1'; r.dispatchEvent(new Event('input', { bubbles: true })); }")
+        d = res["costDay"] = (await page.evaluate(COST))["day"]
+        check(failures, d["hour"] == 1 and d["clock"] == "01:00" and d["red"] and "捌けた / 来た" in d["red"][0],
+              f"over capacity in red as served / demand: {d['red']}")
+        check(failures, any("リクエスト" in x and "/sec" in x and "$" in x for x in d["segments"]), f"a meter says its rate and charge: {d['segments'][:6]}")
+        await page.evaluate("() => window.__dbg.srCostPlayMs(120)")
+        await page.click("#sr-cost [data-src-act='play']")
+        await until(page, "() => window.__dbg.srCost().day.hour >= 5", "played on", timeout=10000)
+        played = (await page.evaluate(COST))["day"]
+        await page.click("#sr-cost [data-src-act='stop']")
+        check(failures, played["hour"] >= 5, f"再生 moves the hour on: {played['hour']}")
+        await page.click("#sr-cost [data-src-seg]")
+        await until(page, "() => window.__dbg.srCost().day.price !== ''", "the price's trace")
+        price = (await page.evaluate(COST))["day"]["price"]
+        check(failures, "出どころ" in price and ("同梱の表" in price or "利用者のファイル" in price), f"a meter pressed shows its price's trace: {price[:200]}")
+        await page.screenshot(path=str(out / "cost-day-light.png"))
+        await page.click("#sr-mode-3d")
+        await until(page, "() => { const c = window.__dbg.srCost(); return !c.paused && c.raf; }", "the 3D again")
         # the theme changing while it is open (D3) follows; dark is a dark ground with floors and labels that read (2.3.9, item 2)
         res["theme"] = {}
         for scheme in ("light", "dark"):
