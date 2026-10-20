@@ -596,8 +596,20 @@ function zoomTo(pose, opener, arrive) {
     flyTo(pose.p, pose.t, controls.target, reduceMotion ? 0 : 0.9, arrive);
   } else flyTo(pose.p, pose.t, viewTarget, reduceMotion ? 0 : 0.5, arrive);
 }
+/* What holds the 3D view (ticket 2026-10-20-jui-viz-data-server-from-robot-card-freezes-3d): every screen that takes
+   it — the robot's card, the spec board, the task board, the data server's sheet, the 単価 sheet — holds it while it is
+   open. A screen holds as it opens, before it closes the one it replaces, and lets go as it closes; the camera flies
+   back and the orbit takes input again only when the last one lets go (and only if it was zoomed: a sheet opened from
+   the 3D did not move the camera). The card used to close "keeping the zoom" for whatever came next, and a sheet that
+   does not zoom never gave it back: the 3D froze (zoomed, the orbit off) after card → rack → back. */
+const VIEW_HOLD = new Set();
+function holdView(name) { VIEW_HOLD.add(name); }
+function releaseView(name) {
+  if (!VIEW_HOLD.delete(name) || VIEW_HOLD.size) return;
+  zoomBack();
+}
 function zoomBack() {
-  if (has3D && zoom.returnPose) {
+  if (has3D && zoom.returnPose && zoom.zoomed) {    // not zoomed: nothing to fly back from (a pose kept from before)
     const back = zoom.returnPose;
     flyTo(back.p, back.t, viewTarget, reduceMotion ? 0 : 0.8, () => { controls.target.copy(back.t); zoom.zoomed = false; controls.enabled = true; controls.update(); });
   }
@@ -691,8 +703,9 @@ wbNav.addEventListener('click', (e) => {
 ['wheel', 'touchmove'].forEach((type) => wbCode.addEventListener(type, () => { if (wb.idx >= 0) $('wb-follow').checked = false; }, { passive: true }));
 
 function openWhiteboard(i, opener, board) {
-  if (tb.open) { tb.open = false; tb.detail = null; hideOverlay(tbEl); }
-  if (rbState.id) closeRobot(true);
+  holdView('wb');
+  if (tb.open) closeTaskBoard();
+  if (rbState.id) closeRobot();
   if (i >= 0 && !inScope(SPECS[i].project)) setProject(SPECS[i].project, { camera: false });
   if (i >= 0 && !inApp(SPECS[i])) wb.app = 'all';
   wb.idx = i; wb.lastActive = null; wb.board = board || null;
@@ -716,10 +729,10 @@ function openWhiteboard(i, opener, board) {
   });
 }
 function closeWhiteboard() {
-  if (!wb.open) return;
+  if (!wb.open) { releaseView('wb'); return; }
   wb.open = false;
   hideOverlay(wbEl);
-  zoomBack();
+  releaseView('wb');
 }
 $('wb-close').addEventListener('click', closeWhiteboard);
 
@@ -1034,8 +1047,9 @@ function openTaskBoard(opener, detail, board) {
   if (board !== undefined) tb.board = board;
   if (detail && !detail.startsWith('perm:') && !inScope(PROJECT_OF[detail.split('#')[0]])) setProject(PROJECT_OF[detail.split('#')[0]], { camera: false });
   if (detail && detail.startsWith('perm:') && !inScope(projectOfRobot(PERM_BY_ID[detail.slice(5)].who))) setProject(projectOfRobot(PERM_BY_ID[detail.slice(5)].who), { camera: false });
-  if (wb.open) { wb.open = false; hideOverlay(wbEl); }
-  if (rbState.id) closeRobot(true);
+  holdView('tb');
+  if (wb.open) closeWhiteboard();
+  if (rbState.id) closeRobot();
   if (tb.open) { renderTaskBoard(latestModel); if (detail) $('tbd-close').focus({ preventScroll: true }); return; }
   tb.open = true;
   zoomTo(taskPose(tb.board), opener, () => {
@@ -1054,11 +1068,11 @@ function closeTaskDetail() {
   (back || $('tb-close')).focus({ preventScroll: true });
 }
 function closeTaskBoard() {
-  if (!tb.open) return;
+  if (!tb.open) { releaseView('tb'); return; }
   tb.open = false; tb.detail = null; tb.waitView = false;
   qStripEl.replaceChildren(); qStripEl._sig = null; qStripEl.hidden = true;   // no second copy of the cards while closed
   hideOverlay(tbEl);
-  zoomBack();
+  releaseView('tb');
 }
 $('tb-close').addEventListener('click', closeTaskBoard);
 const COL_HINT = { todo: '担当が決まれば始められる', wait: '先に終わるタスクがある', doing: 'ロボットが今やっている', done: '' };
@@ -1358,8 +1372,9 @@ const focusing = () => has3D && !!rbState.id && zoom.zoomed && !camTween;
   }, { passive: false });
 }
 function openRobot(id, opener) {
-  if (wb.open) { wb.open = false; hideOverlay(wbEl); }
-  if (tb.open) { tb.open = false; tb.detail = null; hideOverlay(tbEl); }
+  holdView('rb');
+  if (wb.open) closeWhiteboard();
+  if (tb.open) closeTaskBoard();
   const showing = !!rbState.id;
   rbState.id = id;
   if (showing) { renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
@@ -1374,15 +1389,15 @@ function openRobot(id, opener) {
     $('rb-close').focus({ preventScroll: true });
   });
 }
-function closeRobot(keepZoom) {
-  if (!rbState.id) return;
+function closeRobot() {
+  if (!rbState.id) { releaseView('rb'); return; }
   rbState.id = null;
   hideOverlay(rbEl);
   histSync();
   talkSync();
   FOCUS.id = null;      // the next robot opened chooses its view afresh
   focusFadeSync();      // everything faint gets its own material back
-  if (!keepZoom) zoomBack();
+  releaseView('rb');    // the camera goes back only when no other screen holds the view (VIEW_HOLD)
 }
 /* ← → on the robot card (requester, 10-18: "この画面の時に左右キーとかでロボットを切り替えれるようにできる？"): the
    robots in view — the project picked, or the rooms of the floor shown — room by room in the rooms' order, then by

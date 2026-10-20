@@ -124,9 +124,10 @@ const PR_ORIGIN = { default: '既定', user: '追加', changed: '変更', remove
 function pricesSlice() { const p = LIVE.slices && LIVE.slices.prices; return p && !Array.isArray(p) && typeof p === 'object' ? p : null; }
 function openPrices(opener, model) {
   if (SOURCE.mode !== 'live') return;
+  holdView('pr');   // 50-panel.js VIEW_HOLD: held before the card it replaces lets go
   if (wb.open) closeWhiteboard();
   if (tb.open) closeTaskBoard();
-  if (rbState.id) closeRobot(true);
+  if (rbState.id) closeRobot();
   if (ds.open) closeDataDocs();
   const p = pricesSlice(), row = p && (p.rows || []).find((r) => r.model === model);
   Object.assign(pr, { open: true, msg: '', opener: opener || null, sig: '',
@@ -138,9 +139,10 @@ function openPrices(opener, model) {
   if (first) first.focus({ preventScroll: true });
 }
 function closePrices() {
-  if (!pr.open) return;
+  if (!pr.open) { releaseView('pr'); return; }
   pr.open = false; pr.edit = null;
   hideOverlay(prEl);
+  releaseView('pr');
   liveSoloSync();
   if (pr.opener && pr.opener.focus) pr.opener.focus({ preventScroll: true });
 }

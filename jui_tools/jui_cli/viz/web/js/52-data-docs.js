@@ -8,9 +8,10 @@
 const dsEl = $('ds'), dsBody = $('ds-body'), dsTabs = $('ds-tabs');
 const ds = { open: false, project: null, tab: 'api', doc: null, error: '', loading: false, ep: null, seq: 0, opener: null };
 async function openDataDocs(project, opener) {
+  holdView('ds');   // 50-panel.js VIEW_HOLD: held before the card it replaces lets go
   if (wb.open) closeWhiteboard();
   if (tb.open) closeTaskBoard();
-  if (rbState.id) closeRobot(true);
+  if (rbState.id) closeRobot();
   if (pr.open) closePrices();   // 54-bills.js
   Object.assign(ds, { open: true, project, doc: null, error: '', loading: true, ep: null, opener: opener || null });
   setText($('ds-room'), PROJECT[project] ? PROJECT[project].name : '');
@@ -27,9 +28,10 @@ async function openDataDocs(project, opener) {
   renderDataDocs();
 }
 function closeDataDocs() {
-  if (!ds.open) return;
+  if (!ds.open) { releaseView('ds'); return; }
   ds.open = false; ds.doc = null; ds.seq += 1;
   hideOverlay(dsEl);
+  releaseView('ds');
   liveSoloSync();
   if (ds.opener && ds.opener.focus) ds.opener.focus({ preventScroll: true });
 }

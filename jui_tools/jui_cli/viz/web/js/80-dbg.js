@@ -222,6 +222,21 @@ window.__dbg = {
       blockersNow: now.length, blockersFaded: now.filter((o) => FOCUS.faded.has(o)).length, faded: FOCUS.faded.size,
       fadedOpacity: [...FOCUS.faded.keys()].map((o) => [].concat(o.material)[0].opacity) };
   },
+  // what holds the 3D view (ticket 2026-10-20-jui-viz-data-server-from-robot-card-freezes-3d): the camera's zoom and
+  // tween, whether the orbit takes input, the card, every screen open over the 3D, the tags layer
+  view: () => ({ zoomed: zoom.zoomed, controls: controls.enabled, tween: !!camTween, card: rbState.id,
+    open: { rb: !rbEl.hidden, wb: wb.open, tb: tb.open, ds: ds.open, pr: pr.open, log: logState.open },
+    tagsHidden: tagsEl.hidden, held: typeof VIEW_HOLD === 'undefined' ? null : [...VIEW_HOLD] }),
+  // the rack pressed (40-scene.js's pick, kind 'data', makes this same call) — for when the camera, framing a robot's
+  // card, leaves the rack off the screen
+  pressRack: () => { if (!PROPS.dataServer || !PROPS.room) return false; openDataDocs(PROPS.room, canvas); return true; },
+  // a robot's spot on the screen (a real click there opens its card)
+  robotXY: (id) => {
+    const R = robots.find((x) => x.def.id === id);
+    if (!R) return null;
+    const v = R.robot.root.position.clone().add(new THREE.Vector3(0, 1.0, 0)).project(camera), r = canvas.getBoundingClientRect();
+    return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
+  },
   // the arm turns the camera back to the usual direction, as a drag would (to see the faint walls)
   focusSet: (o) => { if ('az' in o) FOCUS.az = o.az; if ('el' in o) FOCUS.el = o.el; if ('dist' in o) FOCUS.dist = o.dist; return { az: FOCUS.az, el: FOCUS.el }; },
   focusBase: () => ({ ...FOCUS_BASE }),

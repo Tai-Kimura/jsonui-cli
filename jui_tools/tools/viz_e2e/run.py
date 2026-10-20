@@ -199,7 +199,7 @@ def check_watch(watch: Watch, label: str, failures: list, allow_foreign=False):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="jui viz browser tests")
     ap.add_argument("--out", required=True, help="where screenshots and results go")
-    ap.add_argument("--only", action="append", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "spec-colors", "weather", "usage", "name-tags", "shredder", "gitbox", "log-strip", "hist-wide", "hist-labels", "hist-images", "name-tag-role", "clock-out", "arrows-rooms", "ask-board", "callbell", "mermaid", "dataflow-mermaid", "data-server", "fulltext", "notify", "heavy-looks", "frame-gaps", "cost-bill", "bg-look", "workwear", "main-color", "hist-fold", "hist-peers", "talk", "talk-ui", "web-dict", "launch-whistle"],
+    ap.add_argument("--only", action="append", choices=["demo", "live", "rooms", "ask", "history", "robot-tests", "rb-layout", "rb-arrows", "focus-cam", "tower", "calls", "play", "play-look", "props", "breaks", "spec-help", "spec-colors", "weather", "usage", "name-tags", "shredder", "gitbox", "log-strip", "hist-wide", "hist-labels", "hist-images", "name-tag-role", "clock-out", "arrows-rooms", "ask-board", "callbell", "mermaid", "dataflow-mermaid", "data-server", "fulltext", "notify", "heavy-looks", "frame-gaps", "cost-bill", "bg-look", "workwear", "main-color", "hist-fold", "hist-peers", "talk", "talk-ui", "web-dict", "launch-whistle", "card-screens"],
                     help="run one half (talk-ui: only the talk view's page side, on the demo; talk: only the talk view's server side (talk.* over the WebSocket); hist-peers: only a SendMessage's recipient linked to its robot; hist-fold: only a history fold closing on a click in its body; rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; play-look: only what a game looks like (tags, the ball, the slap, the bubble); spec-help: only the 「?」 dialog of spec の進み具合; spec-colors: only the spec sheet's colours; weather: only the season and the near weather outside; name-tags: only robots' name tags kept apart; hist-wide: only the wide history; hist-labels: only the history's labels on one line; hist-images: only the pictures in the history; name-tag-role: only a session's name on its robot's tag; clock-out: only the 退勤 button; arrows-rooms: only ← → between rooms and ↑ ↓ between floors; ask-board: only the 質問 / 許可待ち chips' board; mermaid: only the vendored Mermaid (strict, nothing outside); dataflow-mermaid: only a spec's data flow as a diagram; data-server: only the rack and its API / DB sheet; heavy-looks: only heavy work's three looks (red, blue, the whistle); cost-bill: only the bill over a robot and the 単価 sheet; bg-look: only background work's headset, notes and laptop; web-dict: only WebFetch / WebSearch's dictionary on the desk; launch-whistle: only the whistle when a subagent is called (demo and live); "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
@@ -433,6 +433,10 @@ def main(argv=None) -> int:
                 with suite_guard("data-server", failures, out):
                     import data_server
                     await data_server.run_data_server(pw, out, failures)
+            if want("live", "card-screens"):
+                with suite_guard("card-screens", failures, out):
+                    import card_screens
+                    await card_screens.run_card_screens(pw, out, failures)
             if want("live", "fulltext"):
                 with suite_guard("fulltext", failures, out):
                     import fulltext
