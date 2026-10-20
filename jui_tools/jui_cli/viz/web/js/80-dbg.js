@@ -172,7 +172,7 @@ window.__dbg = {
   propsMax: (n) => { if (PROPS.maxAsBuilt === undefined) PROPS.maxAsBuilt = PROPS.max; PROPS.max = n == null ? PROPS.maxAsBuilt : n; return PROPS.max; },
   // the floor of a room as drawn, read from the room (not PROPS): its material's id and whether it has a texture
   floorOf: (id) => { const R = LIVE3D.rooms[id]; return R ? { mat: R.floor.material.uuid, map: !!R.floor.material.map } : null; },
-  tagPinsOver: (pt) => {
+  tagPinsOver: (pt, avoid) => {   // avoid: page rects ([x0, x1, y0, y1]) the tag must not touch (the bell, for a tag over the rack alone)
     if (SOURCE.mode !== 'live') return null;   // the seats are the live source's (30-source-live.js)
     const room = PROJECT[liveSolo()], t = robots.find((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden);
     if (!room || !t) return null;
@@ -182,7 +182,8 @@ window.__dbg = {
       v.set(p[0], 0, p[1]).add(TAG_UP).project(camera);
       const x = r.left + (v.x + 1) / 2 * r.width, y = r.top + (1 - v.y) / 2 * r.height;
       const pts = Array.isArray(pt[0]) ? pt : [pt];   // one point, or several the one tag must hold (the bell and the rack)
-      if (pts.every((q) => q[0] > x - w / 2 + 6 && q[0] < x + w / 2 - 6 && q[1] > y - h + 4 && q[1] < y - 4)) out.push([+dx.toFixed(2), +dz.toFixed(2), Math.max(...pts.map((q) => Math.hypot(x - q[0], y - h / 2 - q[1])))]);
+      const clear = !(avoid || []).some((f) => x - w / 2 < f[1] && f[0] < x + w / 2 && y - h < f[3] && f[2] < y);
+      if (clear && pts.every((q) => q[0] > x - w / 2 + 6 && q[0] < x + w / 2 - 6 && q[1] > y - h + 4 && q[1] < y - 4)) out.push([+dx.toFixed(2), +dz.toFixed(2), Math.max(...pts.map((q) => Math.hypot(x - q[0], y - h / 2 - q[1])))]);
     }
     // best: the spot whose tag's middle is nearest the point(s) (the most room on every side)
     const best = out.slice().sort((p, q) => p[2] - q[2])[0];

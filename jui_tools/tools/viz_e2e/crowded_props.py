@@ -266,18 +266,29 @@ async def run_crowded_props(pw, out, failures):
         at = res["thingsAt"] = {"bell": (await page.evaluate("() => window.__dbg.bell()"))["screen"],
                                 "rack": [round(v) for v in (await page.evaluate("() => window.__dbg.dataServer()"))["screen"]],
                                 "door": (await page.evaluate("() => window.__dbg.sr()"))["door"]}
-        c0 = res["pinBellRack"] = await page.evaluate("(p) => window.__dbg.tagPinsOver(p)", [at["bell"], at["rack"]])
+        # session 0's tag over the bell; session 1's over the rack's upper part alone (clear of the bell's box: one tag over
+        # both was let through for the bell's sake even with the rack left out of tagFixtureRects, the independent check)
+        fx = await page.evaluate("() => window.__dbg.fixRects()")
+        inside = lambda r, p: r[0] <= p[0] <= r[1] and r[2] <= p[1] <= r[3]
+        bell_box = next((r for r in fx if inside(r, at["bell"])), None)
+        rack_box = next((r for r in fx if inside(r, at["rack"]) and r is not bell_box), None)
+        res["boxes"] = {"bell": bell_box, "rack": rack_box}
+        c0 = res["pinBell"] = await page.evaluate("(p) => window.__dbg.tagPinsOver(p)", at["bell"])
+        if rack_box and bell_box:
+            at["rack"] = [round((rack_box[0] + rack_box[1]) / 2), round(rack_box[2] + 8)]   # the rack's top, above the bell
+        cr = res["pinRack"] = await page.evaluate("([p, a]) => window.__dbg.tagPinsOver(p, a)", [at["rack"], [bell_box] if bell_box else []])
         c1 = res["pinDoor"] = await page.evaluate("(p) => window.__dbg.tagPinsOver(p)", at["door"])
-        check(failures, c0 and c0["best"], f"a spot whose tag holds the bell's and the rack's points: {c0}")
+        check(failures, c0 and c0["best"] and cr and cr["best"], f"spots whose tags hold the bell's point, and the rack's clear of the bell: {c0} {cr} boxes {res['boxes']}")
         # the door is on the left wall: measured 23:35, no desk's tag holds its point (0 spots), so no seated robot's tag
         # can cover it; the arm pins it only when a spot exists and says so otherwise
         door_pin = bool(c1 and c1["best"])
         res["doorReachable"] = door_pin
-        pinned = bool(c0 and c0["best"])
+        pinned = bool(c0 and c0["best"] and cr and cr["best"])
         if pinned:
             await page.close()
             page = await new_page(browser, watch, "crowded-props-pinned", **DESKTOP)
-            await page.add_init_script(desk_pins_js([(str(repo), SID.format(0), c0["best"])] + ([(str(repo), SID.format(1), c1["best"])] if door_pin else [])))
+            pins = [(0, c0["best"]), (1, cr["best"])] + ([(2, c1["best"])] if door_pin else [])
+            await page.add_init_script(desk_pins_js([(str(repo), SID.format(i), spot) for i, spot in pins]))
             await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
             await page.goto(url + "/")
             await ready(page)
@@ -288,12 +299,12 @@ async def run_crowded_props(pw, out, failures):
             await settled(page, "the pinned page seated", timeout=60000)
             await until(page, "() => !window.__dbg.view().tween", "the camera still on the pinned page", timeout=20000)
             group = (await page.evaluate(PROPS))["groupId"]   # this page's own group: the 12 -> 11 arms below compare with it
-            labs = await page.evaluate("(sids) => sids.map((sid) => (window.__dbg.robots.find((R) => R.def.realId === sid) || { def: {} }).def.id)", [SID.format(0), SID.format(1)])
+            labs = await page.evaluate("(sids) => sids.map((sid) => (window.__dbg.robots.find((R) => R.def.realId === sid) || { def: {} }).def.id)", [SID.format(i) for i, _ in pins])
             seats = await page.evaluate("() => window.__dbg.seats()")
-            for lab, want in zip(labs, (c0["best"], c1["best"]) if door_pin else (c0["best"],)):
+            for lab, (_, want) in zip(labs, pins):
                 got = seats.get(lab) or {}
                 check(failures, [got.get("dx"), got.get("dz")] == want, f"{lab}'s desk is where the arm pinned it {want}: {got}")
-            owner = {"bell": labs[0], "rack": labs[0], "door": labs[1]}
+            owner = {"bell": labs[0], "rack": labs[1], "door": labs[2] if door_pin else None}
             hold = "([l, p]) => { const o = window.__dbg.overFixture(l); return o && o.tagBox && o.tag && p[0] > o.tagBox[0] && p[0] < o.tagBox[1] && p[1] > o.tagBox[2] && p[1] < o.tagBox[3]; }"
             opened = {"bell": "() => !document.getElementById('call').hidden",
                       "rack": "() => { const d = window.__dbg.dataServer(); return d.open && !d.loading; }",
@@ -323,7 +334,7 @@ async def run_crowded_props(pw, out, failures):
                 await page.keyboard.press("Escape")
                 await wait(page, f"() => ({closed[kind]})() && !window.__dbg.view().card", label=f"closed after the {kind}")
                 await until(page, "() => !window.__dbg.view().tween && !window.__dbg.view().zoomed", f"the camera back after the {kind}", timeout=20000)
-        covers = ({"bell": [{"id": owner["bell"]}], **({"door": [{"id": owner["door"]}]} if door_pin else {})}) if pinned else {"bell": []}
+        covers = ({"bell": [{"id": owner["bell"]}], "rack": [{"id": owner["rack"]}], **({"door": [{"id": owner["door"]}]} if door_pin else {})}) if pinned else {"bell": []}
         # the wait's bubble over that tag (a permission prompt): by its own box (40-scene.js placeRobotTags) — faint and let
         # through only when it crosses a thing to press itself; the tag under it stays let through
         if covers["bell"]:
