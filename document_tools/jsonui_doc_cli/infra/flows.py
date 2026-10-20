@@ -242,17 +242,10 @@ def resolve(flows: list[tuple[str, int, dict]], nodes: dict[str, dict], edges: l
             elif starts[target] != end:
                 F.err(f"{cp}/goto", "flow.goto.jump", f"the flow is at {end!r} and {target!r} starts elsewhere: the page jumps there",
                       "warning")
-    # a loop closed by defaults alone would play forever by itself
-    by_default = {f["id"]: [t for t, taken, _cp, _end in F.gotos if taken] for F, f in checked}
-    looping: set[str] = set()
-    for fid in by_default:
-        trail, cur = [], fid
-        while cur in by_default and cur not in trail:
-            trail.append(cur)
-            nxt = by_default[cur]
-            cur = nxt[0] if nxt else None
-        if cur is not None and cur in trail:
-            looping.update(trail[trail.index(cur):])
+    # a loop closed by defaults alone would play forever by itself: every goto a default takes is an edge of a graph of
+    # the flows (all of them: a flow's lanes may each take one), and a flow on a cycle of it is refused
+    by_default = {f["id"]: {t for t, taken, _cp, _end in F.gotos if taken} for F, f in checked}
+    looping = _on_cycles(by_default)
     for F, f in checked:
         if f["id"] in looping:
             F.err(f"{F.path}", "flow.default_cycle", "its defaults go round a loop of flows: played by itself it never ends")
@@ -262,6 +255,43 @@ def resolve(flows: list[tuple[str, int, dict]], nodes: dict[str, dict], edges: l
             continue
         out.append({**f, "label": f.get("label", f["id"]), "trigger": f.get("trigger", "user"), "environments": F.envs,
                     "steps": _normalized(f["steps"], F.at)})
+    return out
+
+
+def _on_cycles(graph: dict[str, set[str]]) -> set[str]:
+    """The flows on a cycle of graph (id -> the ids it goes to): Tarjan's strongly connected components, a component of
+    two or more, or one that goes to itself."""
+    index: dict[str, int] = {}
+    low: dict[str, int] = {}
+    stack: list[str] = []
+    on: set[str] = set()
+    out: set[str] = set()
+
+    def visit(v: str) -> None:              # the flows are at most 200: recursion stays shallow
+        index[v] = low[v] = len(index)
+        stack.append(v)
+        on.add(v)
+        for w in graph.get(v, ()):
+            if w not in graph:
+                continue
+            if w not in index:
+                visit(w)
+                low[v] = min(low[v], low[w])
+            elif w in on:
+                low[v] = min(low[v], index[w])
+        if low[v] == index[v]:
+            comp = []
+            while True:
+                w = stack.pop()
+                on.discard(w)
+                comp.append(w)
+                if w == v:
+                    break
+            if len(comp) > 1 or v in graph.get(v, ()):
+                out.update(comp)
+    for v in graph:
+        if v not in index:
+            visit(v)
     return out
 
 

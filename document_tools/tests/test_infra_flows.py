@@ -201,3 +201,31 @@ def test_every_problem_code_of_flows_has_its_short_line_in_words():
     for code in codes:
         line = R.short({"file": "m.json", "path": "/flows/0", "code": code, "message": ""}, "docs/infra")
         assert line.startswith("docs/infra/m.json: /flows/0 の flow ") and R.FLOW_JA[code] in line, line
+
+
+def test_a_loop_closed_by_any_default_goto_is_refused_not_only_the_first_one():
+    """The independent check's probe: a's first lane goes by default to c (which ends), its second to b, and b to a.
+    The loop a -> b -> a is closed by defaults; c is not on it and stays."""
+    def stop_or(goto):
+        return {"branch": {"label": "?", "default": "go", "choices": [{"id": "go", "label": "進む", "goto": goto},
+                                                                       {"id": "stop", "label": "やめる", "steps": [{"node": "browser"}]}]}}
+    a = {"id": "a", "start": "browser", "steps": [{"parallel": [[stop_or("c")], [stop_or("b")]]}]}
+    b = {"id": "b", "start": "browser", "steps": [stop_or("a")]}
+    c = {"id": "c", "start": "browser", "steps": [{"node": "browser"}]}
+    model, problems = _merge(a, b, c)
+    assert [f["id"] for f in model["flows"]] == ["c"]
+    assert sorted(_codes(problems)) == [("flow.default_cycle", "/flows/0"), ("flow.default_cycle", "/flows/1")]
+    a1 = {"id": "a", "start": "browser", "steps": [stop_or("a")]}                  # a default back to itself
+    assert _codes(_merge(a1)[1]) == [("flow.default_cycle", "/flows/0")]
+
+
+def test_an_edge_only_in_another_environment_does_not_carry_the_flow():
+    """The independent check's G4: an edge drawn in stg only is not one a flow of prod can take, though its two ends
+    are drawn in both."""
+    base = copy.deepcopy(BASE)
+    base["edges"].append({"from": "cache", "to": "db", "environments": ["stg"]})
+    f = {"id": "f", "start": "api", "environments": ["prod"], "steps": [{"from": "api", "to": "cache"}, {"from": "cache", "to": "db"}]}
+    model, problems = _merge(f, base=base)
+    assert model["flows"] == [] and ("flow.edge.missing", "/flows/0/steps/1") in _codes(problems)
+    f["environments"] = ["stg"]
+    assert _merge(f, base=base)[1] == []
