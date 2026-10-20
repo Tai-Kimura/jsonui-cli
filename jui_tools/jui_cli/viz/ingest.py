@@ -1535,6 +1535,19 @@ class World:
             return image(sid, cwd, given, agent_id, self._agent_paths.get(agent_id), off, n)
         return image(sid, cwd, given, None, None, off, n)
 
+    def history_file(self, agent_id, off, n) -> tuple[int, object]:
+        """One file a SendUserFile call of this robot's transcript sent (sources/history.sent_file_at), read from disk:
+        (200, (media, bytes)), (404, "gone"), or (status, reason)."""
+        agent = self.agents.get(agent_id) if isinstance(agent_id, str) else None
+        sent_file = getattr(self.history_reader, "sent_file", None)
+        if agent is None or sent_file is None:
+            return 404, "no such file"
+        sid = agent["sessionId"]
+        cwd, given = self._paths.get(sid, (None, None))
+        if agent["kind"] == "sub":
+            return sent_file(sid, cwd, given, agent_id, self._agent_paths.get(agent_id), off, n)
+        return sent_file(sid, cwd, given, None, None, off, n)
+
     # ---------------------------------------------------------------- heavy work (10-18)
 
     def poll_usage(self, at: int) -> dict:

@@ -16,6 +16,7 @@ Routes (design: dev-guide, 05 §3):
   POST /api/denial    a card of a call stopped by auto mode: approve (its fixed words as a prompt) or dismiss (the same checks)
   POST /api/attach-image  one attached image for the history's thumbnail and large view, by session and id (the same checks)
   POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
+  POST /api/history-file  one picture a session sent with SendUserFile, named by the robot, the call and the file (the same checks)
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
 """
@@ -713,6 +714,32 @@ def make_app(ctx: ServerContext) -> web.Application:
         log(f"質問の待ち時間: {ask_wait_text(ctx.config.askWaitSec)}")
         return web.json_response({"ok": True, "askWaitSec": ctx.config.askWaitSec})
 
+    async def api_history_file(request: web.Request) -> web.Response:
+        """One picture a session sent with SendUserFile, for the 応答の履歴 (ticket 2026-10-20-jui-viz-history-
+        senduserfile-image-no-thumb): {"agentId", "off", "n"} names the robot, the call's record and the file in it —
+        never a path; the server reads only the path that call holds (sources/history.sent_file_at). The checks of
+        /api/prompt. A file no longer there is {"gone": true} with 200 (a 404 is a console error on every look)."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: /api/history-file（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        agent_id, off, n = body.get("agentId"), body.get("off"), body.get("n")
+        if not isinstance(agent_id, str) or not agent_id or type(off) is not int or type(n) is not int:
+            return web.Response(status=400, text="agentId, off and n are required\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        status, got = await asyncio.get_running_loop().run_in_executor(None, ctx.world.history_file, agent_id, off, n)
+        if status == 404 and got == "gone":
+            return web.json_response({"gone": True}, headers={"Cache-Control": "no-store"})
+        if status != 200:
+            return web.Response(status=status, text=f"{got}\n")
+        media, data = got
+        return web.Response(body=data, content_type=media,
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"})
+
     async def api_history_image(request: web.Request) -> web.Response:
         """One picture of the 応答の履歴 (2.3.4): {"agentId", "off", "n"} names the robot (so its transcript) and the
         picture in it (sources/history.image_at). The same checks as /api/prompt (prompt_checks: POST, the page's own
@@ -899,6 +926,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/denial", api_denial)
     app.router.add_route("*", "/api/attach-image", api_attach_image)
     app.router.add_route("*", "/api/history-image", api_history_image)
+    app.router.add_route("*", "/api/history-file", api_history_file)
     app.router.add_route("*", "/api/data-docs", api_data_docs)
     app.router.add_route("*", "/api/infra-docs", api_infra_docs)
     app.router.add_route("*", "/api/infra-icon", api_infra_icon)

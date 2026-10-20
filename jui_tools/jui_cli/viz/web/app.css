@@ -1219,6 +1219,10 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .h-thumb img { display: block; width: 160px; height: auto; max-height: 200px; object-fit: contain; }
 .h-thumb-wait img, .h-thumb-bad img { display: none; }
 .h-thumb-note { padding: 6px 8px; font: 700 11.5px/1.4 var(--font-body); }
+/* files a session sent with SendUserFile (55-history.js): the pictures as thumbnails, the caption, other files by name */
+.h-sent { display: grid; gap: 6px; margin-top: 6px; }
+.h-sent-caption { margin: 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+.h-sent-file { margin: 0; color: var(--ink-soft); font: 600 12px/1.4 var(--font-body); overflow-wrap: anywhere; }
 /* an attached image's thumbnail in its mark (55-history.js histAttachMarks): smaller, and the keyboard's focus shows */
 .h-attach-sent .h-thumb, .h-attach-sent .h-thumb img { width: 72px; min-height: 40px; max-height: 96px; }
 .h-thumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

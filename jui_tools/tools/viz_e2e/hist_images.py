@@ -15,7 +15,9 @@ import pathlib
 import time
 
 from common import PHONE, dump
-from hist_wide import GONE, Stage, check as _check, wait
+import json
+
+from hist_wide import A, GONE, Stage, check as _check, png, wait
 
 LIGHT = """() => { const d = [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')].find((x) => x.offsetWidth);
   if (!d) return null; const i = d.querySelector('img');
@@ -102,6 +104,37 @@ async def run_hist_images(pw, out, failures):
                                "card": await page.evaluate("() => !document.getElementById('rb').hidden")}
                 check(failures, closes[how]["closed"] and closes[how]["focus"] == th[0]["key"] and closes[how]["card"],
                       f"{how} closes the large view, the focus back on the thumbnail, the card open: {closes[how]}")
+        # files the session sent with SendUserFile (ticket 2026-10-20-jui-viz-history-senduserfile-image-no-thumb): the
+        # transcript holds only their paths, as measured; a picture is a thumbnail read from its file, opening the same
+        # large view; a file no picture is its name; a file no longer there says 消えました and shows no picture
+        sent_dir = pathlib.Path(st.out) / "sent"
+        sent_dir.mkdir(exist_ok=True)
+        (sent_dir / "sample.png").write_bytes(png(240, 160, (60, 160, 90)))
+        (sent_dir / "notes.md").write_text("# notes\n")
+        files = [str(sent_dir / "sample.png"), str(sent_dir / "notes.md"), str(sent_dir / "gone.png")]
+        with open(st.paths[A], "a") as f:
+            f.write(json.dumps({"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {
+                "id": "m-sent", "role": "assistant", "content": [{"type": "tool_use", "id": "tu-sent", "name": "SendUserFile",
+                                                               "input": {"files": files, "caption": "送った見本", "status": "normal", "display": "render"}}]}},
+                               ensure_ascii=False) + "\n")
+            f.write(json.dumps({"type": "user", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu-sent", "content": "3 files delivered to user."}]}}, ensure_ascii=False) + "\n")
+        SENT = """() => { const b = document.querySelector('[data-rb-hist] .h-sent'); if (!b) return null;
+          return { thumbs: [...b.querySelectorAll('.h-thumb')].map((t) => { const i = t.querySelector('img');
+            return { w: i.naturalWidth, src: !!i.getAttribute('src'), bad: t.classList.contains('h-thumb-bad'), note: t.querySelector('.h-thumb-note').textContent }; }),
+            caption: (b.querySelector('.h-sent-caption') || {}).textContent || '', files: [...b.querySelectorAll('.h-sent-file')].map((x) => x.textContent) }; }"""
+        await wait(page, "() => !!document.querySelector('[data-rb-hist] .h-sent')", timeout=20000, label="the SendUserFile row")
+        await page.evaluate("() => document.querySelector('[data-rb-hist] .h-sent').scrollIntoView({ block: 'center' })")
+        await wait(page, f"() => {{ const g = ({SENT})(); return g && g.thumbs.length === 2 && g.thumbs[0].w > 0 && g.thumbs[1].bad; }}", timeout=15000, label="the sent thumbnails")
+        sent = res["sent"] = await page.evaluate(SENT)
+        check(failures, sent["thumbs"][0]["w"] == 240 and sent["caption"] == "送った見本" and sent["files"] == ["📎 notes.md"],
+              f"the sent picture is a thumbnail of its file, the caption under it, a file no picture by its name: {sent}")
+        check(failures, sent["thumbs"][1] == {"w": 0, "src": False, "bad": True, "note": "消えました"}, f"a sent file no longer there: 消えました, no picture: {sent['thumbs'][1]}")
+        await page.click("[data-rb-hist] .h-sent .h-thumb >> nth=0")
+        await wait(page, "() => { const d = document.querySelector('.h-light'); return !!d && d.querySelector('img').naturalWidth === 240; }", label="the sent picture large")
+        res["sentLarge"] = await page.evaluate(LIGHT)
+        await page.screenshot(path=str(out / "sent-large.png"))
+        await page.keyboard.press("Escape")
         await page.close()
         for scheme in ("light", "dark"):
             ph = await st.page(f"hist-images-phone-{scheme}", **dict(PHONE, color_scheme=scheme))

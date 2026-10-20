@@ -264,7 +264,19 @@ function histItem(item) {
       io.appendChild(hNode('pre', `h-code${item.error ? ' h-code-err' : ''}`, `${item.out}${item.outCut ? '\n…' : ''}`));
       if (Array.isArray(item.imgs) && item.imgs.length) { const row = hNode('div', 'h-imgs'); for (const ref of item.imgs) row.appendChild(histThumb(ref)); io.appendChild(row); }
     }
-    return histFolded('h-item h-tool', title, [io], false);
+    // SendUserFile (ticket 2026-10-20-jui-viz-history-senduserfile-image-no-thumb): the transcript holds only the paths, so
+    // each picture is read from its file by (off, n) — never a path from the page — as a thumbnail that opens the large
+    // view; a file that is no picture is its name only. Shown open: what was sent is the point of the row.
+    const sent = Array.isArray(item.sent) ? item.sent : [];
+    if (sent.length) {
+      const box = hNode('div', 'h-sent');
+      const pics = sent.filter((f) => f.image), others = sent.filter((f) => !f.image);
+      if (pics.length) { const row = hNode('div', 'h-imgs'); for (const f of pics) row.appendChild(histThumb({ sent: { off: f.off, n: f.n } })); box.appendChild(row); }
+      if (typeof item.caption === 'string' && item.caption) box.appendChild(hNode('p', 'h-sent-caption', item.caption));
+      for (const f of others) box.appendChild(hNode('p', 'h-sent-file', `📎 ${f.name}`));
+      io.appendChild(box);
+    }
+    return histFolded('h-item h-tool', title, [io], sent.length > 0);
   }
   if (item.kind === 'thought') return hNode('p', 'h-item h-mark', '考えた');
   if (item.kind === 'image') {
@@ -719,7 +731,7 @@ function composeArrived(items) {
    (SOURCE.historyImage, POST /api/history-image under the prompt's checks) when its thumbnail comes into view, and
    kept as a blob URL only while this robot's tab is open. The browser scales the thumbnail. A press opens it large
    in a dialog: ← → for the others in this history, Esc / the backdrop / 閉じる close it and give the focus back. */
-const histRefKey = (ref) => (ref.attach ? `a:${ref.attach.sessionId}:${ref.attach.id}` : `${ref.off}:${ref.n}`);   // a history picture, or an attached image
+const histRefKey = (ref) => (ref.attach ? `a:${ref.attach.sessionId}:${ref.attach.id}` : ref.sent ? `s:${ref.sent.off}:${ref.sent.n}` : `${ref.off}:${ref.n}`);   // a history picture, an attached image, a file the session sent
 const histImgKey = (ref) => `${HIST.id}|${histRefKey(ref)}`;
 function histImgsDrop() {
   for (const v of HIST.imgs.values()) v.then((g) => { if (g.url) URL.revokeObjectURL(g.url); });
@@ -729,7 +741,7 @@ function histImgGet(ref) {
   const key = histImgKey(ref);
   if (!HIST.imgs.has(key)) {
     const id = HIST.id;
-    const asked = ref.attach ? SOURCE.attachImage(ref.attach) : SOURCE.historyImage(id, ref);
+    const asked = ref.attach ? SOURCE.attachImage(ref.attach) : ref.sent ? SOURCE.historyFile(id, ref.sent) : SOURCE.historyImage(id, ref);
     HIST.imgs.set(key, asked.then((got) => (got.ok ? { url: URL.createObjectURL(got.blob) }
       : { error: got.gone ? '消えました' : got.status === 413 ? '大きすぎて表示しない' : got.status === 415 ? '表示できない形式' : `画像を読めない（${got.status || got.error}）` })));
   }
