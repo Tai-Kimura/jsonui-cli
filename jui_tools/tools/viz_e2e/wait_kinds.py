@@ -193,6 +193,22 @@ async def run_wait_kinds(pw, out, failures, jt=None):
             await page.click(f"[data-wait-robot='{rid[k]}']")
             return await until(page, f"() => {{ const c = ({CARD_JS})(); return c.picked && c.picked.id === '{rid[k]}' ? c : null; }}",
                                f"{k}: the press picked its card", timeout=10000, why=CARD_JS)
+        # the robot's card names the lamp and shows its colour: the question's violet, both (support 7's verification)
+        swatch = {}
+        for k, name in (("perm", "黄（許可待ち）"), ("ask", "紫（質問に回答待ち）")):
+            await page.evaluate("(id) => window.__dbg.openRobot(id)", rid[k])
+            await until(page, "(id) => window.__dbg.board().robot === id", f"{k}: its card", arg=rid[k])
+            # the card is filled after it opens: its lamp's name first, then the swatch read
+            await until(page, "(t) => { const n = document.querySelector('#rb [data-rb-lampname]'); return !!n && n.textContent === t; }",
+                        f"{k}: its card names the lamp", arg=name, timeout=10000,
+                        why="() => { const n = document.querySelector('#rb [data-rb-lampname]'); return n ? n.textContent : null; }")
+            swatch[k] = await page.evaluate("""() => { const l = document.querySelector('#rb [data-rb-lamp]'), n = document.querySelector('#rb [data-rb-lampname]');
+              return [l ? getComputedStyle(l).backgroundColor : null, n ? n.textContent : null]; }""")
+            await page.click("#rb-close")
+            await until(page, "() => !window.__dbg.board().robot", f"{k}: its card closed")
+        res["swatch"] = swatch
+        check(failures, swatch["ask"] == ["rgb(180, 140, 255)", "紫（質問に回答待ち）"] and swatch["perm"] == ["rgb(255, 176, 32)", "黄（許可待ち）"],
+              f"the card's lamp swatch is the colour its name says: {swatch}")
         c = await press("ask")
         q = await page.evaluate("(id) => { const e = document.querySelector('.wait-picked'); return e ? [e.dataset.qcard || null, document.activeElement && e.contains(document.activeElement)] : null; }", rid["ask"])
         res["press"]["ask"] = {"card": c, "el": q}
