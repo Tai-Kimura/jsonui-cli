@@ -1,7 +1,7 @@
 """The near weather (requester, 10-18: "天気はリアルな近所の天気を出したい"; ruling: only when turned on).
 
 What must hold (the ticket's rules, fixed before the code):
-- off by default, and then no connection leaves the server at all;
+- off by default; then no connection leaves the server for the weather;
 - the position is rounded to two decimals (about 1 km) before it is stored or sent; the unrounded one never is;
 - one query every 30 minutes while on; a failure is the source's error, never the server's;
 - turning it off removes the position and stops the queries;
@@ -11,6 +11,14 @@ The server-side arm counts connections with a sitecustomize in the real `jui viz
 socket connect and every name lookup. Its control is the same server turned on against a stand-in for Open-Meteo on
 127.0.0.1: that connection must show in the same record, so a record with nothing in it means "nothing connected",
 not "the counter was not there".
+
+viz's whole rule for going outside is here too. It was "by default, nobody"; the requester's ruling 1 for the cost
+simulator (「外部通信既定でいいよ」, docs/plans/2026-10-20-jui-viz-backend-load-and-cost-simulator.md, 依頼者の決め)
+made it: by default, the cloud price hosts and nobody else — DEFAULT_HOSTS, a closed list this file holds — sent only
+a User-Agent and nothing of the user's; turned off (config.json cloudPrices.on false), nobody. The arm holds with no
+delay before the first fetch (the server's own 10 minutes are for the load, not for this gate): the sitecustomize then
+refuses every name lookup and connection that would leave the machine, after recording it, so the server tries for
+real and nothing goes outside.
 """
 from __future__ import annotations
 
@@ -213,10 +221,23 @@ def connect(self, address):
     return _connect(self, address)
 socket.socket.connect = connect
 _gai = socket.getaddrinfo
+_refuse = os.environ.get("JUI_TEST_NET_REFUSE") == "1"
+_here_only = ("127.0.0.1", "::1", "localhost")
 def getaddrinfo(host, *a, **k):
     _w(f"resolve {host!r}")
+    if _refuse and host is not None and str(host) not in _here_only:
+        raise socket.gaierror(f"refused by the test: {host}")
     return _gai(host, *a, **k)
 socket.getaddrinfo = getaddrinfo
+if _refuse:   # what an HTTP request carries, recorded before it is refused (urllib: the price fetch's client)
+    import urllib.request, json as _json
+    _open = urllib.request.OpenerDirector.open
+    def _logged_open(self, fullurl, *a, **k):
+        url = fullurl if isinstance(fullurl, str) else fullurl.full_url
+        headers = {} if isinstance(fullurl, str) else dict(fullurl.header_items())
+        _w("url " + _json.dumps({"url": url, "headers": headers}))
+        return _open(self, fullurl, *a, **k)
+    urllib.request.OpenerDirector.open = _logged_open
 # This file shadows the interpreter's own sitecustomize (Homebrew's adds its site-packages: without it the server
 # cannot import aiohttp, e1 10-18). Find the one it hid, later on sys.path, and run it as it would have run.
 import importlib.util, sys
@@ -334,20 +355,76 @@ def _token(tmp_path: Path) -> str:
     return json.loads((tmp_path / ".local" / "state" / "jui-viz" / "server.json").read_text())["token"]
 
 
-def test_off_by_default_the_server_connects_to_nobody(tmp_path):
+# Where the server may go by default (the requester's ruling 1, 10-20 20:54). Closed: a host added to the fetch's list
+# without this list changing is red, as is any other host the server reaches.
+DEFAULT_HOSTS = {"pricing.us-east-1.amazonaws.com", "prices.azure.com"}
+
+
+def _attempts(mine: list[str]) -> tuple[list[dict], set[str]]:
+    """(the HTTP requests recorded, the hosts looked up or connected to that are not this machine)."""
+    urls = [json.loads(x[4:]) for x in mine if x.startswith("url ")]
+    hosts = set()
+    for x in mine:
+        if x.startswith(("resolve ", "connect ")) and not x.startswith("resolve None"):
+            word = x.split(" ", 1)[1]
+            if not any(f"'{h}'" in word for h in LOOPBACK):
+                hosts.add(word.strip("()").split(",")[0].strip("'\""))
+    return urls, hosts
+
+
+def _settled(tmp_path: Path, log: Path, want_urls: bool) -> None:
+    """Until the price fetch's run is written (it fails fast: every lookup is refused), or a quiet while."""
+    index = tmp_path / ".local" / "state" / "jui-viz" / "cloud-prices" / "index.json"
+    deadline = time.monotonic() + (60 if want_urls else 5)
+    while time.monotonic() < deadline:
+        if want_urls and index.exists() and json.loads(index.read_text()).get("lastRunAt"):
+            return
+        time.sleep(0.2)
+
+
+def test_by_default_the_server_reaches_the_price_hosts_only_with_nothing_of_the_users(tmp_path):
+    from jui_cli.core.document_tools_import import load_document_tools_module
+    fetch, _ = load_document_tools_module("infra.cost.fetch")
+    assert set(fetch.HOSTS) == DEFAULT_HOSTS                                # the fetch's list is this closed list
     port = _free_port()
-    proc, log = _serve(tmp_path, port)
+    proc, log = _serve(tmp_path, port, {"JUI_TEST_NET_REFUSE": "1", "JUI_VIZ_CLOUD_PRICES_DELAY_MS": "0"})
     try:
-        time.sleep(4)                                                       # several ticks of every loop
-        got = asyncio.run(_ws(port, _token(tmp_path), {"type": "snapshot.get", "reqId": "s1"}))
+        _settled(tmp_path, log, want_urls=True)
+        token = _token(tmp_path)
+        got = asyncio.run(_ws(port, token, {"type": "snapshot.get", "reqId": "s1"}))
+    finally:
+        _stop(proc)
+    mine, _away = _outbound(log, proc.pid)
+    assert f"loaded {proc.pid}" in log.read_text()                         # the counter was in the server
+    urls, hosts = _attempts(mine)
+    assert urls, "the server tried no price host: the arm saw nothing (its control)"
+    assert hosts == DEFAULT_HOSTS, hosts                                    # both, and nobody else
+    for u in urls:
+        from urllib.parse import urlsplit
+        parts = urlsplit(u["url"])
+        assert parts.scheme == "https" and parts.hostname in DEFAULT_HOSTS, u
+        assert u["headers"] == {"User-agent": "jui-viz"}, u                  # nothing but a User-Agent
+        for private in (token, str(tmp_path), os.environ.get("USER", "\0"), "e2e0"):
+            assert private not in u["url"], (private, u)
+    assert got[0]["weather"] == {"on": False}
+    status = json.loads((tmp_path / ".local" / "state" / "jui-viz" / "weather-status.json").read_text())
+    assert status["on"] is False and status["lastTryAt"] is None              # the weather stays off by default
+
+
+def test_with_the_price_fetch_off_the_server_connects_to_nobody(tmp_path):
+    cfg = tmp_path / ".local" / "state" / "jui-viz" / "config.json"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(json.dumps({"cloudPrices": {"on": False}}))
+    port = _free_port()
+    proc, log = _serve(tmp_path, port, {"JUI_TEST_NET_REFUSE": "1", "JUI_VIZ_CLOUD_PRICES_DELAY_MS": "0"})
+    try:
+        _settled(tmp_path, log, want_urls=False)                            # several ticks of every loop
+        asyncio.run(_ws(port, _token(tmp_path), {"type": "snapshot.get", "reqId": "s1"}))
     finally:
         _stop(proc)
     mine, away = _outbound(log, proc.pid)
-    assert log.exists() and f"loaded {proc.pid}" in log.read_text()          # the counter was in the server
-    assert away == [], away
-    assert got[0]["weather"] == {"on": False}
-    status = json.loads((tmp_path / ".local" / "state" / "jui-viz" / "weather-status.json").read_text())
-    assert status["on"] is False and status["lastTryAt"] is None
+    assert f"loaded {proc.pid}" in log.read_text()
+    assert away == [] and _attempts(mine) == ([], set()), away
 
 
 def test_turned_on_it_asks_once_with_the_rounded_position_and_off_stops_it(tmp_path):

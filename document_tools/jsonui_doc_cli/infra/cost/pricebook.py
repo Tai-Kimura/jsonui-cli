@@ -34,13 +34,13 @@ def cache_dir(env: dict | None = None) -> Path:
 
 def cache_rows(folder: Path) -> tuple[list[dict], list[str]]:
     """The fetched prices' rows (every *.json below the folder, read as a price file) and why any file was not used.
-    The fetching itself is not in this version (L-B2): an empty or missing folder is no price and no warning."""
+    Written by fetch.py (L-B2); an empty or missing folder is no price and no warning."""
     rows, why = [], []
     if not folder.is_dir():
         return rows, why
     for f in sorted(folder.rglob("*.json")):
-        if f.is_symlink() or not f.is_file() or f.name.startswith("."):
-            continue
+        if f.is_symlink() or not f.is_file() or f.name.startswith(".") or (f.parent == folder and f.name == "index.json"):
+            continue   # index.json: where each fetched file came from (fetch.py), not a price file
         doc, problems = P.read_file(f.name, f.read_bytes())
         if doc is None:
             why.append(f"{f.relative_to(folder)}: not used ({problems[0]['code']})")

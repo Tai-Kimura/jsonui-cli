@@ -87,6 +87,13 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
         pr.add_argument(flag, dest=key, type=float, help="USD per million tokens (set: all five are required)")
     pr.add_argument("--json", action="store_true", help="Machine-readable list")
 
+    cp = sub.add_parser("cloud-prices", help="Fetch the cloud prices for the cost simulator now, or turn the daily fetch on / off")
+    cp.add_argument("cloud_prices_action", nargs="?", choices=["fetch", "status", "on", "off"], default="status")
+    cp.add_argument("--provider", choices=["aws", "azure"], help="fetch: only this provider")
+    cp.add_argument("--region", help="fetch: only this region (global: CloudFront)")
+    cp.add_argument("--large", help="fetch: also these large offers this time (ec2,rds)")
+    cp.add_argument("--json", action="store_true", help="Machine-readable index")
+
     relay = sub.add_parser("relay", help="Register the permission relay (an MCP channel) with Claude Code")
     relay.add_argument("relay_action", nargs="?", choices=["install", "uninstall", "status"])
     relay.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the command, run nothing")
@@ -106,10 +113,11 @@ def cmd_viz(args: argparse.Namespace) -> int:
         "relay": _cmd_relay,
         "export-demo": _cmd_export_demo,
         "prices": _cmd_prices,
+        "cloud-prices": _cmd_cloud_prices,
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,prices}")
+        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,prices,cloud-prices}")
         return 1
     try:
         # Every command that reads or writes the runtime folder moves the old one first; export-demo uses none.
@@ -125,6 +133,43 @@ def cmd_viz(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------- prices (the bill over a robot, 2.3.6)
+
+
+def _cmd_cloud_prices(args: argparse.Namespace) -> int:
+    """fetch: fetch the cloud prices now (the setting's targets, narrowed by --provider / --region, with --large added
+    this time), even while the daily fetch is off: it is asked for by hand. status: the index. on / off: the daily fetch."""
+    from ..viz.sources import cloud_prices as C
+    action = args.cloud_prices_action
+    if action in ("on", "off"):
+        C.save_on(action == "on")
+        print(f"クラウドの単価の日に 1 回の取得: {'オン' if action == 'on' else 'オフ'}（動いている viz は次の起動から）")
+        return 0
+    mod = C.fetch_module()
+    if mod is None:
+        _err("document_tools が見つからないため、クラウドの単価を取れません")
+        return 1
+    cache = C.cache_dir()
+    if action == "status":
+        index = mod.read_index(cache)
+    else:
+        setting = C.load_setting(mod=mod)
+        extra = [x.strip() for x in (args.large or "").split(",") if x.strip()]
+        bad = [x for x in extra if x not in mod.LARGE]
+        if bad:
+            _err(f"--large に使えるのは {', '.join(mod.LARGE)} だけです: {', '.join(bad)}")
+            return 1
+        setting = {**setting, "large": sorted(set(setting["large"]) | set(extra))}
+        index = mod.run(setting, cache, int(time.time() * 1000), provider=args.provider, region=args.region)
+    if args.json:
+        print(json.dumps(mod.summary(index), ensure_ascii=False, indent=1))
+        return 0
+    s = mod.summary(index)
+    print(f"クラウドの単価のキャッシュ: {cache}")
+    for f in s["files"]:
+        when = time.strftime("%m-%d %H:%M", time.localtime(f["fetchedAt"] / 1000)) if f.get("fetchedAt") else "まだ取れていない"
+        tail = f"  失敗: {f['lastError']}" if f.get("lastError") else ""
+        print(f"  {f['path']:<44} {f.get('rows') or 0:>4} 行  {when}  effective {f.get('effective') or '-'}{tail}")
+    return 1 if action == "fetch" and s["failing"] == len(s["files"]) and s["files"] else 0
 
 
 def _cmd_prices(args: argparse.Namespace) -> int:
@@ -666,6 +711,18 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
     ctx.weather, ctx.on_weather = weather, publish_weather
     publish_weather()
+    # The cloud prices for the cost simulator (L-B2): on by default, once a day; where each came from goes to the page.
+    from ..viz.sources import cloud_prices as cloud_prices_src
+
+    cloud_prices = None if replay else cloud_prices_src.CloudPricesBook()
+
+    def publish_cloud_prices() -> None:
+        ctx.state.set_slice("cloudPrices", cloud_prices.view() if cloud_prices else {"on": False})
+        status, error = cloud_prices.source() if cloud_prices else ("off", None)
+        if sources.get("cloudPrices") != {"status": status, **({"error": error} if error else {})}:
+            set_source("cloudPrices", status, error)
+
+    publish_cloud_prices()
     # The plan's usage limits (statusline.py → POST /usage): the last value kept survives a restart.
     from ..viz import usage as usage_mod
 
@@ -946,6 +1003,25 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     n += 1
                     await asyncio.sleep(1)
 
+            async def cloud_prices_loop() -> None:
+                """Once a day: one run in a daemon thread (not the executor: stopping the server must not wait for a
+                download), then the slice."""
+                import threading
+
+                while True:
+                    if cloud_prices.due():
+                        done = loop.create_future()
+
+                        def work() -> None:
+                            try:
+                                cloud_prices.ask()
+                            finally:
+                                loop.call_soon_threadsafe(lambda: done.done() or done.set_result(None))
+                        threading.Thread(target=work, name="cloud-prices", daemon=True).start()
+                        await done
+                        publish_cloud_prices()
+                    await asyncio.sleep(60)
+
             async def git_loop() -> None:
                 """The box (2.3.4): count each push / pull's range in an executor (git, read-only, a short timeout), so
                 a slow repository never holds the server; the trip's amount follows a moment after the trip."""
@@ -962,6 +1038,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             tasks.append(asyncio.create_task(mock_loop()))
             tasks.append(asyncio.create_task(git_loop()))
             tasks.append(asyncio.create_task(weather_loop()))
+            tasks.append(asyncio.create_task(cloud_prices_loop()))
             reader_cleanup.append(stop_readers)
 
         stop = asyncio.Event()
@@ -1584,6 +1661,19 @@ def _doctor_checks() -> list[dict]:
         ok_at, err = w_status.get("lastOkAt"), w_status.get("lastError")
         when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "まだ取れていない"
         add("weather", not err, f"近所の天気: オン（最後に取れた時刻 {when}）" + (f"。失敗: {err}" if err else ""))
+
+    from ..viz.sources import cloud_prices as cloud_prices_src
+
+    cp_setting, cp_status = cloud_prices_src.load_setting(), weather_src.read_status(cloud_prices_src.status_json())
+    if cp_setting.get("unavailable"):
+        add("cloud-prices", True, "クラウドの単価の取得: document_tools が見つからないため、取りません（同梱の表で数えます）")
+    elif not cp_setting["on"]:
+        add("cloud-prices", True, "クラウドの単価の取得: オフ（外への通信はしません。jui viz cloud-prices on でオン）")
+    else:
+        ok_at, err, failing = cp_status.get("lastOkAt"), cp_status.get("lastError"), cp_status.get("failing") or 0
+        when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "まだ取れていない"
+        add("cloud-prices", not err and not failing, f"クラウドの単価の取得: オン（日に 1 回。最後に取れた時刻 {when}）"
+            + (f"。取れなかったファイル {failing} 件（前に取れた値を使う）" if failing else "") + (f"。失敗: {err}" if err else ""))
 
     # the box (2.3.4): what it can see — nothing to check, so always ok; it says where the line is
     add("git-box", True, "git の箱: Claude のセッションが Bash で撃った git push / pull だけが見えます"

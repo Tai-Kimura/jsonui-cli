@@ -1,0 +1,106 @@
+{
+ "formatVersion": "v1.0",
+ "offerCode": "AWSLambda",
+ "version": "20261016182359",
+ "publicationDate": "2026-10-16T18:23:59Z",
+ "products": {
+  "3BE8DYKG4FYSZGDW": {
+   "sku": "3BE8DYKG4FYSZGDW",
+   "productFamily": "Serverless",
+   "attributes": {
+    "servicecode": "AWSLambda",
+    "location": "Asia Pacific (Tokyo)",
+    "locationType": "AWS Region",
+    "group": "AWS-Lambda-Requests",
+    "groupDescription": "Invocation call for a Lambda function",
+    "usagetype": "APN1-Request",
+    "operation": "",
+    "regionCode": "ap-northeast-1",
+    "servicename": "AWS Lambda"
+   }
+  },
+  "FSYUV9NMNDEXRJ5H": {
+   "sku": "FSYUV9NMNDEXRJ5H",
+   "productFamily": "Serverless",
+   "attributes": {
+    "servicecode": "AWSLambda",
+    "location": "Asia Pacific (Tokyo)",
+    "locationType": "AWS Region",
+    "group": "AWS-Lambda-Duration",
+    "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s",
+    "usagetype": "APN1-Lambda-GB-Second",
+    "operation": "",
+    "regionCode": "ap-northeast-1",
+    "servicename": "AWS Lambda"
+   }
+  }
+ },
+ "terms": {
+  "OnDemand": {
+   "3BE8DYKG4FYSZGDW": {
+    "3BE8DYKG4FYSZGDW.JRTCKXETXF": {
+     "offerTermCode": "JRTCKXETXF",
+     "sku": "3BE8DYKG4FYSZGDW",
+     "effectiveDate": "2026-10-01T00:00:00Z",
+     "priceDimensions": {
+      "3BE8DYKG4FYSZGDW.JRTCKXETXF.6YS6EN2CT7": {
+       "rateCode": "3BE8DYKG4FYSZGDW.JRTCKXETXF.6YS6EN2CT7",
+       "description": "AWS Lambda - Total Requests - Asia Pacific (Tokyo)",
+       "beginRange": "0",
+       "endRange": "Inf",
+       "unit": "Request",
+       "pricePerUnit": {
+        "USD": "0.0000002000"
+       },
+       "appliesTo": []
+      }
+     },
+     "termAttributes": {}
+    }
+   },
+   "FSYUV9NMNDEXRJ5H": {
+    "FSYUV9NMNDEXRJ5H.JRTCKXETXF": {
+     "offerTermCode": "JRTCKXETXF",
+     "sku": "FSYUV9NMNDEXRJ5H",
+     "effectiveDate": "2026-10-01T00:00:00Z",
+     "priceDimensions": {
+      "FSYUV9NMNDEXRJ5H.JRTCKXETXF.CUKFZ388N3": {
+       "rateCode": "FSYUV9NMNDEXRJ5H.JRTCKXETXF.CUKFZ388N3",
+       "description": "AWS Lambda - Total Compute - Asia Pacific (Tokyo)-Tier-1",
+       "beginRange": "0",
+       "endRange": "6000000000",
+       "unit": "Lambda-GB-Second",
+       "pricePerUnit": {
+        "USD": "0.0000166667"
+       },
+       "appliesTo": []
+      },
+      "FSYUV9NMNDEXRJ5H.JRTCKXETXF.QZE2SB4KVB": {
+       "rateCode": "FSYUV9NMNDEXRJ5H.JRTCKXETXF.QZE2SB4KVB",
+       "description": "AWS Lambda - Total Compute - Asia Pacific (Tokyo)-Tier-2",
+       "beginRange": "6000000000",
+       "endRange": "15000000000",
+       "unit": "Lambda-GB-Second",
+       "pricePerUnit": {
+        "USD": "0.0000150000"
+       },
+       "appliesTo": []
+      },
+      "FSYUV9NMNDEXRJ5H.JRTCKXETXF.V7R92EXG27": {
+       "rateCode": "FSYUV9NMNDEXRJ5H.JRTCKXETXF.V7R92EXG27",
+       "description": "AWS Lambda - Total Compute - Asia Pacific (Tokyo)-Tier-3",
+       "beginRange": "15000000000",
+       "endRange": "Inf",
+       "unit": "Lambda-GB-Second",
+       "pricePerUnit": {
+        "USD": "0.0000133334"
+       },
+       "appliesTo": []
+      }
+     },
+     "termAttributes": {}
+    }
+   }
+  }
+ }
+}

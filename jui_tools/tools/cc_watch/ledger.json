@@ -297,6 +297,7 @@
     "jui_tools/jui_cli/viz/security.py": "viz サーバー自身の Host・Origin・トークンの守り。CLI 側の形は読まない",
     "jui_tools/jui_cli/viz/sheet.py": "JsonUI の spec からホワイトボードを作るだけ",
     "jui_tools/jui_cli/viz/sources/__init__.py": "パッケージの印だけ",
+    "jui_tools/jui_cli/viz/sources/cloud_prices.py": "クラウドの単価の取得（document_tools の infra.cost.fetch）を日に 1 回呼び、viz home の config.json と状態のファイルを読み書きするだけ。CLI の形も Claude Code の記録も読まない",
     "jui_tools/jui_cli/viz/sources/devices.py": "simctl と adb を読むだけ",
     "jui_tools/jui_cli/viz/sources/jsonui_project.py": "JsonUI の spec・layout・テスト定義を読むだけ",
     "jui_tools/jui_cli/viz/sources/mock_status.py": "jsonui-test の mock serve を見るだけ",

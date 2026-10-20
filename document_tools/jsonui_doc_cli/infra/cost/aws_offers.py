@@ -148,3 +148,46 @@ def rows_from_offer(data: dict, spec: list[dict], region: str, url: str) -> tupl
             continue
         out.append(rows[0])
     return out, missing
+
+
+# ---------------------------------------------------------------- EC2 (plan L-B2): its offer is too big for JSON
+# The EC2 offer of one region is 289 MB as CSV (446 MB as JSON; ap-northeast-1, 2026-10-15), so it is read a line at a
+# time and only the on-demand price of a shared, Linux, no-software, used instance is kept, one row per type (the
+# sku the rules ask for is the type, unit instance-hour). The file's first five lines are its version and its
+# publication date; the sixth is the header.
+EC2_CSV_URL = "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/{region}/index.csv"
+EC2_KEEP = {"TermType": "OnDemand", "Tenancy": "Shared", "Operating System": "Linux", "Pre Installed S/W": "NA",
+            "CapacityStatus": "Used", "Product Family": "Compute Instance", "Unit": "Hrs", "Currency": "USD"}
+
+
+def rows_from_ec2_csv(lines, region: str, url: str) -> tuple[list[dict], list[str]]:
+    """(price rows, why lines were not used) from the EC2 offer's CSV, given as an iterable of text lines (a stream:
+    nothing but the kept rows is held)."""
+    import csv
+    reader = csv.reader(lines)
+    effective, header = "", None
+    for row in reader:
+        if len(row) >= 2 and row[0] == "Publication Date":
+            effective = row[1][:10]
+        if row and row[0] == "SKU":
+            header = {h: i for i, h in enumerate(row)}
+            break
+    if header is None or any(k not in header for k in (*EC2_KEEP, "Instance Type", "PricePerUnit", "usageType")):
+        return [], ["the EC2 offer's header is not the one read (SKU … Instance Type, PricePerUnit, usageType)"]
+    prefix = PREFIX.get(region, [""])
+    out: dict[str, dict] = {}
+    for row in reader:
+        if len(row) < len(header) or any(row[header[k]] != v for k, v in EC2_KEEP.items()):
+            continue
+        typ, usage = row[header["Instance Type"]], row[header["usageType"]]
+        # the usage type decides (BoxUsage is a shared instance; DedicatedUsage and HostUsage are not): Tenancy above
+        # is a second guard with the same answer
+        if not any(usage == f"{p}BoxUsage:{typ}" for p in prefix) or typ in out:
+            continue
+        try:
+            price = float(row[header["PricePerUnit"]])
+        except ValueError:
+            continue
+        out[typ] = {"provider": "aws", "service": "ec2", "sku": typ, "region": region, "unit": "instance-hour",
+                    "price_usd": _round(price), "effective": effective, "source": url, "note": "Linux, shared, on-demand"}
+    return [out[k] for k in sorted(out)], ([] if out else ["no on-demand Linux shared instance in the offer"])
