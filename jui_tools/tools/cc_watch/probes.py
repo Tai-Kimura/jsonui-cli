@@ -224,7 +224,8 @@ def _talk_scan(ctx: Context) -> dict | None:
                 continue
             if not f.is_symlink() and st.st_mtime >= since:
                 files.append((st.st_mtime, f))
-    got = {"sends": [], "results": [], "peer": [], "queued": [], "child": [], "coordinator": [], "enqueue": [], "agent_msg": []}
+    got = {"sends": [], "results": [], "peer": [], "queued": [], "child": [], "coordinator": [], "enqueue": [], "agent_msg": [],
+           "denied": []}
     sends: set = set()
     read = 0
     for _m, f in sorted(files, reverse=True)[:TALK_FILES]:
@@ -244,7 +245,8 @@ def _talk_scan(ctx: Context) -> dict | None:
         if len(data) < size:
             lines = lines[1:]                           # the first line is cut
         for line in lines:
-            if not (b'"SendMessage"' in line or b'"origin"' in line or b'"enqueue"' in line or (sends and b'"tool_result"' in line)):
+            if not (b'"SendMessage"' in line or b'"origin"' in line or b'"enqueue"' in line or (sends and b'"tool_result"' in line)
+                    or b"uto mode" in line):
                 continue
             try:
                 r = json.loads(line)
@@ -261,6 +263,13 @@ def _talk_scan(ctx: Context) -> dict | None:
                 for b in content if isinstance(content, list) else []:
                     if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in sends:
                         got["results"].append(r.get("toolUseResult"))
+                    if isinstance(b, dict) and b.get("type") == "tool_result":   # an auto mode denial (viz/denials.py)
+                        text = b.get("content")
+                        if isinstance(text, list):
+                            text = "".join(x.get("text", "") for x in text if isinstance(x, dict))
+                        # a result that starts by naming the classifier (not a file or an output quoting it)
+                        if b.get("is_error") is True and isinstance(text, str) and "auto mode" in text[:150].lower():
+                            got["denied"].append(text[:300])
                 o = r.get("origin")
                 if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback"):
                     got["child" if o.get("senderTaskId") else "peer"].append(o)
@@ -386,6 +395,25 @@ def price_table_models(ctx: Context, table: dict | None = None):
     return {"responses": bool(models), "unpriced": sorted(m for m in models if m not in table)}
 
 
+NO_VERDICT = "The server-side auto mode classifier gave no verdict"
+
+
+def auto_mode_denial(ctx: Context):
+    """The is_error tool_results that start by naming the auto mode classifier, as viz/denials.py reads them: a denial
+    starts with DENIED_PREFIX and then "Reason: "; the transient no-verdict form (NO_VERDICT, not a denial) is the only
+    other form known. A record of another form makes "known" some / none: the wording changed. What it cannot see: a
+    wording without "auto mode" in its first 150 characters (then no card either, and nothing here turns red)."""
+    if (s := _talk_skipped(ctx)) is not None:
+        return s
+    from_viz = Path(__file__).resolve().parents[2] / "jui_cli" / "viz" / "denials.py"
+    prefix = re.search(r'DENIED_PREFIX = "([^"]+)"', from_viz.read_text(encoding="utf-8")).group(1)
+    got = ctx._talk["denied"]
+    denied = [t for t in got if t.startswith(prefix)]
+    return {"known": _all_any(got, lambda t: t.startswith(prefix) or t.startswith(NO_VERDICT)),
+            "reason": _all_any(denied, lambda t: t[len(prefix):].lstrip().startswith("Reason: ")),
+            "no_verdict": "seen" if any(t.startswith(NO_VERDICT) for t in got) else "unseen"}
+
+
 PROBES: dict[str, Callable[[Context], object]] = {
     "cli_flags": cli_flags, "plugin_cli": plugin_cli, "mcp_cli": mcp_cli, "channels_flags": channels_flags,
     "transcript_shape": transcript_shape, "hook_input_shape": hook_input_shape, "env_vars": env_vars,
@@ -393,5 +421,5 @@ PROBES: dict[str, Callable[[Context], object]] = {
     "session_ran": session_ran, "agents_cli": agents_cli, "tool_names": tool_names,
     "price_table_models": price_table_models,
     "talk_send_input": talk_send_input, "talk_msg_id": talk_msg_id, "talk_origin": talk_origin,
-    "talk_envelope": talk_envelope,
+    "talk_envelope": talk_envelope, "auto_mode_denial": auto_mode_denial,
 }

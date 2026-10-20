@@ -13,6 +13,7 @@ Routes (design: dev-guide, 05 §3):
   POST /api/prompt    a prompt typed in the page for one session (prompt_checks: the page's own origin only)
   POST /api/attach    one file for a prompt, kept in <viz home>/uploads/<session>/ (the same checks, octet-stream)
   POST /api/attach-remove  an attachment taken off before sending (the same checks)
+  POST /api/denial    a card of a call stopped by auto mode: approve (its fixed words as a prompt) or dismiss (the same checks)
   POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
@@ -507,6 +508,30 @@ def make_app(ctx: ServerContext) -> web.Application:
                 return web.json_response({"verdicts": verdicts, "prompts": prompts})
             await asyncio.sleep(0.1)
 
+    async def api_denial(request: web.Request) -> web.Response:
+        """A card of a tool call stopped by auto mode (denials.py): {"id", "do": "approve" | "dismiss"}. The checks of
+        /api/prompt (prompt_checks). approve sends the card's fixed words (denials.prompt_text) to its session as a
+        prompt from the page (World.approve_denial → send_prompt); the page only names the card, never the words."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: /api/denial（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        card_id, do = body.get("id"), body.get("do")
+        if not isinstance(card_id, str) or do not in ("approve", "dismiss"):
+            return web.Response(status=400, text="id and do (approve or dismiss) are required\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        world_do = ctx.world.approve_denial if do == "approve" else ctx.world.dismiss_denial
+        refused_by = world_do(card_id, now_ms())
+        if refused_by is not None:
+            return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
+        if ctx.publish:
+            ctx.publish()
+        return web.json_response({"ok": True})
+
     async def api_prompt(request: web.Request) -> web.Response:
         """A prompt typed in the page's 応答の履歴 tab, for one session (requester's ruling, 10-19: "別端末からは送れなくて
         いいよ"). Every check in prompt_checks must pass; then World.send_prompt queues it for that session's channel."""
@@ -794,6 +819,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/prompt", api_prompt)
     app.router.add_route("*", "/api/attach", api_attach)
     app.router.add_route("*", "/api/attach-remove", api_attach_remove)
+    app.router.add_route("*", "/api/denial", api_denial)
     app.router.add_route("*", "/api/history-image", api_history_image)
     app.router.add_route("*", "/api/data-docs", api_data_docs)
     app.router.add_route("*", "/api/prices", api_prices)

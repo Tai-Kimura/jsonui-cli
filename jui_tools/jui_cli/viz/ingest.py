@@ -19,6 +19,7 @@ from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .attachments import Attachments
 from .calls import CallBook, peer_name
+from .denials import DenialBook
 from .permissions import PROMPTS_QUEUED_MAX, PermissionBook
 from .questions import QuestionBook
 from .sources import devices as devices_mod
@@ -200,6 +201,8 @@ class World:
         self.tasks = TaskBook()
         self.perms = PermissionBook()
         self.questions = QuestionBook()
+        # tool calls stopped by auto mode (denials.py): the hook and the transcript, one card per call
+        self.denials = DenialBook()
         self.git_jobs: list = []                 # (agent id, trip id, what to count) for the box (2.3.4)
         # SendMessage between two sessions here (calls.py): a session's messaging name and socket -> its id
         self.calls = CallBook()
@@ -359,6 +362,8 @@ class World:
             self._dirty.add("questions")
         if self.calls.session_ended(sid, at):
             self._dirty.add("calls")
+        if self.denials.session_ended(sid, at):
+            self._dirty.add("denials")
         self._status(session, "ended", at)
         self._set(agent, at, "idle", "退勤", leftAt=at)
 
@@ -711,6 +716,9 @@ class World:
             text = agent["act"]
         elif kind == "PermissionDenied":
             denied_id = use_id or self._asking.get(agent["id"])
+            # fired only by auto mode (hooks reference): a card that offers to tell the session to go on
+            if self.denials.add(sid, agent["id"], use_id, tool or "?", tool_input, _s(payload.get("reason")) or "", at, "hook"):
+                self._dirty.add("denials")
             if self.perms.tool_finished(sid, denied_id, False, at):
                 self._dirty.add("perms")
             self._settle_asking(agent["id"])
@@ -1334,6 +1342,8 @@ class World:
             self._dirty.add("questions")
         if self.calls.tick(at):
             self._dirty.add("calls")
+        if self.denials.tick(at):
+            self._dirty.add("denials")
         self._data_docs_tick(at)
         for sid in self.attachments.due(at):   # an hour after the session ended (a few files: done here)
             try:
@@ -1502,6 +1512,7 @@ class World:
             total["usage"] += len(got["usage"])
             if got.get("calls"):
                 self._call_records(sid, got["calls"], at)
+            self._denied_records(sid, sid, got.get("denials"), at)
             self._bill(sid, sid, got.get("bills"), at)
             seen = self._usage_seen.setdefault(sid, {})
             for mid, tokens, when in got["usage"]:
@@ -1537,10 +1548,42 @@ class World:
                     continue
                 from .sources.transcripts import UsageTail
                 tail = self._tails[key] = UsageTail(path)
-            self._bill(aid, agent["sessionId"], tail.read().get("bills"), at)
+            got = tail.read()
+            self._bill(aid, agent["sessionId"], got.get("bills"), at)
+            self._denied_records(agent["sessionId"], aid, got.get("denials"), at)
         for key in [k for k in self._tails if isinstance(k, str) and k.startswith("sub:") and k[4:] not in self.agents]:
             self._tails.pop(key, None)
             self._billed.pop(key[4:], None)
+
+    def _denied_records(self, sid: str, agent_id: str, got, at: int) -> None:
+        """Auto mode denials read from a transcript (sources/transcripts.denial_of): the same cards as the hook's."""
+        from .denials import reason_of
+        for use_id, tool, tool_input, text, when in got or []:
+            if self.denials.add(sid, agent_id, use_id, tool, tool_input, reason_of(text), when or at, "transcript"):
+                self._dirty.add("denials")
+
+    def approve_denial(self, card_id: str, at: int) -> tuple[int, str] | None:
+        """「許可して続けさせる」, confirmed on the page: denials.prompt_text(card) goes to that session as a prompt from the
+        page (send_prompt, the path of POST /api/prompt). Nothing else: no rule, no setting, no answer to a hook."""
+        from .denials import prompt_text
+        card = self.denials.find(card_id)
+        if card is None:
+            return 404, "no such card"
+        if card["status"] != "pending":
+            return 409, f"this card is {card['status']}"
+        refused = self.send_prompt(card["sessionId"], prompt_text(card), at)
+        if refused is not None:
+            return refused
+        self.denials.settle(card_id, "sent", at)
+        self._dirty.add("denials")
+        return None
+
+    def dismiss_denial(self, card_id: str, at: int) -> tuple[int, str] | None:
+        """「そのまま」: the card closes; nothing is sent."""
+        if self.denials.settle(card_id, "dismissed", at) is None:
+            return (404, "no such card") if self.denials.find(card_id) is None else (409, "already answered")
+        self._dirty.add("denials")
+        return None
 
     def _bill(self, agent_id: str, sid: str, got, at: int) -> None:
         """The new responses of one transcript as bills over agent_id's robot: one per message id (the same usage
@@ -1651,6 +1694,8 @@ class World:
             self.state.set_slice("perms", self.perms.items())
         if "questions" in self._dirty:
             self.state.set_slice("questions", self.questions.items())
+        if "denials" in self._dirty:
+            self.state.set_slice("denials", self.denials.items())
         if "calls" in self._dirty:
             self.state.set_slice("calls", self.calls.items())
         if "sessions" in self._dirty:

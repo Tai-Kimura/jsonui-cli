@@ -137,6 +137,38 @@ def _epoch_ms(ts) -> int | None:
         return None
 
 
+USES_KEPT = 200
+
+
+def tool_uses_of(rec) -> list[tuple[str, str, object]]:
+    """(tool_use_id, tool name, input) of each tool_use block of an assistant record."""
+    msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "assistant" else None
+    content = msg.get("content") if isinstance(msg, dict) else None
+    out = []
+    for b in content if isinstance(content, list) else []:
+        if isinstance(b, dict) and b.get("type") == "tool_use" and isinstance(b.get("id"), str):
+            out.append((b["id"], str(b.get("name") or "?"), b.get("input")))
+    return out
+
+
+def denial_of(rec) -> list[tuple[str, str]]:
+    """(tool_use_id, the result's text) of each tool_result of a user record that is an auto mode denial (is_error and
+    the text starts with denials.DENIED_PREFIX)."""
+    from ..denials import DENIED_PREFIX
+    msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "user" else None
+    content = msg.get("content") if isinstance(msg, dict) else None
+    out = []
+    for b in content if isinstance(content, list) else []:
+        if not isinstance(b, dict) or b.get("type") != "tool_result" or b.get("is_error") is not True:
+            continue
+        text = b.get("content")
+        if isinstance(text, list):
+            text = "".join(x.get("text", "") for x in text if isinstance(x, dict) and x.get("type") == "text")
+        if isinstance(text, str) and text.startswith(DENIED_PREFIX) and isinstance(b.get("tool_use_id"), str):
+            out.append((b["tool_use_id"], text))
+    return out
+
+
 class UsageTail:
     """The new complete lines of one transcript, from the end it had when first seen."""
 
@@ -145,11 +177,13 @@ class UsageTail:
         self.offset: int | None = None
         self.buf = b""
         self.skipping = False
+        self.uses: dict[str, tuple[str, object]] = {}   # the last USES_KEPT tool calls: a denial names one of them
 
     def read(self) -> dict:
         """{'usage': [(id, tokens, at)], 'bills': [(id, model, usage, at)], 'calls': [(kind, sender name, at)],
+        'denials': [(tool_use_id, tool, input, the result's text, at)] (auto mode denials: denial_of),
         'bytes': n, 'assistant': n, 'bad': n} for what was added. ``calls``: the receiver's records of a cross-session message (calls.record_event)."""
-        out = {"usage": [], "bills": [], "calls": [], "bytes": 0, "assistant": 0, "bad": 0}
+        out = {"usage": [], "bills": [], "calls": [], "denials": [], "bytes": 0, "assistant": 0, "bad": 0}
         try:
             fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
@@ -196,6 +230,13 @@ class UsageTail:
             c = record_event(rec)
             if c:
                 out["calls"].append((c[0], c[1], _epoch_ms(rec.get("timestamp"))))
+            for use_id, name, tool_input in tool_uses_of(rec):
+                self.uses[use_id] = (name, tool_input)
+                if len(self.uses) > USES_KEPT:
+                    self.uses.pop(next(iter(self.uses)))
+            for use_id, text in denial_of(rec):
+                name, tool_input = self.uses.get(use_id, ("?", None))
+                out["denials"].append((use_id, name, tool_input, text, _epoch_ms(rec.get("timestamp"))))
         return out
 
 

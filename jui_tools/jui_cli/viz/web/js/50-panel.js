@@ -180,6 +180,8 @@ function renderPanel(model) {
   chip.hidden = model.pending.length === 0;
   setText(chip, `許可待ち ${model.pending.length}`);
   renderQuestions();
+  renderDenials();
+  paintSince($('denied'), model.t, '経過');
   const sIn = SESSIONS.filter((x) => inScope(x.project)).length, rIn = ROBOT_DEFS.filter((d) => inScope(projectOfRobot(d.id))).length;
   setText($('chip-robots'), UI.project === 'all' ? `ロボット ${ROBOT_DEFS.length}` : `ロボット ${rIn} / ${ROBOT_DEFS.length}`);
   setText($('chip-sessions'), UI.project === 'all' ? `セッション ${SESSIONS.length}` : `セッション ${sIn} / ${SESSIONS.length}`);
@@ -1180,6 +1182,7 @@ function closeTaskBoard() {
   if (!tb.open) { releaseView('tb'); return; }
   tb.open = false; tb.detail = null; tb.waitView = false;
   qStripEl.replaceChildren(); qStripEl._sig = null; qStripEl.hidden = true;   // no second copy of the cards while closed
+  const dStrip = $('denied-strip'); dStrip.replaceChildren(); dStrip._sig = null; dStrip.hidden = true;
   hideOverlay(tbEl);
   releaseView('tb');
 }
@@ -1209,6 +1212,8 @@ function renderTaskBoard(model) {
   // the questions waiting, the same cards as the panel's from the same list (questionsShown), on top
   renderQuestionStrip();
   paintSince(qStripEl, model.t, '待ち');
+  renderDenialStrip();
+  paintSince($('denied-strip'), model.t, '経過');
   stripEl.hidden = !pend.length && !alwaysRules.size && !elsewhere && !tb.waitView;
   keyed(stripEl, JSON.stringify([NAMES.rev, pend.map(permSig), [...alwaysRules.keys()], elsewhere]), () => {
     const cardsHTML = pend.map((p) => {

@@ -209,6 +209,18 @@ const SOURCE = {
     netRequest('question.answer', { questionId: id, answers: picks }).then((ack) => showToast(ack.ok
       ? '質問の答えを Claude Code へ送った' : `送れなかった（${ack.error || '不明'}）`));
   },
+  /* A card of a call stopped by auto mode (51-denials.js): 'approve' (the server sends the card's own words to its
+     session) or 'dismiss'. The checks of /api/prompt. Resolves { ok } or { ok: false, status, error }. */
+  async denial(id, what) {
+    try {
+      const res = await fetch('/api/denial', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ id, do: what }),
+      });
+      return res.ok ? { ok: true } : { ok: false, status: res.status, error: (await res.text()).trim() };
+    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
   /* 40-scene.js calls this when a leaving robot has walked out of the door. */
   robotGone(label) {
     if (rbState.id === label) closeRobot();   // its card closes when it has walked out
@@ -902,6 +914,7 @@ function liveApply(changed, replace) {
   rebuildTasks();
   rebuildPerms();
   rebuildQuestions();
+  rebuildDenials();
   layoutRooms();   // after the permissions: a room's rank comes from this round's requests
   placeRobots();
   renderUsage(vizNow());

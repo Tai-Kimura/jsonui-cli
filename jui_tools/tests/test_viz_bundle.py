@@ -26,9 +26,9 @@ def web_text(*parts):
 
 def test_each_mode_is_its_parts_in_order():
     assert bundle.parts("demo", e2e=False) == ("10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
-                                               "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
     assert bundle.parts("live", e2e=False) == ("10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
-                                               "40-scene.js", "50-panel.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "54-bills.js", "55-history.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
 
 
 def test_build_joins_the_parts_in_that_order_with_a_marker_each():
@@ -181,6 +181,7 @@ BUILDERS = {
         "nameTable", "nameCells",   # 2.3.7: イベント・操作 as one table (ticket 2026-10-20-jui-viz-spec-events-as-table)
         "rowText", "wfTree", "levelHTML",   # 2.3.7: the 構造's row text and its nested boxes (ticket 2026-10-20-jui-viz-spec-structure-shows-no-nesting)
     },
+    "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
 }
 # Builders a part may call that another part defines (each checked where it is defined).
