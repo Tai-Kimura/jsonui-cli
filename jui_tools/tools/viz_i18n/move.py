@@ -68,6 +68,10 @@ KNOWN = {
                                        "one key a choice",
     ("js/54-bills.js", "pr.done.remove"): "as pr.done.set ('削除しました')",
     ("js/54-bills.js", "pr.done.reset"): "as pr.done.set ('既定に戻しました')",
+    ("js/50-panel.js", "panel.rb.follow.closed.toast"): "was `${id} の部屋${was ? `（${was}）` : ''}が閉じました`: the "
+                                                        "{was} slot was a template of its own, now panel.rb.follow.was",
+    ("js/50-panel.js", "panel.rb.follow.closed"): "was `部屋${m.closed ? `（${esc(m.closed)}）` : ''}が閉じた`: as "
+                                                  "panel.rb.follow.closed.toast",
 }
 
 
