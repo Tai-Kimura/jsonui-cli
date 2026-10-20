@@ -132,7 +132,9 @@ def test_a_symlinked_folder_is_not_followed(tmp_path):
     (root / "docs/infra").symlink_to(src / "docs/infra")
     assert I.counts(root)["files"] == 0
     status, m = I.read(root)
-    assert not m["ok"] and m["reason"] == "no_infra"
+    # the boundary since 0dee01ae: a folder reached through a symlink is unreadable, and says why (not "no files")
+    assert not m["ok"] and m["reason"] == "unreadable" and status >= 400 and m["short"]
+    assert not m.get("nodes") and not m.get("files")
 
 
 def test_a_fifo_in_place_of_a_file_never_holds_the_read(tmp_path):
