@@ -1536,6 +1536,7 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .src-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .src-chip { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: var(--panel); }
 .src-chip[data-some] summary b { color: #c0392b; }
+.src-free { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn); background: var(--warn-bg); color: var(--ink); font-size: 13px; }
 .src-chip ul { margin: 4px 0; padding-left: 18px; max-height: 160px; overflow: auto; font: 12px/1.5 var(--font-mono); }
 .src-month { display: block; max-width: 100%; }
 .src-tick line { stroke: var(--line); }

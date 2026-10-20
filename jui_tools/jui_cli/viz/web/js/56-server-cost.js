@@ -105,10 +105,19 @@ function srcSummary(M) {
     ['loadUndefined', '負荷未定義', M.loadUndefined.length, M.loadUndefined],
     ['overflow', '容量を超えた node', Object.keys(M.overflowHours).length, Object.entries(M.overflowHours).map(([n, h]) => `${n}: ${h} 時間`)],
     ['problems', '負荷定義の警告', M.problems.count, M.problems.first.map((p) => `${p.file} ${p.path}: ${p.message}`)],
+    ['warnings', '計算の注意', M.warningCount, M.warnings.map(srcWarnText)],
   ];
+  // the free amount is taken once per scenario (one environment): environments on one account each counted take it twice
+  const free = M.warnings.find((w) => w.code === 'cost.free_per_scenario');
+  const freeHTML = free ? `<p class="src-free" data-src-free role="note">無料枠はシナリオ（環境）ごとに引いている。同じアカウントの環境を別々に数えると、無料枠を二重に引くので、合計は少なめに出る${free.rows && free.rows.length ? `（無料枠のある行 ${Number(free.rows.length)} 件）` : ''}</p>` : '';
   return `<div class="src-sum"><strong class="src-total" data-src-total>${esc(srcUsd(M.usd))}</strong><span class="src-note">1 か月の概算（USD・オンデマンド。予約・割引・税は入っていない）</span>
 <label class="sr-ctl">積み上げ <select id="src-by"><option value="provider"${M.by === 'provider' ? ' selected' : ''}>provider ごと</option><option value="node"${M.by === 'node' ? ' selected' : ''}>node ごと</option></select></label></div>
-<div class="src-chips">${chips.map(([k, label, n, items]) => `<details class="src-chip" data-src-chip="${k}"${n ? ' data-some="1"' : ''}><summary>${esc(label)} <b>${n}</b></summary>${items.length ? `<ul>${items.slice(0, 50).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p>なし</p>'}</details>`).join('')}</div>`;
+<div class="src-chips">${chips.map(([k, label, n, items]) => `<details class="src-chip" data-src-chip="${k}"${n ? ' data-some="1"' : ''}><summary>${esc(label)} <b>${n}</b></summary>${items.length ? `<ul>${items.slice(0, 50).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p>なし</p>'}</details>`).join('')}</div>${freeHTML}`;
+}
+/* An engine warning in one line: its message, and the rows it names (a row is an id or a {id}). */
+function srcWarnText(w) {
+  const rows = Array.isArray(w.rows) ? w.rows.map((r) => (r && typeof r === 'object' ? String(r.id || r.sku || JSON.stringify(r)) : String(r))) : [];
+  return `${w.node ? `${w.node} · ` : ''}${w.message}${rows.length ? `（${rows.slice(0, 8).join('・')}${rows.length > 8 ? ` ほか ${rows.length - 8}` : ''}）` : ''}`;
 }
 function srcMonthSvg(M) {
   const w = Math.max(320, srcEl.clientWidth - 32), h = 260, padL = 56, padB = 28, padT = 18;
