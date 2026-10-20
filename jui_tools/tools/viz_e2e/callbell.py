@@ -28,6 +28,11 @@ SID = "ca110000-0000-4000-8000-0000000000b1"
 # 2026-10-20-jui-viz-e2e-callbell-dialog-wait-flaky; the drawn desk depended on --out, and one put the robot in front
 # of the bell — 2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk is the product's side).
 DESK = [6.4, 4.6]
+# Where the drawn desk hid the bell (2.3.8's full e2e: floor-view room coordinates [1.71, 1.68], up close (-4.87, -4.97),
+# the bell at (-5.5, -6.3)): the robot stands in front of the bell from the usual view. A press on the bell there must
+# still open the dialog (ticket 2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk); before the fix it opened the
+# robot's card.
+DESK_HIDING = [1.71, 1.68]
 # The server's own pollers (jui_cli/viz/sources/processes.py, agents_cli.py, gitbox.py), not processes it was asked for.
 POLLERS = re.compile(r"^(\S*/)?ps -A -o |^(\S*/)?ps -o |\bagents --json\b|^(\S*/)?git -C ")
 # The press to the dialog: measured within 0.1 s at 6x, 20x and 40x CPU throttling (openCall runs in the pointerup);
@@ -222,6 +227,32 @@ async def run_callbell(pw, out, failures):
 
         res["kids"] = [kids0, kids()]
         check(failures, kids() == kids0, f"the server started no process: {res['kids']}")
+
+        # the robot's desk in front of the bell (a fresh page, its own desk memory): the press still opens the dialog
+        await page.close()
+        page = await new_page(browser, watch, "callbell-hidden", **DESKTOP)
+        await page.add_init_script(desk_pins_js([(folder, SID, DESK_HIDING)]))
+        await page.goto(url + "/")
+        await ready(page)
+        await until(page, "() => Object.keys(window.__dbg.robotState()).length >= 1", "the robot (desk in front of the bell)", timeout=30000)
+        await page.click("#scope-top")
+        await page.evaluate("() => [...document.querySelectorAll('#pop [data-pick-project]')].find((x) => x.textContent.includes('call app')).click()")
+        await until(page, "() => window.__dbg.bell().built", "the bell (desk in front of it)", timeout=20000)
+        await settled(page, "seated, the desk in front of the bell")
+        await until(page, "() => !window.__dbg.view().tween", "the camera still, the desk in front of the bell", timeout=20000)
+        seat = res["hiddenSeat"] = await page.evaluate("() => window.__dbg.seats().ca")
+        check(failures, seat and [seat.get("dx"), seat.get("dz")] == DESK_HIDING, f"the desk is where the arm put it {DESK_HIDING}: {seat}")
+        b = res["hiddenBell"] = await page.evaluate("() => window.__dbg.bell()")
+        # the robot is in front of the bell at that point (the arm is about a hidden bell, not a free one); __dbg.under came with the fix
+        under = res["hiddenUnder"] = await page.evaluate("(p) => window.__dbg.under ? window.__dbg.under(p) : 'no __dbg.under'", b["screen"])
+        if isinstance(under, list):
+            check(failures, under[:1] == ["robot:ca"] and "bell" in under, f"the robot stands in front of the bell at its point: {under}")
+        await page.screenshot(path=str(out / "hidden-room-light.png"))
+        await page.mouse.click(*b["screen"])
+        await until(page, "() => !document.getElementById('call').hidden", "the dialog from the bell behind the robot", timeout=OPENED_MS,
+                    why="() => ({ bell: window.__dbg.bell(), view: window.__dbg.view() })")
+        card = res["hiddenCard"] = await page.evaluate("() => window.__dbg.view().card")
+        check(failures, not card, f"the press on the bell opened no robot's card: {card}")
     finally:
         srv.terminate()
         try:

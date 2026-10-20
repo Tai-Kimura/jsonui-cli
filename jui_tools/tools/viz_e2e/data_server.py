@@ -31,6 +31,9 @@ SID_B = "e2e00000-0000-4000-8000-000000000602"
 # (measured: pinned at [1.91, 1.6], in front of the rack, the press opened no sheet: "waiting for the sheet" timed out). Ticket
 # 2026-10-20-jui-viz-e2e-callbell-dialog-wait-flaky (the family); the product's side: 2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk.
 DESK_A = [6.4, 4.6]
+# The desk in front of the rack (measured above): a press on the rack there must still open the sheet (ticket
+# 2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk); before the fix it opened the robot's card.
+DESK_HIDING = [1.91, 1.6]
 # The press to the sheet read (openDataDocs runs in the pointerup, then the server reads the documents): the cap as it
 # was (20 s), not measured under load for the read; a press that opened nothing says so with the page's state.
 OPENED_MS = 20000
@@ -293,6 +296,31 @@ async def run_data_server(pw, out, failures, jt=None, shots_only=False):
         check(failures, res["mermaidAsked"] == [f"{url}/vendor/mermaid-11.17.2/mermaid.min.js"], f"Mermaid read once, from the server: {res['mermaidAsked']}")
         check(failures, not watch.console and not watch.foreign and not watch.csp,
               f"no console error, nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
+        await page.close()
+
+        # the first room's desk in front of the rack (a fresh page, its own desk memory): the press still opens the sheet
+        page = await new_page(browser, watch, "data-server-hidden", **DESKTOP)
+        await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
+        await page.add_init_script(desk_pins_js([(room_a, SID_A, DESK_HIDING)]))
+        await page.goto(url + "/")
+        await ready(page)
+        await wait(page, "() => window.__dbg.robots.length >= 2 && window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated (desk in front of the rack)")
+        await up_close(pa)
+        await wait(page, "() => window.__dbg.dataServer().built", timeout=30000, label="the rack (desk in front of it)")
+        await settled(page, "the room, the desk in front of the rack")
+        await until(page, "() => !window.__dbg.view().tween", "the camera still, the desk in front of the rack", timeout=20000)
+        seat = res["hiddenSeat"] = await page.evaluate("(sid) => { const R = window.__dbg.robots.find((x) => x.def.sessionId === sid); return R ? { id: R.def.id, ...window.__dbg.seats()[R.def.id] } : null; }", SID_A)
+        check(failures, seat and [seat.get("dx"), seat.get("dz")] == DESK_HIDING, f"the first room's desk is where the arm put it {DESK_HIDING}: {seat}")
+        a = res["hiddenRack"] = await page.evaluate("() => window.__dbg.dataServer()")
+        # the robot is in front of the rack at that point; __dbg.under came with the fix
+        under = res["hiddenUnder"] = await page.evaluate("(p) => window.__dbg.under ? window.__dbg.under(p) : 'no __dbg.under'", a["screen"])
+        if isinstance(under, list) and seat:
+            check(failures, under[:1] == [f"robot:{seat['id']}"] and "rack" in under, f"the robot stands in front of the rack at its point: {under}")
+        await page.screenshot(path=str(out / "hidden-room-light.png"))
+        await page.mouse.click(*a["screen"])
+        await until(page, SHEET_JS_OPEN, "the sheet from the rack behind the robot", timeout=OPENED_MS, why=WHY_PRESS)
+        card = res["hiddenCard"] = await page.evaluate("() => window.__dbg.view().card")
+        check(failures, not card, f"the press on the rack opened no robot's card: {card}")
         await page.close()
     except Exception as e:
         failures.append(f"data-server: {type(e).__name__}: {str(e).splitlines()[0]}")

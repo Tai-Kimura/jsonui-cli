@@ -1920,21 +1920,40 @@ function towerHit(ray) {
   const bay = F && h.uv ? F.bays.find((b) => h.uv.x >= b.x0 && h.uv.x <= b.x1) : null;
   return { kind: 'floor', k: h.object.userData.floor, project: bay && bay.id && PROJECT[bay.id] ? bay.id : null, title: towerHover(h) };
 }
-function liveHit(ray) {
-  const solo = liveSolo(), rooms = Object.entries(LIVE3D.rooms).filter(([id]) => !solo || id === solo).map(([, R]) => R);
-  const targets = [...rooms.flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.filter((R) => R.robot.root.visible).map((R) => R.robot.root),
+function liveRooms() {
+  const solo = liveSolo();
+  return Object.entries(LIVE3D.rooms).filter(([id]) => !solo || id === solo).map(([, R]) => R);
+}
+// What a press in the live office can pick, nearest first by the ray (liveHit; __dbg.under reads the same list).
+function liveTargets() {
+  const solo = liveSolo();
+  return [...liveRooms().flatMap((R) => [R.pb.mesh, R.kb.mesh, ...(R.tb ? [R.tb.mesh] : [])]), ...robots.filter((R) => R.robot.root.visible).map((R) => R.robot.root),
     ...(PROPS.bell && PROPS.room === solo ? [PROPS.bell] : []),
     ...(PROPS.dataServer ? [PROPS.dataServer.group] : [])];   // the data server's rack (2.3.5)
-  const hit = ray.intersectObjects(targets, true)[0];
+}
+const robotOf = (obj) => { let o = obj; while (o && o.userData.robotId === undefined && o.parent) o = o.parent; return o && o.userData.robotId !== undefined ? o.userData.robotId : undefined; };
+const isFixture = (obj) => { for (let q = obj; q; q = q.parent) if (q.userData.callBell) return true; return !!obj.userData.dataServer; };
+/* The call bell and the data server's rack are small and stand against the back wall: a robot's desk drawn in front of
+   one (or a robot walking past) covered all of it, and the press opened the robot's card (ticket
+   2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk). A fixture the ray reaches behind a robot wins over that robot,
+   from any camera; the robot is still opened by the rest of its body and by its name tag. Boards are not fixtures here
+   (wide, a robot covers only a part). */
+function liveFirstHit(ray) {
+  const hits = ray.intersectObjects(liveTargets(), true);
+  if (hits.length && robotOf(hits[0].object) !== undefined) { const f = hits.find((h) => isFixture(h.object)); if (f) return f; }
+  return hits[0];
+}
+function liveHit(ray) {
+  const solo = liveSolo(), rooms = liveRooms();
+  const hit = liveFirstHit(ray);
   if (!hit) {
     // a room's floor picks the room (the floor view only)
     const f = solo ? null : ray.intersectObjects(rooms.map((R) => R.floor), false)[0];
     const id = f && Object.keys(LIVE3D.rooms).find((k) => LIVE3D.rooms[k].floor === f.object);
     return id ? { kind: 'room', project: id, title: `${PROJECT[id].name} を選ぶ` } : null;
   }
-  let o = hit.object;
-  while (o && o.userData.robotId === undefined && o.parent) o = o.parent;
-  if (o && o.userData.robotId !== undefined) return { kind: 'robot', id: o.userData.robotId };
+  const rid = robotOf(hit.object);
+  if (rid !== undefined) return { kind: 'robot', id: rid };
   for (let q = hit.object; q; q = q.parent) if (q.userData.callBell) return { kind: 'call', project: PROPS.room, title: 'ロボットを呼ぶ（起動のコマンドをコピー）' };
   if (hit.object.userData.dataServer && PROPS.room) return { kind: 'data', project: PROPS.room, title: 'API 仕様書・DB 仕様書を見る' };
   for (const [id, R] of Object.entries(LIVE3D.rooms)) {

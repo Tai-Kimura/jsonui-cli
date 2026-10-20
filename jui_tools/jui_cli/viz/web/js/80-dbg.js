@@ -124,6 +124,19 @@ window.__dbg = {
     return { built: true, place: PROPS.place.callButton, room: PROPS.room, open: !document.getElementById('call').hidden,
       screen: [Math.round(r.left + ((v.x + 1) / 2) * r.width), Math.round(r.top + ((1 - v.y) / 2) * r.height)], inView: v.z > -1 && v.z < 1 };
   },
+  // what lies under a page point in the live office, nearest first (one entry per thing): the e2e shows a robot stands in
+  // front of the bell or the rack before it presses there (ticket 2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk)
+  under: ([x, y]) => {
+    if (SOURCE.mode !== 'live' || TOWER.on) return null;
+    const r = canvas.getBoundingClientRect(), ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+    const seen = [];
+    for (const h of ray.intersectObjects(liveTargets(), true)) {
+      const rid = robotOf(h.object), k = rid !== undefined ? `robot:${rid}` : isFixture(h.object) ? (h.object.userData.dataServer ? 'rack' : 'bell') : 'board';
+      if (!seen.includes(k)) seen.push(k);
+    }
+    return seen;
+  },
   props: () => {
     const R = PROPS.room ? LIVE3D.rooms[PROPS.room] : null, v = PROPS.vac, sv = PROPS.server;
     return { room: PROPS.room, server: sv ? [+sv.position.x.toFixed(2), +sv.position.z.toFixed(2)] : null,
