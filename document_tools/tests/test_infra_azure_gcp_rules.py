@@ -134,3 +134,22 @@ def test_memorystore_is_its_gb_at_its_tier_and_bands_rate(tier, gb, sku):
 def test_cloud_run_requests_take_the_catalogs_free_two_million():
     got = month(gcp("run", "compute.container", "run"), {"requests": 3_000_000 / 730}, 0, region="asia-northeast1")
     assert round(got["requests"], 6) == 0.4
+
+
+@pytest.mark.parametrize("svc, cat, words", [("run", "compute.container", "Cloud Run's monthly free vCPU-seconds"),
+                                              ("gke", "compute.k8s", "GKE's monthly free credit")])
+def test_a_free_amount_not_counted_is_said(svc, cat, words):
+    """Not counted is not silent: Cloud Run's vCPU and memory grant (not in the catalog, its page unread) and GKE's
+    credit are not taken off, and the result says so."""
+    n = gcp("x", cat, svc)
+    said = RULES.lookup(n).extra["notice"](n, {}, [1])
+    assert [c for c, _m in said] == ["cost.free_not_counted"] and words in said[0][1] and "not taken off" in said[0][1]
+
+
+def test_the_notice_reaches_the_result():
+    """Through the engine: a model with a Cloud Run service carries the notice once, for its node."""
+    from test_infra_cost import _notices, _run
+    n = {"id": "api", "category": "compute.container", "provider": "gcp", "service": "run", "region": "asia-northeast1"}
+    result, _ = _run([n], [{"node": "api", "quantities": {"vcpu": 1, "memory_gb": 0.5, "requests": 100}}])
+    got = _notices(result, "cost.free_not_counted")
+    assert len(got) == 1 and got[0]["node"] == "api" and "Cloud Run's monthly free" in got[0]["message"]

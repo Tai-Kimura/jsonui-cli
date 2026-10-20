@@ -80,6 +80,19 @@ def memorystore(h: F.Hour) -> list[F.Meter]:
     return [F.Meter("capacity", size * h.running, "GB-hour", f"{tier}:{band}")]
 
 
+def run_grant_notice(node, quantities, running):
+    """Said, not silent: the free vCPU and memory a billing account gets a month is not taken off."""
+    return [("cost.free_not_counted", "Cloud Run's monthly free vCPU-seconds and GiB-seconds (per billing account) are "
+                                      "not taken off: the Cloud Billing Catalog does not list them and the page could "
+                                      "not be read — vCPU and memory are priced from the first second (the free 2 "
+                                      "million requests are counted)")]
+
+
+def gke_credit_notice(node, quantities, running):
+    return [("cost.free_not_counted", "GKE's monthly free credit for the cluster management fee (per billing account) "
+                                      "is not taken off: the fee is priced from the first hour")]
+
+
 def kms(h: F.Hour) -> list[F.Meter]:
     return F.per_month(h, "key", "month", "secrets", name="key") + F.counted(h, "requests", "api", "request", "api")
 
@@ -89,7 +102,8 @@ def registry(h: F.Hour) -> list[F.Meter]:
 
 
 _r("run-job", "compute.container", "run.job", F.container)    # before run: a run.job node is a job's
-_r("run", "compute.container", "run", run, reads=("requests", "vcpu", "memory_gb", "egress_gb"))
+_r("run", "compute.container", "run", run, reads=("requests", "vcpu", "memory_gb", "egress_gb"),
+   notice=run_grant_notice)
 _r("functions", "compute.function", "functions", F.function,
    reads=("requests", "duration_ms", "memory_mb", "concurrency", "egress_gb"))
 _r("gce", "compute.vm", "gce", gce)
@@ -100,5 +114,5 @@ _r("gcs", "storage.object", "gcs", F.object_store)
 _r("secretmanager", "secrets", "secretmanager", F.secrets)
 _r("kms", "secrets", "kms", kms)
 _r("clouddns", "edge.dns", "clouddns", F.dns)
-_r("gke", "compute.k8s", "gke", F.k8s)
+_r("gke", "compute.k8s", "gke", F.k8s, notice=gke_credit_notice)
 _r("artifactregistry", "ci", "artifactregistry", registry, reads=("storage_gb",))
