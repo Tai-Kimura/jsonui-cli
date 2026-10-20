@@ -298,7 +298,7 @@ TODAY = "rc=0\n** TEST SUCCEEDED **\npassed=36 failed=0\n\n"
     ("Executed 5 tests, with 1 failure (1 unexpected)\n** TEST SUCCEEDED **\n", ("** TEST SUCCEEDED **", None, 0)),   # the mark decides
     ("Tests:       1 failed, 35 passed, 36 total\n", ("35 passed, 1 failed", 35, 1)),               # jest
     ("4057 passed, 16 skipped in 300.1s\n", ("4057 passed, 0 failed", 4057, 0)),                    # pytest -q
-    # two marks in one output (a run, then a rerun): the last one is the run's word (dd's T1)
+    # two marks in one output (a run, then a rerun): the last one is the run's word (the independent check's T1)
     ("** TEST FAILED **\n--- rerun ---\n** TEST SUCCEEDED **\n", ("** TEST SUCCEEDED **", None, 0)),
     ("** TEST SUCCEEDED **\n--- rerun ---\n** TEST FAILED **\n", ("** TEST FAILED **", None, None)),
 ])
@@ -321,8 +321,8 @@ def test_a_redirected_xcodebuild_failure_with_exit_code_0_is_a_failed_run_and_to
 
 
 # ---------------------------------------------------------------- 2.3.10: the head from the strongest thing that says it
-# cd's ruling on tickets 2026-10-20-jui-viz-test-run-ios-shows-failed-while-passing and -passed-head-over-runner-failed:
-# jsonui-test-runner's own run_end, then xcodebuild's last mark, then a known summary line, then the exit code. b8's
+# The ruling on tickets 2026-10-20-jui-viz-test-run-ios-shows-failed-while-passing and -passed-head-over-runner-failed:
+# jsonui-test-runner's own run_end, then xcodebuild's last mark, then a known summary line, then the exit code. The
 # first fix read counts only from known lines, so robot-tests' "2 passed, 8 failed" (run_end failed=8) showed 通過.
 SCRIPTED = "2 passed, 8 failed"   # tools/viz_e2e/robot_tests.py: the tool's output of the run whose run_end says failed=8
 
@@ -339,7 +339,7 @@ SCRIPTED = "2 passed, 8 failed"   # tools/viz_e2e/robot_tests.py: the tool's out
     ("passed=36 failed=0\n", True, None, ("failed", "exit")),         # an echo says nothing: the exit code
     ("passed=36 failed=0\n", False, None, ("passed", "exit")),
     ("BUILD SUCCESSFUL in 3s\n", True, None, ("failed", "exit")),      # no counts: the exit code
-    # a mark inside a line is no mark (an echo, grep -n's output; サポート7's V2): only a line that is the mark itself
+    # a mark inside a line is no mark (an echo, grep -n's output; the independent check's V2): only a line that is the mark itself
     ("Executed 3 tests, with 0 failures (0 unexpected)\n+ echo 'expect no ** TEST FAILED ** here'\n", False, None, ("passed", "summary")),
     ("Executed 3 tests, with 0 failures (0 unexpected)\nbuild.log:812:** TEST FAILED **\n", False, None, ("passed", "summary")),
     ("Executed 3 tests, with 1 failure (1 unexpected)\n# ** TEST SUCCEEDED ** was expected\n", False, None, ("failed", "summary")),

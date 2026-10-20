@@ -406,7 +406,7 @@ VERDICT_FROM = ("runner", "xcode", "summary", "exit")
 
 
 def test_verdict(output: str, exit_failed: bool, runner: tuple[int, int] | None = None) -> dict:
-    """A test command's head, from the strongest thing that says it (2.3.10, cd's ruling on tickets 2026-10-20-jui-viz-
+    """A test command's head, from the strongest thing that says it (2.3.10, the ruling on tickets 2026-10-20-jui-viz-
     test-run-ios-shows-failed-while-passing and -passed-head-over-runner-failed):
       runner   jsonui-test-runner's own run_end records (passed, failed summed over the command's runs);
       xcode    xcodebuild's last ** TEST SUCCEEDED / FAILED **;
