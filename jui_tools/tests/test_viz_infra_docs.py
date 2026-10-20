@@ -334,3 +334,36 @@ def test_the_rooms_are_counted_every_few_seconds_not_every_tick(tmp_path, monkey
         world.tick(t0 + k * 50)
         time.sleep(0.02)
     assert INFRA_EVERY_MS >= 2_000 and len(calls) == 1, len(calls)
+
+
+def test_the_icon_and_model_routes_check_their_types_and_never_follow_a_symlink(tmp_path):
+    """dd's re-verification: N1 a seq that is not an int (true) comes back as null; N4 a key that is not a string is a
+    bad request; N3 a room whose jui.config.json is broken has no icon (404, not a server error); N8 an icon that is a
+    symlink to a file outside the room is not read (404, nothing of that file)."""
+    root = _room(tmp_path, "compose-and-cloud")
+    world, pid = _world(root)
+    cfg = json.loads((root / "jui.config.json").read_text())
+    key = sorted(k for k in cfg["infra"]["icons"])[0]
+    outside = tmp_path / "outside-secret.svg"
+    outside.write_text("<svg>outside-of-the-room</svg>")
+    linked = root / cfg["infra"]["icons"][key]
+    linked.unlink()
+    linked.symlink_to(outside)
+    broken = tmp_path / "broken"
+    (broken / ".git").mkdir(parents=True)
+    (broken / "jui.config.json").write_text("{ not json")
+    world.apply_hook({"hook_event_name": "SessionStart", "session_id": "1f000000-0000-4000-8000-000000000002", "cwd": str(broken),
+                      "source": "startup"}, int(time.time() * 1000))
+    world.publish()
+    bpid = next(p["id"] for p in world.state.snapshot()["slices"]["projects"] if p["id"] != pid)
+
+    def calls(own):
+        ok = {"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+        return [("POST", "/api/infra-docs", ok, json.dumps({"projectId": pid, "seq": True})),                       # N1
+                ("POST", "/api/infra-icon", ok, json.dumps({"projectId": pid, "key": [key]})),                      # N4
+                ("POST", "/api/infra-icon", ok, json.dumps({"projectId": bpid, "key": key})),                       # N3
+                ("POST", "/api/infra-icon", ok, json.dumps({"projectId": pid, "key": key}))]                        # N8
+    got = _serve(world, calls)
+    assert [g[0] for g in got] == [200, 400, 404, 404], [g[0] for g in got]
+    assert json.loads(got[0][2])["seq"] is None
+    assert b"outside-of-the-room" not in got[3][2]

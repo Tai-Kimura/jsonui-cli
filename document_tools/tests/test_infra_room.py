@@ -117,6 +117,22 @@ def test_icons_inside_the_room_only(tmp_path):
     assert R.read_icon(root, "../x.svg") is None
 
 
+def test_an_icon_that_is_a_symlink_is_never_read(tmp_path):
+    """The boundary's "no symlink" for icons too (dd's re-verification N8): an icon file that is a symlink — to a file
+    outside the room or inside it — is not followed, so nothing outside the room reaches the page through an icon."""
+    outside = tmp_path / "outside.svg"
+    outside.write_text("<svg>outside</svg>")
+    root = _room(tmp_path / "r", config={"infra": {"icons": {"provider:aws": "docs/infra/icons/aws.svg", "provider:gcp": "docs/infra/icons/gcp.svg"}}})
+    icons = root / "docs" / "infra" / "icons"
+    icons.mkdir()
+    (icons / "real.svg").write_text("<svg/>")
+    (icons / "aws.svg").symlink_to(outside)
+    (icons / "gcp.svg").symlink_to(icons / "real.svg")
+    assert R.read_icon(root, "docs/infra/icons/aws.svg") is None
+    assert R.read_icon(root, "docs/infra/icons/gcp.svg") is None
+    assert R.read_icon(root, "docs/infra/icons/real.svg") == (b"<svg/>", "image/svg+xml")
+
+
 def test_counts_opens_no_model_file(tmp_path, monkeypatch):
     root = _room(tmp_path, files={"a.json": OK, "b.json": OK})
     opened = []
