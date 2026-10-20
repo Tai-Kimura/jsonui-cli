@@ -258,3 +258,19 @@ def test_the_probe_sees_the_known_forms_and_flags_a_new_one(tmp_path):
     (proj / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs + [_result("u4", changed)]))
     ctx = P.Context(run=lambda a: (0, ""), transcripts=tmp_path / "projects")
     assert P.auto_mode_denial(ctx)["known"] == "some"
+
+
+def test_a_hook_without_a_tool_use_id_and_the_transcript_make_one_card():
+    """Whether the hook's payload carries tool_use_id was not measured (the event log keeps neither it nor the reason):
+    the two sources of one call are matched by session, tool, input and time too. Another call stays its own card."""
+    w = _world()
+    w.apply_hook({"hook_event_name": "PermissionDenied", "session_id": SID, "cwd": "/w", "permission_mode": "auto",
+                  "tool_name": "Bash", "tool_input": {"command": CMD}}, 1000)
+    w._denied_records(SID, SID, [(USE, "Bash", {"command": CMD}, DENIED_TEXT, 1040)], 1041)
+    (card,) = w.denials.items()
+    assert card["via"] == ["hook", "transcript"] and card["toolUseId"] == USE and card["reason"] == "[Unrequested Commit in a Connected App]"
+    w._denied_records(SID, SID, [("toolu_02OTHER", "Bash", {"command": CMD}, DENIED_TEXT, 1100)], 1101)   # the same command again: another call
+    assert len(w.denials.items()) == 2
+    w.apply_hook({"hook_event_name": "PermissionDenied", "session_id": SID, "cwd": "/w", "tool_name": "Bash",
+                  "tool_input": {"command": CMD}}, 1000 + 31_000 + 200_000)   # long after: its own card
+    assert len(w.denials.items()) == 3

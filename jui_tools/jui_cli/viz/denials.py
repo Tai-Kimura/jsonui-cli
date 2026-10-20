@@ -32,6 +32,8 @@ REASON_MAX = 160
 CARDS_MAX = 50
 #: how long a card that was answered (sent / dismissed) or whose session ended stays on the page
 DONE_SHOW_MS = 60_000
+#: the hook and the transcript of one call, when one of them has no tool_use_id: this close in time
+SAME_CALL_MS = 30_000
 
 
 def reason_of(text: str) -> str:
@@ -78,8 +80,10 @@ class DenialBook:
         Returns whether the page has something new."""
         head = input_head(tool, tool_input) if not isinstance(tool_input, str) else _clip(tool_input)
         key = self.key(sid, use_id, tool, head, at)
-        card = self.cards.get(key)
+        card = self.cards.get(key) or self._same_call(sid, use_id, tool, head, at)
         if card is not None:
+            if use_id and not card["toolUseId"]:
+                card["toolUseId"] = use_id
             changed = via not in card["via"]
             if changed:
                 card["via"].append(via)
@@ -96,6 +100,20 @@ class DenialBook:
             oldest = min(self.cards.values(), key=lambda c: (c["status"] == "pending", c["at"]))
             del self.cards[oldest["key"]]
         return True
+
+    def _same_call(self, sid: str, use_id: str | None, tool: str, head: str, at: int) -> dict | None:
+        """The card of the same call from the other source when one of the two has no tool_use_id: the same session,
+        tool and input, within SAME_CALL_MS. Measured 10-20 13:12: the hook came 0.04 s after the transcript's record
+        with the same tool_input; whether its payload carries tool_use_id was not seen (the event log keeps neither
+        it nor the reason), so the two are matched without it too."""
+        for card in self.cards.values():
+            if card["sessionId"] != sid or card["tool"] != (tool or "?") or card["input"] != head:
+                continue
+            if use_id and card["toolUseId"] and card["toolUseId"] != use_id:
+                continue
+            if abs(card["at"] - at) <= SAME_CALL_MS:
+                return card
+        return None
 
     def find(self, card_id: str) -> dict | None:
         return next((c for c in self.cards.values() if c["id"] == card_id), None)
