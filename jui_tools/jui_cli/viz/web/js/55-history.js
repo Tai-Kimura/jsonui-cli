@@ -444,10 +444,35 @@ function composeTarget(id) {
   }
   return { why: '', name, note: L[1] };
 }
+/* The note above the box for a session that can take a prompt (LAUNCH_WHY's note: --channels) has a × (requester 10-20:
+   "この注意書きの部分邪魔だから消せるようにしといて xボタンで消せて、消したら他でも表示されない"). Pressed: gone on every card and,
+   kept in this browser (readPref / writePref, both try/catch), after a reload; 設定 › 「カードの説明をまた出す」 brings it
+   back. A blocked storage still hides it for this page view. Only the note: the reason a box is disabled always shows. */
+const CARD_NOTE_PREF = 'cardNote';
+let cardNoteOff = readPref(CARD_NOTE_PREF, 'on') === 'off';
+function cardNoteSet(off) {
+  cardNoteOff = !!off;
+  writePref(CARD_NOTE_PREF, cardNoteOff ? 'off' : 'on');
+  composePaint();
+  cardNotePaint();
+}
+function cardNotePaint() {
+  const b = document.getElementById('card-note-back'), n = document.getElementById('card-note-state');
+  if (b) b.disabled = !cardNoteOff;
+  if (n) setText(n, cardNoteOff ? '消してある — ロボットのカードのプロンプト欄の上の説明（--channels のセッション）を出していません' : '出している');
+}
+{ const b = document.getElementById('card-note-back');
+  if (b) b.addEventListener('click', () => cardNoteSet(false));
+  cardNotePaint(); }
 function composeBuild() {
   const box = hNode('div', 'h-compose');
   box.dataset.hCompose = '';
+  const head = hNode('div', 'h-compose-head'); head.dataset.hHead = '';
   const why = hNode('p', 'h-compose-why'); why.dataset.hWhy = '';
+  const noteX = hNode('button', 'h-note-x', '×'); noteX.type = 'button'; noteX.dataset.hNoteX = '';
+  noteX.setAttribute('aria-label', 'この説明を消す（ほかのカードでも出さない。設定 › カードの説明をまた出す で戻る）'); noteX.title = 'この説明を消す';
+  noteX.addEventListener('click', () => cardNoteSet(true));
+  head.append(why, noteX);
   const area = hNode('textarea', 'h-compose-text');
   area.rows = 3;
   area.dataset.hText = '';
@@ -467,7 +492,7 @@ function composeBuild() {
   const back = hNode('button', 'wb-btn', 'やめる'); back.type = 'button'; back.dataset.hBack = '';
   acts.append(go, back);
   confirm.append(to, preview, acts);
-  box.append(why, area, row, confirm);
+  box.append(head, area, row, confirm);
   area.addEventListener('input', () => composePaint());
   area.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); composeAsk(); }
@@ -480,7 +505,7 @@ function composeBuild() {
 function composeEls() {
   const b = HIST.compose;
   const q = (k) => b.querySelector(`[data-${k}]`);
-  return { box: b, why: q('h-why'), area: q('h-text'), state: q('h-state'), send: q('h-send'), confirm: q('h-confirm'), to: q('h-to'), preview: q('h-preview'), go: q('h-go') };
+  return { box: b, head: q('h-head'), why: q('h-why'), noteX: q('h-note-x'), area: q('h-text'), state: q('h-state'), send: q('h-send'), confirm: q('h-confirm'), to: q('h-to'), preview: q('h-preview'), go: q('h-go') };
 }
 /* After every histSync: the box under the history pane of the card shown, and its state. */
 function composePlace(pane, id) {
@@ -503,9 +528,12 @@ function composePaint() {
   if (!HIST.compose) return;
   const E = composeEls(), id = HIST.compose._for, t = composeTarget(id);
   const asking = !E.confirm.hidden;
-  E.why.textContent = t.why || t.note || '';
-  E.why.hidden = !(t.why || t.note);
-  E.why.classList.toggle('h-compose-note', !t.why && !!t.note);
+  const note = !t.why && t.note && !cardNoteOff ? t.note : '';   // the reason (t.why) is never dismissed
+  E.why.textContent = t.why || note;
+  E.why.hidden = !(t.why || note);
+  E.why.classList.toggle('h-compose-note', !!note);
+  E.noteX.hidden = !note;
+  E.head.hidden = E.why.hidden;
   E.area.disabled = !!t.why;
   E.area.readOnly = asking;
   const text = E.area.value, bytes = text.trim() ? composeBytes(id, text) : 0;
@@ -679,7 +707,8 @@ function histLightClose(back) {
 
 /* ---------- the wide history (2.3.4, requester 10-19: "チャットが狭いから見づらい 左にロボット一人分くらいの余裕を残して残りを
    チャットの表示にしてほしい"; "チャット広げた時はカメラの位置移動もしてね 選んでるボットが左の余白の部分に来るように") ----------
-   広げる on the card's head (the 応答の履歴 tab only): the card covers everything right of histWideMargin(), the side
+   広げる on the card's head (both tabs since 2.3.7, requester 10-20: "今の様子タブでも広げられるようにして、応答の履歴と共有で単純に
+   タブ切り替えても広さが保持されればいい" — one state, HIST.wide with its kept histWidePref, for 今の様子 and 応答の履歴): the card covers everything right of histWideMargin(), the side
    panel too, and the camera flies (focusPose, 50-panel.js) so the robot stands in the middle of that margin; ← → keep
    it there for the next robot. 元の幅に戻す / Esc: the card's width and the view before. 900 px or narrower: the whole
    screen. The choice is kept in localStorage (readPref / writePref: a blocked storage only forgets it). */
@@ -696,14 +725,14 @@ function histWideFly() {
   flyTo(pose.p, pose.t, viewTarget, reduceMotion ? 0 : 0.6, null);
 }
 function histSetWide(on, remember = true) {
-  on = !!on && HIST.tab === 'history' && !!rbState.id;
+  on = !!on && !!rbState.id;
   if (remember) { histWidePref = on; writePref(HIST_WIDE_PREF, on ? 'on' : 'off'); }
   if (HIST.wide === on) { histWidePaint(); return; }
   HIST.wide = on;
   histWidePaint();
   histWideFly();
   const pane = histPane();
-  if (pane && HIST.atEnd) histToEnd(pane);   // the newest stays in view across the change of width
+  if (pane && HIST.tab === 'history' && HIST.atEnd) histToEnd(pane);   // the newest stays in view across the change of width
 }
 function histWidePaint() {
   const m = histWideMargin();
@@ -712,15 +741,15 @@ function histWidePaint() {
   rbEl.style.setProperty('--wide-left', `${m}px`);
   const b = rbEl.querySelector('[data-rb-wide]');
   if (b) {
-    b.hidden = HIST.tab !== 'history';
+    b.hidden = false;
     b.setAttribute('aria-pressed', String(HIST.wide));
     b.textContent = HIST.wide ? '元の幅に戻す' : '広げる';
-    b.title = HIST.wide ? '元の幅に戻す（Esc）' : '応答の履歴を画面いっぱいに広げる';
+    b.title = HIST.wide ? '元の幅に戻す（Esc）' : 'カードを画面いっぱいに広げる（今の様子・応答の履歴で同じ）';
   }
 }
-/* After every histSync: the tab and the card decide whether it is wide (the kept choice applies to the history tab). */
+/* After every histSync: the card decides whether it is wide (the kept choice, the same for both tabs). */
 function histWideSync(id) {
-  const want = !!id && HIST.tab === 'history' && histWidePref;
+  const want = !!id && histWidePref;
   if (want !== HIST.wide) histSetWide(want, false);
   else histWidePaint();
 }

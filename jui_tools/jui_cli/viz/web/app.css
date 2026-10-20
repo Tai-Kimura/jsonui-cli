@@ -812,6 +812,12 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-compose[hidden], .h-confirm[hidden], .h-compose-why[hidden] { display: none; }
 .h-compose-why { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font: 700 12px/1.5 var(--font-body); overflow-wrap: anywhere; }
 .h-compose-why.h-compose-note { background: var(--info-bg); color: var(--ink); font-weight: 500; }
+/* The × of the note (2.3.7): over the band's right end; the reason line has none. */
+.h-compose-head { position: relative; }
+.h-compose-head[hidden], .h-note-x[hidden] { display: none; }
+.h-compose-why.h-compose-note { padding-right: 34px; }
+.h-note-x { position: absolute; top: 2px; right: 4px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink-soft); font: 700 16px/1 var(--font-body); cursor: pointer; }
+.h-note-x:hover, .h-note-x:focus-visible { background: var(--bg); color: var(--ink); }
 .h-compose-text { box-sizing: border-box; width: 100%; min-height: 3.6em; max-height: 30vh; resize: vertical; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 500 13px/1.5 var(--font-body); }
 .h-compose-text:disabled { opacity: 0.55; cursor: not-allowed; }
 .h-compose-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1235,6 +1241,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
   100% { opacity: 0; transform: translateY(-12px); }
 }
 .set-bills { display: grid; justify-items: start; gap: 6px; margin-top: 14px; }
+.set-cardnote { display: grid; justify-items: start; gap: 6px; margin-top: 14px; }
 .price-chip::before { content: "$ "; }
 .pr-body { display: grid; align-content: start; gap: 14px; }
 .pr-about { margin: 0; font-size: 12.5px; line-height: 1.6; }
