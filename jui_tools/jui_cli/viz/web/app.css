@@ -638,6 +638,17 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .vt th { padding: 4px 6px; border-bottom: 1px solid var(--wb-line); color: var(--wb-soft); font: 700 11px/1.5 var(--font-body); text-align: left; }
 .vt td { padding: 5px 6px; border-bottom: 1px dashed var(--wb-line); color: var(--wb-ink); vertical-align: baseline; }
 .vt td.mk { width: 1.8em; }
+/* イベント・操作 (one table, ticket 2026-10-20-jui-viz-spec-events-as-table): the name in one line, the rest wraps */
+.nt td.nt-name { font-weight: 700; white-space: nowrap; }
+.nt td.nt-desc { overflow-wrap: anywhere; }
+@container (max-width: 560px) {
+  .nt thead { display: none; }
+  .nt tr { display: grid; grid-template-columns: 1.8em minmax(0, 1fr); border-bottom: 1px dashed var(--wb-line); }
+  .nt td { display: block; min-width: 0; border-bottom: 0; }
+  .nt td.mk { grid-row: span 3; }
+  .nt td:not(.mk) { grid-column: 2; }
+  .nt td.nt-name { overflow-x: auto; }
+}
 .sub-h, .fb-h { margin: 0; color: var(--wb-soft); font: 700 11.5px/1.5 var(--font-body); }
 /* the data flow diagram (2.3.5): Mermaid's SVG on the sheet at its own size, a scroll bar when wider (or fitted) */
 .flow-mmd-wrap { min-width: 0; max-width: 100%; margin: 2px 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }

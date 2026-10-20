@@ -997,6 +997,10 @@ function renderSheet(model, force) {
   let activeKey = null;
   const actAttr = (cls, key) => ((cls === 'is-doing' || cls === 'is-testing') && activeKey === null ? (activeKey = key, ' data-act') : '');
   const li = (m, key, innerHTML, depth) => `<li ${depth === undefined ? '' : `data-depth="${esc(depth)}" `}class="rw ${depth === undefined ? '' : 'rw-tree '}${esc(m[2])}"${actAttr(m[2], key)}><span class="mk ${esc(m[1])}">${esc(m[0])}</span><span>${innerHTML}</span></li>`;
+  // イベント and 操作: one table (tickets 2026-10-20-jui-viz-spec-events-as-table), the look of the variables above it.
+  // Its columns are the spec's own fields, nothing read out of the text; an event's name in one unbroken line.
+  const nameTable = (heads, bodyHTML) => `<table class="vt nt"><thead><tr><th><span class="sr">状態</span></th>${heads.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bodyHTML}</tbody></table>`;
+  const nameCells = (cells, named) => cells.map((c, j) => `<td class="${j === 0 && named ? 'mono nt-name' : 'nt-desc'}">${esc(c)}</td>`).join('');
   const tr = (m, key, cellsHTML) => `<tr class="${esc(m[2])}"${actAttr(m[2], key)}><td class="mk ${esc(m[1])}">${esc(m[0])}</td>${cellsHTML}</tr>`;
   // The first n items of a section; while it is being written the newest one is highlighted instead of marked.
   const pick = (k, arr, n, fresh) => arr.slice(0, n).map((x, i) => [x, i, fresh ? ['', '', i === n - 1 ? 'is-new' : ''] : markOf(s, model, k, i)]);
@@ -1031,7 +1035,7 @@ function renderSheet(model, force) {
     },
     (w, writing) => {
       const rowsHTML = pick(2, d.uiVariables, reveal(d.uiVariables.length, w), writing).map(([[name, type, init], i, m]) => tr(m, `v${i}`, `<td class="mono">${esc(name)}</td>${typeCell(type)}<td class="mono">${esc(init)}</td>`)).join('');
-      const evHTML = !writing || w >= 0.6 ? `<p class="sub-h">イベント</p><ul class="rows">${d.eventHandlers.map(([name, desc]) => `<li class="rw"><span class="mk"></span><span><span class="id">${esc(name)}</span> <span class="desc">${esc(desc)}</span></span></li>`).join('')}</ul>` : '';
+      const evHTML = !writing || w >= 0.6 ? `<p class="sub-h">イベント</p>${nameTable(['イベント', '説明'], d.eventHandlers.map(([name, desc], i) => tr(['', '', ''], `e${i}`, nameCells([name, desc], true))).join(''))}` : '';
       return `<table class="vt"><thead><tr><th><span class="sr">状態</span></th><th>変数</th><th>型</th><th>初期値</th></tr></thead><tbody>${rowsHTML}</tbody></table>${evHTML}`;
     },
     (w, writing) => {
@@ -1049,7 +1053,12 @@ function renderSheet(model, force) {
       if (!d.flowMermaid || writing) return boxesHTML;
       return `<div class="flow-mmd-wrap"><div class="flow-mmd-bar"><button type="button" class="wb-btn" data-flow-zoom data-fk="flow-zoom" aria-pressed="${wb.flowFit ? 'true' : 'false'}">${wb.flowFit ? '実際の大きさ' : '幅に合わせる'}</button></div><div class="flow-mmd" data-flow-mmd role="img" aria-label="データの流れの図"></div></div><p class="sub-h">詳しく</p>${boxesHTML}`;
     },
-    (w, writing) => `<ul class="rows">${pick(4, d.userActions, reveal(d.userActions.length, w), writing).map(([[a, p], i, m]) => li(m, `a${i}`, `${esc(a)}<span class="to">→</span><code>${esc(p)}</code>`)).join('')}</ul>`,
+    (w, writing) => {
+      // 操作 (userAction: action, processing, destination): the destination column only when the spec writes one
+      const dest = d.userActions.some((x) => x[2]);
+      return nameTable(dest ? ['操作', '結果', '行き先'] : ['操作', '結果'], pick(4, d.userActions, reveal(d.userActions.length, w), writing)
+        .map(([[a, p, to], i, m]) => tr(m, `a${i}`, nameCells(dest ? [a, p, to || ''] : [a, p], false))).join(''));
+    },
     (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest, how], i, m]) => li(m, `t${i}`, `${esc(trig)}<span class="to">→</span>${transitionTag(dest, how)}`)).join('')}</ul>`,
     (w, writing) => {
       const rowsHTML = pick(6, d.branches, reveal(d.branches.length, w), writing).map(([[method, when, then], i, m]) => tr(m, `b${i}`, `<td class="mono">${esc(method)}</td><td>${esc(when)}</td><td>${esc(then)}</td>`)).join('');

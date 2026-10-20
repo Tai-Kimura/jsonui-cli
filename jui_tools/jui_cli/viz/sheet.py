@@ -14,7 +14,7 @@ object; this builds it from a real spec so the renderer ports unchanged:
   eventHandlers   [[name, description]]
   vmMethods       [name]      vmVars [name]   repositories [name]
   apis            [[operation, method, path]]
-  userActions     [[action, processing]]
+  userActions     [[action, processing, destination]]
   transitions     [[trigger or condition, destination, type or method]]
   branches        [[method, when, then]]      ("note" entries: [method, "note", text])
   related         [[type, path, exists]]
@@ -180,7 +180,8 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
         "vmVars": [_name(v) for v in _list(vm.get("vars"))],
         "repositories": [_name(r) for r in _list(df.get("repositories"))],
         "apis": apis,
-        "userActions": [[_t(a.get("action")), _t(a.get("processing"))]
+        # the third: where it goes (userAction.destination; "" when the spec says none), its own column on the sheet
+        "userActions": [[_t(a.get("action")), _t(a.get("processing")), _t(a.get("destination"))]
                         for a in _list(spec.get("userActions")) if isinstance(a, dict)],
         # the third: how it moves (type / method: push, sheet, dismiss …), for the page's colours (2.3.5)
         "transitions": [[_t(t.get("trigger") or t.get("condition")), _t(t.get("destination")), _t(t.get("type") or t.get("method") or "")]
