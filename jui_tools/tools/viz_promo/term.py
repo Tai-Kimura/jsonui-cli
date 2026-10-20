@@ -206,7 +206,9 @@ window.render = (t) => {
 
 
 def page_html(kind: str, data, t0: float, t1: float) -> str:
-    js = (TERM_JS if kind == "1b" else EDITOR_JS).replace("__DATA__", json.dumps(data, ensure_ascii=False)).replace(
+    # "</" written as "<\/" in the data: a file or document that holds </script> must not end the page's script
+    data_js = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    js = (TERM_JS if kind == "1b" else EDITOR_JS).replace("__DATA__", data_js).replace(
         "__T0__", repr(t0)).replace("__T1__", repr(t1)).replace("__PROMPT__", json.dumps(PROMPT))
     if kind != "1b":
         inner = '<div class="tabs" id="tabs"></div><div class="path" id="path"></div><div class="code"><div class="lines" id="lines"></div></div>'

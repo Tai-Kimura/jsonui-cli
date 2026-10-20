@@ -6,7 +6,8 @@ talk suite does: nothing here can start the agent CLI), Chromium at 1920x1080 (d
 then one frame per 1/30 s of the video.
 
 The clock. page.clock.install() before the page loads fakes Date, performance.now, the timers and
-requestAnimationFrame, so the page draws only when the driver lets time pass: per frame, clock.run_for() with the
+requestAnimationFrame, and pause_at() stops it (installed but not paused, it runs at the wall clock's pace: the first
+capture did so), so the page draws only when the driver lets time pass: per frame, clock.run_for() with the
 frame's share of a second (33 or 34 ms, summing to exactly 1000 ms every 30 frames). The 3D (40-scene.js, the
 server room's own loop, the flow player, the cost day's play) all run from requestAnimationFrame and
 performance.now, so they move by video time, not by how long a screenshot took. What does not follow the page's
@@ -600,7 +601,10 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
         page = await ctx.new_page()
         watch = Watch(origin=stage.url)
         watch.attach(page, chapter.id)
-        await page.clock.install(time=int(time.time() * 1000))
+        # install() alone keeps time flowing at the wall clock's pace; paused, it moves only when run_for() moves it
+        t0 = int(time.time() * 1000)
+        await page.clock.install(time=t0)
+        await page.clock.pause_at(t0 + 1000)
         drv = Driver(page, stage, lang, watch, sky_time)
         await drv.boot(chapter.needs)
         await drv.prelude(chapter.prelude)
