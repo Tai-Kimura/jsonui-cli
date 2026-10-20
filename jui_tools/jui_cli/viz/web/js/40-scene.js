@@ -281,7 +281,7 @@ function drawTestBoard(model, board = null, run = null) {
 
 function drawCartUI(r, t) {
   const c = r.phoneCanvas, ctx = c.getContext('2d'), W = c.width;
-  const accent = ROLES[r.role].color;
+  const accent = pillBg(r.role), ink = pillInk(r.role);   // the header and the button carry text
   const T = latestModel.tests, idx = T.runningIdx, step = idx >= 0 ? T.rows[idx].step : '';
   ctx.clearRect(0, 0, c.width, c.height);
   ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1d2330'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
@@ -294,7 +294,7 @@ function drawCartUI(r, t) {
   ctx.fillStyle = '#f1f4f9'; ctx.fillRect(sx, sy, sw, sh);
   ctx.fillStyle = accent; ctx.fillRect(sx, sy, sw, 58);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#ffffff'; ctx.font = `700 11px ${FONT_MONO}`; ctx.fillText('9:41', sx + 12, sy + 16);
+  ctx.fillStyle = ink; ctx.font = `700 11px ${FONT_MONO}`; ctx.fillText('9:41', sx + 12, sy + 16);
   ctx.font = `700 18px ${FONT_BODY}`; ctx.fillText(idx === 6 && step.includes('screen') ? 'ログイン' : 'カート', sx + 14, sy + 46);
   const empty = idx === 2;
   const items = empty ? 0 : idx === 1 && step.includes('count') ? 2 : 3;
@@ -317,7 +317,7 @@ function drawCartUI(r, t) {
   const disabled = empty || idx === 5;
   const byBtn = sy + 274;
   rr(ctx, sx + 10, byBtn, sw - 20, 34, 10); ctx.fillStyle = disabled ? '#b9c3d1' : accent; ctx.fill();
-  ctx.fillStyle = '#ffffff'; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('購入する', sx + sw / 2, byBtn + 23);
+  ctx.fillStyle = disabled ? '#ffffff' : ink; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('購入する', sx + sw / 2, byBtn + 23);
   if (idx >= 0) {
     let tx = sx + sw / 2, ty = byBtn + 17;
     if (step.includes('coupon')) { tx = sx + 60; ty = cy + 13; } else if (step.includes('qty')) { tx = sx + sw - 34; ty = sy + 92; } else if (step.includes('cart_list') || step.includes('count')) { tx = sx + 90; ty = sy + 120; }
@@ -2618,9 +2618,9 @@ function drawLivePhone(r, t) {
   rr(ctx, 6, 6, W - 12, 360, 28); ctx.fill(); ctx.stroke();
   ctx.save(); rr(ctx, 24, 24, 192, 320, 18); ctx.clip();
   ctx.fillStyle = '#0d1828'; ctx.fillRect(24, 24, 192, 320);
-  ctx.fillStyle = ROLES[r.role].color; ctx.fillRect(24, 24, 192, 46);
+  ctx.fillStyle = pillBg(r.role); ctx.fillRect(24, 24, 192, 46);   // a header with text: the pill's pair
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#ffffff'; ctx.font = `700 15px ${FONT_BODY}`; ctx.fillText('テスト実行', 36, 54);
+  ctx.fillStyle = pillInk(r.role); ctx.font = `700 15px ${FONT_BODY}`; ctx.fillText('テスト実行', 36, 54);
   ctx.fillStyle = '#9fc3ff'; ctx.font = `600 12px ${FONT_MONO}`;
   wrapText(ctx, act || '待機中', 36, 96, 168, 18, cases.length ? 6 : 12);
   if (cases.length) {

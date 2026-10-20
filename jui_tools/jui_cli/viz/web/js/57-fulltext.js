@@ -22,7 +22,7 @@ const FULLTEXT_LINES = [
   '.pg-toggle small',             // panel · セッション: a project group's summary (in its button)
   '#ticker .what',                // the log strip: an event's text (2.3.6: a cross-session message was cut there)
   '#ticker .kind',                // the log strip: an event's kind
-  '.talk-peer-name',                // card · トーク (2.3.7): the peer's name in the talk's header (in its button)
+  '.talk-peer-name',                // card · トーク (2.3.6): the peer's name in the talk's header (in its button)
   '.talk-row-name',                  // card · トーク: a peer's name in the list of talks (in its button)
 ].join(', ');
 const FULLTEXT = { el: null, anchor: null, owner: null, host: null, via: null };

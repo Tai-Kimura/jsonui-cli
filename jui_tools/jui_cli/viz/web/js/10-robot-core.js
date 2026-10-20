@@ -22,6 +22,9 @@ const ROLES = {
   debug: { name: 'debug', color: '#f0b400' },
   other: { name: 'その他', color: '#8a9bb0', pill: '#60748e' },
 };
+/* Whatever is filled with a role's colour and has text on it (pills, the talk's marks, a phone's header and button) takes
+   pillBg, with pillInk (20-core.js) for the text; the robot's own parts keep ROLES[role].color. */
+const pillBg = (role) => ROLES[role].pill || ROLES[role].color;
 const COL = {
   shell: '#e8ecf3', limb: '#394150', screen: '#0f1830', eye: '#a6fbff',
   band: '#fffdf7', bandInk: '#d62839', wood: '#c99f73', woodDark: '#9e7752',
@@ -300,7 +303,7 @@ function drawLogo(r) {
 }
 function drawPhoneUI(r, t) {
   const c = r.phoneCanvas, ctx = c.getContext('2d'), W = c.width;
-  const accent = ROLES[r.role].color;
+  const accent = pillBg(r.role), ink = pillInk(r.role);   // the header and the button carry text
   ctx.clearRect(0, 0, c.width, c.height);
   ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1d2330'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
   ctx.beginPath(); ctx.moveTo(44, 360); ctx.lineTo(16, 396); ctx.lineTo(84, 362); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -312,8 +315,8 @@ function drawPhoneUI(r, t) {
   ctx.fillStyle = '#f1f4f9'; ctx.fillRect(sx, sy, sw, sh);
   ctx.fillStyle = accent; ctx.fillRect(sx, sy, sw, 64);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)'; ctx.font = `700 11px ${FONT_MONO}`; ctx.fillText('9:41', sx + 12, sy + 17); ctx.fillRect(sx + sw - 32, sy + 8, 18, 9);
-  ctx.fillStyle = '#ffffff'; ctx.font = `700 19px ${FONT_BODY}`; ctx.fillText('ログイン', sx + 14, sy + 50);
+  ctx.fillStyle = ink; ctx.font = `700 11px ${FONT_MONO}`; ctx.fillText('9:41', sx + 12, sy + 17); ctx.fillRect(sx + sw - 32, sy + 8, 18, 9);
+  ctx.fillStyle = ink; ctx.font = `700 19px ${FONT_BODY}`; ctx.fillText('ログイン', sx + 14, sy + 50);
   for (let i = 0; i < 2; i++) {
     const y = sy + 84 + i * 52;
     ctx.fillStyle = '#7a879b'; ctx.fillRect(sx + 14, y, 56 + i * 20, 7);
@@ -324,7 +327,7 @@ function drawPhoneUI(r, t) {
   }
   const by = sy + 200;
   rr(ctx, sx + 14, by, sw - 28, 40, 10); ctx.fillStyle = accent; ctx.fill();
-  ctx.fillStyle = '#ffffff'; ctx.font = `700 15px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('ログイン', sx + sw / 2, by + 26);
+  ctx.fillStyle = ink; ctx.font = `700 15px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('ログイン', sx + sw / 2, by + 26);
   const ph = (t * 0.7) % 1;
   ctx.beginPath(); ctx.arc(sx + sw / 2 + 24, by + 20, 6 + ph * 30, 0, Math.PI * 2);
   ctx.strokeStyle = `rgba(255, 255, 255, ${(0.9 * (1 - ph)).toFixed(2)})`; ctx.lineWidth = 4; ctx.stroke();

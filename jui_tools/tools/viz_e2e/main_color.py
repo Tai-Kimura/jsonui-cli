@@ -147,6 +147,15 @@ async def run_main_color(pw, out, failures):
               and (rp["canvas"]["main"]["bg"], rp["canvas"]["main"]["fg"]) == (MAIN_PILL, WHITE),
               f"the main pill (HTML and canvas) is {MAIN_PILL} with white text: {rp['html']['main']} {rp['canvas']['main']}")
         check(failures, rp["body"] == BODIES, f"every robot's body colour stays: {rp['body']}")
+        # the phones' headers (2.3.7, ticket 2026-10-20-jui-viz-talk-pill-contrast-and-version-comments): text on a role's
+        # colour, so the pill's pair, per role, for each drawer of the live page
+        heads = res["phoneHeads"] = await page.evaluate("() => window.__dbg.phoneHeads()")
+        for name in ("phoneUI", "live"):
+            check(failures, name in heads, f"the phone drawer {name} was probed: {list(heads)}")
+            for role, h in heads.get(name, {}).items():
+                want = (rp["canvas"][role]["bg"], rp["canvas"][role]["fg"])
+                check(failures, (h.get("bg"), h.get("fg")) == want, f"{name}: {role}'s phone header is its pill's pair {want}: {h}")
+                check(failures, bool(h.get("fg")) and contrast(h["fg"], h["bg"]) >= INK_CONTRAST, f"{name}: {role}'s phone header reads: {h}")
         check(failures, not got["old"], f"nothing drawn in the old orange: {got['old']}")
         colors = await page.evaluate("() => window.__dbg.wearColors()")
         res["deImplement"] = round(de2000(colors["roles"]["main"], colors["roles"]["implement"]), 2)

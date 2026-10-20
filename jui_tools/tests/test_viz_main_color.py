@@ -79,7 +79,8 @@ def test_no_role_is_let_off_the_contrast():
 def test_every_pill_takes_the_one_source():
     core = (WEB / "js" / "20-core.js").read_text()
     assert "--c:${ROLES[role].pill || ROLES[role].color};--t:${ROLE_INK[role] || '#ffffff'}" in core
-    assert "const pillBg = (role) => ROLES[role].pill || ROLES[role].color;" in core
+    assert "const pillInk = (role) => ROLE_INK[role] || '#ffffff';" in core
+    assert "const pillBg = (role) => ROLES[role].pill || ROLES[role].color;" in (WEB / "js" / "10-robot-core.js").read_text()
     scene = (WEB / "js" / "40-scene.js").read_text()
     # the canvas pills are drawRolePill's; no other canvas fills a pill with the role's colour and inks it
     calls = len(re.findall(r"(?<!function )drawRolePill\(ctx, role, ", scene))
@@ -94,3 +95,27 @@ def test_no_old_orange_is_left_for_the_main_robot():
                 if "ff7a3d" in line.lower() and "confetti" not in line and "G.ball" not in line:
                     hits.append(f"{path.name}:{n}: {line.strip()[:120]}")
     assert hits == [], hits
+
+
+# Every use of a role's body colour (ROLES[…].color) in the page, per file, reviewed (2.3.7, ticket 2026-10-20-jui-viz-
+# talk-pill-contrast-and-version-comments): none of them has text on it. Text on a role's colour takes pillBg / pillInk
+# (the pills, the talk's marks, the phones' headers and buttons). A new use is red here until it is reviewed too.
+ROLE_COLOR_USES = {
+    "10-robot-core.js": (4, "the comment over pillBg, pillBg's fallback, the { } logo drawn in the colour, the robot's accent"),
+    "20-core.js": (1, "pill()'s fallback (= pillBg)"),
+    "40-scene.js": (4, "the spec tile's border, the segment's outline, the link line, the selection ring"),
+    "50-panel.js": (3, "roleVar (a row's border / dot), the card head's top border, the segments' outline"),
+    "80-dbg.js": (2, "the test hook's reads"),
+}
+_ROLE_COLOR = re.compile(r"ROLES(?:\[(?:[^\[\]]|\[[^\]]*\])*\]|\.\w+)\.color")
+
+
+def test_every_use_of_a_role_colour_is_reviewed():
+    got = {}
+    for path in sorted((WEB / "js").glob("*.js")):
+        n = len(_ROLE_COLOR.findall(path.read_text()))
+        if n:
+            got[path.name] = n
+    assert got == {k: v[0] for k, v in ROLE_COLOR_USES.items()}, got
+    talk = (WEB / "js" / "58-talk.js").read_text()
+    assert "mark.style.setProperty('--c', pillBg(role)); mark.style.setProperty('--t', pillInk(role));" in talk

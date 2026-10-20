@@ -9,8 +9,8 @@ const pct = (v) => Math.round(v * 100);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const ROLE_INK = { debug: '#2a2000' };   // dark ink where white would not read on the pill (debug's yellow)
 /* A role's pill: its background (ROLES[role].pill, else its colour) and its text (ROLE_INK, else white). One source for
-   the HTML pills (pill()) and the canvas ones (drawRolePill, the boards). */
-const pillBg = (role) => ROLES[role].pill || ROLES[role].color;
+   the HTML pills (pill()), the canvas ones (drawRolePill, the boards), the talk's marks and the phones' headers.
+   pillBg sits next to ROLES (10-robot-core.js), which the phones' drawers there read. */
 const pillInk = (role) => ROLE_INK[role] || '#ffffff';
 /* A session's name (/rename, `claude -n`; 10-19): the server's title, one line, at most NAME_MAX characters. Panels and
    cards show all of it next to the two-letter mark; the tag over the robot shows it alone, cut at its end with "…". */

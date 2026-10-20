@@ -739,7 +739,7 @@ function updateRobotStates(simT, t, perms) {
   }
 }
 
-/* ---------- トーク (2.3.7): the demo's stand-in for the server's talk frames (TALK_CONTRACT.md) ----------
+/* ---------- トーク (2.3.6): the demo's stand-in for the server's talk frames (TALK_CONTRACT.md) ----------
    The talks themselves are 31-talk-demo-data.js (TALK_DEMO: generated frames, data only; it comes after this file, so it
    is read only when the first request comes). talkStandIn answers the page's talk.* requests from them the way the
    server does: talk.open → the robot's list, talk.get → a page of messages (before / limit), talk.seen → the unread

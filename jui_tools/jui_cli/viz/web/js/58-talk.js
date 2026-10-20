@@ -1,4 +1,4 @@
-/* ---------- トーク: a robot's SendMessage conversations, as a chat (2.3.7, requester 10-20) ----------
+/* ---------- トーク: a robot's SendMessage conversations, as a chat (2.3.6, requester 10-20) ----------
    「チャットアイコンをロボットのメニューに置いて、それ選んだらラインのトークっぽい画面でトークの一覧が表示される。トーク選ぶと詳細で
    トークが見れる。新しいメッセージ受信したら一覧では通知が出て詳細ではメッセージが表示される。」 and (00:54) 「トークの詳細でヘッダーに
    相手のbot名表示しってタップでそのbotに切り替えられるようにして。名前は一行で入らないなら省略で」.
@@ -219,7 +219,7 @@ function talkPeerMark(peer) {
   span.setAttribute('aria-hidden', 'true');
   if (label && DEF[label]) {   // the robot's mark, as pill() draws it (built as nodes here)
     const role = DEF[label].role, mark = hNode('span', 'pill', label);
-    mark.style.setProperty('--c', ROLES[role].color); mark.style.setProperty('--t', ROLE_INK[role] || '#ffffff');
+    mark.style.setProperty('--c', pillBg(role)); mark.style.setProperty('--t', pillInk(role));
     span.appendChild(mark);
   }
   else span.appendChild(hNode('span', `talk-kind talk-kind-${peer.kind}`, peer.kind === 'external' ? '外' : peer.kind === 'subagent' ? 'サブ' : '？'));

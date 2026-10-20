@@ -374,7 +374,7 @@ window.__dbg.wearFit = (id) => {
 };
 window.__dbg.setVisState = (id, state) => { robotState[id] = { ...(robotState[id] || {}), state }; };
 window.__dbg.wearColors = () => ({ main: ROLES.main.color, overall: WEAR.overall, edge: WEAR.edge, rim: WEAR.rim, roles: Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [k, v.color])) });
-// トーク (2.3.7, 58-talk.js): its state, the requests it sent and refused, and in the demo the stand-in server's hands
+// トーク (2.3.6, 58-talk.js): its state, the requests it sent and refused, and in the demo the stand-in server's hands
 window.__dbg.talk = () => ({ on: TALK.on, owner: TALK.owner, agent: TALK.agent, opened: TALK.opened, conv: TALK.conv, atEnd: TALK.atEnd, newer: TALK.newer,
   list: TALK.list ? TALK.list.map((c) => ({ id: c.id, name: c.peer.name, unread: c.unread, alive: c.peer.alive, agentId: c.peer.agentId })) : null,
   msgs: TALK.conv && TALK.msgs.get(TALK.conv) ? TALK.msgs.get(TALK.conv).items.length : 0, more: TALK.conv && TALK.msgs.get(TALK.conv) ? TALK.msgs.get(TALK.conv).more : null,
@@ -439,3 +439,29 @@ window.__dbg.launchLook = () => ({ t: latestModel ? +latestModel.t.toFixed(3) : 
     armRz: +r.armR.rotation.z.toFixed(3), reduced: reduceMotion, until: (robotState[R.def.id] || {}).whistle ? robotState[R.def.id].whistle.until : null };
 }) });
 window.__dbg.launchBeats = () => (typeof DEMO_BEATS !== 'undefined' && DEMO_BEATS.launch ? { beats: DEMO_BEATS.launch, sec: DEMO_BEATS.launchSec } : null);
+// the other surfaces with text on a role's colour (2.3.7, ticket 2026-10-20-jui-viz-talk-pill-contrast-and-version-comments):
+// the talk's marks (each peer's pill in the list and the header, with the role of its robot), and the phones' headers,
+// drawn per role by each drawer this page has (drawPhoneUI; drawCartUI in the demo; drawLivePhone in the live view) on
+// a stand-in robot: a pixel of the header clear of the text, and the commonest opaque colour other than it (the clock
+// and the battery are drawn in the text's colour)
+window.__dbg.talkMarks = () => [...document.querySelectorAll('#rb .talk-mark .pill')].map((p) => ({ label: p.textContent,
+  role: DEF[p.textContent] ? DEF[p.textContent].role : null, where: p.closest('.talk-row') ? 'row' : 'head',
+  bg: getComputedStyle(p).backgroundColor, fg: getComputedStyle(p).color }));
+window.__dbg.phoneHeads = () => {
+  const hx = (d, i) => '#' + [d[i], d[i + 1], d[i + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+  const drawers = { phoneUI: drawPhoneUI };
+  if (SOURCE.mode === 'demo') drawers.cart = drawCartUI; else drawers.live = drawLivePhone;
+  const out = {};
+  for (const [name, draw] of Object.entries(drawers)) {
+    out[name] = {};
+    for (const role of Object.keys(ROLES)) {
+      const r = { role, label: '__probe', phoneCanvas: makeCanvas(240, 400), phoneTex: {}, phoneScreenTex: {} };
+      try { draw(r, 0); } catch (e) { out[name][role] = { error: String(e) }; continue; }
+      const d = r.phoneCanvas.getContext('2d', { willReadFrequently: true }).getImageData(24, 24, 192, 44).data, bg = hx(d, (40 * 192 + 186) * 4), n = {};
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] === 255) { const c = hx(d, i); if (c !== bg) n[c] = (n[c] || 0) + 1; }
+      const fg = Object.entries(n).sort((a, b) => b[1] - a[1])[0];
+      out[name][role] = { bg, fg: fg ? fg[0] : null };
+    }
+  }
+  return out;
+};

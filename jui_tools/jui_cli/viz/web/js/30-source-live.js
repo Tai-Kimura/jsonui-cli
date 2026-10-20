@@ -940,7 +940,7 @@ NET.handlers = {
   notifyPing() { NOTIFY.pings += 1; notifyPresenceSay(); },
   talk(msg) { talkReceive(msg); },   // talk.list / talk.messages / talk.update / talk.badges (58-talk.js)
 };
-/* トーク (2.3.7): a robot's agentId on the wire is the server's id (a main robot: its session id; a subagent: its id). */
+/* トーク (2.3.6): a robot's agentId on the wire is the server's id (a main robot: its session id; a subagent: its id). */
 Object.assign(SOURCE, {
   talkAgentId: (label) => (DEF[label] && DEF[label].realId) || null,
   talkLabel: (agentId) => (agentId ? LIVE.labelOfReal[agentId] || null : null),

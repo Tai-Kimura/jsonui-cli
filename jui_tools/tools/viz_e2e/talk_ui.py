@@ -1,4 +1,4 @@
-"""トーク: a robot's SendMessage conversations as a chat, the page side (2.3.7, requester 10-20). Runs with `--only talk-ui`.
+"""トーク: a robot's SendMessage conversations as a chat, the page side (2.3.6, requester 10-20). Runs with `--only talk-ui`.
 
 The demo page (fake_server.py, ?demo=1&talkhold=1): its stand-in server (30-source-demo.js talkStandIn) answers the page's
 talk.* requests from the demo data (31-talk-demo-data.js, generated frames): robot a0's talks with 4f (a long name), b4
@@ -19,7 +19,10 @@ Checked:
   * paging: reading up asks talk.get with `before` and the older messages come in above;
   * the header: a long name is one line cut with …, its hover shows the whole name (57-fulltext.js); pressed, the card
     switches to that robot with the same talk open; a peer outside the machine is not a button and says この機械の外の相手;
-  * a remove op takes the talk off the list (and out of the detail, with a note).
+  * a remove op takes the talk off the list (and out of the detail, with a note);
+  * the peers' marks (2.3.7, ticket 2026-10-20-jui-viz-talk-pill-contrast-and-version-comments), in the list and the
+    header: each the pill's pair of its robot's role (as pill() draws it, __dbg.rolePills), white on main's #0369a1,
+    every one 4.5:1 or more; and the demo phones' headers (drawPhoneUI, drawCartUI) per role: the pill's pair, >= 4.5:1.
 Waits are on page state (waits.until); nothing is sampled on the wall clock.
 """
 
@@ -32,6 +35,7 @@ import time
 
 from common import DESKTOP, PHONE, LAUNCH_ARGS, Watch, new_page, ready
 from waits import WaitTimeout, until
+from workwear import contrast
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from jui_cli.viz import talk_contract  # noqa: E402
@@ -59,6 +63,37 @@ FOLD = """() => { const t = [...document.querySelectorAll('#rb [data-tk-text]')]
 COLORS = """() => { const o = document.querySelector('#rb .talk-out .talk-bubble'), i = document.querySelector('#rb .talk-in .talk-bubble');
   return { body: getComputedStyle(document.body).backgroundColor, out: o && getComputedStyle(o).backgroundColor, in: i && getComputedStyle(i).backgroundColor,
     ink: i && getComputedStyle(i).color }; }"""
+
+
+def rgb_hex(css):
+    nums = [int(float(x)) for x in css[css.index("(") + 1:css.index(")")].split(",")[:3]]
+    return "#" + "".join(f"{n:02x}" for n in nums)
+
+
+async def marks_read(page, scheme, r, failures, where, at_least):
+    # every talk mark on the card now: its role's pill pair, 4.5:1 or more
+    pairs = (await page.evaluate("() => window.__dbg.rolePills()"))["html"]
+    marks = r.setdefault("marks", {})[where] = await page.evaluate("() => window.__dbg.talkMarks()")
+    check(failures, len(marks) >= at_least and all(m["role"] for m in marks), f"{scheme}: {where}: the peers' marks ({len(marks)}): {marks}")
+    for m in marks:
+        if not m["role"]:
+            continue
+        want = (rgb_hex(pairs[m["role"]]["bg"]), rgb_hex(pairs[m["role"]]["fg"]))
+        got = (rgb_hex(m["bg"]), rgb_hex(m["fg"]))
+        m["contrast"] = round(contrast(got[1], got[0]), 2)
+        check(failures, got == want, f"{scheme}: {where}: {m['label']}'s mark is its role's pill {want}: {got}")
+        check(failures, m["contrast"] >= 4.5, f"{scheme}: {where}: {m['label']}'s mark reads: {m['contrast']}:1 {got}")
+        if m["role"] == "main":
+            check(failures, got == ("#0369a1", "#ffffff"), f"{scheme}: {where}: a main mark is #0369a1 / white: {got}")
+
+
+def phone_heads_read(heads, pairs, failures, label, drawers):
+    for name in drawers:
+        check(failures, name in heads, f"{label}: the phone drawer {name} was probed: {list(heads)}")
+        for role, h in heads.get(name, {}).items():
+            want = (pairs[role]["bg"], pairs[role]["fg"])
+            check(failures, (h.get("bg"), h.get("fg")) == want, f"{label}: {name}: {role}'s phone header is its pill's pair {want}: {h}")
+            check(failures, bool(h.get("fg")) and contrast(h["fg"], h["bg"]) >= 4.5, f"{label}: {name}: {role}'s phone header reads: {h}")
 
 
 def check(failures, cond, text):
@@ -138,6 +173,11 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
     names = [x["name"] for x in rows]
     check(failures, names == [LONG_NAME, "shop-app-signup", "cloud-reviewer", SUB_NAME, "shop-app-payment"], f"{scheme}: newest first: {names}")
     check(failures, [x["unread"] for x in rows] == ["1", "1", "", "", ""], f"{scheme}: unread on the rows: {[x['unread'] for x in rows]}")
+    await marks_read(page, scheme, r, failures, "rows", 3)
+    if scheme == "light":
+        rp = await page.evaluate("() => window.__dbg.rolePills()")
+        heads = r["phoneHeads"] = await page.evaluate("() => window.__dbg.phoneHeads()")
+        phone_heads_read(heads, rp["canvas"], failures, f"{scheme}: demo", ("phoneUI", "cart"))
     check(failures, rows[-1]["gone"].startswith("終了"), f"{scheme}: the ended peer is marked: {rows[-1]['gone']!r}")
     no_send = r["noSend"] = await page.evaluate(SEND_UI)
     check(failures, no_send == {"fields": 0, "sendWords": [], "compose": 0}, f"{scheme}: no send UI in the talk: {no_send}")
@@ -145,6 +185,7 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
 
     # the detail with b4: sides, states, the fold, the escaped <script>, seen
     await open_row(page, "shop-app-signup", 4)
+    await marks_read(page, scheme, r, failures, "head", 1)
     bubbles = r["bubbles"] = await page.evaluate(BUBBLES)
     ins = [b for b in bubbles if b["dir"] == "in"]
     outs = [b for b in bubbles if b["dir"] == "out"]

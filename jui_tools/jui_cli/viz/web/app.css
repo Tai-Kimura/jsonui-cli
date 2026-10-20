@@ -1268,7 +1268,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 @media (max-width: 640px) { .pr-table thead { display: none; } .pr-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 0; border-bottom: 1px solid var(--wb-line); } .pr-table th[scope="row"], .pr-table td.pr-acts { grid-column: 1 / -1; } .pr-table td, .pr-table th { border: 0; } }
 /* priced by the user's own table (not the shipped one): a dashed frame, and the title says so */
 .bill.own-price .bill-in { border-style: dashed; }
-/* ---------- トーク (58-talk.js, 2.3.7): a robot's SendMessage conversations, as a chat ---------- */
+/* ---------- トーク (58-talk.js, 2.3.6): a robot's SendMessage conversations, as a chat ---------- */
 .rb-talk { position: relative; display: inline-flex; align-items: center; gap: 5px; background: var(--panel); color: var(--ink); }
 .rb-talk[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
 .rb-talk-icon { flex: none; }
