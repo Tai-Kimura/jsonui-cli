@@ -276,65 +276,64 @@ async def run_crowded_props(pw, out, failures):
         c0 = res["pinBell"] = await page.evaluate("(p) => window.__dbg.tagPinsOver(p)", at["bell"])
         if rack_box and bell_box:
             at["rack"] = [round((rack_box[0] + rack_box[1]) / 2), round(rack_box[2] + 8)]   # the rack's top, above the bell
-        cr = res["pinRack"] = await page.evaluate("([p, a, w]) => window.__dbg.tagPinsOver(p, a, w)", [at["rack"], [bell_box] if bell_box else [], [c0["best"]] if c0 and c0["best"] else []])
+        cr = res["pinRack"] = await page.evaluate("([p, a]) => window.__dbg.tagPinsOver(p, a)", [at["rack"], [bell_box] if bell_box else []])
         c1 = res["pinDoor"] = await page.evaluate("(p) => window.__dbg.tagPinsOver(p)", at["door"])
         check(failures, c0 and c0["best"] and cr and cr["best"], f"spots whose tags hold the bell's point, and the rack's clear of the bell: {c0} {cr} boxes {res['boxes']}")
         # the door is on the left wall: measured 23:35, no desk's tag holds its point (0 spots), so no seated robot's tag
-        # can cover it; the arm pins it only when a spot exists and says so otherwise
-        door_pin = bool(c1 and c1["best"])
-        res["doorReachable"] = door_pin
-        pinned = bool(c0 and c0["best"] and cr and cr["best"])
-        if pinned:
+        # can cover it; it gets a page of its own only when a spot exists, and the arm says which
+        res["doorReachable"] = bool(c1 and c1["best"])
+        # One pinned desk a page (session 0, the first to sit, so no desk taken before it can push the pin out): the rack's
+        # spot and the bell's are too close to keep both (measured: 0 rack spots clear of the bell's desk). The bell's page
+        # comes last and the rest of the arm goes on on it.
+        opened = {"bell": "() => !document.getElementById('call').hidden",
+                  "rack": "() => { const d = window.__dbg.dataServer(); return d.open && !d.loading; }",
+                  "door": "() => window.__dbg.sr().open"}
+        closed = {"bell": "() => document.getElementById('call').hidden",
+                  "rack": "() => !window.__dbg.dataServer().open && document.getElementById('ds').hidden",
+                  "door": "() => !window.__dbg.sr().open"}
+        hold = "([l, p]) => { const o = window.__dbg.overFixture(l); return o && o.tagBox && o.tag && p[0] > o.tagBox[0] && p[0] < o.tagBox[1] && p[1] > o.tagBox[2] && p[1] < o.tagBox[3]; }"
+        plan = [(k, c) for k, c in (("rack", cr), ("door", c1), ("bell", c0)) if c and c["best"]]
+        pinned = any(k == "bell" for k, _ in plan)
+        res["tagOver"], owner = {}, {}
+        for kind, cand in plan:
             await page.close()
-            page = await new_page(browser, watch, "crowded-props-pinned", **DESKTOP)
-            pins = [(0, c0["best"]), (1, cr["best"])] + ([(2, c1["best"])] if door_pin else [])
-            await page.add_init_script(desk_pins_js([(str(repo), SID.format(i), spot) for i, spot in pins]))
+            page = await new_page(browser, watch, f"crowded-props-{kind}", **DESKTOP)
+            await page.add_init_script(desk_pins_js([(str(repo), SID.format(0), cand["best"])]))
             await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
             await page.goto(url + "/")
             await ready(page)
-            await wait(page, "() => window.__dbg.robots.length === 12", timeout=30000, label="twelve on the pinned page")
+            await wait(page, "() => window.__dbg.robots.length === 12", timeout=30000, label=f"twelve on the {kind}'s page")
             await page.evaluate("() => { window.__dbg.play({ p: 0, solo: { p: 0 } }); window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); window.__dbg.tagsApart(false); }")
             await page.click(f".tag.room[data-set-project='{room_id}']")
-            await wait(page, f"() => window.__dbg.props().room === '{room_id}' && window.__dbg.props().uses.bell && window.__dbg.props().uses.serverDoor", timeout=30000, label="the pinned page up close")
-            await settled(page, "the pinned page seated", timeout=60000)
-            await until(page, "() => !window.__dbg.view().tween", "the camera still on the pinned page", timeout=20000)
-            group = (await page.evaluate(PROPS))["groupId"]   # this page's own group: the 12 -> 11 arms below compare with it
-            labs = await page.evaluate("(sids) => sids.map((sid) => (window.__dbg.robots.find((R) => R.def.realId === sid) || { def: {} }).def.id)", [SID.format(i) for i, _ in pins])
-            seats = await page.evaluate("() => window.__dbg.seats()")
-            for lab, (_, want) in zip(labs, pins):
-                got = seats.get(lab) or {}
-                check(failures, [got.get("dx"), got.get("dz")] == want, f"{lab}'s desk is where the arm pinned it {want}: {got}")
-            owner = {"bell": labs[0], "rack": labs[1], "door": labs[2] if door_pin else None}
-            hold = "([l, p]) => { const o = window.__dbg.overFixture(l); return o && o.tagBox && o.tag && p[0] > o.tagBox[0] && p[0] < o.tagBox[1] && p[1] > o.tagBox[2] && p[1] < o.tagBox[3]; }"
-            opened = {"bell": "() => !document.getElementById('call').hidden",
-                      "rack": "() => { const d = window.__dbg.dataServer(); return d.open && !d.loading; }",
-                      "door": "() => window.__dbg.sr().open"}
-            closed = {"bell": "() => document.getElementById('call').hidden",
-                      "rack": "() => !window.__dbg.dataServer().open && document.getElementById('ds').hidden",
-                      "door": "() => !window.__dbg.sr().open"}
-            res["tagOver"] = {}
-            for kind in ("bell", "rack", "door") if door_pin else ("bell", "rack"):
-                lab, pt = owner[kind], at[kind]
-                try:   # its tag holds the point and is let through (.over-fixture); else where the tag and the robot were
-                    await wait(page, hold, timeout=20000, label=f"{lab}'s tag over the {kind}, let through", arg=[lab, pt])
-                except Exception:
-                    res.setdefault("pinnedMiss", {})[kind] = await page.evaluate("(l) => { const R = window.__dbg.robots.find((x) => x.def.id === l); return R && { tag: window.__dbg.overFixture(l), pos: R.robot.root.position.toArray(), seat: R.def.pos, path: R.path.length, tagDy: R.tagDy, tagTarget: R.tagTarget, rps: !!(R.robot.rps && R.robot.rps.visible) }; }", lab)
-                    check(failures, False, f"{lab}'s tag over the {kind} ({pt}): {res['pinnedMiss'][kind]}")
-                    continue
-                top = await page.evaluate(UNDER, pt)
-                await page.mouse.click(*pt)
-                try:
-                    await wait(page, opened[kind], timeout=20000, label=f"a press on {lab}'s tag over the {kind} opens it")
-                    ok = True
-                except Exception:
-                    ok = False
-                card = await page.evaluate("() => window.__dbg.view().card")
-                res["tagOver"][kind] = {"id": lab, "q": pt, "top": top, "opened": ok, "card": card}
-                check(failures, ok and not card, f"a press on {lab}'s tag over the {kind} opens it, not the robot's card: {res['tagOver'][kind]}")
-                await page.keyboard.press("Escape")
-                await wait(page, f"() => ({closed[kind]})() && !window.__dbg.view().card", label=f"closed after the {kind}")
-                await until(page, "() => !window.__dbg.view().tween && !window.__dbg.view().zoomed", f"the camera back after the {kind}", timeout=20000)
-        covers = ({"bell": [{"id": owner["bell"]}], "rack": [{"id": owner["rack"]}], **({"door": [{"id": owner["door"]}]} if door_pin else {})}) if pinned else {"bell": []}
+            await wait(page, f"() => window.__dbg.props().room === '{room_id}' && window.__dbg.props().uses.bell && window.__dbg.props().uses.serverDoor", timeout=30000, label=f"the {kind}'s page up close")
+            await settled(page, f"the {kind}'s page seated", timeout=60000)
+            await until(page, "() => !window.__dbg.view().tween", f"the camera still on the {kind}'s page", timeout=20000)
+            lab = owner[kind] = await page.evaluate("(sid) => (window.__dbg.robots.find((R) => R.def.realId === sid) || { def: {} }).def.id", SID.format(0))
+            got = (await page.evaluate("() => window.__dbg.seats()")).get(lab) or {}
+            check(failures, [got.get("dx"), got.get("dz")] == cand["best"], f"{lab}'s desk is where the arm pinned it for the {kind} {cand['best']}: {got}")
+            pt = at[kind]
+            try:   # its tag holds the point and is let through (.over-fixture); else where the tag and the robot were
+                await wait(page, hold, timeout=20000, label=f"{lab}'s tag over the {kind}, let through", arg=[lab, pt])
+            except Exception:
+                res.setdefault("pinnedMiss", {})[kind] = await page.evaluate("(l) => { const R = window.__dbg.robots.find((x) => x.def.id === l); return R && { tag: window.__dbg.overFixture(l), pos: R.robot.root.position.toArray(), seat: R.def.pos, path: R.path.length, tagDy: R.tagDy, tagTarget: R.tagTarget, rps: !!(R.robot.rps && R.robot.rps.visible) }; }", lab)
+                check(failures, False, f"{lab}'s tag over the {kind} ({pt}), let through: {res['pinnedMiss'][kind]}")
+                continue
+            top = await page.evaluate(UNDER, pt)
+            await page.mouse.click(*pt)
+            try:
+                await wait(page, opened[kind], timeout=20000, label=f"a press on {lab}'s tag over the {kind} opens it")
+                ok = True
+            except Exception:
+                ok = False
+            card = await page.evaluate("() => window.__dbg.view().card")
+            res["tagOver"][kind] = {"id": lab, "q": pt, "top": top, "opened": ok, "card": card}
+            check(failures, ok and not card, f"a press on {lab}'s tag over the {kind} opens it, not the robot's card: {res['tagOver'][kind]}")
+            await page.keyboard.press("Escape")
+            await wait(page, f"() => ({closed[kind]})() && !window.__dbg.view().card", label=f"closed after the {kind}")
+            await until(page, "() => !window.__dbg.view().tween && !window.__dbg.view().zoomed", f"the camera back after the {kind}", timeout=20000)
+        if pinned:
+            group = (await page.evaluate(PROPS))["groupId"]   # the bell's page's own group: the 12 -> 11 arms below compare with it
+        covers = {"bell": [{"id": owner["bell"]}]} if pinned else {"bell": []}
         # the wait's bubble over that tag (a permission prompt): by its own box (40-scene.js placeRobotTags) — faint and let
         # through only when it crosses a thing to press itself; the tag under it stays let through
         if covers["bell"]:
