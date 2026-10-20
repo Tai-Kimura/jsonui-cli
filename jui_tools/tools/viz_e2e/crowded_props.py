@@ -241,6 +241,11 @@ async def run_crowded_props(pw, out, failures):
         # ---- a robot's tag over the bell: the press goes to the bell; a tag over nothing selects its robot ----
         await settled(page, "twelve before the tags", timeout=60000)
         await until(page, "() => !window.__dbg.view().tween", "the camera still before the tags", timeout=20000)
+        # tags kept apart push the pinned robot's tag up off the bell when a nearer robot's tag stands below it (the
+        # other desks move with --out: 22:02, the pinned tag was over the rack): off for this arm (tag-click does the
+        # same, __dbg.tagsApart), on again after
+        await page.evaluate("() => window.__dbg.tagsApart(false)")
+        await settled(page, "the tags where their robots are", timeout=30000)
         covers = res["covers"] = {k: await page.evaluate(COVER, k) for k in ("bell", "rack", "door")}
         res["seats"] = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.realId || R.def.id, window.__dbg.seats()[R.def.id]]))")
         for i, spot in TAG_PINS:   # a pin that did not take is a failure, not a quiet draw (common.desk_pins_js)
@@ -271,6 +276,8 @@ async def run_crowded_props(pw, out, failures):
             await page.keyboard.press("Escape")
             await wait(page, "() => !window.__dbg.view().card", label="the card closed")
             await until(page, "() => !window.__dbg.view().tween && !window.__dbg.view().zoomed", "the camera back after the card", timeout=20000)
+
+        await page.evaluate("() => window.__dbg.tagsApart(true)")
 
         # ---- 12 -> 11: the same group; -> 10: the looks back ----
         await settled(page, "twelve before one leaves", timeout=60000)
