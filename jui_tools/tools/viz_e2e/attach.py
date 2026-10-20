@@ -44,7 +44,7 @@ def _png(w: int = 8, h: int = 8) -> bytes:
 
 
 PNG = _png()
-LINE_RE = re.compile(r"^添付: (/\S+/uploads/" + S_OK + r"/([0-9a-f]{16})\.([a-z]+))（(.*)、([^、]*)、([^、]*)）$")
+LINE_RE = re.compile(r"^attached: (/\S+/uploads/" + S_OK + r"/([0-9a-f]{16})\.([a-z]+)) \((.*), ([^,]*), ([^,]*)\)$")
 
 
 async def wait(page, js, timeout=20000, label="", arg=None):

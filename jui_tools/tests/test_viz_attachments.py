@@ -250,7 +250,28 @@ def test_at_start_old_folders_are_swept_and_new_ones_and_symlinks_left(store, tm
 
 def test_the_prompt_line_names_the_absolute_path():
     rec = {"path": "/s/uploads/x/0123456789abcdef.png", "name": "a.png", "media": "image/png", "size": 2048}
-    assert attachment_line(rec) == "添付: /s/uploads/x/0123456789abcdef.png（a.png、image/png、2 KB）"
+    assert attachment_line(rec) == "attached: /s/uploads/x/0123456789abcdef.png (a.png, image/png, 2 KB)"
+
+
+def test_the_history_reads_the_english_line_and_the_japanese_one_of_older_transcripts():
+    """The line is English from 2.3.13 (the terminal's words are English); a transcript written before has the Japanese
+    form, and 55-history.js's histAttachMatch (run in node) reads both into the same parts. Its own text is no file."""
+    import shutil
+    import subprocess
+    from tests.test_viz_bundle import web_text
+    node = shutil.which("node")
+    assert node, "node is needed (the jui_tools job has it; a skip would hide the arm)"
+    src = web_text("js", "55-history.js")
+    start, end = src.index("const HIST_ATTACH_LINES"), src.index("\n", src.index("const histAttachMatch"))
+    rec = {"path": "/s/uploads/ab-1/0123456789abcdef.png", "name": "a, (b).png", "media": "image/png", "size": 2048}
+    lines = [attachment_line(rec), "添付: /s/uploads/ab-1/0123456789abcdef.png（a, (b).png、image/png、2 KB）",
+             "attached: see the file", "添付: なし"]
+    out = subprocess.run([node, "-e", src[start:end] + f"\nprocess.stdout.write(JSON.stringify({json.dumps(lines)}"
+                          ".map((l) => { const m = histAttachMatch(l); return m && m.slice(1); })));"],
+                         capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    parts = ["/s/uploads/ab-1/0123456789abcdef.png", "ab-1", "0123456789abcdef", "png", "a, (b).png", "image/png", "2 KB"]
+    assert json.loads(out.stdout) == [parts, parts, None, None]
 
 
 def test_the_module_has_no_other_place_and_widens_nothing():
@@ -305,8 +326,8 @@ def test_a_prompt_with_attachments_carries_each_files_path_and_the_file_is_there
     got = _taken(viz, "new")[0]["text"].split("\n")
     folder = viz.state / "uploads" / S_NEW
     assert got[0] == "見て"
-    assert got[1] == f"添付: {folder / (one['id'] + '.png')}（貼り付け.png、image/png、{len(PNG)} B）"
-    assert got[2] == f"添付: {folder / (two['id'] + '.txt')}（notes.txt、text/plain、6 B）"
+    assert got[1] == f"attached: {folder / (one['id'] + '.png')} (貼り付け.png, image/png, {len(PNG)} B)"
+    assert got[2] == f"attached: {folder / (two['id'] + '.txt')} (notes.txt, text/plain, 6 B)"
     assert (folder / f"{one['id']}.png").read_bytes() == PNG
     assert (folder / f"{two['id']}.txt").read_bytes() == b"hello\n"
 
@@ -315,7 +336,7 @@ def test_a_prompt_of_files_only_is_taken_and_unknown_ids_are_refused(viz):
     _, one = _attach(viz, PNG)
     status, text = viz.prompt(body=json.dumps({"sessionId": S_NEW, "text": "", "attachments": [one["id"]]}).encode())
     assert status == 200, text
-    assert _taken(viz, "new")[0]["text"].startswith("添付: /")
+    assert _taken(viz, "new")[0]["text"].startswith("attached: /")
     assert viz.prompt(body=json.dumps({"sessionId": S_NEW, "text": "x", "attachments": ["f" * 16]}).encode())[0] == 404
     assert viz.prompt(body=json.dumps({"sessionId": S_NEW, "text": "", "attachments": []}).encode())[0] == 400
 

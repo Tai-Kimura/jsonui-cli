@@ -232,8 +232,8 @@ function histItem(item) {
     const n = hNode('div', 'h-item h-user h-channel');
     const head = hNode('p', 'h-who', /(^|:)jui-viz$/.test(String(item.server || '')) ? 'ページから（jui-viz の channel）' : `channel ${item.server || ''}`);
     head.appendChild(at); n.appendChild(head);
-    const lines = String(item.text).split('\n'), files = lines.filter((l) => HIST_ATTACH_LINE.test(l));
-    const rest = lines.filter((l) => !HIST_ATTACH_LINE.test(l)).join('\n');
+    const lines = String(item.text).split('\n'), files = lines.filter((l) => histAttachMatch(l));
+    const rest = lines.filter((l) => !histAttachMatch(l)).join('\n');
     if (rest.trim()) n.appendChild(hNode('p', 'h-plain', rest));
     if (files.length) n.appendChild(histAttachMarks(files));
     const cut = histCutNote(item); if (cut) n.appendChild(cut);
@@ -515,8 +515,13 @@ const attachBusy = () => HIST.attach.some((a) => a.up);
 const attachSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 const RELAY_HOW_TEXT = RELAY_HOW.replace(/<[^>]+>/g, '');   // the same how-to as on a permission card, as plain text
 const composeNorm = (t) => String(t || '').split(/\s+/).join(' ').trim();
-/* the server's line for one attached file (ingest.attachment_line): 添付: <path>（<name>、<media>、<size>） */
-const HIST_ATTACH_LINE = /^添付: (\/\S*?\/uploads\/([A-Za-z0-9_-]+)\/([0-9a-f]{16})\.([a-z]+))（(.*)、([^、]*)、([^、]*)）$/;
+/* the server's line for one attached file (ingest.attachment_line): attached: <path> (<name>, <media>, <size>). A
+   transcript written before 2.3.13 has the Japanese form 添付: <path>（<name>、<media>、<size>）, and is read the same. */
+const HIST_ATTACH_LINES = [
+  /^attached: (\/\S*?\/uploads\/([A-Za-z0-9_-]+)\/([0-9a-f]{16})\.([a-z]+)) \((.*), ([^,]*), ([^,]*)\)$/,
+  /^添付: (\/\S*?\/uploads\/([A-Za-z0-9_-]+)\/([0-9a-f]{16})\.([a-z]+))（(.*)、([^、]*)、([^、]*)）$/,
+];
+const histAttachMatch = (line) => HIST_ATTACH_LINES.map((re) => re.exec(line)).find(Boolean) || null;
 /* The files of a prompt sent from this page, as marks. An image's mark is a thumbnail button like a history picture's
    (histThumb): the server reads it from the kept file (SOURCE.attachImage, POST /api/attach-image by session and id),
    and a press — or Enter / Space — opens it in the same large view (ticket 2026-10-20-jui-viz-attachment-thumb-opens-
@@ -525,7 +530,7 @@ const HIST_ATTACH_LINE = /^添付: (\/\S*?\/uploads\/([A-Za-z0-9_-]+)\/([0-9a-f]
 function histAttachMarks(lines) {
   const ul = hNode('ul', 'h-attach h-attach-sent');
   for (const line of lines) {
-    const m = HIST_ATTACH_LINE.exec(line), li = hNode('li', 'h-attach-item');
+    const m = histAttachMatch(line), li = hNode('li', 'h-attach-item');
     li.title = m[1];
     if (/^image\/(png|jpeg|gif|webp)$/.test(m[6])) li.appendChild(histThumb({ attach: { sessionId: m[2], id: m[3], ext: m[4] } }));
     if (/^image\//.test(m[6])) li.appendChild(hNode('span', 'h-attach-name', `📎 ${m[5]}`));
@@ -846,7 +851,7 @@ async function composeSend() {
 function composeArrived(items) {
   const sent = HIST.sent;
   if (!sent || sent.error || sent.arrivedAt || sent.id !== HIST.id || !Array.isArray(items)) return;
-  const want = composeNorm(sent.text).slice(0, 120) || '添付:';   // only files: the server's first line
+  const want = composeNorm(sent.text).slice(0, 120) || 'attached:';   // only files: the server's first line
   const fresh = (x) => !(Number(x.at) < sent.at - 60000);   // an older item with the same words is not this one
   const ours = (x) => x.kind === 'channel' && /(^|:)jui-viz$/.test(String(x.server || ''));
   if (items.some((x) => ours(x) && fresh(x) && composeNorm(x.text).startsWith(want))) { sent.arrivedAt = Date.now(); composePaint(); }

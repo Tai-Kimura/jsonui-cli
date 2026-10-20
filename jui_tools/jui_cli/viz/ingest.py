@@ -148,10 +148,11 @@ INFRA_EVERY_MS = 5_000
 
 
 def attachment_line(record: dict) -> str:
-    """The prompt's line for one attached file: its absolute path, then the shown name, media type and size."""
+    """The prompt's line for one attached file: its absolute path, then the shown name, media type and size. In English
+    (the receiving session reads it; 55-history.js reads this form and the Japanese one written before 2.3.13)."""
     size = record["size"]
     shown = f"{size} B" if size < 1024 else f"{size / 1024:.0f} KB" if size < 1024 * 1024 else f"{size / 1048576:.1f} MB"
-    return f"添付: {record['path']}（{record['name']}、{record['media']}、{shown}）"
+    return f"attached: {record['path']} ({record['name']}, {record['media']}, {shown})"
 
 
 class World:
