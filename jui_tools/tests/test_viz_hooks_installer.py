@@ -247,3 +247,26 @@ def test_a_write_between_our_read_and_our_stat_is_not_lost(home, monkeypatch):
     data = _read()
     assert data["permissions"] == {"allow": ["Bash(ls)"]} and "hooks" in data
 
+
+
+def test_status_and_doctor_name_an_ask_hook_left_at_the_old_timeout(home, capsys, monkeypatch):
+    """Ticket 2026-10-20 question-window-over-5-min: hooks installed before 2.3.7 cut the --ask hook at 600 s, under
+    the 30 min and "until answered" windows; status says the timeout, doctor asks for hooks install again."""
+    from jui_cli.cli import main
+    hi.install(python=PY)
+    assert hi.status()["askTimeout"] == hi.ASK_TIMEOUT_SEC
+    data = _read()
+    for g in data["hooks"]["PreToolUse"]:
+        for h in g["hooks"]:
+            if h.get("command", "").endswith(" --ask"):
+                h["timeout"] = 600
+    _write(data)
+    assert hi.status()["askTimeout"] == 600
+    monkeypatch.setenv("PATH", "")
+    main(["viz", "doctor", "--json"])
+    checks = {c["name"]: c for c in json.loads(capsys.readouterr().out)["checks"]}
+    assert checks["askTimeout"]["ok"] is False and "600" in checks["askTimeout"]["detail"]
+    hi.install(python=PY)
+    assert hi.status()["askTimeout"] == hi.ASK_TIMEOUT_SEC
+    main(["viz", "doctor", "--json"])
+    assert "askTimeout" not in {c["name"] for c in json.loads(capsys.readouterr().out)["checks"]}

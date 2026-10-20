@@ -406,11 +406,17 @@ def status() -> dict:
     ask = any(is_ours(h) and "--ask" in str(h.get("command", ""))
               for g in (hooks.get("PreToolUse") or []) if isinstance(g, dict) and g.get("matcher") == "AskUserQuestion"
               for h in (g.get("hooks") or []))
+    # the --ask hook's timeout as installed: one from before 2.3.7 (600 s) cuts the 30 min and "until answered"
+    # windows short (ticket 2026-10-20 question-window-over-5-min) until hooks install is run again
+    ask_timeouts = [h.get("timeout") for g in (hooks.get("PreToolUse") or [])
+                    if isinstance(g, dict) and g.get("matcher") == "AskUserQuestion"
+                    for h in (g.get("hooks") or []) if is_ours(h) and "--ask" in str(h.get("command", ""))]
     env = data.get("env") if isinstance(data.get("env"), dict) else {}
     return {
         "plugin": plugin_enabled(data),
         "decide": decide,
         "ask": ask,
+        "askTimeout": min((t for t in ask_timeouts if isinstance(t, (int, float)) and not isinstance(t, bool)), default=None),
         "readable": True,
         "path": str(path),
         "events": events,

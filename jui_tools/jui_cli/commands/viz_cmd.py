@@ -1161,6 +1161,9 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
             print(f"  入っていないイベント: {', '.join(missing)}")
         for command in info["broken"]:
             print(f"  NG  python か forward.py が見つかりません: {command}（jui viz hooks install で入れ直す）")
+        if info.get("askTimeout") is not None and info["askTimeout"] < hi.ASK_TIMEOUT_SEC:
+            print(f"  NG  質問のフックの timeout が {info['askTimeout']:g} 秒のままです。長い待ち時間（30 分・答えるまで）が途中で切れます"
+                  "（jui viz hooks install で入れ直す）")
         if info["disableAllHooks"]:
             print("  NG  フックが全体で無効になっています（disableAllHooks: true）")
         if info["otherHooks"]:
@@ -1515,6 +1518,9 @@ def _doctor_checks() -> list[dict]:
         else:
             ok = hooks["installed"] == total and not hooks["broken"]
             add("hooks", ok, f"{hooks['installed']}/{total} イベント" + ("" if ok else "（/plugin install jui-viz@jsonui、または jui viz hooks install）"))
+            if hooks.get("askTimeout") is not None and hooks["askTimeout"] < hooks_installer.ASK_TIMEOUT_SEC:
+                add("askTimeout", False, f"質問のフックの timeout が {hooks['askTimeout']:g} 秒のままです。長い待ち時間（30 分・答えるまで）が"
+                    "途中で切れます。jui viz hooks install を撃ち直してください（Claude Code のセッションの再起動が要ります）")
         if hooks.get("progressEnv") in hooks_installer.legacy_progress_values():
             add("progressEnv", False, f"settings.json の {hooks_installer.PROGRESS_ENV} が古い場所（{hooks['progressEnv']}）のままです。"
                 "jui viz hooks install を撃ち直すと新しい場所に書き換わります")
