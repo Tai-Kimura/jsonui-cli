@@ -2,10 +2,12 @@
 2026-10-21-jui-viz-camera-does-not-follow-robot-walking-rooms). Runs with `--only camera-follow`.
 
 The real `jui viz serve` in a throwaway HOME on a free port and the real forward.py: three sessions in two projects
-(A: a1, a2; B: b1). A session moves with a CwdChanged hook, as Claude Code sends it. Checked, in order:
+(A: a1, a2, a3; B: b1). A session moves with a CwdChanged hook, as Claude Code sends it. Checked, in order:
   * A shown (one room), a1's card open, a1 moves to B: B shown, a1's card open, the camera on a1, and a toast says so
-  * right after a switch by hand (a2 picked from the list while B is shown), a2 moves to B: nothing moves — A shown, a2's card open with the
+  * right after a switch by hand (a2 picked while B is shown, as a talk's ロボットへ移る does), a2 moves to B: nothing moves — A shown, a2's card open with the
     mark "… へ移った"; its button goes to B, the camera on a2
+  * A shown, a3's card open, a3 — the last robot in A — moves to B: A closes, the floor is shown (30-source-live.js), B
+    is in view there, so nothing more moves: a3's card open, the camera on it, no mark
   * the whole floor shown, b1's card open, b1 moves to A (a room in view): the floor still shown, no toast of its own,
     the camera on b1 where it walked, and the card names its new room
 No console error; nothing outside the server.
@@ -23,9 +25,9 @@ import time
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
 
 SIDS = {"a1": "e2e00000-0000-4000-8000-0000000000f1", "a2": "e2e00000-0000-4000-8000-0000000000f2",
-        "b1": "e2e00000-0000-4000-8000-0000000000f3"}
+        "a3": "e2e00000-0000-4000-8000-0000000000f4", "b1": "e2e00000-0000-4000-8000-0000000000f3"}
 CWD_A, CWD_B = "/work/follow-a", "/work/follow-b"
-CWDS = {"a1": CWD_A, "a2": CWD_A, "b1": CWD_B}
+CWDS = {"a1": CWD_A, "a2": CWD_A, "a3": CWD_A, "b1": CWD_B}
 HAND_MS = 3000   # 50-panel.js FOLLOW_HAND_MS
 STATE = "() => ({ robot: window.__dbg.board().robot, project: window.__dbg.project(), card: !document.getElementById('rb').hidden })"
 ON_ROBOT = "() => { const c = window.__dbg.camOn(); return !c.tween && !c.waitFor && c.zoomed && c.inScene && c.toRobot !== null && c.toRobot < 1.5; }"
@@ -79,12 +81,12 @@ async def run_camera_follow(pw, out, failures):
         page = await new_page(browser, watch, "camera-follow", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 3", label="three sessions")
+        await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 4", label="four sessions")
         who = await page.evaluate("(sids) => Object.fromEntries(Object.entries(sids).map(([k, sid]) => [k, window.__dbg.labelOfSession(sid)]))", SIDS)
         proj = await page.evaluate("(ls) => Object.fromEntries(Object.entries(ls).map(([k, l]) => [k, window.__dbg.robotProject(l)]))", who)
         res["who"], res["proj"] = who, proj
         A, B = proj["a1"], proj["b1"]
-        check(A and B and A != B and proj["a2"] == A, f"two projects: a1 and a2 in one, b1 in the other: {proj}")
+        check(A and B and A != B and proj["a2"] == A and proj["a3"] == A, f"two projects: a1, a2 and a3 in one, b1 in the other: {proj}")
         name = await page.evaluate("(ids) => ids.map((id) => window.__dbg.projectName(id))", [A, B])
 
         async def pick_project(pid):
@@ -124,9 +126,9 @@ async def run_camera_follow(pw, out, failures):
         check(not fol["moved"] and not await page.locator("#rb [data-rb-moved]").count(), f"no mark when it followed: {fol}")
         await page.screenshot(path=str(out / "followed-to-b.png"))
 
-        # right after a switch by hand: the card is marked, nothing moves; its button goes there. a2 is picked from the
-        # list while B is shown, so selectRobot switches to A by hand, and a2 moves at once
-        await page.click(f"#sessions [data-robot-open='{who['a2']}']")
+        # right after a switch by hand: the card is marked, nothing moves; its button goes there. a2 is picked while B is
+        # shown (as a talk's ロボットへ移る does: selectRobot), so the view switches to A by hand, and a2 moves at once
+        await page.evaluate("(l) => window.__dbg.selectRobot(l)", who["a2"])
         await wait(page, "([l, p]) => window.__dbg.board().robot === l && window.__dbg.project() === p", arg=[who["a2"], A], label="a2's card in A")
         hook("a2", cwd=CWD_B, hook_event_name="CwdChanged")
         try:
@@ -143,6 +145,19 @@ async def run_camera_follow(pw, out, failures):
         await wait(page, ON_ROBOT, label="the camera on a2 in B")
         await step("the mark's button: B, a2, the camera on it", "a2", B)
         check(not await page.locator("#rb [data-rb-moved]").count(), "the mark is gone after going there")
+
+        # the last robot leaves the room shown: the room closes, the floor is shown and B is in view there
+        await pick_project(A)
+        await open_robot("a3")
+        await wait(page, ON_ROBOT, label="the camera on a3")
+        await page.wait_for_timeout(HAND_MS + 500)
+        await moved_to("a3", CWD_B)
+        await wait(page, "() => window.__dbg.project() === 'all'", label="A closed: the floor shown")
+        await wait(page, "([l, p]) => { const r = window.__dbg.robotAt(l); return !!r && r.room === p && !r.walking; }",
+                   arg=[who["a3"], B], timeout=30000, label="a3 at its seat in B")
+        await wait(page, ON_ROBOT, timeout=30000, label="the camera on a3 after its walk")
+        fol, cam = await step("A shown, a3 (the last in A) moves to B: the floor, a3's card, the camera on it", "a3", "all")
+        check(not fol["moved"], f"no mark: B is in view on the floor: {fol}")
 
         # A: the whole floor, b1's card open, b1 moves to A (a room in view): it walks there and the camera follows
         await pick_project("all")
