@@ -545,3 +545,14 @@ def test_a_big_template_with_a_bom_is_known_by_its_head(tmp_path, monkeypatch):
     rep = C.run_infra_iac(_decls(r)["iac"], r)
     assert any("stack.yaml" in w and "not read" in w for w in rep.target_extra["unverified"].get("aws", []))
     assert _by_target(rep)["aws/q"].status == "skipped"
+
+
+def test_jsonc_keeps_an_escaped_quote_and_a_trailing_backslash_inside_a_string():
+    """dd's fifth verification X1: a \\" inside a string does not end it, so a // or ,} after it is still text; a
+    string ending in an escaped backslash ends at its quote. A comment between the last "," and the close is skipped
+    when deciding that the "," is the last."""
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert T.parse_jsonc('{"name": "a \\" // b", "x": "c \\" ,} d",}') == {"name": 'a " // b', "x": 'c " ,} d'}
+    assert T.parse_jsonc('{"path": "C:\\\\", // the drive\n "n": 1,}') == {"path": "C:\\", "n": 1}
+    # a last "," with a comment between it and the close (the generated file's own way of writing a list)
+    assert T.parse_jsonc('{"a": [1, 2, // the last\n ], "b": 3, /* end */ }') == {"a": [1, 2], "b": 3}
