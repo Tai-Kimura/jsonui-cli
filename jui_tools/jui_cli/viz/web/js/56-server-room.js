@@ -46,6 +46,7 @@ function srLog(text) {
 async function srEnter(project, opener) {
   if (!project || ['loading', 'ok', 'open'].includes(SR.phase)) return;
   const seq = ++SR.seq;
+  clearTimeout(SR.failTimer);
   Object.assign(SR, { phase: 'loading', project, t0: srNow(), why: '', full: '', opener: opener || null });
   srBubble('サーバー構成を読み込んでいます', 'info');
   srLog(`${(PROJECT[project] && PROJECT[project].name) || project}: 構成を読み込み始めた`);
@@ -56,6 +57,7 @@ async function srEnter(project, opener) {
   const took = srNow() - SR.t0;
   SR.model = got; SR.phase = 'ok';
   SR.until = srNow() + (took < SR.fastMs ? 120 : SR.okMs);
+  SR.took = Math.round(took); SR.waitMs = Math.round(SR.until - srNow());   // read under SR.fastMs: a flash, not the whole 解錠
   srBubble(null);
   srLog(`読み込んだ: ${got.files.length} ファイル、node ${got.nodes.length}・edge ${got.edges.length}（${got.readMs} ms）${got.problems && got.problems.length ? `、問題 ${got.problems.length} 件` : ''}`);
   setTimeout(() => { if (seq === SR.seq && SR.phase === 'ok') srShow(got); }, Math.max(0, SR.until - srNow()));
@@ -66,7 +68,17 @@ function srFail(got) {
   for (const p of (got.problems || []).slice(0, 30)) lines.push(`${p.file || ''}${p.line ? `:${p.line}` : ''} ${p.short || p.message || ''}`.trim());
   Object.assign(SR, { phase: 'failed', why: short, full: lines.filter(Boolean).join('\n'), until: srNow() + SR.failMs });
   srBubble(short, 'error', SR.full);
+  // gone after SR.failMs by its own timer, wherever the view is (dd's verification D1, 10-20: it was cleared from the
+  // keypad's tick, which runs only for the door in sight, and stayed on the floor view after a failure)
+  clearTimeout(SR.failTimer);
+  const seq = SR.seq;
+  SR.failTimer = setTimeout(() => { if (SR.phase === 'failed' && SR.seq === seq) srIdle(); }, SR.failMs);
   srLog(`読めなかった: ${short}`);
+}
+function srIdle() {
+  clearTimeout(SR.failTimer);
+  SR.phase = 'idle';
+  srBubble(null);
 }
 function srCancel() {
   if (SR.phase !== 'loading') return false;
@@ -75,12 +87,11 @@ function srCancel() {
   srLog('読み込みをやめた（Esc）');
   return true;
 }
-/* What the keypad shows now (40-scene.js serverDoorTick). */
+/* What the keypad shows now (40-scene.js serverDoorTick, and the e2e hook): it only reads, it changes nothing. */
 function srKeypad(project, nowSec) {
   void nowSec;
   if (project !== SR.project) return { state: 'idle', stars: 0, open: 0 };
   const t = srNow();
-  if (SR.phase === 'failed' && t > SR.until) { SR.phase = 'idle'; srBubble(null); }
   if (SR.phase === 'loading') return { state: 'loading', stars: reduceMotion ? 4 : 1 + (Math.floor((t - SR.t0) / SR.starMs) % 8), open: 0 };
   if (SR.phase === 'ok') return { state: 'ok', stars: 8, open: 1 };
   if (SR.phase === 'failed') return { state: 'failed', stars: 0, open: 0, shake: t - (SR.until - SR.failMs) < 500 };
@@ -97,6 +108,9 @@ function srBubble(text, kind = 'info', full = '') {
 }
 function srBubblePlace() {
   if (srBubbleEl.hidden) return;
+  // a failure is about one room's door: away from that room (the floor, another room) it goes at once (D1)
+  const near = typeof srDoorNow === 'function' ? srDoorNow() : null;
+  if (SR.phase === 'failed' && (!near || near.room !== SR.project)) { srIdle(); return; }
   const at = typeof serverDoorScreen === 'function' ? serverDoorScreen() : null;
   if (at) {   // kept on the page: centred over the keypad, its top and sides 16 px in at least
     const w = srBubbleEl.offsetWidth, h = srBubbleEl.offsetHeight, half = w / 2 + 16;
@@ -430,6 +444,7 @@ function srPlaceLabels(V) {
 }
 /* The room's icons: per node the strongest key the settings give (service → provider → category), an image plane above it. */
 async function srIcons(V) {
+  V.iconKeys = {};
   const icons = new Set(SR.model.icons ? Object.keys(SR.model.icons) : []);
   if (!icons.size || typeof SOURCE.infraIcon !== 'function') return;
   const byKey = {};
@@ -437,7 +452,7 @@ async function srIcons(V) {
     if (p.hiddenIn) continue;
     const n = p.n, prov = n.providerResolved || n.provider;
     const key = [n.service && prov ? `service:${prov}/${n.service}` : null, prov ? `provider:${prov}` : null, `category:${n.category}`].find((k) => k && icons.has(k));
-    if (key) (byKey[key] = byKey[key] || []).push(p);
+    if (key) { (byKey[key] = byKey[key] || []).push(p); V.iconKeys[n.id] = key; }
   }
   for (const [key, list] of Object.entries(byKey)) {
     const blob = await SOURCE.infraIcon(SR.project, key);

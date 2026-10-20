@@ -20,6 +20,24 @@ window.__dbg = {
   srSelectGroup: (id) => { SR.selected = null; SR.selectedGroup = id; srRenderBoard(); return !!document.querySelector('#sr-board [data-sr-act="toggle"]'); },
   srEdges: () => (SR.view ? SR.view.L.edges.map((e) => `${e.from}>${e.to}`) : []),
   mainFrames: () => renderer.info.render.frame,
+  // the server room's arms (dd's verification, 10-20): what is drawn and how, without changing anything
+  srTiming: () => ({ took: SR.took ?? null, waitMs: SR.waitMs ?? null, fastMs: SR.fastMs, okMs: SR.okMs }),
+  srIconKeys: () => (SR.view ? { ...(SR.view.iconKeys || {}) } : {}),
+  srNodeEnvs: () => (SR.view ? SR.view.L.nodes.map((n) => [n.id, Array.isArray(n.environments) ? n.environments : []]) : []),
+  srAlive: () => !!SR.view,
+  srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
+  // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in
+  // front of the door from this view (D2: the door must still take the press, as the bell and the rack do)
+  srRobotBeforeDoor: () => {
+    const at = srDoorNow();
+    if (!at) return null;
+    const R = robots.find((x) => x.def.room === at.room && x.robot.root.visible);
+    if (!R) return null;
+    const door = new THREE.Vector3(); at.D.root.getWorldPosition(door); door.y = 1.1;
+    const cam = camera.position, t = (cam.y - 1.0) / (cam.y - door.y), p = cam.clone().lerp(door, Math.min(0.97, Math.max(0, t)));
+    R.robot.root.position.set(p.x, 0, p.z);
+    return R.def.id;
+  },
   srFramesReset: () => { if (SR.view) SR.view.frames = []; return !!SR.view; },
   srZoom: (factor) => { const V = SR.view; if (!V) return null; const d = V.camera.position.clone().sub(V.controls.target).multiplyScalar(factor); V.camera.position.copy(V.controls.target).add(d); V.controls.update(); return +srCellPx(V).toFixed(2); },
   srEnter: (project) => srEnter(project, null),
@@ -154,7 +172,7 @@ window.__dbg = {
     ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
     const seen = [];
     for (const h of ray.intersectObjects(liveTargets(), true)) {
-      const rid = robotOf(h.object), k = rid !== undefined ? `robot:${rid}` : isFixture(h.object) ? (h.object.userData.dataServer ? 'rack' : 'bell') : 'board';
+      const rid = robotOf(h.object), k = rid !== undefined ? `robot:${rid}` : isFixture(h.object) ? (h.object.userData.dataServer ? 'rack' : h.object.userData.serverDoor ? 'door' : 'bell') : 'board';
       if (!seen.includes(k)) seen.push(k);
     }
     return seen;

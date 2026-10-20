@@ -75,6 +75,21 @@ async def run_server_room(pw, out, failures):
         "large": _write(work, ex, "large-multi-provider", "sr-large"),
         "icons": _write(work, ex, "compose-and-cloud", "sr-icons"),
     }
+    # a room with no infra folder: no door (E13, dd's verification); six rooms stay one floor
+    (work / "sr-none" / ".git").mkdir(parents=True, exist_ok=True)
+    rooms["none"] = work / "sr-none"
+    # the icons room: a category icon too for the node the service icon names, so the stronger key must win (E5)
+    icfg_path = rooms["icons"] / "jui.config.json"
+    icfg = json.loads(icfg_path.read_text())
+    folder = rooms["icons"] / icfg["infra"]["dir"]
+    svc_node = None
+    for f in sorted(folder.glob("*.json")):
+        for n in json.loads(f.read_text()).get("nodes", []):
+            if n.get("service") == "run" and svc_node is None:
+                svc_node = n
+    svc_key = next(k for k in icfg["infra"]["icons"] if k.startswith("service:"))
+    icfg["infra"]["icons"][f"category:{svc_node['category']}"] = icfg["infra"]["icons"][svc_key]
+    icfg_path.write_text(json.dumps(icfg, ensure_ascii=False))
     # one room for the three that cannot be read (seven rooms would turn the floor into the building): its prod.json is
     # written before each press
     secret_doc = ex["invalid/single/secret-connection-string.json"]
@@ -189,6 +204,11 @@ async def run_server_room(pw, out, failures):
             await until(page, f"(e) => window.__dbg.sr().env === e", "the other environment", arg=envs[1])
             res["envSwitch"] = [before, (await page.evaluate(SR))["shown"]["nodes"]]
         check(failures, len(envs) >= 2 and "envSwitch" in res, f"the environments are a switch: {envs}")
+        if len(envs) >= 2:   # E1: never two environments at once — every node drawn is in the one chosen (or in all)
+            drawn = await page.evaluate("() => window.__dbg.srNodeEnvs()")
+            stray = [nid for nid, e in drawn if e and envs[1] not in e]
+            res["envOnly"] = {"env": envs[1], "drawn": len(drawn), "stray": stray}
+            check(failures, drawn and not stray, f"only the chosen environment is drawn: {res['envOnly']}")
         folded = (await page.evaluate(SR))["shown"]
         await page.check("#sr-fold")
         await until(page, f"(n) => window.__dbg.sr().shown.nodes > n", "the folded ones shown", arg=folded["nodes"])
@@ -225,6 +245,7 @@ async def run_server_room(pw, out, failures):
         await page.keyboard.press("Escape")
         await until(page, "() => !window.__dbg.sr().open && window.__dbg.sr().phase === 'idle'", "back to the room")
         check(failures, (await page.evaluate("() => window.__dbg.solo()")) == pid["three"], "Esc goes back to the room")
+        check(failures, not await page.evaluate("() => window.__dbg.srAlive()"), "back in the room the server room's 3D is gone (its loop and GPU objects freed)")   # E9
 
         # 3. Esc while it reads: the late reply opens nothing
         import asyncio
@@ -245,6 +266,46 @@ async def run_server_room(pw, out, failures):
         check(failures, late.is_set() and not res["afterEsc"]["open"] and res["afterEsc"]["phase"] == "idle", f"a reply after Esc opens nothing: {res['afterEsc']['phase']}, open {res['afterEsc']['open']}")
         await page.unroute("**/api/infra-docs", hold_late)
 
+        # 3b. a read that comes back at once (answered here without waiting): only a flash of 解錠, not the whole 0.7 s (E3)
+        model_box = {}
+
+        async def instant(route):
+            seq = json.loads(route.request.post_data or "{}").get("seq")
+            if "model" not in model_box:
+                got = await route.fetch()
+                model_box["model"] = await got.json()
+            await route.fulfill(status=200, content_type="application/json", body=json.dumps({**model_box["model"], "seq": seq}))
+        await page.route("**/api/infra-docs", instant)
+        await press_door()
+        await until(page, "() => window.__dbg.sr().open", "the server room (warm-up)", timeout=15000)
+        await page.keyboard.press("Escape")
+        await until(page, "() => !window.__dbg.sr().open", "back (warm-up)")
+        await press_door()
+        await until(page, "() => window.__dbg.sr().open", "the server room (instant reply)", timeout=15000)
+        res["flash"] = await page.evaluate("() => window.__dbg.srTiming()")
+        f = res["flash"]
+        check(failures, f["took"] is not None and f["took"] < f["fastMs"] and f["waitMs"] <= 150, f"an instant read only flashes 解錠: {f}")
+        await page.keyboard.press("Escape")
+        await until(page, "() => !window.__dbg.sr().open", "back (instant reply)")
+        await page.unroute("**/api/infra-docs", instant)
+
+        # 3c. a robot in front of the door (D2, dd's verification): the press still takes the door, as the bell's and the rack's
+        rid = await page.evaluate("() => window.__dbg.srRobotBeforeDoor()")
+        await page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        at = (await page.evaluate(SR))["door"]
+        under = res["doorUnder"] = await page.evaluate("(p) => window.__dbg.under(p)", at)
+        check(failures, bool(rid) and isinstance(under, list) and under[:1] == [f"robot:{rid}"] and "door" in under,
+              f"the robot stands in front of the door at its point: {under}")
+        await page.mouse.click(at[0], at[1])
+        await until(page, "() => window.__dbg.sr().phase !== 'idle' || !!window.__dbg.board().robot", "the press behind the robot", timeout=5000)
+        res["doorBehindRobot"] = {"phase": (await page.evaluate(SR))["phase"], "card": await page.evaluate("() => window.__dbg.board().robot || null")}
+        check(failures, res["doorBehindRobot"]["phase"] in ("loading", "ok", "open") and not res["doorBehindRobot"]["card"],
+              f"the door behind a robot takes the press (no robot card): {res['doorBehindRobot']}")
+        await until(page, "() => window.__dbg.sr().open || window.__dbg.sr().phase === 'idle'", "settled after the press", timeout=15000)
+        if (await page.evaluate(SR))["open"]:
+            await page.keyboard.press("Escape")
+        await page.keyboard.press("Escape")
+
         # 4. rooms that cannot be read: red, the file named, the room stays, no value shown
         await up_close("bad")
         for name, want in (("broken", "prod.json"), ("schema", "prod.json"), ("secret", "prod.json")):
@@ -256,6 +317,7 @@ async def run_server_room(pw, out, failures):
             check(failures, s["keypad"] == "failed" and (s["bubble"] or {}).get("kind") == "error" and want in text and not s["open"],
                   f"{name}: the keypad red, the bubble names the file, the room stays: {s['keypad']} {s['bubble']}")
             check(failures, (await page.evaluate("() => window.__dbg.solo()")) == pid["bad"], f"{name}: still in the room")
+            check(failures, want in ((s["bubble"] or {}).get("text") or ""), f"{name}: the bubble's own line (the short one) names the file: {s['bubble']}")   # E2
             if name == "secret":
                 leaked = [v for v in secret_values if len(v) >= 6 and v in text]
                 check(failures, not leaked, f"no secret-shaped value in the bubble or its whole text: {leaked}")
@@ -265,6 +327,24 @@ async def run_server_room(pw, out, failures):
                 vw = await page.evaluate("() => window.innerWidth")
                 check(failures, rect and rect[0] >= 0 and rect[1] >= 0 and rect[2] <= vw, f"the error bubble stays on the page: {rect} (width {vw})")
                 await page.screenshot(path=str(out / "failed-light.png"))
+
+        # 4b. away from the room after a failure: the bubble goes at once (D1, dd's verification; read from the page, not the
+        # e2e hook). Staying: it goes after SR.failMs (9 s, E4)
+        bubble_dom = "() => { const b = document.getElementById('sr-bubble'); return b.hidden ? null : b.querySelector('.sr-short').textContent; }"
+        res["leftAfterFail"] = {"before": await page.evaluate(bubble_dom)}
+        await page.click("#room-back")
+        await until(page, "() => window.__dbg.solo() === null", "the floor after a failure")
+        t = await page.evaluate("() => performance.now()")
+        await until(page, "(t) => performance.now() > t + 1500", "1.5 s on the floor", arg=t)
+        res["leftAfterFail"]["after"] = await page.evaluate(bubble_dom)
+        check(failures, res["leftAfterFail"]["before"] and res["leftAfterFail"]["after"] is None, f"the failure's bubble goes when the room is left: {res['leftAfterFail']}")
+        await up_close("bad")
+        await press_door()
+        await until(page, "() => window.__dbg.sr().phase === 'failed'", "failed again (to stay)")
+        t = await page.evaluate("() => performance.now()")
+        await until(page, "(t) => performance.now() > t + 9500", "9.5 s in the room", arg=t, timeout=20000)
+        res["failGone"] = {"bubble": await page.evaluate(bubble_dom), "phase": (await page.evaluate(SR))["phase"]}
+        check(failures, res["failGone"] == {"bubble": None, "phase": "idle"}, f"the failure goes after 9 s in the room: {res['failGone']}")
 
         # 5. crossing cables; icons
         await up_close("multi")
@@ -281,6 +361,14 @@ async def run_server_room(pw, out, failures):
         await until(page, "() => window.__dbg.sr().open", "icons open", timeout=20000)
         await until(page, "() => window.__dbg.sr().icons > 0", "the room's icons on their nodes", timeout=10000)
         res["icons"] = (await page.evaluate(SR))["icons"]
+        node_env = (svc_node.get("environments") or [None])[0]
+        if node_env and (await page.evaluate(SR))["env"] != node_env:   # the node is drawn in its own environment only
+            await page.select_option("#sr-env", node_env)
+            await until(page, "(e) => window.__dbg.sr().env === e", "the service node's environment", arg=node_env)
+        await until(page, f"() => '{svc_node['id']}' in window.__dbg.srIconKeys()", "the service node's icon key", timeout=10000)
+        keys = await page.evaluate("() => window.__dbg.srIconKeys()")
+        res["iconKey"] = {"node": svc_node["id"], "key": keys.get(svc_node["id"]), "want": svc_key}
+        check(failures, res["iconKey"]["key"] == svc_key, f"a node with a service icon and a category icon shows the service's: {res['iconKey']}")   # E5
         await page.keyboard.press("Escape")
 
         # 6. the large model: drawn, frames kept, far and near
@@ -310,12 +398,27 @@ async def run_server_room(pw, out, failures):
         await until(page, "() => window.__dbg.sr().lod === 'near'", "near", timeout=5000)
         await until(page, "(n) => window.__dbg.sr().labels > n", "near labels", arg=far["labels"], timeout=5000)
         near, res["large"]["near"] = await frames("near")
+        rects = await page.evaluate("() => window.__dbg.srLabelRects()")
+        overlaps = sum(1 for i, a_ in enumerate(rects) for b_ in rects[i + 1:] if a_[0] < b_[2] - 1 and b_[0] < a_[2] - 1 and a_[1] < b_[3] - 1 and b_[1] < a_[3] - 1)
+        res["labelOverlaps"] = [len(rects), overlaps]
+        check(failures, len(rects) > 10 and overlaps == 0, f"no label covers another up close: {res['labelOverlaps']}")   # E12
         check(failures, max(res["large"]["far"]["frameP90"], res["large"]["near"]["frameP90"]) < FRAME_P90_MAX_MS, f"far and near do not stall: {res['large']}")
         await page.screenshot(path=str(out / "large-near-light.png"))
         res["lod"] = {"far": [px_far, far["labels"]], "near": [px_near, near["labels"]]}
         check(failures, far["lod"] == "far" and near["lod"] == "near" and far["labels"] < near["labels"],
               f"zoomed out the groups are boxes and the labels thin out: {res['lod']}")
         await page.keyboard.press("Escape")
+
+        # 6b. a room with no infra folder has no door (E13)
+        await page.click("#room-back")
+        await until(page, "() => window.__dbg.solo() === null", "the floor (no-door room)")
+        await page.click(f".tag.room[data-set-project='{pid['none']}']")
+        await until(page, f"() => window.__dbg.solo() === '{pid['none']}'", "the room without an infra folder")
+        await until(page, f"() => window.__dbg.gitBox().room === '{pid['none']}'", "its things built", timeout=20000)
+        t = await page.evaluate("() => performance.now()")
+        await until(page, "(t) => performance.now() > t + 1000", "a second up close", arg=t)
+        res["noDoor"] = (await page.evaluate(SR))["built"]
+        check(failures, res["noDoor"] is False, f"a room without an infra folder has no door: built {res['noDoor']}")
 
         # 7. reduced motion: the * stand still, the bubble shows
         ctx2 = await browser.new_context(**DESKTOP, reduced_motion="reduce")
