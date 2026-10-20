@@ -112,31 +112,38 @@ async def run_usage(pw, out, failures):
               f"{tag}: a stale note keeps every chip at {h}px: {[(c['name'], c['h']) for c in stale]}")
         check(failures, all(abs(c["mid"] - c["textMid"]) <= 2 for c in stale),
               f"{tag}: each chip's text sits in its middle: {[(c['name'], c['mid'], c['textMid']) for c in stale]}")
-    async def buttons_right(page, tag: str, wrap: bool = False) -> None:
+    async def buttons_right(page, tag: str, wrap: bool = False, wide: bool = False) -> None:
         """通知 and パネルを閉じる stay at the header's right edge, on the first line or wrapped to the next, and nothing
-        sticks out sideways (requester 10-20, ticket 2026-10-20-jui-viz-header-buttons-right-aligned). With wrap, the
-        widest width (from 1400 down, 20 px a step) at which the buttons leave the first line is found first."""
+        sticks out sideways (requester 10-20, ticket 2026-10-20-jui-viz-header-buttons-right-aligned). Wide is 2400 px,
+        where everything is on one line (checked: with the two usage chips the header already wraps at 1440). With wrap,
+        the widest width (from 2400 down, 20 px a step) at which the buttons stand on a line of their own below the chips
+        (the requester's 09:08 screen) is found first."""
         js = """() => {
           const bar = document.querySelector('.topbar'), b = bar.getBoundingClientRect(), cs = getComputedStyle(bar);
           const right = b.right - parseFloat(cs.paddingRight), brand = document.querySelector('.brand').getBoundingClientRect();
           const box = (id) => { const e = document.getElementById(id); if (!e || e.offsetParent === null) return null;
             const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
           const side = box('btn-side'), bell = box('btn-notify');
-          return { w: innerWidth, right, side, bell, wrapped: !!side && side.top >= brand.bottom - 0.5,
+          const chips = document.querySelector('.chips').getBoundingClientRect(), ctl = document.querySelector('.controls').getBoundingClientRect();
+          return { w: innerWidth, right, side, bell, oneLine: ctl.top < brand.bottom - 0.5, alone: ctl.top >= chips.bottom - 0.5,
                    scrollW: document.documentElement.scrollWidth, innerW: innerWidth };
         }"""
         if wrap:
             vp = page.viewport_size
-            for w in range(1400, 680, -20):
+            for w in range(2400, 680, -20):
                 await page.set_viewport_size({"width": w, "height": vp["height"]})
                 await page.wait_for_timeout(120)
-                if (await page.evaluate(js))["wrapped"]:
+                if (await page.evaluate(js))["alone"]:
                     break
+        if wide:
+            await page.set_viewport_size({"width": 2400, "height": page.viewport_size["height"]})
         await page.wait_for_timeout(300)
         g = res[f"buttons-{tag}"] = await page.evaluate(js)
         await page.screenshot(path=str(out / f"header-buttons-{tag}.png"), clip={"x": 0, "y": 0, "width": g["w"], "height": 140})
         if wrap:
-            check(failures, g["wrapped"], f"{tag}: the buttons wrapped to a line of their own at {g['w']} px (else this arm proves nothing): {g}")
+            check(failures, g["alone"], f"{tag}: the buttons wrapped to a line of their own at {g['w']} px (else this arm proves nothing): {g}")
+        elif wide:
+            check(failures, g["oneLine"], f"{tag}: at {g['w']} px the buttons are on the first line: {g}")
         side, bell = g["side"], g["bell"]
         check(failures, side is not None and abs(side["right"] - g["right"]) <= 1,
               f"{tag}: パネルを閉じる ends at the header's right edge ({g['right']}): {side}")
@@ -223,7 +230,7 @@ async def run_usage(pw, out, failures):
         await page.evaluate("() => window.__dbg.setClock(null)")
         await wait(page, "() => window.__dbg.usage()[0].note === ''", label="fresh again")
         await chips_hold(page, "light", 1440)
-        await buttons_right(page, "wide-light")
+        await buttons_right(page, "wide-light", wide=True)
         await buttons_right(page, "wrap-light", wrap=True)
         await chips_hold(page, "wrap-light", page.viewport_size["width"])
         await page.set_viewport_size(DESKTOP["viewport"])
@@ -242,7 +249,7 @@ async def run_usage(pw, out, failures):
         check(failures, dark[0]["num"] == dark[0]["pc"] and 50 < hue(dark[0]["num"]) < 90, f"dark: the same hue rule: {dark}")
         await page.screenshot(path=str(out / "header-dark.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
         await chips_hold(page, "dark", 1440)
-        await buttons_right(page, "wide-dark")
+        await buttons_right(page, "wide-dark", wide=True)
         await buttons_right(page, "wrap-dark", wrap=True)
         await chips_hold(page, "wrap-dark", page.viewport_size["width"])
         await page.set_viewport_size(DESKTOP["viewport"])
