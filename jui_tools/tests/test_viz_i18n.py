@@ -388,6 +388,14 @@ def test_a_mark_takes_the_tables_words_html_escaped():
                                             '&lt;b&gt; run <code>jui viz</code> now</p>')
 
 
+def test_only_a_tlhtml_mark_draws_code():
+    """A backtick in a {{tl:…}} mark's words stays a backtick: only {{tlhtml:…}} draws `…` as <code> (the words of
+    index.html's text and attributes are plain)."""
+    words = i18n.Strings(language="en", table={"a.t": "run `jui viz` now"})
+    assert i18n.fill_words('<p title="{{tl:a.t}}x{{/tl}}">{{tl:a.t}}x{{/tl}} {{tlhtml:a.t}}x{{/tl}}</p>', words) == (
+        '<p title="run `jui viz` now">run `jui viz` now run <code>jui viz</code> now</p>')
+
+
 def test_a_key_the_table_lacks_keeps_the_words_as_written():
     words = i18n.Strings(language="en", table={})
     assert i18n.fill_words('<p title="{{tl:no.key}}題 &amp; 名{{/tl}}">{{tl:no.key}}元の文{{/tl}}</p>', words) \
