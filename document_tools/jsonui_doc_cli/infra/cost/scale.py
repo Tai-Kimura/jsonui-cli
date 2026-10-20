@@ -15,7 +15,9 @@ def wanted(demand: float, per_instance: float, target: float) -> int:
 
 
 def lag_hours(delay_min: int | None) -> int:
-    return int(round((delay_min or 0) / 60))
+    """A delay in whole hours, half an hour and up rounding up (30 -> 1, 89 -> 1, 90 -> 2); round() would go to the
+    even hour (30 -> 0, 150 -> 2)."""
+    return int((delay_min or 0) / 60 + 0.5)
 
 
 def autoscale(demand: list[float], per_instance: float | list[float], target: float, mins: list[int], maxs: list[int],

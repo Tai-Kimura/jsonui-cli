@@ -122,6 +122,10 @@ def test_autoscale_clamps_marks_max_lags_and_steps():
     assert counts == [2, 1]                 # one instance takes more on a bigger step
 
 
+def test_a_delay_rounds_half_an_hour_up():
+    assert [scale.lag_hours(m) for m in (None, 0, 29, 30, 89, 90, 149, 150, 210)] == [0, 0, 0, 1, 1, 2, 2, 3, 4]
+
+
 LADDER = [{"sku": "s", "amount": 100}, {"sku": "m", "amount": 200}, {"sku": "l", "amount": 400}]
 
 
@@ -285,6 +289,17 @@ def test_a_shared_free_amount_is_used_once_across_nodes():
     loads = [{"node": f"f{i}", "quantities": {"requests": _per_hour(600_000)}} for i in (1, 2)]
     _result, totals = _run(nodes, loads)
     assert totals["usd"] == pytest.approx(200_000 * 0.2 / 1_000_000)
+
+
+def test_a_shared_free_amount_goes_to_the_first_node_in_the_models_order():
+    """The month's totals run node by node in the model's order: of two functions of 1 million requests each, the
+    first takes the free million (it pays 0.0) and the second pays for all of its own (0.2)."""
+    nodes = [{"id": n, "category": "compute.function", "provider": "aws", "service": "lambda", "region": "us-east-1"}
+             for n in ("a", "b")]
+    loads = [{"node": n, "quantities": {"requests": _per_hour(1_000_000)}} for n in ("a", "b")]
+    result, _totals = _run(nodes, loads)
+    assert round(_meter_usd(result, "a", "requests"), 6) == 0.0
+    assert round(_meter_usd(result, "b", "requests"), 6) == 0.2
 
 
 def test_lines_carry_the_rate_as_written_and_the_price_trace():
