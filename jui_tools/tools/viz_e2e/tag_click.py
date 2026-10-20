@@ -193,7 +193,9 @@ async def run_tag_click(pw, out, failures, jt=None):
         check(failures, all(int(b) < int(z["room"]) for b in z["bots"] if b != "auto"), f"rooms' signs over the robots' tags: {z}")
 
         # a drag from empty space turns the camera and selects nothing
-        async def drag(label, x, y):
+        # rid: the drag starts on that robot's tag, read again once the camera is at rest (the tag moves with the camera;
+        # dd's mutation N1, 10-20: the press read before the rest landed on the bare canvas, so no tag ever had it)
+        async def drag(label, x, y, rid=None):
             await page.mouse.move(x, y)
             still = 1e9
             for _ in range(20):   # the camera at rest first (the damping of an earlier drag runs on for a while)
@@ -203,7 +205,14 @@ async def run_tag_click(pw, out, failures, jt=None):
                 still = max(abs(a - b) for a, b in zip(c0, c1))
                 if still < 0.001:
                     break
+            if rid:
+                p = await page.evaluate(PART_JS, [rid, ".pill"])
+                x, y = p["x"], p["y"]
+                await page.mouse.move(x, y)
+            await page.evaluate("""() => { window.__pressOn = undefined; window.addEventListener('pointerdown', (e) => {
+              const o = e.target.closest && e.target.closest('[data-robot]'); window.__pressOn = o ? o.dataset.robot : null; }, { capture: true, once: true }); }""")
             await page.mouse.down()
+            press_on = await page.evaluate("() => window.__pressOn")
             for k in range(1, 9):
                 await page.mouse.move(x + 20 * k, y + 4 * k)
             await page.mouse.up()
@@ -211,7 +220,8 @@ async def run_tag_click(pw, out, failures, jt=None):
             c2 = await page.evaluate(CAM_JS)
             card = await page.evaluate(CARD_JS)
             moved = max(abs(a - b) for a, b in zip(c1, c2))
-            res[label] = {"still": still, "moved": moved, "card": card}
+            res[label] = {"still": still, "moved": moved, "card": card, "pressOn": press_on}
+            check(failures, press_on == rid, f"{label}: the press lands on {rid or 'the bare canvas'}: {press_on}")
             check(failures, still < 0.01 and moved > 0.3, f"{label}: the camera turns (still {still:.3f}, moved {moved:.3f})")
             check(failures, card["robot"] is None and not card["open"], f"{label}: selects nothing: {card}")
 
@@ -225,7 +235,7 @@ async def run_tag_click(pw, out, failures, jt=None):
         p = await page.evaluate(PART_JS, [lab[2], ".pill"])
         check(failures, p and p["owner"] == lab[2], f"the third robot's tag under the pointer for the drag: {p}")
         if p:
-            await drag("drag from a tag", p["x"], p["y"])
+            await drag("drag from a tag", p["x"], p["y"], lab[2])
         # the wheel over a tag zooms
         await settled(page, "before the wheel")
         p = await page.evaluate(PART_JS, [lab[1], ".pill"])
