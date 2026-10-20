@@ -1428,10 +1428,10 @@ def run(root: Path, out_dir: Path | None = None, to_stdout: bool = False, force:
     by_p: dict[str, int] = {}
     for n in doc["nodes"]:
         by_p[n.get("provider", "(none)")] = by_p.get(n.get("provider", "(none)"), 0) + 1
+    providers = ", ".join(f"{p} {c}" for p, c in sorted(by_p.items())) or "none"
+    unmatched = ", ".join(f"{p} {v['count']}" for p, v in rep["unmatched"].items()) or "none"
     summary = (f"seed infra: {len(doc['nodes'])} nodes, {len(doc['groups'])} groups, {len(doc['edges'])} edges "
-               f"({', '.join(f'{p} {c}' for p, c in sorted(by_p.items())) or 'none'}); "
-               f"unmatched {um} ({', '.join(f'{p} {v['count']}' for p, v in rep['unmatched'].items()) or 'none'}); "
-               f"skipped {rep['skippedCount']}")
+               f"({providers}); unmatched {um} ({unmatched}); skipped {rep['skippedCount']}")
     (err if to_stdout else echo)(summary)
     if not to_stdout:
         echo(f"seed infra: wrote {out_dir / DRAFT_NAME} and {REPORT_NAME} (a draft: move what you keep into {folder}/)")
