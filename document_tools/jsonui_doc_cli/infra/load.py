@@ -274,32 +274,38 @@ def day_shape(doc: dict, hour: dict, row_profile: str | None) -> float:
     return shape * special.get("multiplier", 1.0)
 
 
-def rule_cover(rule: dict, hour: dict, dow: str) -> float:
-    """How much of the hour (0, 0.5 or 1) the rule covers on that day."""
+def rule_covers(rule: dict, hour: dict, dow: str, half: int) -> bool:
+    """Whether the rule covers that half of the hour (0: :00-:30, 1: :30-:00) on that day. Rules start and end on the
+    hour or the half hour, so a half is covered whole or not at all."""
     if dow not in rule["days"] and not (hour["holiday"] and "holiday" in rule["days"]):
-        return 0.0
-    start, end = hour["hour"] * 60, hour["hour"] * 60 + 60
-    return max(0, min(end, _minutes(rule["to"])) - max(start, _minutes(rule["from"]))) / 60
+        return False
+    start = hour["hour"] * 60 + half * 30
+    return _minutes(rule["from"]) <= start and start + 30 <= _minutes(rule["to"])
+
+
+def half_hour(sch: dict, hour: dict, dow: str, half: int) -> dict:
+    """What the schedule says for one half of the hour: the default count, then each rule covering it in order (a
+    later rule wins): its count (and as "fixed"), min, max, sku."""
+    out: dict = {"count": float(sch.get("default", 1))}
+    for rule in sch.get("rules", []):
+        if rule_covers(rule, hour, dow, half):
+            out.update({k: rule[k] for k in ("min", "max", "sku") if k in rule})
+            if "count" in rule:
+                out["count"] = float(rule["count"])
+                out["fixed"] = rule["count"]
+    return out
 
 
 def schedule_hour(sch: dict, hour: dict) -> dict:
-    """One hour of a schedule: {count} (instance-hours, a half-covered hour weighted), and the min, max and sku of the
-    rules covering at least half of it (a later rule wins). A holiday "off" is 0; "weekend" reads as a sunday."""
+    """One hour of a schedule: {count} — the two halves' counts averaged (instance-hours) — and the min, max, sku and
+    fixed count of a rule covering at least half of it (each half decided on its own; when the halves differ, the
+    second's, as the hour ends in it). A holiday "off" is 0; "weekend" reads as a sunday."""
     if hour["holiday"] and sch.get("holidays") == "off":
         return {"count": 0.0, "min": 0, "max": 0, "off": True}
     dow = "sun" if hour["holiday"] and sch.get("holidays") == "weekend" else hour["dow"]
-    count, out = float(sch.get("default", 1)), {}
-    for rule in sch.get("rules", []):
-        cover = rule_cover(rule, hour, dow)
-        if not cover:
-            continue
-        if "count" in rule:
-            count = count * (1 - cover) + rule["count"] * cover
-        if cover >= 0.5:
-            out.update({k: rule[k] for k in ("min", "max", "sku") if k in rule})
-            if "count" in rule:
-                out["fixed"] = rule["count"]
-    out["count"] = count
+    first, second = half_hour(sch, hour, dow, 0), half_hour(sch, hour, dow, 1)
+    out = {k: v for k, v in {**first, **second}.items() if k != "count"}
+    out["count"] = (first["count"] + second["count"]) / 2
     return out
 
 

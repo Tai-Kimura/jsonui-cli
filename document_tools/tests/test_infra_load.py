@@ -256,6 +256,25 @@ def test_a_schedule_hour_by_hour():
     assert L.schedule_hour(hol, hours[("2026-11-03", 23)])["count"] == 0 and L.schedule_hour(hol, hours[("2026-11-04", 23)])["count"] == 1
 
 
+def test_two_rules_each_covering_half_an_hour_count_the_same_in_either_order():
+    """サポート7's verification of L-A: 8:00-9:30 at 2 and 9:30-18:00 at 4 is 3.0 instance-hours at 9, whatever the order."""
+    hour = next(h for h in L.month_hours({"month": "2026-11"}) if h["date"] == "2026-11-02" and h["hour"] == 9)
+    a = {"days": WEEKDAYS, "from": "08:00", "to": "09:30", "count": 2}
+    b = {"days": WEEKDAYS, "from": "09:30", "to": "18:00", "count": 4}
+    assert L.schedule_hour({"default": 1, "rules": [a, b]}, hour)["count"] == 3.0
+    assert L.schedule_hour({"default": 1, "rules": [b, a]}, hour)["count"] == 3.0
+    # a rule over exactly half the hour gives that hour its min and max (and sku); the half it does not cover keeps none
+    half = {"default": 1, "rules": [{"days": WEEKDAYS, "from": "09:00", "to": "09:30", "min": 3, "max": 6, "sku": "a.xlarge"}]}
+    assert L.schedule_hour(half, hour) == {"count": 1.0, "min": 3, "max": 6, "sku": "a.xlarge"}
+    late = {"default": 1, "rules": [{"days": WEEKDAYS, "from": "09:30", "to": "10:00", "min": 3}]}
+    assert L.schedule_hour(late, hour) == {"count": 1.0, "min": 3}
+    assert L.schedule_hour(late, dict(hour, hour=10)) == {"count": 1.0}
+    # the halves differ: the second's (the hour ends in it)
+    both = {"default": 1, "rules": [{"days": WEEKDAYS, "from": "09:00", "to": "09:30", "max": 6},
+                                    {"days": WEEKDAYS, "from": "09:30", "to": "10:00", "max": 8}]}
+    assert L.schedule_hour(both, hour)["max"] == 8
+
+
 def test_quantities_per_hour_with_the_per_they_were_written_in(tmp_path):
     doc = _scenario(loads=[{"node": "cdn", "quantities": {"requests": {"amount": 100, "per": "second"},
                                                           "cdn_egress_gb": {"by_zone": {"japan": 24}, "per": "day"}}},
@@ -448,6 +467,14 @@ resource "google_storage_bucket" "redis" {
 def _seeded(root: Path) -> dict:
     doc, _rep = S.draft(root)
     return {tuple(n.get("iac") or []): n for n in doc["nodes"]}
+
+
+def test_a_name_drafted_first_never_takes_a_declared_id():
+    """サポート7's verification of L-A: another node named "web" drafted before the declared one does not take its id."""
+    d = S.Draft(Path("."), declared=[("aws_instance.b", "web")])
+    assert d.new_id("web") == "web-2"
+    assert d.declared_id("aws_instance.b") == "web"
+    assert d.declared_id("aws_instance.b") is None          # taken now: a second resource at the address gets a new one
 
 
 def test_seed_keeps_a_declared_nodes_id_and_reads_its_region(tmp_path):
