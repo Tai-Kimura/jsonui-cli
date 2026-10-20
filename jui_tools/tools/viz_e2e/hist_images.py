@@ -221,6 +221,27 @@ async def run_hist_images(pw, out, failures):
         await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').scrollIntoView({ block: 'center' })")
         await page.screenshot(path=str(out / "closed-row-mark.png"))
 
+        await page.close()
+        for scheme in ("light", "dark"):
+            ph = await st.page(f"hist-images-phone-{scheme}", **dict(PHONE, color_scheme=scheme))
+            await st.open_a(ph)
+            await ph.evaluate(INTO_VIEW)
+            await ph.wait_for_timeout(1200)
+            await ph.screenshot(path=str(out / f"thumbs-390-{scheme}.png"))
+            if await ph.locator("[data-rb-hist] .h-thumb").count():
+                await ph.click("[data-rb-hist] .h-thumb >> nth=0")
+                await wait(ph, LIGHT_READY, label="the large view (phone)")
+                lv = res[f"phone-{scheme}"] = await ph.evaluate(LIGHT)
+                fits = await ph.evaluate("() => { const i = document.querySelector('.h-light img').getBoundingClientRect(); return i.left >= 0 && i.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; }")
+                check(failures, lv and lv["w"] == 320 and fits, f"390 px {scheme}: the large view fits: {lv} {fits}")
+                await ph.screenshot(path=str(out / f"large-390-{scheme}.png"))
+            else:
+                check(failures, False, f"390 px {scheme}: thumbnails")
+            await ph.close()
+
+        # ---- further back (last: the 45 lines below push A's first words out of the 40 the other parts find A by)
+        page = await st.page("hist-images-back")
+        await st.open_a(page)
         # ---- further back (2.3.12, ticket 2026-10-21-jui-viz-hist-tab-cannot-scroll-back; the requester's ruling of 10-21):
         # a call stopped by auto mode, then 45 more lines: everything before them leaves the 40 shown. 「もっと前を読む」
         # brings the 40 before back above (the place kept), the stopped call's row says 止められた with the reason, no row
@@ -263,22 +284,6 @@ async def run_hist_images(pw, out, failures):
         check(failures, why == "[Git Destructive]", f"opened, the row says why: {why!r}")
         await page.screenshot(path=str(out / "denied-row.png"))
         await page.close()
-        for scheme in ("light", "dark"):
-            ph = await st.page(f"hist-images-phone-{scheme}", **dict(PHONE, color_scheme=scheme))
-            await st.open_a(ph)
-            await ph.evaluate(INTO_VIEW)
-            await ph.wait_for_timeout(1200)
-            await ph.screenshot(path=str(out / f"thumbs-390-{scheme}.png"))
-            if await ph.locator("[data-rb-hist] .h-thumb").count():
-                await ph.click("[data-rb-hist] .h-thumb >> nth=0")
-                await wait(ph, LIGHT_READY, label="the large view (phone)")
-                lv = res[f"phone-{scheme}"] = await ph.evaluate(LIGHT)
-                fits = await ph.evaluate("() => { const i = document.querySelector('.h-light img').getBoundingClientRect(); return i.left >= 0 && i.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; }")
-                check(failures, lv and lv["w"] == 320 and fits, f"390 px {scheme}: the large view fits: {lv} {fits}")
-                await ph.screenshot(path=str(out / f"large-390-{scheme}.png"))
-            else:
-                check(failures, False, f"390 px {scheme}: thumbnails")
-            await ph.close()
     except Exception as e:
         failures.append(f"hist-images: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
