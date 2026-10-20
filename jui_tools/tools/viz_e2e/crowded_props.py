@@ -276,7 +276,7 @@ async def run_crowded_props(pw, out, failures):
         c0 = res["pinBell"] = await page.evaluate("(p) => window.__dbg.tagPinsOver(p)", at["bell"])
         if rack_box and bell_box:
             at["rack"] = [round((rack_box[0] + rack_box[1]) / 2), round(rack_box[2] + 8)]   # the rack's top, above the bell
-        cr = res["pinRack"] = await page.evaluate("([p, a]) => window.__dbg.tagPinsOver(p, a)", [at["rack"], [bell_box] if bell_box else []])
+        cr = res["pinRack"] = await page.evaluate("([p, a, w]) => window.__dbg.tagPinsOver(p, a, w)", [at["rack"], [bell_box] if bell_box else [], [c0["best"]] if c0 and c0["best"] else []])
         c1 = res["pinDoor"] = await page.evaluate("(p) => window.__dbg.tagPinsOver(p)", at["door"])
         check(failures, c0 and c0["best"] and cr and cr["best"], f"spots whose tags hold the bell's point, and the rack's clear of the bell: {c0} {cr} boxes {res['boxes']}")
         # the door is on the left wall: measured 23:35, no desk's tag holds its point (0 spots), so no seated robot's tag
