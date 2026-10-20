@@ -475,12 +475,22 @@ async def run_server_room(pw, out, failures):
         res["linesFar"] = (await page.evaluate("() => window.__dbg.srLines()"))["far"]
         await page.select_option("#sr-lines", "all")
         res["linesFarAll"] = (await page.evaluate("() => window.__dbg.srLines()"))["far"]
+        # the chosen node's lines only: far, the crossing bundles go too (Z2, dd's check 20:30:51) — on a layer that
+        # draws at least one, so that "not seen" is not an empty layer's
+        await page.select_option("#sr-lines", "focus")
+        await until(page, "() => window.__dbg.srLines().mode === 'focus'", "far, the chosen node's lines only")
+        res["linesFarFocus"] = (await page.evaluate("() => window.__dbg.srLines()"))["far"]
+        await page.select_option("#sr-lines", "all")
         await page.uncheck("#sr-fold")
         await page.click("#sr-fit")
         lr, lf, la = res["linesRebuilt"], res["linesFar"], res["linesFarAll"]
         check(failures, not lr["plainVisible"] and lr["crossVisible"], f"the lines switch holds through a rebuild: {lr}")
         check(failures, not lf["plainVisible"] and lf["crossVisible"] and la["plainVisible"] and la["plainOpacity"] <= 0.3 and la["crossOpacity"] <= 0.6,
               f"far, the bundles are faint and follow the switch: {lf} / {la}")
+        lff = res["linesFarFocus"]
+        check(failures, la["crossCount"] >= 1 and la["crossVisible"], f"far, at least one crossing bundle drawn and seen with all lines (else the next arm proves nothing): {la}")
+        check(failures, not lff["crossVisible"] and not lff["plainVisible"] and lff["crossCount"] == la["crossCount"],
+              f"far, the chosen node's lines only: the crossing bundles hidden, not removed: {lff} / {la}")
         d, c = ln["default"], ln["chosen"]
         check(failures, d["plainOpacity"] <= 0.3 and d["focus"] == 0 and d["plainVisible"] and d["crossVisible"], f"lines faint by default, none strong: {d}")
         check(failures, want > 0 and c["focus"] == want, f"a chosen node's cables drawn strong, all of them: {c}")

@@ -30,7 +30,9 @@ window.__dbg = {
     return { dark: V.dark, bg: `#${V.scene.background.getHexString()}`, floors: [...new Set(V.floorColors)], label: cs ? [cs.color, cs.backgroundColor] : null }; },
   srLines: () => { const V = SR.view; return V ? { mode: SR.lines, plainOpacity: V.plainLines.material.opacity, crossOpacity: V.crossLines.material.opacity,
     plainVisible: V.plainLines.visible, crossVisible: V.crossLines.visible,
-    far: { plainOpacity: V.farPlain.material.opacity, crossOpacity: V.farCross.material.opacity, plainVisible: V.farPlain.visible, crossVisible: V.farCross.visible },
+    far: { plainOpacity: V.farPlain.material.opacity, crossOpacity: V.farCross.material.opacity, plainVisible: V.farPlain.visible, crossVisible: V.farCross.visible,
+      // how many bundles each layer draws (two points a line): a "not seen" on an empty layer would prove nothing
+      plainCount: (V.farPlain.geometry.attributes.position || { count: 0 }).count / 2, crossCount: (V.farCross.geometry.attributes.position || { count: 0 }).count / 2 },
     boardSelected: !!document.querySelector('#sr-board .sr-sel'), focus: V.focusCount || 0, selected: SR.selected } : null; },
   srSelect: (id) => { srSelect(id); return SR.view ? SR.view.focusCount || 0 : null; },
   srEdgesOf: (id) => (SR.view ? SR.view.L.edges.filter((e) => e.from === id || e.to === id).length : null),
