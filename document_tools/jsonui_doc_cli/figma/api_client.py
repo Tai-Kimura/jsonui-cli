@@ -93,6 +93,30 @@ class FigmaAPIError(Exception):
         self.retry_after = retry_after
 
 
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """No redirect is followed, to any host (the same one included): urllib carries a request's own headers to the
+    next one, so following would send the token wherever the answer points (ticket
+    2026-10-21-figma-token-follows-redirects). The Figma API does not redirect these calls; a redirect is a failure."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        u = urllib.parse.urlsplit(newurl)
+        raise FigmaAPIError(f"Figma API answered {code}, a redirect to {u.scheme}://{u.hostname} — not followed (the "
+                            f"token is sent to the Figma API only)", status_code=code)
+
+
+def opener(*lower: urllib.request.BaseHandler):
+    """The opener of the calls that carry the token: no redirects; ``lower`` is the arms' stand-in for the network."""
+    return urllib.request.build_opener(_NoRedirects, *lower).open
+
+
+def _open(req: urllib.request.Request, timeout: int):
+    """Open a request that carries X-Figma-Token: only to the Figma API, and following no redirect."""
+    if not req.full_url.startswith(FIGMA_API_BASE + "/"):
+        raise FigmaAPIError(f"not sent: {urllib.parse.urlsplit(req.full_url).hostname} is not the Figma API "
+                            f"({FIGMA_API_BASE})")
+    return opener()(req, timeout=timeout)
+
+
 def _parse_retry_after(http_error: urllib.error.HTTPError) -> Optional[int]:
     """Extract Retry-After seconds from HTTP 429 response header."""
     raw = http_error.headers.get("Retry-After")
@@ -220,7 +244,7 @@ def fetch_file(file_key: str, token: str, depth: Optional[int] = None, timeout: 
 
     spinner = _Spinner("Fetching from Figma API").start()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        with _open(req, timeout) as response:
             raw = response.read()
             spinner.stop("done")
             return json.loads(raw)
@@ -306,7 +330,7 @@ def fetch_nodes(
 
     spinner = _Spinner("Fetching nodes from Figma API").start()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        with _open(req, timeout) as response:
             raw = response.read()
             spinner.stop("done")
             return json.loads(raw)
@@ -360,7 +384,7 @@ def fetch_file_images(
 
     spinner = _Spinner("Fetching image fill URLs").start()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        with _open(req, timeout) as response:
             raw = response.read()
             spinner.stop("done")
             data = json.loads(raw)
@@ -448,7 +472,7 @@ def fetch_image_renders(
         for retry in range(MAX_RETRIES):
             try:
                 last_request_time = time.monotonic()
-                with urllib.request.urlopen(req, timeout=timeout) as response:
+                with _open(req, timeout) as response:
                     raw = response.read()
                     spinner.stop("done")
                     data = json.loads(raw)
