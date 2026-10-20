@@ -7,7 +7,9 @@ process, the last Bash command naming it (30 minutes).
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -218,3 +220,49 @@ def test_a_running_test_of_a_session_that_ended_names_nobody(tmp_path):
     world.apply_devices([SIM, EMU])   # the next device scan (every 10 s) puts the slice right
     world.publish()
     assert _used(state)[UDID] is None
+
+
+# ---------------------------------------------------------------- the page: a push of the load alone rebuilds nothing
+# Ticket 2026-10-21-jui-viz-device-panel-breaks-hist-wide-and-gitbox-e2e: liveApply rebuilt the whole scene on every
+# slice push, and the machine slice comes every 5 s. Only a push made of page-only slices skips the rebuild; one that
+# also carries another slice (sessions …) still rebuilds — the independent check's DV2 (`every` read as `some`) passed
+# every e2e suite, so the line is held here: liveApply and PAGE_ONLY_SLICES cut out of 30-source-live.js, run in node
+# with the rebuilds counted.
+def _live_apply_rebuilds(pushes: list) -> list:
+    import re
+    import shutil
+    node = shutil.which("node")
+    assert node, "node is needed (the jui_tools job has it)"
+    src = (Path(__file__).resolve().parents[1] / "jui_cli" / "viz" / "web" / "js" / "30-source-live.js").read_text(encoding="utf-8")
+    const = re.search(r"\nconst PAGE_ONLY_SLICES = [^\n]*\n", src).group(0)
+    start = src.index("\nfunction liveApply(")
+    end = src.index("\n}\n", start) + 3
+    stubs = """
+let rebuilds = 0;
+const LIVE = { slices: {} }, SOURCE = { layoutRev: 0 }, UI = { project: 'all' }, PROJECT = {};
+const count = () => { rebuilds += 1; };
+const notifySettingsShow = () => {}, layoutSignature = () => '', paintScopeButtons = () => {}, vizNow = () => 0;
+const rebuildRooms = count, rebuildRobots = () => {}, rebuildSpecs = () => {}, roomFlags = () => {}, rebuildSessions = () => {},
+  rebuildTasks = () => {}, rebuildPerms = () => {}, rebuildQuestions = () => {}, rebuildDenials = () => {}, layoutRooms = () => {},
+  placeRobots = () => {}, renderUsage = () => {};
+"""
+    calls = "".join(f"rebuilds = 0; liveApply({json.dumps(c)}, {str(r).lower()}); out.push([rebuilds, Object.keys(LIVE.slices).sort()]);\n"
+                    for c, r in pushes)
+    script = stubs + const + src[start:end] + "\nconst out = [];\n" + calls + "process.stdout.write(JSON.stringify(out));"
+    got = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    assert got.returncode == 0, got.stderr
+    return json.loads(got.stdout)
+
+
+def test_a_push_of_page_only_slices_alone_rebuilds_nothing_and_any_other_slice_still_rebuilds():
+    got = _live_apply_rebuilds([
+        ({"machine": {"level": "ok"}}, False),                         # the load alone: stored, nothing rebuilt
+        ({"cloudPrices": {"on": True}}, False),
+        ({"machine": {"level": "busy"}, "cloudPrices": {}}, False),    # page-only slices only: still nothing
+        ({"machine": {"level": "high"}, "sessions": []}, False),        # with another slice: the scene is rebuilt
+        ({"sessions": []}, False),
+        ({"machine": {"level": "ok"}}, True),                          # a snapshot (replace) always rebuilds
+        ({}, False),
+    ])
+    assert [n for n, _ in got] == [0, 0, 0, 1, 1, 1, 1], got
+    assert "machine" in got[0][1] and "sessions" in got[3][1]          # stored either way

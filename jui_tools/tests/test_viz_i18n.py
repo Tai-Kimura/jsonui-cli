@@ -28,7 +28,7 @@ MOVED = {"05-i18n.js"}
 #: Not moved yet (the ticket's stages 1–3). Each is counted, not held: the count is what is left to move.
 NOT_YET = {
     "10-robot-core.js", "20-core.js", "25-net.js", "30-source-demo.js", "30-source-live.js", "31-talk-demo-data.js",
-    "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "54-bills.js", "55-history.js",
+    "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js",
     "56-server-room.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js", "80-dbg.js",
 }
 
