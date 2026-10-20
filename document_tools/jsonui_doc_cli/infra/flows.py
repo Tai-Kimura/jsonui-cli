@@ -16,6 +16,8 @@ or ``from`` and ``to``), so a load can be drawn from a flow later. One step is o
 
 Every path is walked (each (step, position) once), so a step reached by two paths must be reached at one node. A flow
 with an error is left out, the file and the other flows stay; a problem names the place and the kind, never a value.
+A flow is drawn in the environments that draw its whole way, each by itself: when it names its environments, a step
+missing in one of them is an error (flow.env.partial); when it names none, it is drawn in those its whole way is in.
 A goto whose flow starts elsewhere is a warning (the page jumps there). A loop the flows close by their defaults alone
 would play forever by itself: an error on the flows in it.
 """
@@ -228,11 +230,28 @@ def resolve(flows: list[tuple[str, int, dict]], nodes: dict[str, dict], edges: l
             continue
         start = nodes.get(f["start"])
         envs = [e for e in want if start is not None and e in start["environments"]]
-        F = _Flow(f, name, path, nodes, edges, envs)
-        if start is None or not envs:
-            F.err(f"{path}/start", "flow.node.missing", f"starts at a node that is not drawn with this flow: {f['start']!r}")
-        else:
+
+        def walked(envs: list[str]) -> _Flow:
+            F = _Flow(f, name, path, nodes, edges, envs)
             F.walk(f["steps"], 0, f["start"], f"{path}/steps", [], 0, True, None)
+            return F
+        if start is None or not envs:
+            F = _Flow(f, name, path, nodes, edges, envs)
+            F.err(f"{path}/start", "flow.node.missing", f"starts at a node that is not drawn with this flow: {f['start']!r}")
+            checked.append((F, f))
+            continue
+        # its whole way in each environment by itself: a node or an edge drawn in another one does not carry it there
+        whole = [e for e in envs if not walked([e]).wrong]
+        written = bool(f.get("environments"))
+        if whole and (not written or whole == want):
+            F = walked(whole)               # written: every one it names; not written: those its way is whole in
+        else:
+            F = walked(envs)                # what is wrong with the way itself is said as before
+            if not F.wrong:
+                lacking = [e for e in want if e not in whole]
+                F.err(f"{path}/environments" if written else path, "flow.env.partial",
+                      f"its way is not whole in: {', '.join(lacking)}" if written
+                      else "no one environment draws its whole way: its nodes and edges are drawn in different ones")
         checked.append((F, f))
     starts = {f["id"]: f["start"] for F, f in checked if not F.wrong}
     for F, f in checked:

@@ -44,6 +44,7 @@ FLOW_JA = {"flow.node.missing": "が、この flow と一緒に描かれない n
            "flow.goto.missing": "の goto が、描かれない flow を指しています",
            "flow.goto.jump": "の goto の先は、別の node から始まります（画面では跳びます）",
            "flow.default_cycle": "は、既定だけで輪になり、ひとりでに流すと終わりません",
+           "flow.env.partial": "の道筋が、そろわない環境があります（環境ごとに、通る node と辺が全部描かれていること）",
            "flow.id.duplicate": "の id が、ほかの flow と重なっています",
            "flow.schedule.trigger": "の schedule は、trigger が schedule の時だけ書けます"}
 

@@ -231,6 +231,46 @@ def test_an_edge_only_in_another_environment_does_not_carry_the_flow():
     assert _merge(f, base=base)[1] == []
 
 
+def _with_pay():
+    """A payment service drawn in prod only, reached from the api; the edges between api and cache split by environment."""
+    base = copy.deepcopy(BASE)
+    base["nodes"].append({"id": "pay", "category": "external.saas", "environments": ["prod"]})
+    base["edges"] += [{"id": "e-api-pay", "from": "api", "to": "pay"},
+                      {"id": "e-cache-db-prod", "from": "cache", "to": "db", "environments": ["prod"]},
+                      {"id": "e-db-bucket-stg", "from": "db", "to": "bucket", "environments": ["stg"]}]
+    return base
+
+
+BUY = {"id": "buy", "start": "browser", "steps": [{"edge": "e-browser-api"}, {"edge": "e-api-pay", "action": "request"}]}
+
+
+def test_a_flow_naming_its_environments_holds_together_in_each_of_them():
+    """Asked by a backend writing staging flows: a step drawn in prod only does not carry a flow that names stg too
+    (it was taken as soon as one of the flow's environments drew it)."""
+    base = _with_pay()
+    model, problems = _merge({**BUY, "environments": ["prod", "stg"]}, base=base)
+    assert model["flows"] == [] and _codes(problems) == [("flow.env.partial", "/flows/0/environments")]
+    assert "stg" in problems[0]["message"] and "prod" not in problems[0]["message"]
+    model, problems = _merge({**BUY, "environments": ["prod"]}, base=base)
+    assert problems == [] and model["flows"][0]["environments"] == ["prod"]
+    # its start not drawn in one it names: that one is not dropped quietly either
+    late = {"id": "late", "start": "stg-only", "environments": ["prod", "stg"], "steps": [{"node": "stg-only"}]}
+    assert _codes(_merge(late, base=base)[1]) == [("flow.env.partial", "/flows/0/environments")]
+
+
+def test_a_flow_naming_no_environment_is_drawn_where_its_whole_way_is():
+    base = _with_pay()
+    model, problems = _merge(BUY, base=base)
+    assert problems == [] and model["flows"][0]["environments"] == ["prod"]
+    # a way whose steps are each drawn somewhere, but in no one environment all of them
+    mixed = {"id": "mixed", "start": "api", "steps": [{"from": "api", "to": "cache"}, {"edge": "e-cache-db-prod"},
+                                                      {"edge": "e-db-bucket-stg"}]}
+    model, problems = _merge(mixed, base=base)
+    assert model["flows"] == [] and _codes(problems) == [("flow.env.partial", "/flows/0")]
+    # what is wrong with the way itself is said as before, not as the environments
+    assert _codes(_merge({**BUY, "steps": [{"from": "browser", "to": "db"}]}, base=base)[1]) == [("flow.edge.missing", "/flows/0/steps/0")]
+
+
 def test_a_loop_whose_flows_also_go_to_a_flow_that_ends_is_refused_and_that_flow_kept():
     """The independent check's H2: r goes by default to s; s's two lanes go by default to r and to c (no goto). Only r
     and s are on the loop: c, reached from it and done first, stays."""
