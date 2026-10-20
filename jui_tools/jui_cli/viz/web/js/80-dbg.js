@@ -326,11 +326,12 @@ window.__dbg.camFollowGap = () => (rbState.id && zoom.zoomed ? camera.position.d
    going (robotPose), every frame, to a list the arm reads; the fixed box it fits (FOCUS_BOX) and the robot's shown meshes in its
    own space (the widest corners over the frames recorded), to check that the box holds the pose. */
 window.__dbg.camRecord = (id) => {
-  const rec = window.__camRec = { frames: [], states: new Set(), env: null };
+  const rec = window.__camRec = { frames: [], states: new Set(), env: null, rootY: [Infinity, -Infinity] };
   const inv = new THREE.Matrix4(), box = new THREE.Box3(), v = new THREE.Vector3();
   LIVE3D.afterFrame = () => {
     const R = robots.find((x) => x.def.id === id), root = R.robot.root, pose = robotPose(id);
     rec.frames.push([...camera.position.toArray(), ...viewTarget.toArray(), ...pose.p.toArray(), ...pose.t.toArray()]);
+    rec.rootY[0] = Math.min(rec.rootY[0], root.position.y); rec.rootY[1] = Math.max(rec.rootY[1], root.position.y);
     rec.states.add(`${R.robot.state}|${!!R.robot.tired}|${!!(R.robot.sweat && R.robot.sweat.visible)}|${R.robot.look || ''}`);
     root.updateMatrixWorld(true);
     inv.copy(root.matrixWorld).invert();
@@ -346,7 +347,16 @@ window.__dbg.camRecord = (id) => {
   };
   return true;
 };
-window.__dbg.camRecorded = () => { const r = window.__camRec; return r ? { frames: r.frames, states: [...r.states], env: r.env } : null; };
+window.__dbg.camRecorded = () => { const r = window.__camRec; return r ? { frames: r.frames, states: [...r.states], env: r.env, rootY: r.rootY } : null; };
+// the fixed box's width as focusExtent gives it for the focused robot, at the camera's turn and distance now (before a back-off),
+// with what the arm needs to work it out on its own: the robot's size and turn, the camera's direction and right
+window.__dbg.focusFit = () => {
+  const R = rbState.id ? robots.find((x) => x.def.id === rbState.id) : null;
+  if (!R) return null;
+  const dir = focusDir(FOCUS.az, FOCUS.el), right = new THREE.Vector3().crossVectors(dir.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
+  const e = focusExtent(R, right, dir, FOCUS.dist);
+  return { id: R.def.id, size: R.robot.size || 1, l: e.l, r: e.r, dist: FOCUS.dist, dir: dir.toArray(), right: right.toArray(), quat: R.robot.root.quaternion.toArray() };
+};
 window.__dbg.focusBox = () => JSON.parse(JSON.stringify(FOCUS_BOX));
 // background work (2.3.5): the headset, the notes and the laptop of each robot; and a pose's keystroke, sampled
 window.__dbg.bgLook = () => robots.map((R) => {

@@ -154,11 +154,14 @@ TO_END = """() => { const pane = document.querySelector('[data-rb-hist]'); pane.
 CAM_SEC = 5
 CAM_STATES = (("calm", "idle", None), ("sweat", "typing", {"heavy": ["tokens"]}), ("whistle", "typing", {"heavy": ["subagents"]}),
               ("headset-notes", "background", None), ("tired", "idle", {"tired": True}),
-              ("tired-sweat", "typing", {"heavy": ["tokens"], "tired": True}))
+              ("tired-sweat", "typing", {"heavy": ["tokens"], "tired": True}),
+              ("done-jump", "done", None))   # jumps for joy: the root itself goes up and down (rootY), the camera must not
 CAM_SHOWS = {"calm": "(x, b) => x.state === 'idle' && !x.sweat && !x.tired", "sweat": "(x, b) => x.state === 'typing' && x.sweat && x.look === 'fired'",
              "whistle": "(x, b) => x.state === 'typing' && x.sweat && x.whistle && x.armRz < -1.8",
              "headset-notes": "(x, b) => x.state === 'background' && b.headset && b.notes.length > 0",
-             "tired": "(x, b) => x.state === 'idle' && x.tired && x.antenna > 0.9", "tired-sweat": "(x, b) => x.state === 'typing' && x.tired && x.sweat"}
+             "tired": "(x, b) => x.state === 'idle' && x.tired && x.antenna > 0.9", "tired-sweat": "(x, b) => x.state === 'typing' && x.tired && x.sweat",
+             "done-jump": "(x, b) => x.state === 'done'"}
+ROOT_MOVES = 0.1   # done-jump: the root's height must go through at least this much in the 5 s (the jump is 0.15), or the arm checks nothing
 # the camera at rest after the flight: the same position for 20 frames running (a follow's lerp ends on a fixed point)
 CAM_REST = """() => new Promise((done) => { const D = window.__dbg; let last = null, n = 0, k = 0;
   const f = () => { const p = D.camera.position.toArray().join(); n = p === last ? n + 1 : 0; last = p; k += 1;
@@ -194,7 +197,11 @@ async def camera_holds_still(page, ra, failures, res):
         env = rec["env"] or {}
         r = out[name] = {"frames": len(fr), "rest": rest, "states": rec["states"], "cam": max(moved[0:3], default=None), "look": max(moved[3:6], default=None),
                          "goal": max(moved[6:12], default=None), "maxStep": max(steps, default=None),
-                         "env": {k: [round(v[0], 3), round(v[1], 3)] for k, v in env.items()}, "box": box, "margin": margin}
+                         "env": {k: [round(v[0], 3), round(v[1], 3)] for k, v in env.items()}, "box": box, "margin": margin,
+                         "rootY": [round(v, 3) for v in rec["rootY"]] if fr else None}
+        if name == "done-jump":
+            check(failures, fr and rec["rootY"][1] - rec["rootY"][0] >= ROOT_MOVES,
+                  f"{name}: the robot's root goes up and down while the camera is recorded (else this state checks nothing): {r['rootY']}")
         check(failures, len(fr) >= 5 and len(rec["states"]) == 1, f"{name}: {CAM_SEC} s recorded in one state: {r['frames']} frames, {rec['states']}")
         check(failures, fr and r["cam"] == 0 and r["look"] == 0 and r["goal"] == 0,
               f"{name}, wide: the camera holds still over {CAM_SEC} s (position, where it looks and where it is going move 0): "
@@ -204,6 +211,52 @@ async def camera_holds_still(page, ra, failures, res):
         check(failures, box and box["x0"] >= 0 and box["x1"] <= margin, f"{name}: the robot is inside the left margin: {box} margin {margin}")
     await page.evaluate("(id) => window.__dbg.force(id, null)", ra)
     await page.evaluate("([id, s]) => window.__dbg.setVisState(id, s)", [ra, "idle"])
+
+
+# A subagent is drawn at 0.8 (2.3.5): the box the camera fits shrinks with it. focusExtent's width for the focused subagent,
+# worked out here on its own from the fixed box times the robot's size, turned with it, along the camera's right (a corner
+# nearer the camera counted wider, as the page does): the two must agree.
+SUB_ID = "wide-sub-1"
+SUB_FIT = """() => { const D = window.__dbg, T = D.THREE, f = D.focusFit(), B = D.focusBox();
+  if (!f) return null;
+  const q = new T.Quaternion().fromArray(f.quat), dir = new T.Vector3().fromArray(f.dir), right = new T.Vector3().fromArray(f.right), look = new T.Vector3(0, 1.15, 0);
+  const span = (size) => { let l = 0, r = 0;
+    for (const x of B.x) for (const y of B.y) for (const z of B.z) {
+      const c = new T.Vector3(x, y, z).multiplyScalar(size).applyQuaternion(q), side = c.dot(right), depth = f.dist - c.clone().sub(look).dot(dir);
+      const d = depth > 0.1 ? side * (f.dist / depth) : side; l = Math.min(l, d); r = Math.max(r, d); }
+    return { l, r }; };
+  return { ...f, want: span(f.size), unscaled: span(1) }; }"""
+
+
+async def subagent_box_scaled(st, failures, res):
+    """Wide on a subagent (size 0.8): the box is the scaled one, and the subagent stays inside the margin."""
+    from waits import until
+    st.hook(A, CWD_A, hook_event_name="SubagentStart", agent_id=SUB_ID, agent_type="general-purpose")
+    page = await st.page("hist-wide-sub")
+    await until(page, "() => window.__dbg.robots.some((R) => R.robot.size < 1 && R.path.length === 0)", "hist-wide: the subagent seated",
+                timeout=30000, why="() => window.__dbg.robots.map((R) => [R.def.id, R.robot.size, R.path.length])")
+    await page.evaluate("() => { window.__dbg.play({ p: 0, solo: { p: 0 } }); window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); }")
+    sid = await page.evaluate("() => window.__dbg.robots.find((R) => R.robot.size < 1).def.id")
+    await page.evaluate("(id) => window.__dbg.openRobot(id)", sid)
+    await wait(page, "() => { const el = document.getElementById('rb'); return !el.hidden && !!el.querySelector('[data-rb-tab=\"history\"]'); }", label="the subagent's card")
+    if await page.evaluate("() => document.querySelector('[data-rb-tab=\"history\"]').getAttribute('aria-selected')") != "true":
+        await page.click('#rb [data-rb-tab="history"]')
+    if not await page.evaluate("() => document.getElementById('rb').classList.contains('rb-wide')"):
+        await page.click("#rb [data-rb-wide]")
+    await wait(page, "() => document.getElementById('rb').classList.contains('rb-wide')", label="the subagent's history wide")
+    await wait(page, f"() => window.__dbg.focus().id === '{sid}'", label="the camera on the subagent")
+    await wait(page, SETTLED, label="the camera's flight to the subagent")
+    await page.wait_for_timeout(800)
+    fit = res["subFit"] = await page.evaluate(SUB_FIT)
+    box = res["subBox"] = await page.evaluate(ROBOT_BOX, sid)
+    margin = (await page.evaluate(CARD))["left"]
+    check(failures, fit and abs(fit["size"] - 0.8) < 1e-6, f"subagent: the focused robot is a subagent at 0.8: {fit and fit['size']}")
+    check(failures, fit and abs(fit["want"]["r"] - fit["want"]["l"] - (fit["unscaled"]["r"] - fit["unscaled"]["l"])) > 0.1,
+          f"subagent: at 0.8 the scaled box is narrower than the full-size one by more than 0.1 (else this checks nothing): {fit}")
+    check(failures, fit and abs(fit["l"] - fit["want"]["l"]) < 1e-9 and abs(fit["r"] - fit["want"]["r"]) < 1e-9,
+          f"subagent: the camera fits the fixed box scaled by the robot's size (0.8): page {fit and [fit['l'], fit['r']]}, scaled {fit and fit['want']}, full size {fit and fit['unscaled']}")
+    check(failures, box and box["x0"] >= 0 and box["x1"] <= margin, f"subagent: wide, the subagent is inside the left margin: {box} margin {margin}")
+    await page.close()
 
 
 class Stage:
@@ -445,6 +498,7 @@ async def run_hist_wide(pw, out, failures):
             check(failures, c["titleLines"] <= 2, f"390 px {scheme}: the card's title stays readable: {c['titleLines']} lines")
             await ph.screenshot(path=str(out / f"wide-390-{scheme}.png"))
             await ph.close()
+        await subagent_box_scaled(st, failures, res)
     except Exception as e:
         failures.append(f"hist-wide: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
