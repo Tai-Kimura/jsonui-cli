@@ -243,6 +243,39 @@ def test_a_notifications_event_carries_its_type_for_the_page():
 
 
 
+
+def _input_wait(state):
+    return state.slices["sessions"][0].get("inputWaitAt")
+
+
+def test_idle_prompt_marks_the_session_waiting_for_input_until_it_moves_again():
+    """3D's 入力待ち bubble (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input): idle_prompt sets the
+    session's inputWaitAt, a mark and not a state (the robot does not wait); a Stop keeps it, the next prompt, tool, start
+    or end of the session clears it."""
+    for ends in (_hook("UserPromptSubmit", prompt="go"), _hook("PreToolUse", tool_name="Read", tool_use_id="r", tool_input={}),
+                 _hook("SessionStart", source="resume"), _hook("SessionEnd", reason="exit")):
+        world, state = _world()
+        world.apply_hook(_hook("Stop"), 1)
+        world.apply_hook(_hook("Notification", notification_type="idle_prompt", message="Claude is waiting for your input"), 5)
+        world.publish()
+        assert _input_wait(state) == 5
+        assert _states(state)["s-aaaa"] != "waiting"
+        world.apply_hook(_hook("Stop"), 6)
+        world.publish()
+        assert _input_wait(state) == 5, "a Stop is not the session moving again"
+        world.apply_hook(ends, 7)
+        world.publish()
+        assert _input_wait(state) is None, ends["hook_event_name"]
+
+
+def test_a_subagents_idle_prompt_and_other_notifications_mark_no_input_wait():
+    world, state = _world()
+    world.apply_hook(_hook("SubagentStart", agent_id="sub-1", agent_type="Explore"), 1)
+    world.apply_hook(_hook("Notification", agent_id="sub-1", agent_type="Explore", notification_type="idle_prompt", message="x"), 2)
+    world.apply_hook(_hook("Notification", notification_type="permission_prompt", message="x"), 3)
+    world.publish()
+    assert _input_wait(state) is None
+
 def test_a_busy_session_quiet_for_30_s_is_thinking_then_works_then_stops():
     """10-18 live check: thinking was idle with another act, so the page drew it asleep."""
     from jui_cli.viz.ingest import THINKING_AFTER_MS

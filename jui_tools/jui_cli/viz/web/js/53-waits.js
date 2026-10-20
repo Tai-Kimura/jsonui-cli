@@ -1,0 +1,100 @@
+/* ---------- a robot waiting on the person, told apart in 3D (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input) ----------
+   Requester: 「今こっちの返答や許可待ちになってるbotが3dの見た目でもわかるようにしてほしい。質問、許可、入力待ちでそれぞれUI用意して」
+   and 「ボットの頭に追加の吹き出し用意して、そこからボード遷移もできるといい」; answers: an input's wait may go to play (the
+   bubble goes with it), an auto mode denial is a permission's bubble, the colour is ours, the bubble opens the panel's card.
+   One robot shows one wait, permission > question > input (the panel's order):
+     * perm  — a permission prompt (state waiting, not a question) or a stopped call's card (51-denials.js): "!", amber
+     * ask   — a question (state waiting on AskUserQuestion): "?" and how many choices, violet; the lamp violet too
+     * input — the session's turn ended and nobody answered (Notification idle_prompt: the server's inputWaitAt, until it
+               moves again), on its main robot, until it is opened on this page since: "…"
+   The pose (10-robot-core.js) follows r.waitKind: perm the raised hand, ask a hand to the chin, input leaning back. The
+   bubble is a button over the tag (placeRobotTags keeps it on the tag's box), in front of everything 3D; a press opens
+   the wait's card in the panel — the question card, the permission (or the stopped call's) card — or the session's
+   talk. A press on the robot or its tag does what it did. Text 4.5:1 on each bubble, light and dark (fixed colours). */
+const WAIT = { picked: null, mark: { perm: '!', ask: '?', input: '…' }, name: { perm: '許可待ち', ask: '質問に回答待ち', input: '入力待ち' } };
+function waitKindOf(id) {
+  const st = robotState[id];
+  if (!st || !DEF[id]) return null;
+  const denied = typeof DENIALS !== 'undefined' && DENIALS.some((d) => d.who === id && d.status === 'pending');
+  if ((st.state === 'waiting' && !st.asking) || denied) return 'perm';
+  if (st.state === 'waiting' && st.asking) return 'ask';
+  if (DEF[id].kind === 'main' && SOURCE.mode === 'live') {
+    const sess = SESSIONS.find((x) => x.id === SESSION_OF[id]);
+    const since = sess ? Number(sess.inputWaitAt) || 0 : 0;
+    if (since && !((NOTIFY.opened.get(id) || 0) >= since)) return 'input';   // seen on this page since: no bubble
+  }
+  return null;
+}
+/* The question waiting for this robot (the one its bubble opens), or null. */
+const waitQuestion = (id) => (typeof QUESTIONS !== 'undefined' ? QUESTIONS.find((q) => q.who === id && q.status === 'pending') : null) || null;
+function waitText(id, kind) {
+  if (kind !== 'ask') return WAIT.mark[kind];
+  const q = waitQuestion(id), n = q && q.questions[0] && Array.isArray(q.questions[0].options) ? q.questions[0].options.length : 0;
+  return n ? `? ${n}` : '?';
+}
+/* Each frame (liveUpdateRobots / the demo's loop): the robot's wait and its bubble. */
+function waitSync(R) {
+  const kind = waitKindOf(R.def.id);
+  R.robot.waitKind = kind;
+  if (!kind) { if (R.waitEl) R.waitEl.hidden = true; return; }
+  if (!R.waitEl) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'wait-bubble'; b.dataset.waitRobot = R.def.id;
+    tagsEl.append(b);
+    R.waitEl = b;
+  }
+  const text = waitText(R.def.id, kind);
+  if (R.waitEl.dataset.waitKind !== kind) { R.waitEl.dataset.waitKind = kind; R.waitEl.title = `${WAIT.name[kind]}（押すと開く）`; }
+  if (R.waitEl.textContent !== text) R.waitEl.textContent = text;
+  R.waitEl.hidden = false;
+}
+function waitDrop(R) { if (R.waitEl) { R.waitEl.remove(); R.waitEl = null; } }
+/* A press on a bubble: the panel's card of that wait, scrolled to and focused (the side panel opened first), or the
+   session's talk. WAIT.picked says what was picked (the e2e reads it). */
+function waitOpen(id, kind) {
+  if (kind === 'input') {
+    openRobot(id, document.getElementById('scene-canvas'));
+    const until = Date.now() + 4000;
+    const talk = () => { if (rbState.id !== id) return; if (rbEl.hidden) { if (Date.now() < until) requestAnimationFrame(talk); return; } talkShow(true); WAIT.picked = { kind, id }; };
+    requestAnimationFrame(talk);
+    return;
+  }
+  if (!sideOpen) { sideOpen = true; applySide(); }
+  let el = null, card = null;
+  if (kind === 'ask') {
+    const q = waitQuestion(id);
+    card = q ? q.id : null;
+    el = q ? $('questions').querySelector(`[data-qcard="${CSS.escape(q.id)}"]`) : null;
+  } else {
+    const d = typeof DENIALS !== 'undefined' ? DENIALS.find((x) => x.who === id && x.status === 'pending') : null;
+    const p = SOURCE.mode === 'live' ? PERMS_LIVE.find((x) => x.who === id && x.status === 'pending') : null;
+    // the panel's task list: the permission's box (50-panel.js permBox), with or without its buttons (no relay: none)
+    if (p) { card = `perm:${p.id}`; const b = $('tasks').querySelector(`[data-perm-box="${CSS.escape(p.id)}"]`); el = b ? b.closest('li') : null; }
+    else if (d) { card = `denied:${d.id}`; el = $('denied').querySelector(`[data-dcard="${CSS.escape(d.id)}"]`); }
+  }
+  WAIT.picked = { kind, id, card, found: !!el };
+  if (!el) return;
+  el.scrollIntoView({ block: 'center' });
+  el.classList.add('wait-picked');
+  setTimeout(() => el.classList.remove('wait-picked'), 2400);
+  // its first control, or the card itself when it has none (answered in the terminal: no relay)
+  const first = el.querySelector('input:not([disabled]), button:not([disabled])');
+  if (first) first.focus({ preventScroll: true });
+  else { el.tabIndex = -1; el.focus({ preventScroll: true }); }
+}
+tagsEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-wait-robot]');
+  if (b) waitOpen(b.dataset.waitRobot, b.dataset.waitKind);
+});
+/* The header's chips say how many wait of each kind with the bubbles' marks (the 入力待ち chip is new). */
+function waitChips() {
+  let input = 0;
+  for (const d of ROBOT_DEFS) if (waitKindOf(d.id) === 'input') input += 1;
+  const chip = $('chip-input');
+  chip.hidden = input === 0;
+  setText(chip, `… 入力待ち ${input}`);
+}
+$('chip-input').addEventListener('click', () => {
+  const d = ROBOT_DEFS.find((x) => waitKindOf(x.id) === 'input');
+  if (d) waitOpen(d.id, 'input');
+});

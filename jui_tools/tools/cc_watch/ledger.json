@@ -289,6 +289,7 @@
     "jui_tools/jui_cli/viz/data_docs.py": "JsonUI の room の docs/api・docs/db の仕様（OpenAPI・Swagger）を document_tools で読むだけ。CLI の形は読まない",
     "jui_tools/jui_cli/viz/web/js/56-server-room.js": "サーバールームの 3D・ボード・ログ・扉のテンキー（ページの描画だけ）。サーバーの /api/infra-docs と /api/infra-icon を読むだけで、CLI・フックの形は読まない",
     "jui_tools/jui_cli/viz/infra_docs.py": "部屋の docs/infra（宣言されたインフラの構成）と部屋の中のアイコンを document_tools の infra.room で読むだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/53-waits.js": "返事待ちのロボットの 3D の印（吹き出し・ランプ・ポーズ）。サーバーの slice（state・asking・inputWaitAt）とページの札だけを読み、CLI の形は読まない。idle_prompt の形はサーバー（ingest.py、hooks の項目）の側",
     "jui_tools/jui_cli/viz/web/js/57-fulltext.js": "カード・パネルの 1 行で切れた文の全文を浮き札で見せるだけ（ページの中の DOM だけ。CLI の形を読まない）",
     "jui_tools/jui_cli/viz/web/js/58-talk.js": "トークの画面（一覧と詳細）。サーバーの talk.* の frame（talk_contract.json）だけを読み、transcript や CLI の形は読まない。msg_id などの CLI の形はサーバー（データの層）の側の項目",
     "jui_tools/jui_cli/viz/export_demo.py": "デモのページを静的に書き出すだけ（サーバーも CLI も無し）",

@@ -282,6 +282,12 @@ window.__dbg = {
   },
   towerLines: (text) => { const f = towerNameFit(makeCanvas(8, 8).getContext('2d'), text, towerBays()[0].w - 8); return [f.size, ...f.lines]; },
   openRobot: (id) => openRobot(id, document.getElementById('scene-canvas')),
+  // a robot's wait as 3D shows it (53-waits.js): its kind, lamp, pose and bubble; what a bubble's press picked
+  waitLook: (id) => { const R = robots.find((x) => x.def.id === id); if (!R) return null; const b = R.waitEl;
+    return { kind: R.robot.waitKind || null, lamp: R.robot.lampKey || null, pose: R.robot.poseName || null,
+      bubble: b && !b.hidden ? b.textContent : null, bubbleShown: !!(b && !b.hidden && b.style.visibility === 'visible') }; },
+  waitPicked: () => WAIT.picked,
+  towerStateOf: (id) => (SOURCE.mode === 'live' ? towerState(id) : null),
   // a session's main robot and a robot's project, as the page has them (tools/viz_e2e/project_switch.py)
   labelOfSession: (sid) => (typeof SESSION_UUID === 'undefined' ? null : Object.keys(SESSION_UUID).find((l) => SESSION_UUID[l] === sid) || null),
   robotProject: (id) => projectOfRobot(id) || null,

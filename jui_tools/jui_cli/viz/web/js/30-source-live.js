@@ -931,6 +931,7 @@ function rebuildSessions() {
       launch: typeof s.launch === 'string' ? s.launch : null,   // whether the CLI hands that text over (sources/launch.py)
       client: ['terminal', 'vscode', 'desktop', 'other'].includes(s.client) ? s.client : 'unknown',   // 退勤: terminal only
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
+      inputWaitAt: Number.isFinite(s.inputWaitAt) && s.inputWaitAt > 0 ? s.inputWaitAt : 0,   // 入力待ち since (53-waits.js)
       heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [],   // tokens / tool / subagents
       heavyInfo: s.heavyInfo && typeof s.heavyInfo === 'object' ? { tokensPerMin: Number(s.heavyInfo.tokensPerMin) || 0, toolSec: Number(s.heavyInfo.toolSec) || 0, subagents: Number(s.heavyInfo.subagents) || 0 } : null });   // the transcript's first record; none: not guessed
   }

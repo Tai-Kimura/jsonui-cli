@@ -735,6 +735,7 @@ function liveDropRobot(R) {
   const k = fontRedraws.indexOf(R.robot.fontRedraw); if (k >= 0) fontRedraws.splice(k, 1);
   R.tag.remove();
   if (R.bill) R.bill.remove();
+  waitDrop(R);
   if (links[R.def.id]) links[R.def.id].set(null, null, false, 0);
   robots.splice(robots.indexOf(R), 1);
 }
@@ -1145,6 +1146,7 @@ function liveUpdateRobots(nowSec, dt) {
   for (const R of [...robots]) {
     const st = robotState[R.def.id] || { state: 'idle', act: '' };
     liveTagName(R);
+    waitSync(R);   // the wait it shows over its head, and the pose and lamp of it (53-waits.js)
     liveCallTag(R, calls[R.def.id] || null);
     setRobotTired(R.robot, forced(R.robot, 'tired', R.def.kind === 'main' && isTired(sinceOf(R.def.id), now)));
     R.robot.heavy = forced(R.robot, 'heavy', heavyOf(R.def.id));   // one look per cause while it works (the robot decides when)
@@ -2342,7 +2344,24 @@ const TOWER_STATE = ['waiting', 'working', 'idle', 'idle'];   // rank 0..3 → w
 // A working room where nobody does more than think shows "thinking" (lit, its own badge and pose).
 const roomThinks = (id) => { const st = ROBOT_DEFS.filter((d) => roomOfDef(d) === id && !LIVE.leaving[d.id]).map((d) => (robotState[d.id] || {}).state);
   return st.includes('thinking') && !st.some((x) => x && !['idle', 'done', 'thinking', 'waiting'].includes(x)); };
-const towerState = (id) => { if (!id) return 'empty'; const t = TOWER_STATE[LIVE.rank[id]] || 'idle'; return t === 'working' && roomThinks(id) ? 'thinking' : t; };
+/* A room's wait as the window shows it (53-waits.js waitKindOf, the same order as the bubbles): perm > ask > input. */
+const roomWaitKind = (id) => {
+  let ask = false, input = false;
+  for (const d of ROBOT_DEFS) {
+    if (roomOfDef(d) !== id || LIVE.leaving[d.id]) continue;
+    const k = waitKindOf(d.id);
+    if (k === 'perm') return 'perm';
+    ask = ask || k === 'ask'; input = input || k === 'input';
+  }
+  return ask ? 'ask' : input ? 'input' : null;
+};
+const towerState = (id) => {
+  if (!id) return 'empty';
+  const t = TOWER_STATE[LIVE.rank[id]] || 'idle';
+  if (t === 'waiting') return roomWaitKind(id) === 'ask' ? 'asking' : 'waiting';   // a question's window apart from a permission's
+  if (t === 'idle' && roomWaitKind(id) === 'input') return 'input';               // the lights stay as they were, its own mark
+  return t === 'working' && roomThinks(id) ? 'thinking' : t;
+};
 const towerName = (id) => String(TOWER_NAMES[id] || (PROJECT[id] && PROJECT[id].name) || id || '').replace(/\/+$/, '');
 const roomOfDef = (d) => d.room || projectOfRobot(d.id);   // the live defs carry a room; the demo's come from their session
 /* A name in up to two lines that fit maxW, broken after '-', '_' or a space when it can be (not "tea-finder-ag / ent");
@@ -2396,7 +2415,9 @@ function towerFacade(F, k, P) {
     const id = ids[i], state = towerState(id), gy = WIN_TOP + BADGE;
     // the badge band: the state in words and a symbol (not only a colour)
     ctx.fillStyle = P.frame; ctx.fillRect(x, WIN_TOP, w, BADGE);
-    const badge = { working: ['▶ 作業中', P.ok, P.okBg], thinking: ['… 考え中', P.ok, P.okBg], waiting: ['! 許可待ち', P.warn, P.warnBg], idle: ['● 待機（消灯）', P.soft, P.chip], empty: ['空き', P.soft, P.panel] }[state];
+    const badge = { working: ['▶ 作業中', P.ok, P.okBg], thinking: ['… 考え中', P.ok, P.okBg], waiting: ['! 許可待ち', P.warn, P.warnBg],
+      asking: ['? 質問待ち', '#14062e', '#b48cff'], input: ['… 入力待ち', '#13233a', '#e8ecf1'],
+      idle: ['● 待機（消灯）', P.soft, P.chip], empty: ['空き', P.soft, P.panel] }[state];
     ctx.font = `700 26px ${FONT_BODY}`;
     const bwid = ctx.measureText(badge[0]).width + 26;
     ctx.fillStyle = badge[2]; ctx.beginPath(); ctx.roundRect(x + 10, WIN_TOP + 8, bwid, 36, 18); ctx.fill();
@@ -2409,7 +2430,11 @@ function towerFacade(F, k, P) {
     if (state === 'empty') {                         // no room: a dashed frame across the dark glass
       ctx.setLineDash([14, 10]); ctx.strokeStyle = P.soft; ctx.lineWidth = 4; ctx.strokeRect(x + 10, gy + 10, w - 20, WIN_BOTTOM - gy - 20); ctx.setLineDash([]);
     }
-    if (state === 'waiting') { ctx.strokeStyle = P.warn; ctx.lineWidth = 12; ctx.globalAlpha = 0.5 + 0.5 * TOWER.pulse; ctx.strokeRect(x + 6, WIN_TOP + 6, w - 12, WIN_BOTTOM - WIN_TOP - 12); ctx.globalAlpha = 1; }
+    if (state === 'waiting' || state === 'asking') {   // a frame that pulses: amber for a permission, violet for a question
+      ctx.strokeStyle = state === 'asking' ? '#b48cff' : P.warn; ctx.lineWidth = 12; ctx.globalAlpha = 0.5 + 0.5 * TOWER.pulse;
+      ctx.strokeRect(x + 6, WIN_TOP + 6, w - 12, WIN_BOTTOM - WIN_TOP - 12); ctx.globalAlpha = 1;
+    }
+    if (state === 'input') { ctx.setLineDash([18, 12]); ctx.strokeStyle = '#6b7a90'; ctx.lineWidth = 8; ctx.strokeRect(x + 6, WIN_TOP + 6, w - 12, WIN_BOTTOM - WIN_TOP - 12); ctx.setLineDash([]); }
     const play = id && SOURCE.mode === 'live' ? playRoomText(id) : '';   // a game in the room (2.3.3): its name at the window's foot
     if (play) {
       let size = 32; ctx.font = `700 ${size}px ${FONT_BODY}`;
@@ -2615,7 +2640,7 @@ function towerSync(now = performance.now()) {
   towerBuild();
   const waits = LIVE.floors.some((f) => f.some((id) => LIVE.rank[id] === 0));
   const pulse = waits && !reduceMotion ? Math.round((0.5 + 0.5 * Math.sin(now / 160)) * 4) / 4 : 1;   // a waiting window's frame
-  const sig = JSON.stringify([LIVE.floors, LIVE.rank, TOWER.floors.map((F, k) => towerFloorText(k)).map((t) => [t.working, t.waiting, t.idle]),
+  const sig = JSON.stringify([LIVE.floors, LIVE.rank, LIVE.floors.map((f) => f.map(towerState)), TOWER.floors.map((F, k) => towerFloorText(k)).map((t) => [t.working, t.waiting, t.idle]),
     SOURCE.mode === 'live' ? PLAY.list.map((G) => [G.room, G.kind, !!G.t0]) : []]);   // a game's name on its window (2.3.3)
   if (sig === TOWER.sig && pulse === TOWER.pulse) return;
   const P = towerPalette(), all = sig !== TOWER.sig;
@@ -2629,7 +2654,7 @@ function towerSync(now = performance.now()) {
 const towerTmp = { m: new THREE.Matrix4(), q: new THREE.Quaternion(), p: new THREE.Vector3(), s: new THREE.Vector3(1, 1, 1), c: new THREE.Color() };
 function towerAnimate(t, dt) {
   if (!TOWER.lights || !TOWER.actors) return;
-  const P = towerPalette(), want = { working: P.on, thinking: P.on, waiting: P.on, idle: P.off, empty: P.none };
+  const P = towerPalette(), want = { working: P.on, thinking: P.on, waiting: P.on, asking: P.on, input: P.off, idle: P.off, empty: P.none };
   const k = reduceMotion ? 1 : Math.min(1, dt * 4);
   const counts = Object.fromEntries(TOWER_POSES.map((p) => [p, 0]));
   const { m, q, p, s, c } = towerTmp;
@@ -2656,6 +2681,10 @@ function towerAnimate(t, dt) {
     } else if (bay.state === 'waiting') {
       place('raise', x(0.55), B.yBot + (still ? 0 : Math.abs(Math.sin(t * 3 + seed)) * 0.05));
       place('type', x(0.2), B.yBot);
+    } else if (bay.state === 'asking') {           // a hand to the chin over the question
+      place('think', x(0.55), B.yBot, -1, still ? 0 : Math.sin(t * 1.4 + seed) * 0.05); place('type', x(0.2), B.yBot);
+    } else if (bay.state === 'input') {            // the lights off, one figure waiting at the glass
+      place('shadow', x(0.5), B.yBot);
     } else if (bay.state === 'idle') {
       place('shadow', x(0.3), B.yBot); place('shadow', x(0.72), B.yBot, -1);
     }
@@ -2672,7 +2701,7 @@ function towerAnimate(t, dt) {
   if (flash !== !!TOWER.flash) { TOWER.flash = flash; sceneEl.style.filter = flash ? 'brightness(1.8)' : ''; }
 }
 /* The room under the pointer in the building: its full name and state, as the canvas's title. */
-const TOWER_STATE_JA = { working: '作業中', thinking: '考え中', waiting: '許可待ち', idle: '待機（消灯）', empty: '空き' };
+const TOWER_STATE_JA = { working: '作業中', thinking: '考え中', waiting: '許可待ち', asking: '質問に回答待ち', input: '入力待ち', idle: '待機（消灯）', empty: '空き' };
 function towerHover(hit) {
   const F = hit && TOWER.floors[hit.object.userData.floor];
   const bay = F && hit.uv ? F.bays.find((b) => hit.uv.x >= b.x0 && hit.uv.x <= b.x1) : null;
@@ -2807,12 +2836,15 @@ function placeRobotTags(dt = 1 / 60) {
     // the bill (54-bills.js) sits on the tag, inside the tag's box: what keeps tags apart keeps it off every tag
     const bill = !hidden && R.bill && !R.bill.hidden ? R.bill : null, btext = bill ? bill.textContent : '';
     if (bill && (!R.billSize || R.billSize.text !== btext)) R.billSize = { text: btext, w: bill.offsetWidth, h: bill.offsetHeight };
-    list.push({ R, hidden, bill, x: ((tagNdc.x + 1) / 2) * W, y: ((1 - tagNdc.y) / 2) * H, z: tagNdc.z });
+    // the wait's bubble (53-waits.js) sits over the bill, or over the tag: kept on the tag's box as the bill is
+    const wait = !hidden && R.waitEl && !R.waitEl.hidden ? R.waitEl : null, wtext = wait ? `${wait.dataset.waitKind}|${wait.textContent}` : '';
+    if (wait && (!R.waitSize || R.waitSize.text !== wtext)) R.waitSize = { text: wtext, w: wait.offsetWidth, h: wait.offsetHeight };
+    list.push({ R, hidden, bill, wait, x: ((tagNdc.x + 1) / 2) * W, y: ((1 - tagNdc.y) / 2) * H, z: tagNdc.z });
   }
   const placed = [];
   for (const it of list.filter((q) => !q.hidden).sort((a, b) => a.z - b.z)) {   // nearest first: it keeps its spot
-    const b = it.bill ? it.R.billSize : null;
-    const w = Math.max(it.R.tagSize.w, b ? b.w : 0), h = it.R.tagSize.h + (b ? b.h + BILL.gap + BILL.rise : 0);
+    const b = it.bill ? it.R.billSize : null, wb = it.wait ? it.R.waitSize : null;
+    const w = Math.max(it.R.tagSize.w, b ? b.w : 0, wb ? wb.w : 0), h = it.R.tagSize.h + (b ? b.h + BILL.gap + BILL.rise : 0) + (wb ? wb.h + BILL.gap : 0);
     const x0 = it.x - w / 2, x1 = it.x + w / 2;
     let bottom = it.y;
     for (let pass = 0; pass < TAGS.maxPasses; pass++) {
@@ -2826,11 +2858,12 @@ function placeRobotTags(dt = 1 / 60) {
   }
   for (const it of list) {   // the writes
     const el = it.R.tag;
-    if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; if (it.R.bill) it.R.bill.style.visibility = 'hidden'; continue; }
+    if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; if (it.R.bill) it.R.bill.style.visibility = 'hidden'; if (it.R.waitEl) it.R.waitEl.style.visibility = 'hidden'; continue; }
     el.style.visibility = 'visible';
     const zi = String(-it.front);   // negative: under the rooms' signs (z-index 1), inside .tags (isolation: isolate)
     if (el.style.zIndex !== zi) el.style.zIndex = zi;
     if (it.R.bill && it.R.bill.style.zIndex !== zi) it.R.bill.style.zIndex = zi;
+    if (it.R.waitEl && it.R.waitEl.style.zIndex !== zi) it.R.waitEl.style.zIndex = zi;
     const dy = it.R.tagDy === undefined ? it.target : it.R.tagDy + (it.target - it.R.tagDy) * ease;
     it.R.tagDy = Math.abs(dy - it.target) < 0.5 ? it.target : dy;
     it.R.tagTarget = it.target;   // where the tag is going (the e2e reads a tag once tagDy has reached it: the settle hook of 80-dbg.js)
@@ -2839,6 +2872,11 @@ function placeRobotTags(dt = 1 / 60) {
       it.bill.style.visibility = 'visible';
       it.bill.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy - it.R.tagSize.h - BILL.gap).toFixed(1)}px) translate(-50%, -100%)`;
     } else if (it.R.bill) it.R.bill.style.visibility = 'hidden';
+    if (it.wait) {   // over the bill (with its rise kept), or over the tag
+      const above = it.R.tagSize.h + (it.bill ? it.R.billSize.h + BILL.gap + BILL.rise : 0) + BILL.gap;
+      it.wait.style.visibility = 'visible';
+      it.wait.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy - above).toFixed(1)}px) translate(-50%, -100%)`;
+    } else if (it.R.waitEl) it.R.waitEl.style.visibility = 'hidden';
   }
   const ms = performance.now() - t0, S0 = TAGS.stats;
   S0.n = list.length; S0.frames++; S0.sumMs += ms; S0.maxMs = Math.max(S0.maxMs, ms);
@@ -2859,6 +2897,7 @@ function update3D(model, nowSec, dt) {
       R.robot.launch = forced(R.robot, 'launch', demoLaunch(R.def.id, model.t));   // a subagent called (10-20)
       if (st.walk) { R.robot.root.position.x = st.walk.x; R.robot.root.position.z = st.walk.z; R.robot.root.rotation.y = st.walk.ry; }
       if (st.state !== R.robot.state) setRobotState(R.robot, st.state);
+      waitSync(R);
       if (st.act !== R.act) { R.act = st.act; R.text.textContent = st.act; }
       updateRobot(R.robot, nowSec, dt);
     }

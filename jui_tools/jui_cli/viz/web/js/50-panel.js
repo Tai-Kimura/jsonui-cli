@@ -182,6 +182,7 @@ function renderPanel(model) {
   renderQuestions();
   renderDenials();
   paintSince($('denied'), model.t, '経過');
+  waitChips();   // 53-waits.js
   const sIn = SESSIONS.filter((x) => inScope(x.project)).length, rIn = ROBOT_DEFS.filter((d) => inScope(projectOfRobot(d.id))).length;
   setText($('chip-robots'), UI.project === 'all' ? `ロボット ${ROBOT_DEFS.length}` : `ロボット ${rIn} / ${ROBOT_DEFS.length}`);
   setText($('chip-sessions'), UI.project === 'all' ? `セッション ${SESSIONS.length}` : `セッション ${sIn} / ${SESSIONS.length}`);
@@ -213,7 +214,7 @@ function permSubjectLive(p) {
   return `<span class="perm-exact" tabindex="0">${partsHTML.join('')}</span>`;
 }
 const permSubject = (p) => (SOURCE.mode === 'live' ? permSubjectLive(p) : `<code>${esc(permSummary(p))}</code>`);
-const permBox = (p) => `<div class="perm-box"><p class="perm-q"><b>${esc(p.tool)}</b> ${permSubject(p)}</p><div class="perm-acts">${permButtons(p, 's')}</div></div>`;
+const permBox = (p) => `<div class="perm-box" data-perm-box="${esc(p.id)}"><p class="perm-q"><b>${esc(p.tool)}</b> ${permSubject(p)}</p><div class="perm-acts">${permButtons(p, 's')}</div></div>`;
 function recentHTML(id) {
   const items = logItems.filter((e) => e.who === id).slice(0, 6);
   return items.length ? items.map((e) => `<li><time>${fmtClock(BASE_CLOCK + e.abs)}</time><span><b>${esc(e.kind)}</b> ${esc(e.what)}</span></li>`).join('') : '<li><span>まだ記録がない</span></li>';
@@ -1657,7 +1658,7 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   const S = STATES[st.state] || STATES.idle;
   const play = SOURCE.mode === 'live' && has3D ? playTagText(id) : '';   // a game (2.3.3): the same words as the name tag
   setText(rbEl.querySelector('[data-rb-state]'), st.asking ? '質問に回答待ち' : play ? `${S.name} · ${play}` : S.name);
-  setText(rbEl.querySelector('[data-rb-lampname]'), st.asking ? '黄（質問に回答待ち）' : LAMP_TEXT[S.lamp] || '');
+  setText(rbEl.querySelector('[data-rb-lampname]'), st.asking ? LAMP_TEXT.asking : LAMP_TEXT[S.lamp] || '');
   const lamp = rbEl.querySelector('[data-rb-lamp]'); if (lamp) lamp.style.background = LAMP[S.lamp];
   setText(rbEl.querySelector('[data-rb-act]'), st.act);
   // the box (2.3.4): its last push / pull, from the server's agent.git

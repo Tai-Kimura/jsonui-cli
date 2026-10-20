@@ -37,7 +37,8 @@ const COL = {
    measures it). */
 const WEAR = { overall: '#ff8c1a', stripe: '#e8edf3', brim: '#c25e00', rim: '#ffffff', edge: '#1f2a44' };
 const SUB_SIZE = 0.8;
-const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', bg: '#4cc3d9', waiting: '#ffb020', done: '#35d07f', off: '#2a3a30' };
+// asking: a question waits (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input): a violet far from the permission's amber
+const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', bg: '#4cc3d9', waiting: '#ffb020', asking: '#b48cff', done: '#35d07f', off: '#2a3a30' };
 const STATES = {
   idle: { name: '待機', lamp: 'idle', face: 'normal' },
   thinking: { name: '考え中', lamp: 'think', face: 'normal' },
@@ -51,7 +52,7 @@ const STATES = {
   stroll: { name: '歩く', lamp: 'idle', face: 'normal' },   // to and from play (10-18): no papers; the lamp is the real state's
   done: { name: '完了', lamp: 'done', face: 'happy' },
 };
-const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', think: '淡い緑のゆっくり点滅（考え中）', waiting: '黄（許可待ち）', done: '緑の点滅（完了）', bg: '水色（裏で作業中）' };
+const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', think: '淡い緑のゆっくり点滅（考え中）', waiting: '黄（許可待ち）', asking: '紫（質問に回答待ち）', done: '緑の点滅（完了）', bg: '水色（裏で作業中）' };
 
 const HIPS_Y = 0.36;
 const HEAD = { w: 1.1, h: 0.9, d: 0.92, r: 0.17 };
@@ -1337,6 +1338,21 @@ function poseFor(state, s) {
       p.aRz = -2.7 + Math.sin(s * 7) * 0.2; p.aRx = -0.1; p.aLz = 0.2;
       p.headX = -0.12; p.headZ = Math.sin(s * 1.6) * 0.06; p.hipsY = Math.abs(Math.sin(s * 3.5)) * 0.02;
       break;
+    case 'asking': {   // a question waits: the head tilted the other way from thinking's, a hand to the chin, the other arm out
+      const bob = reduceMotion ? 0 : Math.sin(s * 1.4);
+      p.headZ = -0.3 + bob * 0.05; p.headX = -0.1; p.headY = -0.16;
+      p.aLx = -2.05; p.aLz = 0.95;            // the left hand to the chin
+      p.aRx = -0.35; p.aRz = -0.75 - bob * 0.06;   // the right arm out, palm up: "which one?"
+      p.hipsY = reduceMotion ? 0 : Math.abs(Math.sin(s * 1.4)) * 0.008;
+      break;
+    }
+    case 'leanBack': {   // waiting for the person's input: leaning back, looking up at its screen, arms at rest
+      const b = reduceMotion ? 0 : Math.sin(s * 0.9);
+      p.torsoX = -0.24; p.headX = -0.2 + b * 0.02; p.headY = b * 0.08;
+      p.aLx = 0.25; p.aLz = 0.42; p.aRx = 0.25; p.aRz = -0.42;
+      p.hipsY = b * 0.006;
+      break;
+    }
     case 'stroll': {
       const w = s * 7;
       p.lLx = Math.sin(w) * 0.5; p.lRx = -Math.sin(w) * 0.5; p.hipsY = Math.abs(Math.cos(w)) * 0.03;
@@ -1366,7 +1382,10 @@ function updateRobot(r, t, dt) {
   const e = r.blend * r.blend * (3 - 2 * r.blend);
   const look = lookUpdate(r, t, dt), heavy = !!look;
   // heavy: fast typing (drained: slower than fired)
-  const posed = (state) => (state === 'reading' && r.readKind === 'web' ? 'readingWeb' : state);   // the dictionary (10-20)
+  // the dictionary (10-20); a question's and an input's wait (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input)
+  const posed = (state) => (state === 'reading' && r.readKind === 'web' ? 'readingWeb'
+    : state === 'waiting' && r.waitKind === 'ask' ? 'asking' : state === 'idle' && r.waitKind === 'input' ? 'leanBack' : state);
+  r.poseName = heavy ? 'typing' : posed(r.state);   // read by the e2e (80-dbg.js waitLook)
   const a = poseFor(posed(r.prev), s), b = heavy ? poseFor('typing', s * (look === 'drained' ? 1.5 : 2.4)) : poseFor(posed(r.state), s);
   sweatUpdate(r, s, heavy);
   const p = {};
@@ -1400,7 +1419,9 @@ function updateRobot(r, t, dt) {
   r.legR.rotation.x = p.lRx;
   r.tails.forEach((tail, i) => tail.rotation.set(0.5 + Math.sin(s * 6.5 + i * 1.3) * 0.12, 0, tail.userData.spread));
 
-  const lampKey = STATES[r.lampState && STATES[r.lampState] ? r.lampState : r.state].lamp;   // play: the real state's lamp
+  let lampKey = STATES[r.lampState && STATES[r.lampState] ? r.lampState : r.state].lamp;   // play: the real state's lamp
+  if (lampKey === 'waiting' && r.waitKind === 'ask') lampKey = 'asking';                 // a question's wait: violet
+  r.lampKey = lampKey;
   const lampOn = lampKey === 'think' ? (reduceMotion || Math.sin(s * 1.6) > -0.4)   // thinking: a slow blink
     : lampKey !== 'done' || Math.floor(s * 3) % 2 === 0;
   r.lampMat.color.set(lampOn ? LAMP[lampKey] : LAMP.off);

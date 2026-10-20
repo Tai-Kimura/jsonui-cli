@@ -244,6 +244,16 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
    click, its hover rings it. The nearest robot's tag is in front (z-index from placeRobotTags, negative, so the rooms'
    signs stay over every tag). The bill over a robot (.bill, 54-bills.js) does the same. */
 .tag.bot, .bill { pointer-events: auto; cursor: pointer; }
+/* A robot's wait over its head (53-waits.js): a press opens its card. Fixed colours, the text 4.5:1+ on each in both
+   themes; the shape of the mark tells them apart as well as the colour (!, ?, …). */
+.wait-bubble { position: absolute; left: 0; top: 0; min-width: 26px; padding: 2px 9px; border: 2px solid; border-radius: 12px 12px 12px 3px;
+  font: 800 13px/1.3 var(--font-body); white-space: nowrap; pointer-events: auto; cursor: pointer; box-shadow: 0 1px 4px var(--shadow); }
+.wait-bubble[hidden] { display: none; }
+.wait-bubble[data-wait-kind="perm"] { background: #ffb020; border-color: #7a4b00; color: #1f1400; }
+.wait-bubble[data-wait-kind="ask"] { background: #b48cff; border-color: #4b2a8f; color: #14062e; }
+.wait-bubble[data-wait-kind="input"] { background: #e8ecf1; border-color: #6b7a90; color: #13233a; }
+.wait-bubble:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wait-picked { outline: 3px solid var(--focus); outline-offset: 2px; }
 .tag.bot:hover { box-shadow: 0 0 0 2px var(--info), 0 1px 4px var(--shadow); }
 /* A room's name is a sign, not a robot's name tag (requester 10-18: the two blended in a crowded room): square corners,
    a frame and the info hue always on, an opaque ground, and in front of the tags (a later sibling would paint over it). */

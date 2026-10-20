@@ -66,6 +66,8 @@ BILL_KEEP_MS = 30_000
 BILLS_MAX = 60
 UNPRICED_MAX = 20
 ENDED_LINGER_MS = 60_000
+#: the hooks after which a session no longer waits for input (Notification idle_prompt set it): a prompt, a tool, its end
+INPUT_WAIT_ENDS = frozenset({"UserPromptSubmit", "PreToolUse", "SessionEnd", "SessionStart"})
 # Waiting on background work (requester, 10-18): a session whose Stop listed background_tasks keeps its light on
 # until the work ends — the next Stop without any, SessionEnd, or no background shell left under its process
 # (check_background). Only when its process cannot be watched (no pid, or ps has not answered for
@@ -590,6 +592,8 @@ class World:
             return None
         cwd = _s(payload.get("cwd"))
         session = self._session(sid, cwd, at)
+        if kind in INPUT_WAIT_ENDS and session.pop("inputWaitAt", None) is not None:   # it moves again: no longer waits for input
+            self._dirty.add("sessions")
         self._find_since(session, cwd, _s(payload.get("transcript_path")))
         if kind != "SessionEnd":
             self.attachments.ended.pop(sid, None)   # resumed within the hour: its attachments stay
@@ -783,6 +787,12 @@ class World:
                 self._status(session, "idle", at)
                 if agent["state"] == "waiting":
                     self._set(agent, at, "idle", "待機")
+                # 入力待ち (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input): a mark over the main
+                # robot, not a state; from this until the session moves again (INPUT_WAIT_ENDS). A subagent's does not
+                # (the page does not ring it either, notifyIdle)
+                if not aid:
+                    session["inputWaitAt"] = at
+                    self._dirty.add("sessions")
             text = f"通知 {ntype} {_head(payload.get('message'), 120) or ''}".strip()
         elif kind == "SubagentStart":
             self._set(agent, at, "idle", f"起動 {agent_type or ''}".strip())
