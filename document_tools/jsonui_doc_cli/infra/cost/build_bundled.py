@@ -4,7 +4,8 @@ Route 53's hosted zone). It does not fetch: the person who
 refreshes the table downloads the files (aws_offers.OFFER_URL) and runs
 
     python -m jsonui_doc_cli.infra.cost.build_bundled <folder> <the day Cloudflare's pages were read> [<the day
-        AWS's pages (Route 53's hosted zone) were read; the first day when not given>]
+        AWS's pages (Route 53's hosted zone, Parameter Store) were read; the first day when not given> [<the day
+        Cloudflare's KV, Zero Trust and Load Balancing pages were read; the first day when not given>]]
 
 Every row keeps its source (the offer file's URL, or the page) and its effective date (the offer's publication date,
 or the day the page was read).
@@ -22,7 +23,11 @@ CF_WORKERS = "https://developers.cloudflare.com/workers/platform/pricing/"
 CF_R2 = "https://developers.cloudflare.com/r2/pricing/"
 CF_D1 = "https://developers.cloudflare.com/d1/platform/pricing/"
 CF_QUEUES = "https://developers.cloudflare.com/queues/platform/pricing/"
+CF_KV = "https://developers.cloudflare.com/kv/platform/pricing/"
+CF_ZERO_TRUST = "https://www.cloudflare.com/plans/sase-zero-trust/"
+CF_LB = "https://www.cloudflare.com/plans/network-cdn/"
 R53 = "https://aws.amazon.com/route53/pricing/"
+SSM = "https://aws.amazon.com/systems-manager/pricing/"
 #: The EC2 instance types bundled (the offer has hundreds; the rest come from the fetch's large "ec2"): the small and
 #: the usual ones of a backend's first years. NAT gateway and gp3 rows come from the same file.
 EC2_TYPES = ("t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.nano", "t4g.micro", "t4g.small",
@@ -30,17 +35,30 @@ EC2_TYPES = ("t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.na
 
 
 def aws_page_rows(checked: str) -> list[dict]:
-    """AWS prices no offer file holds: Route 53's hosted zone (the page, read on ``checked``)."""
+    """AWS prices no offer file holds, as the pages said them on ``checked``: Route 53's hosted zone, and Parameter
+    Store's standard parameters and their API interactions (free: "No additional charge", a price of 0 so the total
+    says it, not "no price") and an advanced parameter's month (the offer has it by the hour)."""
+    def ssm(sku, unit, price, note, per_units=None):
+        r = {"provider": "aws", "service": "ssm", "sku": sku, "region": "global", "unit": unit, "price_usd": price,
+             "effective": checked, "source": SSM, "note": note}
+        if per_units:
+            r["per_units"] = per_units
+        return r
     return [{"provider": "aws", "service": "route53", "sku": "zone", "region": "global", "unit": "month",
              "tiers": [{"from": 0.0, "to": 25.0, "price_usd": 0.5}, {"from": 25.0, "price_usd": 0.1}],
-             "effective": checked, "source": R53, "note": "hosted zone: the first 25, then each"}]
+             "effective": checked, "source": R53, "note": "hosted zone: the first 25, then each"},
+            ssm("secret", "secret", 0.0, "standard parameter: free (No additional charge)"),
+            ssm("api", "request", 0.0, "standard throughput API interactions, standard parameters: free", 10_000),
+            ssm("secret:advanced", "secret", 0.05, "advanced parameter, per month (prorated hourly)")]
 
 
-def cloudflare_rows(checked: str) -> list[dict]:
-    """Workers Paid (Standard), R2 Standard, D1 and Queues on Workers Paid, as the pages said them on ``checked``."""
-    def row(service, sku, unit, price, source, per_units=None, free=None, note=None):
+def cloudflare_rows(checked: str, checked_b: str | None = None) -> list[dict]:
+    """Workers Paid (Standard), R2 Standard, D1 and Queues on Workers Paid, as the pages said them on ``checked``; KV on
+    Workers Paid, Zero Trust's Pay-as-you-go seat and Load Balancing's base fee on ``checked_b`` (the first day when not
+    given)."""
+    def row(service, sku, unit, price, source, per_units=None, free=None, note=None, day=None):
         r = {"provider": "cloudflare", "service": service, "sku": sku, "region": "global", "unit": unit,
-             "price_usd": price, "effective": checked, "source": source}
+             "price_usd": price, "effective": day or checked, "source": source}
         if per_units:
             r["per_units"] = per_units
         if free:
@@ -60,6 +78,15 @@ def cloudflare_rows(checked: str) -> list[dict]:
         row("d1", "storage", "GB-month", 0.75, CF_D1, free=5, note="5 GB included"),
         row("queues", "requests", "request", 0.40, CF_QUEUES, 1_000_000, 1_000_000,
             "operations (64 KB each); 1 million included"),
+        row("kv", "read", "read_unit", 0.50, CF_KV, 1_000_000, 10_000_000, "10 million/month included", checked_b),
+        row("kv", "write", "write_unit", 5.00, CF_KV, 1_000_000, 1_000_000,
+            "1 million/month included (deletes and lists are priced as writes)", checked_b),
+        row("kv", "storage", "GB-month", 0.50, CF_KV, free=1, note="1 GB included", day=checked_b),
+        row("access", "seat", "user", 7.0, CF_ZERO_TRUST,
+            note="Pay-as-you-go: $7 /user/month; the Free plan is up to 50 users (the rule: 50 or fewer cost 0)",
+            day=checked_b),
+        row("lb", "plan", "month", 5.0, CF_LB, note="Load Balancing: Starting at $5/mo (the base fee only)",
+            day=checked_b),
     ]
 
 
@@ -97,21 +124,23 @@ def aws_rows(folder: Path) -> tuple[list[dict], list[str]]:
     return rows, missing
 
 
-def build(folder: Path, checked: str, aws_checked: str | None = None) -> tuple[dict, list[str]]:
+def build(folder: Path, checked: str, aws_checked: str | None = None, cf_checked_b: str | None = None
+          ) -> tuple[dict, list[str]]:
     rows, missing = aws_rows(folder)
     doc = {"$schema": "https://jsonui.dev/schemas/infra-prices/v0.json", "version": 0, "id": "bundled",
            "label": "同梱の単価（AWS ap-northeast-1・us-east-1 と Cloudflare、オンデマンド）", "currency": "USD",
-           "prices": rows + aws_page_rows(aws_checked or checked) + cloudflare_rows(checked)}
+           "prices": rows + aws_page_rows(aws_checked or checked) + cloudflare_rows(checked, cf_checked_b)}
     return doc, missing
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) not in (2, 3):   # the days are the person's to say (the pages they read), never the machine's clock
+    if len(argv) not in (2, 3, 4):   # the days are the person's to say (the pages they read), never the machine's clock
         print("usage: build_bundled <folder of offer files> <YYYY-MM-DD Cloudflare's pages were read> "
-              "[<YYYY-MM-DD AWS's pages were read>]", file=sys.stderr)
+              "[<YYYY-MM-DD AWS's pages were read> [<YYYY-MM-DD Cloudflare's KV, Zero Trust and Load Balancing pages "
+              "were read>]]", file=sys.stderr)
         return 2
     folder, checked = Path(argv[0]), argv[1]
-    doc, missing = build(folder, checked, argv[2] if len(argv) == 3 else None)
+    doc, missing = build(folder, checked, *argv[2:])
     out = Path(__file__).with_name("bundled-prices.json")
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"wrote {out} ({len(doc['prices'])} prices)")

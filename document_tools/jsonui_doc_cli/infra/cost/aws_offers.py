@@ -15,9 +15,9 @@ CF_ZONES = {"US": "north_america", "EU": "europe", "JP": "japan", "AP": "asia", 
 
 def S(offer, service, sku, unit, usagetype, per_units=1, family=None, attrs=None, free=None, note=None, scale=1.0):
     """One line of the spec: which offer row becomes which price. usagetype is a name (after the region's prefix), a
-    list of names (the regions spell some differently), or a name ending in "*" (a prefix: RDS abbreviates xlarge to
-    "xl", so its rows are matched by the instanceType attribute). scale multiplies the price (regional transfer is
-    charged in and out)."""
+    list of names (the regions spell some differently), a name ending in "*" (a prefix: RDS abbreviates xlarge to
+    "xl", so its rows are matched by the instanceType attribute), or a name with "{region}" (KMS spells the region out
+    in place of the prefix). scale multiplies the price (regional transfer is charged in and out)."""
     return {"offer": offer, "service": service, "sku": sku, "unit": unit, "usagetype": usagetype, "per_units": per_units,
             "family": family, "attrs": attrs or {}, "free": free, "note": note, "scale": scale}
 
@@ -26,6 +26,13 @@ LAMBDA_FREE = "https://aws.amazon.com/lambda/pricing/"
 RDS_TYPES = ["db.t3.micro", "db.t3.small", "db.t3.medium", "db.t4g.micro", "db.t4g.small", "db.t4g.medium", "db.m6g.large", "db.r6g.large", "db.r6g.xlarge",
              "db.r6g.2xlarge"]
 CACHE_TYPES = ["cache.t4g.micro", "cache.t4g.small", "cache.t4g.medium", "cache.m7g.large", "cache.r7g.large"]
+AURORA_TYPES = ["db.t3.medium", "db.t4g.medium", "db.r6g.large", "db.r7g.large"]
+DOCDB_TYPES = ["db.t3.medium", "db.t4g.medium", "db.r6g.large", "db.r8g.large"]
+SEARCH_TYPES = ["t3.small.search", "t3.medium.search", "m7g.medium.search", "m7g.large.search", "r7g.medium.search",
+                "r7g.large.search", "m6g.large.search", "r6g.large.search"]
+MSK_TYPES = ["kafka.t3.small", "kafka.m7g.large", "kafka.m5.large"]
+COGNITO = "https://aws.amazon.com/cognito/pricing/"
+KMS = "https://aws.amazon.com/kms/pricing/"
 
 
 def regional_spec() -> list[dict]:
@@ -91,8 +98,29 @@ def regional_spec() -> list[dict]:
         S("awswaf", "waf", "rule", "month", "RuleV2", note="WAFv2 rule (a managed rule group counts as one)"),
         S("AWSEvents", "scheduler", "requests", "request", "ScheduledInvocation", 1_000_000,
           note="EventBridge Scheduler invocations; the first 14 million a month are the offer's free step"),
+        # the ticket's stage B (usage types read in the offers of 10-21)
+        S("AmazonKinesis", "kinesis", "put", "request", "PutRequestPayloadUnits", 1_000_000,
+          note="PUT payload units (25 KB each; a record is at least one)"),
+        S("AmazonDynamoDB", "dynamodb", "read-capacity", "capacity_unit-hour", "ReadCapacityUnit-Hrs",
+          note="provisioned read capacity; the first step is the offer's free 25 units"),
+        S("AmazonDynamoDB", "dynamodb", "write-capacity", "capacity_unit-hour", "WriteCapacityUnit-Hrs",
+          note="provisioned write capacity; the first step is the offer's free 25 units"),
+        S("AmazonCognito", "cognito", "mau", "user", "CognitoEssentialsMAU", free={"amount": 10_000, "period": "month"},
+          note=f"Essentials (a new user pool's tier); free: the offer's Global-CognitoFreeTierMAU row, {COGNITO}"),
+        S("AmazonCognito", "cognito", "mau:lite", "user", "CognitoLiteMAU", free={"amount": 10_000, "period": "month"},
+          note=f"Lite; free: the offer's Global-CognitoFreeTierMAU row, {COGNITO}"),
+        S("AmazonCognito", "cognito", "mau:plus", "user", "CognitoPlusMAU", note="Plus"),
+        S("awskms", "kms", "key", "month", "{region}-KMS-Keys", note="a customer managed key"),
+        S("awskms", "kms", "api", "request", "{region}-KMS-Requests", 10_000, family="API Request",
+          free={"amount": 20_000, "period": "month"}, note=f"free: the offer's Global-KMS-Requests row, {KMS}"),
+        S("AWSSystemsManager", "ssm", "api:advanced", "request", "PS-Param-Processed-Tier1", 10_000,
+          note="Parameter Store API interactions, advanced parameters or higher throughput"),
+        S("AmazonES", "opensearch", "storage", "GB-month", "ES:GP3-Storage", note="gp3"),
+        S("AmazonDocDB", "docdb", "storage", "GB-month", "StorageUsage", family="Database Storage",
+          attrs={"volumeType": "General Purpose"}, note="Standard (I/O billed apart, not counted)"),
+        S("AmazonMSK", "msk", "storage", "GB-month", "Kafka.Storage.GP2", note="broker storage"),
     ]
-    for engine, svc in (("MySQL", "rds.mysql"), ("PostgreSQL", "rds.postgres")):
+    for engine, svc in (("MySQL", "rds.mysql"), ("PostgreSQL", "rds.postgres"), ("MariaDB", "rds.mariadb")):
         for t in RDS_TYPES:
             out.append(S("AmazonRDS", svc, t, "instance-hour", "InstanceUsage:*",
                          attrs={"databaseEngine": engine, "deploymentOption": "Single-AZ", "instanceType": t}))
@@ -105,6 +133,31 @@ def regional_spec() -> list[dict]:
     for t in CACHE_TYPES:
         out.append(S("AmazonElastiCache", "elasticache", t, "instance-hour", f"NodeUsage:{t}",
                      attrs={"cacheEngine": "Redis"}, note="Redis OSS"))
+    for engine, tag in (("Redis", ""), ("Valkey", ":valkey")):   # Serverless
+        out.append(S("AmazonElastiCache", "elasticache", f"cached-data{tag}", "GB-hour", f"CachedData:{engine}",
+                     family="ElastiCache Serverless", note=f"Serverless {engine}: data stored"))
+        out.append(S("AmazonElastiCache", "elasticache", f"ecpu{tag}", "ECPU", f"ElastiCacheProcessingUnits:{engine}",
+                     1_000_000, family="ElastiCache Serverless", note=f"Serverless {engine}: ElastiCache Processing Units"))
+    # Aurora Standard: the instances of a cluster (a replica is one more instance: no Multi-AZ price), the cluster's
+    # storage and Serverless v2's ACUs; MySQL's storage row says its engine "Any"
+    for engine, svc, store in (("Aurora MySQL", "aurora.mysql", "Any"), ("Aurora PostgreSQL", "aurora.postgres",
+                                                                          "Aurora PostgreSQL")):
+        for t in AURORA_TYPES:
+            out.append(S("AmazonRDS", svc, t, "instance-hour", "InstanceUsage:*",
+                         attrs={"databaseEngine": engine, "deploymentOption": "Single-AZ", "instanceType": t}))
+        out.append(S("AmazonRDS", svc, "storage", "GB-month", "Aurora:StorageUsage",
+                     attrs={"databaseEngine": store, "volumeType": "General Purpose-Aurora"}, note="Aurora Standard"))
+        out.append(S("AmazonRDS", svc, "capacity", "capacity_unit-hour", "Aurora:ServerlessV2Usage",
+                     attrs={"databaseEngine": engine}, note="Serverless v2 ACU"))
+    for t in DOCDB_TYPES:
+        out.append(S("AmazonDocDB", "docdb", t, "instance-hour", "InstanceUsage:*",
+                     attrs={"databaseEngine": "Amazon DocumentDB", "volumeType": "General Purpose", "instanceType": t}))
+    for t in SEARCH_TYPES:
+        out.append(S("AmazonES", "opensearch", t, "instance-hour", f"ESInstance:{t.removesuffix('.search')}",
+                     attrs={"instanceType": t}))
+    for t in MSK_TYPES:
+        out.append(S("AmazonMSK", "msk", t, "instance-hour", f"Kafka.{t.removeprefix('kafka.')}",
+                     attrs={"group": "Broker"}, note="a broker"))
     return out
 
 
@@ -160,7 +213,7 @@ def rows_from_offer(data: dict, spec: list[dict], region: str, url: str) -> tupl
     out, missing = [], []
     for s in spec:
         names = s["usagetype"] if isinstance(s["usagetype"], list) else [s["usagetype"]]
-        uts = {p + n for p in prefixes for n in names}
+        uts = {n.format(region=region) if "{region}" in n else p + n for p in prefixes for n in names}
 
         def named(ut: str | None) -> bool:
             return ut in uts or any(u.endswith("*") and (ut or "").startswith(u[:-1]) for u in uts)

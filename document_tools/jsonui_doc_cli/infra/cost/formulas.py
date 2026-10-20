@@ -5,7 +5,8 @@ other skus; the generic rules use these names, so a price file written with them
 
 The skus by convention: instance (the type, instance-hour), storage (GB-month), egress (GB, service data-transfer),
 requests (request), compute (GB-second), cpu (ms), plan (month, optional), vcpu (vCPU-hour), memory (GB-hour), get /
-put (request), read / write (read_unit / write_unit), capacity (capacity_unit-hour), egress-<zone> (GB) and
+put (request), read / write (read_unit / write_unit), capacity (capacity_unit-hour), read-capacity /
+write-capacity (capacity_unit-hour, provisioned), egress-<zone> (GB) and
 requests-<zone> (request) for a CDN, hour
 (instance-hour) and lcu (LCU-hour) for a load balancer, cluster (instance-hour), shard (capacity_unit-hour), rows-read /
 rows-written (row), queries (request), emails (email), mau (user), secret (secret), api (request), ingest (GB),
@@ -191,6 +192,20 @@ def key_value(h: Hour) -> list[Meter]:
     if "capacity_units" in h.q:
         out.append(Meter("capacity", h.q["capacity_units"], "capacity_unit-hour", "capacity", "capacity_units"))
     return out + stored(h)
+
+
+def provisioned(h: Hour) -> list[Meter]:
+    """Provisioned reads and writes, each its own price (DynamoDB's RCU and WCU): units held this hour."""
+    return [Meter(f"{kind}-capacity", h.q[f"{kind}_capacity_units"], "capacity_unit-hour", f"{kind}-capacity",
+                  f"{kind}_capacity_units") for kind in ("read", "write") if f"{kind}_capacity_units" in h.q]
+
+
+def spec_value(node: dict, *keys: str) -> str:
+    """The first of ``keys`` the node's spec writes, lower case ("" when none)."""
+    for item in node.get("spec") or []:
+        if isinstance(item, dict) and item.get("key") in keys:
+            return str(item.get("value", "")).strip().lower()
+    return ""
 
 
 def search(h: Hour) -> list[Meter]:

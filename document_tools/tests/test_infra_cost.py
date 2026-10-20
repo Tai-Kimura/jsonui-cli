@@ -157,8 +157,9 @@ def test_every_meter_is_in_a_price_unit_and_every_rule_has_its_page():
             continue
         for m in rule.cost(hour):
             assert m.unit in units, (rule.id, m)
-        if rule.provider:   # the pages read 10-20; the NAT gateway's, public IPv4's and alarms' 10-21
-            new = rule.id in ("aws/nat", "aws/ipv4", "aws/cloudwatch-alarm")
+        if rule.provider:   # the pages read 10-20; the NAT gateway's, public IPv4's, alarms' and stage B's 10-21
+            new = rule.id in ("aws/nat", "aws/ipv4", "aws/cloudwatch-alarm", "aws/aurora", "aws/docdb", "aws/msk",
+                              "aws/kms", "aws/ssm", "cloudflare/kv", "cloudflare/access", "cloudflare/lb")
             assert rule.source.startswith("https://") and rule.checked == ("2026-10-21" if new else "2026-10-20"), rule.id
 
 
@@ -365,7 +366,8 @@ def test_the_bundled_table_is_valid_and_traced():
     assert problems == [] and warnings == [] and len(rows) == len(doc["prices"]) > 100
     assert all(r["source"].startswith("https://") for r in rows)
     assert {r["region"] for r in rows if r["provider"] == "aws"} == {"ap-northeast-1", "us-east-1", "global"}
-    assert {r["service"] for r in rows if r["provider"] == "cloudflare"} == {"workers", "r2", "d1", "queues"}
+    assert {r["service"] for r in rows if r["provider"] == "cloudflare"} == {"workers", "r2", "d1", "queues", "kv",
+                                                                             "access", "lb"}
 
 
 def test_rows_from_an_offer_file():

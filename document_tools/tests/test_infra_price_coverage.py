@@ -21,6 +21,8 @@ from jsonui_doc_cli.infra import iac_tables as T
 from jsonui_doc_cli.infra import model as M
 from jsonui_doc_cli.infra import rules as RULES
 from jsonui_doc_cli.infra import seed as S
+from jsonui_doc_cli.infra.cost import aws_offers as A
+from jsonui_doc_cli.infra.cost import build_bundled as BB
 from jsonui_doc_cli.infra.cost import engine as E
 from jsonui_doc_cli.infra.cost import formulas as F
 from jsonui_doc_cli.infra.cost import pricebook as PB
@@ -37,12 +39,9 @@ NOT_BUNDLED = {
     "digitalocean": "no bundled table", "heroku": "no bundled table", "kubernetes": "priced by its cluster's provider",
     "netlify": "no bundled table", "vercel": "no bundled table",
 }
-#: Meters of AWS and Cloudflare with no bundled price (closed, each with why). Stage B of the ticket moves most of
-#: them into the table.
+#: Meters of AWS and Cloudflare with no bundled price (closed, each with why). "stage B" are the ticket's still to
+#: come (2.3.15 on); the rest are no price by design.
 NOT_YET = {
-    ("aws", "cognito", "mau"): "stage B (Cognito's MAU steps)",
-    ("aws", "elasticache", "capacity"): "stage B (ElastiCache Serverless)",
-    ("aws", "elasticache", "storage"): "stage B (ElastiCache Serverless)",
     ("aws", "lambda", "cpu"): "Lambda bills no CPU time (cpu_ms is Workers'); the generic formula offers it",
     ("aws", "stepfunctions", "requests"): "stage B (Step Functions' state transitions)",
     ("aws", "stepfunctions", "compute"): "stage B", ("aws", "stepfunctions", "cpu"): "stage B",
@@ -50,51 +49,38 @@ NOT_YET = {
     ("aws", "beanstalk", "instance"): "priced by its EC2 instances, not drafted apart",
     ("aws", "beanstalk", "storage"): "priced by its EC2 instances",
     ("aws", "lightsail", "instance"): "stage B (Lightsail's bundles)", ("aws", "lightsail", "storage"): "stage B",
-    ("aws", "docdb", "read"): "stage B (DocumentDB)", ("aws", "docdb", "write"): "stage B",
-    ("aws", "docdb", "capacity"): "stage B", ("aws", "docdb", "storage"): "stage B",
-    ("aws", "dynamodb", "capacity"): "stage B (DynamoDB provisioned capacity)",
-    ("aws", "aurora", "storage"): "stage B (Aurora)", ("aws", "aurora", "capacity"): "stage B (Aurora Serverless v2)",
-    ("aws", "aurora", "instance"): "stage B (Aurora)",
+    ("aws", "aurora", "storage"): "an Aurora whose engine is a variable: its price rows are per engine",
+    ("aws", "aurora", "capacity"): "an Aurora whose engine is a variable", ("aws", "aurora", "instance"): "as capacity",
     ("aws", "rds", "storage"): "an RDS whose engine is a variable: its price rows are per engine",
     ("aws", "rds", "instance"): "an RDS whose engine is a variable",
     ("aws", "rds.mysql", "capacity"): "RDS is not serverless (Aurora is)", ("aws", "rds.postgres", "capacity"): "as mysql",
     ("aws", "rds.mariadb", "capacity"): "as mysql",
-    ("aws", "rds.mariadb", "instance"): "stage B (MariaDB)", ("aws", "rds.mariadb", "storage"): "stage B (MariaDB)",
     ("aws", "rds.mysql", "rows-read"): "rows are D1's; RDS bills no rows", ("aws", "rds.mysql", "rows-written"): "as rows-read",
     ("aws", "rds.postgres", "rows-read"): "as mysql", ("aws", "rds.postgres", "rows-written"): "as mysql",
     ("aws", "rds.mariadb", "rows-read"): "as mysql", ("aws", "rds.mariadb", "rows-written"): "as mysql",
     ("aws", "rds", "rows-read"): "as mysql", ("aws", "rds", "rows-written"): "as mysql",
     ("aws", "rds", "capacity"): "as mysql",
-    ("aws", "aurora", "rows-read"): "as mysql", ("aws", "aurora", "rows-written"): "as mysql",
     ("aws", "lightsail", "rows-read"): "as mysql", ("aws", "lightsail", "rows-written"): "as mysql",
     ("aws", "lightsail", "capacity"): "stage B",
     ("aws", "rds", "instance:multi-az"): "as instance", ("aws", "rds", "storage:multi-az"): "as storage",
-    ("aws", "rds.mariadb", "instance:multi-az"): "stage B (MariaDB)", ("aws", "rds.mariadb", "storage:multi-az"): "stage B",
-    ("aws", "aurora", "instance:multi-az"): "stage B (Aurora)", ("aws", "aurora", "storage:multi-az"): "stage B (Aurora)",
     ("aws", "lightsail", "instance:multi-az"): "stage B", ("aws", "lightsail", "storage:multi-az"): "stage B",
-    ("aws", "opensearch", "instance"): "stage B (OpenSearch)", ("aws", "opensearch", "storage"): "stage B",
     ("aws", "elb", "hour"): "a load balancer whose type is a variable", ("aws", "elb", "lcu"): "as hour",
     ("aws", "elb.gwlb", "hour"): "stage B (Gateway Load Balancer)", ("aws", "elb.gwlb", "lcu"): "stage B",
     ("aws", "elb.classic", "hour"): "stage B (Classic Load Balancer, previous generation)",
     ("aws", "elb.classic", "lcu"): "stage B",
     ("aws", "eventbridge", "requests"): "a rule on the event bus: a scheduled rule is free; custom events stage B",
-    ("aws", "kms", "secret"): "stage B (KMS keys)", ("aws", "kms", "api"): "stage B",
-    ("aws", "ssm", "secret"): "a standard parameter is free; advanced ones stage B", ("aws", "ssm", "api"): "stage B",
-    ("aws", "kinesis", "put"): "stage B (Kinesis PUT payload units)",
-    ("aws", "msk", "shard"): "stage B (MSK)", ("aws", "msk", "put"): "stage B",
-    ("cloudflare", "access", "mau"): "stage B (Zero Trust seats)",
     ("cloudflare", "workers", "compute"): "Workers bill CPU ms, not GB-seconds",
     ("cloudflare", "workers", "egress"): "Workers' data out is free",
-    ("cloudflare", "pages", "instance"): "stage B (Pages)", ("cloudflare", "pages", "storage"): "stage B",
-    ("cloudflare", "pages", "egress"): "Pages' data out is free",
-    ("cloudflare", "kv", "read"): "stage B (KV)", ("cloudflare", "kv", "write"): "stage B",
-    ("cloudflare", "kv", "capacity"): "KV has no provisioned capacity", ("cloudflare", "kv", "storage"): "stage B",
-    ("cloudflare", "zone", "queries"): "Cloudflare DNS: free", ("cloudflare", "lb", "hour"): "stage B (Load Balancing)",
-    ("cloudflare", "lb", "lcu"): "stage B",
+    ("cloudflare", "pages", "instance"): "Pages: static asset requests are free and unlimited (its Functions are "
+                                         "Workers, priced on the Workers rows)",
+    ("cloudflare", "pages", "storage"): "as instance", ("cloudflare", "pages", "egress"): "Pages' data out is free",
+    ("cloudflare", "zone", "queries"): "Cloudflare DNS: free",
 }
 #: A type-priced meter is looked up with a type the table holds (the formula says "instance" when none is given).
 TYPE_OF = {"ec2": "t3.micro", "ec2.asg": "t3.micro", "rds.mysql": "db.t3.micro", "rds.postgres": "db.t3.micro",
-           "elasticache": "cache.t4g.micro"}
+           "rds.mariadb": "db.t3.micro", "aurora.mysql": "db.t4g.medium", "aurora.postgres": "db.t4g.medium",
+           "elasticache": "cache.t4g.micro", "opensearch": "t3.small.search", "docdb": "db.t4g.medium",
+           "msk": "kafka.m7g.large"}
 
 
 def drafted() -> list[tuple[str, str, str]]:
@@ -107,8 +93,8 @@ def drafted() -> list[tuple[str, str, str]]:
         if prov is None:
             continue
         names = {svc}
-        if svc == "rds":
-            names |= set(T.RDS_ENGINE_SERVICE.values())
+        if svc in ("rds", "aurora"):
+            names |= {n for n in T.RDS_ENGINE_SERVICE.values() if n.startswith(svc + ".")}
         if svc == "elb":
             names |= set(T.LB_TYPE_SERVICE.values())
         out |= {(prov, cat, n) for n in names}
@@ -189,6 +175,10 @@ def test_the_seeds_service_is_the_price_rows():
     assert T.priced_service("elb", lb_type="network", lb_type_written=True) == "elb.nlb"
     assert T.priced_service("elb", lb_type=None, lb_type_written=True) == "elb"   # a variable: not guessed
     assert T.priced_service("elb.classic") == "elb.classic" and T.priced_service("s3", "x") == "s3"
+    assert (T.priced_service("aurora", "aurora-postgresql"), T.priced_service("aurora", "aurora-mysql"),
+            T.priced_service("aurora", "aurora"), T.priced_service("rds", "aurora-mysql")) == (
+        "aurora.postgres", "aurora.mysql", "aurora.mysql", "aurora.mysql")   # an instance of a cluster, too
+    assert T.priced_service("aurora", None) == "aurora" and T.priced_service("rds", "mariadb") == "rds.mariadb"
 
 
 @pytest.mark.parametrize("kind", ["LoadBalancer", "DBInstance"])
@@ -328,3 +318,116 @@ def test_alarms_are_a_monthly_fee_less_the_ten_free():
     assert RULES.lookup(node).id == "aws/cloudwatch-alarm"
     for hours in (730, 744):
         assert round(sum(month(node, {}, 12, hours).values()), 6) == 0.2
+
+
+# ---------------------------------------------------------------- stage B: the rest, each from its price rows
+# (label, node, quantities per hour, how many run, the month of 730 hours by hand from the offer's or the page's price)
+def cf(id_: str, cat: str, svc: str, **extra) -> dict:
+    return {"id": id_, "category": cat, "provider": "cloudflare", "providerResolved": "cloudflare", "service": svc, **extra}
+
+
+STAGE_B = [
+    ("Aurora PostgreSQL db.t4g.medium + 10 GB", aws("au", "database.relational", "aurora.postgres", ha="multi-az"),
+     {"_sku": "db.t4g.medium", "storage_gb": 10.0}, 1, 0.113 * 730 + 0.12 * 10),
+    ("Aurora Serverless v2 0.5 ACU", aws("au", "database.relational", "aurora.mysql"), {"capacity_units": 0.5}, 1,
+     0.5 * 730 * 0.15),
+    ("MariaDB db.t4g.micro Multi-AZ + 20 GB", aws("ma", "database.relational", "rds.mariadb", ha="multi-az"),
+     {"_sku": "db.t4g.micro", "storage_gb": 20.0}, 1, 0.05 * 730 + 0.276 * 20),
+    ("DocumentDB db.t4g.medium ×2 + 50 GB", aws("doc", "database.document", "docdb"),
+     {"_sku": "db.t4g.medium", "storage_gb": 50.0}, 2, 0.11543 * 730 * 2 + 0.12 * 50),
+    ("OpenSearch t3.small.search ×2 + 20 GB", aws("os", "database.search", "opensearch"),
+     {"_sku": "t3.small.search", "storage_gb": 20.0}, 2, 0.056 * 730 * 2 + 0.1464 * 20),
+    ("MSK kafka.m7g.large ×3 + 100 GB", aws("msk", "stream", "msk"), {"_sku": "kafka.m7g.large", "storage_gb": 100.0}, 3,
+     0.2635 * 730 * 3 + 0.12 * 100),
+    ("Kinesis 1 million records", aws("ks", "stream", "kinesis"), {"messages": 1_000_000 / 730}, 0, 0.0215),
+    ("DynamoDB provisioned 100 RCU + 10 WCU (25 each free)", aws("ddb", "database.kv", "dynamodb"),
+     {"read_capacity_units": 100.0, "write_capacity_units": 10.0}, 0, (100 * 730 - 25 * 744) * 0.0001484),
+    ("ElastiCache Serverless Redis 1 GB + 1 million ECPU an hour", aws("ec", "cache", "elasticache"),
+     {"storage_gb": 1.0, "ecpu": 1_000_000.0}, 1, 0.151 * 730 + 0.0041 * 730),
+    ("ElastiCache Serverless Valkey", aws("ec", "cache", "elasticache", spec=[{"key": "engine", "value": "valkey"}]),
+     {"storage_gb": 1.0, "ecpu": 1_000_000.0}, 1, 0.101 * 730 + 0.0027 * 730),
+    ("Cognito Essentials 20,000 MAU (10,000 free)", aws("cg", "auth", "cognito"), {"monthly_active_users": 20_000.0}, 0,
+     10_000 * 0.015),
+    ("Cognito Lite 20,000 MAU", aws("cg", "auth", "cognito", spec=[{"key": "tier", "value": "lite"}]),
+     {"monthly_active_users": 20_000.0}, 0, 10_000 * 0.0055),
+    ("Cognito Plus 20,000 MAU", aws("cg", "auth", "cognito", spec=[{"key": "tier", "value": "Plus"}]),
+     {"monthly_active_users": 20_000.0}, 0, 20_000 * 0.02),
+    ("KMS 2 keys + 30,000 requests (20,000 free)", aws("kms", "secrets", "kms"),
+     {"secrets": 2.0, "requests": 30_000 / 730}, 0, 2.0 + 10_000 / 10_000 * 0.03),
+    ("SSM 40 standard parameters: free", aws("ssm", "secrets", "ssm"), {"secrets": 40.0, "requests": 100.0}, 0, 0.0),
+    ("SSM 10 advanced parameters + 20,000 API", aws("ssm", "secrets", "ssm", spec=[{"key": "tier", "value": "advanced"}]),
+     {"secrets": 10.0, "requests": 20_000 / 730}, 0, 10 * 0.05 + 2 * 0.05),
+    ("KV 20 million reads + 2 million writes + 3 GB", cf("kv", "database.kv", "kv"),
+     {"read_units": 20_000_000 / 730, "write_units": 2_000_000 / 730, "storage_gb": 3.0}, 0, 5.0 + 5.0 + 1.0),
+    ("Load Balancing", cf("lb", "load_balancer", "lb"), {}, 1, 5.0),
+]
+
+
+@pytest.mark.parametrize("label, node, q, running, hand", STAGE_B, ids=[x[0] for x in STAGE_B])
+def test_stage_b_costs_come_out_of_the_bundled_prices(label, node, q, running, hand):
+    assert round(sum(month(node, dict(q), running, 730).values()), 4) == round(hand, 4), label
+
+
+@pytest.mark.parametrize("users, usd", [(50, 0.0), (51, 51 * 7.0)])
+def test_zero_trust_is_free_to_fifty_users_then_every_user_is_a_seat(users, usd):
+    """Cloudflare's Zero Trust plans (read 2026-10-21): Free "50 users", Pay-as-you-go "$7 /user/month". 50 cost 0
+    (priced, not "no price"); the 51st puts the account on Pay-as-you-go, every user a seat, in any month."""
+    for hours in (730, 744):
+        got = month(cf("za", "auth", "access"), {"monthly_active_users": float(users)}, 0, hours)
+        assert set(got) == {"seat"} and round(got["seat"], 6) == usd
+
+
+def test_a_seeded_aurora_is_priced(tmp_path):
+    """CloudFormation through the seed: a DB cluster's Engine aurora-postgresql drafts aurora.postgres, priced by the
+    Aurora rule (no Multi-AZ price: a replica is one more instance); an Engine written as a reference stays "aurora"."""
+    def draft(props, name):
+        root = tmp_path / name
+        root.mkdir()
+        (root / "template.json").write_text(json.dumps({"AWSTemplateFormatVersion": "2010-09-09", "Resources": {
+            "Db": {"Type": "AWS::RDS::DBCluster", "Properties": props}}}))
+        doc, _rep = S.draft(root)
+        return next(nd for nd in doc["nodes"] if nd["category"] == "database.relational")
+    node = draft({"Engine": "aurora-postgresql"}, "a")
+    assert node["service"] == "aurora.postgres" and RULES.lookup(node).id == "aws/aurora"
+    assert draft({"Engine": {"Ref": "E"}}, "b")["service"] == "aurora"
+    ha = dict(node, ha="multi-az")
+    assert [m.sku for m in RULES.lookup(ha).cost(F.Hour(node=ha, q={"storage_gb": 1.0}, running=1.0,
+                                                          sku="db.r6g.large"))] == ["db.r6g.large", "storage"]
+
+
+def test_the_meters_a_rule_no_longer_charges_are_gone():
+    """DocumentDB and MSK are billed by their instances (brokers) and storage, not read/write units or shards; KV and
+    DynamoDB charge no single capacity; Aurora no rows (D1's)."""
+    assert {m.sku for m in meters("aws", "database.document", "docdb")} == {"db.t4g.medium", "storage"}
+    assert {m.sku for m in meters("aws", "stream", "msk")} == {"kafka.m7g.large", "storage"}
+    assert "capacity" not in {m.sku for m in meters("aws", "database.kv", "dynamodb")}
+    assert "capacity" not in {m.sku for m in meters("cloudflare", "database.kv", "kv")}
+    assert not {"rows-read", "rows-written"} & {m.sku for m in meters("aws", "database.relational", "aurora.mysql")}
+
+
+def test_the_page_rows_are_the_bundled_ones():
+    """The rows no offer file holds (Route 53's zone, Parameter Store, Cloudflare) are written by build_bundled as the
+    table has them, on the days the table says: a free standard parameter is a price of 0, not "no price"."""
+    key = lambda r: (r["provider"], r["service"], r["sku"], r["unit"])
+    bundled = {key(r): r for r in json.loads(PB.BUNDLED_PATH.read_text(encoding="utf-8"))["prices"]
+               if r["provider"] == "cloudflare" or r["source"] in (BB.R53, BB.SSM)}
+    built = BB.aws_page_rows("2026-10-21") + BB.cloudflare_rows("2026-10-20", "2026-10-21")
+    assert {key(r): r for r in built} == bundled
+    ssm = {r["sku"]: r["price_usd"] for r in built if r["service"] == "ssm"}
+    assert ssm == {"secret": 0.0, "api": 0.0, "secret:advanced": 0.05}
+
+
+def test_a_usage_type_that_spells_its_region_out_is_found():
+    """KMS's usage types are "ap-northeast-1-KMS-Keys", not "APN1-…": the spec's "{region}" is the region itself."""
+    spec = [s for s in A.regional_spec() if s["offer"] == "awskms"]
+    for region, other in (("ap-northeast-1", "us-east-1"), ("us-east-1", "ap-northeast-1")):
+        def product(ut, fam):
+            return {"productFamily": fam, "attributes": {"usagetype": ut}}
+        offer = {"publicationDate": "2026-09-11T12:46:01Z", "products": {
+            "K": product(f"{region}-KMS-Keys", "Encryption Key"), "R": product(f"{region}-KMS-Requests", "API Request"),
+            "X": product(f"{other}-KMS-Keys", "Encryption Key")},
+            "terms": {"OnDemand": {k: {"t": {"priceDimensions": {"d": {"pricePerUnit": {"USD": usd}, "beginRange": "0",
+                                                                     "endRange": "Inf"}}}}
+                                   for k, usd in (("K", "1.0"), ("R", "0.000003"), ("X", "9.0"))}}}
+        rows, missing = A.rows_from_offer(offer, spec, region, "u")
+        assert missing == [] and {(r["sku"], r["price_usd"]) for r in rows} == {("key", 1.0), ("api", 0.03)}

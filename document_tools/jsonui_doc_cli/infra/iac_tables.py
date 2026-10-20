@@ -166,15 +166,16 @@ PART_EXACT = {"aws_iam_role_policy", "aws_iam_role_policy_attachment", "aws_iam_
 # never the other way), so a seeded RDS or load balancer had no price. Refined from what the resource says: its engine,
 # its load balancer type (none written: AWS's default, application). What cannot be read (a variable) is not guessed.
 RDS_ENGINE_SERVICE = {"mysql": "rds.mysql", "postgres": "rds.postgres", "mariadb": "rds.mariadb",
-                      "aurora": "aurora", "aurora-mysql": "aurora", "aurora-postgresql": "aurora"}
+                      "aurora": "aurora.mysql", "aurora-mysql": "aurora.mysql", "aurora-postgresql": "aurora.postgres"}
 LB_TYPE_SERVICE = {"application": "elb.alb", "network": "elb.nlb", "gateway": "elb.gwlb"}
 LB_DEFAULT_TYPE = "application"
 
 
 def priced_service(svc: str, engine: str | None = None, lb_type: str | None = None, lb_type_written: bool = False) -> str:
-    """``svc`` as the price rows name it: rds -> rds.<engine>, elb -> elb.alb / elb.nlb. ``engine`` / ``lb_type``: the
-    literal the resource gives, or None; ``lb_type_written``: the attribute is there (a variable when lb_type is None)."""
-    if svc == "rds" and engine:
+    """``svc`` as the price rows name it: rds -> rds.<engine> (aurora.<engine> for an Aurora engine), aurora ->
+    aurora.mysql / aurora.postgres, elb -> elb.alb / elb.nlb. ``engine`` / ``lb_type``: the literal the resource gives,
+    or None; ``lb_type_written``: the attribute is there (a variable when lb_type is None)."""
+    if svc in ("rds", "aurora") and engine:
         return RDS_ENGINE_SERVICE.get(engine.strip().lower(), svc)
     if svc == "elb":
         if lb_type:

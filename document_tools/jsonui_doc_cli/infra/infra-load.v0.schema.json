@@ -246,6 +246,13 @@
           "x-kind": "flow",
           "x-label": "リクエスト"
         },
+        "ecpu": {
+          "$ref": "#/$defs/flow",
+          "description": "ElastiCache Processing Units used (ElastiCache Serverless: reads, writes and the data they move)",
+          "x-unit": "ECPU",
+          "x-kind": "flow",
+          "x-label": "ECPU"
+        },
         "read_units": {
           "$ref": "#/$defs/flow",
           "description": "read capacity units consumed (DynamoDB RRU, Cosmos DB read RU, Firestore document reads)",
@@ -411,10 +418,26 @@
         "capacity_units": {
           "type": "number",
           "minimum": 0,
-          "description": "provisioned or serverless capacity in that hour (Aurora ACU, Cosmos DB RU/s, provisioned RCU/WCU)",
+          "description": "provisioned or serverless capacity in that hour (Aurora ACU, Cosmos DB RU/s); DynamoDB's provisioned reads and writes are read_capacity_units and write_capacity_units",
           "x-unit": "capacity_unit",
           "x-kind": "level",
           "x-label": "容量"
+        },
+        "read_capacity_units": {
+          "type": "number",
+          "minimum": 0,
+          "description": "provisioned read capacity, units per hour (DynamoDB RCU); priced apart from writes",
+          "x-unit": "capacity_unit",
+          "x-kind": "level",
+          "x-label": "読みの容量"
+        },
+        "write_capacity_units": {
+          "type": "number",
+          "minimum": 0,
+          "description": "provisioned write capacity, units per hour (DynamoDB WCU); priced apart from reads",
+          "x-unit": "capacity_unit",
+          "x-kind": "level",
+          "x-label": "書きの容量"
         },
         "vcpu": {
           "type": "number",
