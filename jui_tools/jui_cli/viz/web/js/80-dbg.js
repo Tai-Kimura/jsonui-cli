@@ -301,15 +301,6 @@ window.__dbg = {
   // a session's main robot and a robot's project, as the page has them (tools/viz_e2e/project_switch.py)
   labelOfSession: (sid) => (typeof SESSION_UUID === 'undefined' ? null : Object.keys(SESSION_UUID).find((l) => SESSION_UUID[l] === sid) || null),
   robotProject: (id) => projectOfRobot(id) || null,
-  // the デバイス pane (tools/viz_e2e/devices_pane.py): the picked robot, the project, the server's machine slice, the
-  // button's colour per level, a project switch as the picker does it, the robot a project remembers
-  devState: () => ({ robot: rbState.id, project: UI.project, card: !document.getElementById('rb').hidden, pane: !document.getElementById('dev-pane').hidden }),
-  devMachine: () => (SOURCE.mode === 'live' ? LIVE.slices.machine || null : null),
-  devColours: () => { const b = document.getElementById('btn-devices'), keep = b.dataset.load;
-    const out = Object.fromEntries(['ok', 'busy', 'high'].map((l) => { b.dataset.load = l; return [l, getComputedStyle(b).backgroundColor]; }));
-    b.dataset.load = keep; return out; },
-  setProject: (id) => setProject(id, { camera: false }),
-  lastRobot: (id) => (LAST_ROBOT.has(id) ? LAST_ROBOT.get(id) : undefined),
   // the box (2.3.4): its desk, what it overlaps, the papers in it, each robot's trip and the trips' ends
   gitBox: () => ({ room: PROPS.room, desk: !!PROPS.gitDesk, fill: PROPS.gitFill, spot: PROPS.place ? PROPS.place.git : null,
     overlaps: gitDeskOverlaps(), ends: GITBOX.ends.slice(),

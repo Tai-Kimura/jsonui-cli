@@ -75,7 +75,6 @@ INPUT_WAIT_ENDS = frozenset({"UserPromptSubmit", "PreToolUse", "SessionEnd", "Se
 BACKGROUND_CAP_MS = 30 * 60_000
 BACKGROUND_UNWATCHED_MS = 60_000
 TEST_RUNS_KEPT = 50
-DEVICE_CMDS_KEPT = 200   # device ids named by Bash commands, newest kept (the デバイス pane's estimate)
 EDIT_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 
@@ -216,12 +215,6 @@ class World:
         self._peer_socks: dict[str, str] = {}
         self._session_names: dict[str, str] = {}
         self.devices: list[dict] = []
-        # who uses a device (sources/devices.py, the デバイス pane): device id -> sessions with a process naming it
-        # (ps, only while a device is up), and device id -> (agent id, at) of the last Bash command naming it
-        self.device_procs: dict[str, list[str]] = {}
-        self.device_cmds: dict[str, tuple[str, int]] = {}
-        self.machine: dict = {}                  # this machine's load (sources/machine.py), every 5 s
-        self.wall_ms = lambda: int(time.time() * 1000)   # the clock a command's estimate ages by (tests set their own)
         self.progress = ProgressBook()
         self.tests: dict[str, dict] = {}
         # a finished test command's head from its output (robots.test_verdict without the runner's records): kept so a
@@ -680,8 +673,6 @@ class World:
                 self._dirty.add("tasks")
             if tool == "SendMessage" and _s(tool_input.get("to")):
                 self._dial(session, agent, tool_input["to"], use_id, at)
-            if tool == "Bash" and _s(tool_input.get("command")):
-                self._device_named(str(tool_input["command"]), agent, at)
             if tool in ("Bash",) and use_id:   # a deletion (10-19): what it deletes, kept until it has run
                 gone = robots.deletions(str(tool_input.get("command", "")))
                 if gone is not None:
@@ -1199,66 +1190,12 @@ class World:
         if devices != self.devices:
             self.devices = devices
             self._dirty.add("devices")
-            # a test that started before its device was seen (the command booted it, or the first scan had not run)
-            for test in self.running_tests():
-                if not test.get("deviceId"):
-                    found = devices_mod.device_for_command(test.get("command", ""), devices)
-                    if found:
-                        test["deviceId"] = found
-                        self._dirty.add("tests")
-        elif self.devices_slice(self.wall_ms()) != self.state.slices.get("devices"):
-            self._dirty.add("devices")   # a command's estimate went out of date (COMMAND_KEPT_MS), a robot left
 
     def apply_mock(self, project_id: str, info: dict) -> None:
         project = self.rooms.projects.get(project_id)
         if project is not None and project.get("mock") != info:
             project["mock"] = info
             self._dirty.add("projects")
-
-    def _device_named(self, command: str, agent: dict, at: int) -> None:
-        for dev_id in devices_mod.ids_in_command(command, self.devices):
-            self.device_cmds.pop(dev_id, None)
-            self.device_cmds[dev_id] = (agent["id"], at)
-            if any(d["id"] == dev_id for d in self.devices):
-                self._dirty.add("devices")
-        for old in list(self.device_cmds)[:-DEVICE_CMDS_KEPT]:
-            del self.device_cmds[old]
-
-    def apply_device_procs(self, rows: list | None) -> None:
-        """A ps snapshot taken with the device scan while a device is up: which sessions have a process naming it."""
-        if rows is None:
-            return
-        found = devices_mod.sessions_using(rows, self.devices, self.pid_to_session) if self.devices else {}
-        if found != self.device_procs:
-            self.device_procs = found
-            self._dirty.add("devices")
-
-    def apply_machine(self, reading: dict) -> None:
-        if reading != self.machine:
-            self.machine = reading
-            self._dirty.add("machine")
-
-    def devices_slice(self, at: int) -> list[dict]:
-        """The devices, each with who uses it when that can be told, and how it was told (strongest first)."""
-        busy = {t["deviceId"]: t["agentId"] for t in self.running_tests() if t.get("deviceId")}
-        out = []
-        for dev in self.devices:
-            row = dict(dev)
-            used = None
-            if dev["id"] in busy:
-                row["busyBy"] = busy[dev["id"]]
-                used = {"agentId": busy[dev["id"]], "how": "test"}
-            elif any(sid in self.agents for sid in self.device_procs.get(dev["id"], [])):
-                sids = [sid for sid in self.device_procs[dev["id"]] if sid in self.agents]
-                used = {"agentId": sids[0], "how": "process", "others": sids[1:]}
-            elif dev["id"] in self.device_cmds:
-                agent_id, when = self.device_cmds[dev["id"]]
-                if agent_id in self.agents and at - when <= devices_mod.COMMAND_KEPT_MS:
-                    used = {"agentId": agent_id, "how": "command", "at": when}
-            if used:
-                row["usedBy"] = used
-            out.append(row)
-        return out
 
     def running_tests(self, platform: str | None = None) -> list[dict]:
         return [r for r in self.tests.values() if r["status"] == "running" and (platform is None or r["platform"] == platform)]
@@ -1888,7 +1825,6 @@ class World:
         if "prices" in self._dirty:
             self.state.set_slice("prices", self.prices_slice())
         if "devices" in self._dirty:
-            self.state.set_slice("devices", self.devices_slice(self.wall_ms()))
-        if "machine" in self._dirty:
-            self.state.set_slice("machine", dict(self.machine))
+            busy = {t["deviceId"]: t["agentId"] for t in self.running_tests() if t.get("deviceId")}
+            self.state.set_slice("devices", [dict(d, **({"busyBy": busy[d["id"]]} if d["id"] in busy else {})) for d in self.devices])
         self._dirty.clear()

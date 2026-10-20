@@ -10,7 +10,7 @@ import time
 from collections import deque
 from typing import Any
 
-SLICE_NAMES = ("projects", "sessions", "agents", "tasks", "specs", "tests", "perms", "questions", "denials", "calls", "devices", "server", "weather", "usage", "settings", "bills", "prices", "machine")
+SLICE_NAMES = ("projects", "sessions", "agents", "tasks", "specs", "tests", "perms", "questions", "denials", "calls", "devices", "server", "weather", "usage", "settings", "bills", "prices")
 
 
 def now_ms() -> int:
@@ -22,7 +22,6 @@ class VizState:
         self.rev = 0
         self.slices: dict[str, Any] = {name: [] for name in SLICE_NAMES}
         self.slices["server"] = {}
-        self.slices["machine"] = {}
         self._dirty: set[str] = set()
         self.events: deque[dict] = deque(maxlen=events_keep)
         self._new_events: list[dict] = []

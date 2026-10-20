@@ -822,19 +822,9 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
             first_scan = {"done": False}
 
-            procs_scan: dict = {"task": None}
-
-            async def scan_device_procs() -> None:
-                # Who has a process naming a device (the デバイス pane's estimate): one ps, only while a device is up.
-                rows = await loop.run_in_executor(None, processes.snapshot)
-                world.apply_device_procs(rows)
-                world.publish()
-
             def on_devices(found: list[dict]) -> None:
                 world.apply_devices(found)
                 world.publish()
-                if (found or world.device_procs) and (procs_scan["task"] is None or procs_scan["task"].done()):
-                    procs_scan["task"] = asyncio.create_task(scan_device_procs())
                 if not first_scan["done"]:  # the start-up pull rides the first device scan; no watcher of its own
                     first_scan["done"] = True
                     for dev in found:
@@ -842,14 +832,6 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                             pull_results(dev["id"])
 
             tasks.append(asyncio.create_task(devices_src.run(on_devices, lambda st, err: set_source("devices", st, err))))
-
-            from ..viz.sources import machine as machine_src
-
-            def on_machine(reading: dict) -> None:
-                world.apply_machine(reading)
-                world.publish()
-
-            tasks.append(asyncio.create_task(machine_src.run(on_machine)))
 
             # The progress folder, and while a session still has the old one (a plugin or a settings.json
             # env written before the move: the web runner recreates it), that one too.
