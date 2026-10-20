@@ -217,6 +217,9 @@ class World:
         self.devices: list[dict] = []
         self.progress = ProgressBook()
         self.tests: dict[str, dict] = {}
+        # a finished test command's head from its output (robots.test_verdict without the runner's records): kept so a
+        # run_end that comes after the command ended decides it again, the runner's records first (2.3.10)
+        self._test_from_output: dict[str, dict] = {}
         # Per case, the newest outcome a source reported, merged into each project's test_results:
         # live progress (project id -> spec id -> (test, case) -> (t, status)) and the saved
         # result files' rows (sources/test_results.py). Newest wins, so a case that ran live
@@ -737,11 +740,11 @@ class World:
                     output = f"{response.get('stdout') or ''}\n{response.get('stderr') or ''}"
                 elif isinstance(response, str):
                     output = response
-                summary, passed, n_failed = robots.test_summary(output[-200_000:])
-                run["status"] = "failed" if failed or (n_failed or 0) > 0 else "passed"
-                if summary:
-                    run["summary"] = summary
+                self._test_from_output[use_id] = robots.test_verdict(output[-200_000:], bool(failed))
+                for old in list(self._test_from_output)[:-TEST_RUNS_KEPT]:
+                    del self._test_from_output[old]
                 run["endedAt"] = at
+                self._test_decide(run)
                 self._dirty |= {"tests", "devices", "specs"}
             text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
             gone = self._deleting.pop(use_id, None) if use_id else None
@@ -1197,6 +1200,26 @@ class World:
     def running_tests(self, platform: str | None = None) -> list[dict]:
         return [r for r in self.tests.values() if r["status"] == "running" and (platform is None or r["platform"] == platform)]
 
+    def _runner_counts(self, test: dict) -> tuple[int, int] | None:
+        """jsonui-test-runner's own run_end counts over a command's runs, summed; None before any run_end."""
+        ended = [self.progress.runs[r] for r in _runs_of(test) if r in self.progress.runs and "failed" in self.progress.runs[r]]
+        if not ended:
+            return None
+        return sum(int(r.get("passed") or 0) for r in ended), sum(int(r.get("failed") or 0) for r in ended)
+
+    def _test_decide(self, test: dict) -> None:
+        """A finished command's head: the runner's records, else what its output said (robots.test_verdict's order)."""
+        got = self._test_from_output.get(test["id"])
+        if got is None:
+            return
+        runner = self._runner_counts(test)
+        if runner is not None:
+            got = robots.test_verdict("", False, runner)
+        test["status"], test["verdictFrom"] = got["status"], got["from"]
+        if got["summary"]:
+            test["summary"] = got["summary"]   # a command with runner records: the tick puts its cases' counts over it (_run_cases)
+        self._dirty |= {"tests", "devices", "specs"}
+
     def apply_progress(self, rec, source: str, device_id: str | None, at: int) -> bool:
         run = self.progress.add(rec, source, device_id)
         if run is None:
@@ -1214,6 +1237,8 @@ class World:
                 target.setdefault("progressRun", run["run"])
                 target.setdefault("progressRuns", []).append(run["run"])
         if target is not None:
+            if target["status"] != "running" and rec.get("event") == "run_end":
+                self._test_decide(target)   # the runner's own word came after the command ended
             self._cases_due.add(target["id"])  # tick rebuilds its cases once: each record would go over every run again
             project = self.jsonui.get(target["projectId"])
             if project is not None:

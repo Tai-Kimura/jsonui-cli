@@ -444,6 +444,13 @@ function liveTestsFor(projectId) {
   if (!pickFrom.length) return EMPTY_TESTS;
   return liveRunView(pickFrom.find((r) => r.status === 'running') || [...pickFrom].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0]);
 }
+/* What decided a finished run's head (ingest robots.test_verdict, 2.3.10): shown as the status's tooltip. */
+const VERDICT_FROM_JA = {
+  runner: '判定: jsonui-test-runner 自身の記録（run_end の passed / failed）',
+  xcode: '判定: xcodebuild の最後の ** TEST SUCCEEDED / FAILED **',
+  summary: '判定: ランナーの要約の行',
+  exit: '判定: 終了コード（出力に要約が無い）',
+};
 /* One run as the panels show it (the test pane, and a robot's card). */
 function liveRunView(run) {
   const cases = Array.isArray(run.cases) ? run.cases : [];
@@ -459,6 +466,7 @@ function liveRunView(run) {
     file: String(run.file || run.command || ''), device: dev ? String(dev.name) : ({ ios: 'iOS', android: 'Android', web: 'Web' }[run.platform] || ''),
     who: labelOf(run.agentId), project: run.projectId, runStatus: run.status, command: String(run.command || ''),
     id: String(run.id), startedAt: Number(run.startedAt) || 0, savedAt: Number(run.savedAt) || 0,
+    verdictWhy: run.status === 'running' ? '' : VERDICT_FROM_JA[run.verdictFrom] || '',
   };
 }
 /* A robot's own runs for its card (requester, 10-18: "ロボットのパネルにもテストの経過表示できない？"): only runs

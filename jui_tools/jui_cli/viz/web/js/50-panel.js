@@ -1807,14 +1807,14 @@ function robotRunHTML(T) {
   const failedRows = T.rows.filter((c) => c.status === 'failed');
   const namesHTML = failedRows.slice(0, FAILED_SHOWN).map((c) => `<li>${esc(c.name)}</li>`).join('');
   const moreHTML = failedRows.length > FAILED_SHOWN ? `<li class="rb-fail-more">ほか ${Math.max(0, failedRows.length - FAILED_SHOWN)} 件</li>` : '';
-  return `<li class="rb-run r-${esc(T.runStatus)}" data-rb-run="${esc(T.id)}"><p class="rb-run-head"><b>${esc(T.device || 'テスト')}</b> <span>${esc(T.statusText)}</span>${T.savedAt ? '<small class="rb-saved">保存された結果</small>' : ''}</p><code class="rb-run-file">${esc(T.file)}</code>
+  return `<li class="rb-run r-${esc(T.runStatus)}" data-rb-run="${esc(T.id)}"><p class="rb-run-head"><b>${esc(T.device || 'テスト')}</b> <span${T.verdictWhy ? ` title="${esc(T.verdictWhy)}" data-verdict-why` : ''}>${esc(T.statusText)}</span>${T.savedAt ? '<small class="rb-saved">保存された結果</small>' : ''}</p><code class="rb-run-file">${esc(T.file)}</code>
 <div class="prog" role="img" aria-label="通過 ${Number(T.passed)} 件 / 失敗 ${Number(T.failed)} 件 / 全 ${Number(n)} 件"><span class="p" style="width:${Number(pPct)}%"></span><span class="r" style="width:${Number(rPct)}%"></span><span class="x" style="width:${Number(fPct)}%"></span></div>${namesHTML ? `<ul class="rb-fails" aria-label="失敗したケース">${namesHTML}${moreHTML}</ul>` : ''}</li>`;
 }
 function liveTestsHTML(T) {
   const n = T.rows.length, pPct = n ? (T.passed / n) * 100 : T.runStatus === 'passed' ? 100 : 0, rPct = n && T.runningIdx >= 0 ? 100 / n : 0;
   const fPct = n ? (T.failed / n) * 100 : T.runStatus === 'failed' ? 100 : 0;
   const whoPillHTML = T.who && DEF[T.who] ? pill(T.who, DEF[T.who].role) : '';
-  return `<div class="test-head"><div>${whoPillHTML} <code>${esc(T.file)}</code></div><code>${esc(T.device)}${T.device ? ' · ' : ''}${esc(T.statusText)}</code>
+  return `<div class="test-head"><div>${whoPillHTML} <code>${esc(T.file)}</code></div><code${T.verdictWhy ? ` title="${esc(T.verdictWhy)}" data-verdict-why` : ''}>${esc(T.device)}${T.device ? ' · ' : ''}${esc(T.statusText)}</code>
 <div class="prog" role="img" aria-label="通過 ${Number(T.passed)} 件 / 全 ${Number(n)} 件"><span class="p" style="width:${Number(pPct)}%"></span><span class="r" style="width:${Number(rPct)}%"></span><span class="x" style="width:${Number(fPct)}%"></span></div></div>
 <ul class="cases">${T.rows.map((c, i) => `<li class="c-${esc(c.status)}"><span class="ic">${CASE_ICON[c.status] || '○'}</span><span>${i + 1}. ${esc(c.name)}</span>${c.status === 'running' ? `<span class="step">${esc(c.step)}</span>` : ''}</li>`).join('')}</ul>`;
 }

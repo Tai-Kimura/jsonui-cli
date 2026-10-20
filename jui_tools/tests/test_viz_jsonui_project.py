@@ -8,6 +8,7 @@ import socket
 from pathlib import Path
 
 import aiohttp
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from jui_cli.viz import robots
@@ -164,7 +165,7 @@ def test_the_world_links_edits_tasks_and_test_runs(tmp_path):
     world.publish()
     assert state.slices["tests"][0]["status"] == "running" and state.slices["tests"][0]["platform"] == "ios"
     world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "b", "tool_input": {"command": cmd},
-                      "tool_response": {"stdout": "Executed 8 tests, with 1 failure (0 unexpected)", "stderr": ""}}, 900)
+                      "tool_response": {"stdout": "Executed 8 tests, with 1 failure (1 unexpected)", "stderr": ""}}, 900)   # a real failure: 1 unexpected
     world.publish()
     run = state.slices["tests"][0]
     assert run["status"] == "failed" and run["summary"] == "7 passed, 1 failed" and run["endedAt"] == 900
@@ -245,7 +246,10 @@ def test_spec_sheet_over_the_websocket(tmp_path):
 
 
 def test_test_command_summaries():
-    assert robots.test_summary("Executed 1 test, with 0 failures\n...\nExecuted 12 tests, with 2 failures (0 unexpected)") == ("10 passed, 2 failed", 10, 2)
+    # XCTExpectFailure's 2 are expected (0 unexpected): the run passed (ticket 2026-10-20-jui-viz-test-run-ios-shows-
+    # failed-while-passing; this arm held "10 passed, 2 failed" before)
+    assert robots.test_summary("Executed 1 test, with 0 failures\n...\nExecuted 12 tests, with 2 failures (0 unexpected)") == ("12 passed, 0 failed", 12, 0)
+    assert robots.test_summary("Executed 12 tests, with 3 failures (1 unexpected)") == ("11 passed, 1 failed", 11, 1)
     assert robots.test_summary("12 tests completed, 1 failed") == ("11 passed, 1 failed", 11, 1)
     assert robots.test_summary("  2 failed\n  30 passed (40s)") == ("30 passed, 2 failed", 30, 2)
     assert robots.test_summary("BUILD SUCCESSFUL in 3s") == ("BUILD SUCCESSFUL", None, 0)
@@ -273,3 +277,156 @@ def test_a_new_artifact_is_carried_but_an_edit_is_not(tmp_path):
     world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_use_id": "e", "tool_input": {"file_path": str(old)}}, 6_100)
     world.publish()
     assert state.slices["agents"][0]["state"] == "idle"  # an edit of an existing file is not carried
+
+
+# ---------------------------------------------------------------- ticket 2026-10-20-jui-viz-test-run-ios-shows-failed-while-passing
+# The requester's screen: "iOS 失敗 · 0 passed, 36 failed" for a run that passed 36 (TEST SUCCEEDED). Counts came from
+# "(\d+) failed" anywhere, so an agent's echoed `passed=36 failed=0` read as 36 failed.
+TODAY = "rc=0\n** TEST SUCCEEDED **\npassed=36 failed=0\n\n"
+
+
+@pytest.mark.parametrize("output, want", [
+    (TODAY, ("** TEST SUCCEEDED **", None, 0)),                                                    # today's output itself
+    ("passed=36 failed=0\n", ("", None, None)),                                                    # an echo is no runner's line
+    ("writing /tmp/run 3 failed.log\nsee docs/5 failed attempts.md\n", ("", None, None)),          # numbers and "failed" in a path or a sentence
+    ("test_2_failed_logins_lock_the_account PASSED\n", ("", None, None)),                          # a test's name
+    ("=== 1 failed, 3 passed in 2.1s ===\n--- rerun ---\n4 passed in 1.0s\n", ("4 passed, 0 failed", 4, 0)),   # pytest's rerun: the last line alone
+    ("rc=0\n** TEST FAILED **\n", ("** TEST FAILED **", None, None)),                             # a redirected failed run, exit 0
+    ("Test case 'A.t1()' passed on 'Clone 1 of iPhone'\nTest case 'A.t2()' passed on 'Clone 2 of iPhone'\n** TEST SUCCEEDED **\n",
+     ("2 passed, 0 failed", 2, 0)),                                                                # parallel testing: no Executed line
+    ("Test case 'A.t1()' passed on 'Clone 1'\nTest case 'A.t2()' failed on 'Clone 2'\n** TEST FAILED **\n", ("1 passed, 1 failed", 1, 1)),
+    ("Executed 5 tests, with 1 failure (1 unexpected)\n** TEST SUCCEEDED **\n", ("** TEST SUCCEEDED **", None, 0)),   # the mark decides
+    ("Tests:       1 failed, 35 passed, 36 total\n", ("35 passed, 1 failed", 35, 1)),               # jest
+    ("4057 passed, 16 skipped in 300.1s\n", ("4057 passed, 0 failed", 4057, 0)),                    # pytest -q
+    # two marks in one output (a run, then a rerun): the last one is the run's word (dd's T1)
+    ("** TEST FAILED **\n--- rerun ---\n** TEST SUCCEEDED **\n", ("** TEST SUCCEEDED **", None, 0)),
+    ("** TEST SUCCEEDED **\n--- rerun ---\n** TEST FAILED **\n", ("** TEST FAILED **", None, None)),
+])
+def test_counts_come_only_from_a_runners_own_summary_line(output, want):
+    assert robots.test_summary(output) == want
+
+
+def test_a_redirected_xcodebuild_failure_with_exit_code_0_is_a_failed_run_and_todays_is_passed(tmp_path):
+    root = make_project(tmp_path)
+    for out, want in ((TODAY, "passed"), ("rc=0\n** TEST FAILED **\n", "failed")):
+        world = World(VizState())
+        base = {"session_id": "s1", "cwd": str(root)}
+        world.apply_hook({**base, "hook_event_name": "SessionStart"}, 0)
+        cmd = "cd ios && xcodebuild test -scheme App > $L 2>&1; echo rc=$?"
+        world.apply_hook({**base, "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1", "tool_input": {"command": cmd}}, 1)
+        world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "t1", "tool_input": {"command": cmd},
+                          "tool_response": {"stdout": out, "stderr": ""}}, 2)
+        runs = list(world.tests.values())
+        assert len(runs) == 1 and runs[0]["status"] == want, (out, runs)
+
+
+# ---------------------------------------------------------------- 2.3.10: the head from the strongest thing that says it
+# cd's ruling on tickets 2026-10-20-jui-viz-test-run-ios-shows-failed-while-passing and -passed-head-over-runner-failed:
+# jsonui-test-runner's own run_end, then xcodebuild's last mark, then a known summary line, then the exit code. b8's
+# first fix read counts only from known lines, so robot-tests' "2 passed, 8 failed" (run_end failed=8) showed 通過.
+SCRIPTED = "2 passed, 8 failed"   # tools/viz_e2e/robot_tests.py: the tool's output of the run whose run_end says failed=8
+
+
+@pytest.mark.parametrize("output, exit_failed, runner, want", [
+    (TODAY, False, None, ("passed", "xcode")),                         # ticket 1's output itself
+    (SCRIPTED, False, (2, 8), ("failed", "runner")),                   # ticket 2's output and records
+    (SCRIPTED, False, None, ("failed", "summary")),                    # the one-line total, no records yet
+    ("Executed 3 tests, with 0 failures\n** TEST SUCCEEDED **\n", False, (3, 1), ("failed", "runner")),   # the runner over the mark
+    ("4 passed in 1.0s\n", True, (4, 0), ("passed", "runner")),         # the runner over the exit code
+    ("rc=0\n** TEST FAILED **\n", False, None, ("failed", "xcode")),  # the mark over the exit code
+    ("Executed 5 tests, with 1 failure (1 unexpected)\n** TEST SUCCEEDED **\n", False, None, ("passed", "xcode")),   # the mark over the count
+    ("=== 1 failed, 3 passed in 2.1s ===\n", False, None, ("failed", "summary")),   # the count over the exit code
+    ("passed=36 failed=0\n", True, None, ("failed", "exit")),         # an echo says nothing: the exit code
+    ("passed=36 failed=0\n", False, None, ("passed", "exit")),
+    ("BUILD SUCCESSFUL in 3s\n", True, None, ("failed", "exit")),      # no counts: the exit code
+])
+def test_the_head_comes_from_the_strongest_thing_that_says_it(output, exit_failed, runner, want):
+    got = robots.test_verdict(output, exit_failed, runner)
+    assert (got["status"], got["from"]) == want, got
+
+
+@pytest.mark.parametrize("output, want", [
+    (SCRIPTED, ("2 passed, 8 failed", 2, 8)),
+    ("  8 failed, 2 passed\n", ("2 passed, 8 failed", 2, 8)),
+    ("passed=2, failed=8\n", ("", None, None)),                        # key=value is no summary line
+    ("see 2 passed, 8 failed above\n", ("", None, None)),              # inside a sentence: not at the line's start
+    ("2 passed, 2 passed\n", ("", None, None)),                        # not both counts
+])
+def test_a_one_line_total_with_both_counts(output, want):
+    assert robots.test_summary(output) == want
+
+
+def _runner_world(tmp_path):
+    root = make_project(tmp_path)
+    state = VizState()
+    world = World(state)
+    base = {"session_id": "s1", "cwd": str(root)}
+    world.apply_hook({**base, "hook_event_name": "SessionStart"}, 0)
+    cmd = "npx playwright test tests/a.test.json"
+    world.apply_hook({**base, "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "r1", "tool_input": {"command": cmd}}, 100)
+    post = {**base, "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "r1", "tool_input": {"command": cmd},
+            "tool_response": {"stdout": SCRIPTED, "stderr": ""}}
+    return state, world, post
+
+
+RUN_ID = "0f8f8f8f-1111-4222-8333-444455556666"
+
+
+def _records(world, at, failed=8, passed=2):
+    rec = lambda event, **kw: {"v": 1, "t": at, "platform": "web", "run": RUN_ID, "event": event, **kw}
+    world.apply_progress(rec("run_start", files=1), "web", None, at)
+    world.apply_progress(rec("run_end", passed=passed, failed=failed, skipped=0), "web", None, at + 1)
+
+
+def test_the_runners_run_end_decides_the_head_before_the_command_ends(tmp_path):
+    state, world, post = _runner_world(tmp_path)
+    _records(world, 200)
+    world.apply_hook(dict(post, tool_response={"stdout": "", "stderr": ""}), 300)   # no summary in the output, exit 0
+    world.publish()
+    run = state.slices["tests"][0]
+    assert run["status"] == "failed", run   # the head itself (the old code said 通過 here: exit 0, no summary line)
+    assert run["verdictFrom"] == "runner", run
+
+
+def test_a_run_end_after_the_command_ended_decides_again(tmp_path):
+    state, world, post = _runner_world(tmp_path)
+    world.apply_progress({"v": 1, "t": 150, "platform": "web", "run": RUN_ID, "event": "run_start", "files": 1}, "web", None, 150)
+    world.apply_hook(dict(post, tool_response={"stdout": "  2 passed (1.0s)\n", "stderr": ""}), 300)   # the output says passed
+    world.publish()
+    assert state.slices["tests"][0]["status"] == "passed"
+    assert state.slices["tests"][0]["verdictFrom"] == "summary"
+    world.apply_progress({"v": 1, "t": 310, "platform": "web", "run": RUN_ID, "event": "run_end", "passed": 2, "failed": 8, "skipped": 0}, "web", None, 310)
+    world.publish()
+    assert state.slices["tests"][0]["status"] == "failed"   # decided again by the runner's own word
+    assert state.slices["tests"][0]["verdictFrom"] == "runner"
+
+
+def test_todays_ios_output_through_the_world_is_passed_from_the_mark(tmp_path):
+    root = make_project(tmp_path)
+    state = VizState()
+    world = World(state)
+    base = {"session_id": "s1", "cwd": str(root)}
+    world.apply_hook({**base, "hook_event_name": "SessionStart"}, 0)
+    cmd = "cd ios && L=/tmp/x.log && xcodebuild test -scheme App > $L 2>&1; echo rc=$?"
+    world.apply_hook({**base, "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "i1", "tool_input": {"command": cmd}}, 1)
+    world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "i1", "tool_input": {"command": cmd},
+                      "tool_response": {"stdout": TODAY, "stderr": ""}}, 2)
+    world.publish()
+    run = state.slices["tests"][0]
+    assert run["status"] == "passed", run   # the old code said 失敗 · 0 passed, 36 failed
+    assert (run["verdictFrom"], run.get("summary")) == ("xcode", "** TEST SUCCEEDED **"), run
+
+
+def test_every_run_of_the_command_counts(tmp_path):
+    # a command runs one jsonui-test-runner run per test file: the head is their sum, a later file's failure too
+    state, world, post = _runner_world(tmp_path)
+    second = "1f8f8f8f-1111-4222-8333-444455556666"
+    for rid, t, passed, failed in ((RUN_ID, 200, 3, 0), (second, 220, 4, 1)):
+        rec = lambda event, **kw: {"v": 1, "t": t, "platform": "web", "run": rid, "event": event, **kw}
+        world.apply_progress(rec("run_start", files=1), "web", None, t)
+        world.apply_progress(rec("run_end", passed=passed, failed=failed, skipped=0), "web", None, t + 1)
+    world.apply_hook(dict(post, tool_response={"stdout": "", "stderr": ""}), 300)
+    assert world._runner_counts(world.tests["r1"]) == (7, 1)
+    world.publish()
+    run = state.slices["tests"][0]
+    assert run["status"] == "failed" and run["verdictFrom"] == "runner", run
