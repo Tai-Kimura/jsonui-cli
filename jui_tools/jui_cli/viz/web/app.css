@@ -1316,6 +1316,25 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 /* priced by the user's own table (not the shipped one): a dashed frame, and the title says so */
 .bill.own-price .bill-in { border-style: dashed; }
 /* ---------- トーク (58-talk.js, 2.3.6): a robot's SendMessage conversations, as a chat ---------- */
+/* A received talk bubble (2.3.8, ticket 2026-10-20-jui-viz-talk-bubble-colours; requester 10-20: 「トークの吹き出しの色が背景と
+   どうかしててわかりづらい」「相手側ね」): its ground, edge, text and what is inside it (links and 全文を表示, `code` and code
+   blocks, notes and quotes, table lines, a code block's error). Light: a white bubble with a grey edge (the edge 3:1+ on
+   the panel); dark: a light grey bubble with dark text, as a chat app's. The text 4.5:1+ on its ground; the ground apart
+   from the sent bubble's (ΔE2000 ≥ 8). The sent bubble keeps --info-bg / --info / --ink. Measured by tools/viz_e2e/talk_ui.py. */
+:root {
+  --talk-in-bg: #ffffff; --talk-in-edge: #6b7a90; --talk-in-ink: #111827; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
+  --talk-in-code-bg: #eef1f5; --talk-in-line: #c9d1dc; --talk-in-warn: #9a3412;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --talk-in-bg: #e5e7eb; --talk-in-edge: #e5e7eb; --talk-in-ink: #111827; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
+    --talk-in-code-bg: #d1d5db; --talk-in-line: #9ca3af; --talk-in-warn: #9a3412;
+  }
+}
+:root[data-theme="dark"] {
+  --talk-in-bg: #e5e7eb; --talk-in-edge: #e5e7eb; --talk-in-ink: #111827; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
+  --talk-in-code-bg: #d1d5db; --talk-in-line: #9ca3af; --talk-in-warn: #9a3412;
+}
 .rb-talk { position: relative; display: inline-flex; align-items: center; gap: 5px; background: var(--panel); color: var(--ink); }
 .rb-talk[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
 .rb-talk-icon { flex: none; }
@@ -1359,7 +1378,14 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .talk-in { justify-self: start; align-self: flex-start; }
 .talk-out { justify-self: end; align-self: flex-end; justify-items: end; }
 .talk-bubble { min-width: 0; padding: 7px 11px; border-radius: 14px; overflow-wrap: anywhere; font-size: 13px; }
-.talk-in .talk-bubble { border: 1px solid var(--line); border-top-left-radius: 4px; background: var(--chip); color: var(--ink); }
+.talk-in .talk-bubble { border: 1px solid var(--talk-in-edge); border-top-left-radius: 4px; background: var(--talk-in-bg); color: var(--talk-in-ink); }
+.talk-in .talk-bubble .h-md a, .talk-in .talk-bubble .talk-more { color: var(--talk-in-link); }
+.talk-in .talk-bubble .h-md code, .talk-in .talk-bubble .h-code { background: var(--talk-in-code-bg); color: var(--talk-in-ink); }
+.talk-in .talk-bubble .h-code code { background: none; }
+.talk-in .talk-bubble .h-code-err { color: var(--talk-in-warn); }
+.talk-in .talk-bubble .talk-note, .talk-in .talk-bubble .h-quote, .talk-in .talk-bubble .h-img { color: var(--talk-in-soft); }
+.talk-in .talk-bubble .h-quote { border-left-color: var(--talk-in-line); }
+.talk-in .talk-bubble .h-table th, .talk-in .talk-bubble .h-table td { border-color: var(--talk-in-line); }
 .talk-out .talk-bubble { border: 1px solid var(--info); border-top-right-radius: 4px; background: var(--info-bg); color: var(--ink); }
 .talk-out .talk-bubble.talk-undelivered { border: 1px dashed var(--bad); background: var(--bad-bg); }
 .talk-text { line-height: 1.6; }

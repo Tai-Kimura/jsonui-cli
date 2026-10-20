@@ -20,6 +20,11 @@ Checked:
   * the header: a long name is one line cut with …, its hover shows the whole name (57-fulltext.js); pressed, the card
     switches to that robot with the same talk open; a peer outside the machine is not a button and says この機械の外の相手;
   * a remove op takes the talk off the list (and out of the detail, with a note);
+  * the received bubble's colours (2.3.8, ticket 2026-10-20-jui-viz-talk-bubble-colours; requester: 「相手側ね」), light and
+    dark, from the computed styles: its text, a link in it (an <a> put into its rendered text), 全文を表示 and `code` (on
+    the code's ground) 4.5:1 or more on it; the time under it 4.5:1 or more on what is behind it; the bubble 3:1 or more
+    on the talk's ground, by its fill or its solid edge; its fill apart from the sent bubble's (ΔE2000 >= IN_OUT_DE);
+  * the sent bubble as it was (SENT, per theme), and the undelivered one still dashed in --bad;
   * the peers' marks (2.3.7, ticket 2026-10-20-jui-viz-talk-pill-contrast-and-version-comments), in the list and the
     header: each the pill's pair of its robot's role (as pill() draws it, __dbg.rolePills), white on main's #0369a1,
     every one 4.5:1 or more; and the demo phones' headers (drawPhoneUI, drawCartUI) per role: the pill's pair, >= 4.5:1.
@@ -35,7 +40,7 @@ import time
 
 from common import DESKTOP, PHONE, LAUNCH_ARGS, Watch, new_page, ready
 from waits import WaitTimeout, until
-from workwear import contrast
+from workwear import contrast, de2000
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from jui_cli.viz import talk_contract  # noqa: E402
@@ -63,6 +68,48 @@ FOLD = """() => { const t = [...document.querySelectorAll('#rb [data-tk-text]')]
 COLORS = """() => { const o = document.querySelector('#rb .talk-out .talk-bubble'), i = document.querySelector('#rb .talk-in .talk-bubble');
   return { body: getComputedStyle(document.body).backgroundColor, out: o && getComputedStyle(o).backgroundColor, in: i && getComputedStyle(i).backgroundColor,
     ink: i && getComputedStyle(i).color }; }"""
+
+
+BUBBLE_PAINT = """() => {
+  const back = (el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c; } return getComputedStyle(document.body).backgroundColor; };
+  const one = (dir) => {
+    const all = [...document.querySelectorAll(`#rb .talk-${dir} .talk-bubble:not(.talk-undelivered)`)];
+    const n = all.find((x) => x.querySelector('.h-md code')) || all[0]; if (!n) return null;
+    const cs = getComputedStyle(n), md = n.querySelector('.h-md');
+    const a = document.createElement('a'); a.href = '#probe'; a.textContent = 'link'; md.appendChild(a); const link = getComputedStyle(a).color; a.remove();
+    const code = n.querySelector('.h-md code'), more = n.querySelector('.talk-more'), at = n.parentElement.querySelector('.talk-at');
+    return { bg: cs.backgroundColor, ink: cs.color, edge: cs.borderTopColor, edgeStyle: cs.borderTopStyle, edgeWidth: cs.borderTopWidth, back: back(n.parentElement), link,
+      code: code ? { bg: getComputedStyle(code).backgroundColor, fg: getComputedStyle(code).color } : null,
+      more: more ? getComputedStyle(more).color : null, at: at ? { fg: getComputedStyle(at).color, back: back(at) } : null };
+  };
+  const und = document.querySelector('#rb .talk-out .talk-bubble.talk-undelivered');
+  return { in: one('in'), out: one('out'), undelivered: und ? { style: getComputedStyle(und).borderTopStyle, color: getComputedStyle(und).borderTopColor, bg: getComputedStyle(und).backgroundColor } : null };
+}"""
+IN_OUT_DE = 8.0   # ΔE2000 between the received and the sent bubbles' fills (before: 3.6 light, 4.2 dark)
+# the sent bubble, unchanged by the received bubble's colours (2.3.8): fill, text, edge, link, per theme
+SENT = {"light": ("#dde8fb", "#13233a", "#2a62c9", "#2a62c9"), "dark": ("#15305a", "#e4ecf8", "#86b8ff", "#86b8ff")}
+BAD = {"light": "#c62f3c", "dark": "#ff8590"}
+
+
+def bubbles_read(paint, scheme, failures):
+    i, o = paint.get("in"), paint.get("out")
+    check(failures, bool(i and o), f"{scheme}: a received and a sent bubble to measure: {paint}")
+    if not (i and o):
+        return {}
+    h = {k: rgb_hex(i[k]) for k in ("bg", "ink", "edge", "back", "link", "more")}
+    m = {"text": contrast(h["ink"], h["bg"]), "link": contrast(h["link"], h["bg"]), "more": contrast(h["more"], h["bg"]),
+         "code": contrast(rgb_hex(i["code"]["fg"]), rgb_hex(i["code"]["bg"])) if i["code"] else None,
+         "time": contrast(rgb_hex(i["at"]["fg"]), rgb_hex(i["at"]["back"])) if i["at"] else None,
+         "fill": contrast(h["bg"], h["back"]), "edge": contrast(h["edge"], h["back"]) if i["edgeStyle"] == "solid" and i["edgeWidth"] != "0px" else 0,
+         "dE": de2000(h["bg"], rgb_hex(o["bg"]))}
+    m = {k: (round(v, 2) if v is not None else None) for k, v in m.items()}
+    for k in ("text", "link", "more", "code", "time"):
+        check(failures, m[k] is not None and m[k] >= 4.5, f"{scheme}: the received bubble's {k} reads: {m[k]}:1 ({h})")
+    check(failures, max(m["fill"], m["edge"]) >= 3.0, f"{scheme}: the received bubble stands off the talk's ground: fill {m['fill']}:1, edge {m['edge']}:1 ({h})")
+    check(failures, m["dE"] >= IN_OUT_DE, f"{scheme}: the received bubble is apart from the sent one: ΔE2000 {m['dE']} ({h['bg']} vs {rgb_hex(o['bg'])})")
+    sent = (rgb_hex(o["bg"]), rgb_hex(o["ink"]), rgb_hex(o["edge"]), rgb_hex(o["link"]))
+    check(failures, sent == SENT[scheme], f"{scheme}: the sent bubble is as it was {SENT[scheme]}: {sent}")
+    return m
 
 
 def rgb_hex(css):
@@ -211,6 +258,8 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
                 "the badge after seen (2 → 1)", why=BADGE)
     r["badgeAfterSeen"] = await page.evaluate(BADGE)
     r["colors"] = await page.evaluate(COLORS)
+    r["paint"] = await page.evaluate(BUBBLE_PAINT)
+    r["ratios"] = bubbles_read(r["paint"], scheme, failures)
     await page.screenshot(path=str(out / f"ui-after-detail-{scheme}.png"))
 
     # the script at 20 s: a new message while at the end shows at the bottom, and is seen
@@ -256,6 +305,8 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
                            "sub": await page.evaluate("() => document.querySelector('#rb .talk-peer-sub').textContent")}
     check(failures, ext["head"] and not ext["head"]["switchable"] and not ext["head"]["button"] and ext["bubbles"][0]["state"] == "届かなかった"
           and "この機械の外の相手" in ext["sub"], f"{scheme}: the outside peer: not a button, 届かなかった: {ext}")
+    und = ext["undelivered"] = (await page.evaluate(BUBBLE_PAINT))["undelivered"]
+    check(failures, bool(und) and und["style"] == "dashed" and rgb_hex(und["color"]) == BAD[scheme], f"{scheme}: an undelivered message keeps its red dashed edge: {und}")
     await page.click("#rb [data-tk-back]")
     await until(page, "() => document.querySelectorAll('#rb .talk-row').length === 4", "back on the list (3)", why=T)
 
