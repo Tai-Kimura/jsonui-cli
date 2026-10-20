@@ -96,6 +96,12 @@ def check(failures, cond, text):
 
 
 FLOW = "() => window.__dbg.srFlow()"
+# when the next toast is put up and when it is taken down (the start's, as the flow is pressed)
+TOAST_LIFE = """() => { const box = document.getElementById('sr-toasts'), L = window.__toastLife = { born: 0, gone: 0 }; let el = null;
+  const mo = new MutationObserver(() => { const now = performance.now();
+    if (!el && box.firstElementChild) { el = box.firstElementChild; L.born = now; }
+    if (el && !el.isConnected) { L.gone = now; mo.disconnect(); } });
+  mo.observe(box, { childList: true }); }"""
 
 
 async def run_flows(page, out, failures, res):
@@ -148,16 +154,23 @@ async def run_flows(page, out, failures, res):
           f"back to the branch and the other way chosen: {fl['back']}")
 
     # the speed: the time between the first two arrivals at 1.0 and at 2.0; 自動 takes the default
-    gaps = {}
+    # and how long the start's toast stays up: the toasts go by the same clock as the light
+    gaps, lives = {}, {}
     for speed in (1.0, 2.0):
         await page.click("#sr-player [data-sr-fp='stop']")
         await page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", speed)
+        await page.evaluate(TOAST_LIFE)
         await page.click("#sr-board [data-sr-flow='search']")
         f = await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 2 ? f : null; }}", f"two arrivals at {speed}", timeout=30000, why=FLOW)
         gaps[speed] = f["arrivals"][1] - f["arrivals"][0]
-    fl["gaps"] = gaps
+        life = await until(page, "() => { const L = window.__toastLife; return L.gone ? L : null; }", f"the start's toast gone at {speed}", timeout=15000)
+        lives[speed] = life["gone"] - life["born"]
+    fl["gaps"], fl["toastLives"] = gaps, lives
     ratio = gaps[1.0] / gaps[2.0] if gaps[2.0] else 0
     check(failures, 1.5 <= ratio <= 2.6, f"twice the speed, half the time between two steps: {gaps} (ratio {ratio:.2f})")
+    toast_ratio = lives[1.0] / lives[2.0] if lives[2.0] else 0
+    check(failures, 1.5 <= toast_ratio <= 2.6 and abs(toast_ratio - ratio) <= 0.5,
+          f"twice the speed, a toast up half as long, as the light's step: {lives} (ratio {toast_ratio:.2f}, the light's {ratio:.2f})")
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srFlowSpeed(5)")
     await page.click("#sr-board [data-sr-flow='search']")
@@ -175,6 +188,25 @@ async def run_flows(page, out, failures, res):
     check(failures, night["toasts"][0] == "⏰ 毎晩の写しcron(0 3 * * ? *)", f"a schedule's flow starts with ⏰ and its schedule: {night['toasts']}")
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srFlowSpeed(1)")
+
+    # the 3D rebuilt while it plays (the theme turned): the flow stops, its light and toasts gone, nothing plays on
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 1 && f.state === 'play' ? f : null; }}", "search: playing",
+                timeout=30000, why=FLOW)
+    dark = await page.evaluate("() => window.__dbg.srTheme().dark")
+    await page.emulate_media(color_scheme="light" if dark else "dark")
+    await until(page, f"(d) => window.__dbg.sr().built && window.__dbg.srTheme().dark === d", "rebuilt in the other theme", arg=not dark)
+    rebuilt = await page.evaluate(FLOW)
+    await page.wait_for_timeout(1500)                    # at 1.0 that is past the next step: a player left alive would have said it
+    later = await page.evaluate(FLOW)
+    fl["rebuilt"] = {k: (rebuilt[k], later[k]) for k in ("playing", "toasts", "lights", "choices")}
+    fl["rebuilt"]["dom"] = await page.evaluate("() => [document.querySelectorAll('#sr-toasts .sr-toast').length, document.getElementById('sr-choices').hidden]")
+    check(failures, all(r["playing"] is None and not r["toasts"] and r["lights"] == 0 and not r["choices"] for r in (rebuilt, later))
+          and fl["rebuilt"]["dom"] == [0, True],
+          f"a rebuild while it plays stops the flow, its light and toasts gone, nothing played on: {fl['rebuilt']}")
+    await page.emulate_media(color_scheme="dark" if dark else "light")
+    await until(page, f"(d) => window.__dbg.sr().built && window.__dbg.srTheme().dark === d", "the theme back", arg=dark)
 
 
 async def run_server_room(pw, out, failures):
