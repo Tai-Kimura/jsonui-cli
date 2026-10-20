@@ -639,13 +639,46 @@ function composePlace(pane, id) {
     composeEls().area.value = '';
     composeClose(false);
   }
-  if (pane && box.previousElementSibling !== pane) pane.after(box);
+  const cards = histCardsBox();
+  if (pane && cards.previousElementSibling !== pane) pane.after(cards);
+  if (pane && box.previousElementSibling !== cards) cards.after(box);
   box.hidden = !pane || HIST.tab !== 'history';
+  histCardsPaint(id, !pane || HIST.tab !== 'history');
   // The card was rebuilt (50-panel.js, keyed) while the box had the focus, and the box is put back only now: refocus.
   const lost = rbEl._lostFk;
   const again = lost !== undefined && !box.hidden ? box.querySelector('[data-fk="' + CSS.escape(lost) + '"]') : null;
   if (again) { rbEl._lostFk = undefined; again.focus({ preventScroll: true }); }   // not found here: the talk pane may hold it (58-talk.js)
   composePaint();
+}
+/* ---------- the session's cards on the 応答の履歴 tab (ticket 2026-10-20-jui-viz-approve-and-answer-from-history) ----------
+   Requester: 「ここでも許可とか質問の回答とか全部できるようにしたい」, plan A (「カードのけんはあんAで進めて」): between the
+   history and the prompt box, outside the history's frame as the box is, the cards of this robot's session — its
+   permission prompts, its questions and its stopped calls, a subagent's too — the same cards as the panel's and the
+   board's (permDetail, questionHTML, denialHTML) under their own `where` (ids and radio names apart; a permission's per card, the session may have two), answered the
+   same way: a permission and a question through the hook's decision, a stopped call through its words (it says so,
+   DEN_MAY). Answered in one place, every place shows it answered (one state). */
+function histCardsBox() {
+  if (!HIST.cards) {
+    const el = hNode('div', 'h-cards');
+    el.dataset.hCards = '';
+    el.dataset.dwhere = 'h';
+    el.setAttribute('aria-label', 'このセッションの許可・質問・止められた操作');
+    el.addEventListener('input', onQuestionInput);
+    el.addEventListener('click', onQuestionClick);
+    el.addEventListener('click', onDenialClick);
+    HIST.cards = el;
+  }
+  return HIST.cards;
+}
+function histCardsPaint(id = HIST.compose && HIST.compose._for, off = HIST.tab !== 'history') {
+  const el = histCardsBox(), sess = id ? SESSION_OF[id] : null, now = Date.now();
+  const mine = (who) => !!sess && SESSION_OF[who] === sess;
+  const perms = !off && latestModel ? latestModel.pending.filter((p) => mine(p.who)) : [];
+  const qs = !off ? QUESTIONS.filter((q) => mine(q.who) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS)) : [];
+  const ds = !off && typeof DENIALS !== 'undefined' ? DENIALS.filter((d) => mine(d.who) && (d.status === 'pending' || now - (d.doneAt || 0) < DEN_SHOW_MS)) : [];
+  el.hidden = !(perms.length || qs.length || ds.length);
+  keyed(el, JSON.stringify([id, NAMES.rev, DEN.asking, perms.map(permSig), questionsSig(qs), denialsSig(ds)]),
+    () => `${perms.map((p) => permDetail(p, `hb-${p.id}`)).join('')}${qs.map((q) => questionHTML(q, 'h')).join('')}${ds.map((d) => denialHTML(d, 'h')).join('')}`);
 }
 function composePaint() {
   if (!HIST.compose) return;

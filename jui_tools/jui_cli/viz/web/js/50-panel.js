@@ -236,8 +236,9 @@ function decide(id, behavior, btn) {
   const p = latestModel.pending.find((q) => q.id === id);
   if (!p) return;
   const where = btn.closest('#tasks, #perm-strip, #kanban, #tb-detail, #rb');
-  const reasonEl = $('tbd-reason') || $('rb-reason');
-  const reason = behavior === 'deny' && reasonEl && where && where.contains(reasonEl) ? reasonEl.value.trim() : '';
+  // the reason box of the very card pressed (the card is on the board, the robot's card and its 応答の履歴 tab at once)
+  const card = btn.closest('.tbd-perm'), reasonEl = card ? card.querySelector('.tbd-reason input') : null;
+  const reason = behavior === 'deny' && reasonEl ? reasonEl.value.trim() : '';
   if (SOURCE.mode === 'live' && behavior === 'always') { openAlwaysConfirm(p, btn); return; }   // confirm the rules first (plan 08 §5)
   SOURCE.decide(id, behavior, { perm: p, reason });
   refreshNow();
@@ -388,7 +389,7 @@ function renderQuestions() {
   setText(chip, `質問 ${waiting}`);
   $('questions-sec').hidden = shown.length === 0;
   keyed($('questions'), questionsSig(shown), () => shown.map((q) => questionHTML(q)).join(''));
-  for (const el of document.querySelectorAll('#questions [data-quntil], #q-strip [data-quntil]')) {   // the countdown, in place (inputs keep their state)
+  for (const el of document.querySelectorAll('#questions [data-quntil], #q-strip [data-quntil], [data-h-cards] [data-quntil]')) {   // the countdown, in place (inputs keep their state)
     const q = QUESTIONS.find((x) => x.id === el.dataset.quntil);
     setText(el, qLeftText(q, now));
   }

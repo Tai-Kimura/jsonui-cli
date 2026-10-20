@@ -871,10 +871,13 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-tabs button { padding: 6px 12px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--ink-soft); font: 700 12.5px/1.4 var(--font-body); cursor: pointer; }
 .rb-tabs button[aria-selected="true"] { border-bottom-color: var(--info); color: var(--ink); }
 /* 応答の履歴 (55-history.js): the conversation as the VS Code extension shows it */
-.rb-hist { gap: 8px; font-size: 13px; }
+.rb-hist { gap: 8px; font-size: 13px; min-height: 120px; }   /* the cards over the prompt box never squeeze it away */
 .h-list-box { display: grid; gap: 8px; min-width: 0; }
 .h-newer { position: sticky; bottom: 0; justify-self: center; padding: 5px 14px; border: 0; border-radius: 999px; background: var(--info); color: var(--bg); font: 700 12px/1.4 var(--font-body); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); cursor: pointer; }
 .h-newer[hidden] { display: none; }
+/* the session's cards on the 応答の履歴 tab (55-history.js histCardsPaint): over the prompt box, a scroll of their own */
+.h-cards { display: grid; gap: 8px; max-height: min(30vh, 260px); overflow-y: auto; padding: 8px 14px; border-top: 1px solid var(--line); background: var(--panel); }
+.h-cards[hidden] { display: none; }
 .h-compose { display: grid; gap: 6px; padding: 8px 14px 12px; border-top: 1px solid var(--line); background: var(--panel); }
 .h-compose[hidden], .h-confirm[hidden], .h-compose-why[hidden] { display: none; }
 .h-compose-why { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font: 700 12px/1.5 var(--font-body); overflow-wrap: anywhere; }
