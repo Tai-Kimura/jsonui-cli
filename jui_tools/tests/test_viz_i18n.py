@@ -10,6 +10,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -18,6 +19,11 @@ import pytest
 from jui_cli.cli import main
 from jui_cli.viz import bundle, i18n, paths
 from jui_cli.viz.config import load_config
+
+TOOLS = Path(__file__).resolve().parents[1] / "tools" / "viz_i18n"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import finder  # noqa: E402
 
 VIZ = Path(resources.files("jui_cli.viz"))
 WEB_JS = VIZ / "web" / "js"
@@ -91,42 +97,8 @@ def test_every_key_in_the_table_is_asked_for():
 
 
 def js_code_japanese(text: str) -> list[str]:
-    """The Japanese outside comments: in strings, templates, regexes and code. Comments are // to the line's end and
-    /* … */, skipped only where no string is open."""
-    out, i, n, quote = [], 0, len(text), None
-    while i < n:
-        c = text[i]
-        if quote:
-            if c == "\\":
-                i += 2
-                continue
-            if c == quote or (c == "\n" and quote != "`"):   # a ' or " string cannot pass its line (a regex's quote)
-                quote = None
-            elif JA.match(c):
-                out.append(c)
-        elif text.startswith("//", i):
-            i = text.find("\n", i)
-            i = n if i < 0 else i
-            continue
-        elif text.startswith("/*", i):
-            i = text.find("*/", i + 2)
-            i = n if i < 0 else i + 2
-            continue
-        elif c in "'\"`":
-            quote = c
-        elif c == "/" and re.search(r"(^|[(,=:\[!&|?{};+\-*%<>~^]|\breturn)\s*$", text[max(0, i - 40):i]):
-            # a regex literal (where a value starts): its Japanese is code, a quote in it opens nothing
-            j, in_class = i + 1, False
-            while j < n and text[j] != "\n" and (in_class or text[j] != "/"):
-                in_class = (in_class or text[j] == "[") and text[j] != "]"
-                j += 2 if text[j] == "\\" else 1
-            out.extend(JA.findall(text[i:j]))
-            i = j + 1
-            continue
-        elif JA.match(c):
-            out.append(c)
-        i += 1
-    return out
+    """The Japanese outside comments (tools/viz_i18n/finder.py, shared with the mover)."""
+    return finder.chars("part.js", text)
 
 
 def test_a_moved_file_has_no_japanese_in_its_code():
