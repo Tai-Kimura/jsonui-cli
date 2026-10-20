@@ -3,7 +3,8 @@
 The requester's ruling (10-21): "言語の切り替えは設定ファイル読み込みでデフォルトは英語で自分で同じキーに文言当てて
 好きに設定できるようにしたい". So:
 
-- ``language`` in config.json picks the words: "en" (the default) or "ja", bundled as web/i18n/<language>.json.
+- ``language`` in config.json picks the words: "en" or "ja", bundled as web/i18n/<language>.json; DEFAULT_LANGUAGE
+  when it says none.
   ``JUI_VIZ_LANGUAGE`` in the environment comes first (the browser tests pin "ja" with it: their checks wait on the
   Japanese words).
 - ``strings`` in config.json names a file of the person's own words: the same flat ``{key: words}``, any part of it.
@@ -31,7 +32,11 @@ from pathlib import Path
 from . import paths
 
 LANGUAGES = ("en", "ja")
-DEFAULT_LANGUAGE = "en"
+#: The words when config.json names no language. Japanese until the page's words are all in the table (2.3.12: a page
+#: in English with Japanese left in it is not shipped); English from then on, as the requester ruled.
+DEFAULT_LANGUAGE = "ja"
+#: The table that holds every key: what a key missing from the others falls back to.
+FALLBACK_LANGUAGE = "en"
 LANGUAGE_ENV = "JUI_VIZ_LANGUAGE"
 #: index.html's slots, filled by page_html
 LANG_SLOT = "__JUI_VIZ_LANG__"
@@ -68,7 +73,7 @@ def shape_problem(value, like) -> str | None:
 
 @dataclass
 class Strings:
-    language: str = DEFAULT_LANGUAGE
+    language: str = FALLBACK_LANGUAGE
     table: dict = field(default_factory=dict)
     #: the person's file, when one is named (resolved), and how many of its keys are used
     own_path: str = ""
@@ -89,14 +94,14 @@ def load(language: str = "", own: str = "", use_env: bool = True) -> Strings:
     """English, overlaid with ``language``'s words, overlaid with the person's file ``own``. JUI_VIZ_LANGUAGE comes
     before ``language`` unless ``use_env`` is false (export-demo's --lang is said on the command line)."""
     out = Strings()
-    english = bundled(DEFAULT_LANGUAGE)
+    english = bundled(FALLBACK_LANGUAGE)
     out.table = dict(english)
     chosen = (os.environ.get(LANGUAGE_ENV, "") if use_env else "") or language or DEFAULT_LANGUAGE
     if chosen not in LANGUAGES:
         out.problems.append(f'language "{chosen}" is not one of {", ".join(LANGUAGES)}; using {DEFAULT_LANGUAGE}')
         chosen = DEFAULT_LANGUAGE
     out.language = chosen
-    if chosen != DEFAULT_LANGUAGE:
+    if chosen != FALLBACK_LANGUAGE:
         out.table.update({k: v for k, v in bundled(chosen).items() if k in english})
     if own:
         path = _own_path(own)
@@ -149,7 +154,7 @@ def activate(strings: Strings) -> None:
 
 
 def active() -> Strings:
-    """The server's words: English until serve activates the configured ones (a test's server, an import)."""
+    """The server's words: the default language's until serve activates the configured ones (a test's server, an import)."""
     if not _ACTIVE.table:
         activate(load())
     return _ACTIVE

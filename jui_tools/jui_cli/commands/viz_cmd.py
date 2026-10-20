@@ -78,7 +78,7 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     statusline.add_argument("--json", action="store_true", help="Machine-readable status")
     export = sub.add_parser("export-demo", help="Write the demo page as a static folder (for a docs site)")
     export.add_argument("--out", required=True, help="An empty or new folder")
-    export.add_argument("--lang", choices=["en", "ja"], default="en", help="The words of the page (default: en)")
+    export.add_argument("--lang", choices=["en", "ja"], help="The words of the page (default: the view's default language)")
 
     pr = sub.add_parser("prices", help="Show or change the prices behind the estimated cost over each robot")
     pr.add_argument("prices_action", nargs="?", choices=["list", "set", "remove", "reset"], default="list")
@@ -1104,10 +1104,11 @@ def _someone_listens(port: int) -> bool:
 
 
 def _cmd_export_demo(args: argparse.Namespace) -> int:
+    from ..viz import i18n
     from ..viz.export_demo import ExportError, export
 
     try:
-        result = export(Path(args.out), getattr(args, "lang", "en") or "en")
+        result = export(Path(args.out), getattr(args, "lang", None) or i18n.DEFAULT_LANGUAGE)
     except ExportError as exc:
         _err(str(exc))
         return 1

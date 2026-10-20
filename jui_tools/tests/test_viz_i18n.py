@@ -136,7 +136,19 @@ def test_the_finder_sees_japanese_in_code_and_not_in_comments():
 
 # ---- the person's words ------------------------------------------------------------------------------------------
 
-def test_english_by_default(home):
+def test_japanese_when_no_language_is_set(home):
+    """2.3.12 ships Japanese by default: the page is not all in the table yet, and an English page with Japanese left in
+    it is not shipped. Turned to English (and this arm with it) once the rest has moved."""
+    assert i18n.DEFAULT_LANGUAGE == "ja" and load_config().language == ""
+    words = i18n.from_config(load_config())
+    assert (words.language, words.locale, words.problems) == ("ja", "ja-JP", [])
+    assert i18n.lookup(words, "status.idle") == "待機"
+    write_config({"askWaitSec": 60})
+    assert i18n.from_config(load_config()).language == "ja"
+
+
+def test_english_when_set(home):
+    write_config({"language": "en"})
     words = i18n.from_config(load_config())
     assert (words.language, words.locale, words.problems) == ("en", "en-US", [])
     assert i18n.lookup(words, "status.idle") == "Idle"
@@ -156,16 +168,16 @@ def test_the_environment_comes_before_config(home, monkeypatch):
     assert i18n.load("en", use_env=False).language == "en"
 
 
-def test_an_unknown_language_is_english_with_a_problem(home):
+def test_an_unknown_language_is_the_default_with_a_problem(home):
     write_config({"language": "fr"})
     words = i18n.from_config(load_config())
-    assert words.language == "en"
-    assert words.problems == ['language "fr" is not one of en, ja; using en']
+    assert words.language == i18n.DEFAULT_LANGUAGE
+    assert words.problems == [f'language "fr" is not one of en, ja; using {i18n.DEFAULT_LANGUAGE}']
 
 
 def test_a_language_of_the_wrong_type_is_the_default(home, capsys):
     write_config({"language": 1})
-    assert i18n.from_config(load_config()).language == "en"
+    assert i18n.from_config(load_config()).language == i18n.DEFAULT_LANGUAGE
     assert "language" in capsys.readouterr().err
 
 
@@ -197,7 +209,7 @@ def test_an_unknown_key_is_left_out_with_a_problem(home):
     ({"one": "x", "other": "y"}, "is not a string"),
 ])
 def test_a_value_of_the_wrong_shape_is_left_out(home, value, why):
-    write_config({"strings": own_words({"status.idle": value})})
+    write_config({"language": "en", "strings": own_words({"status.idle": value})})
     words = i18n.from_config(load_config())
     assert words.problems == [f'strings file: "status.idle" {why}; left out']
     assert i18n.lookup(words, "status.idle") == "Idle"
@@ -280,8 +292,10 @@ def test_the_page_reads_its_words_first():
 
 
 def test_export_demo_writes_the_words_of_its_language(tmp_path, capsys):
-    assert main(["viz", "export-demo", "--out", str(tmp_path / "en")]) == 0
+    assert main(["viz", "export-demo", "--out", str(tmp_path / "en"), "--lang", "en"]) == 0
     assert main(["viz", "export-demo", "--out", str(tmp_path / "ja"), "--lang", "ja"]) == 0
+    assert main(["viz", "export-demo", "--out", str(tmp_path / "default")]) == 0
+    assert f'<html lang="{i18n.DEFAULT_LANGUAGE}">' in (tmp_path / "default" / "index.html").read_text()
     en, ja = ((tmp_path / d / "index.html").read_text() for d in ("en", "ja"))
     assert '<html lang="en">' in en and '"status.idle":"Idle"' in en
     assert '<html lang="ja">' in ja and '"status.idle":"待機"' in ja
@@ -300,7 +314,7 @@ def doctor_language(capsys) -> str:
 
 def test_doctor_names_the_language(home, capsys, monkeypatch):
     monkeypatch.setenv("PATH", "")
-    assert doctor_language(capsys).startswith("en. Read when the server starts")
+    assert doctor_language(capsys).startswith(f"{i18n.DEFAULT_LANGUAGE}. Read when the server starts")
     write_config({"language": "ja", "strings": own_words({"status.idle": "ひま"})})
     assert doctor_language(capsys).startswith(f"ja, own words: {paths.viz_home() / 'mine.json'} (1 keys used). ")
 
@@ -309,7 +323,7 @@ def test_doctor_warns_of_each_problem(home, capsys, monkeypatch):
     monkeypatch.setenv("PATH", "")
     write_config({"language": "fr", "strings": own_words({"nope": "x"})})
     detail = doctor_language(capsys)
-    assert '2 warning(s): language "fr" is not one of en, ja; using en; strings file: unknown key "nope" left out' in detail
+    assert f'2 warning(s): language "fr" is not one of en, ja; using {i18n.DEFAULT_LANGUAGE}; strings file: unknown key "nope" left out' in detail
     monkeypatch.setenv(i18n.LANGUAGE_ENV, "ja")
     assert "(from JUI_VIZ_LANGUAGE)" in doctor_language(capsys)
 
