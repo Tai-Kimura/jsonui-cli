@@ -79,9 +79,15 @@ def test_the_query_names_one_service_one_region_and_narrows_storage():
 def test_ec2_keeps_linux_shared_on_demand_one_row_per_type():
     with (FX / "aws-ec2-ap-northeast-1-extract.csv").open(newline="") as fh:
         rows, why = AWS.rows_from_ec2_csv(fh, "ap-northeast-1", "U")
+    other = [r for r in rows if r["service"] != "ec2" or r["sku"] == "storage"]
+    rows = [r for r in rows if r not in other]
     by = {r["sku"]: r for r in rows}
     assert why == [] and by["t3.micro"]["price_usd"] == 0.0136 and by["m5.large"]["price_usd"] == 0.124
     assert all(r["unit"] == "instance-hour" and r["service"] == "ec2" and r["effective"] == "2026-10-15" for r in rows)
+    # the NAT gateway's and gp3's rows, from the offer's own lines (10-21): $0.062 an hour and a GB, gp3 $0.096 a GB-month
+    assert {(r["service"], r["sku"], r["unit"], r["price_usd"]) for r in other} == {
+        ("vpc.nat", "hour", "instance-hour", 0.062), ("vpc.nat", "processed", "GB", 0.062),
+        ("ebs", "storage", "GB-month", 0.096), ("ec2", "storage", "GB-month", 0.096)}
     text = (FX / "aws-ec2-ap-northeast-1-extract.csv").read_text()
     assert '"Windows"' in text and '"Reserved"' in text and "DedicatedUsage:i8g.48xlarge" in text   # rows not to keep
     assert set(by) == {"c6g.large", "i7i.48xlarge", "m5.large", "r5a.xlarge", "t3.micro"}   # no dedicated i8g.48xlarge
@@ -97,7 +103,9 @@ def test_the_lambda_offer_extract():
     data = json.loads((FX / "aws-lambda-ap-northeast-1.json").read_text())
     spec = [s for s in AWS.regional_spec() if s["offer"] == "AWSLambda"]
     rows, missing = AWS.rows_from_offer(data, spec, "ap-northeast-1", "U")
-    assert missing == [] and {r["sku"] for r in rows} == {"requests", "compute"}
+    assert missing == [] and {r["sku"] for r in rows} == {"requests", "compute", "compute:arm64"}
+    arm = next(r for r in rows if r["sku"] == "compute:arm64")
+    assert arm["tiers"][0]["price_usd"] == 0.0000133334 and arm["free"] == {"amount": 400_000, "period": "month"}
 
 
 # ---------------------------------------------------------------- what is fetched

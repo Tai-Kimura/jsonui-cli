@@ -8,7 +8,11 @@ requests (request), compute (GB-second), cpu (ms), plan (month, optional), vcpu 
 put (request), read / write (read_unit / write_unit), capacity (capacity_unit-hour), egress-<zone> (GB) and
 requests-<zone> (request) for a CDN, hour
 (instance-hour) and lcu (LCU-hour) for a load balancer, cluster (instance-hour), shard (capacity_unit-hour), rows-read /
-rows-written (row), queries (request), emails (email), mau (user), secret (secret), api (request), ingest (GB).
+rows-written (row), queries (request), emails (email), mau (user), secret (secret), api (request), ingest (GB),
+hour (instance-hour) and processed (GB) for a NAT gateway, address (instance-hour) for a public IP address, alarm,
+metric, acl and rule (month: each a monthly fee, its share of the month). A node whose spec says an ARM architecture
+(arch / cpu_architecture / architecture: arm64, aarch64, graviton) is priced on the ":arm64" skus of its compute
+(vcpu, memory, compute).
 """
 from __future__ import annotations
 
@@ -39,6 +43,22 @@ class Hour:
 
 def _flow(h: Hour, name: str) -> float:
     return float(h.q.get(name, 0.0))
+
+
+ARCH_KEYS = ("arch", "cpu_architecture", "architecture")
+
+
+def arm(node: dict) -> bool:
+    """The node's spec says it runs on ARM (Graviton): Fargate's and Lambda's ARM prices are 20-25% under x86's."""
+    for item in node.get("spec") or []:
+        if isinstance(item, dict) and item.get("key") in ARCH_KEYS and \
+                str(item.get("value", "")).strip().lower() in ("arm64", "arm", "aarch64", "graviton"):
+            return True
+    return False
+
+
+def _arch(h: Hour, sku: str) -> str:
+    return f"{sku}:arm64" if arm(h.node) else sku
 
 
 def instances(h: Hour, default_sku: str = "instance", name: str = "instance") -> list[Meter]:
@@ -86,9 +106,9 @@ def container(h: Hour) -> list[Meter]:
     if "vcpu" in h.q or "memory_gb" in h.q:
         out = []
         if "vcpu" in h.q and h.running:
-            out.append(Meter("vcpu", h.q["vcpu"] * h.running, "vCPU-hour", "vcpu", "vcpu"))
+            out.append(Meter("vcpu", h.q["vcpu"] * h.running, "vCPU-hour", _arch(h, "vcpu"), "vcpu"))
         if "memory_gb" in h.q and h.running:
-            out.append(Meter("memory", h.q["memory_gb"] * h.running, "GB-hour", "memory", "memory_gb"))
+            out.append(Meter("memory", h.q["memory_gb"] * h.running, "GB-hour", _arch(h, "memory"), "memory_gb"))
         return out + egress(h)
     return instances(h) + egress(h)
 
@@ -98,8 +118,8 @@ def function(h: Hour, plan: bool = False) -> list[Meter]:
     out = counted(h, "requests", "requests", "request")
     n = _flow(h, "requests")
     if "duration_ms" in h.q and "memory_mb" in h.q:
-        out.append(Meter("compute", n * h.q["duration_ms"] / 1000 * h.q["memory_mb"] / 1024, "GB-second", "compute",
-                         "duration_ms"))
+        out.append(Meter("compute", n * h.q["duration_ms"] / 1000 * h.q["memory_mb"] / 1024, "GB-second",
+                         _arch(h, "compute"), "duration_ms"))
     if "cpu_ms" in h.q:
         out.append(Meter("cpu", n * h.q["cpu_ms"], "ms", "cpu", "cpu_ms"))
     if plan:
@@ -215,8 +235,10 @@ def dns(h: Hour) -> list[Meter]:
     return counted(h, "requests", "queries", "request", "queries") + per_month(h, "zone", "month", optional=True)
 
 
-def waf(h: Hour) -> list[Meter]:
-    return counted(h, "requests", "requests", "request") + per_month(h, "acl", "month", optional=True)
+def waf(h: Hour, acl_optional: bool = True) -> list[Meter]:
+    """Requests, the web ACL's monthly fee (a provider without one: optional) and its rules' (rules: how many)."""
+    return (counted(h, "requests", "requests", "request") + per_month(h, "acl", "month", optional=acl_optional)
+            + per_month(h, "rule", "month", "rules"))
 
 
 def mail(h: Hour) -> list[Meter]:
@@ -232,7 +254,25 @@ def secrets(h: Hour) -> list[Meter]:
 
 
 def monitoring(h: Hour) -> list[Meter]:
-    return counted(h, "log_ingest_gb", "ingest", "GB", "ingest") + stored(h)
+    """Logs taken in and kept, and custom metrics (metrics: how many are kept; Container Insights' are counted here)."""
+    return counted(h, "log_ingest_gb", "ingest", "GB", "ingest") + stored(h) + per_month(h, "metric", "month", "metrics")
+
+
+def alarm(h: Hour) -> list[Meter]:
+    """Alarms, each a monthly fee: the node's count (running) is how many."""
+    if not h.running:
+        return []
+    return [Meter("alarm", h.running / h.hours_in_month, "month", "alarm")]
+
+
+def nat(h: Hour) -> list[Meter]:
+    """A NAT gateway: the hours it runs (each gateway) and the GB it processes."""
+    return instances(h, "hour", "hour") + counted(h, "processed_gb", "processed", "GB", "processed")
+
+
+def ip_address(h: Hour) -> list[Meter]:
+    """Public IP addresses: each an hourly charge (the node's count is how many)."""
+    return instances(h, "address", "address")
 
 
 BY_CATEGORY = {
@@ -241,7 +281,8 @@ BY_CATEGORY = {
     "gateway.api": gateway, "database.relational": relational, "database.document": key_value,
     "database.kv": key_value, "database.search": search, "cache": cache, "storage.object": object_store,
     "storage.file": file_store, "storage.block": file_store, "queue": queue, "stream": stream, "scheduler": scheduler,
-    "mail": mail, "auth": auth, "secrets": secrets, "monitoring": monitoring,
+    "mail": mail, "auth": auth, "secrets": secrets, "monitoring": monitoring, "monitoring.alarm": alarm,
+    "gateway.nat": nat, "network.ip": ip_address,
 }
 
 

@@ -39,6 +39,8 @@ TF_TYPES: dict[str, tuple[str, str]] = {
     "aws_eks_cluster": ("compute.k8s", "eks"), "aws_lambda_function": ("compute.function", "lambda"),
     "aws_apprunner_service": ("compute.paas", "apprunner"),
     "aws_elastic_beanstalk_environment": ("compute.paas", "beanstalk"),
+    # billed by the hour (ticket 2026-10-21-infra-bundled-prices-missing-common-aws-rows): no longer parts
+    "aws_nat_gateway": ("gateway.nat", "vpc.nat"), "aws_eip": ("network.ip", "vpc.ipv4"),
     "aws_lb": ("load_balancer", "elb"), "aws_alb": ("load_balancer", "elb"), "aws_elb": ("load_balancer", "elb.classic"),
     "aws_cloudfront_distribution": ("edge.cdn", "cloudfront"), "aws_route53_zone": ("edge.dns", "route53"),
     "aws_wafv2_web_acl": ("edge.waf", "waf"), "aws_waf_web_acl": ("edge.waf", "waf"),
@@ -50,7 +52,7 @@ TF_TYPES: dict[str, tuple[str, str]] = {
     "aws_opensearch_domain": ("database.search", "opensearch"), "aws_elasticsearch_domain": ("database.search", "opensearch"),
     "aws_s3_bucket": ("storage.object", "s3"), "aws_efs_file_system": ("storage.file", "efs"),
     "aws_ebs_volume": ("storage.block", "ebs"), "aws_sqs_queue": ("queue", "sqs"), "aws_sns_topic": ("queue", "sns"),
-    "aws_cloudwatch_event_rule": ("scheduler", "eventbridge"), "aws_scheduler_schedule": ("scheduler", "eventbridge"),
+    "aws_cloudwatch_event_rule": ("scheduler", "eventbridge"), "aws_scheduler_schedule": ("scheduler", "scheduler"),
     "aws_kinesis_stream": ("stream", "kinesis"), "aws_msk_cluster": ("stream", "msk"),
     "aws_sfn_state_machine": ("compute.function", "stepfunctions"),
     "aws_ses_domain_identity": ("mail", "ses"), "aws_sesv2_email_identity": ("mail", "ses"),
@@ -159,6 +161,29 @@ PART_EXACT = {"aws_iam_role_policy", "aws_iam_role_policy_attachment", "aws_iam_
               "aws_iam_instance_profile", "aws_ecs_capacity_provider", "aws_ecr_lifecycle_policy",
               "google_project_service", "google_project_iam_member", "azurerm_resource_group"}
 
+# The service a price row is found by (ticket 2026-10-21-infra-bundled-prices-missing-common-aws-rows): the tables
+# above say "rds" and "elb", the price rows "rds.mysql", "elb.alb" (the price book falls back from "rds.mysql" to "rds",
+# never the other way), so a seeded RDS or load balancer had no price. Refined from what the resource says: its engine,
+# its load balancer type (none written: AWS's default, application). What cannot be read (a variable) is not guessed.
+RDS_ENGINE_SERVICE = {"mysql": "rds.mysql", "postgres": "rds.postgres", "mariadb": "rds.mariadb",
+                      "aurora": "aurora", "aurora-mysql": "aurora", "aurora-postgresql": "aurora"}
+LB_TYPE_SERVICE = {"application": "elb.alb", "network": "elb.nlb", "gateway": "elb.gwlb"}
+LB_DEFAULT_TYPE = "application"
+
+
+def priced_service(svc: str, engine: str | None = None, lb_type: str | None = None, lb_type_written: bool = False) -> str:
+    """``svc`` as the price rows name it: rds -> rds.<engine>, elb -> elb.alb / elb.nlb. ``engine`` / ``lb_type``: the
+    literal the resource gives, or None; ``lb_type_written``: the attribute is there (a variable when lb_type is None)."""
+    if svc == "rds" and engine:
+        return RDS_ENGINE_SERVICE.get(engine.strip().lower(), svc)
+    if svc == "elb":
+        if lb_type:
+            return LB_TYPE_SERVICE.get(lb_type.strip().lower(), svc)
+        if not lb_type_written:
+            return LB_TYPE_SERVICE[LB_DEFAULT_TYPE]
+    return svc
+
+
 CFN_TYPES: dict[str, tuple[str, str]] = {
     "AWS::EC2::Instance": ("compute.vm", "ec2"), "AWS::AutoScaling::AutoScalingGroup": ("compute.vm", "ec2.asg"),
     "AWS::ECS::Service": ("compute.container", "ecs"), "AWS::ECS::Cluster": ("group:cluster", "ecs"),
@@ -175,7 +200,8 @@ CFN_TYPES: dict[str, tuple[str, str]] = {
     "AWS::ElastiCache::CacheCluster": ("cache", "elasticache"), "AWS::ElastiCache::ReplicationGroup": ("cache", "elasticache"),
     "AWS::OpenSearchService::Domain": ("database.search", "opensearch"), "AWS::S3::Bucket": ("storage.object", "s3"),
     "AWS::EFS::FileSystem": ("storage.file", "efs"), "AWS::SQS::Queue": ("queue", "sqs"), "AWS::SNS::Topic": ("queue", "sns"),
-    "AWS::Events::Rule": ("scheduler", "eventbridge"), "AWS::Scheduler::Schedule": ("scheduler", "eventbridge"),
+    "AWS::Events::Rule": ("scheduler", "eventbridge"), "AWS::Scheduler::Schedule": ("scheduler", "scheduler"),
+    "AWS::EC2::NatGateway": ("gateway.nat", "vpc.nat"), "AWS::EC2::EIP": ("network.ip", "vpc.ipv4"),
     "AWS::Kinesis::Stream": ("stream", "kinesis"),
     "AWS::StepFunctions::StateMachine": ("compute.function", "stepfunctions"),
     "AWS::Serverless::StateMachine": ("compute.function", "stepfunctions"),
@@ -189,7 +215,7 @@ CFN_TYPES: dict[str, tuple[str, str]] = {
 }
 CFN_PARTS = {"Policy", "Permission", "Version", "Alias", "Listener", "ListenerRule", "TargetGroup", "Route",
              "RouteTable", "SubnetRouteTableAssociation", "SecurityGroup", "SecurityGroupIngress", "SecurityGroupEgress",
-             "InternetGateway", "VPCGatewayAttachment", "NatGateway", "EIP", "BucketPolicy", "QueuePolicy",
+             "InternetGateway", "VPCGatewayAttachment", "BucketPolicy", "QueuePolicy",
              "TopicPolicy", "Subscription", "EventSourceMapping", "Deployment", "Stage", "Method", "Resource",
              "Integration", "Route", "LayerVersion", "TaskDefinition", "LogStream", "SubnetGroup", "DBSubnetGroup",
              "DBParameterGroup", "InstanceProfile", "RecordSet", "RecordSetGroup", "Certificate", "LaunchTemplate",

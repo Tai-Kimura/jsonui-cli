@@ -100,6 +100,28 @@
   },
   {
    "provider": "aws",
+   "service": "scheduler",
+   "sku": "requests",
+   "region": "ap-northeast-1",
+   "unit": "request",
+   "effective": "2026-09-24",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/current/ap-northeast-1/index.json",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 14000000.0
+    },
+    {
+     "from": 14000000.0,
+     "price_usd": 1.25
+    }
+   ],
+   "note": "EventBridge Scheduler invocations; the first 14 million a month are the offer's free step"
+  },
+  {
+   "provider": "aws",
    "service": "lambda",
    "sku": "requests",
    "region": "ap-northeast-1",
@@ -143,6 +165,36 @@
     "period": "month"
    },
    "note": "x86; free tier: https://aws.amazon.com/lambda/pricing/"
+  },
+  {
+   "provider": "aws",
+   "service": "lambda",
+   "sku": "compute:arm64",
+   "region": "ap-northeast-1",
+   "unit": "GB-second",
+   "effective": "2026-10-16",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/ap-northeast-1/index.json",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 1.33334e-05,
+     "to": 7500000000.0
+    },
+    {
+     "from": 7500000000.0,
+     "price_usd": 1.20001e-05,
+     "to": 18750000000.0
+    },
+    {
+     "from": 18750000000.0,
+     "price_usd": 1.06667e-05
+    }
+   ],
+   "free": {
+    "amount": 400000,
+    "period": "month"
+   },
+   "note": "ARM (Graviton); AWS's free tier is shared with x86, counted per row here: https://aws.amazon.com/lambda/pricing/"
   },
   {
    "provider": "aws",
@@ -274,6 +326,56 @@
   },
   {
    "provider": "aws",
+   "service": "cloudwatch",
+   "sku": "alarm",
+   "region": "ap-northeast-1",
+   "unit": "month",
+   "effective": "2026-10-07",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/ap-northeast-1/index.json",
+   "price_usd": 0.1,
+   "free": {
+    "amount": 10,
+    "period": "month"
+   },
+   "note": "standard-resolution metric alarm; free: the offer's Global-CW:AlarmMonitorUsage row"
+  },
+  {
+   "provider": "aws",
+   "service": "cloudwatch",
+   "sku": "metric",
+   "region": "ap-northeast-1",
+   "unit": "month",
+   "effective": "2026-10-07",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/ap-northeast-1/index.json",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.3,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.1,
+     "to": 250000.0
+    },
+    {
+     "from": 250000.0,
+     "price_usd": 0.05,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.02
+    }
+   ],
+   "free": {
+    "amount": 10,
+    "period": "month"
+   },
+   "note": "custom metrics (Container Insights' among them); free: the offer's Global-CW:MetricMonitorUsage row"
+  },
+  {
+   "provider": "aws",
    "service": "dynamodb",
    "sku": "read",
    "region": "ap-northeast-1",
@@ -338,6 +440,39 @@
    "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/ap-northeast-1/index.json",
    "price_usd": 0.00553,
    "note": "Fargate Linux/x86"
+  },
+  {
+   "provider": "aws",
+   "service": "ecs",
+   "sku": "vcpu:arm64",
+   "region": "ap-northeast-1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-19",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/ap-northeast-1/index.json",
+   "price_usd": 0.04045,
+   "note": "Fargate Linux/ARM"
+  },
+  {
+   "provider": "aws",
+   "service": "ecs",
+   "sku": "memory:arm64",
+   "region": "ap-northeast-1",
+   "unit": "GB-hour",
+   "effective": "2026-10-19",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/ap-northeast-1/index.json",
+   "price_usd": 0.00442,
+   "note": "Fargate Linux/ARM"
+  },
+  {
+   "provider": "aws",
+   "service": "efs",
+   "sku": "storage",
+   "region": "ap-northeast-1",
+   "unit": "GB-month",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEFS/current/ap-northeast-1/index.json",
+   "price_usd": 0.36,
+   "note": "Standard (General Purpose)"
   },
   {
    "provider": "aws",
@@ -415,6 +550,66 @@
    "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonKinesis/current/ap-northeast-1/index.json",
    "price_usd": 0.0195,
    "note": "provisioned shard"
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.micro",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.026
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.micro:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.052
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.small",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.052
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.small:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.104
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.medium",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.104
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.medium:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.208
   },
   {
    "provider": "aws",
@@ -581,6 +776,66 @@
   {
    "provider": "aws",
    "service": "rds.postgres",
+   "sku": "db.t3.micro",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.028
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.micro:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.056
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.small",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.056
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.small:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.112
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.medium",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.112
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.medium:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json",
+   "price_usd": 0.224
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
    "sku": "db.t4g.micro",
    "region": "ap-northeast-1",
    "unit": "instance-hour",
@@ -742,6 +997,28 @@
   },
   {
    "provider": "aws",
+   "service": "route53",
+   "sku": "queries",
+   "region": "ap-northeast-1",
+   "unit": "request",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/current/ap-northeast-1/index.json",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.4,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "standard queries"
+  },
+  {
+   "provider": "aws",
    "service": "s3",
    "sku": "storage",
    "region": "ap-northeast-1",
@@ -792,6 +1069,18 @@
   },
   {
    "provider": "aws",
+   "service": "ses",
+   "sku": "emails",
+   "region": "ap-northeast-1",
+   "unit": "email",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSES/current/ap-northeast-1/index.json",
+   "per_units": 1000,
+   "price_usd": 0.1,
+   "note": "outbound email, per recipient"
+  },
+  {
+   "provider": "aws",
    "service": "sns",
    "sku": "requests",
    "region": "ap-northeast-1",
@@ -811,6 +1100,51 @@
     }
    ],
    "note": "API requests"
+  },
+  {
+   "provider": "aws",
+   "service": "vpc.ipv4",
+   "sku": "address",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-16",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/current/ap-northeast-1/index.json",
+   "price_usd": 0.005,
+   "note": "an in-use public IPv4 address (an EIP, a NAT gateway's, a load balancer's, a task's)"
+  },
+  {
+   "provider": "aws",
+   "service": "waf",
+   "sku": "requests",
+   "region": "ap-northeast-1",
+   "unit": "request",
+   "effective": "2026-09-14",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awswaf/current/ap-northeast-1/index.json",
+   "per_units": 1000000,
+   "price_usd": 0.6,
+   "note": "WAFv2, up to 1,500 WCU"
+  },
+  {
+   "provider": "aws",
+   "service": "waf",
+   "sku": "acl",
+   "region": "ap-northeast-1",
+   "unit": "month",
+   "effective": "2026-09-14",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awswaf/current/ap-northeast-1/index.json",
+   "price_usd": 5.0,
+   "note": "WAFv2 web ACL"
+  },
+  {
+   "provider": "aws",
+   "service": "waf",
+   "sku": "rule",
+   "region": "ap-northeast-1",
+   "unit": "month",
+   "effective": "2026-09-14",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awswaf/current/ap-northeast-1/index.json",
+   "price_usd": 1.0,
+   "note": "WAFv2 rule (a managed rule group counts as one)"
   },
   {
    "provider": "aws",
@@ -907,6 +1241,28 @@
   },
   {
    "provider": "aws",
+   "service": "scheduler",
+   "sku": "requests",
+   "region": "us-east-1",
+   "unit": "request",
+   "effective": "2026-09-24",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/current/us-east-1/index.json",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.0,
+     "to": 14000000.0
+    },
+    {
+     "from": 14000000.0,
+     "price_usd": 1.0
+    }
+   ],
+   "note": "EventBridge Scheduler invocations; the first 14 million a month are the offer's free step"
+  },
+  {
+   "provider": "aws",
    "service": "lambda",
    "sku": "requests",
    "region": "us-east-1",
@@ -950,6 +1306,36 @@
     "period": "month"
    },
    "note": "x86; free tier: https://aws.amazon.com/lambda/pricing/"
+  },
+  {
+   "provider": "aws",
+   "service": "lambda",
+   "sku": "compute:arm64",
+   "region": "us-east-1",
+   "unit": "GB-second",
+   "effective": "2026-10-16",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/us-east-1/index.json",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 1.33334e-05,
+     "to": 7500000000.0
+    },
+    {
+     "from": 7500000000.0,
+     "price_usd": 1.20001e-05,
+     "to": 18750000000.0
+    },
+    {
+     "from": 18750000000.0,
+     "price_usd": 1.06667e-05
+    }
+   ],
+   "free": {
+    "amount": 400000,
+    "period": "month"
+   },
+   "note": "ARM (Graviton); AWS's free tier is shared with x86, counted per row here: https://aws.amazon.com/lambda/pricing/"
   },
   {
    "provider": "aws",
@@ -1081,6 +1467,56 @@
   },
   {
    "provider": "aws",
+   "service": "cloudwatch",
+   "sku": "alarm",
+   "region": "us-east-1",
+   "unit": "month",
+   "effective": "2026-10-07",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/us-east-1/index.json",
+   "price_usd": 0.1,
+   "free": {
+    "amount": 10,
+    "period": "month"
+   },
+   "note": "standard-resolution metric alarm; free: the offer's Global-CW:AlarmMonitorUsage row"
+  },
+  {
+   "provider": "aws",
+   "service": "cloudwatch",
+   "sku": "metric",
+   "region": "us-east-1",
+   "unit": "month",
+   "effective": "2026-10-07",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/us-east-1/index.json",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.3,
+     "to": 10000.0
+    },
+    {
+     "from": 10000.0,
+     "price_usd": 0.1,
+     "to": 250000.0
+    },
+    {
+     "from": 250000.0,
+     "price_usd": 0.05,
+     "to": 1000000.0
+    },
+    {
+     "from": 1000000.0,
+     "price_usd": 0.02
+    }
+   ],
+   "free": {
+    "amount": 10,
+    "period": "month"
+   },
+   "note": "custom metrics (Container Insights' among them); free: the offer's Global-CW:MetricMonitorUsage row"
+  },
+  {
+   "provider": "aws",
    "service": "dynamodb",
    "sku": "read",
    "region": "us-east-1",
@@ -1145,6 +1581,39 @@
    "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/us-east-1/index.json",
    "price_usd": 0.004445,
    "note": "Fargate Linux/x86"
+  },
+  {
+   "provider": "aws",
+   "service": "ecs",
+   "sku": "vcpu:arm64",
+   "region": "us-east-1",
+   "unit": "vCPU-hour",
+   "effective": "2026-10-19",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/us-east-1/index.json",
+   "price_usd": 0.03238,
+   "note": "Fargate Linux/ARM"
+  },
+  {
+   "provider": "aws",
+   "service": "ecs",
+   "sku": "memory:arm64",
+   "region": "us-east-1",
+   "unit": "GB-hour",
+   "effective": "2026-10-19",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/us-east-1/index.json",
+   "price_usd": 0.00356,
+   "note": "Fargate Linux/ARM"
+  },
+  {
+   "provider": "aws",
+   "service": "efs",
+   "sku": "storage",
+   "region": "us-east-1",
+   "unit": "GB-month",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEFS/current/us-east-1/index.json",
+   "price_usd": 0.3,
+   "note": "Standard (General Purpose)"
   },
   {
    "provider": "aws",
@@ -1222,6 +1691,66 @@
    "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonKinesis/current/us-east-1/index.json",
    "price_usd": 0.015,
    "note": "provisioned shard"
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.micro",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.017
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.micro:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.034
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.small",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.034
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.small:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.068
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.medium",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.068
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.t3.medium:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.136
   },
   {
    "provider": "aws",
@@ -1388,6 +1917,66 @@
   {
    "provider": "aws",
    "service": "rds.postgres",
+   "sku": "db.t3.micro",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.018
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.micro:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.036
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.small",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.036
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.small:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.072
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.medium",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.072
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
+   "sku": "db.t3.medium:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-20",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+   "price_usd": 0.145
+  },
+  {
+   "provider": "aws",
+   "service": "rds.postgres",
    "sku": "db.t4g.micro",
    "region": "us-east-1",
    "unit": "instance-hour",
@@ -1549,6 +2138,28 @@
   },
   {
    "provider": "aws",
+   "service": "route53",
+   "sku": "queries",
+   "region": "us-east-1",
+   "unit": "request",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/current/us-east-1/index.json",
+   "per_units": 1000000,
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 0.4,
+     "to": 1000000000.0
+    },
+    {
+     "from": 1000000000.0,
+     "price_usd": 0.2
+    }
+   ],
+   "note": "standard queries"
+  },
+  {
+   "provider": "aws",
    "service": "s3",
    "sku": "storage",
    "region": "us-east-1",
@@ -1599,6 +2210,18 @@
   },
   {
    "provider": "aws",
+   "service": "ses",
+   "sku": "emails",
+   "region": "us-east-1",
+   "unit": "email",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSES/current/us-east-1/index.json",
+   "per_units": 1000,
+   "price_usd": 0.1,
+   "note": "outbound email, per recipient"
+  },
+  {
+   "provider": "aws",
    "service": "sns",
    "sku": "requests",
    "region": "us-east-1",
@@ -1618,6 +2241,447 @@
     }
    ],
    "note": "API requests"
+  },
+  {
+   "provider": "aws",
+   "service": "vpc.ipv4",
+   "sku": "address",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-10-16",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/current/us-east-1/index.json",
+   "price_usd": 0.005,
+   "note": "an in-use public IPv4 address (an EIP, a NAT gateway's, a load balancer's, a task's)"
+  },
+  {
+   "provider": "aws",
+   "service": "waf",
+   "sku": "requests",
+   "region": "us-east-1",
+   "unit": "request",
+   "effective": "2026-09-14",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awswaf/current/us-east-1/index.json",
+   "per_units": 1000000,
+   "price_usd": 0.6,
+   "note": "WAFv2, up to 1,500 WCU"
+  },
+  {
+   "provider": "aws",
+   "service": "waf",
+   "sku": "acl",
+   "region": "us-east-1",
+   "unit": "month",
+   "effective": "2026-09-14",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awswaf/current/us-east-1/index.json",
+   "price_usd": 5.0,
+   "note": "WAFv2 web ACL"
+  },
+  {
+   "provider": "aws",
+   "service": "waf",
+   "sku": "rule",
+   "region": "us-east-1",
+   "unit": "month",
+   "effective": "2026-09-14",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awswaf/current/us-east-1/index.json",
+   "price_usd": 1.0,
+   "note": "WAFv2 rule (a managed rule group counts as one)"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "c7g.large",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.091,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "m7g.large",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.1054,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "m7i.large",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.1302,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "r7g.large",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.1292,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.large",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.1088,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.medium",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0544,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.micro",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0136,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.nano",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0068,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.small",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0272,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.large",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0864,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.medium",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0432,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.micro",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0108,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.nano",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0054,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.small",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0216,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ebs",
+   "sku": "storage",
+   "region": "ap-northeast-1",
+   "unit": "GB-month",
+   "price_usd": 0.096,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "gp3"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "storage",
+   "region": "ap-northeast-1",
+   "unit": "GB-month",
+   "price_usd": 0.096,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "gp3 (the root volume)"
+  },
+  {
+   "provider": "aws",
+   "service": "vpc.nat",
+   "sku": "hour",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.062,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "NAT gateway, each hour it runs"
+  },
+  {
+   "provider": "aws",
+   "service": "vpc.nat",
+   "sku": "processed",
+   "region": "ap-northeast-1",
+   "unit": "GB",
+   "price_usd": 0.062,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv",
+   "note": "NAT gateway, data processed"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "c7g.large",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0725,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "m7g.large",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0816,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "m7i.large",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.1008,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "r7g.large",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.1071,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.large",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0832,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.medium",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0416,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.micro",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0104,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.nano",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0052,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t3.small",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0208,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.large",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0672,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.medium",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0336,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.micro",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0084,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.nano",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0042,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "t4g.small",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.0168,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "Linux, shared, on-demand"
+  },
+  {
+   "provider": "aws",
+   "service": "ebs",
+   "sku": "storage",
+   "region": "us-east-1",
+   "unit": "GB-month",
+   "price_usd": 0.08,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "gp3"
+  },
+  {
+   "provider": "aws",
+   "service": "ec2",
+   "sku": "storage",
+   "region": "us-east-1",
+   "unit": "GB-month",
+   "price_usd": 0.08,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "gp3 (the root volume)"
+  },
+  {
+   "provider": "aws",
+   "service": "vpc.nat",
+   "sku": "hour",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "price_usd": 0.045,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "NAT gateway, each hour it runs"
+  },
+  {
+   "provider": "aws",
+   "service": "vpc.nat",
+   "sku": "processed",
+   "region": "us-east-1",
+   "unit": "GB",
+   "price_usd": 0.045,
+   "effective": "2026-10-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.csv",
+   "note": "NAT gateway, data processed"
   },
   {
    "provider": "aws",
@@ -2140,6 +3204,27 @@
    "per_units": 10000,
    "price_usd": 0.012,
    "note": "HTTPS, viewers in ME"
+  },
+  {
+   "provider": "aws",
+   "service": "route53",
+   "sku": "zone",
+   "region": "global",
+   "unit": "month",
+   "tiers": [
+    {
+     "from": 0.0,
+     "to": 25.0,
+     "price_usd": 0.5
+    },
+    {
+     "from": 25.0,
+     "price_usd": 0.1
+    }
+   ],
+   "effective": "2026-10-21",
+   "source": "https://aws.amazon.com/route53/pricing/",
+   "note": "hosted zone: the first 25, then each"
   },
   {
    "provider": "cloudflare",

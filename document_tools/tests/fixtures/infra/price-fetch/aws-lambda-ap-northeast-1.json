@@ -33,6 +33,21 @@
     "regionCode": "ap-northeast-1",
     "servicename": "AWS Lambda"
    }
+  },
+  "ZSE7CMBEBTMPH8ET": {
+   "sku": "ZSE7CMBEBTMPH8ET",
+   "productFamily": "Serverless",
+   "attributes": {
+    "servicecode": "AWSLambda",
+    "location": "Asia Pacific (Tokyo)",
+    "locationType": "AWS Region",
+    "group": "AWS-Lambda-Duration-ARM",
+    "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s for ARM",
+    "usagetype": "APN1-Lambda-GB-Second-ARM",
+    "operation": "",
+    "regionCode": "ap-northeast-1",
+    "servicename": "AWS Lambda"
+   }
   }
  },
  "terms": {
@@ -94,6 +109,49 @@
        "unit": "Lambda-GB-Second",
        "pricePerUnit": {
         "USD": "0.0000133334"
+       },
+       "appliesTo": []
+      }
+     },
+     "termAttributes": {}
+    }
+   },
+   "ZSE7CMBEBTMPH8ET": {
+    "ZSE7CMBEBTMPH8ET.JRTCKXETXF": {
+     "offerTermCode": "JRTCKXETXF",
+     "sku": "ZSE7CMBEBTMPH8ET",
+     "effectiveDate": "2026-10-01T00:00:00Z",
+     "priceDimensions": {
+      "ZSE7CMBEBTMPH8ET.JRTCKXETXF.6NBUNBXSC3": {
+       "rateCode": "ZSE7CMBEBTMPH8ET.JRTCKXETXF.6NBUNBXSC3",
+       "description": "AWS Lambda - Total Compute for ARM - Asia Pacific (Tokyo)-Tier-1",
+       "beginRange": "0",
+       "endRange": "7500000000",
+       "unit": "Lambda-GB-Second",
+       "pricePerUnit": {
+        "USD": "0.0000133334"
+       },
+       "appliesTo": []
+      },
+      "ZSE7CMBEBTMPH8ET.JRTCKXETXF.6JGAYSJBNY": {
+       "rateCode": "ZSE7CMBEBTMPH8ET.JRTCKXETXF.6JGAYSJBNY",
+       "description": "AWS Lambda - Total Compute for ARM - Asia Pacific (Tokyo)-Tier-2",
+       "beginRange": "7500000000",
+       "endRange": "18750000000",
+       "unit": "Lambda-GB-Second",
+       "pricePerUnit": {
+        "USD": "0.0000120001"
+       },
+       "appliesTo": []
+      },
+      "ZSE7CMBEBTMPH8ET.JRTCKXETXF.AVR3V96UTF": {
+       "rateCode": "ZSE7CMBEBTMPH8ET.JRTCKXETXF.AVR3V96UTF",
+       "description": "AWS Lambda - Total Compute for ARM - Asia Pacific (Tokyo)-Tier-3",
+       "beginRange": "18750000000",
+       "endRange": "Inf",
+       "unit": "Lambda-GB-Second",
+       "pricePerUnit": {
+        "USD": "0.0000106667"
        },
        "appliesTo": []
       }

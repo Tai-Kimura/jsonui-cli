@@ -16,9 +16,11 @@ GENERIC: dict[str, tuple[tuple[str, ...], bool]] = {   # category: (reads, hourl
     "compute.paas": (("requests", "egress_gb", "storage_gb"), True),
     "edge.cdn": (("requests", "cdn_egress_gb", "egress_gb"), False),
     "edge.dns": (("requests",), False),
-    "edge.waf": (("requests",), False),
+    "edge.waf": (("requests", "rules"), False),
     "load_balancer": (LB, True),
     "gateway.api": (("requests", "processed_gb", "egress_gb"), False),
+    "gateway.nat": (("processed_gb",), True),
+    "network.ip": ((), True),
     "database.relational": (("requests", "rows_read", "rows_written", "storage_gb", "capacity_units", "egress_gb"), True),
     "database.document": (("requests", "read_units", "write_units", "storage_gb", "capacity_units"), False),
     "database.kv": (("requests", "read_units", "write_units", "storage_gb", "capacity_units"), False),
@@ -33,12 +35,12 @@ GENERIC: dict[str, tuple[tuple[str, ...], bool]] = {   # category: (reads, hourl
     "mail": (("emails",), False),
     "auth": (("monthly_active_users", "requests"), False),
     "secrets": (("secrets", "requests"), False),
-    "monitoring": (("log_ingest_gb", "storage_gb"), False),
+    "monitoring": (("log_ingest_gb", "storage_gb", "metrics"), False),
     "ci": ((), False),
     "external.saas": ((), False),
     "security.iam": ((), False),
     "security.policy": ((), False),
-    "monitoring.alarm": ((), False),
+    "monitoring.alarm": ((), True),
 }
 
 for _cat, (_reads, _hourly) in GENERIC.items():

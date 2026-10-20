@@ -23,7 +23,7 @@ def S(offer, service, sku, unit, usagetype, per_units=1, family=None, attrs=None
 
 
 LAMBDA_FREE = "https://aws.amazon.com/lambda/pricing/"
-RDS_TYPES = ["db.t4g.micro", "db.t4g.small", "db.t4g.medium", "db.m6g.large", "db.r6g.large", "db.r6g.xlarge",
+RDS_TYPES = ["db.t3.micro", "db.t3.small", "db.t3.medium", "db.t4g.micro", "db.t4g.small", "db.t4g.medium", "db.m6g.large", "db.r6g.large", "db.r6g.xlarge",
              "db.r6g.2xlarge"]
 CACHE_TYPES = ["cache.t4g.micro", "cache.t4g.small", "cache.t4g.medium", "cache.m7g.large", "cache.r7g.large"]
 
@@ -65,6 +65,30 @@ def regional_spec() -> list[dict]:
           note="across zones: the offer's price, charged in and out (x2)"),
         S("AWSDataTransfer", "data-transfer", "transfer-inter-region", "GB", "AWS-Out-Bytes",
           note="out of the region to another AWS region"),
+        # ticket 2026-10-21-infra-bundled-prices-missing-common-aws-rows (usage types read in the offers of 10-21)
+        S("AWSLambda", "lambda", "compute:arm64", "GB-second", "Lambda-GB-Second-ARM", family="Serverless",
+          free={"amount": 400_000, "period": "month"},
+          note=f"ARM (Graviton); AWS's free tier is shared with x86, counted per row here: {LAMBDA_FREE}"),
+        S("AmazonECS", "ecs", "vcpu:arm64", "vCPU-hour", "Fargate-ARM-vCPU-Hours:perCPU", note="Fargate Linux/ARM"),
+        S("AmazonECS", "ecs", "memory:arm64", "GB-hour", "Fargate-ARM-GB-Hours", note="Fargate Linux/ARM"),
+        S("AmazonEFS", "efs", "storage", "GB-month", "TimedStorage-ByteHrs", family="Storage",
+          attrs={"storageClass": "General Purpose"}, note="Standard (General Purpose)"),
+        S("AmazonRoute53", "route53", "queries", "request", "DNS-Queries", 1_000_000, note="standard queries"),
+        S("AmazonSES", "ses", "emails", "email", "Recipients", 1000, family="Sending Email",
+          note="outbound email, per recipient"),
+        S("AmazonVPC", "vpc.ipv4", "address", "instance-hour", "PublicIPv4:InUseAddress",
+          note="an in-use public IPv4 address (an EIP, a NAT gateway's, a load balancer's, a task's)"),
+        S("AmazonCloudWatch", "cloudwatch", "alarm", "month", "CW:AlarmMonitorUsage", family="Alarm",
+          free={"amount": 10, "period": "month"},
+          note="standard-resolution metric alarm; free: the offer's Global-CW:AlarmMonitorUsage row"),
+        S("AmazonCloudWatch", "cloudwatch", "metric", "month", "CW:MetricMonitorUsage", family="Metric",
+          free={"amount": 10, "period": "month"},
+          note="custom metrics (Container Insights' among them); free: the offer's Global-CW:MetricMonitorUsage row"),
+        S("awswaf", "waf", "requests", "request", "RequestV2-Tier1", 1_000_000, note="WAFv2, up to 1,500 WCU"),
+        S("awswaf", "waf", "acl", "month", "WebACLV2", note="WAFv2 web ACL"),
+        S("awswaf", "waf", "rule", "month", "RuleV2", note="WAFv2 rule (a managed rule group counts as one)"),
+        S("AWSEvents", "scheduler", "requests", "request", "ScheduledInvocation", 1_000_000,
+          note="EventBridge Scheduler invocations; the first 14 million a month are the offer's free step"),
     ]
     for engine, svc in (("MySQL", "rds.mysql"), ("PostgreSQL", "rds.postgres")):
         for t in RDS_TYPES:
@@ -160,9 +184,19 @@ EC2_KEEP = {"TermType": "OnDemand", "Tenancy": "Shared", "Operating System": "Li
             "CapacityStatus": "Used", "Product Family": "Compute Instance", "Unit": "Hrs", "Currency": "USD"}
 
 
+#: Rows the EC2 offer holds besides instances (ticket 2026-10-21-infra-bundled-prices-missing-common-aws-rows): the usage
+#: type (after the region's prefix) -> (service, sku, unit, note). gp3 is both an EBS volume's and an EC2 instance's
+#: storage (the instance's root volume).
+EC2_OTHER = {
+    "NatGateway-Hours": [("vpc.nat", "hour", "instance-hour", "NAT gateway, each hour it runs")],
+    "NatGateway-Bytes": [("vpc.nat", "processed", "GB", "NAT gateway, data processed")],
+    "EBS:VolumeUsage.gp3": [("ebs", "storage", "GB-month", "gp3"), ("ec2", "storage", "GB-month", "gp3 (the root volume)")],
+}
+
+
 def rows_from_ec2_csv(lines, region: str, url: str) -> tuple[list[dict], list[str]]:
     """(price rows, why lines were not used) from the EC2 offer's CSV, given as an iterable of text lines (a stream:
-    nothing but the kept rows is held)."""
+    nothing but the kept rows is held): each shared Linux instance type, and the NAT gateway's and gp3's rows."""
     import csv
     reader = csv.reader(lines)
     effective, header = "", None
@@ -176,8 +210,23 @@ def rows_from_ec2_csv(lines, region: str, url: str) -> tuple[list[dict], list[st
         return [], ["the EC2 offer's header is not the one read (SKU … Instance Type, PricePerUnit, usageType)"]
     prefix = PREFIX.get(region, [""])
     out: dict[str, dict] = {}
+    other: dict[tuple, dict] = {}
+    others = {p + k: v for p in prefix for k, v in EC2_OTHER.items()}
     for row in reader:
-        if len(row) < len(header) or any(row[header[k]] != v for k, v in EC2_KEEP.items()):
+        if len(row) < len(header):
+            continue
+        usage = row[header["usageType"]]
+        if usage in others and row[header["TermType"]] == "OnDemand" and row[header["Currency"]] == "USD":
+            try:
+                price = float(row[header["PricePerUnit"]])
+            except ValueError:
+                continue
+            for svc, sku, unit, note in others[usage]:
+                other.setdefault((svc, sku), {"provider": "aws", "service": svc, "sku": sku, "region": region,
+                                              "unit": unit, "price_usd": _round(price), "effective": effective,
+                                              "source": url, "note": note})
+            continue
+        if any(row[header[k]] != v for k, v in EC2_KEEP.items()):
             continue
         typ, usage = row[header["Instance Type"]], row[header["usageType"]]
         # the usage type decides (BoxUsage is a shared instance; DedicatedUsage and HostUsage are not): Tenancy above
@@ -190,4 +239,6 @@ def rows_from_ec2_csv(lines, region: str, url: str) -> tuple[list[dict], list[st
             continue
         out[typ] = {"provider": "aws", "service": "ec2", "sku": typ, "region": region, "unit": "instance-hour",
                     "price_usd": _round(price), "effective": effective, "source": url, "note": "Linux, shared, on-demand"}
-    return [out[k] for k in sorted(out)], ([] if out else ["no on-demand Linux shared instance in the offer"])
+    missing = [] if out else ["no on-demand Linux shared instance in the offer"]
+    missing += [f"{svc} {sku} ({u})" for u, rows in EC2_OTHER.items() for svc, sku, *_ in rows if (svc, sku) not in other]
+    return [out[k] for k in sorted(out)] + [other[k] for k in sorted(other)], missing

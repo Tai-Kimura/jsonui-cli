@@ -456,6 +456,22 @@
           "x-kind": "level",
           "x-label": "秘密の数"
         },
+        "metrics": {
+          "type": "number",
+          "minimum": 0,
+          "description": "custom metrics kept (CloudWatch's, Container Insights' among them); each a monthly fee",
+          "x-unit": "metric",
+          "x-kind": "level",
+          "x-label": "メトリクスの数"
+        },
+        "rules": {
+          "type": "number",
+          "minimum": 0,
+          "description": "rules in a web ACL (a managed rule group counts as one); each a monthly fee",
+          "x-unit": "rule",
+          "x-kind": "level",
+          "x-label": "ルールの数"
+        },
         "duration_ms": {
           "type": "number",
           "minimum": 0,

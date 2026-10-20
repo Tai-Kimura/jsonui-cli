@@ -35,11 +35,13 @@ PAGES = {
     "cognito": "https://aws.amazon.com/cognito/pricing/",
     "secretsmanager": "https://aws.amazon.com/secrets-manager/pricing/",
     "cloudwatch": "https://aws.amazon.com/cloudwatch/pricing/",
+    "nat": "https://aws.amazon.com/vpc/pricing/",
+    "ipv4": "https://aws.amazon.com/vpc/pricing/",
 }
 
 
-def _r(name: str, category: str, service: str, cost, page: str | None = None, **extra) -> None:
-    provider_rule(f"aws/{name}", category, "aws", service, cost, PAGES[page or name], CHECKED, **extra)
+def _r(name: str, category: str, service: str, cost, page: str | None = None, checked: str = CHECKED, **extra) -> None:
+    provider_rule(f"aws/{name}", category, "aws", service, cost, PAGES[page or name], checked, **extra)
 
 
 def sqs(h: F.Hour, ops_per_message: int = 3) -> list[F.Meter]:
@@ -56,7 +58,7 @@ _r("ec2", "compute.vm", "ec2", F.vm)
 _r("eks", "compute.k8s", "eks", F.k8s)
 _r("cloudfront", "edge.cdn", "cloudfront", F.cdn)
 _r("route53", "edge.dns", "route53", F.dns)
-_r("waf", "edge.waf", "waf", F.waf)
+_r("waf", "edge.waf", "waf", partial(F.waf, acl_optional=False))
 _r("alb", "load_balancer", "elb.alb", F.load_balancer, "elb")
 _r("nlb", "load_balancer", "elb.nlb", partial(F.load_balancer, dims=NLB), "elb")
 _r("apigateway", "gateway.api", "apigateway", F.gateway)
@@ -71,8 +73,12 @@ _r("ebs", "storage.block", "ebs", F.file_store)
 _r("sqs", "queue", "sqs", sqs)
 _r("sns", "queue", "sns", partial(sqs, ops_per_message=1))
 _r("kinesis", "stream", "kinesis", F.stream)
-_r("scheduler", "scheduler", "scheduler", F.scheduler)
+_r("scheduler", "scheduler", "scheduler", F.scheduler)   # EventBridge Scheduler (a rule on the bus: eventbridge)
 _r("ses", "mail", "ses", F.mail)
 _r("cognito", "auth", "cognito", F.auth)
 _r("secretsmanager", "secrets", "secretsmanager", F.secrets)
 _r("cloudwatch", "monitoring", "cloudwatch", F.monitoring)
+# ticket 2026-10-21-infra-bundled-prices-missing-common-aws-rows: the pages read that day
+_r("cloudwatch-alarm", "monitoring.alarm", "cloudwatch", F.alarm, "cloudwatch", checked="2026-10-21")
+_r("nat", "gateway.nat", "vpc.nat", F.nat, checked="2026-10-21")
+_r("ipv4", "network.ip", "vpc.ipv4", F.ip_address, checked="2026-10-21")

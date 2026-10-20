@@ -157,8 +157,9 @@ def test_every_meter_is_in_a_price_unit_and_every_rule_has_its_page():
             continue
         for m in rule.cost(hour):
             assert m.unit in units, (rule.id, m)
-        if rule.provider:
-            assert rule.source.startswith("https://") and rule.checked == "2026-10-20", rule.id
+        if rule.provider:   # the pages read 10-20; the NAT gateway's, public IPv4's and alarms' 10-21
+            new = rule.id in ("aws/nat", "aws/ipv4", "aws/cloudwatch-alarm")
+            assert rule.source.startswith("https://") and rule.checked == ("2026-10-21" if new else "2026-10-20"), rule.id
 
 
 def test_the_most_specific_provider_rule_is_found():
@@ -254,8 +255,10 @@ def test_the_examples_run_and_say_what_is_not_priced():
     model = R.read(FIX / "aws-three-tier")
     sc = {s["id"]: s for s in L.read(FIX / "aws-three-tier")["scenarios"]}
     ordinary = E.month_totals(E.simulate(sc["ordinary"], model, BUNDLED))
-    assert ordinary["noRule"] == ["stripe", "api-role", "api-5xx"]
-    assert ordinary["noPrice"] == [{"node": "mailer", "meter": "emails", "sku": "emails", "unit": "email"}]   # sendgrid
+    assert ordinary["noRule"] == ["stripe", "api-role"]   # api-5xx: an alarm, priced since 2026-10-21
+    assert ordinary["noPrice"] == [{"node": "mailer", "meter": "emails", "sku": "emails", "unit": "email"},   # sendgrid
+                                   # an alarm in no region's group: its region's price is not found, said not guessed
+                                   {"node": "api-5xx", "meter": "alarm", "sku": "alarm", "unit": "month"}]
     assert ordinary["usd"] > 0 and abs(sum(d["usd"] for d in ordinary["days"]) - ordinary["usd"]) < 1e-6
     sale = E.month_totals(E.simulate(sc["sale"], model, BUNDLED))
     assert sale["loadUndefined"] == ["mailer", "assets"] and "api-prod" in sale["overflowHours"]

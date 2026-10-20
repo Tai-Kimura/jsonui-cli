@@ -671,6 +671,9 @@ def seed_terraform(d: Draft, files: list[tuple[str, str, str]]) -> None:
             d.miss(prov, r.file, addr, "no category for this resource type")
             continue
         cat, svc = mapped
+        if not cat.startswith("group:"):
+            svc = T.priced_service(svc, _literal(r.body, "engine"), _literal(r.body, "load_balancer_type"),
+                                   bool(re.search(r"^\s*load_balancer_type\s*=", r.body, re.M)))
         key = (r.dir, r.type, r.name)
         parent, parent_rank = None, 99
         for rt, rn in _expanded_refs(r, by_key):
@@ -913,6 +916,11 @@ def seed_cfn(d: Draft, rel: str, resources: dict, text: str, source: str = "clou
                 d.miss("(unknown)", rel, f"{lid} ({typ})", "not an AWS resource type")
             continue
         cat, svc = mapped
+        props = res.get("Properties") if isinstance(res.get("Properties"), dict) else {}
+        if not cat.startswith("group:"):
+            engine, lb_type = props.get("Engine"), props.get("Type")
+            svc = T.priced_service(svc, engine if isinstance(engine, str) else None,
+                                   lb_type if isinstance(lb_type, str) else None, "Type" in props)
         path = ((res.get("Metadata") or {}).get("aws:cdk:path")) if isinstance(res.get("Metadata"), dict) else None
         label = lid
         if isinstance(path, str) and "/" in path:

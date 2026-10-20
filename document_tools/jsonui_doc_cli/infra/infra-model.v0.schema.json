@@ -170,6 +170,8 @@
         "edge.waf",
         "load_balancer",
         "gateway.api",
+        "gateway.nat",
+        "network.ip",
         "database.relational",
         "database.document",
         "database.kv",
