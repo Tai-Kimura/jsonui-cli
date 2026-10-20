@@ -160,6 +160,12 @@
               "enum": [
                 "month"
               ]
+            },
+            "pool": {
+              "enum": [
+                "aws:data-transfer-out"
+              ],
+              "description": "A free amount the provider gives the account across rows (regions, services): taken once from one total for the pool, not per row. A closed list; an unknown pool is an error. aws:data-transfer-out: AWS's 100 GB a month out to the internet, all regions and services together (CloudFront's own free tier aside)."
             }
           },
           "required": [

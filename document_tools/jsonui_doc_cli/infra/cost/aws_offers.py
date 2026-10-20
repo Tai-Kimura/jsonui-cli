@@ -60,7 +60,9 @@ def regional_spec() -> list[dict]:
           note="logs storage"),
         S("AmazonKinesis", "kinesis", "shard", "capacity_unit-hour", "Storage-ShardHour", note="provisioned shard"),
         S("AWSDataTransfer", "data-transfer", "egress", "GB", "DataTransfer-Out-Bytes",
-          note="to the internet, beyond the global free tier"),
+          free={"amount": 100, "period": "month", "pool": "aws:data-transfer-out"},
+          note="to the internet; free: 100 GB a month for the account, all regions and services together "
+               "(https://aws.amazon.com/ec2/pricing/on-demand/, read 2026-10-21)"),
         S("AWSDataTransfer", "data-transfer", "transfer-regional", "GB", "DataTransfer-Regional-Bytes", scale=2.0,
           note="across zones: the offer's price, charged in and out (x2)"),
         S("AWSDataTransfer", "data-transfer", "transfer-inter-region", "GB", "AWS-Out-Bytes",

@@ -467,3 +467,81 @@ def test_a_free_first_step_counts_as_a_free_amount():
              "price_usd": 0.0000166667, "effective": "2026-01-01"}]
     got = _free_warnings(_env_run(["production", "staging"], _user(rows)))
     assert len(got) == 1 and got[0]["rows"] == ["aws lambda requests (us-east-1)"]
+
+
+# ---------------------------------------------------------------- the account's free amounts: pools, simulate_account
+
+def _account_model(nodes: list[dict], envs=("production", "staging")) -> dict:
+    doc = {"version": 0, "environments": [{"id": e} for e in envs], "groups": [], "edges": [], "nodes": nodes}
+    model, problems = M.merge([("m.json", json.dumps(doc).encode())])
+    assert M.errors(problems) == []
+    return model
+
+
+def _scenario(model: dict, env: str, loads: list[dict], month: str = "2026-11") -> dict:
+    sc, problems = L.normalize(f"{env}.json", {"version": 0, "id": env, "month": month, "environment": env,
+                                               "loads": loads}, model)
+    assert [p for p in problems if p["severity"] == "error"] == []
+    return sc
+
+
+def _vm(id_: str, region: str) -> dict:
+    return {"id": id_, "category": "compute.vm", "provider": "aws", "service": "ec2", "region": region}
+
+
+def test_an_unknown_free_pool_is_an_error():
+    row = {"provider": "aws", "service": "data-transfer", "sku": "egress", "region": "us-east-1", "unit": "GB",
+           "price_usd": 0.09, "effective": "2026-01-01", "source": "https://example.com/prices",
+           "free": {"amount": 100, "period": "month", "pool": "aws:mystery"}}
+    doc, problems = P.read_file("p.json", json.dumps({"version": 0, "prices": [row]}).encode())
+    assert doc is None and [(p["code"], p["path"]) for p in problems if p["severity"] == "error"] == [
+        ("schema", "/prices/0/free/pool")]
+    ok = dict(row, free=dict(row["free"], pool="aws:data-transfer-out"))
+    assert P.read_file("p.json", json.dumps({"version": 0, "prices": [ok]}).encode())[0] is not None
+
+
+def test_the_100_free_gb_out_are_taken_once_across_regions():
+    """AWS's 100 GB a month out to the internet are the account's, all regions together (the EC2 pricing page, read
+    2026-10-21): 75 GB from Tokyo and 75 GB from Virginia are 75 free, then 25 free and 50 at $0.09."""
+    model = _account_model([_vm("tokyo", "ap-northeast-1"), _vm("virginia", "us-east-1")], ("production",))
+    per_hour = 75 / 720
+    sc = _scenario(model, "production", [{"node": "tokyo", "quantities": {"egress_gb": per_hour}},
+                                         {"node": "virginia", "quantities": {"egress_gb": per_hour}}])
+    result = E.simulate(sc, model, BUNDLED)
+    assert round(_meter_usd(result, "tokyo", "egress"), 6) == 0.0
+    assert round(_meter_usd(result, "virginia", "egress"), 2) == 4.50
+
+
+def test_without_its_pool_a_free_amount_is_the_rows_own():
+    """The same 150 GB on rows whose 100 GB is each row's (no pool): each region takes 100 free, nothing is billed."""
+    plain = [dict(r, free={"amount": 100, "period": "month"}) if r["service"] == "data-transfer" and r["sku"] == "egress"
+             else r for r in PB.bundled_rows()]
+    model = _account_model([_vm("tokyo", "ap-northeast-1"), _vm("virginia", "us-east-1")], ("production",))
+    sc = _scenario(model, "production", [{"node": n, "quantities": {"egress_gb": 75 / 720}} for n in ("tokyo", "virginia")])
+    result = E.simulate(sc, model, PB.Book(bundled=plain))
+    assert round(_meter_usd(result, "virginia", "egress"), 6) == 0.0
+
+
+def test_the_account_takes_its_free_amounts_once_across_environments():
+    """Production and staging in one account (113 custom metrics each): priced as two scenarios, $30.90 each (the
+    warning says so); as the account, $30.90 then $33.90, and no warning."""
+    logs = {"id": "logs", "category": "monitoring", "provider": "aws", "service": "cloudwatch", "region": "ap-northeast-1"}
+    model = _account_model([logs])
+    scs = [_scenario(model, e, [{"node": "logs", "quantities": {"metrics": 113.0}}]) for e in ("production", "staging")]
+    alone = [E.simulate(s, model, BUNDLED) for s in scs]
+    assert [round(E.month_totals(r)["usd"], 2) for r in alone] == [30.9, 30.9]
+    assert all(_free_warnings(r) for r in alone)
+    account = E.simulate_account(scs, model, BUNDLED)
+    assert [round(E.month_totals(r)["usd"], 2) for r in account] == [30.9, 33.9]
+    assert not any(_free_warnings(r) for r in account)
+    assert round(E.account_totals(account)["usd"], 2) == 64.8
+
+
+def test_a_scenario_of_another_month_is_priced_on_its_own_and_says_so():
+    logs = {"id": "logs", "category": "monitoring", "provider": "aws", "service": "cloudwatch", "region": "ap-northeast-1"}
+    model = _account_model([logs])
+    scs = [_scenario(model, "production", [{"node": "logs", "quantities": {"metrics": 113.0}}]),
+           _scenario(model, "staging", [{"node": "logs", "quantities": {"metrics": 113.0}}], month="2026-12")]
+    account = E.simulate_account(scs, model, BUNDLED)
+    assert [round(E.month_totals(r)["usd"], 2) for r in account] == [30.9, 30.9]
+    assert [w["code"] for w in account[1].warnings if w.get("code") == "cost.account_other_month"] == ["cost.account_other_month"]

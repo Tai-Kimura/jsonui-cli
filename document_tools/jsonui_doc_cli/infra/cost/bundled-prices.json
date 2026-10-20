@@ -34,7 +34,12 @@
      "price_usd": 0.084
     }
    ],
-   "note": "to the internet, beyond the global free tier"
+   "free": {
+    "amount": 100,
+    "period": "month",
+    "pool": "aws:data-transfer-out"
+   },
+   "note": "to the internet; free: 100 GB a month for the account, all regions and services together (https://aws.amazon.com/ec2/pricing/on-demand/, read 2026-10-21)"
   },
   {
    "provider": "aws",
@@ -1175,7 +1180,12 @@
      "price_usd": 0.05
     }
    ],
-   "note": "to the internet, beyond the global free tier"
+   "free": {
+    "amount": 100,
+    "period": "month",
+    "pool": "aws:data-transfer-out"
+   },
+   "note": "to the internet; free: 100 GB a month for the account, all regions and services together (https://aws.amazon.com/ec2/pricing/on-demand/, read 2026-10-21)"
   },
   {
    "provider": "aws",

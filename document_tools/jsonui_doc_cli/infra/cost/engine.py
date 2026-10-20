@@ -4,7 +4,9 @@ For each node of the environment: its rule (infra/rules lookup), how many run an
 what it carries each hour (the load's quantities times the hour's multiplier; the part over capacity left out unless
 the rule charges it), its meters (the rule's formula), and each meter's price and charge on the month's total so far
 (parts.py; the totals are kept per price row: a free amount and the steps are the account's, within one scenario — a
-scenario is one environment, so environments sharing an account each take its free amount, and the result says so).
+scenario is one environment, so environments sharing an account each take its free amount, and the result says so;
+simulate_account prices them with one total). A free amount with a pool (infra-prices free.pool) is taken from the
+pool's total, across rows and regions, the steps still from the row's.
 A node billed by the hour with no load row runs the model's count all month; one billed by use with no load row is
 "load undefined".
 
@@ -153,18 +155,28 @@ def price_meter(book: PB.Book, totals: dict, meter: F.Meter, node: dict, region:
     key = (found["layer"], row.get("file"), row.get("index"))
     if row.get("free") or (row.get("tiers") and row["tiers"][0].get("price_usd") == 0):
         totals.setdefault(FREE_USED, {})[key] = f"{row['provider']} {row['service']} {row['sku']} ({row['region']})"
+    pool = (row.get("free") or {}).get("pool")
+    if pool:   # the account's free amount, across rows: taken from the pool's total, the steps from the row's
+        pool_before = totals.get((POOL, pool), 0.0)
+        free_now = min(meter.amount, max(0.0, row["free"]["amount"] - pool_before))
+        totals[(POOL, pool)] = pool_before + meter.amount
+        bill, row = meter.amount - free_now, {k: v for k, v in row.items() if k != "free"}
+    else:
+        bill = meter.amount
     before = totals.get(key, 0.0)
-    usd, _detail = parts.charge(before, meter.amount, row)
-    totals[key] = before + meter.amount
+    usd, _detail = parts.charge(before, bill, row)
+    totals[key] = before + bill
     return usd, PB.ref(found)
 
 
 #: totals' entry for the price rows with a free amount this scenario used (simulate says so: see FREE_PER_SCENARIO)
 FREE_USED = ("free amounts used",)
+#: totals' key head for a free amount's pool (infra-prices v0 free.pool): (POOL, "aws:data-transfer-out")
+POOL = "free pool"
 FREE_PER_SCENARIO = ("free amounts are taken once per scenario: a scenario is one environment, so environments that "
                      "share one account (production and staging in one AWS account) each take the account's free "
-                     "amount here, and the sum of their scenarios is low by it. Put the account's environments in one "
-                     "scenario to take it once.")
+                     "amount here, and the sum of their scenarios is low by it. Price them as the account "
+                     "(simulate_account: one total for its scenarios) to take it once.")
 
 
 def _meter_slot(run: NodeRun, m: F.Meter, n: int) -> dict:
@@ -252,15 +264,17 @@ def run_edge(edge: dict, nodes: dict, book: PB.Book, totals: dict, hours: list[d
     return run
 
 
-def simulate(scenario: dict, model: dict, book: PB.Book) -> Result:
+def simulate(scenario: dict, model: dict, book: PB.Book, totals: dict | None = None) -> Result:
     """The scenario's month, priced. Hours outer and nodes inner would share a free amount fairly by time; the totals
     are kept per price row across nodes in the model's order, hour by hour within a node (a simplification said on the
-    page: a shared free amount goes to the first nodes)."""
+    page: a shared free amount goes to the first nodes). ``totals``: the account's, carried in from the scenarios
+    priced before (simulate_account); none: this scenario's own."""
+    account = totals is not None
     hours, warnings = scenario["hours"], []
     n, on = len(hours), scenario["month"] + "-01"
     nodes = {nd["id"]: nd for nd in model["nodes"]}
     rows = {r["node"]: r for r in scenario["loads"]}
-    totals: dict = {}
+    totals = {} if totals is None else totals
     runs = []
     for node in model["nodes"]:
         if scenario["environment"] not in node["environments"]:
@@ -281,10 +295,33 @@ def simulate(scenario: dict, model: dict, book: PB.Book) -> Result:
     for edge in scenario.get("edges", []):
         if edge["from"] in nodes and edge["to"] in nodes:
             runs.append(run_edge(edge, nodes, book, totals, hours, on, warnings))
-    if totals.get(FREE_USED) and len(model.get("environments") or []) > 1:
+    if not account and totals.get(FREE_USED) and len(model.get("environments") or []) > 1:
         _warn(warnings, "simulate", FREE_PER_SCENARIO, code="cost.free_per_scenario",
               rows=sorted(totals[FREE_USED].values()))
     return Result(scenario=scenario["id"], month=scenario["month"], hours=hours, nodes=runs, warnings=warnings)
+
+
+def simulate_account(scenarios: list[dict], model: dict, book: PB.Book) -> list[Result]:
+    """The account's month: the scenarios (one an environment each) priced in the order given with one total, so a
+    free amount, a step and a free pool are the account's, taken once; the first scenario takes the free amounts. A
+    scenario of another month than the first's is priced on its own, and says so (cost.account_other_month)."""
+    totals: dict = {}
+    out = []
+    for s in scenarios:
+        if scenarios and s["month"] != scenarios[0]["month"]:
+            r = simulate(s, model, book)
+            _warn(r.warnings, "simulate_account", f"a scenario of {s['month']}, not {scenarios[0]['month']}: priced on its "
+                  "own, its free amounts not the account's", code="cost.account_other_month")
+        else:
+            r = simulate(s, model, book, totals)
+        out.append(r)
+    return out
+
+
+def account_totals(results: list[Result]) -> dict:
+    """The account's month: each scenario's month_totals, and their sum."""
+    each = [month_totals(r) for r in results]
+    return {"scenarios": each, "usd": sum(t["usd"] for t in each)}
 
 
 # ---------------------------------------------------------------- reading the result

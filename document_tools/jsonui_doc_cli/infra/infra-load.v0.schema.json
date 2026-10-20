@@ -29,7 +29,7 @@
     },
     "environment": {
       "$ref": "#/$defs/id",
-      "description": "The model's environment this scenario is for. Left out: the model's first (a warning when it has several). Free amounts and price steps are taken once per scenario: environments that share one account (production and staging in one AWS account) each take the account's free amount when priced as two scenarios, and the simulator says so (warning cost.free_per_scenario)."
+      "description": "The model's environment this scenario is for. Left out: the model's first (a warning when it has several). Free amounts and price steps are taken once per scenario: environments that share one account (production and staging in one AWS account) each take the account's free amount when priced as two scenarios, and the simulator says so (warning cost.free_per_scenario); priced as the account (one total for its scenarios), they take it once, and a free pool (infra-prices free.pool: AWS's 100 GB out to the internet) is the account's across regions."
     },
     "month": {
       "type": "string",
