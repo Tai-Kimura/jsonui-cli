@@ -338,7 +338,8 @@ async def run_server_room(pw, out, failures):
         await page.unroute("**/api/infra-docs", instant)
 
         # 3c. a robot in front of the door (D2, dd's verification): the press still takes the door, as the bell's and the rack's
-        rid = await page.evaluate("() => window.__dbg.srRobotBeforeDoor()")
+        placed = await page.evaluate("() => window.__dbg.srRobotBeforeDoor()")
+        rid = placed and placed["id"]
         await page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
         at = (await page.evaluate(SR))["door"]
         under = res["doorUnder"] = await page.evaluate("(p) => window.__dbg.under(p)", at)
@@ -379,6 +380,18 @@ async def run_server_room(pw, out, failures):
         # 4b. away from the room after a failure: the bubble goes at once (D1, dd's verification; read from the page, not the
         # e2e hook). Staying: it goes after SR.failMs (9 s, E4)
         bubble_dom = "() => { const b = document.getElementById('sr-bubble'); return b.hidden ? null : b.querySelector('.sr-short').textContent; }"
+        # → to the next room (dd's re-verification X1: the floor was the only way out an arm took)
+        res["stepAfterFail"] = {"before": await page.evaluate(bubble_dom)}
+        await page.keyboard.press("ArrowRight")
+        await until(page, f"() => !!window.__dbg.solo() && window.__dbg.solo() !== '{pid['bad']}'", "the next room with →")
+        t = await page.evaluate("() => performance.now()")
+        await until(page, "(t) => performance.now() > t + 1500", "1.5 s in the next room", arg=t)
+        res["stepAfterFail"].update({"after": await page.evaluate(bubble_dom), "room": await page.evaluate("() => window.__dbg.solo()"), "phase": (await page.evaluate(SR))["phase"]})
+        check(failures, res["stepAfterFail"]["before"] and res["stepAfterFail"]["after"] is None and res["stepAfterFail"]["phase"] == "idle",
+              f"the failure's bubble goes when → takes the view to the next room: {res['stepAfterFail']}")
+        await up_close("bad")
+        await press_door()
+        await until(page, "() => window.__dbg.sr().phase === 'failed'", "failed again (to leave for the floor)")
         res["leftAfterFail"] = {"before": await page.evaluate(bubble_dom)}
         await page.click("#room-back")
         await until(page, "() => window.__dbg.solo() === null", "the floor after a failure")
@@ -543,9 +556,18 @@ async def run_server_room(pw, out, failures):
         await p3.goto(url + "/?demo=1")
         await ready(p3)
         await until(p3, "() => window.__dbg.sr().built && !!window.__dbg.sr().door", "the demo's door", timeout=30000)
+        # a seated robot in front of the demo's door: the press still takes the door (the live office's rule, here too)
+        placed = res["demoBeforeDoor"] = await p3.evaluate("() => window.__dbg.srRobotBeforeDoor()")
+        await p3.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        check(failures, bool(placed) and str(placed.get("first", "")).startswith("robot:"), f"the demo: a robot stands in front of the door: {placed}")
         demo_door = (await p3.evaluate(SR))["door"]
         await p3.mouse.click(demo_door[0], demo_door[1])
-        await until(p3, "() => window.__dbg.sr().phase === 'loading' && window.__dbg.sr().stars > 0", "the demo reads")
+        try:
+            await until(p3, "() => window.__dbg.sr().phase === 'loading' && window.__dbg.sr().stars > 0", "the demo reads", timeout=5000)
+        except Exception:
+            card = await p3.evaluate("() => (window.__dbg.board ? window.__dbg.board().robot : null) || null")
+            check(failures, False, f"the demo's door behind a robot did not take the press (card {card})")
+            raise
         await until(p3, "() => window.__dbg.sr().open", "the demo's server room", timeout=15000)
         s = res["demo"] = await p3.evaluate(SR)
         check(failures, s["shown"]["nodes"] > 0 and s["shown"]["folded"] == 2 and s["shown"]["cross"] > 0 and s["shown"]["external"] == 1

@@ -38,12 +38,18 @@ window.__dbg = {
   srRobotBeforeDoor: () => {
     const at = srDoorNow();
     if (!at) return null;
-    const R = robots.find((x) => x.def.room === at.room && x.robot.root.visible);
+    // live: a robot of that room; the demo: a seated one (the walker is placed by the script each frame)
+    const R = robots.find((x) => x.robot && x.robot.root && x.robot.root.visible && (SOURCE.mode === 'live' ? x.def.room === at.room : !x.def.walk));
     if (!R) return null;
     const door = new THREE.Vector3(); at.D.root.getWorldPosition(door); door.y = 1.1;
     const cam = camera.position, t = (cam.y - 1.0) / (cam.y - door.y), p = cam.clone().lerp(door, Math.min(0.97, Math.max(0, t)));
     R.robot.root.position.set(p.x, 0, p.z);
-    return R.def.id;
+    R.robot.root.updateMatrixWorld(true);
+    // what a ray from the camera through the door's point meets first: the robot, if it stands in front
+    const ray = new THREE.Raycaster(cam.clone(), door.clone().sub(cam).normalize());
+    ray.camera = camera;   // a sprite (a robot's sign) is hit only with the camera given
+    const first = ray.intersectObjects([...robots.map((x) => x.robot.root), at.D.root, at.D.pad].filter(Boolean), true)[0];
+    return { id: R.def.id, first: first ? (robotOf(first.object) !== undefined ? `robot:${robotOf(first.object)}` : first.object.userData.serverDoor ? 'door' : 'other') : null };
   },
   srFramesReset: () => { if (SR.view) SR.view.frames = []; return !!SR.view; },
   srZoom: (factor) => { const V = SR.view; if (!V) return null; const d = V.camera.position.clone().sub(V.controls.target).multiplyScalar(factor); V.camera.position.copy(V.controls.target).add(d); V.controls.update(); return +srCellPx(V).toFixed(2); },
