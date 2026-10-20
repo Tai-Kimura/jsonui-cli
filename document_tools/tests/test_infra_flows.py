@@ -293,6 +293,42 @@ def test_a_step_off_the_way_says_the_rule_its_writer_most_likely_missed(steps, c
     assert [p["path"] for p in off] == [path] and hint in off[0]["message"], off
 
 
+def _either(a, b):
+    return {"branch": {"label": "?", "choices": [{"id": "a", "label": "a", "steps": a}, {"id": "b", "label": "b", "steps": b}]}}
+
+
+GENERIC = "(a move leaves the node the flow is at)"
+JOIN = ("(a choice's steps go on into the steps after the branch from where they end: a choice that ends the flow another "
+        "way joins the step that ends it (join))")
+
+
+@pytest.mark.parametrize("steps, path, hint", [
+    # the independent check's h2: a lane's last node does not stand for the flow's once the lanes are done
+    ([{"edge": "e-browser-api"}, {"parallel": [[{"node": "api"}], [{"from": "api", "to": "queue"}, {"from": "queue", "to": "worker"}]]},
+      {"from": "queue", "to": "db"}], "/flows/0/steps/2/from", GENERIC),
+    # h3: the first step after a choice is, the one after it is not
+    ([{"edge": "e-browser-api"}, _either([{"node": "api"}], [{"node": "api"}]), {"from": "api", "to": "db"}, {"from": "queue", "to": "worker"}],
+     "/flows/0/steps/3/from", GENERIC),
+    # h4: a choice's first step is not right after the move before the branch
+    ([{"edge": "e-browser-api"}, _either([{"from": "browser", "to": "api"}], [{"node": "api"}])],
+     "/flows/0/steps/1/branch/choices/0/steps/0/from", GENERIC),
+    # h5: a step at a node ends "the first after a choice" as a move does
+    ([{"edge": "e-browser-api"}, _either([{"node": "api"}], [{"node": "api"}]), {"node": "api"}, {"from": "queue", "to": "worker"}],
+     "/flows/0/steps/3/from", GENERIC),
+    # nested: lanes inside a choice, then a step of that choice
+    ([{"edge": "e-browser-api"}, _either([{"parallel": [[{"from": "api", "to": "queue"}], [{"node": "api"}]]}, {"from": "queue", "to": "worker"}],
+                                         [{"node": "api"}])], "/flows/0/steps/1/branch/choices/0/steps/1/from", GENERIC),
+    # nested: a branch inside a lane, its choice ending elsewhere: join is the rule there too
+    ([{"edge": "e-browser-api"}, {"parallel": [[_either([{"from": "api", "to": "db"}], [{"node": "api"}]), {"from": "api", "to": "cache"}],
+                                               [{"node": "api"}]]}], "/flows/0/steps/1/parallel/0/1/from", JOIN),
+])
+def test_the_hint_is_for_the_step_it_is_said_of_not_one_walked_before(steps, path, hint):
+    """The state behind the hint (the node before the last move, a lane's or a choice's first step) is put back where
+    it stops being true: each of these, with one of those resets left out, pointed at a rule that was not missed."""
+    off = [p for p in _merge({"id": "f", "start": "browser", "steps": steps})[1] if p["code"] == "flow.discontinuous"]
+    assert [p["path"] for p in off] == [path] and off[0]["message"].endswith(hint), off
+
+
 def test_a_loop_whose_flows_also_go_to_a_flow_that_ends_is_refused_and_that_flow_kept():
     """The independent check's H2: r goes by default to s; s's two lanes go by default to r and to c (no goto). Only r
     and s are on the loop: c, reached from it and done first, stays."""
