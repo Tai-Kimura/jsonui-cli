@@ -140,12 +140,13 @@
           <label class="sr-ctl">線 <select id="sr-lines"><option value="all">すべて（薄く）</option><option value="cross">跨ぐ線だけ</option><option value="focus">選んだものだけ</option></select></label>
           <button type="button" class="wb-btn" id="sr-zin" aria-label="寄る">＋</button>
           <button type="button" class="wb-btn" id="sr-zout" aria-label="引く">−</button>
+          <button type="button" class="wb-btn" id="sr-boxzoom" aria-pressed="false" title="次のドラッグで四角を描き、そこへ寄ります（Option を押しながらのドラッグでも描けます。Esc でやめる）">範囲で寄る</button>
           <button type="button" class="wb-btn" id="sr-fit">全体を見る</button>
           <button type="button" class="wb-btn" id="sr-board-btn" aria-pressed="true" aria-controls="sr-board">ボード</button>
           <button type="button" class="wb-btn" id="sr-log-btn" aria-pressed="false" aria-controls="sr-log">ログ</button>
         </header>
         <div class="sr-main">
-          <div class="sr-stage"><canvas id="sr-canvas" aria-label="インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす）"></canvas><div class="sr-labels" id="sr-labels" aria-hidden="true"></div></div>
+          <div class="sr-stage"><canvas id="sr-canvas" aria-label="インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす、Option＋ドラッグで範囲に寄る）"></canvas><div class="sr-box" id="sr-box" hidden></div><div class="sr-labels" id="sr-labels" aria-hidden="true"></div></div>
           <aside class="sr-board" id="sr-board" aria-label="構成のボード"></aside>
         </div>
         <div class="sr-log" id="sr-log" hidden aria-label="サーバールームのログ"></div>

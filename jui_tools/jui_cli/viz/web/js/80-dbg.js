@@ -64,6 +64,12 @@ window.__dbg = {
     return { id: R.def.id, first: first ? (robotOf(first.object) !== undefined ? `robot:${robotOf(first.object)}` : first.object.userData.serverDoor ? 'door' : 'other') : null };
   },
   srFramesReset: () => { if (SR.view) SR.view.frames = []; return !!SR.view; },
+  // the box (2.3.11 item 6): the nodes on the page now (client px; null behind the camera), the camera, what the last box held
+  srScreen: () => { const V = SR.view; if (!V) return null; V.camera.updateMatrixWorld(); const r = V.renderer.domElement.getBoundingClientRect();
+    return { rect: [r.left, r.top, r.right, r.bottom], lod: V.lod, nodes: srBoxPoints(V).map(([id, v]) => { const s = srScreenAt(V, v, r.width, r.height); return [id, s ? [r.left + s[0], r.top + s[1]] : null]; }) }; },
+  srCam: () => { const V = SR.view; return V ? { target: V.controls.target.toArray().map((x) => +x.toFixed(3)), dist: +V.camera.position.distanceTo(V.controls.target).toFixed(3),
+    pos: V.camera.position.toArray().map((x) => +x.toFixed(3)) } : null; },
+  srBox: () => ({ armed: SR.box.armed, drawing: !!SR.box.drag, shown: !$('sr-box').hidden, last: SR.view ? SR.view.lastBox || null : null }),
   srZoom: (factor) => { const V = SR.view; if (!V) return null; const d = V.camera.position.clone().sub(V.controls.target).multiplyScalar(factor); V.camera.position.copy(V.controls.target).add(d); V.controls.update(); return +srCellPx(V).toFixed(2); },
   srEnter: (project) => srEnter(project, null),
   srCross: () => { const V = SR.view; return V ? { drawn: V.crossLines.geometry.attributes.position.count / 2, dashed: !!V.crossLines.material.isLineDashedMaterial, plain: V.plainLines.geometry.attributes.position.count / 2 } : null; },

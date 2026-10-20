@@ -42,6 +42,8 @@ const SR = {
   // drawn strong on a layer of their own; a switch for all (faint) / crossing ones only / the chosen node's only
   lines: 'all', hover: null, plainOpacity: 0.18, crossOpacity: 0.55,
   only: new Set(),   // the clouds chosen on the board's legend (2.3.9, item 3; empty: all)
+  // a box drawn to move in on (2.3.11 item 6): Option + drag, or 範囲で寄る then one drag; fit is how much of the page it fills
+  box: { armed: false, drag: null }, boxFit: 0.92,
 };
 const srEl = $('sr'), srBubbleEl = $('sr-bubble');
 function srNow() { return performance.now(); }
@@ -309,6 +311,8 @@ function srShow(model) {
 function srClose() {
   if (SR.phase !== 'open') return;
   SR.phase = 'idle';
+  srBoxEnd();
+  srBoxArm(false);
   srDispose();
   hideOverlay(srEl);
   SR.seq += 1;
@@ -662,6 +666,71 @@ function srZoomBy(factor) {
   V.camera.position.copy(V.controls.target).add(d);
   V.controls.update();
 }
+/* The box (2.3.11 item 6). Requester 10-20: 「ドラッグで範囲指定できてそこが画面全体になるようにズームするとかできる？」.
+   Option (Alt) + a left drag draws it, or 範囲で寄る then one drag (a finger too). Not Shift: OrbitControls pans on
+   Shift / Ctrl / ⌘ + a left drag. The stage takes the press in the capture phase, so the controls never start turning;
+   a second finger, Esc or a drag under 5 px draws nothing. Let go, the camera keeps its direction and moves in until
+   what the box held fills SR.boxFit of the page; 全体を見る goes back. */
+function srBoxArm(on) {
+  SR.box.armed = on;
+  $('sr-boxzoom').setAttribute('aria-pressed', String(on));
+  $('sr-canvas').parentElement.dataset.box = on ? 'armed' : '';
+}
+function srBoxEnd() {
+  SR.box.drag = null;
+  $('sr-box').hidden = true;
+}
+function srBoxDraw() {
+  const D = SR.box.drag, el = $('sr-box');
+  el.hidden = false;
+  el.style.transform = `translate(${Math.min(D.x0, D.x1)}px, ${Math.min(D.y0, D.y1)}px)`;
+  el.style.width = `${Math.abs(D.x1 - D.x0)}px`; el.style.height = `${Math.abs(D.y1 - D.y0)}px`;
+}
+/* What the box can hold: near the nodes drawn, far the top groups' boxes ([id, point]). */
+function srBoxPoints(V) {
+  if (V.lod === 'far') return V.L.tops.map((G) => [G.g.id, new THREE.Vector3(G.x + G.w / 2, G.boxH / 2, G.z + G.d / 2)]);
+  return [...V.L.pos.values()].filter((p) => !p.hiddenIn).map((p) => [p.n.id, new THREE.Vector3(p.x, p.y + 0.75, p.z)]);
+}
+/* A point on the page now (px within the canvas), or null behind the camera. */
+function srScreenAt(V, v, w, h) {
+  const q = v.clone().project(V.camera);
+  return q.z < -1 || q.z > 1 ? null : [(q.x + 1) / 2 * w, (1 - q.y) / 2 * h];
+}
+function srZoomToBox(x0, y0, x1, y1) {
+  const V = SR.view;
+  if (!V) return;
+  const cv = V.renderer.domElement, w = cv.clientWidth || 1, h = cv.clientHeight || 1;
+  const l = Math.min(x0, x1), r = Math.max(x0, x1), t = Math.min(y0, y1), b = Math.max(y0, y1);
+  V.camera.updateMatrixWorld();
+  const held = srBoxPoints(V).filter(([, v]) => { const s = srScreenAt(V, v, w, h); return s && s[0] >= l && s[0] <= r && s[1] >= t && s[1] <= b; });
+  const dir = V.camera.position.clone().sub(V.controls.target).normalize(), now = V.camera.position.distanceTo(V.controls.target);
+  const { minDistance: lo0, maxDistance: hi0 } = V.controls;
+  const place = (d) => { V.camera.position.copy(V.controls.target).addScaledVector(dir, d); V.camera.updateMatrixWorld(); };
+  if (held.length) {
+    const c = held.reduce((a, [, v]) => a.add(v), new THREE.Vector3()).divideScalar(held.length);
+    V.controls.target.set(c.x, 0, c.z);
+    const k = SR.boxFit;
+    const fits = (d) => {
+      place(d);
+      return held.every(([, v]) => { const q = v.clone().project(V.camera); return q.z > -1 && q.z < 1 && Math.abs(q.x) <= k && Math.abs(q.y) <= k; });
+    };
+    let lo = lo0, hi = Math.max(now, lo0);
+    while (!fits(hi) && hi < hi0) hi = Math.min(hi0, hi * 2);
+    if (fits(lo)) hi = lo;
+    else for (let i = 0; i < 32 && hi - lo > 0.01; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
+    place(hi);
+  } else {   // nothing in it: its middle on the floor, as much nearer as the box is smaller than the page
+    const ray = new THREE.Raycaster(), at = new THREE.Vector3();
+    ray.setFromCamera(new THREE.Vector2(((l + r) / 2 / w) * 2 - 1, -((t + b) / 2 / h) * 2 + 1), V.camera);
+    if (ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), at)) V.controls.target.copy(at);
+    place(Math.min(hi0, Math.max(lo0, now * Math.max((r - l) / w, (b - t) / h))));
+  }
+  V.camera.near = Math.max(0.1, Math.min(V.camera.near, V.camera.position.distanceTo(V.controls.target) / 500));
+  V.camera.updateProjectionMatrix();
+  V.controls.update();
+  V.lastBox = { held: held.map(([id]) => id), lod: V.lod };
+  srLog(`範囲に寄った: ${V.lastBox.lod === 'far' ? 'group' : 'node'} ${held.length}`);
+}
 
 /* ---- the board and the log ---- */
 function srCounts(L) {
@@ -712,6 +781,37 @@ if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEven
 new MutationObserver(srRetheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 $('sr-back').addEventListener('click', srClose);
 $('sr-fit').addEventListener('click', () => srFit(false));
+$('sr-boxzoom').addEventListener('click', () => { srBoxEnd(); srBoxArm(!SR.box.armed); });
+{
+  const stage = $('sr-canvas').parentElement;
+  const local = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  stage.addEventListener('pointerdown', (e) => {   // capture: before OrbitControls on the canvas
+    if (SR.phase !== 'open' || !SR.view) return;
+    if (SR.box.drag) { e.stopPropagation(); e.preventDefault(); srBoxEnd(); return; }   // a second finger: no box
+    if (e.button !== 0 || !(e.altKey || SR.box.armed)) return;
+    e.stopPropagation(); e.preventDefault();
+    const [x, y] = local(e);
+    SR.box.drag = { id: e.pointerId, x0: x, y0: y, x1: x, y1: y };
+    try { stage.setPointerCapture(e.pointerId); } catch { /* a pointer already gone */ }
+  }, true);
+  stage.addEventListener('pointermove', (e) => {
+    const D = SR.box.drag;
+    if (!D || e.pointerId !== D.id) return;
+    e.stopPropagation();
+    [D.x1, D.y1] = local(e);
+    srBoxDraw();
+  }, true);
+  const up = (e) => {
+    const D = SR.box.drag;
+    if (!D || e.pointerId !== D.id) return;
+    e.stopPropagation();
+    srBoxEnd();
+    srBoxArm(false);
+    if (e.type === 'pointerup' && Math.abs(D.x1 - D.x0) >= 5 && Math.abs(D.y1 - D.y0) >= 5) srZoomToBox(D.x0, D.y0, D.x1, D.y1);
+  };
+  stage.addEventListener('pointerup', up, true);
+  stage.addEventListener('pointercancel', up, true);
+}
 $('sr-zin').addEventListener('click', () => srZoomBy(1 / SR.zoomStep));
 $('sr-lines').addEventListener('change', () => {
   SR.lines = $('sr-lines').value;
@@ -745,6 +845,7 @@ for (const [btn, el] of [['sr-board-btn', 'sr-board'], ['sr-log-btn', 'sr-log']]
 }
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (SR.phase === 'open' && (SR.box.drag || SR.box.armed)) { e.preventDefault(); e.stopPropagation(); srBoxEnd(); srBoxArm(false); return; }   // the box only, the room stays
   if (SR.phase === 'loading') { e.preventDefault(); e.stopPropagation(); srCancel(); return; }
   if (SR.phase === 'open') { e.preventDefault(); e.stopPropagation(); srClose(); }
 }, true);

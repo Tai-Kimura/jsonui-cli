@@ -622,6 +622,103 @@ async def run_server_room(pw, out, failures):
         res["lod"] = {"far": [px_far, far["labels"]], "near": [px_near, near["labels"]]}
         check(failures, far["lod"] == "far" and near["lod"] == "near" and far["labels"] < near["labels"],
               f"zoomed out the groups are boxes and the labels thin out: {res['lod']}")
+
+        # 6a. a box drawn to move in on (2.3.11 item 6): Option + drag, or 範囲で寄る then a drag; Shift still pans, Esc stops
+        # the box only, 全体を見る goes back
+        async def frames_settled():
+            await page.evaluate("() => new Promise((r) => { let n = 0; const f = () => (++n < 12 ? requestAnimationFrame(f) : r()); requestAnimationFrame(f); })")
+
+        async def drag(x0, y0, x1, y1, mods=()):
+            for m in mods:
+                await page.keyboard.down(m)
+            await page.mouse.move(x0, y0)
+            await page.mouse.down()
+            await page.mouse.move(x1, y1, steps=8)
+            mid = await page.evaluate("() => window.__dbg.srBox()")
+            await page.mouse.up()
+            for m in mods:
+                await page.keyboard.up(m)
+            await frames_settled()
+            return mid
+
+        def on_page(xy, rect):
+            return xy is not None and rect[0] <= xy[0] <= rect[2] and rect[1] <= xy[1] <= rect[3]
+
+        await page.click("#sr-fit")
+        await frames_settled()
+        fit_cam = await page.evaluate("() => window.__dbg.srCam()")
+        await page.evaluate("() => window.__dbg.srZoom(0.3)")
+        await until(page, "() => window.__dbg.sr().lod === 'near'", "near for the box", timeout=5000)
+        await frames_settled()
+        box_res = res["box"] = {}
+        scr = await page.evaluate("() => window.__dbg.srScreen()")
+        rect = scr["rect"]
+        cw, ch = rect[2] - rect[0], rect[3] - rect[1]
+        cx, cy = rect[0] + cw / 2, rect[1] + ch / 2
+        for frac in (0.12, 0.2, 0.3):   # a box in the middle holding a few nodes
+            bx = [cx - cw * frac / 2, cy - ch * frac / 2, cx + cw * frac / 2, cy + ch * frac / 2]
+            inside = {i for i, xy in scr["nodes"] if on_page(xy, bx)}
+            if len(inside) >= 3:
+                break
+        outside = {i for i, xy in scr["nodes"] if on_page(xy, rect)} - inside
+        box_res["before"] = {"box": [round(v) for v in bx], "inside": len(inside), "outsideOnPage": len(outside)}
+        # a plain drag still turns (the target stays); Shift + drag still pans (the target moves); neither draws a box
+        c0 = await page.evaluate("() => window.__dbg.srCam()")
+        mid = await drag(cx, cy, cx + 120, cy + 10)
+        c1 = await page.evaluate("() => window.__dbg.srCam()")
+        box_res["turn"] = {"mid": mid, "target": [c0["target"], c1["target"]], "moved": c0["pos"] != c1["pos"]}
+        check(failures, not mid["shown"] and c0["target"] == c1["target"] and c0["pos"] != c1["pos"], f"a plain drag still turns, no box: {box_res['turn']}")
+        mid = await drag(cx, cy, cx + 120, cy + 60, ("Shift",))
+        c2 = await page.evaluate("() => window.__dbg.srCam()")
+        box_res["pan"] = {"mid": mid, "target": [c1["target"], c2["target"]], "last": (await page.evaluate("() => window.__dbg.srBox()"))["last"]}
+        check(failures, not mid["shown"] and c1["target"] != c2["target"] and box_res["pan"]["last"] is None, f"Shift + drag still pans, no box: {box_res['pan']}")
+        # the view the box is measured on: back to where the nodes were found
+        await page.click("#sr-fit")
+        await page.evaluate("() => window.__dbg.srZoom(0.3)")
+        await frames_settled()
+        scr = await page.evaluate("() => window.__dbg.srScreen()")
+        inside = {i for i, xy in scr["nodes"] if on_page(xy, bx)}
+        outside = {i for i, xy in scr["nodes"] if on_page(xy, rect)} - inside
+        mid = await drag(bx[0], bx[1], bx[2], bx[3], ("Alt",))
+        after = await page.evaluate("() => window.__dbg.srScreen()")
+        last = (await page.evaluate("() => window.__dbg.srBox()"))["last"]
+        pos = dict((i, xy) for i, xy in after["nodes"])
+        missing = sorted(i for i in inside if not on_page(pos.get(i), after["rect"]))
+        gone = [i for i in outside if not on_page(pos.get(i), after["rect"])]
+        box_res["alt"] = {"mid": mid, "inside": len(inside), "held": len(last["held"]) if last else None, "missing": missing[:10],
+                          "outside": len(outside), "outsideGone": len(gone), "log": (await page.evaluate(SR))["log"][:1]}
+        check(failures, mid["shown"] and inside and last and set(last["held"]) == inside and not missing,
+              f"Option + drag: every node in the box is on the page after: {box_res['alt']}")
+        check(failures, outside and len(gone) >= 0.8 * len(outside), f"Option + drag: most nodes outside the box leave the page: {box_res['alt']}")
+        # Esc while drawing: the box goes, the room stays, the camera does not move
+        await page.click("#sr-fit")
+        await frames_settled()
+        c3 = await page.evaluate("() => window.__dbg.srCam()")
+        box_res["fit"] = [fit_cam, c3]
+        check(failures, c3["target"] == fit_cam["target"] and abs(c3["dist"] - fit_cam["dist"]) < 0.01, f"全体を見る goes back: {box_res['fit']}")
+        await page.click("#sr-boxzoom")
+        armed = await page.evaluate("() => window.__dbg.srBox()")
+        await page.mouse.move(cx - 80, cy - 60)
+        await page.mouse.down()
+        await page.mouse.move(cx + 80, cy + 60, steps=6)
+        drawing = await page.evaluate("() => window.__dbg.srBox()")
+        await page.keyboard.press("Escape")
+        await page.mouse.up()
+        await frames_settled()
+        esc = await page.evaluate("() => window.__dbg.srBox()")
+        c4 = await page.evaluate("() => window.__dbg.srCam()")
+        box_res["esc"] = {"armed": armed, "drawing": drawing, "after": esc, "open": (await page.evaluate(SR))["open"], "cam": [c3, c4]}
+        check(failures, armed["armed"] and drawing["drawing"] and drawing["shown"] and not esc["drawing"] and not esc["shown"] and not esc["armed"]
+              and box_res["esc"]["open"] and c4 == c3, f"Esc while drawing stops the box only: {box_res['esc']}")
+        # 範囲で寄る: one plain drag draws the box, then the button is off again
+        await page.click("#sr-boxzoom")
+        mid = await drag(cx - cw * 0.1, cy - ch * 0.1, cx + cw * 0.1, cy + ch * 0.1)
+        c5 = await page.evaluate("() => window.__dbg.srCam()")
+        btn = await page.evaluate("() => window.__dbg.srBox()")
+        box_res["button"] = {"mid": mid, "after": btn, "dist": [c3["dist"], c5["dist"]]}
+        check(failures, mid["shown"] and not btn["armed"] and btn["last"] and c5["dist"] < c3["dist"] * 0.5,
+              f"範囲で寄る then a plain drag moves in on the box, once: {box_res['button']}")
+        await page.screenshot(path=str(out / "large-box.png"))
         await page.keyboard.press("Escape")
 
         # 6b. a room with no infra folder has no door (E13)

@@ -1496,6 +1496,11 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-stage { position: relative; flex: 1; min-width: 0; overflow: hidden; }
 .sr-stage canvas { display: block; width: 100%; height: 100%; }
 .sr-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* the box drawn to move in on (2.3.11 item 6): Option + drag, or 範囲で寄る then a drag */
+.sr-box { position: absolute; left: 0; top: 0; border: 1.5px dashed var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); pointer-events: none; }
+.sr-box[hidden] { display: none; }
+.sr-stage[data-box="armed"] canvas { cursor: crosshair; }
+#sr-boxzoom[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); }
 .sr-label { position: absolute; left: 0; top: 0; padding: 1px 6px; border-radius: 4px; background: var(--tag-bg); color: var(--ink); font: 500 11px/1.5 var(--font-mono); white-space: nowrap; }
 .sr-label[hidden] { display: none; }
 .sr-label[data-kind="group"] { font-weight: 700; background: var(--panel); border: 1px solid var(--line); }
