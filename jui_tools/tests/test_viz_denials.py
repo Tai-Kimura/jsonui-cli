@@ -274,3 +274,36 @@ def test_a_hook_without_a_tool_use_id_and_the_transcript_make_one_card():
     w.apply_hook({"hook_event_name": "PermissionDenied", "session_id": SID, "cwd": "/w", "tool_name": "Bash",
                   "tool_input": {"command": CMD}}, 1000 + 31_000 + 200_000)   # long after: its own card
     assert len(w.denials.items()) == 3
+
+
+def test_two_sessions_stopped_on_the_same_command_keep_a_card_each():
+    """Two robots of two sessions stopped on the same command within the window, one hook without a tool_use_id: two
+    cards, each on its own session (dd's G1, 10-20: matched across sessions, one session's card was gone and it could
+    not be told to go on)."""
+    other = "e2e00000-0000-4000-8000-00000000c002"
+    w = _world()
+    w.apply_hook({"hook_event_name": "SessionStart", "session_id": other, "cwd": "/w2"}, 500)
+    w._denied_records(SID, SID, [(USE, "Bash", {"command": CMD}, DENIED_TEXT, 1000)], 1001)
+    w.apply_hook({"hook_event_name": "PermissionDenied", "session_id": other, "cwd": "/w2", "permission_mode": "auto",
+                  "tool_name": "Bash", "tool_input": {"command": CMD}}, 1500)
+    cards = w.denials.items()
+    assert sorted(c["sessionId"] for c in cards) == sorted([SID, other])
+    by = {c["sessionId"]: c for c in cards}
+    assert by[SID]["via"] == ["transcript"] and by[SID]["toolUseId"] == USE
+    assert by[other]["via"] == ["hook"] and by[other]["toolUseId"] is None
+
+
+def test_another_command_or_another_tool_on_the_same_input_keeps_its_own_card():
+    """The same session within the window, one source without a tool_use_id: another command, or another tool on the
+    same path, is another call — its own card (the family of dd's G1: each condition of the match is needed)."""
+    w = _world()
+    w._denied_records(SID, SID, [(USE, "Bash", {"command": CMD}, DENIED_TEXT, 1000)], 1001)
+    w.apply_hook({"hook_event_name": "PermissionDenied", "session_id": SID, "cwd": "/w", "tool_name": "Bash",
+                  "tool_input": {"command": "git push --force origin main"}}, 1500)
+    assert len(w.denials.items()) == 2
+    path = "/w/.claude/settings.json"
+    w._denied_records(SID, SID, [("toolu_read", "Read", {"file_path": path}, DENIED_TEXT, 2000)], 2001)
+    w.apply_hook({"hook_event_name": "PermissionDenied", "session_id": SID, "cwd": "/w", "tool_name": "Write",
+                  "tool_input": {"file_path": path, "content": "{}"}}, 2500)
+    cards = w.denials.items()
+    assert len(cards) == 4 and sorted(c["tool"] for c in cards) == ["Bash", "Bash", "Read", "Write"]
