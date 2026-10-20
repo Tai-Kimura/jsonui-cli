@@ -355,6 +355,43 @@ async def run_notify(pw, out, failures):
         check(failures, res["yield"] == {"a": 0, "b": 1, "shown": 1, "chimes": 1},
               f"the tab that can sound rings it, the one that cannot leaves it: {res['yield']}")
 
+        # 3h. quiet in the tab that can sound (dd, 10-20): b in front, showing that robot's card, takes the event without a
+        # ring; a left it to b, and a moment later finds it taken — neither shows it, no sound
+        await b.bring_to_front()
+        await b.evaluate("(id) => window.__dbg.openRobot(id)", rid)
+        await wait(b, "(id) => window.__dbg.board().robot === id", arg=rid, label="tab b shows the robot's card")
+        res["quietB"] = {"focus": await b.evaluate("() => [document.visibilityState, document.hasFocus()]")}
+        n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+        seen_a = await a.evaluate("() => window.__dbg.notifySeen()")
+        turn()
+        await wait(a, "(before) => window.__dbg.notifySeen().some((k) => k.includes(':done:') && !before.includes(k))", arg=seen_a, label="tab a saw the quiet turn end")
+        t0 = await a.evaluate("() => performance.now()")
+        await wait(a, "(t) => performance.now() > t + 2500", arg=t0, timeout=8000, label="past tab a's wait to take it back")
+        res["quietB"].update({"shown": len(await a.evaluate(SHOWN)) - n0, "chimes": await a.evaluate(CHIMES) - c0})
+        check(failures, res["quietB"] == {"focus": ["visible", True], "shown": 0, "chimes": 0},
+              f"quiet in the tab that can sound: the other tab does not show it either: {res['quietB']}")
+        await b.keyboard.press("Escape")
+        await a.bring_to_front()
+
+        # 3i. the tab that said it can sound never takes the event (it takes events 5 s late here; it could have gone
+        # without a good-bye): a shows it itself once its wait is over — the notification is never lost
+        await b.evaluate("() => window.__dbg.notifyDelay(5000)")
+        n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
+        a0, b0 = len(await a.evaluate("() => window.__shown")), len(await b.evaluate("() => window.__shown"))
+        t0 = await a.evaluate("() => performance.now()")
+        turn()
+        try:
+            await wait(a, f"() => JSON.parse(localStorage.getItem('e2e-shown') || '[]').length >= {n0 + 1}", timeout=4500, label="tab a takes it back")
+        except RuntimeError:
+            pass
+        res["takeBack"] = {"a": len(await a.evaluate("() => window.__shown")) - a0, "b": len(await b.evaluate("() => window.__shown")) - b0,
+                           "within": round(await a.evaluate("() => performance.now()") - t0)}
+        await wait(b, "() => window.__dbg.notifySeen().length >= " + str(len(await b.evaluate("() => window.__dbg.notifySeen()")) + 1), timeout=15000, label="tab b took it, late")
+        res["takeBack"]["shown"] = len(await a.evaluate(SHOWN)) - n0
+        res["takeBack"]["bAfter"] = len(await b.evaluate("() => window.__shown")) - b0
+        check(failures, res["takeBack"]["a"] == 1 and res["takeBack"]["b"] == 0 and res["takeBack"]["shown"] == 1 and res["takeBack"]["bAfter"] == 0,
+              f"the tab that said it can sound never took it: the other shows it once, after its wait: {res['takeBack']}")
+
         # 4. a reload rings nothing again — with the list of rung keys cleared first (a fresh profile), so it is the
         # page's own "nothing from before it was loaded" that holds, not the other tabs' record
         before = len(await a.evaluate(SHOWN))
