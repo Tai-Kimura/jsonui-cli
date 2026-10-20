@@ -1,0 +1,11 @@
+{
+  "status.waiting": "許可待ち",
+  "status.asking": "質問に回答待ち",
+  "status.done": "完了",
+  "status.idle": "待機",
+  "status.thinking": "考え中",
+  "status.background": "裏で作業中",
+  "status.busy": "作業中",
+  "tests.status.none": "まだ無い",
+  "tests.none": "テストの実行はまだ無い"
+}

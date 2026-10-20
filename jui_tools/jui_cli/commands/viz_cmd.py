@@ -78,6 +78,7 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     statusline.add_argument("--json", action="store_true", help="Machine-readable status")
     export = sub.add_parser("export-demo", help="Write the demo page as a static folder (for a docs site)")
     export.add_argument("--out", required=True, help="An empty or new folder")
+    export.add_argument("--lang", choices=["en", "ja"], default="en", help="The words of the page (default: en)")
 
     pr = sub.add_parser("prices", help="Show or change the prices behind the estimated cost over each robot")
     pr.add_argument("prices_action", nargs="?", choices=["list", "set", "remove", "reset"], default="list")
@@ -630,6 +631,13 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..viz.state import VizState, now_ms
 
     quiet_aiohttp_logs()
+    from ..viz import i18n
+
+    words = i18n.from_config(config)
+    i18n.activate(words)
+    log(f"language: {words.language}" + (f", own words: {words.own_path} ({words.own_used} keys)" if words.own_path else ""))
+    for problem in words.problems:
+        log(f"language: {problem}")
     port = config.port
     ctx = ServerContext(
         config=config,
@@ -1099,7 +1107,7 @@ def _cmd_export_demo(args: argparse.Namespace) -> int:
     from ..viz.export_demo import ExportError, export
 
     try:
-        result = export(Path(args.out))
+        result = export(Path(args.out), getattr(args, "lang", "en") or "en")
     except ExportError as exc:
         _err(str(exc))
         return 1
@@ -1690,6 +1698,8 @@ def _doctor_checks() -> list[dict]:
     add("shredder", True, "削除の見分け: Bash の rm・rmdir・unlink・trash・git rm・git worktree remove・find -delete / -exec rm だけ。"
         "スクリプトの中の削除（Python の os.remove など）と、利用者自身の削除は見えません")
 
+    add("language", True, _language_detail())
+
     if claude is not None:
         registered = _relay_registered(claude)
         add("relay", True, "許可の中継: " + ("登録済み" if registered else "未登録（jui viz relay install）" if registered is False else "確かめられません"))
@@ -1708,6 +1718,24 @@ def _doctor_checks() -> list[dict]:
         add("server", True, "停止中")
         add("port", _port_free(port), f"{port} は{'空いています' if _port_free(port) else '使用中です'}")
     return checks
+
+
+def _language_detail() -> str:
+    """The view's words as config.json (and JUI_VIZ_LANGUAGE) give them, with every problem found in them. A problem is
+    a warning, not a failure: the server goes on without what it cannot use."""
+    from ..viz import i18n
+    from ..viz.config import load_config
+
+    config = load_config()
+    words = i18n.from_config(config)
+    text = f"{words.language}"
+    if os.environ.get(i18n.LANGUAGE_ENV):
+        text += f" (from {i18n.LANGUAGE_ENV})"
+    if words.own_path:
+        text += f", own words: {words.own_path} ({words.own_used} keys used)"
+    if words.problems:
+        text += f". {len(words.problems)} warning(s): " + "; ".join(words.problems)
+    return text + ". Read when the server starts (jui viz stop, then start, after a change)"
 
 
 def _server_sessions(port: int, token) -> list | None:

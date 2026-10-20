@@ -36,6 +36,10 @@ class VizConfig:
     # The talk view (talk.py): how long a conversation is kept after one of its two sessions ended (the requester's
     # ruling 10-20: one hour), so a session resumed within it keeps its talks.
     talkGraceSec: float = 3600
+    # The view's words (i18n.py; the requester's ruling 10-21): "en" (the default) or "ja", and a file of the person's
+    # own words over them (absolute, or from the viz folder). Read when the server starts.
+    language: str = "en"
+    strings: str = ""
 
 
 #: the page's choices for askWaitSec: 20 s, 1, 3, 10, 30 min, and 0 = until answered

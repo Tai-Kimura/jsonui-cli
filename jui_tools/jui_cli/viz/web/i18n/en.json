@@ -1,0 +1,11 @@
+{
+  "status.waiting": "Waiting for permission",
+  "status.asking": "Waiting for an answer",
+  "status.done": "Done",
+  "status.idle": "Idle",
+  "status.thinking": "Thinking",
+  "status.background": "Working in the background",
+  "status.busy": "Working",
+  "tests.status.none": "None yet",
+  "tests.none": "No test runs yet"
+}

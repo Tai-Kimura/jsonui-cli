@@ -19,7 +19,7 @@ setup(
         # `jui viz` page. Patterns do not reach into subfolders, so each
         # folder is listed (P3 adds the page's own folders here).
         "jui_cli.viz": [
-            "web/*.html", "web/*.css", "web/*.js", "web/js/*.js", "web/fonts/*",
+            "web/*.html", "web/*.css", "web/*.js", "web/js/*.js", "web/i18n/*.json", "web/fonts/*",
             "web/vendor/*.md", "web/vendor/three-0.160.0/*",
             "web/vendor/three-0.160.0/addons/controls/*.js",
             "web/vendor/three-0.160.0/addons/geometries/*.js",

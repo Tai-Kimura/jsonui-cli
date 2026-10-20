@@ -39,7 +39,7 @@ const permResponse = (p, behavior, reason) => ({ behavior, reason: reason || und
 const robotState = {};
 function updateRobotStates() { /* the server decides the states (plan 04 §3) */ }
 
-const EMPTY_TESTS = { rows: [], passed: 0, runningIdx: -1, retrying: false, active: false, statusText: 'まだ無い', file: '', device: '' };
+const EMPTY_TESTS = { rows: [], passed: 0, runningIdx: -1, retrying: false, active: false, statusText: tl('tests.status.none'), none: true, file: '', device: '' };
 const LIVE = {
   slices: {}, model: null, modelAt: 0, labelOfReal: {}, seenSeq: 0, specRows: {}, sheetAsked: {}, sheetFailed: {},
   seatOf: {}, leaving: {}, shown: [], floors: [], floor: 0, rank: {}, connectedOnce: false, serverError: '',

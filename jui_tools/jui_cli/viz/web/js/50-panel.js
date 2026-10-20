@@ -6,16 +6,21 @@ const setText = (el, text) => { if (el && el.textContent !== text) el.textConten
 /* The legend of heavy work's three looks (2.3.6), under the card's 重い作業 line. */
 const HEAVY_LEGEND = '見た目: 赤い顔＝出力が多い · 青い顔＝ツールが長く走っている · 笛＝サブエージェント 3 体以上（重なると交互） · 裏で作業中でも、サブエージェント 3 体以上なら笛（ヘッドセットを外す）';
 const STATUS_CLASS = { idle: 'st-idle', write: 'st-write', written: 'st-idle', impl: 'st-impl', verify: 'st-verify', 'impl-done': 'st-idle', paused: 'st-paused', test: 'st-test', done: 'st-complete' };
-function robotBadge(id) {
+/* A robot's badge: [its class, its words]. The kind (robotBadgeKind) is what the session's badge compares — never
+   the words, which follow the language. */
+const BADGES = {
+  waiting: ['st-waiting', 'status.waiting'], asking: ['st-asking', 'status.asking'], done: ['st-done', 'status.done'],
+  idle: ['st-idle', 'status.idle'], thinking: ['st-busy', 'status.thinking'], background: ['st-bg', 'status.background'],
+  busy: ['st-busy', 'status.busy'],
+};
+function robotBadgeKind(id) {
   const s = robotState[id].state;
   // a question waits for the person too, but it is no permission: its own badge and filter (requester, 10-18)
-  if (s === 'waiting') return robotState[id].asking ? ['st-asking', '質問に回答待ち'] : ['st-waiting', '許可待ち'];
-  if (s === 'done') return ['st-done', '完了'];
-  if (s === 'idle') return ['st-idle', '待機'];
-  if (s === 'thinking') return ['st-busy', '考え中'];
-  if (s === 'background') return ['st-bg', '裏で作業中'];
-  return ['st-busy', '作業中'];
+  if (s === 'waiting') return robotState[id].asking ? 'asking' : 'waiting';
+  return ['done', 'idle', 'thinking', 'background'].includes(s) ? s : 'busy';
 }
+const badgeOf = (kind) => [BADGES[kind][0], tl(BADGES[kind][1])];
+const robotBadge = (id) => badgeOf(robotBadgeKind(id));
 /* What the view is narrowed to: one project (or all), which sessions, how the session list is shown. */
 const prefJSON = (key, fallback) => { try { return JSON.parse(readPref(key, JSON.stringify(fallback))); } catch (err) { return fallback; } };
 const UI = {
@@ -29,10 +34,9 @@ if (!['all', 'active', 'waiting', 'asking', 'background', 'idle'].includes(UI.se
 const inScope = (project) => UI.project === 'all' || UI.project === project;
 const scopeLabel = () => (UI.project === 'all' ? 'すべて' : PROJECT[UI.project].name);
 function sessionBadge(s) {
-  const b = s.robots.map(robotBadge);
+  const kinds = new Set(s.robots.map(robotBadgeKind));
   // A session whose busy robots only think says 考え中, as its robot row does (they disagreed — 10-18 review).
-  return b.some((x) => x[0] === 'st-waiting') ? ['st-waiting', '許可待ち'] : b.some((x) => x[0] === 'st-asking') ? ['st-asking', '質問に回答待ち'] : b.some((x) => x[1] === '作業中') ? ['st-busy', '作業中']
-    : b.some((x) => x[1] === '考え中') ? ['st-busy', '考え中'] : b.some((x) => x[0] === 'st-bg') ? ['st-bg', '裏で作業中'] : ['st-idle', '待機'];
+  return badgeOf(['waiting', 'asking', 'busy', 'thinking', 'background'].find((k) => kinds.has(k)) || 'idle');
 }
 /* A robot on the whiteboards (10-19): its mark, and its session's name when it has one. */
 const robotWho = (id) => `${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="who-name">${esc(DEF[id].title)}</span>` : ''}`;
@@ -148,7 +152,7 @@ function renderPanel(model) {
 
   const T = model.tests, n = CASES.length;
   const pPct = (T.passed / n) * 100, rPct = T.runningIdx >= 0 ? 100 / n : 0;
-  if (SOURCE.mode === 'live' && !T.rows.length && !T.command) setHTML($('tests'), `<p class="empty-note">${T.statusText === 'まだ無い' ? 'テストの実行はまだ無い' : esc(T.statusText)}</p>`);
+  if (SOURCE.mode === 'live' && !T.rows.length && !T.command) setHTML($('tests'), `<p class="empty-note">${T.none ? esc(tl('tests.none')) : esc(T.statusText)}</p>`);
   else if (SOURCE.mode === 'live') setHTML($('tests'), liveTestsHTML(T));
   else if (!inScope('shop')) setHTML($('tests'), `<p class="empty-note">${esc(scopeLabel())} で動いているテストはない</p>`);
   else setHTML($('tests'), `<div class="test-head"><div>${pill('a2', 'test')} <code>${esc(T.file)}</code></div><code>${esc(T.device)} · ${esc(T.statusText)}</code>

@@ -31,7 +31,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]  # jui_tools/
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from jui_cli.viz import bundle  # noqa: E402
+from jui_cli.viz import bundle, i18n  # noqa: E402
+from jui_cli.viz.config import load_config  # noqa: E402
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from scenario import Scenario  # noqa: E402
@@ -104,7 +105,7 @@ class FakeServer:
         return await handler(request)
 
     async def index_page(self, request):
-        html = self.index.replace("__JUI_VIZ_TOKEN__", self.token)
+        html = i18n.page_html(self.index.replace("__JUI_VIZ_TOKEN__", self.token), i18n.from_config(load_config()))
         return web.Response(text=html, content_type="text/html", headers=self.headers(no_store=True))
 
     async def app_js(self, request):

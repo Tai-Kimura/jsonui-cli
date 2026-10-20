@@ -206,6 +206,9 @@ def main(argv=None) -> int:
     ap.add_argument("--record-demo", metavar="URL",
                     help="run the demo suites against URL (the prototype's agent-test.html) and write expect_demo.json")
     a = ap.parse_args(argv)
+    # The checks wait on the page's Japanese words: every server these suites start (they pass this environment on)
+    # shows Japanese, whatever the default language (viz/i18n.py). JUI_VIZ_LANGUAGE=en runs them on the English words.
+    os.environ.setdefault("JUI_VIZ_LANGUAGE", "ja")
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     failures: list[str] = []

@@ -25,9 +25,9 @@ def web_text(*parts):
 
 
 def test_each_mode_is_its_parts_in_order():
-    assert bundle.parts("demo", e2e=False) == ("10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
+    assert bundle.parts("demo", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
                                                "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "54-bills.js", "55-history.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
-    assert bundle.parts("live", e2e=False) == ("10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
+    assert bundle.parts("live", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
                                                "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "54-bills.js", "55-history.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
 
 
@@ -82,7 +82,9 @@ def test_the_page_has_one_inline_script_the_import_map_and_no_handlers():
     html = web_text("index.html")
     scripts = re.findall(r"<script\b([^>]*)>(.*?)</script>", html, re.S)
     inline = [attrs for attrs, body in scripts if body.strip()]
-    assert inline == [' type="importmap"']
+    # The view's words (viz/i18n.py): a JSON data block, never run, so no script-src hash; the server fills its slot.
+    assert inline == [' type="application/json" id="jui-viz-strings"', ' type="importmap"']
+    assert [body for attrs, body in scripts if 'application/json' in attrs] == ["__JUI_VIZ_STRINGS__"]
     assert [attrs for attrs, body in scripts if not body.strip()] == [' type="module" src="/boot.js"']
     assert not re.search(r"\son[a-z]+\s*=", html), "an on* attribute would need 'unsafe-inline'"
     assert '<meta name="jui-viz-token" content="__JUI_VIZ_TOKEN__">' in html

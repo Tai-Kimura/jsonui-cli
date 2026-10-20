@@ -36,7 +36,7 @@ from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import attachments, callcmd, clockout, infra_docs, paths, security
+from . import attachments, callcmd, clockout, i18n, infra_docs, paths, security
 from .config import ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec, save_setting
 from .state import VizState, now_ms
 
@@ -226,7 +226,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     security.install_headers(app, ctx.port, hashes)
 
     def _with_token(html: str) -> web.Response:
-        body = html.replace(TOKEN_PLACEHOLDER, ctx.token)
+        body = i18n.page_html(html.replace(TOKEN_PLACEHOLDER, ctx.token), i18n.active())
         response = web.Response(text=body, content_type="text/html")
         response.headers["Cache-Control"] = "no-store"
         return response
