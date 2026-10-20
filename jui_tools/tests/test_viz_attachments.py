@@ -339,3 +339,73 @@ def test_a_real_start_sweeps_old_folders_and_keeps_new_ones(tmp_path, monkeypatc
         assert not old.exists() and (new / "0123456789abcdef.txt").exists()
     finally:
         v.stop()
+
+
+# ---------------------------------------------------------------- an attached image, read back for the history (2.3.9)
+
+
+def test_a_kept_image_is_read_back_and_a_gone_one_is_404(store):
+    a, home = store
+    rec = a.save(SID, "a.png", "image/png", PNG)
+    fid = rec["id"]
+    assert a.read_image(SID, fid, "png") == ("image/png", PNG)
+    os.unlink(rec["path"])
+    with pytest.raises(Refused) as e:
+        a.read_image(SID, fid, "png")
+    assert e.value.status == 404
+    with pytest.raises(Refused) as e:
+        Attachments(home=home).read_image("e2e00000-0000-4000-8000-00000000b0ff", fid, "png")   # no folder at all
+    assert e.value.status == 404
+
+
+def test_only_an_image_is_read_back_never_through_a_symlink_or_out_of_the_folder(store, tmp_path):
+    a, home = store
+    txt = a.save(SID, "notes.txt", "", b"hello")
+    with pytest.raises(Refused) as e:
+        a.read_image(SID, txt["id"], "txt")
+    assert e.value.status == 415
+    fake = a.save(SID, "x.bin", "", b"<html>not a png</html>")
+    os.rename(fake["path"], Path(fake["path"]).with_suffix(".png"))   # an image's name, other bytes
+    with pytest.raises(Refused) as e:
+        a.read_image(SID, fake["id"], "png")
+    assert e.value.status == 415
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(PNG)
+    link_id = "abcdefabcdefabcd"
+    os.symlink(outside, home / "uploads" / SID / f"{link_id}.png")
+    with pytest.raises(Refused) as e:
+        a.read_image(SID, link_id, "png")
+    assert e.value.status == 404
+    for sid, fid in (("../x", txt["id"]), (SID, "../../secret"), (SID, "0123")):
+        with pytest.raises(Refused):
+            a.read_image(sid, fid, "png")
+
+
+def _attach_image(v, body: dict, **over):
+    h = v.page_headers(**over)
+    return v.raw("POST", "/api/attach-image", h, json.dumps(body).encode())
+
+
+def test_attach_image_has_the_checks_and_serves_the_kept_image(viz):
+    status, one = _attach(viz, PNG)
+    assert status == 200, one
+    body = {"sessionId": S_NEW, "id": one["id"], "ext": "png"}
+    assert _attach_image(viz, body, **{"X-Jui-Viz-Token": None})[0] == 401
+    assert _attach_image(viz, body, Origin="http://evil.example")[0] == 403
+    assert _attach_image(viz, body, **{"Content-Type": None})[0] == 415
+    assert viz.raw("GET", "/api/attach-image", viz.page_headers())[0] == 405
+    conn = __import__("http.client").client.HTTPConnection("127.0.0.1", viz.port, timeout=10)
+    try:
+        data = json.dumps(body).encode()
+        conn.putrequest("POST", "/api/attach-image", skip_host=True, skip_accept_encoding=True)
+        for k, v in {**viz.page_headers(), "Content-Length": str(len(data))}.items():
+            conn.putheader(k, v)
+        conn.endheaders()
+        conn.send(data)
+        res = conn.getresponse()
+        got, ctype, nosniff = res.read(), res.getheader("Content-Type"), res.getheader("X-Content-Type-Options")
+    finally:
+        conn.close()
+    assert (res.status, got, ctype, nosniff) == (200, PNG, "image/png", "nosniff")
+    (viz.state / "uploads" / S_NEW / f"{one['id']}.png").unlink()
+    assert _attach_image(viz, body) == (200, '{"gone": true}')   # not an error: the browser logs every 404

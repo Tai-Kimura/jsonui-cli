@@ -14,7 +14,7 @@ const HIST_POLL_MS = 3000;
    a working session sent the reader to the top). newer: answers came while the reader was above (the 新しい応答 marker). */
 const HIST = { tab: 'now', id: null, data: null, error: '', timer: 0, busy: false, node: null, sig: '',
   atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null, wide: false, imgs: new Map(), box: null,
-  attach: [], attachThumbs: new Map() };
+  attach: [] };
 
 function hNode(tag, cls, text) {
   const n = document.createElement(tag);
@@ -420,23 +420,27 @@ const composeBytes = (label, text) => new TextEncoder().encode(JSON.stringify({ 
    into the text (Ctrl/⌘+V). Each goes to the server at once (SOURCE.attachFile, POST /api/attach); the prompt names their
    ids and the server adds a line with each file's path, which the receiver opens with Read (its own permission check:
    the permission board shows it). Limits as the server's (attachments.py). */
-const ATTACH_MAX = 10, ATTACH_FILE_MAX = 20 * 1024 * 1024, ATTACH_THUMBS_MAX = 60;
+const ATTACH_MAX = 10, ATTACH_FILE_MAX = 20 * 1024 * 1024;
 const attachReady = () => HIST.attach.filter((a) => a.id);
 const attachBusy = () => HIST.attach.some((a) => a.up);
 const attachSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 const RELAY_HOW_TEXT = RELAY_HOW.replace(/<[^>]+>/g, '');   // the same how-to as on a permission card, as plain text
 const composeNorm = (t) => String(t || '').split(/\s+/).join(' ').trim();
 /* the server's line for one attached file (ingest.attachment_line): 添付: <path>（<name>、<media>、<size>） */
-const HIST_ATTACH_LINE = /^添付: (\/\S*?([0-9a-f]{16})\.[a-z]+)（(.*)、([^、]*)、([^、]*)）$/;
+const HIST_ATTACH_LINE = /^添付: (\/\S*?\/uploads\/([A-Za-z0-9_-]+)\/([0-9a-f]{16})\.([a-z]+))（(.*)、([^、]*)、([^、]*)）$/;
+/* The files of a prompt sent from this page, as marks. An image's mark is a thumbnail button like a history picture's
+   (histThumb): the server reads it from the kept file (SOURCE.attachImage, POST /api/attach-image by session and id),
+   and a press — or Enter / Space — opens it in the same large view (ticket 2026-10-20-jui-viz-attachment-thumb-opens-
+   large; requester: 「サムネタップで拡大をこのメッセージにもつけてほしい。」). A file that is gone says so and shows no
+   picture. Any other file is a mark only: nothing opens. */
 function histAttachMarks(lines) {
   const ul = hNode('ul', 'h-attach h-attach-sent');
   for (const line of lines) {
     const m = HIST_ATTACH_LINE.exec(line), li = hNode('li', 'h-attach-item');
     li.title = m[1];
-    const thumb = HIST.attachThumbs.get(m[2]);
-    if (thumb) { const img = hNode('img', 'h-attach-thumb'); img.src = thumb; img.alt = ''; li.appendChild(img); }
-    li.appendChild(hNode('span', 'h-attach-name', `📎 ${m[3]}`));
-    li.appendChild(hNode('span', 'h-attach-meta', m[5]));
+    if (/^image\/(png|jpeg|gif|webp)$/.test(m[6])) li.appendChild(histThumb({ attach: { sessionId: m[2], id: m[3], ext: m[4] } }));
+    li.appendChild(hNode('span', 'h-attach-name', `📎 ${m[5]}`));
+    li.appendChild(hNode('span', 'h-attach-meta', m[7]));
     ul.appendChild(li);
   }
   return ul;
@@ -593,14 +597,8 @@ function attachDropAll(label) {
   HIST.attach = [];
 }
 /* A sent image's thumbnail stays (by its server id) for the history's own line of it; the oldest go first. */
-function attachKeepThumb(a) {
-  if (!a.thumb) return;
-  if (!a.id) { URL.revokeObjectURL(a.thumb); return; }
-  HIST.attachThumbs.set(a.id, a.thumb);
-  while (HIST.attachThumbs.size > ATTACH_THUMBS_MAX) {
-    const [old, url] = HIST.attachThumbs.entries().next().value;
-    URL.revokeObjectURL(url); HIST.attachThumbs.delete(old);
-  }
+function attachKeepThumb(a) {   // sent: the history's mark reads the kept file from the server (histAttachMarks)
+  if (a.thumb) URL.revokeObjectURL(a.thumb);
 }
 function attachPaint(E) {
   const sig = HIST.attach.map((a) => `${a.key}:${a.id}:${a.up}:${a.error}`).join('|');
@@ -721,7 +719,8 @@ function composeArrived(items) {
    (SOURCE.historyImage, POST /api/history-image under the prompt's checks) when its thumbnail comes into view, and
    kept as a blob URL only while this robot's tab is open. The browser scales the thumbnail. A press opens it large
    in a dialog: ← → for the others in this history, Esc / the backdrop / 閉じる close it and give the focus back. */
-const histImgKey = (ref) => `${HIST.id}|${ref.off}|${ref.n}`;
+const histRefKey = (ref) => (ref.attach ? `a:${ref.attach.sessionId}:${ref.attach.id}` : `${ref.off}:${ref.n}`);   // a history picture, or an attached image
+const histImgKey = (ref) => `${HIST.id}|${histRefKey(ref)}`;
 function histImgsDrop() {
   for (const v of HIST.imgs.values()) v.then((g) => { if (g.url) URL.revokeObjectURL(g.url); });
   HIST.imgs.clear();
@@ -730,8 +729,9 @@ function histImgGet(ref) {
   const key = histImgKey(ref);
   if (!HIST.imgs.has(key)) {
     const id = HIST.id;
-    HIST.imgs.set(key, SOURCE.historyImage(id, ref).then((got) => (got.ok ? { url: URL.createObjectURL(got.blob) }
-      : { error: got.status === 413 ? '大きすぎて表示しない' : got.status === 415 ? '表示できない形式' : `画像を読めない（${got.status || got.error}）` })));
+    const asked = ref.attach ? SOURCE.attachImage(ref.attach) : SOURCE.historyImage(id, ref);
+    HIST.imgs.set(key, asked.then((got) => (got.ok ? { url: URL.createObjectURL(got.blob) }
+      : { error: got.gone ? '消えました' : got.status === 413 ? '大きすぎて表示しない' : got.status === 415 ? '表示できない形式' : `画像を読めない（${got.status || got.error}）` })));
   }
   return HIST.imgs.get(key);
 }
@@ -754,7 +754,7 @@ function histThumb(ref) {
   const b = hNode('button', 'h-thumb h-thumb-wait');
   b.type = 'button';
   b._ref = ref;
-  b.dataset.hImg = `${ref.off}:${ref.n}`;
+  b.dataset.hImg = histRefKey(ref);
   b.setAttribute('aria-label', '画像を大きく表示');
   const img = hNode('img');
   img.alt = '履歴の画像';

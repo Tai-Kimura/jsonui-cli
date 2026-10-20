@@ -290,6 +290,41 @@ async def run_attach(pw, out, failures):
               f"the pasted image's mark has its thumbnail: {res['marks']}")
         await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith('届いた')", timeout=15000, label="届いた")
         await page.screenshot(path=str(out / "history.png"))
+        # 2.3.9 (ticket 2026-10-20-jui-viz-attachment-thumb-opens-large): the image's mark opens the history's large view
+        THUMB = "[data-rb-hist] .h-attach-sent .h-thumb"
+        LIGHT_IMG = "() => { const l = document.querySelector('.h-light'); const i = l && l.querySelector('img'); return l ? { src: !!i.getAttribute('src'), w: i.naturalWidth, note: l.querySelector('.h-light-note').textContent } : null; }"
+        res["thumbs"] = await page.evaluate(f"() => document.querySelectorAll('{THUMB}').length")
+        check(res["thumbs"] == 1, f"only the image's mark is a button (the .md and .txt are marks only): {res['thumbs']}")
+        await wait(page, f"() => {{ const i = document.querySelector('{THUMB} img'); return i && i.complete && i.naturalWidth > 0; }}", label="the mark's thumbnail from the kept file")
+        await page.click(THUMB)
+        await wait(page, f"() => {{ const g = ({LIGHT_IMG})(); return g && g.w > 0; }}", label="the large view with the image")
+        res["lightClick"] = await page.evaluate(LIGHT_IMG)
+        await page.screenshot(path=str(out / "attach-large.png"))
+        for key in ("Enter", " "):
+            await page.keyboard.press("Escape")
+            await wait(page, f"() => !document.querySelector('.h-light') && document.activeElement && document.activeElement.matches('{THUMB}')", label="closed, the focus back on the thumbnail")
+            await page.keyboard.press(key)
+            await wait(page, f"() => {{ const g = ({LIGHT_IMG})(); return g && g.w > 0; }}", label=f"the large view from the keyboard ({key!r})")
+        await page.keyboard.press("Escape")
+        res["nonImage"] = await page.evaluate("""() => { const li = [...document.querySelectorAll('[data-rb-hist] .h-attach-sent li')].filter((x) => !x.querySelector('.h-thumb'));
+          li.forEach((x) => x.click()); return { marks: li.length, opened: !!document.querySelector('.h-light') }; }""")
+        check(res["nonImage"] == {"marks": 2, "opened": False}, f"a mark that is not an image opens nothing: {res['nonImage']}")
+        # the kept file gone (an hour after its session ended): a fresh look says 消えました and shows no picture
+        for f in uploads.glob(f"{image_id}.*"):
+            f.unlink()
+        await page.reload()
+        await ready(page)
+        await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 1", label="the session after the reload")
+        await open_robot(page)
+        await wait(page, f"() => {{ const b = document.querySelector('{THUMB}'); return b && b.classList.contains('h-thumb-bad'); }}", timeout=15000, label="the gone image's mark")
+        res["goneMark"] = await page.evaluate(f"() => {{ const b = document.querySelector('{THUMB}'); return {{ note: b.querySelector('.h-thumb-note').textContent, src: !!b.querySelector('img').getAttribute('src') }}; }}")
+        check(res["goneMark"] == {"note": "消えました", "src": False}, f"a gone image: 消えました, no picture: {res['goneMark']}")
+        await page.click(THUMB)
+        await wait(page, f"() => {{ const g = ({LIGHT_IMG})(); return g && g.note === '消えました'; }}", label="the large view says 消えました")
+        res["goneLight"] = await page.evaluate(LIGHT_IMG)
+        check(not res["goneLight"]["src"], f"the large view shows no broken picture: {res['goneLight']}")
+        await page.screenshot(path=str(out / "attach-gone.png"))
+        await page.keyboard.press("Escape")
         await page.emulate_media(color_scheme="dark")
         await page.set_input_files("[data-h-file]", str(files / "仕様メモ.md"))
         await chips_ready(page, 1, "a chip in dark")

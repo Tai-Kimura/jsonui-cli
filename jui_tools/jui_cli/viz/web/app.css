@@ -1218,6 +1218,9 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .h-thumb img { display: block; width: 160px; height: auto; max-height: 200px; object-fit: contain; }
 .h-thumb-wait img, .h-thumb-bad img { display: none; }
 .h-thumb-note { padding: 6px 8px; font: 700 11.5px/1.4 var(--font-body); }
+/* an attached image's thumbnail in its mark (55-history.js histAttachMarks): smaller, and the keyboard's focus shows */
+.h-attach-sent .h-thumb, .h-attach-sent .h-thumb img { width: 72px; min-height: 40px; max-height: 96px; }
+.h-thumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .h-thumb-note:empty { display: none; }
 .h-thumb-wait .h-thumb-note:empty { display: block; }
 .h-thumb-wait .h-thumb-note:empty::after { content: '読み込み中…'; }

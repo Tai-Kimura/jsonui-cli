@@ -713,6 +713,7 @@ const SOURCE = {
   },
   history() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no transcripts
   historyImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
+  attachImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   attachFile() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   attachRemove() {},
   denial() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },

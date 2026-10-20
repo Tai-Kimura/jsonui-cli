@@ -56,6 +56,8 @@ _MAGIC = {
     "png": (b"\x89PNG\r\n\x1a\n",), "jpg": (b"\xff\xd8\xff",), "jpeg": (b"\xff\xd8\xff",),
     "gif": (b"GIF87a", b"GIF89a"), "webp": (b"RIFF",), "pdf": (b"%PDF-",),
 }
+# the extensions a kept image can have, and the media type it is served with (read_image)
+_MEDIA_BY_IMAGE_EXT = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
 # an image pasted from the clipboard has no name of its own; its media type gives the extension
 _MEDIA_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}
 
@@ -204,6 +206,41 @@ class Attachments:
         finally:
             os.close(fd)
         return out
+
+    def read_image(self, sid: str, fid: str, ext: str) -> tuple[str, bytes]:
+        """One kept image, for the history's large view (ticket 2026-10-20-jui-viz-attachment-thumb-opens-large): read
+        from <viz home>/uploads/<sid>/<fid>.<ext> through the folder's descriptor, never following a symlink; a plain
+        file of at most FILE_MAX whose bytes start like the image its extension names. Refused 404 when it is gone
+        (removed an hour after its session ended), 415 when it is not an image. The page names the session and the id
+        from the prompt's line, never a path."""
+        if not isinstance(fid, str) or not _ID.fullmatch(fid) or ext not in _MEDIA_BY_IMAGE_EXT:
+            raise Refused(415 if isinstance(fid, str) and _ID.fullmatch(fid) else 400, "not an attached image")
+        try:
+            fd = self._open(sid, create=False)
+        except (OSError, Refused):
+            raise Refused(404, "gone") from None
+        try:
+            try:
+                out = os.open(f"{fid}.{ext}", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+            except OSError:
+                raise Refused(404, "gone") from None
+            try:
+                st = os.fstat(out)
+                if not stat.S_ISREG(st.st_mode) or st.st_size > FILE_MAX:
+                    raise Refused(404, "gone")
+                data = b""
+                while len(data) <= FILE_MAX:
+                    chunk = os.read(out, FILE_MAX + 1 - len(data))
+                    if not chunk:
+                        break
+                    data += chunk
+            finally:
+                os.close(out)
+        finally:
+            os.close(fd)
+        if len(data) > FILE_MAX or not data.startswith(_MAGIC[ext]):
+            raise Refused(415, "not an image")
+        return _MEDIA_BY_IMAGE_EXT[ext], data
 
     def remove(self, sid: str, fid: str) -> bool:
         """One file the person took off before sending (× on the page)."""

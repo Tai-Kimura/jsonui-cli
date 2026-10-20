@@ -182,6 +182,20 @@ const SOURCE = {
       return { ok: true, blob: await res.blob() };
     } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
   },
+  /* One attached image of a prompt from this page (POST /api/attach-image: the session and the id from the prompt's
+     line, under the prompt's checks). The bytes come back as a Blob; { gone: true } when the kept file is gone. */
+  async attachImage(ref) {
+    try {
+      const res = await fetch('/api/attach-image', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ sessionId: ref.sessionId, id: ref.id, ext: ref.ext }),
+      });
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      if ((res.headers.get('Content-Type') || '').startsWith('application/json')) return { ok: false, gone: !!(await res.json()).gone, status: 200 };
+      return { ok: true, blob: await res.blob() };
+    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+  },
   /* The data server's documents (2.3.5): the room's API and DB specifications, read by the server now (POST
      /api/data-docs under the prompt's checks; the room's id only, never a path). Resolves { ok, doc } or { ok, error }. */
   async dataDocs(projectId) {
