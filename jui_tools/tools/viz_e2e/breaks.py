@@ -67,6 +67,10 @@ GEOM_JS = """() => {
         entrance: [da.frontX - h, da.frontX + h, r.z1 - S.aisleF, r.z1] };
       if (back) zones.backDoor = [da.backX - h, da.backX + h, r.z0, r.z0 + 1.2];
       if (left) zones.leftDoor = [r.x0, r.x0 + 1.2, da.leftZ - h, da.leftZ + h];
+      // robots with no desk stand along the front, then down the right aisle (seatPos, standing): only in a crowded room,
+      // where the things with a use stay (2.3.10), so those keep off that column too (the front is the front aisle)
+      const standRight = [r.x1 - 0.45 - 0.5, r.x1, r.z0, r.z1];
+      const USES = new Set(['gitDesk', 'gitStand', 'shredder', 'shredSpot', 'callButton', 'dataServer']);
       const E = [da.frontX, r.z1 - 0.7];
       for (const [cx, cz] of [[sx0, sz0], [sx1, sz0], [sx0, sz1], [sx1, sz1]]) for (let k = 0; k <= 24; k++)
         zones[`walkIn(${cx.toFixed(1)},${cz.toFixed(1)})#${k}`] = box(E[0] + (cx - E[0]) * k / 24, E[1] + (cz - E[1]) * k / 24, 0.5);
@@ -74,6 +78,7 @@ GEOM_JS = """() => {
       for (const [pn, pb] of Object.entries(props)) {
         if (pb[0] < r.x0 - 1e-6 || pb[1] > r.x1 + 1e-6 || pb[2] < r.z0 - 1e-6 || pb[3] > r.z1 + 1e-6) out.bad.push(`${tag}: ${pn} outside the room`);
         for (const [zn, zb] of Object.entries(zones)) if (hit(pb, zb)) out.bad.push(`${tag}: ${pn} x ${zn}`);
+        if (USES.has(pn) && hit(pb, standRight)) out.bad.push(`${tag}: ${pn} x the standing robots' column on the right`);
       }
       const names = Object.keys(props);
       // the customer's spot and the point in front of it are one walk, by design, and the shredder's feeder stands at its
@@ -454,7 +459,9 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         await wait(page, f"() => window.__dbg.robots.filter((R) => R.def.room === '{many_room}').length >= 11", timeout=30000, label="eleven robots")
         await page.wait_for_timeout(2500)
         b = res["eleven"] = await page.evaluate(BRK)
-        check(failures, b["place"] is None and not b["built"]["booth"] and not b["built"]["vend"] and not any(x["kind"] for x in b["robots"]),
+        # place: the things with a use keep theirs at 11+ (2.3.10, ticket 2026-10-20-jui-viz-functional-props-gone-in-a-crowded-room;
+        # before, the whole set went and place was None)
+        check(failures, b["place"] is not None and not b["built"]["booth"] and not b["built"]["vend"] and not any(x["kind"] for x in b["robots"]),
               f"eleven robots: no booth, no machine, nobody on a break: {b['built']} {[x for x in b['robots'] if x['kind']]}")
         e = [x for x in b["ends"] if x["reason"] in ("relaid", "props")]
         check(failures, bool(e), f"the smoker went back when the room filled: {b['ends'][-3:]}")

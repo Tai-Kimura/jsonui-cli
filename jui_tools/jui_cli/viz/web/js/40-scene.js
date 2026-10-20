@@ -1204,12 +1204,18 @@ function liveSoloSync() {
    disposed as soon as it is not (back to the floor, the building, an 11th robot). The floor's own material is swapped
    for a toon material with a canvas plank texture (512 px, repeated; no image, no light, no shadow) and put back.
    2.3.3 (requester, 10-19): a glass smoking booth and a vending machine come with them, on the same rule (the one-room
-   view, PROPS.max robots or fewer); robots on a break walk to them (BRK below). Where the three stand: propsPlace. */
+   view, PROPS.max robots or fewer); robots on a break walk to them (BRK below). Where the three stand: propsPlace.
+   Two sets since 2.3.10 (requester, 10-20: 「遊び以外の意味があるオブジェクト（シュレッダー、呼び鈴、段ボール箱など）は残す
+   ように」, docs/bugs/2026-10-20-jui-viz-functional-props-gone-in-a-crowded-room.md): the things with a use (the
+   shredder, the git box's desk, the call bell, the data server's rack, the server room's door) in PROPS.group, in the
+   one-room view whatever the number of robots (PROPS.room is their room); the looks (the wooden floor, the water
+   server, the vacuum, the booth and the machine, with the breaks) in PROPS.funGroup, only with PROPS.max robots or
+   fewer (PROPS.fun). Robots coming and going across PROPS.max build and drop the looks only. */
 const PROPS = { max: 10, room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null,
   boxes: [], boxesAt: 0, rng: null, seed: 20261020, speed: 0.45, radius: 0.64, serverScale: 1.9,   // the robots' scale (they stand about 1 m)
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null, serverDoor: null };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null, serverDoor: null, fun: false, funGroup: null };
 const PROPS_EMPTY = { room: null, geo: null, dark: null, group: null, server: null, vac: null, woodMat: null, woodTex: null, floorMat: null, boxes: [], boxesAt: 0,
-  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null, serverDoor: null };
+  place: null, booth: null, vend: null, fan: null, smoke: [], shredder: null, bits: [], gitDesk: null, gitFill: null, bell: null, dataServer: null, serverDoor: null, fun: false, funGroup: null };
 function woodTexture(dark) {
   const N = 512, cv = makeCanvas(N, N), ctx = cv.getContext('2d'), W = { rng: snackRandom(PROPS.seed) };   // the same planks every time
   const base = dark ? [92, 72, 55] : [214, 184, 146], rows = 8, h = N / rows;
@@ -1231,30 +1237,53 @@ function woodTexture(dark) {
   const t = texFrom(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
+// the room the things with a use stand in: the one-room view's
 function propsWanted() {
   const solo = liveSolo();
-  if (!solo || !has3D || TOWER.on || !LIVE3D.rooms[solo]) return null;
-  return robots.filter((R) => R.def.room === solo).length <= PROPS.max ? solo : null;
+  return !solo || !has3D || TOWER.on || !LIVE3D.rooms[solo] ? null : solo;
+}
+// the looks as well: PROPS.max robots or fewer in that room
+function funWanted() {
+  const id = propsWanted();
+  return !!id && robots.filter((R) => R.def.room === id).length <= PROPS.max;
 }
 function propsClear() {
   if (!PROPS.room) return;
+  funClear();
   for (const Q of robots) if (Q.shred) shredStop(Q);   // an errand to a shredder that is going away ends here
-  const R = LIVE3D.rooms[PROPS.room];
-  if (R && PROPS.floorMat && R.floor.material === PROPS.woodMat) R.floor.material = PROPS.floorMat;
   if (PROPS.group) { scene.remove(PROPS.group); disposeTree(PROPS.group); }
-  if (PROPS.woodMat) PROPS.woodMat.dispose();
-  if (PROPS.woodTex) PROPS.woodTex.dispose();
   if (PROPS.shredder) { PROPS.shredder.bit.geo.dispose(); PROPS.shredder.bit.mat.dispose(); }   // shared by bits that may all be gone
   Object.assign(PROPS, PROPS_EMPTY, { boxes: [], smoke: [], bits: [] });
+}
+// the looks go (an 11th robot, or with the rest): the floor's own material back; a break ends in brkTick ('props')
+function funClear() {
+  if (!PROPS.fun) return;
+  const R = LIVE3D.rooms[PROPS.room];
+  if (R && PROPS.floorMat && R.floor.material === PROPS.woodMat) R.floor.material = PROPS.floorMat;
+  if (PROPS.funGroup) { scene.remove(PROPS.funGroup); disposeTree(PROPS.funGroup); }
+  if (PROPS.woodMat) PROPS.woodMat.dispose();
+  if (PROPS.woodTex) PROPS.woodTex.dispose();
+  Object.assign(PROPS, { fun: false, funGroup: null, woodMat: null, woodTex: null, floorMat: null, server: null, vac: null, booth: null, vend: null, fan: null, smoke: [] });
 }
 function propsBuild(id) {
   const r = PROJECT[id], R = LIVE3D.rooms[id], g = new THREE.Group();
   PROPS.room = id; PROPS.geo = R.geo; PROPS.dark = isDark(); PROPS.group = g; PROPS.rng = snackRandom(PROPS.seed);
+  const P = PROPS.place = propsPlace(r);
+  PROPS.shredder = shredderBuild(r, g);
+  gitDeskBuild(id, g);   // the cardboard box on its desk (2.3.4)
+  PROPS.bell = bellBuild(P.callButton); g.add(PROPS.bell);   // the call bell (2.3.5)
+  if (dataServerWanted(id)) PROPS.dataServer = dataServerBuild(P.dataServer, g);   // the rack (2.3.5)
+  if (serverDoorWanted(id)) PROPS.serverDoor = serverDoorBuild(P.serverDoor, g);   // the server room's door
+  propsBoxes(0, true);
+  scene.add(g);
+}
+function funBuild() {
+  const id = PROPS.room, r = PROJECT[id], R = LIVE3D.rooms[id], g = new THREE.Group(), P = PROPS.place;
+  PROPS.fun = true; PROPS.funGroup = g;
   // the floor: the same mesh, a wooden material while the room is up close
   PROPS.woodTex = woodTexture(PROPS.dark); PROPS.woodTex.repeat.set((r.x1 - r.x0) / 2.4, (r.z1 - r.z0) / 2.4);
   PROPS.woodMat = toon('#ffffff', { map: PROPS.woodTex }); PROPS.floorMat = R.floor.material; R.floor.material = PROPS.woodMat;
   // the water server: the back-right corner (propsPlace), in sight from the usual view
-  const P = PROPS.place = propsPlace(r);
   const sv = new THREE.Group(), body = toon('#eef1f4'), dark = toon('#5b6573');
   const cab = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.95, 0.38, 2, 0.04), body); cab.position.y = 0.475; sv.add(cab);
   const panel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.02), dark); panel.position.set(0, 0.72, 0.2); sv.add(panel);
@@ -1275,11 +1304,6 @@ function propsBuild(id) {
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), toon('#52e08a')); lamp.position.set(0, 0.145, PROPS.radius * 0.5); vac.add(lamp);
   vac.userData.heading = PROPS.rng() * Math.PI * 2;
   g.add(vac); PROPS.vac = vac;
-  PROPS.shredder = shredderBuild(r, g);
-  gitDeskBuild(id, g);   // the cardboard box on its desk (2.3.4)
-  PROPS.bell = bellBuild(P.callButton); g.add(PROPS.bell);   // the call bell (2.3.5)
-  if (dataServerWanted(id)) PROPS.dataServer = dataServerBuild(P.dataServer, g);   // the rack (2.3.5)
-  if (serverDoorWanted(id)) PROPS.serverDoor = serverDoorBuild(P.serverDoor, g);   // the server room's door
   propsBoxes(0, true);
   const start = propsSpot();
   vac.position.set(start[0], 0, start[1]);
@@ -1300,6 +1324,7 @@ function propsBoxes(nowSec, force) {
   if (PROPS.shredder) PROPS.boxes.push(PROPS.shredder.box);
   if (PROPS.dataServer) PROPS.boxes.push(PROPS.place.dataServer.rect);
   if (PROPS.serverDoor) PROPS.boxes.push(PROPS.place.serverDoor.rect);   // the floor in front of the server room's door
+  if (!PROPS.fun) return;   // the boxes are the vacuum's, which comes with the looks
   const s = PROPS.server.position;
   const half = 0.42 * PROPS.serverScale;
   PROPS.boxes.push([s.x - half, s.x + half, s.z - half, s.z + half]);
@@ -1519,10 +1544,13 @@ function propsTick(nowSec, dt) {
   if (PROPS.room && (want !== PROPS.room || LIVE3D.rooms[PROPS.room].geo !== PROPS.geo || isDark() !== PROPS.dark || dataServerWanted(PROPS.room) !== !!PROPS.dataServer || serverDoorWanted(PROPS.room) !== !!PROPS.serverDoor)) propsClear();
   if (!want) return;
   if (!PROPS.room) propsBuild(want);
+  const fun = funWanted();   // across PROPS.max: the looks only; the things with a use stay as they are
+  if (PROPS.fun && !fun) funClear();
+  else if (!PROPS.fun && fun) funBuild();
   propsBoxes(nowSec, false);
   dataServerTick(nowSec);
   serverDoorTick(nowSec);
-  if (reduceMotion) return;   // placed, not driven
+  if (reduceMotion || !PROPS.fun) return;   // placed, not driven
   const v = PROPS.vac, p = v.position;
   if (!propsClearAt(p.x, p.z)) { const s = propsSpot(); p.set(s[0], 0, s[1]); return; }   // a robot sat down on it: start elsewhere
   const step = PROPS.speed * Math.min(dt, 0.1), h = v.userData.heading;
@@ -1707,7 +1735,7 @@ function brkTick(nowSec, now) {
     const B = R.brk;
     if (!B) continue;
     const st = robotState[R.def.id] || { state: 'idle' }, rm = PROJECT[B.room];
-    const reason = playStopReason(R, st, B.room, B.since) || (!rm || !rm.shown || rectOf(rm) !== B.rect ? 'relaid' : null) || (PROPS.room !== B.room ? 'props' : null)
+    const reason = playStopReason(R, st, B.room, B.since) || (!rm || !rm.shown || rectOf(rm) !== B.rect ? 'relaid' : null) || (PROPS.room !== B.room || !PROPS.fun ? 'props' : null)
       || (B.phase === 'going' && nowSec >= B.walkUntil ? 'walk too long' : null) || (B.t0 && nowSec >= B.until ? 'done' : null);
     if (reason) { brkStop(R, reason, nowSec); continue; }
     brkClock(R, nowSec);
@@ -1716,7 +1744,7 @@ function brkTick(nowSec, now) {
   if (reduceMotion || nowSec < BRK.next) return;
   const n = rollsDue(BRK, nowSec);
   const room = PROPS.room;
-  if (!room || !PROPS.place || robots.some((R) => R.def.room === room && R.def.standing)) return;
+  if (!room || !PROPS.fun || robots.some((R) => R.def.room === room && R.def.standing)) return;
   const here = robots.filter((R) => R.def.room === room);
   for (const R of here) {
     const st = robotState[R.def.id];
@@ -1778,7 +1806,7 @@ const SHRED = { w: 0.8, d: 0.55, h: 1.1, bitsMax: 24, feedSec: 1.2, bitsSec: 2.0
 // and the git box's desk; 2.3.4)
 /* ---------- the data server (requester, 10-19; 2.3.5): a rack for a JsonUI room's API and DB specifications ----------
    「dbとapiのファイルがある場合は部屋にデータサーバーっぽいもの置いてそれクリックでDB仕様書とAPI仕様書みれるようにしてほしい」.
-   With the room's other props (the one-room view, PROPS.max robots or fewer), only in a room whose docs/api or docs/db
+   With the room's things with a use (the one-room view, however many robots; 2.3.10), only in a room whose docs/api or docs/db
    hold a specification (PROJECT[id].dataDocs, counted by the server: data_docs.counts); it comes and goes with them.
    Against the back wall, DATASRV.fromLeft from the room's left edge: right of the call button's stand (the author, 2.3.5),
    left of the shredder and its feeder in the smallest room. No robot walks to it. Pressed (liveHit: kind 'data'), the
@@ -2821,6 +2849,34 @@ function placeTag(el, p) {
    robot showing じゃんけん lifts its tag clear of the hand. Cost per frame: TAGS.stats (the e2e reads it). */
 const TAGS = { gap: 3, ease: 0.35, measureMs: 500, maxPasses: 12, rpsLift: 0.55, stats: { n: 0, sumMs: 0, maxMs: 0, frames: 0 } };
 const tagNdc = new THREE.Vector3();
+/* A tag over a thing to press (2.3.10, ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room, cd's
+   ruling 10-20 on the requester's 2.3.9 choice that the bell and the rack are pressed even behind a robot's desk):
+   while a robot's tag (or its bill) crosses the call bell, the data server's rack or the server room's door on the
+   page, it lets the press through to the canvas (liveFirstHit then takes the thing) and is drawn faint, its name
+   still readable (.over-fixture, app.css). A tag over nothing to press selects its robot as before (2.3.7). */
+const tagFixBox = new THREE.Box3(), tagFixV = new THREE.Vector3();
+function tagFixtureRects(W, H) {
+  const objs = [];
+  if (SOURCE.mode === 'live' && PROPS.bell && PROPS.room === liveSolo()) objs.push(PROPS.bell);   // as liveTargets
+  if (PROPS.dataServer) objs.push(PROPS.dataServer.group);
+  const at = srDoorNow();
+  if (at) objs.push(at.D.root, at.D.pad);
+  const out = [];
+  for (const o of objs) {
+    if (!o || !o.visible) continue;
+    if (!o.userData.tagBox) { o.updateMatrixWorld(true); o.userData.tagBox = new THREE.Box3().setFromObject(o); }   // they never move
+    const b = o.userData.tagBox;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, behind = false;
+    for (let k = 0; k < 8; k++) {
+      tagFixV.set(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z).project(camera);
+      if (tagFixV.z > 1 || tagFixV.z < -1) { behind = true; break; }
+      const x = ((tagFixV.x + 1) / 2) * W, y = ((1 - tagFixV.y) / 2) * H;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    }
+    if (!behind) out.push([x0, x1, y0, y1]);
+  }
+  return out;
+}
 function placeRobotTags(dt = 1 / 60) {
   const ease = 1 - Math.pow(1 - TAGS.ease, dt * 60);   // TAGS.ease of the way each 1/60 s, in real time (it was per frame)
   const t0 = performance.now(), W = canvas.clientWidth, H = canvas.clientHeight, list = [];
@@ -2856,6 +2912,7 @@ function placeRobotTags(dt = 1 / 60) {
     it.target = it.y - bottom;
     it.front = placed.length;   // 1 = the nearest: its tag (and bill) is drawn over, and takes the click from, any farther one
   }
+  const fix = tagFixtureRects(W, H);
   for (const it of list) {   // the writes
     const el = it.R.tag;
     if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; if (it.R.bill) it.R.bill.style.visibility = 'hidden'; if (it.R.waitEl) it.R.waitEl.style.visibility = 'hidden'; continue; }
@@ -2868,6 +2925,13 @@ function placeRobotTags(dt = 1 / 60) {
     it.R.tagDy = Math.abs(dy - it.target) < 0.5 ? it.target : dy;
     it.R.tagTarget = it.target;   // where the tag is going (the e2e reads a tag once tagDy has reached it: the settle hook of 80-dbg.js)
     el.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy).toFixed(1)}px) translate(-50%, -100%)`;
+    {   // over a thing to press: the tag and its bill let the press through (tagFixtureRects)
+      const b = it.bill ? it.R.billSize : null, w = Math.max(it.R.tagSize.w, b ? b.w : 0), h = it.R.tagSize.h + (b ? b.h + BILL.gap + BILL.rise : 0);
+      const x0 = it.x - w / 2, x1 = it.x + w / 2, y1 = it.y - it.R.tagDy, y0 = y1 - h;
+      const over = fix.some((f) => x0 < f[1] && f[0] < x1 && y0 < f[3] && f[2] < y1);
+      if (el.classList.contains('over-fixture') !== over) el.classList.toggle('over-fixture', over);
+      if (it.R.bill && it.R.bill.classList.contains('over-fixture') !== over) it.R.bill.classList.toggle('over-fixture', over);
+    }
     if (it.bill) {   // its bottom just above the tag; it rises inside the room the box kept for it (BILL.rise)
       it.bill.style.visibility = 'visible';
       it.bill.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy - it.R.tagSize.h - BILL.gap).toFixed(1)}px) translate(-50%, -100%)`;

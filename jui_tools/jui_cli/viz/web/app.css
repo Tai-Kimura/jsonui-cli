@@ -254,6 +254,8 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .wait-bubble[data-wait-kind="input"] { background: #e8ecf1; border-color: #6b7a90; color: #13233a; }
 .wait-bubble:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .wait-picked { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* over the call bell, the rack or the server room's door (40-scene.js tagFixtureRects, 2.3.10): the press goes through to it */
+.tag.bot.over-fixture, .bill.over-fixture { pointer-events: none; opacity: 0.5; }
 .tag.bot:hover { box-shadow: 0 0 0 2px var(--info), 0 1px 4px var(--shadow); }
 /* A room's name is a sign, not a robot's name tag (requester 10-18: the two blended in a crowded room): square corners,
    a frame and the info hue always on, an opaque ground, and in front of the tags (a later sibling would paint over it). */

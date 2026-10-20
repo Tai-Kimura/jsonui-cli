@@ -4,7 +4,7 @@ The real `jui viz serve` in a throwaway HOME on a free port; sessions are made w
 robots in a room picked alone: both props are there and the floor carries the plank texture; the vacuum, watched for
 a while, never enters a robot's or a desk's box, the server's corner or the front aisle (doors, play spot, easel).
 Back to the floor: nothing left (scene children as before, no floor map). Five times in and out: three's geometry and
-texture counts do not grow. An 11th robot in the room: the props go. Frame times on the floor and up close are
+texture counts do not grow. An 11th robot in the room: the looks go (the things with a use stay, 2.3.10). Frame times on the floor and up close are
 printed. Screenshots of the building, the floor and the room, light and dark (`--jt` takes them from another tree,
 for the before / after pictures). No console error, nothing requested outside the server.
 """
@@ -181,7 +181,8 @@ async def run_props(pw, out, failures, jt=None, shots_only=False):
         res["memory"] = mem
         check(failures, mem[-1]["geometries"] <= mem[0]["geometries"] and mem[-1]["textures"] <= mem[0]["textures"],
               f"geometries and textures do not grow over five visits: {mem}")
-        # 11 robots in the room: no props, even up close; back to 10: they come back
+        # 11 robots in the room: no looks, even up close (the things with a use stay: crowded_props.py, 2.3.10); back to 10:
+        # they come back
         for i in range(4, 11):
             hook(SID.format(i), hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.robots.filter((R) => R.def.room === window.__dbg.robots[0].def.room).length >= 11", timeout=30000, label="eleven robots")
@@ -189,14 +190,18 @@ async def run_props(pw, out, failures, jt=None, shots_only=False):
         await wait(page, f"() => window.__dbg.solo() === '{room_id}'", label="up close with eleven")
         await page.wait_for_timeout(1500)
         many = res["eleven"] = await page.evaluate("() => window.__dbg.props()")
-        check(failures, many["room"] is None and not many["floorMap"], f"eleven robots: no props, no wood: {many}")
+        # inverted in 2.3.10 (requester 10-20: the things with a use stay; ticket 2026-10-20-jui-viz-functional-props-gone-in-a-crowded-room):
+        # before, the whole set went (room None); now the room keeps its shredder, box and bell, and only the looks go
+        check(failures, many["room"] == room_id and not many["fun"] and not many["floorMap"] and many["vac"] is None and many["server"] is None
+              and many["uses"]["shredder"] and many["uses"]["gitDesk"] and many["uses"]["bell"],
+              f"eleven robots: no looks (no wood, vacuum, server), the things with a use stay: {many}")
         # everyone at the seat the eleven-robot layout gave it first (a robot leaves only from its desk): the wait below then
         # covers the exit and the walk out alone
         await settled(page, "eleven seated before one leaves", timeout=60000)
         await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # the walk out, with frames 3 s apart
         t_ten = time.monotonic()
         hook(SID.format(10), hook_event_name="SessionEnd", reason="exit")
-        await wait(page, f"() => window.__dbg.props().room === '{room_id}'", timeout=30000, label="ten again: props back")
+        await wait(page, f"() => window.__dbg.props().room === '{room_id}' && window.__dbg.props().fun", timeout=30000, label="ten again: props back")
         res["tenSec"] = round(time.monotonic() - t_ten, 1)
         await page.evaluate("() => { window.__slowFrameMs = 0; }")
         check(failures, res["tenSec"] < TEN_MAX_SEC, f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenSec']} s")

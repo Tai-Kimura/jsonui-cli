@@ -159,6 +159,21 @@ window.__dbg = {
   room: (id) => { const r = PROJECT[id]; return r ? { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, shown: !!r.shown, doors: r.doors || null } : null; },
   walls: () => (SOURCE.mode === 'live' ? liveWalls() : null),   // the wall pieces, door gaps cut out (the e2e checks no robot is in one)
   seats: () => (SOURCE.mode === 'live' ? JSON.parse(JSON.stringify(LIVE.seatOf)) : null),
+  // desk spots (the floor room's coordinates, 0.1 apart) whose robot's tag would hold the page point pt in the room up
+  // close: the robot at seatPos, its tag at + TAG_UP projected as placeRobotTags puts it, a tag's size as one drawn now
+  // (the e2e pins one, so a tag covers the call bell in every run: ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room)
+  tagPinsOver: (pt) => {
+    const room = PROJECT[liveSolo()], t = robots.find((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden);
+    if (!room || !t) return null;
+    const tb = t.tag.getBoundingClientRect(), w = tb.width, h = tb.height, r = canvas.getBoundingClientRect(), a = seatArea(room.baseW, room.baseD), out = [], v = new THREE.Vector3();
+    for (let dx = Math.ceil(a.x0 * 10) / 10; dx <= a.x1; dx += 0.1) for (let dz = Math.ceil(a.z0 * 10) / 10; dz <= a.z1; dz += 0.1) {
+      const p = seatPos(room, { dx, dz, standing: false }).pos;
+      v.set(p[0], 0, p[1]).add(TAG_UP).project(camera);
+      const x = r.left + (v.x + 1) / 2 * r.width, y = r.top + (1 - v.y) / 2 * r.height;
+      if (pt[0] > x - w / 2 + 6 && pt[0] < x + w / 2 - 6 && pt[1] > y - h + 4 && pt[1] < y - 4) out.push([+dx.toFixed(2), +dz.toFixed(2)]);
+    }
+    return { n: out.length, mid: out[Math.floor(out.length / 2)] || null, first: out.slice(0, 3), tag: [w, h] };
+  },
   solo: () => (SOURCE.mode === 'live' ? liveSolo() : null),
   // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
   tags: () => robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !tagsEl.hidden).map((R) => {
@@ -208,7 +223,11 @@ window.__dbg = {
       vac: v ? [+v.position.x.toFixed(3), +v.position.z.toFixed(3)] : null, radius: PROPS.radius, boxes: PROPS.boxes,
       area: PROPS.room ? propsArea() : null, wood: !!(R && R.floor.material === PROPS.woodMat && PROPS.woodMat && PROPS.woodMat.map),
       floorMap: Object.values(LIVE3D.rooms).some((x) => !!x.floor.material.map), sceneChildren: scene.children.length - robots.length,   // less the robots, which come and go
-      memory: { ...renderer.info.memory } };
+      memory: { ...renderer.info.memory },
+      // the two sets (2.3.10): the looks only with PROPS.max robots or fewer; the things with a use, one group kept across it
+      fun: !!PROPS.fun, groupId: PROPS.group ? PROPS.group.uuid : null, funGroupId: PROPS.funGroup ? PROPS.funGroup.uuid : null,
+      uses: { shredder: !!PROPS.shredder, gitDesk: !!PROPS.gitDesk, bell: !!PROPS.bell, dataServer: !!PROPS.dataServer, serverDoor: !!PROPS.serverDoor },
+      looks: { booth: !!PROPS.booth, vend: !!PROPS.vend, vac: !!PROPS.vac, server: !!PROPS.server } };
   },
   // breaks (10-19): the arms shorten the times (the real defaults stay in 40-scene.js); where the props stand, for a room
   // as it is or for any rectangle and doors (the arms try every size the layout makes); who is on a break
