@@ -464,6 +464,33 @@ async def run_server_room(pw, out, failures):
         await page.click("#sr-mode-3d")
         await until(page, "() => { const c = window.__dbg.srCost(); return !c.paused && c.raf; }", "the 3D again")
         check(failures, not await page.evaluate("() => document.getElementById('sr-boxzoom').disabled"), "3D: 範囲で寄る on again")
+        # 範囲で寄る pressed, then コスト and back: nothing is left armed, so the next plain drag turns the 3D, no box
+        await page.click("#sr-boxzoom")
+        armed_before = (await page.evaluate("() => window.__dbg.srBox()"))["armed"]
+        await page.click("#sr-mode-cost")
+        await until(page, "() => window.__dbg.srCost().mode === 'cost'", "コスト after 範囲で寄る")
+        await page.click("#sr-mode-3d")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.mode === '3d' && !c.paused; }", "the 3D after コスト")
+        cvr = await page.evaluate("() => { const r = document.getElementById('sr-canvas').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }")
+        await page.mouse.move(cvr[0] - 50, cvr[1] - 30)
+        await page.mouse.down()
+        await page.mouse.move(cvr[0] + 50, cvr[1] + 30, steps=4)
+        mid = await page.evaluate("() => ({ ...window.__dbg.srBox(), pressed: document.getElementById('sr-boxzoom').getAttribute('aria-pressed') })")
+        await page.mouse.up()
+        res["costBoxArmed"] = {"armedBefore": armed_before, "afterCost": mid}
+        check(failures, armed_before and not mid["armed"] and mid["pressed"] == "false" and not mid["drawing"] and not mid["shown"],
+              f"範囲で寄る, then コスト and 3D: nothing left armed, a plain drag draws no box: {res['costBoxArmed']}")
+        # the room closed while コスト is shown, and opened again: 範囲で寄る can be pressed
+        await page.click("#sr-mode-cost")
+        await until(page, "() => window.__dbg.srCost().mode === 'cost'", "コスト before closing")
+        await page.click("#sr-back")
+        await until(page, "() => !window.__dbg.sr().open", "the room closed from コスト")
+        await page.evaluate(f"() => window.__dbg.srEnter('{pid['three']}')")
+        await until(page, "() => window.__dbg.sr().open", "the room open again", timeout=20000)
+        reopened = await page.evaluate("() => ({ disabled: document.getElementById('sr-boxzoom').disabled, mode: window.__dbg.srCost().mode, paused: window.__dbg.srCost().paused })")
+        res["costReopened"] = reopened
+        check(failures, reopened == {"disabled": False, "mode": "3d", "paused": False},
+              f"closed from コスト and opened again: the 3D, 範囲で寄る pressable: {reopened}")
         # the theme changing while it is open (D3) follows; dark is a dark ground with floors and labels that read (2.3.9, item 2)
         res["theme"] = {}
         for scheme in ("light", "dark"):
