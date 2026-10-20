@@ -234,7 +234,19 @@ async def run_ask(pw, out, failures):
         phone = await new_page(browser, watch, "ask-phone", **PHONE)
         await phone.goto(url + "/")
         await ready(phone)
-        await wait(phone, "() => !!document.querySelector('.qcard')", timeout=15000, label="the phone's card")
+        # 30 s, as ready(): a fresh page builds its 3D on a starved main thread first (ticket
+        # 2026-10-20-jui-viz-e2e-ask-phone-card-wait-15s: CPU x100 took 10.6-11.0 s, x150 24.4 s, on 2.3.8 and 2.3.9 alike).
+        # A timeout keeps what the phone showed: its state, its console lines and a screenshot.
+        try:
+            await wait(phone, "() => !!document.querySelector('.qcard')", timeout=30000, label="the phone's card")
+        except RuntimeError as e:
+            state = await phone.evaluate("""() => ({ cards: document.querySelectorAll('.qcard').length,
+              conn: (document.querySelector('.chip.demo') || { dataset: {} }).dataset.conn || null,
+              sessions: document.querySelectorAll('#sessions [data-robot-open]').length, mode: document.body.dataset.mode || null,
+              questionsHidden: (document.getElementById('questions-sec') || {}).hidden, chipAsk: (document.getElementById('chip-ask') || {}).hidden })""")
+            await phone.screenshot(path=str(out / "question-phone-timeout.png"))
+            said = [line for line in watch.console if line.startswith("[ask-phone ")]
+            raise RuntimeError(f"{e} state: {json.dumps(state, ensure_ascii=False)} console: {said} (question-phone-timeout.png)") from None
         await phone.click("#chip-ask")
         await phone.wait_for_timeout(600)
         res["phone"] = await phone.evaluate("() => ({ hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth })")
