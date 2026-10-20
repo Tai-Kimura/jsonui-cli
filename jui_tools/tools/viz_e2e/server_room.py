@@ -96,10 +96,12 @@ def check(failures, cond, text):
 
 
 FLOW = "() => window.__dbg.srFlow()"
-# when the next toast is put up and when it is taken down (the start's, as the flow is pressed)
+# when the next toast is put up and when it is taken down (the start's, as the flow is pressed): the first one added
+# after this, not one already there (a stop that left its toasts behind is the rebuild arm's to say)
 TOAST_LIFE = """() => { const box = document.getElementById('sr-toasts'), L = window.__toastLife = { born: 0, gone: 0 }; let el = null;
+  const before = new Set(box.children);
   const mo = new MutationObserver(() => { const now = performance.now();
-    if (!el && box.firstElementChild) { el = box.firstElementChild; L.born = now; }
+    if (!el) { el = [...box.children].find((c) => !before.has(c)) || null; if (el) L.born = now; }
     if (el && !el.isConnected) { L.gone = now; mo.disconnect(); } });
   mo.observe(box, { childList: true }); }"""
 
@@ -207,6 +209,20 @@ async def run_flows(page, out, failures, res):
           f"a rebuild while it plays stops the flow, its light and toasts gone, nothing played on: {fl['rebuilt']}")
     await page.emulate_media(color_scheme="dark" if dark else "light")
     await until(page, f"(d) => window.__dbg.sr().built && window.__dbg.srTheme().dark === d", "the theme back", arg=dark)
+    # and while it waits at a branch, its choices shown: the rebuild takes them away too
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "search: at its branch again",
+                timeout=30000, why=FLOW)
+    await page.emulate_media(color_scheme="light" if dark else "dark")
+    await until(page, f"(d) => window.__dbg.sr().built && window.__dbg.srTheme().dark === d", "rebuilt at the branch", arg=not dark)
+    at_branch = await page.evaluate(FLOW)
+    fl["rebuiltAtBranch"] = {"playing": at_branch["playing"], "choices": at_branch["choices"],
+                             "hidden": await page.evaluate("() => document.getElementById('sr-choices').hidden")}
+    check(failures, at_branch["playing"] is None and not at_branch["choices"] and fl["rebuiltAtBranch"]["hidden"] is True,
+          f"a rebuild while it waits at a branch takes its choices away: {fl['rebuiltAtBranch']}")
+    await page.emulate_media(color_scheme="dark" if dark else "light")
+    await until(page, f"(d) => window.__dbg.sr().built && window.__dbg.srTheme().dark === d", "the theme back again", arg=dark)
 
 
 async def run_server_room(pw, out, failures):
