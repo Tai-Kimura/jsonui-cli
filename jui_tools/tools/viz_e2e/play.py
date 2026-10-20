@@ -239,7 +239,7 @@ async def run_play(pw, out, failures):
         hook(THIRD, hook_event_name="SessionEnd", reason="exit", cwd="/work/play-third")
         await wait(page, "() => window.__dbg.play().robots.length === 2 && window.__dbg.play().robots.every((x) => !x.play && !x.back && x.path === 0)",
                    timeout=60000, label="the third robot gone again, both at their desks")
-        # its desk moves to another room in the middle of a game (cd): it walks back through the doors, never a wall
+        # its desk moves to another room in the middle of a game (the orchestrator): it walks back through the doors, never a wall
         await settle(page)
         await page.evaluate("() => window.__dbg.play({ p: 1, kinds: ['highfive'], restMinSec: 0, restMaxSec: 0, minSec: 30, maxSec: 30 })")
         await wait(page, "() => window.__dbg.play().list.some((g) => g.started)", timeout=20000, label="a game before the move")

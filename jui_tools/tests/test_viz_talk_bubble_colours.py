@@ -114,7 +114,7 @@ def test_the_sent_bubble_is_as_it_was():
 # The chosen values, per theme (light, dark). Dark went one step darker after the requester saw it (10-20: 「ダークモード
 # もう少しくらい色がいいな」): #e5e7eb → slate-300 #cbd5e1, the link, soft text, code ground, lines and error with it.
 # Light then took the requester's sample A (「ライトはAでいいよ」): #ffffff → #e8ecf1, the text #13233a, code #d5dbe3, the
-# grey edge kept (cd).
+# grey edge kept (the orchestrator).
 # Dark then took the requester's sample C (ticket 2026-10-20-jui-viz-talk-bubble-dark-v2, 「トークのデザインはCで」): a navy a
 # little deeper than the sent bubble, white text, a violet edge.
 CHOSEN = {"bg": ("#e8ecf1", "#0f2747"), "edge": ("#6b7a90", "#c4b5fd"), "ink": ("#13233a", "#ffffff"),

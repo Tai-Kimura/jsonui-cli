@@ -149,7 +149,7 @@ async def run_notify(pw, out, failures):
         check(failures, await a.evaluate("() => window.__asked") == 0, "nothing is asked on load")
         await a.click("#btn-notify")
         await wait(a, "() => !document.getElementById('notify-ask-perm').hidden", label="the permission button")
-        # the OS's own switch (cd and the requester, 10-19: off, nothing showed, and the question still waited in viz)
+        # the OS's own switch (the orchestrator and the requester, 10-19: off, nothing showed, and the question still waited in viz)
         res["osNote"] = await a.evaluate("() => { const e = document.getElementById('notify-os-note'); return e && e.offsetParent !== null ? e.textContent : null; }")
         check(failures, bool(res["osNote"]) and "システム設定 → 通知 → Google Chrome" in res["osNote"] and "質問は viz で待ちます" in res["osNote"],
               f"the settings say the Mac's own switch for Chrome: {res['osNote']!r}")

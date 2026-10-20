@@ -90,7 +90,7 @@ def test_the_schema_walker_reads_the_new_words_and_the_model_is_unchanged():
 def test_the_quantities_are_closed_with_one_unit_each_and_the_price_units_hold_them():
     q = L.quantities()
     assert {"requests", "read_units", "get_requests", "rows_read", "storage_gb", "cdn_egress_gb", "lcu"} <= set(q)
-    assert "reads" not in q and "writes" not in q          # one name, one unit (cd 21:0x)
+    assert "reads" not in q and "writes" not in q          # one name, one unit (the orchestrator, 21:0x)
     assert q["storage_gb"]["unit"] == "GB" and q["storage_gb"]["kind"] == "level"
     assert q["requests"]["label"] == "リクエスト"
     assert {v["unit"] for v in q.values()} <= set(P.units())

@@ -415,7 +415,7 @@ def hook_settings(repo: Path) -> dict:
 
 
 def add_hook(settings_file: Path, repo: Path) -> bool:
-    """Merge the hook into *settings_file* (cd runs this; it is never run for cd). False if it is already there."""
+    """Merge the hook into *settings_file* (the orchestrator runs this; it is never run for the orchestrator). False if it is already there."""
     data = json.loads(settings_file.read_text()) if settings_file.exists() else {}
     entries = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
     command = hook_settings(repo)["hooks"]["UserPromptSubmit"][0]

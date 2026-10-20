@@ -7,7 +7,7 @@ one tab, by the yield and quiet rules of the chime; its own switch in the settin
 whose 完了 notification has already gone out (or was taken quietly).
 
 Measured by the requester (10-20 10:36, an isolated real claude, plugin 1.2.1's Notification hook): Stop at 10:36:45,
-then 60 s later {"message":"Claude is waiting for your input","notification_type":"idle_prompt"}. The ruling (cd): the
+then 60 s later {"message":"Claude is waiting for your input","notification_type":"idle_prompt"}. The orchestrator's ruling: the
 notification is a reminder — not rung when, since that Stop, the person clicked its 完了 notification or opened that
 session on the page; otherwise once. The hooks are replayed here through forward.py in that shape.
 """

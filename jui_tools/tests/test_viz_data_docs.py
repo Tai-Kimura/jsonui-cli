@@ -437,7 +437,7 @@ def test_a_held_read_takes_its_own_executor_not_the_shared_one(tmp_path, monkeyp
     assert shared < 1.0 and health < 1.0 and status == 200, (shared, health, status)
 
 
-# ---- what is not a regular file (cd, 10-19) -------------------------------------------------------------------------
+# ---- what is not a regular file (the orchestrator, 10-19) -------------------------------------------------------------------------
 
 def test_a_directory_or_a_socket_named_like_a_document_is_neither_counted_nor_read_nor_holds(tmp_path, monkeypatch):
     import socket as _socket

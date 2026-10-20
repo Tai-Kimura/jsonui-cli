@@ -22,7 +22,7 @@ WEB_READING_TOOLS = {
 }
 COMMAND_TOOLS = {"Bash", "BashOutput"}
 # Calling a subagent blows a whistle (requester 10-20: "サブエージェント呼ぶのは笛鳴らそうか"): a short signal of a fixed
-# length from the moment the call starts, not the call's length (cd measured 3 days: a background Agent ends in
+# length from the moment the call starts, not the call's length (the orchestrator measured 3 days: a background Agent ends in
 # p50 0.5 s, a foreground one runs p50 74 s — it whistles only at its start, then waits as before). The page's demo
 # beats use the same length (30-source-demo.js, DEMO_BEATS.launchSec).
 LAUNCH_TOOLS = {"Agent", "Task"}
