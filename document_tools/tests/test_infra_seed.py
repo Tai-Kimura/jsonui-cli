@@ -618,3 +618,17 @@ def test_a_seeded_spec_compares_clean_with_check(tmp_path):
     (root / "docs" / "infra" / "draft.json").write_text(json.dumps(doc))
     iac = IC.run_infra_iac(SimpleNamespace(gate=False, ignore_types=[]), root).results
     assert [r.target for r in iac if "#spec." in r.target] == []
+
+
+def test_a_drafted_node_takes_the_declared_id_and_its_spec_both(tmp_path):
+    """Both meet in add_node: the id comes from the declaration that names the same iac address (the load definitions
+    name nodes by it), the spec from the IaC; neither drops the other."""
+    root = _spec_project(tmp_path)
+    (root / "docs" / "infra").mkdir(parents=True)
+    (root / "docs" / "infra" / "main.json").write_text(json.dumps({"version": 0, "nodes": [
+        {"id": "orders-db", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.orders"]}]}))
+    doc, rep = S.draft(root)
+    node = _by_iac(doc)["aws_db_instance.orders"]
+    assert node["id"] == "orders-db"
+    assert node["spec"] == [{"key": "instance_class", "value": "db.r6g.large"}, {"key": "storage_gb", "value": "100"},
+                            {"key": "multi_az", "value": "true"}]
