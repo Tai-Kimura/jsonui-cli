@@ -686,7 +686,9 @@ class World:
                 elif isinstance(response, str):
                     output = response
                 summary, passed, n_failed = robots.test_summary(output[-200_000:])
-                run["status"] = "failed" if failed or (n_failed or 0) > 0 else "passed"
+                # xcodebuild's ** TEST FAILED ** decides even with exit code 0 (a redirect; ticket 2026-10-20-jui-viz-test-run-ios-shows-failed-while-passing)
+                failed_mark = robots.xcode_verdict(output[-200_000:]) == "failed"
+                run["status"] = "failed" if failed or failed_mark or (n_failed or 0) > 0 else "passed"
                 if summary:
                     run["summary"] = summary
                 run["endedAt"] = at

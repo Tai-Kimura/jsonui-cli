@@ -99,14 +99,19 @@ def act_for_tool(tool: str, tool_input: dict, root: str | None) -> str:
 
 # ---------------------------------------------------------------- test runs (09 §4)
 
-_SUMMARY_PATTERNS = (
-    # xcodebuild: "Executed 12 tests, with 1 failure (0 unexpected)"
-    (re.compile(r"Executed (\d+) tests?, with (\d+) failures?"), lambda m: (int(m[1]) - int(m[2]), int(m[2]))),
-    # Gradle: "12 tests completed, 1 failed"
-    (re.compile(r"(\d+) tests completed, (\d+) failed"), lambda m: (int(m[1]) - int(m[2]), int(m[2]))),
-)
-_PLAYWRIGHT_PASSED = re.compile(r"(\d+) passed")
-_PLAYWRIGHT_FAILED = re.compile(r"(\d+) failed")
+# Counts are read only from a known runner's summary line, matched from the line's start in its own form (ticket
+# 2026-10-20-jui-viz-test-run-ios-shows-failed-while-passing: "(\d+) failed" anywhere counted an agent's echoed
+# `passed=36 failed=0` as 36 failed). None matching: no counts — unsure is not said.
+_XCODE_EXECUTED = re.compile(r"^\s*Executed (\d+) tests?, with (\d+) failures?(?: \((\d+) unexpected\))?", re.M)
+_XCODE_CASE = re.compile(r"^\s*Test [Cc]ase '[^'\n]+' (passed|failed) on '", re.M)   # parallel testing: no Executed line
+_XCODE_MARK = re.compile(r"^\*\* TEST (?:BUILD )?(SUCCEEDED|FAILED) \*\*\s*$", re.M)
+_GRADLE_COUNTS = re.compile(r"^\s*(\d+) tests completed, (\d+) failed", re.M)
+# pytest's last summary: "3 failed, 10 passed in 2.1s", or the same inside "=" rules; passed and failed from that line
+_PYTEST_LINE = re.compile(r"^=*\s*((?:\d+ (?:failed|passed|skipped|deselected|xfailed|xpassed|errors?|warnings?|subtests passed)(?:, )?)+) in [\d.]+s\b.*$", re.M)
+# Playwright: a line that is only "N passed (1.2m)" or "N failed"
+_PLAYWRIGHT_LINE = re.compile(r"^\s+(\d+) (passed|failed)(?: \([^)\n]*\))?\s*$", re.M)
+# jest: "Tests:       1 failed, 35 passed, 36 total"
+_JEST_LINE = re.compile(r"^Tests:\s+(.*\d+ total)\s*$", re.M)
 _GRADLE_OK = re.compile(r"BUILD SUCCESSFUL")
 
 
@@ -355,19 +360,54 @@ def deletion_failed(output: str) -> bool:
     return bool(_NOTHING_THERE.search(output or ""))
 
 
+def xcode_verdict(output: str) -> str | None:
+    """xcodebuild's own last word: "failed" for ** TEST FAILED ** (or TEST BUILD FAILED), "passed" for ** TEST SUCCEEDED **,
+    None when it said neither. It decides over any count and over the exit code (a redirect can end a failed run with 0)."""
+    marks = _XCODE_MARK.findall(output or "")
+    return ("failed" if marks[-1] == "FAILED" else "passed") if marks else None
+
+
+def _counted(output: str) -> tuple[int, int] | None:
+    m = list(_XCODE_EXECUTED.finditer(output))
+    if m:
+        last = m[-1]           # the last summary is the run's total; expected failures (XCTExpectFailure) are no failures
+        failed = int(last[3]) if last[3] is not None else int(last[2])
+        return int(last[1]) - failed, failed
+    cases = _XCODE_CASE.findall(output)
+    if cases:
+        return cases.count("passed"), cases.count("failed")
+    m = list(_GRADLE_COUNTS.finditer(output))
+    if m:
+        return int(m[-1][1]) - int(m[-1][2]), int(m[-1][2])
+    m = list(_PYTEST_LINE.finditer(output))
+    if m:
+        parts = dict((w, int(n)) for n, w in re.findall(r"(\d+) (failed|passed)\b", m[-1][1]))
+        if "passed" in parts or "failed" in parts:
+            return parts.get("passed", 0), parts.get("failed", 0)
+    m = list(_JEST_LINE.finditer(output))
+    if m:
+        parts = dict((w, int(n)) for n, w in re.findall(r"(\d+) (failed|passed)\b", m[-1][1]))
+        return parts.get("passed", 0), parts.get("failed", 0)
+    lines = _PLAYWRIGHT_LINE.findall(output)
+    if lines:
+        last = {w: int(n) for n, w in lines}
+        return last.get("passed", 0), last.get("failed", 0)
+    return None
+
+
 def test_summary(output: str) -> tuple[str, int | None, int | None]:
-    """(text, passed, failed) read from a test command's output; unknown counts are None."""
-    for pattern, counts in _SUMMARY_PATTERNS:
-        matches = list(pattern.finditer(output))
-        if matches:
-            passed, failed = counts(matches[-1])  # the last summary is the run's total
-            return f"{passed} passed, {failed} failed", passed, failed
-    p = _PLAYWRIGHT_PASSED.findall(output)
-    f = _PLAYWRIGHT_FAILED.findall(output)
-    if p or f:
-        passed = int(p[-1]) if p else 0
-        failed = int(f[-1]) if f else 0
-        return f"{passed} passed, {failed} failed", passed, failed
+    """(text, passed, failed) read from a test command's output; unknown counts are None. xcodebuild's ** TEST FAILED **
+    makes it failed whatever the counts say; its ** TEST SUCCEEDED ** drops counts that say otherwise."""
+    output = output or ""
+    verdict, counts = xcode_verdict(output), _counted(output)
+    if verdict == "passed" and counts and counts[1] > 0:
+        counts = None
+    if verdict == "failed" and not (counts and counts[1] > 0):
+        return "** TEST FAILED **", counts[0] if counts else None, None
+    if counts:
+        return f"{counts[0]} passed, {counts[1]} failed", counts[0], counts[1]
+    if verdict == "passed":
+        return "** TEST SUCCEEDED **", None, 0
     if _GRADLE_OK.search(output):
         return "BUILD SUCCESSFUL", None, 0
     return "", None, None
