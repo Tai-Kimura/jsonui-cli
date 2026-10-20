@@ -21,8 +21,9 @@ Three passes, one problem list:
    category, managed_by "iac", direction "out"; one implicit environment "default" when none is declared. Every
    group and node gets providerResolved (its own provider, else the nearest enclosing group's; a "logical" group
    gives none), every node regionResolved (its own region, else the nearest enclosing group's, up to a "logical"
-   group; "" when none says one), and every edge crossProvider (its two ends' providers known and different). The room's model
-   together keeps the per-file limits (nodes 5,000, edges 10,000; the target size is 2,000 and 5,000).
+   group; "" when none says one), and every edge crossProvider (its two ends' providers known and different). A node's
+   spec keeps each key once (spec.duplicate, a warning). The room's model together keeps the per-file limits (nodes
+   5,000, edges 10,000; the target size is 2,000 and 5,000).
 
 A problem never carries the value it found (a message names the place and the kind only).
 """
@@ -476,6 +477,8 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
         refs = within(n, by_id[gid]["environments"] if gid else None, name, path, f"its group {gid!r}")
         if refs is None:
             continue
+        if "spec" in n:
+            n["spec"] = _spec_once(n["spec"], name, path, problems)
         out_nodes.append({**n, "label": n.get("label", nid), "count": n.get("count", 1),
                           "providerResolved": n.get("provider") or group_provider(gid),
                           "regionResolved": n.get("region") or group_region(gid),
@@ -503,6 +506,20 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
              "environments": [{"id": e["id"], "label": e.get("label", e["id"]), "kind": e.get("kind", "other")} for e in env_list],
              "groups": out_groups, "nodes": out_nodes, "edges": out_edges}
     return model, problems
+
+
+def _spec_once(spec: list[dict], name: str, path: str, problems: list[dict]) -> list[dict]:
+    """A node's spec with each key once (the first kept): a key written twice is a warning, the node is still drawn."""
+    seen: set[str] = set()
+    out = []
+    for i, item in enumerate(spec):
+        if item["key"] in seen:
+            problems.append(_problem(name, f"{path}/spec/{i}/key", "spec.duplicate",
+                                     f"spec key {item['key']!r} is written twice: the first is shown", "warning"))
+            continue
+        seen.add(item["key"])
+        out.append(item)
+    return out
 
 
 def _capped(items: list[dict], kind: str, problems: list[dict]) -> list[dict]:

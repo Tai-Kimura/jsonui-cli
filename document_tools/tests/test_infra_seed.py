@@ -552,3 +552,69 @@ def test_seed_withholds_a_name_exactly_when_the_model_says_it_is_a_value(tmp_pat
     assert "10_0_0_5" not in json.dumps([doc, rep])
     assert [s for s in _strings([doc, rep]) if M.secret_findings(s)] == []
     assert S.check_draft(doc) == []
+
+
+# ---------------------------------------------------------------- a node's spec (ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §4)
+
+SPEC_TF = '''provider "aws" {
+  region = "ap-northeast-1"
+}
+resource "aws_db_instance" "orders" {
+  engine            = "postgres"
+  engine_version    = var.pg_version
+  instance_class    = "db.r6g.large"
+  allocated_storage = 100
+  multi_az          = true
+  storage_type      = "${var.kind}"
+}
+resource "aws_lambda_function" "resize" {
+  runtime     = "python3.12"
+  memory_size = 512
+  timeout     = local.t
+}
+resource "aws_instance" "bastion" {
+  instance_type = "10.0.0.5"
+}
+'''
+SPEC_CFN = '''AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  Cache:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      CacheNodeType: cache.t4g.small
+      NumCacheNodes: 2
+      EngineVersion: !Ref CacheVersion
+'''
+
+
+def _spec_project(tmp_path):
+    root = tmp_path / "spec-room"
+    (root / "infra").mkdir(parents=True)
+    (root / "infra" / "main.tf").write_text(SPEC_TF)
+    (root / "cfn").mkdir()
+    (root / "cfn" / "template.yaml").write_text(SPEC_CFN)
+    return root
+
+
+def test_seed_drafts_a_spec_from_the_values_the_iac_writes_and_nothing_else(tmp_path):
+    doc, rep = S.draft(_spec_project(tmp_path))
+    by = _by_iac(doc)
+    assert by["aws_db_instance.orders"]["spec"] == [
+        {"key": "instance_class", "value": "db.r6g.large"}, {"key": "storage_gb", "value": "100"},
+        {"key": "multi_az", "value": "true"}]                            # var.pg_version and "${var.kind}" not evaluated
+    assert by["aws_lambda_function.resize"]["spec"] == [{"key": "memory_mb", "value": "512"}, {"key": "runtime", "value": "python3.12"}]
+    assert by["Cache"]["spec"] == [{"key": "node_type", "value": "cache.t4g.small"}, {"key": "nodes", "value": "2"}]   # !Ref not
+    assert "spec" not in by["aws_instance.bastion"]                     # its one value has a secret's shape: withheld
+    assert rep["specValues"] == 7 and rep["withheld"] >= 1
+    assert "10.0.0.5" not in json.dumps(doc) and "10.0.0.5" not in json.dumps(rep)
+    raw = json.dumps(doc).encode()
+    assert M.check_file("draft.json", raw)[1] == []
+
+
+def test_a_seeded_spec_compares_clean_with_check(tmp_path):
+    root = _spec_project(tmp_path)
+    doc, _rep = S.draft(root)
+    (root / "docs" / "infra").mkdir(parents=True)
+    (root / "docs" / "infra" / "draft.json").write_text(json.dumps(doc))
+    iac = IC.run_infra_iac(SimpleNamespace(gate=False, ignore_types=[]), root).results
+    assert [r.target for r in iac if "#spec." in r.target] == []

@@ -332,3 +332,13 @@ def test_a_password_with_its_value_reads_in_words(tmp_path):
     shorts = [p["short"] for p in got["problems"]]
     assert not got["ok"] and shorts == ["docs/infra/a.json: /nodes/0/label に秘密の形（パスワード）があります。値は書けません"]
     assert "hunter2" not in json.dumps(got, ensure_ascii=False)
+
+
+def test_a_nodes_spec_reaches_the_page_and_a_key_twice_has_its_short_line(tmp_path):
+    """A node's spec (ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §4) is in what the page reads, each key
+    once; the key written twice is a warning with its own short line, the room still usable."""
+    spec = [{"key": "instance_type", "value": "t3.small"}, {"key": "instance_type", "value": "t3.large"}]
+    root = _room(tmp_path, files={"main.json": json.dumps({"version": 0, "nodes": [{"id": "vm", "category": "compute.vm", "spec": spec}]})})
+    got = R.read(root)
+    assert got["ok"] and got["nodes"][0]["spec"] == spec[:1]
+    assert [p["short"] for p in got["problems"]] == ["docs/infra/main.json: /nodes/0/spec/1/key の spec の key が 2 度あります（先の物を出します）"]

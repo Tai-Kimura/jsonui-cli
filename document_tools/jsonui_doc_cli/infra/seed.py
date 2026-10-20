@@ -19,6 +19,10 @@ What it reads, in the research's order:
 8. deploy workflows (hints) and code: SDK imports and the names of environment variables (Python, JavaScript /
    TypeScript; ``.env.example`` and the like by name only — a ``.env`` holds values and is never read).
 
+A Terraform or CloudFormation resource's spec (its instance type, memory, version...: iac_tables.TF_SPEC / CFN_SPEC) is
+drafted from the values written as they are; a variable or a reference is not evaluated (the report's specValues counts
+what was read).
+
 What it never does:
 
 - read Terraform state (``*.tfstate``), variable values (``*.tfvars``), ``.env`` files, a Pulumi stack's settings,
@@ -151,6 +155,7 @@ class Draft:
         self.inputs: dict[str, list[str]] = {}
         self.withheld = 0
         self.withheld_from: list[dict] = []          # where each withheld string was (the report masks the path)
+        self.spec_values = 0                         # spec values read from the IaC (iac_tables.TF_SPEC / CFN_SPEC)
         self.by_key: dict[tuple, str] = {}
 
     # ---- values never leave: every string passes here
@@ -273,6 +278,16 @@ class Draft:
         self.evidence(nid, file, pattern, line)
         return nid
 
+    def spec(self, items: list[dict], where: tuple | None = None) -> list[dict] | None:
+        """A node's spec as the IaC writes it (iac_tables), each value through safe: a value-shaped one is withheld."""
+        out = []
+        for item in items:
+            v = self.safe(item["value"], None, where, f"spec {item['key']}")
+            if v is not None:
+                out.append({"key": item["key"], "value": v})
+        self.spec_values += len(out)
+        return out or None
+
     def add_iac(self, nid: str, iac: str, where: tuple | None = None) -> None:
         iac = self.safe(iac, None, where, "an iac address")
         if not iac or len(iac) > 300:
@@ -371,7 +386,7 @@ class Draft:
                "unmatched": {p: capped(v) for p, v in sorted(self.unmatched.items())},
                "notDrawn": {p: dict(sorted(v.items())) for p, v in sorted(self.not_drawn.items())},
                "skipped": self.skipped[:LIST_CAP], "skippedCount": len(self.skipped),
-               "notes": self.notes, "withheld": self.withheld,
+               "notes": self.notes, "specValues": self.spec_values, "withheld": self.withheld,
                "withheldFrom": self.withheld_from[:LIST_CAP], "withheldFromCount": len(self.withheld_from)}
         return _scrub(rep)
 
@@ -535,39 +550,7 @@ def _line_of(text: str, needle: str) -> int | None:
 
 TF_BLOCK = re.compile(r'^[ \t]*(resource|module|provider|data)\s+"([A-Za-z0-9_-]+)"(?:\s+"([A-Za-z0-9_-]+)")?\s*\{', re.M)
 TF_REF = re.compile(r'(?<![\w.])(data\.)?([a-z][a-z0-9]*_[a-z0-9_]+)\.([A-Za-z_][A-Za-z0-9_-]*)')
-HEREDOC = re.compile(r"<<-?\s*([A-Za-z_][A-Za-z0-9_]*)[^\n]*\n")
-
-
-def _block_end(text: str, i: int) -> int:
-    depth, n, j = 0, len(text), i
-    while j < n:
-        c = text[j]
-        if c == '"':
-            j += 1
-            while j < n and text[j] != '"' and text[j] != "\n":
-                j += 2 if text[j] == "\\" else 1
-        elif c == "#" or text.startswith("//", j):
-            k = text.find("\n", j)
-            j = n if k < 0 else k
-            continue
-        elif text.startswith("/*", j):
-            k = text.find("*/", j + 2)
-            j = n if k < 0 else k + 2
-            continue
-        elif text.startswith("<<", j):
-            m = HEREDOC.match(text, j)
-            if m:
-                end = re.compile(r"^\s*" + re.escape(m.group(1)) + r"\s*$", re.M).search(text, m.end())
-                j = n if end is None else end.end()
-                continue
-        elif c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return j
-        j += 1
-    return n
+_block_end = T.block_end   # one copy with check (iac_tables): where a Terraform block's braces close
 
 
 def _literal(body: str, attr: str) -> str | None:
@@ -680,9 +663,11 @@ def seed_terraform(d: Draft, files: list[tuple[str, str, str]]) -> None:
             region = _literal(r.body, "region") or _literal(r.body, "location")   # the resource's own (gcp, azure)
             if not (region and REGION_RX.match(region) and not M.secret_findings(region)):
                 region = None
+            body = json.loads(r.body) if r.file.endswith(".tf.json") else r.body   # a .tf.json body is kept as its JSON
             gid = d.add_node(("tf",) + key, f"{svc.split('.')[0]}-{r.name}", cat, prov, svc, f"{r.name} ({svc})",
                              parent or place(prov, r.body), r.file, r.header, r.line, iac=addr,
-                             engine=(f"{engine} {ver}" if engine and ver else engine), region=region)
+                             engine=(f"{engine} {ver}" if engine and ver else engine), region=region,
+                             spec=d.spec(T.tf_spec(body), (r.file, r.line)))
             if re.search(r"^\s*(count|for_each)\s*=", r.body, re.M):
                 d.notes.append(f"{addr} ({r.file}): count/for_each is not evaluated; the draft shows one")
         ids[key], kinds[key] = gid, cat
@@ -883,7 +868,7 @@ def seed_cfn(d: Draft, rel: str, resources: dict, text: str, source: str = "clou
                               where=(rel, line))
         else:
             gid = d.add_node(("cfn", rel, lid), f"{svc.split('.')[0]}-{lid}", cat, "aws", svc, f"{label} ({svc})", pg,
-                             rel, lid, line, iac=T.cfn_address(lid))
+                             rel, lid, line, iac=T.cfn_address(lid), spec=d.spec(T.cfn_spec(res.get("Properties")), (rel, line)))
         ids[lid], kinds[lid] = gid, cat
     for lid, refs in refs_of.items():
         a = ids.get(lid)

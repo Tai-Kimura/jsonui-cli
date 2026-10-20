@@ -328,6 +328,113 @@ def optional(category: str) -> bool:
     return category in M.FOLDED_BY_DEFAULT
 
 
+# ---------------------------------------------------------------- reading HCL (seed and check alike)
+TF_RESOURCE = re.compile(r'^[ \t]*resource\s+"([a-z0-9_]+)"\s+"([A-Za-z0-9_-]+)"\s*\{', re.M)
+HEREDOC = re.compile(r"<<-?\s*([A-Za-z_][A-Za-z0-9_]*)[^\n]*\n")
+
+
+def block_end(text: str, i: int) -> int:
+    """The index of the brace that closes the one at i (strings, comments and heredocs skipped); len(text) if none."""
+    depth, n, j = 0, len(text), i
+    while j < n:
+        c = text[j]
+        if c == '"':
+            j += 1
+            while j < n and text[j] != '"' and text[j] != "\n":
+                j += 2 if text[j] == "\\" else 1
+        elif c == "#" or text.startswith("//", j):
+            k = text.find("\n", j)
+            j = n if k < 0 else k
+            continue
+        elif text.startswith("/*", j):
+            k = text.find("*/", j + 2)
+            j = n if k < 0 else k + 2
+            continue
+        elif text.startswith("<<", j):
+            m = HEREDOC.match(text, j)
+            if m:
+                end = re.compile(r"^\s*" + re.escape(m.group(1)) + r"\s*$", re.M).search(text, m.end())
+                j = n if end is None else end.end()
+                continue
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return j
+        j += 1
+    return n
+
+
+# ---------------------------------------------------------------- a node's spec (the server room ticket's §4)
+# The attributes of a resource that are its spec, IaC name -> the model's spec key, in the order the display lists them.
+# seed drafts a node's spec from them, check compares a declared spec with them; only a value written as it is (a
+# string, a number, true or false) is read: a variable, a reference, a function or "${...}" is not evaluated.
+TF_SPEC = (("instance_type", "instance_type"), ("instance_class", "instance_class"), ("node_type", "node_type"),
+           ("machine_type", "machine_type"), ("tier", "tier"), ("engine_version", "version"),
+           ("allocated_storage", "storage_gb"), ("storage_type", "storage_type"), ("memory_size", "memory_mb"),
+           ("timeout", "timeout_s"), ("runtime", "runtime"), ("multi_az", "multi_az"), ("num_cache_nodes", "nodes"),
+           ("desired_count", "tasks"), ("cpu", "cpu"), ("memory", "memory"))
+CFN_SPEC = (("InstanceType", "instance_type"), ("DBInstanceClass", "instance_class"), ("CacheNodeType", "node_type"),
+            ("EngineVersion", "version"), ("AllocatedStorage", "storage_gb"), ("StorageType", "storage_type"),
+            ("MemorySize", "memory_mb"), ("Timeout", "timeout_s"), ("Runtime", "runtime"), ("MultiAZ", "multi_az"),
+            ("NumCacheNodes", "nodes"), ("DesiredCount", "tasks"))
+SPEC_KEYS = tuple(dict.fromkeys(k for _a, k in TF_SPEC + CFN_SPEC))   # every key the tables give
+
+
+def _spec_scalar(v) -> str | None:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str) and v.strip() and "${" not in v and len(v) <= 120:
+        return v
+    return None
+
+
+def _spec_find(value, attr: str):
+    """The first value written as it is under the key attr anywhere in a parsed body (a block nests: settings.tier)."""
+    if isinstance(value, dict):
+        if attr in value and _spec_scalar(value[attr]) is not None:
+            return _spec_scalar(value[attr])
+        for v in value.values():
+            got = _spec_find(v, attr)
+            if got is not None:
+                return got
+    elif isinstance(value, list):
+        for v in value:
+            got = _spec_find(v, attr)
+            if got is not None:
+                return got
+    return None
+
+
+def tf_spec(body) -> list[dict]:
+    """A Terraform resource's spec: body is the HCL text between its braces, or the parsed JSON of a .tf.json one."""
+    out = []
+    for attr, key in TF_SPEC:
+        if isinstance(body, str):
+            m = re.search(r'^\s*' + attr + r'\s*=\s*(?:"([^"$]*)"|(-?\d+(?:\.\d+)?|true|false))\s*(?:[#/].*)?$', body, re.M)
+            got = (m.group(1) if m.group(1) is not None else m.group(2)) if m else None
+            got = got if got is not None and got.strip() and len(got) <= 120 else None
+        else:
+            got = _spec_find(body, attr)
+        if got is not None:
+            out.append({"key": key, "value": got})
+    return out
+
+
+def cfn_spec(properties) -> list[dict]:
+    """A CloudFormation resource's spec from its Properties (a !Ref, !GetAtt or !Sub is not a value written)."""
+    out = []
+    if isinstance(properties, dict):
+        for attr, key in CFN_SPEC:
+            got = _spec_scalar(properties.get(attr))
+            if got is not None:
+                out.append({"key": key, "value": got})
+    return out
+
+
 # ---------------------------------------------------------------- the iac addresses (boundary §3)
 def tf_address(type_: str, name: str) -> str:
     return f"{type_}.{name}"            # a declared one may carry the module path: module.<m>.<type>.<name>

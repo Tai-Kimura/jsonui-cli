@@ -26,11 +26,17 @@
    - labels: a pool of SR.labels.max on the page, given each tenth of a second to the nearest things in view.
    - icons: where the room's settings give one (service → provider → category), its image on a plane above the node,
      read from the room by the server (SOURCE.infraIcon); otherwise the neutral shape.
+   - up close (ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §5, requester: 「ある程度拡大して表示されてる
+     ノードが少なくなった時はどれが何のインスタンスかわかる程度に違いが欲しい」): near, with SR.detail.enter nodes or fewer
+     in view, a second set of shapes by service (a function a slim pillar, a container a crate, a key-value store a
+     tapered drum, a notification a pyramid...: srDetailShape) and tags of name · service · its main spec; back to
+     the simple ones past SR.detail.leave (between the two it stays as it was).
+   - a node's spec (§4): the board's 選んだもの lists it, the keys the IaC tables know with a name in words.
    Measured for the ticket: the first draw, the frame time far and near, the memory (SR.stats). */
 const SR = {
   phase: 'idle', project: null, seq: 0, t0: 0, until: 0, why: '', full: '', opener: null, model: null, view: null, log: [],
   fastMs: 300, starMs: 140, okMs: 700, failMs: 9000,
-  lod: { far: 9, near: 13 }, labels: { max: 110, nodes: 80 }, stats: null,
+  lod: { far: 9, near: 13 }, labels: { max: 110, nodes: 80 }, stats: null, detail: { enter: 30, leave: 40 },
   closed: new Set(), selected: null, selectedGroup: null, zoomStep: 1.4,
   // fewer lines (2.3.9, requester 10-20: 「線減らす工夫欲しいね」): all cables faint, the pressed and the pointed node's
   // drawn strong on a layer of their own; a switch for all (faint) / crossing ones only / the chosen node's only
@@ -133,6 +139,11 @@ const SR_SHAPES = {
   globe: () => new THREE.SphereGeometry(0.55, 12, 8), gate: () => new THREE.ConeGeometry(0.6, 1.0, 4),
   puck: () => new THREE.CylinderGeometry(0.55, 0.55, 0.45, 12), small: () => new THREE.BoxGeometry(0.6, 0.6, 0.6),
   kiosk: () => new THREE.OctahedronGeometry(0.55),
+  // up close only (srDetailShape)
+  pillar: () => new THREE.CylinderGeometry(0.3, 0.3, 1.5, 6), crate: () => new THREE.BoxGeometry(1.3, 0.8, 0.8),
+  ring: () => new THREE.TorusGeometry(0.42, 0.16, 8, 20), taper: () => new THREE.CylinderGeometry(0.35, 0.6, 1.1, 8),
+  pyramid: () => new THREE.TetrahedronGeometry(0.65), longBelt: () => new THREE.BoxGeometry(1.7, 0.22, 0.45),
+  shield: () => new THREE.DodecahedronGeometry(0.5), key: () => new THREE.IcosahedronGeometry(0.5),
 };
 function srShape(category) {
   const c = String(category || '');
@@ -145,6 +156,51 @@ function srShape(category) {
   if (c === 'cache') return 'puck';
   if (c === 'external.saas' || c === 'client') return 'kiosk';
   return 'small';
+}
+/* Up close: a shape by what the node is, so two of one category tell apart (an EC2 and a Lambda, an SQS and an SNS). */
+function srDetailShape(n) {
+  const c = String(n.category || ''), s = String(n.service || '');
+  if (c === 'compute.function') return 'pillar';
+  if (c === 'compute.container') return 'crate';
+  if (c === 'compute.k8s') return 'ring';
+  if (c === 'database.kv' || c === 'database.document') return 'taper';
+  if (c === 'queue' && /^(sns|eventgrid|notification)/.test(s)) return 'pyramid';
+  if (c === 'stream') return 'longBelt';
+  if (c === 'edge.waf') return 'shield';
+  if (c === 'auth' || c === 'secrets') return 'key';
+  return srShape(c);
+}
+const srShapeIn = (set, n) => (set === 'detail' ? srDetailShape(n) : srShape(n.category));
+// the services' names as people say them (the tag up close); an unknown one shows as it is written
+const SR_SERVICE_NAME = { ec2: 'EC2', 'ec2.asg': 'EC2 Auto Scaling', ecs: 'ECS', 'ecs.fargate': 'ECS Fargate', eks: 'EKS', lambda: 'Lambda',
+  stepfunctions: 'Step Functions', apprunner: 'App Runner', beanstalk: 'Elastic Beanstalk', elb: 'ELB', 'elb.alb': 'ALB', 'elb.nlb': 'NLB',
+  cloudfront: 'CloudFront', route53: 'Route 53', waf: 'WAF', apigateway: 'API Gateway', rds: 'RDS', 'rds.mysql': 'RDS MySQL',
+  'rds.postgres': 'RDS PostgreSQL', aurora: 'Aurora', dynamodb: 'DynamoDB', docdb: 'DocumentDB', elasticache: 'ElastiCache',
+  opensearch: 'OpenSearch', s3: 'S3', efs: 'EFS', ebs: 'EBS', sqs: 'SQS', sns: 'SNS', eventbridge: 'EventBridge', kinesis: 'Kinesis',
+  msk: 'MSK', ses: 'SES', cognito: 'Cognito', secretsmanager: 'Secrets Manager', kms: 'KMS', ssm: 'SSM', gce: 'Compute Engine',
+  'gce.mig': 'Compute Engine MIG', run: 'Cloud Run', 'run.job': 'Cloud Run Job', functions: 'Cloud Functions', gke: 'GKE',
+  appengine: 'App Engine', cloudsql: 'Cloud SQL', spanner: 'Spanner', firestore: 'Firestore', bigtable: 'Bigtable',
+  bigquery: 'BigQuery', memorystore: 'Memorystore', gcs: 'Cloud Storage', pubsub: 'Pub/Sub', cloudtasks: 'Cloud Tasks',
+  scheduler: 'Cloud Scheduler', workers: 'Workers', kv: 'Workers KV', d1: 'D1', r2: 'R2', queues: 'Queues', nextjs: 'Next.js',
+  'elasticache.redis': 'ElastiCache Redis', 'cloudsql.postgres': 'Cloud SQL PostgreSQL', 'memorystore.redis': 'Memorystore Redis',
+  containerapps: 'Container Apps', servicebus: 'Service Bus', cosmosdb: 'Cosmos DB', blob: 'Blob Storage', sql: 'Azure SQL',
+  'cache.redis': 'Azure Cache for Redis' };
+// a spec's keys the IaC tables give (document_tools iac_tables.TF_SPEC / CFN_SPEC), in words; any other key as written
+const SR_SPEC_NAME = { instance_type: 'インスタンスの種類', instance_class: 'インスタンスの種類', node_type: 'ノードの種類',
+  machine_type: 'マシンの種類', tier: 'ティア', version: '版', storage_gb: 'ストレージ（GB）', storage_type: 'ストレージの種類',
+  memory_mb: 'メモリ（MB）', memory: 'メモリ', cpu: 'CPU', timeout_s: 'タイムアウト（秒）', runtime: 'ランタイム',
+  multi_az: 'マルチ AZ', nodes: 'ノード数', tasks: 'タスク数' };
+// the one value a tag up close shows: what the instance is, else its size
+const SR_SPEC_MAIN = ['instance_type', 'instance_class', 'node_type', 'machine_type', 'tier', 'memory_mb', 'memory', 'cpu'];
+const SR_SPEC_KIND = SR_SPEC_MAIN.slice(0, 5);
+function srDetailText(n) {
+  const name = SR_SERVICE_NAME[n.service] || n.service || '';
+  const eng = n.engine && !name.toLowerCase().includes(String(n.engine).split(/\s/)[0].toLowerCase()) ? ` ${n.engine}` : '';
+  const spec = Array.isArray(n.spec) ? n.spec : [];
+  const main = SR_SPEC_MAIN.map((k) => spec.find((x) => x.key === k)).find(Boolean);
+  // what the instance is speaks for itself (db.r6g.large); a size says which one it is (memory 2048)
+  const shown = !main ? '' : SR_SPEC_KIND.includes(main.key) ? main.value : `${main.key} ${main.value}`;
+  return [n.label || n.id, `${name}${eng}`.trim(), shown].filter(Boolean).join(' · ') + (n.count > 1 ? ` ×${n.count}` : '');
 }
 const SR_PALETTE = ['#f29a38', '#4f8ef7', '#3fb26b', '#e2574c', '#a26bd6', '#26a5b8', '#d4a72c', '#7d8a99', '#e06fa8', '#5c6bc0'];
 /* The 3D's colours (2.3.9, item 2, requester 10-20: 「ダークでも背景が白なの嫌だね 背景は暗めにして欲しい」): in dark the
@@ -321,20 +377,30 @@ function srBuild() {
     cm.userData.groups = L.closed.map((G) => G.g.id);
     V.near.add(cm); V.pick.push(cm);
   }
-  // nodes: one instanced mesh per shape
-  const byShape = {};
-  for (const p of L.pos.values()) if (!p.hiddenIn) (byShape[srShape(p.n.category)] = byShape[srShape(p.n.category)] || []).push(p);
-  for (const [shape, list] of Object.entries(byShape)) {
-    const mesh = new THREE.InstancedMesh(SR_SHAPES[shape](), new THREE.MeshLambertMaterial({ color: 0xffffff }), list.length);
-    list.forEach((p, i) => {
-      const s = p.n.count > 1 ? 1 + Math.min(Math.log2(p.n.count), 4) * 0.12 : 1;
-      m4.compose(at.set(p.x, p.y + 0.75, p.z), q, sc.set(s, s, s));
-      mesh.setMatrixAt(i, m4);
-      mesh.setColorAt(i, col.set(srProviderColor(p.n.providerResolved || p.n.provider)));
-    });
-    mesh.userData.nodes = list.map((p) => p.n.id);
-    V.near.add(mesh); V.pick.push(mesh);
+  // nodes: one instanced mesh per shape, twice — the simple shapes, and up close the shapes by service (srSetDetail
+  // shows one set and gives it to the picking)
+  V.nodeSets = { simple: new THREE.Group(), detail: new THREE.Group() };
+  V.nodeMeshes = { simple: [], detail: [] };
+  V.nodeSets.detail.visible = false;
+  V.detail = false;
+  for (const set of ['simple', 'detail']) {
+    const byShape = {};
+    for (const p of L.pos.values()) if (!p.hiddenIn) (byShape[srShapeIn(set, p.n)] = byShape[srShapeIn(set, p.n)] || []).push(p);
+    for (const [shape, list] of Object.entries(byShape)) {
+      const mesh = new THREE.InstancedMesh(SR_SHAPES[shape](), new THREE.MeshLambertMaterial({ color: 0xffffff }), list.length);
+      list.forEach((p, i) => {
+        const s = p.n.count > 1 ? 1 + Math.min(Math.log2(p.n.count), 4) * 0.12 : 1;
+        m4.compose(at.set(p.x, p.y + 0.75, p.z), q, sc.set(s, s, s));
+        mesh.setMatrixAt(i, m4);
+        mesh.setColorAt(i, col.set(srProviderColor(p.n.providerResolved || p.n.provider)));
+      });
+      mesh.userData.nodes = list.map((p) => p.n.id);
+      mesh.userData.shape = shape;
+      V.nodeSets[set].add(mesh); V.nodeMeshes[set].push(mesh);
+    }
   }
+  V.near.add(V.nodeSets.simple, V.nodeSets.detail);
+  V.pick.push(...V.nodeMeshes.simple);
   // cables: within a provider solid, across providers dashed magenta and higher (requester: 跨いでいることが見て分かる)
   const plain = [], cross = [];
   for (const e of L.edges) {
@@ -451,17 +517,23 @@ function srLod(V) {
 }
 function srPlaceLabels(V) {
   const cam = V.camera, w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, v = new THREE.Vector3(), out = [];
-  const consider = (x, y, z, text, kind, weight) => {
+  const consider = (x, y, z, text, kind, weight, n = null) => {
     v.set(x, y, z).project(cam);
     if (v.z < -1 || v.z > 1 || v.x < -1.05 || v.x > 1.05 || v.y < -1.05 || v.y > 1.05) return;
-    out.push({ sx: (v.x + 1) / 2 * w, sy: (1 - v.y) / 2 * h, text, kind, d: cam.position.distanceToSquared(new THREE.Vector3(x, y, z)) * weight });
+    out.push({ sx: (v.x + 1) / 2 * w, sy: (1 - v.y) / 2 * h, text, kind, n, d: cam.position.distanceToSquared(new THREE.Vector3(x, y, z)) * weight });
   };
   if (V.lod === 'far') {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
     for (const G of V.L.floors) if (G.g.id) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
-    for (const p of V.L.pos.values()) if (!p.hiddenIn) consider(p.x, p.y + 1.9, p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1);
+    for (const p of V.L.pos.values()) if (!p.hiddenIn) consider(p.x, p.y + 1.9, p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
   }
+  // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
+  const inView = out.filter((o) => o.n).length;
+  V.inView = inView;
+  const detail = V.lod === 'near' && inView > 0 && (V.detail ? inView <= SR.detail.leave : inView <= SR.detail.enter);
+  if (detail !== V.detail) srSetDetail(V, detail);
+  if (V.detail) for (const o of out) if (o.n) o.text = srDetailText(o.n);
   out.sort((a, b) => a.d - b.d);
   const groups = out.filter((o) => o.kind === 'group').slice(0, SR.labels.max - SR.labels.nodes);
   const rest = out.filter((o) => o.kind !== 'group').slice(0, SR.labels.nodes);
@@ -479,6 +551,13 @@ function srPlaceLabels(V) {
     s.style.transform = `translate(${Math.round(o.sx)}px, ${Math.round(o.sy)}px) translate(-50%, -100%)`;
   });
   V.shownLabels = shown.length;
+}
+/* The simple shapes or the ones by service (§5): shown, and the ones a press picks. */
+function srSetDetail(V, on) {
+  V.detail = on;
+  V.nodeSets.simple.visible = !on; V.nodeSets.detail.visible = on;
+  const drop = new Set(V.nodeMeshes[on ? 'simple' : 'detail']);
+  V.pick = V.pick.filter((m) => !drop.has(m)).concat(V.nodeMeshes[on ? 'detail' : 'simple']);
 }
 /* The room's icons: per node the strongest key the settings give (service → provider → category), an image plane above it. */
 async function srIcons(V) {
@@ -606,7 +685,8 @@ function srRenderBoard() {
 <ul class="sr-legend">${provs.map((p) => `<li><button type="button" class="sr-prov" data-sr-prov="${esc(p)}" aria-pressed="${SR.only.has(p) ? 'true' : 'false'}"><span class="sr-chip" style="background:${esc(srProviderColor(p))}"></span>${esc(p)}</button></li>`).join('')}
 <li><button type="button" class="sr-prov" data-sr-prov="" aria-pressed="${SR.only.size ? 'false' : 'true'}">全部</button></li>
 <li><span class="sr-line"></span>同じ provider の中のつながり</li><li><span class="sr-line sr-line-cross"></span>provider を跨ぐつながり（破線・マゼンタ）</li></ul>
-${sel ? `<h3>選んだもの</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(sel.id)}</dd><dt>名前</dt><dd>${esc(sel.label || '')}</dd><dt>種類</dt><dd>${esc(sel.category)}</dd><dt>provider</dt><dd>${esc(sel.providerResolved || sel.provider || '')}${sel.service ? ` · ${esc(sel.service)}` : ''}</dd>${sel.count > 1 ? `<dt>台数</dt><dd>${esc(String(sel.count))}</dd>` : ''}</dl>
+${sel ? `<h3>選んだもの</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(sel.id)}</dd><dt>名前</dt><dd>${esc(sel.label || '')}</dd><dt>種類</dt><dd>${esc(sel.category)}</dd><dt>provider</dt><dd>${esc(sel.providerResolved || sel.provider || '')}${sel.service ? ` · ${esc(sel.service)}` : ''}</dd>${sel.count > 1 ? `<dt>台数</dt><dd>${esc(String(sel.count))}</dd>` : ''}${sel.engine ? `<dt>エンジン</dt><dd>${esc(sel.engine)}</dd>` : ''}</dl>
+${Array.isArray(sel.spec) && sel.spec.length ? `<h3>スペック</h3><table class="sr-spec" data-sr-spec><tbody>${sel.spec.map((x) => `<tr><th scope="row">${SR_SPEC_NAME[x.key] ? `${esc(SR_SPEC_NAME[x.key])} <small>${esc(x.key)}</small>` : esc(x.key)}</th><td>${esc(x.value)}</td></tr>`).join('')}</tbody></table>` : ''}
 <p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">これに寄る</button></p>
 <ul class="sr-edges">${edgesOf.map((e) => `<li>${esc(e.from)} → ${esc(e.to)}${e.protocol ? ` <small>${esc(e.protocol)}</small>` : ''}${e.crossProvider ? ' <b>跨ぐ</b>' : ''}</li>`).join('')}</ul>`
     : grp ? `<h3>選んだ group</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(grp.id)}</dd><dt>名前</dt><dd>${esc(grp.label || '')}</dd><dt>種類</dt><dd>${esc(grp.kind || '')}</dd><dt>provider</dt><dd>${esc(grp.providerResolved || grp.provider || '')}</dd><dt>中の node</dt><dd>${esc(String(inGroup ? srCountNodes(inGroup) : 0))}</dd></dl>

@@ -36,6 +36,14 @@ window.__dbg = {
     boardSelected: !!document.querySelector('#sr-board .sr-sel'), focus: V.focusCount || 0, selected: SR.selected } : null; },
   srSelect: (id) => { srSelect(id); return SR.view ? SR.view.focusCount || 0 : null; },
   srEdgesOf: (id) => (SR.view ? SR.view.L.edges.filter((e) => e.from === id || e.to === id).length : null),
+  // up close (the server room ticket §5): the look, how many nodes are in view, each drawn node's shape in the set shown,
+  // and the tags given out; the thresholds may be set for an arm
+  srDetail: (set) => { const V = SR.view; if (!V) return null; if (set) Object.assign(SR.detail, set);
+    const shapesOf = (set) => { const o = {}; for (const m of V.nodeMeshes[set]) m.userData.nodes.forEach((id) => { o[id] = m.userData.shape; }); return o; };
+    return { detail: V.detail, inView: V.inView ?? null, enter: SR.detail.enter, leave: SR.detail.leave, simple: shapesOf('simple'), byService: shapesOf('detail'),
+      shown: { simple: V.nodeSets.simple.visible, detail: V.nodeSets.detail.visible }, picks: V.pick.filter((m) => m.userData.nodes).map((m) => m.userData.shape),
+      tags: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((s) => s.dataset.kind !== 'group').map((s) => s.textContent) }; },
+  srTagOf: (id) => { const n = SR.model && (SR.model.nodes || []).find((x) => x.id === id); return n ? srDetailText(n) : null; },   // a node's tag up close
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
   // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in
   // front of the door from this view (D2: the door must still take the press, as the bell and the rack do)

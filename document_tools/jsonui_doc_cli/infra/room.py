@@ -44,6 +44,8 @@ def short(p: dict, folder: str) -> str:
         return f"{where}: {p['path']} がスキーマに合いません"
     if code in ("environment.conflict", "environment.missing", "id.duplicate", "group.missing", "group.cycle", "edge.missing"):
         return f"{where}: {p['path']} の参照が合いません（{code}）"
+    if code == "spec.duplicate":
+        return f"{where}: {p['path']} の spec の key が 2 度あります（先の物を出します）"
     if code == "model.too_big":
         return f"{folder}: 部屋のモデルが上限を超えています（{p['path'].lstrip('/')}）"
     if code == "read.too_large":

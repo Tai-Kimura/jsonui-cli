@@ -229,6 +229,30 @@
         "engine": {
           "$ref": "#/$defs/text"
         },
+        "spec": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "The node's details for the display (ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §4): the instance type, memory, a version... as pairs in the order shown. Names a person reads, never a value of a secret (validate rejects the file). jui older than this field rejects a file that has it.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "value"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,39}$"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "\\S",
+                "maxLength": 120
+              }
+            }
+          }
+        },
         "ha": {
           "$ref": "#/$defs/text"
         },

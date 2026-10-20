@@ -33,6 +33,7 @@ from waits import until
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SR = "() => window.__dbg.sr()"
+SPEC_SECRET = "postgres://orders@db-prod.internal:5432/orders"
 #: a frame of the large model must come within this (ms; the slowest tenth of the frames, software GL)
 FRAME_P90_MAX_MS = 250
 
@@ -128,7 +129,10 @@ async def run_server_room(pw, out, failures):
     secret_doc = ex["invalid/single/secret-connection-string.json"]
     BAD = {"broken": '{\n  "version": 0,\n  "nodes": [ {"id": "a" \n',
            "schema": json.dumps({"version": 0, "nodes": [{"id": "a", "category": "no.such.category"}]}),
-           "secret": secret_doc if isinstance(secret_doc, str) else json.dumps(secret_doc)}
+           "secret": secret_doc if isinstance(secret_doc, str) else json.dumps(secret_doc),
+           # a spec value with a secret's shape (§4): the file is refused as any other, the value shown nowhere
+           "specSecret": json.dumps({"version": 0, "nodes": [{"id": "db", "category": "database.relational", "spec": [
+               {"key": "instance_class", "value": "db.r6g.large"}, {"key": "endpoint", "value": SPEC_SECRET}]}]})}
     bad = work / "sr-bad"
     (bad / "docs" / "infra").mkdir(parents=True, exist_ok=True)
     (bad / ".git").mkdir(exist_ok=True)
@@ -290,6 +294,23 @@ async def run_server_room(pw, out, failures):
         check(failures, closed["nodes"] == before["nodes"] - g["nodes"] and closed["inClosed"] == g["nodes"] and reopened["nodes"] == before["nodes"],
               f"a closed group is one box, opened it is all there again: {res['group']}")
         check(failures, m0 == m1, f"the room's 3D is not drawn under the server room: {m0} → {m1}")
+        # a node's spec (the ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §4) on the board, and up close
+        # (§5) its tag: name · service · its main spec — db-prod is in production
+        await page.select_option("#sr-env", envs[0])
+        await until(page, "(e) => window.__dbg.sr().env === e", "production again", arg=envs[0])
+        await page.evaluate("() => window.__dbg.srSelect('db-prod')")
+        rows = await page.evaluate("() => [...document.querySelectorAll('#sr-board [data-sr-spec] tr')].map((tr) => [tr.querySelector('th').textContent, tr.querySelector('td').textContent])")
+        await page.click("#sr-board [data-sr-act='focus']")
+        dt = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail && d.tags.some((t) => t.startsWith('db-prod · ')) ? d : null; }",
+                         "db-prod up close: its tag in detail", timeout=10000, why="() => window.__dbg.srDetail()")
+        res["spec"] = {"rows": rows, "tag": [t for t in dt["tags"] if t.startswith("db-prod")], "inView": dt["inView"],
+                       "sizeTag": await page.evaluate("() => window.__dbg.srTagOf('api-prod')")}
+        check(failures, res["spec"]["sizeTag"] == "api-prod · ECS Fargate · memory 2048 ×3",
+              f"a size (no instance type) says which it is, and the count stays: {res['spec']['sizeTag']}")
+        check(failures, rows == [["インスタンスの種類 instance_class", "db.r6g.large"], ["ストレージ（GB） storage_gb", "200"], ["マルチ AZ multi_az", "true"]],
+              f"the chosen node's spec on the board, the known keys in words: {rows}")
+        check(failures, res["spec"]["tag"] == ["db-prod · RDS MySQL · db.r6g.large"], f"up close a tag says the service and the main spec: {res['spec']}")
+        await page.screenshot(path=str(out / "spec-light.png"))
         await page.keyboard.press("Escape")
         await until(page, "() => !window.__dbg.sr().open && window.__dbg.sr().phase === 'idle'", "back to the room")
         check(failures, (await page.evaluate("() => window.__dbg.solo()")) == pid["three"], "Esc goes back to the room")
@@ -357,7 +378,7 @@ async def run_server_room(pw, out, failures):
 
         # 4. rooms that cannot be read: red, the file named, the room stays, no value shown
         await up_close("bad")
-        for name, want in (("broken", "prod.json"), ("schema", "prod.json"), ("secret", "prod.json")):
+        for name, want in (("broken", "prod.json"), ("schema", "prod.json"), ("secret", "prod.json"), ("specSecret", "/nodes/0/spec/1/value")):
             (bad / "docs" / "infra" / "prod.json").write_text(BAD[name], encoding="utf-8")
             await press_door()
             await until(page, "() => window.__dbg.sr().phase === 'failed'", f"{name}: failed")
@@ -370,6 +391,10 @@ async def run_server_room(pw, out, failures):
             if name == "secret":
                 leaked = [v for v in secret_values if len(v) >= 6 and v in text]
                 check(failures, not leaked, f"no secret-shaped value in the bubble or its whole text: {leaked}")
+            if name == "specSecret":
+                html = await page.content()
+                check(failures, "接続文字列" in text and "db-prod.internal" not in html and SPEC_SECRET not in html,
+                      f"a spec value with a secret's shape: refused by its place and kind, the value nowhere on the page: {s['bubble']}")
             if name == "broken":
                 await page.hover("#sr-bubble")
                 rect = (await page.evaluate(SR))["bubbleRect"]
@@ -546,6 +571,42 @@ async def run_server_room(pw, out, failures):
         check(failures, len(rects) > 10 and overlaps == 0, f"no label covers another up close: {res['labelOverlaps']}")   # E12
         check(failures, max(res["large"]["far"]["frameP90"], res["large"]["near"]["frameP90"]) < FRAME_P90_MAX_MS, f"far and near do not stall: {res['large']}")
         await page.screenshot(path=str(out / "large-near-light.png"))
+        # up close (§5): many in view, the simple shapes; moved in on one Lambda, the shapes by service and tags with the
+        # service; between the two thresholds it stays as it was; the whole view, simple again
+        d0 = await page.evaluate("() => window.__dbg.srDetail()")
+        fn = next(i for i, sh in d0["byService"].items() if sh == "pillar" and d0["simple"].get(i) == "rack")
+        await page.evaluate("(id) => window.__dbg.srSelect(id)", fn)
+        await page.click("#sr-board [data-sr-act='focus']")
+        d1 = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail ? d : null; }", "moved in on a Lambda: detail",
+                         timeout=10000, why="() => { const d = window.__dbg.srDetail(); return d && [d.detail, d.inView]; }")
+        await page.screenshot(path=str(out / "large-detail-light.png"))
+        k = d1["inView"]
+        stay = await until(page, f"() => {{ const d = window.__dbg.srDetail({{ enter: {k - 1}, leave: {k + 5} }}); return d.inView === {k} ? d : null; }}",
+                           "past enter, within leave", timeout=5000)
+        await page.evaluate("() => new Promise((r) => setTimeout(r, 300))")
+        stay = await page.evaluate(f"() => window.__dbg.srDetail()")
+        await page.evaluate(f"() => window.__dbg.srDetail({{ enter: {k - 1}, leave: {k - 1} }})")
+        off = await until(page, "() => { const d = window.__dbg.srDetail(); return d.detail ? null : d; }", "past leave: simple", timeout=5000)
+        await page.evaluate(f"() => window.__dbg.srDetail({{ enter: {k - 1}, leave: {k + 5} }})")
+        await page.evaluate("() => new Promise((r) => setTimeout(r, 300))")
+        still_off = await page.evaluate("() => window.__dbg.srDetail()")
+        await page.evaluate("() => window.__dbg.srDetail({ enter: 30, leave: 40 })")
+        await until(page, "() => window.__dbg.srDetail().detail", "back in detail", timeout=5000)
+        await page.click("#sr-fit")
+        d2 = await until(page, "() => { const d = window.__dbg.srDetail(); return d.detail ? null : d; }", "the whole view: simple again", timeout=10000)
+        await page.evaluate("() => window.__dbg.srSelect(null)")
+        def svc_tags(d):
+            return [t for t in d["tags"] if " · " in t]
+        res["detail"] = {"many": [d0["detail"], d0["inView"]], "fn": fn, "close": [d1["detail"], d1["inView"], d1["byService"][fn], d1["simple"][fn],
+                         sorted(set(d1["picks"])), svc_tags(d1)[:6]], "gap": [stay["detail"], off["detail"], still_off["detail"], k],
+                         "whole": [d2["detail"], d2["inView"], d2["shown"], sorted(set(d2["picks"])), svc_tags(d2)[:3]]}
+        check(failures, not d0["detail"] and d0["inView"] > 40, f"many nodes in view: the simple shapes: {res['detail']['many']}")
+        check(failures, d1["detail"] and k <= 30 and d1["shown"] == {"simple": False, "detail": True} and "pillar" in d1["picks"] and "rack" not in [d1["byService"][fn]]
+              and any(t.startswith(f"{fn} · Lambda") for t in d1["tags"]), f"moved in on a Lambda: its own shape, a tag with the service: {res['detail']['close']}")
+        check(failures, stay["detail"] and not off["detail"] and not still_off["detail"],
+              f"between entering and leaving the look stays as it was: (stays in, out past leave, stays out) {res['detail']['gap']}")
+        check(failures, not d2["detail"] and d2["shown"] == {"simple": True, "detail": False} and not svc_tags(d2) and "pillar" not in d2["picks"],
+              f"the whole view: the simple shapes and names only: {res['detail']['whole']}")
         res["lod"] = {"far": [px_far, far["labels"]], "near": [px_near, near["labels"]]}
         check(failures, far["lod"] == "far" and near["lod"] == "near" and far["labels"] < near["labels"],
               f"zoomed out the groups are boxes and the labels thin out: {res['lod']}")

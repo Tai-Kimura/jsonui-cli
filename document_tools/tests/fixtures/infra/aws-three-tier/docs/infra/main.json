@@ -126,6 +126,20 @@
    ],
    "environments": [
     "production"
+   ],
+   "spec": [
+    {
+     "key": "cpu",
+     "value": "1024"
+    },
+    {
+     "key": "memory",
+     "value": "2048"
+    },
+    {
+     "key": "tasks",
+     "value": "3"
+    }
    ]
   },
   {
@@ -148,6 +162,20 @@
    "data_doc": "docs/db",
    "environments": [
     "production"
+   ],
+   "spec": [
+    {
+     "key": "instance_class",
+     "value": "db.r6g.large"
+    },
+    {
+     "key": "storage_gb",
+     "value": "200"
+    },
+    {
+     "key": "multi_az",
+     "value": "true"
+    }
    ]
   },
   {

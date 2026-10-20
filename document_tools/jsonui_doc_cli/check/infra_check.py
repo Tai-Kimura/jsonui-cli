@@ -6,7 +6,8 @@ credentials, no plan, no state (state holds secrets in the clear). Each resource
 address from infra/iac_tables.py — the one table seed drafts with — parts of another resource (attachments, rules,
 routes, records, ...) are dropped, and IAM, policies and alarms are compared when declared and not asked for when not
 (they are folded by default); each provider's resources are compared with that provider's declared nodes
-(providerResolved) through their ``iac`` addresses.
+(providerResolved) through their ``iac`` addresses, and a node's declared spec with the values its resources write
+(iac_tables.TF_SPEC / CFN_SPEC; a variable or a reference is not evaluated: such a value is counted as not compared).
 
 builtin:infra-code — the code: every node's ``evidence`` (the file is there, the pattern still in it), and the services
 the code talks to by its SDK imports and the *names* of its environment variables (never their values), against the
@@ -123,16 +124,16 @@ def _tf_json_counted(data) -> bool:
     return False
 
 
-def _tf_json_resources(data) -> list[tuple[str, str]]:
-    """(type, name) of the resources of a Terraform JSON configuration (resource: {type: {name: ...}}, or a list of
-    such objects, as CDKTF writes it)."""
+def _tf_json_resources(data) -> list[tuple[str, str, object]]:
+    """(type, name, body) of the resources of a Terraform JSON configuration (resource: {type: {name: ...}}, or a list
+    of such objects, as CDKTF writes it)."""
     out = []
     blocks = data.get("resource") if isinstance(data, dict) else None
     for block in (blocks if isinstance(blocks, list) else [blocks]):
         if isinstance(block, dict):
             for t, by_name in block.items():
                 if isinstance(by_name, dict):
-                    out.extend((t, n) for n in by_name)
+                    out.extend((t, n, b) for n, b in by_name.items())
     return out
 
 
@@ -168,11 +169,11 @@ def _app_engine(text: str | None) -> bool:
     return bool(text) and bool(re.search(r"^runtime:", text, re.M)) and not T.is_k8s("app.yaml", text)
 
 
-def _node(found, address, provider, mapping, source, type_):
+def _node(found, address, provider, mapping, source, type_, spec=None):
     cat, svc = mapping
     if not cat.startswith("group:"):          # a network, a cluster: a group of the model, not compared as a node
         found.append({"address": address, "provider": provider, "category": cat, "service": svc, "source": source,
-                      "type": type_})
+                      "type": type_, "spec": spec or []})
 
 
 def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
@@ -227,10 +228,10 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                 except (ValueError, RecursionError):
                     not_read("*", f"{rel}: not JSON: not read")
                     continue
-            else:
-                pairs = re.findall(r'^\s*resource\s+"([a-z0-9_]+)"\s+"([A-Za-z0-9_-]+)"', text, re.M)
+            else:   # each resource with its body, for its spec (iac_tables.tf_spec)
+                pairs = [(m.group(1), m.group(2), text[m.end():T.block_end(text, m.end() - 1)]) for m in T.TF_RESOURCE.finditer(text)]
             file_providers = set()
-            for t, n in pairs:
+            for t, n, body in pairs:
                 provider = T.tf_provider(t)
                 m = T.tf_mapping(t)
                 if provider is None:
@@ -242,7 +243,7 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                 if m is None:
                     unmapped.setdefault(provider, set()).add(t)
                     continue
-                _node(found, T.tf_address(t, n), provider, m, rel, t)
+                _node(found, T.tf_address(t, n), provider, m, rel, t, T.tf_spec(body))
             if kind == "terraform_json":
                 for mname, src in _tf_json_modules(tfj):
                     if not src.startswith(("./", "../")):
@@ -320,7 +321,7 @@ def _cfn(p, rel, text, y, found, note, unmapped, part):
         if m is None:
             unmapped.setdefault("aws", set()).add(t)
             continue
-        _node(found, T.cfn_address(logical), "aws", m, rel, t)
+        _node(found, T.cfn_address(logical), "aws", m, rel, t, T.cfn_spec(res.get("Properties")))
 
 
 def _k8s(rel, text, y, found, note, unmapped, part):
@@ -433,6 +434,25 @@ def _status(decl, status: str) -> str:
     return status if getattr(decl, "gate", False) or status in ("ok", "skipped") else "warning"
 
 
+def _compare_spec(decl, n: dict, hit: list[dict], target: str, results: list[ResultItem]) -> int:
+    """A node's declared spec against the values its IaC resources write (the server room ticket's §4): a value that
+    differs is a finding (target <node>#spec.<key>); returns how many declared values could not be compared."""
+    written: dict[str, tuple[str, str]] = {}
+    for f in hit:
+        for item in f.get("spec", []):
+            written.setdefault(item["key"], (item["value"], f["source"]))
+    uncompared = 0
+    for item in n.get("spec", []):
+        if item["key"] not in written:
+            uncompared += 1
+            continue
+        value, source = written[item["key"]]
+        if value != item["value"]:
+            results.append(ResultItem(f"{target}#spec.{item['key']}", _status(decl, "mismatch"), "metadata",
+                                      expected=item["value"], actual=value, message=f"spec {item['key']} differs from {source}"))
+    return uncompared
+
+
 def run_infra_iac(decl, project_root: Path) -> CheckReport:
     model, folder, model_files = _model(project_root)
     found, unverified = scan_iac(project_root)
@@ -442,6 +462,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
     nodes = [n for n in model["nodes"] if n["managed_by"] == "iac"]
     results: list[ResultItem] = []
     claimed: set[str] = set()
+    spec_uncompared = 0
     by_provider: dict[str, list[dict]] = {}
     for f in found:
         by_provider.setdefault(f["provider"], []).append(f)
@@ -480,6 +501,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
             else:
                 results.append(ResultItem(target, _status(decl, "mismatch"), "metadata", expected=n["category"],
                                           actual=", ".join(sorted(cats)), message=f"category differs from {hit[0]['source']}"))
+            spec_uncompared += _compare_spec(decl, n, hit, target, results)
         elif provider in unread or ("*" in unread and any(T.is_terraform_address(a) for a in n["iac"])):
             # one of this provider's IaC files was not read, or a Terraform file (anyone's) and the node's address is
             # a Terraform one: not there is not known. A compose or wrangler address cannot be in a Terraform file.
@@ -488,6 +510,10 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
         else:
             results.append(ResultItem(target, _status(decl, "missing_in_impl"), "metadata", expected=", ".join(n["iac"]),
                                       message="declared, but no such resource in this provider's IaC"))
+    if spec_uncompared:
+        unverified.setdefault("*", []).append(
+            f"{spec_uncompared} declared spec value(s) not compared: the IaC writes no value for them (a variable, a "
+            "reference, or a key iac_tables.TF_SPEC / CFN_SPEC does not know)")
     folded_quiet = 0
     for f in found:
         if f["address"] in claimed:

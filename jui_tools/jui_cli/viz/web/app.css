@@ -1472,6 +1472,12 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-board dt { color: var(--ink-soft); }
 .sr-board dd { margin: 0; font-family: var(--font-mono); }
 .sr-legend, .sr-edges, .sr-problems { margin: 0; padding-left: 0; list-style: none; }
+/* a node's spec (the server room ticket's §4): its key in words where known, the key as written in small */
+.sr-spec { width: 100%; border-collapse: collapse; }
+.sr-spec th, .sr-spec td { padding: 2px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.sr-spec th { padding-right: 10px; color: var(--ink-soft); font-weight: 400; }
+.sr-spec th small { display: block; font: 11px/1.3 var(--font-mono); }
+.sr-spec td { font-family: var(--font-mono); overflow-wrap: break-word; }
 .sr-chip { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: middle; }
 .sr-line { display: inline-block; width: 22px; margin-right: 6px; border-top: 2px solid #5c6b7f; vertical-align: middle; }
 .sr-line-cross { border-top: 2px dashed #d63fb0; }

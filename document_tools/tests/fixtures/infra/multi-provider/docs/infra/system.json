@@ -79,6 +79,16 @@
    "app": "api",
    "iac": [
     "wrangler.toml"
+   ],
+   "spec": [
+    {
+     "key": "plan",
+     "value": "paid"
+    },
+    {
+     "key": "cpu_ms",
+     "value": "50"
+    }
    ]
   },
   {

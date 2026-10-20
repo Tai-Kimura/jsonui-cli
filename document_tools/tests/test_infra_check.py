@@ -556,3 +556,35 @@ def test_jsonc_keeps_an_escaped_quote_and_a_trailing_backslash_inside_a_string()
     assert T.parse_jsonc('{"path": "C:\\\\", // the drive\n "n": 1,}') == {"path": "C:\\", "n": 1}
     # a last "," with a comment between it and the close (the generated file's own way of writing a list)
     assert T.parse_jsonc('{"a": [1, 2, // the last\n ], "b": 3, /* end */ }') == {"a": [1, 2], "b": 3}
+
+
+# ---------------------------------------------------------------- a node's spec (ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §4)
+
+def test_a_declared_spec_is_compared_with_the_values_the_iac_writes(tmp_path):
+    tf = ('resource "aws_db_instance" "orders" {\n  instance_class = "db.t3.micro"\n  allocated_storage = 100\n'
+          '  engine_version = var.v\n}\n')
+    cfn = ('Resources:\n  Fn:\n    Type: AWS::Lambda::Function\n    Properties:\n      MemorySize: 1024\n'
+           '      Runtime: !Ref Rt\n')
+    spec_db = [{"key": "instance_class", "value": "db.r6g.large"}, {"key": "storage_gb", "value": "100"},
+               {"key": "version", "value": "16"}, {"key": "owner", "value": "team-a"}]
+    spec_fn = [{"key": "memory_mb", "value": "1024"}, {"key": "runtime", "value": "nodejs20.x"}]
+    _r, rep = _mini(tmp_path, {"main.tf": tf, "cfn/template.yaml": cfn}, [
+        {"id": "db", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.orders"], "spec": spec_db},
+        {"id": "fn", "category": "compute.function", "provider": "aws", "iac": ["Fn"], "spec": spec_fn}])
+    t = _by_target(rep)
+    assert t["aws/db"].status == "ok" and t["aws/fn"].status == "ok"
+    differs = t["aws/db#spec.instance_class"]
+    assert (differs.status, differs.expected, differs.actual) == ("mismatch", "db.r6g.large", "db.t3.micro")
+    assert "main.tf" in differs.message
+    assert [k for k in t if "#spec." in k] == ["aws/db#spec.instance_class"]   # storage the same; memory the same
+    # version (a variable), owner (no table key), runtime (a !Ref): not compared, and said so
+    assert any("3 declared spec value(s) not compared" in w for w in rep.warnings), rep.warnings
+
+
+def test_a_spec_difference_is_a_warning_unless_gate(tmp_path):
+    root, _rep = _mini(tmp_path, {"main.tf": 'resource "aws_instance" "w" {\n  instance_type = "t3.small"\n}\n'},
+                       [{"id": "w", "category": "compute.vm", "provider": "aws", "iac": ["aws_instance.w"],
+                         "spec": [{"key": "instance_type", "value": "t3.large"}]}])
+    (root / "jui.config.json").write_text(json.dumps({"checks": [{"name": "iac", "type": "builtin:infra-iac"}]}))
+    rep = C.run_infra_iac(_decls(root)["iac"], root)
+    assert _by_target(rep)["aws/w#spec.instance_type"].status == "warning"

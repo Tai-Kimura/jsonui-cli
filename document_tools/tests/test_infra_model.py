@@ -422,3 +422,56 @@ def test_no_ones_address_and_what_only_looks_like_one_is_none(text):
     """A11 (127 and 0), A21 (more numbers after), A13 (::/112: ::2), Q3's false hits (a version after "_", hex
     words joined by "::", ::ffff:0 = ::255.255.0.0)."""
     assert not _ip(text)
+
+
+# ---------------------------------------------------------------- a node's spec (ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §4)
+
+def _spec_file(spec, **node):
+    return json.dumps({"version": 0, "nodes": [{"id": "db", "category": "database.relational", "provider": "aws", **node, "spec": spec}]}).encode()
+
+
+def test_a_nodes_spec_is_kept_in_order_and_a_key_written_twice_keeps_the_first():
+    spec = [{"key": "instance_class", "value": "db.r6g.large"}, {"key": "storage_gb", "value": "100"},
+            {"key": "instance_class", "value": "db.t3.micro"}]
+    model, problems = M.merge([("m.json", _spec_file(spec))])
+    assert model["nodes"][0]["spec"] == spec[:2]
+    assert [(p["code"], p["severity"], p["path"]) for p in problems] == [("spec.duplicate", "warning", "/nodes/0/spec/2/key")]
+
+
+@pytest.mark.parametrize("item, path", [
+    ({"key": "Instance", "value": "x"}, "/nodes/0/spec/0/key"),              # a key is lower case, a letter first
+    ({"key": "1st", "value": "x"}, "/nodes/0/spec/0/key"),
+    ({"key": "a" * 41, "value": "x"}, "/nodes/0/spec/0/key"),
+    ({"key": "memory", "value": "x" * 121}, "/nodes/0/spec/0/value"),
+    ({"key": "memory", "value": "   "}, "/nodes/0/spec/0/value"),
+    ({"key": "memory", "value": 512}, "/nodes/0/spec/0/value"),             # a string: "512", as the display shows it
+    ({"key": "memory"}, "/nodes/0/spec/0/value"),
+    ({"key": "memory", "value": "1", "unit": "GB"}, "/nodes/0/spec/0/<key>"),      # a field it does not have: masked
+])
+def test_a_spec_item_out_of_its_form_is_a_schema_error(item, path):
+    data, problems = M.check_file("m.json", _spec_file([item]))
+    assert data is None and [(p["code"], p["path"]) for p in problems] == [("schema", path)]
+
+
+def test_spec_has_at_most_20_items():
+    spec = [{"key": f"k{i}", "value": "v"} for i in range(21)]
+    _d, problems = M.check_file("m.json", _spec_file(spec))
+    assert [(p["code"], p["path"]) for p in problems] == [("schema", "/nodes/0/spec")]
+
+
+@pytest.mark.parametrize("value, kind", [
+    ("postgres://app@db.internal:5432/orders", "connection_string"), ("10.0.3.12", "ip_address"),
+    ("arn:aws:rds:ap-northeast-1:123456789012:db:orders", "arn"), ("AKIA" "ABCDEFGHIJKLMNOP", "access_key")])
+def test_a_secret_in_a_spec_value_leaves_the_file_out_and_never_shows_the_value(value, kind):
+    """The guard is the one every string of a file passes (check_file's _walk_strings): a spec is no exception."""
+    raw = _spec_file([{"key": "instance_class", "value": "db.r6g.large"}, {"key": "endpoint", "value": value}])
+    data, problems = M.check_file("m.json", raw)
+    assert data is None and f"secret.{kind}" in {p["code"] for p in problems}
+    assert {p["path"] for p in problems if p["code"].startswith("secret.")} == {"/nodes/0/spec/1/value"}
+    model, _ = M.merge([("m.json", raw)])
+    assert model["nodes"] == [] and value not in json.dumps(problems) and value not in json.dumps(model)
+
+
+def test_a_secret_in_a_spec_key_is_found_too():
+    _d, problems = M.check_file("m.json", _spec_file([{"key": "db_10_0_0_5", "value": "primary"}]))
+    assert [(p["code"], p["path"]) for p in problems] == [("secret.ip_address", "/nodes/0/spec/0/key")]
