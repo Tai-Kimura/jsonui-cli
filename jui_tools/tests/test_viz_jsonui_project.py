@@ -339,6 +339,10 @@ SCRIPTED = "2 passed, 8 failed"   # tools/viz_e2e/robot_tests.py: the tool's out
     ("passed=36 failed=0\n", True, None, ("failed", "exit")),         # an echo says nothing: the exit code
     ("passed=36 failed=0\n", False, None, ("passed", "exit")),
     ("BUILD SUCCESSFUL in 3s\n", True, None, ("failed", "exit")),      # no counts: the exit code
+    # a mark inside a line is no mark (an echo, grep -n's output; サポート7's V2): only a line that is the mark itself
+    ("Executed 3 tests, with 0 failures (0 unexpected)\n+ echo 'expect no ** TEST FAILED ** here'\n", False, None, ("passed", "summary")),
+    ("Executed 3 tests, with 0 failures (0 unexpected)\nbuild.log:812:** TEST FAILED **\n", False, None, ("passed", "summary")),
+    ("Executed 3 tests, with 1 failure (1 unexpected)\n# ** TEST SUCCEEDED ** was expected\n", False, None, ("failed", "summary")),
 ])
 def test_the_head_comes_from_the_strongest_thing_that_says_it(output, exit_failed, runner, want):
     got = robots.test_verdict(output, exit_failed, runner)
