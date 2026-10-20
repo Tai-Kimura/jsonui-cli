@@ -249,6 +249,9 @@ function histItem(item) {
     }
     if (item.error) title.push(hNode('span', 'h-err', 'エラー'));
     if (item.out === undefined) title.push(hNode('span', 'h-run', '結果待ち'));
+    // The time the tool was called (its tool_use record's), at the right end after the marks (2.3.7, requester 10-20:
+    // 「このBashとかのタイトルの右端にその時の時刻表示できる？」); the description narrows first (.h-head), never the time.
+    title.push(at);
     const io = hNode('div', 'h-io');
     io.appendChild(hNode('span', 'h-io-k', 'IN'));
     io.appendChild(hNode('pre', 'h-code', `${item.in || ''}${item.inCut ? '\n…' : ''}`));

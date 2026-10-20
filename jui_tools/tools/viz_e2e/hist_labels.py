@@ -20,7 +20,7 @@ from __future__ import annotations
 import pathlib
 import time
 
-from common import PHONE, dump
+from common import PHONE, dump, stamp
 from hist_wide import SETTLED, Stage, TO_END, check as _check, wait
 
 KINDS = {"time": ".h-item .h-at", "tool": ".h-tool summary > b", "harness": ".h-harness summary > b", "sender": ".h-peer summary > b",
@@ -55,6 +55,25 @@ PEER_STACK = """() => {
     // the body as it would run unfolded: the folded head keeps its whole text, only its box is cut (issue #34: 3 lines)
     fullLines: Math.round(headEl.scrollHeight / lh), clamp: getComputedStyle(headEl).webkitLineClamp || getComputedStyle(headEl).getPropertyValue('-webkit-line-clamp') };
 }"""
+# The tool rows' times (2.3.7, ticket 2026-10-20-jui-viz-history-tool-row-time): every row shows HH:MM of its tool_use
+# record, after the エラー / 結果待ち mark and at the right end; a long description is cut with …, the time never.
+TOOL_TIMES = """(isos) => {
+  const want = isos.map((t) => new Date(t).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+  const rows = [...document.querySelectorAll('[data-rb-hist] .h-tool > summary')].map((s) => {
+    const kids = [...s.children], at = s.querySelector(':scope > .h-at'), head = s.querySelector(':scope > .h-head');
+    const mark = s.querySelector(':scope > .h-err, :scope > .h-run');
+    const row = s.getBoundingClientRect(), pad = parseFloat(getComputedStyle(s).paddingRight) || 0;
+    const a = at && at.getBoundingClientRect(), m = mark && mark.getBoundingClientRect();
+    return { name: (s.querySelector(':scope > b') || {}).textContent, time: at ? at.textContent : null,
+      last: !!at && kids[kids.length - 1] === at,
+      markBefore: !mark || (!!a && m.right <= a.left + 1),
+      inside: !!a && a.width > 0 && a.left >= row.left - 1 && a.right <= row.right - pad + 1,
+      whole: !!at && at.scrollWidth <= at.clientWidth + 1,
+      rightGap: a ? Math.round(row.right - pad - a.right) : null,
+      headCut: !!head && head.scrollWidth > head.clientWidth + 1, headLong: !!head && head.textContent.length > 80, mark: mark ? mark.textContent : '' };
+  });
+  return { want, rows };
+}"""
 PEER_LONG = "もう 1 本お願いします（dd から）。" + "とても長い知らせの本文。" * 30   # hist_wide.py's sample
 PEER_OPEN = """(want) => {
   const d = document.querySelector('[data-rb-hist] .h-peer');
@@ -66,6 +85,9 @@ PEER_OPEN = """(want) => {
   return got;
 }"""
 SQUEEZE = "(on) => { const p = document.querySelector('[data-rb-hist]'); p.style.width = on ? '130px' : ''; p.style.justifySelf = on ? 'start' : ''; }"
+
+
+TOOL_ISOS = [stamp("2026-10-19T09:47:10Z"), stamp("2026-10-19T09:47:40Z"), stamp("2026-10-19T09:47:50Z")]   # hist_wide.records("A")'s tool_use rows
 
 
 def check(failures, cond, text):
@@ -96,6 +118,15 @@ async def measure(page, failures, where, res):
     res[f"{where}-peerOpen"] = op = await page.evaluate(PEER_OPEN, PEER_LONG)
     check(failures, op and op["whole"] and op["lines"] > 3 and not op["clipped"],
           f"{where}: opened, the whole message reads in full: {op}")
+    res[f"{where}-toolTimes"] = tt = await page.evaluate(TOOL_TIMES, TOOL_ISOS)
+    rows = tt["rows"]
+    check(failures, [r["time"] for r in rows] == tt["want"] and all(r["time"] for r in rows),
+          f"{where}: every tool row shows the time of its call: {[r['time'] for r in rows]} want {tt['want']}")
+    check(failures, rows and all(r["last"] and r["markBefore"] and r["inside"] and r["whole"] and abs(r["rightGap"]) <= 2 for r in rows)
+          and sum(1 for r in rows if r["mark"]) >= 2,
+          f"{where}: the time is whole at the right end, after the エラー / 結果待ち mark: {rows}")
+    check(failures, all(r["headCut"] for r in rows if r["headLong"]) and any(r["headLong"] for r in rows),
+          f"{where}: a long description is cut, not the time: {rows}")
     await page.evaluate(SQUEEZE, True)
     await page.wait_for_timeout(150)
     res[f"{where}-squeezed"] = got = await page.evaluate(LABELS, KINDS)
