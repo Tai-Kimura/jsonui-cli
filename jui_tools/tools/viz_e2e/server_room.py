@@ -371,6 +371,22 @@ async def run_server_room(pw, out, failures):
         chips = dict(c["month"]["chips"])
         check(failures, c["paused"] and not c["raf"] and c["month"]["days"] == 30 and c["month"]["total"].startswith("$"),
               f"コスト: the 3D paused, the month's 30 days and its sum: {c}")
+        # the box is the 3D's (ticket 2026-10-21-jui-viz-cost-view-box-zoom-takes-the-clicks): 範囲で寄る off, an Option + drag
+        # over the month draws nothing, and a day pressed after it still opens (checked with the sale's day below)
+        bz = await page.evaluate("() => ({ disabled: document.getElementById('sr-boxzoom').disabled, ...window.__dbg.srBox() })")
+        sbox = await page.evaluate("() => { const r = document.getElementById('sr-cost').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }")
+        await page.keyboard.down("Alt")
+        await page.mouse.move(sbox[0] - 60, sbox[1] - 40)
+        await page.mouse.down()
+        await page.mouse.move(sbox[0] + 60, sbox[1] + 40, steps=4)
+        mid = await page.evaluate("() => window.__dbg.srBox()")
+        await page.mouse.up()
+        await page.keyboard.up("Alt")
+        res["costBox"] = {"before": bz, "during": mid, "after": await page.evaluate("() => window.__dbg.srBox()")}
+        if (await page.evaluate(COST))["day"]:   # the release over a bar is that bar's press: back to the month
+            await page.click("#sr-cost [data-src-act='month']")
+        check(failures, bz["disabled"] and not bz["armed"] and not mid["drawing"] and not mid["shown"] and not res["costBox"]["after"]["armed"],
+              f"コスト: 範囲で寄る off and an Option + drag draws no box: {res['costBox']}")
         check(failures, chips.get("noRule") == 2 and chips.get("noPrice") == 2 and "loadUndefined" in chips, f"what is not priced is counted on the page: {chips}")
         await page.select_option("#sr-scn", "sale")
         await until(page, "(u) => { const c = window.__dbg.srCost(); return c.scenario === 'sale' && c.month && c.month.usd !== u; }",
@@ -432,6 +448,7 @@ async def run_server_room(pw, out, failures):
         await page.screenshot(path=str(out / "cost-day-light.png"))
         await page.click("#sr-mode-3d")
         await until(page, "() => { const c = window.__dbg.srCost(); return !c.paused && c.raf; }", "the 3D again")
+        check(failures, not await page.evaluate("() => document.getElementById('sr-boxzoom').disabled"), "3D: 範囲で寄る on again")
         # the theme changing while it is open (D3) follows; dark is a dark ground with floors and labels that read (2.3.9, item 2)
         res["theme"] = {}
         for scheme in ("light", "dark"):

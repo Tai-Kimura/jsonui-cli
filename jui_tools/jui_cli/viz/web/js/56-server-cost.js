@@ -37,6 +37,8 @@ function srcSetMode(mode) {
   $('sr-scn-ctl').hidden = mode !== 'cost';
   srcEl.hidden = mode !== 'cost';
   SR.paused = mode === 'cost';
+  $('sr-boxzoom').disabled = mode === 'cost';   // the box is the 3D's (56-server-room.js); the cost page takes its own presses
+  if (mode === 'cost') { srBoxEnd(); srBoxArm(false); }
   if (mode === '3d') {
     srcStop();
     if (SR.view && !SR.view.raf && SR.view.loop) SR.view.loop();
@@ -48,6 +50,7 @@ function srCostReset() {   // the server room closed (56-server-room.js srClose)
   srcStop();
   Object.assign(SRC, { mode: '3d', scenario: null, month: null, day: null, date: null, hour: 0, picked: null, error: '' });
   SR.paused = false;
+  $('sr-boxzoom').disabled = false;
   $('sr-mode-3d').setAttribute('aria-pressed', 'true');
   $('sr-mode-cost').setAttribute('aria-pressed', 'false');
   $('sr-scn-ctl').hidden = true;

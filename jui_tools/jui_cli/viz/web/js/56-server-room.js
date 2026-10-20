@@ -793,7 +793,7 @@ $('sr-boxzoom').addEventListener('click', () => { srBoxEnd(); srBoxArm(!SR.box.a
   const stage = $('sr-canvas').parentElement;
   const local = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   stage.addEventListener('pointerdown', (e) => {   // capture: before OrbitControls on the canvas
-    if (SR.phase !== 'open' || !SR.view) return;
+    if (SR.phase !== 'open' || !SR.view || SR.paused) return;   // コスト is drawn on the stage: its presses are its own
     if (SR.box.drag) { e.stopPropagation(); e.preventDefault(); srBoxEnd(); return; }   // a second finger: no box
     if (e.button !== 0 || !(e.altKey || SR.box.armed)) return;
     e.stopPropagation(); e.preventDefault();
