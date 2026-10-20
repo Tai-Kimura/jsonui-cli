@@ -128,3 +128,52 @@ def device_for_command(command: str, devices: list[dict]) -> str | None:
         if len(hits) == 1:
             return hits[0]
     return None
+
+
+# ---------------------------------------------------------------- who uses a device (estimated; the デバイス pane)
+# Ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators. Nothing records a device's user: a simulator runs
+# under launchd, an emulator under whoever started it. So the pane says how each user was found, strongest first:
+#   test     a running test's command names the device (busyBy, above);
+#   process  a process whose arguments name the device runs under a session's process (ps, only while a device is up);
+#   command  the last Bash command that named the device (any robot, within COMMAND_KEPT_MS).
+
+_UUID = re.compile(r"\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b")
+_EMULATOR = re.compile(r"\bemulator-\d+\b")
+COMMAND_KEPT_MS = 30 * 60_000
+ANCESTORS_MAX = 64
+
+
+def ids_in_command(command: str, devices: list[dict]) -> set[str]:
+    """The device ids a command names: a UUID, an emulator serial, adb -s / ANDROID_SERIAL=, and a -destination
+    name= that fits one booted simulator only. A UUID is kept even before its device is seen (simctl boot <udid>)."""
+    found = {m.group(0).upper() for m in _UUID.finditer(command)} | {m.group(0) for m in _EMULATOR.finditer(command)}
+    for pattern in (_SERIAL_ENV, _ADB_S):
+        found |= {m.group(1).strip("'\"") for m in pattern.finditer(command)}
+    named = device_for_command(command, devices)
+    if named:
+        found.add(named)
+    known = {d["id"].upper(): d["id"] for d in devices}
+    return {known.get(x.upper(), x) for x in found}
+
+
+def sessions_using(rows: list[tuple[int, int, str]], devices: list[dict], pid_to_session: dict[int, str]) -> dict[str, list[str]]:
+    """Device id -> the sessions (oldest pid first) with a process under them whose arguments name the device."""
+    parent = {pid: ppid for pid, ppid, _ in rows}
+    out: dict[str, list[str]] = {}
+    for dev in devices:
+        dev_id = dev["id"]
+        if len(dev_id) < 8:   # a serial too short to look for in a command line
+            continue
+        sids: list[str] = []
+        for pid, _ppid, command in rows:
+            if dev_id not in command:
+                continue
+            seen, cur = 0, pid
+            while cur and seen < ANCESTORS_MAX and cur not in pid_to_session:
+                cur, seen = parent.get(cur, 0), seen + 1
+            sid = pid_to_session.get(cur)
+            if sid and sid not in sids:
+                sids.append(sid)
+        if sids:
+            out[dev_id] = sids
+    return out
