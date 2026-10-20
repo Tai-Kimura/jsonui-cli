@@ -118,3 +118,20 @@ def test_the_route_takes_the_page_checks(tmp_path):
     assert got[0][3]["X-Content-Type-Options"] == "nosniff"
     day = json.loads(got[6][2])
     assert day["seq"] == 10 and day["day"]["date"] == "2026-11-27"
+
+
+def test_the_free_amount_taken_per_scenario_reaches_the_page(tmp_path):
+    """A model of two environments, a node with a free amount (113 CloudWatch metrics, 10 free): the month the page gets
+    carries the engine's cost.free_per_scenario with the rows it names (the page's 計算の注意 and its note)."""
+    root = _room(tmp_path, "aws-three-tier")
+    (root / "docs/infra/logs.json").write_text(json.dumps({"version": 0, "groups": [], "edges": [], "nodes": [
+        {"id": "logs", "category": "monitoring", "provider": "aws", "service": "cloudwatch", "region": "ap-northeast-1"}]}),
+        encoding="utf-8")
+    path = root / "docs/infra/load/ordinary.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["loads"].append({"node": "logs", "quantities": {"metrics": 113}})
+    path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    month = C.read(root, seq=1)[1]["month"]
+    free = [w for w in month["warnings"] if w.get("code") == "cost.free_per_scenario"]
+    assert len(free) == 1 and free[0]["rows"] and all(isinstance(r, str) for r in free[0]["rows"])
+    assert month["warningCount"] >= 1

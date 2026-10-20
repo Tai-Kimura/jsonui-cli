@@ -376,7 +376,33 @@ async def run_server_room(pw, out, failures):
         await until(page, "(u) => { const c = window.__dbg.srCost(); return c.scenario === 'sale' && c.month && c.month.usd !== u; }",
                     "another scenario's month", arg=c["month"]["usd"], timeout=20000)
         sale = res["costSale"] = await page.evaluate(COST)
+        ord_w = chips.get("warnings")   # the ordinary month's own
         check(failures, sale["month"]["overDays"] >= 1, f"the sale's day over capacity is marked: {sale['month']}")
+        check(failures, sale["month"]["free"] == "", f"no free amount used: no note on how it is taken: {sale['month']['free']}")
+        # the engine's cost.free_per_scenario (infra cost stage B; its shape) put in the server's reply: 計算の注意 counts
+        # it and the note under the total says the free amount is taken per environment
+        free_w = {"fn": "simulate", "code": "cost.free_per_scenario", "message": "free amounts are taken once per scenario",
+                  "rows": ["aws lambda compute (us-east-1)", "aws lambda requests (us-east-1)"]}
+
+        async def with_free(route):
+            got = await route.fetch()
+            body = await got.json()
+            if body.get("ok") and body.get("month"):
+                body["month"]["warnings"] = body["month"]["warnings"] + [free_w]
+                body["month"]["warningCount"] += 1
+            await route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+        await page.route("**/api/infra-cost", with_free)
+        await page.select_option("#sr-scn", "ordinary")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.scenario === 'ordinary' && c.month && c.month.free !== ''; }",
+                    "the free amount's note", timeout=20000)
+        fm = res["costFree"] = (await page.evaluate(COST))["month"]
+        fchips = dict(fm["chips"])
+        check(failures, "二重に引く" in fm["free"] and "無料枠のある行 2 件" in fm["free"] and fchips.get("warnings") == ord_w + 1,
+              f"cost.free_per_scenario: its note under the total and one more in 計算の注意: {fm['free']} {fchips} (was {ord_w})")
+        await page.unroute("**/api/infra-cost", with_free)
+        await page.select_option("#sr-scn", "sale")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.scenario === 'sale' && c.month && c.month.free === ''; }",
+                    "the sale again, no note", timeout=20000)
         await page.click("#sr-cost [data-src-date='2026-11-27']")
         await until(page, "() => { const c = window.__dbg.srCost(); return c.day && c.day.date === '2026-11-27' && c.day.rows > 0; }", "the day", timeout=20000)
         await page.evaluate("() => { const r = document.getElementById('src-hour'); r.value = '1'; r.dispatchEvent(new Event('input', { bubbles: true })); }")
