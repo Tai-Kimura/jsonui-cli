@@ -87,6 +87,12 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     config = config_mgr.load()
     spec_dir = config_mgr.spec_directory
+    external_mode = (config.get("verify") or {}).get("external", "warn")
+    if external_mode not in EXTERNAL_MODES:
+        print(f"ERROR: jui.config.json verify.external is {external_mode!r}; it is one of "
+              f"{', '.join(repr(m) for m in EXTERNAL_MODES)} (warn: report the externally authored layouts' "
+              "findings; gate: also count them under --fail-on-diff)")
+        return 1
 
     platforms = config.get("platforms") or {}
     # A named platform the config does not have is an ERROR. With a
@@ -179,6 +185,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print(f"NOTE: initial values compared without the strings table: {e}")
         strings_table = StringsTable({})
     unregistered_types: "OrderedDict[str, list[str]]" = OrderedDict()
+    external_checks: list[dict] = []
     for sf in spec_files:
         if sf.resolve() in sub_spec_paths:
             continue
@@ -217,11 +224,18 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
         # Skip specs whose layout is authored externally (layoutFile mode
         # with no components). Generating would produce an empty stub,
-        # causing a false diff against the real layout.
+        # causing a false diff against the real layout. What can still be
+        # compared is checked: the layout's bindings and its data section
+        # against what the spec declares (ticket 2026-10-21-jui-verify-skips-
+        # every-consumer-screen, the requester's plan A) — the rules pack
+        # makes every screen external, so without this nothing was.
         if screen_spec.layout_file and not screen_spec.layout_components:
             skipped_external.append(
                 f"{sf.stem} -> {screen_spec.layout_file}.json"
             )
+            external_checks.append(_external_check(
+                sf.stem, spec_data, screen_spec, layout_gen, Path(layouts_root),
+                Path(config_mgr.styles_directory)))
             continue
 
         generated = layout_gen.generate(screen_spec)
@@ -278,6 +292,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
     total = verified + sum(n for _, n in skips)
     print()
     print(_verified_line(verified, total, skips, spec_dir=spec_dir))
+    if external_checks:
+        print(_external_line(external_checks))
 
     # Computed before the skip list is printed, so a name reported below as
     # missing is not also listed above as an ordinary external skip. One
@@ -336,6 +352,27 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "regeneration is idempotent."
         )
 
+    external_findings = [c for c in external_checks if c["findings"] or not c["checked"]]
+    if external_findings:
+        counted = ("counted by `--fail-on-diff` (verify.external: \"gate\")" if external_mode == "gate"
+                   else "reported only — `verify.external: \"gate\"` in jui.config.json counts these under `--fail-on-diff`")
+        print(f"\n**WARNING: externally authored layouts against their specs** ({counted}):")
+        for c in external_findings:
+            print(f"- {c['screen']} -> {c['layout']}.json:")
+            if not c["checked"]:
+                print(f"    - not checked: {c['reason']}")
+            for f in c["findings"]:
+                print(f"    - {f['kind']} `{f['name']}`: {f['why']}")
+        print(
+            "  → declare each name in the screen's spec, in stateManagement.uiVariables — a handler "
+            "(onXxx, or a name bound to onClick and the like) with a callback type such as "
+            "\"(() -> Void)?\" — or remove it from the Layout JSON. A layout's bindings resolve against "
+            "the data section `jui g project` writes from uiVariables; stateManagement.eventHandlers "
+            "are view-local and never go there. A name bound inside an include with an id is the "
+            "including screen's, spelled with the include's id in front (pager + onNextTap -> "
+            "pagerOnNextTap, a camelCase variable name)."
+        )
+
     value_gate = initial_value_gate_state()
     if initial_values:
         counted = {
@@ -389,6 +426,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     if args.json_out:
         summary = _summary_payload(results, skips)
+        summary.update(_external_payload(external_checks))
         out_path = Path(args.json_out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -397,11 +435,117 @@ def cmd_verify(args: argparse.Namespace) -> int:
     coverage_gap = bool(coverage.missing_specs or coverage.missing_layouts)
     if args.fail_on_diff and (
         any(r.has_diff for r in results) or data_orphans or api_drift
+        or (external_mode == "gate" and external_findings)
         or (initial_values and value_gate in ("on", "unavailable"))
         or (require_coverage and coverage_gap)
     ):
         return 1
     return 0
+
+
+# ---------------------------------------------------------------- externally authored layouts against their specs
+# Ticket 2026-10-21-jui-verify-skips-every-consumer-screen (the requester's plan A). The rules pack writes every screen
+# with `metadata.layoutFile` and an empty `structure.components`, so the comparison above skips every screen and, in
+# five consumers measured, compared none. What a hand-written layout can still be held to: each binding root (after
+# its includes expand, an include with an id prefixing what is inside it — layout_facts, the reader the validator and
+# the coverage axis use) is declared by the spec, and the file's own data section holds nothing the spec does not
+# (_diff_data_section, as for a compared screen). First a WARNING; `verify.external: "gate"` counts them.
+# Decided with the plan: an include's bindings are the INCLUDING screen's to declare (its view model receives them,
+# and `jui build` writes that view model's protocol from its spec); `stateManagement.cellData`, which no part of jui
+# reads, does not declare — a name found only there is named as such.
+EXTERNAL_MODES = ("warn", "gate")
+
+
+def _named(group) -> set[str]:
+    return {x.get("name") for x in group or [] if isinstance(x, dict) and isinstance(x.get("name"), str) and x.get("name")}
+
+
+def _declared_names(spec_data: dict, generated: dict) -> set[str]:
+    """What a screen's spec declares a binding may name: the data section regenerating it would write, and the view
+    model's vars and methods, the ui variables and the event handlers."""
+    vm = (spec_data.get("dataFlow") or {}).get("viewModel") or {}
+    sm = spec_data.get("stateManagement") or {}
+    names = {e["name"] for e in layout_data_entries(generated) if e.get("name")}
+    for group in (vm.get("vars"), vm.get("methods"), sm.get("uiVariables"), sm.get("eventHandlers")):
+        names |= _named(group)
+    return names
+
+
+def _cell_data_names(spec_data: dict) -> set[str]:
+    """Names written under stateManagement.cellData.<section>.variables (a consumer's habit; jui reads none of it)."""
+    out: set[str] = set()
+    cell = (spec_data.get("stateManagement") or {}).get("cellData")
+    for section in (cell.values() if isinstance(cell, dict) else []):
+        for v in (section.get("variables") or []) if isinstance(section, dict) else []:
+            name = v.get("name") if isinstance(v, dict) else v
+            if isinstance(name, str) and name:
+                out.add(name)
+    return out
+
+
+def _only_in_cell_data(name: str, cell_names: set[str]) -> bool:
+    """The name, or the name with an include's id in front, is one written under cellData."""
+    return name in cell_names or any(
+        len(name) > len(c) and name.endswith(c[:1].upper() + c[1:]) for c in cell_names)
+
+
+def _external_check(stem: str, spec_data: dict, screen_spec, layout_gen, layouts_dir: Path, styles_dir: Path) -> dict:
+    """One externally authored screen: {screen, layout, checked, reason, findings: [{kind, name, why}]}."""
+    from ..core.layout_facts import layout_facts
+    from ..core.normalizer.include_expander import IncludeCycleError
+    out = {"screen": stem, "layout": screen_spec.layout_file, "checked": False, "reason": None, "findings": []}
+    try:
+        facts = layout_facts(spec_data, None, layouts_dir=layouts_dir, styles_dir=styles_dir)
+    except IncludeCycleError as exc:   # the initial-value check names the cycle; here the screen is not checked
+        out["reason"] = str(exc)
+        return out
+    except (OSError, ValueError) as exc:
+        out["reason"] = f"the layout could not be read ({type(exc).__name__})"
+        return out
+    if not facts.evaluated:
+        out["reason"] = facts.reason or "the layout could not be read"
+        return out
+    try:
+        generated = layout_gen.generate(screen_spec)
+        actual = json.loads(facts.path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        out["reason"] = f"the spec's data section could not be built ({type(exc).__name__})"
+        return out
+    out["checked"] = True
+    declared, cell_names = _declared_names(spec_data, generated), _cell_data_names(spec_data)
+    # The file's own data section (includes not opened, as _diff_data_section reads it) against the same declared
+    # names as the bindings: for a hand-written layout a data entry declares a name the view model gives, so one the
+    # spec has as a view-model var or an event handler is declared (the generator writes only the ui variables' —
+    # comparing against it alone reported a consumer's declared vars and handlers, measured 10-21).
+    data = {}
+    for e in layout_data_entries(actual):
+        if e.get("name") and e["name"] not in declared:
+            data.setdefault(e["name"], e.get("class", "?"))
+    for name in sorted((facts.binding_roots - declared) | set(data)):
+        where = " and ".join(w for w, on in (("bound in the layout", name in facts.binding_roots),
+                                             (f"in its data section ({data.get(name)})", name in data)) if on)
+        why = (f"{where}; declared only under stateManagement.cellData, which jui does not read: declare it in "
+               "stateManagement.uiVariables" if _only_in_cell_data(name, cell_names) else f"{where}, not declared by the spec")
+        kind = "binding" if name in facts.binding_roots else "data"
+        out["findings"].append({"kind": kind, "name": name, "why": why})
+    return out
+
+
+def _external_line(checks: list[dict]) -> str:
+    """`checked against the spec's declarations: K of E externally authored layout(s) — F finding(s)`."""
+    checked = sum(1 for c in checks if c["checked"])
+    findings = sum(len(c["findings"]) for c in checks)
+    return (f"**checked against the spec's declarations: {checked} of {len(checks)} externally authored "
+            f"layout(s)** — {findings} finding(s)")
+
+
+def _external_payload(checks: list[dict]) -> dict:
+    return {
+        "externalChecked": sum(1 for c in checks if c["checked"]),
+        "externalTotal": len(checks),
+        "externalFindings": {c["screen"]: c["findings"] for c in checks if c["findings"]},
+        "externalNotChecked": {c["screen"]: c["reason"] for c in checks if not c["checked"]},
+    }
 
 
 #: Why a spec was not compared, in the wording the report already uses.
