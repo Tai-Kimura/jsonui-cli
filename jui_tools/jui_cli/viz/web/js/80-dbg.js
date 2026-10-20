@@ -163,6 +163,7 @@ window.__dbg = {
   // close: the robot at seatPos, its tag at + TAG_UP projected as placeRobotTags puts it, a tag's size as one drawn now
   // (the e2e pins one, so a tag covers the call bell in every run: ticket 2026-10-20-jui-viz-robot-tag-covers-a-fixture-in-a-crowded-room)
   tagPinsOver: (pt) => {
+    if (SOURCE.mode !== 'live') return null;   // the seats are the live source's (30-source-live.js)
     const room = PROJECT[liveSolo()], t = robots.find((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden);
     if (!room || !t) return null;
     const tb = t.tag.getBoundingClientRect(), w = tb.width, h = tb.height, r = canvas.getBoundingClientRect(), a = seatArea(room.baseW, room.baseD), out = [], v = new THREE.Vector3();
