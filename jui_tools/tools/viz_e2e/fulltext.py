@@ -7,14 +7,18 @@ path, and has a subagent with a long type reading a long path; its transcript ha
 description (the 応答の履歴 tab). Robot B runs a test with a short command.
 
 Checked (57-fulltext.js, one component for the family — the table is in the ticket):
-  * A's テスト実行 row (a ~2000-char command), hovered: the floating tag shows the whole command, wrapped, in the 3D's left
-    column — inside the window and the 3D left free by the card, 16 px in, clear of the view's centre, readable width (PLACE_JS;
-    10-20 requester: 「いやホバーで出る位置をもっと左にしてよ」); the pointer crossing to it keeps it; its text selected and
-    copied comes out of the clipboard whole; the pointer leaving hides it (also downwards inside the card).
+  * A's テスト実行 row (a ~2000-char command), hovered: the floating tag shows the whole command, wrapped, just left of the
+    card — inside the window and the 3D left free by the card, 0-16 px from the card's left edge, on neither the card nor its
+    line's host, not at the 3D's left edge (2.3.8's place, inverted), its top level with the row, readable width (PLACE_JS;
+    10-20 requester: 「ホバーで横に出す件だけど、今度は遠すぎる ボードのすぐ横に出て欲しい」); the pointer crossing to it keeps
+    it; its text selected and copied comes out of the clipboard whole; the pointer leaving hides it (also downwards inside
+    the card). The same at 1440x900 and 2000x1100, with the card at its width and widened (広げる).
   * B's short row: not cut, not focusable, no tag on hover.
   * Tab to A's row: the tag shows, the row points at it (aria-describedby); Esc hides it and the card stays open.
   * one row of every other member of the family (the card's subagent act, the history's head and tool name, the panel's
-    act, subagent name, spec name and project summary): cut, hovered → the whole text, in the same left column.
+    act, subagent name, spec name and project summary): cut, hovered → the whole text, just left of the open card, level
+    with its own row.
+  * the log strip's line (no board beside it): 2.3.8's place, the 3D's left edge above the strip, clear of the centre.
     A member the scene does not cut by itself is narrowed for the arm (style max-width on that element), named in the
     results ("narrowed"): the component, not the length of a test string, is what is checked.
 Waits are on page state (waits.until); a hover's effect is synchronous, read right after the pointer moved.
@@ -45,13 +49,17 @@ SHORT_CMD = "npx playwright test t.json"
 PEER_PROMPT = ("Another session sent a message: <cross-session-message from=\"uds:/tmp/e2e-hover.sock\" from-name=\"jsonui-dd\"> "
                "2.3.6 の票を振りました。ログの帯の行もホバーとフォーカスで全文が読めるかを確かめるための、わざと長くした文です。"
                "</cross-session-message>")
-# Where the tag is (10-20, requester: 「いやホバーで出る位置をもっと左にしてよ」): the 3D left free (the scene less the robot
-# card when it is open). placed: inside the window and the free box (so never on the card nor the panel), its left edge
-# 16 px in from the free box's left, clear of the free box's centre point and of the scene's centre point, and — when
-# its text wraps — at least min(420, 40% of the free box's width) wide (a narrow strip of a long text is unreadable).
-# robotCovered: how much of the selected robot's box on screen (its shown meshes, the desk left out) it covers
-# (measured, not judged: the rule lets it cover the robot's left side).
-PLACE_JS = """const place = (tb) => { if (!tb) return null;
+# Where the tag is (10-20 afternoon, requester: 「ホバーで横に出す件だけど、今度は遠すぎる ボードのすぐ横に出て欲しい」).
+# The board beside it: the robot card when it is open at the side (widened too), else, for a side-panel line, the panel.
+# With a board — placed: inside the window and the free box (the scene less the card), its right edge 0-16 px left of the
+# board's left edge (nextTo), on neither the open card nor its line's host (clear), not at the free box's left edge
+# (offLeftEdge: 2.3.8's arm "16 px in from the 3D's left", inverted), its top level with the line's top kept inside the
+# free box and the line's middle inside the tag's height (level), and — when it wraps — at least min(420, 40% of the free
+# box's width) wide. A card or panel line with no board found is not placed.
+# 2.3.8's "clear of the 3D's centre" is dropped for these (the requester allows the tag on the 3D and a robot): measured
+# only (coversMid). No board (the log strip): 2.3.8's arm as it was — 16 px in from the free box's left, clear of its centre.
+# robotCovered: how much of the selected robot's box on screen (its shown meshes, the desk left out) it covers (measured).
+PLACE_JS = """const place = (tb, line) => { if (!tb) return null;
     const s = document.getElementById('scene').getBoundingClientRect(), card = document.getElementById('rb');
     const f = { l: Math.max(s.left, 0), t: Math.max(s.top, 0), r: Math.min(s.right, innerWidth), b: Math.min(s.bottom, innerHeight) };
     if (card && !card.hidden) { const c = card.getBoundingClientRect(); if (c.left > f.l + (f.r - f.l) * 0.25) f.r = Math.min(f.r, c.left); else f.b = Math.min(f.b, c.top); }
@@ -67,19 +75,35 @@ PLACE_JS = """const place = (tb) => { if (!tb) return null;
         robot.l = Math.min(robot.l, x); robot.r = Math.max(robot.r, x); robot.t = Math.min(robot.t, y); robot.b = Math.max(robot.b, y); } }
     const w = f.r - f.l, minW = Math.min(420, w * 0.4);
     const holds = (x, y) => x >= tb.left && x <= tb.right && y >= tb.top && y <= tb.bottom;
+    const overlaps = (b) => !!b && Math.min(tb.right, b.right) - Math.max(tb.left, b.left) > 0.5 && Math.min(tb.bottom, b.bottom) - Math.max(tb.top, b.top) > 0.5;
     const tag = document.getElementById('fulltext'), wraps = tb.height > 40;   // one line is 32 px (18 + padding + border)
     const inWin = tb.left >= -0.5 && tb.top >= -0.5 && tb.right <= innerWidth + 0.5 && tb.bottom <= innerHeight + 0.5;
     const inFree = tb.left >= f.l - 0.5 && tb.right <= f.r + 0.5 && tb.top >= f.t - 0.5 && tb.bottom <= f.b + 0.5;
-    const atLeft = Math.abs(tb.left - (f.l + 16)) <= 1.5;
-    const clearMid = !holds((f.l + f.r) / 2, (f.t + f.b) / 2) && !holds((s.left + s.right) / 2, (s.top + s.bottom) / 2);
     const wide = !wraps || tb.width >= minW - 1;
+    const coversMid = holds((f.l + f.r) / 2, (f.t + f.b) / 2) || holds((s.left + s.right) / 2, (s.top + s.bottom) / 2);
+    const host = line ? ['#rb', '#side'].map((q) => document.querySelector(q)).find((h) => h && h.contains(line)) : null;
+    const cardBox = card && !card.hidden ? card.getBoundingClientRect() : null;
+    let board = null;
+    if (host) { const bb = cardBox || (host.id === 'side' ? host.getBoundingClientRect() : null); if (bb && bb.left >= f.r - 1 && bb.left > f.l) board = bb; }
     let robotCovered = null;
     if (robot) { const ox = Math.max(0, Math.min(tb.right, robot.r) - Math.max(tb.left, robot.l)), oy = Math.max(0, Math.min(tb.bottom, robot.b) - Math.max(tb.top, robot.t));
       robotCovered = Math.round(100 * ox * oy / Math.max(1, (robot.r - robot.l) * (robot.b - robot.t))) + '%'; }
     const r1 = (x) => Math.round(x);
-    return { placed: inWin && inFree && atLeft && clearMid && wide, inWin, inFree, atLeft, clearMid, wide, minW: r1(minW), robotCovered,
+    const at = { inWin, inFree, wide, minW: r1(minW), robotCovered, coversMid, beside: host ? (host.id === 'rb' ? 'card' : 'panel') : 'none',
       scrolls: !!tag && tag.scrollHeight > tag.clientHeight + 1,
-      tag: [r1(tb.left), r1(tb.top), r1(tb.width), r1(tb.height)], free: [r1(f.l), r1(f.t), r1(f.r), r1(f.b)], robot: robot && [r1(robot.l), r1(robot.t), r1(robot.r), r1(robot.b)] }; };"""
+      tag: [r1(tb.left), r1(tb.top), r1(tb.width), r1(tb.height)], free: [r1(f.l), r1(f.t), r1(f.r), r1(f.b)], robot: robot && [r1(robot.l), r1(robot.t), r1(robot.r), r1(robot.b)] };
+    if (host) {
+      const lb = line.getBoundingClientRect(), gap = board ? board.left - tb.right : null;
+      const nextTo = gap !== null && gap >= -0.5 && gap <= 16.5;
+      const clear = !overlaps(cardBox) && !overlaps(host.getBoundingClientRect());
+      const offLeftEdge = tb.left > f.l + 16 + 1.5;
+      const wantTop = Math.max(f.t + 16, Math.min(lb.top, f.b - 16 - tb.height)), mid = (lb.top + lb.bottom) / 2;
+      const level = Math.abs(tb.top - wantTop) <= 1.5 && mid >= tb.top - 0.5 && mid <= tb.bottom + 0.5;
+      return Object.assign(at, { placed: !!board && inWin && inFree && nextTo && clear && offLeftEdge && level && wide, board: board && [r1(board.left), r1(board.top), r1(board.right), r1(board.bottom)],
+        gap: gap === null ? null : r1(gap), nextTo, clear, offLeftEdge, level, row: [r1(lb.top), r1(lb.bottom)], wantTop: r1(wantTop) });
+    }
+    const atLeft = Math.abs(tb.left - (f.l + 16)) <= 1.5, clearMid = !coversMid;
+    return Object.assign(at, { placed: inWin && inFree && atLeft && clearMid && wide, atLeft, clearMid }); };"""
 # One strip line (by its text) and the tag: inside the viewport and above the line.
 STRIP_JS = """(want) => { """ + PLACE_JS + """ const line = [...document.querySelectorAll('#ticker .what')].find((x) => x.textContent.includes(want));
   const tag = document.getElementById('fulltext');
@@ -102,7 +126,7 @@ LINE_JS = """([sel, i]) => { """ + PLACE_JS + """ const line = document.querySel
   const owner = line.closest('button, summary, a[href]') || line;
   return { cut: line.scrollWidth > line.clientWidth + 1, text: line.textContent, tabindex: line.getAttribute('tabindex'),
     shown: !!tb, tagText: tag && !tag.hidden ? tag.textContent : '', described: owner.getAttribute('aria-describedby'),
-    at: place(tb), placed: !!(tb && place(tb).placed),
+    at: place(tb, line), placed: !!(tb && place(tb, line).placed),
     wraps: !!tb && tb.height > 30, select: tag ? getComputedStyle(tag).userSelect : '' }; }"""
 TAG_SHOWN = "() => { const t = document.getElementById('fulltext'); return !!t && !t.hidden; }"
 TAG_HIDDEN = "() => { const t = document.getElementById('fulltext'); return !t || t.hidden; }"
@@ -172,6 +196,12 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
                     f"{label}'s card with its test row", arg=label)
         await until(page, "() => getComputedStyle(document.getElementById('rb')).opacity === '1'", f"{label}'s card faded in")
 
+    async def set_wide(page, on):   # 広げる (the choice is kept: put back at the end of the arm)
+        want = "true" if on else "false"
+        if await page.evaluate("() => document.querySelector('#rb [data-rb-wide]').getAttribute('aria-pressed')") != want:
+            await page.click("#rb [data-rb-wide]")
+        await until(page, "(w) => document.getElementById('rb').classList.contains('rb-wide') === (w === 'true')", f"the card {'widened' if on else 'at its width'}", arg=want)
+
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     t0 = time.monotonic()
     try:
@@ -227,7 +257,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
         await until(page, TAG_SHOWN, "the tag on hover")
         r = res["longHover"] = await line(page, "#rb .rb-run-file")
         check(failures, r["shown"] and r["tagText"] == LONG_CMD and r["placed"] and r["wraps"] and r["described"] == "fulltext" and r["select"] in ("text", "auto"),
-              f"hovered: the whole command, wrapped, at the 3D's left, clear of the centre, readable width, the row points at it: {r}")
+              f"hovered: the whole command, wrapped, just left of the card (0-16 px, not on it), level with the row, readable width, the row points at it: {r}")
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
             await page.screenshot(path=str(out / f"after-card-{scheme}.png"))
@@ -256,6 +286,26 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
             res["leftDown"] = str(e)
             check(failures, False, f"the pointer left the row downwards inside the card: the tag stays: {e}")
         await page.mouse.move(5, 5)
+        # 1c. the card at its width and widened (広げる, 2.3.4), at 1440x900 and 2000x1100: the tag just left of the card,
+        #     level with the row (ticket 2026-10-20-jui-viz-fulltext-float-next-to-the-card)
+        res["sizes"] = {}
+        for vw, vh in ((1440, 900), (2000, 1100)):
+            await page.set_viewport_size({"width": vw, "height": vh})
+            for wide in (False, True):
+                await set_wide(page, wide)
+                await page.mouse.move(5, 5)
+                await until(page, TAG_HIDDEN, "no tag before the hover")
+                await until(page, "() => document.querySelector('#rb .rb-run-file').getAttribute('tabindex') === '0'", "A's row cut")
+                await page.hover("#rb .rb-run-file")
+                await until(page, TAG_SHOWN, "the tag on hover")
+                key = f"{vw}x{vh} {'wide' if wide else 'normal'}"
+                r = res["sizes"][key] = await line(page, "#rb .rb-run-file")
+                check(failures, r["shown"] and r["tagText"] == LONG_CMD and r["placed"],
+                      f"{key} card: the tag just left of the card (0-16 px, not on it), level with the row: {r['at']}")
+        await page.mouse.move(5, 5)
+        await page.set_viewport_size(DESKTOP["viewport"])
+        await set_wide(page, False)
+        await until(page, TAG_HIDDEN, "no tag after the sizes")
         # 2. B's short row: not cut, not focusable, no tag
         await open_card(page, lab_b)
         await page.hover("#rb .rb-run-file")
@@ -301,7 +351,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
             r = await line(page, sel)
             res["family"][fname] = dict(r, narrowed=narrowed)
             check(failures, r["cut"] and r["shown"] and r["tagText"] == r["text"] and r["placed"] and r["described"] == "fulltext",
-                  f"{fname}: cut, hovered → the whole text inside its box: {r} (narrowed for the arm: {narrowed})")
+                  f"{fname}: cut, hovered → the whole text just left of the open card, level with its row: {r} (narrowed for the arm: {narrowed})")
             if fname == "panel · セッションの act":
                 await page.screenshot(path=str(out / "after-panel-light.png"))
             await page.mouse.move(5, 5)
@@ -317,7 +367,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
         await page.hover(f"#ticker .what:has-text('{head}')")
         r = res["stripLong"] = await page.evaluate(STRIP_JS, head)
         check(failures, r and r["cut"] and r["shown"] and r["tagText"] == r["text"] and "</cross-session-message>" in r["tagText"] and r["inView"] and r["above"] and r["described"] == "fulltext" and r["at"]["placed"],
-              f"the strip's long line hovered: the whole text, above the line, inside the viewport, in the 3D's left column: {r}")
+              f"the strip's long line hovered: the whole text, above the line, inside the viewport, at the 3D's left edge (no board beside the strip), clear of the centre: {r}")
         await page.screenshot(path=str(out / "after-strip-light.png"))
         await page.mouse.move(5, 5)
         await until(page, TAG_HIDDEN, "the strip's tag gone")

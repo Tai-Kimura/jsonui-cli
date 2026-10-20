@@ -982,7 +982,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .rb-run-head { display: flex; gap: 8px; margin: 0; }
 .rb-saved { margin-left: auto; color: var(--ink-soft); font-size: 11px; }
 .rb-run-file { overflow: hidden; color: var(--ink-soft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-/* the whole text of a line cut to one (57-fulltext.js): wrapped, selectable, in the 3D's left column (fulltextPlace) */
+/* the whole text of a line cut to one (57-fulltext.js): wrapped, selectable, just left of the card or the panel (fulltextPlace) */
 .fulltext { position: fixed; z-index: 45; box-sizing: border-box; padding: 6px 9px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); box-shadow: 0 6px 18px var(--shadow); font: 500 12px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
 .fulltext[hidden] { display: none; }
 [tabindex="0"]:is(.rb-run-file, .act, .h-head):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }

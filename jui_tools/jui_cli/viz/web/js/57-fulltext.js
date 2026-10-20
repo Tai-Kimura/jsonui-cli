@@ -2,7 +2,7 @@
    One component for every one-line ellipsis of the robot card and the side panel (the family: FULLTEXT_LINES; the table is
    in the ticket 2026-10-19-jui-viz-test-run-path-on-hover). A line that is cut (scrollWidth > clientWidth) shows a floating
    tag with its whole text, wrapped, when the pointer is over it or the keyboard focus reaches it; the tag's text can be
-   selected and copied; it sits at the left of the 3D (fulltextPlace, 10-20) and goes when the pointer or the focus
+   selected and copied; it sits just left of the card or the panel (fulltextPlace, 10-20) and goes when the pointer or the focus
    leaves (the pointer: after the time to cross to the tag), or on Esc. A line that is not cut never gets it. Not the native title: slow, and the OS cuts a long one.
    Focus: a cut line that is plain text becomes focusable (tabindex 0) only while it is cut; a line inside a button or a
    summary (already focusable) shows through that control's focus. The control or the line points at the tag
@@ -49,19 +49,21 @@ function fulltextShow(line, via) {
   Object.assign(FULLTEXT, { anchor: line, owner, host, via });
   fulltextPlace();
 }
-/* Where the tag goes (requester 10-20: 「いやホバーで出る位置をもっと左にしてよ」 — next to the card, a 2000-char command
-   covered the 3D from its middle to the right, top to bottom; ticket 2026-10-20-jui-viz-fulltext-float-covers-the-scene).
-   One rule for every member of the family (the card, the side panel, the log strip), never beside the line:
+/* Where the tag goes. 2.3.8 put it at the 3D's left edge (requester 10-20 morning: 「いやホバーで出る位置をもっと左にしてよ」 —
+   beside its line it covered the card); that was far from the line (requester 10-20 afternoon: 「ホバーで横に出す件だけど、
+   今度は遠すぎる ボードのすぐ横に出て欲しい」; ticket 2026-10-20-jui-viz-fulltext-float-next-to-the-card). The rule now:
      * the 3D left free: the scene's box, less the robot card when it is open (a side card: what is left of it; a bottom
        sheet, narrow: what is above it);
-     * the tag sits at the left of that free box, FULLTEXT_PAD in, as wide as its text needs up to
-       min(FULLTEXT_MAX_W, FULLTEXT_SHARE of the free box's width) (a long text: that width, so it stays readable);
-       its right edge is then left of the free box's middle (the view's centre point stays clear; with the card open the
-       camera puts the selected robot there, so the tag may cover the robot's left side, never its middle) and never on
-       the card (the free box ends at the card);
+     * the board the tag stands beside (fulltextBoard): the card when it is open at the side (the wide card too), else, for
+       a line of the side panel, the panel; the tag's right edge is FULLTEXT_GAP left of the board's left edge, never on
+       the board; it may cover the 3D and a robot (requester 10-20: 「いいよ」);
+     * no board (the log strip, a bottom sheet): at the left of the free box, FULLTEXT_PAD in (2.3.8); and when the tag does
+       not fit left of the board, at that same left edge;
+     * as wide as its text needs up to min(FULLTEXT_MAX_W, FULLTEXT_SHARE of the free box's width) (2.3.8: a long text
+       keeps a readable width);
      * its top is level with the line, moved up or down to stay inside the free box (the log strip's line is below the
        scene: the tag sits on the scene's bottom, above the strip); taller than the free box, it scrolls inside. */
-const FULLTEXT_PAD = 16, FULLTEXT_MAX_W = 420, FULLTEXT_SHARE = 0.4;
+const FULLTEXT_PAD = 16, FULLTEXT_GAP = 8, FULLTEXT_MAX_W = 420, FULLTEXT_SHARE = 0.4;
 function fulltextFree() {
   const sb = sceneEl.getBoundingClientRect();
   const f = { left: Math.max(sb.left, 0), top: Math.max(sb.top, 0), right: Math.min(sb.right, window.innerWidth), bottom: Math.min(sb.bottom, window.innerHeight) };
@@ -73,17 +75,24 @@ function fulltextFree() {
   }
   return f;
 }
+function fulltextBoard(f) {
+  const host = FULLTEXT.host;
+  if (!host || host.id === 'ticker-strip') return null;
+  const card = document.getElementById('rb');
+  const box = card && !card.hidden ? card.getBoundingClientRect() : host.id === 'side' ? host.getBoundingClientRect() : null;
+  return box && box.left >= f.right - 1 && box.left > f.left ? box : null;   // right of the free box (not a bottom sheet)
+}
 function fulltextPlace() {
   const { el, anchor } = FULLTEXT;
   if (!el || el.hidden || !anchor) return;
-  const lb = anchor.getBoundingClientRect(), f = fulltextFree();
+  const lb = anchor.getBoundingClientRect(), f = fulltextFree(), board = fulltextBoard(f);
   const w = Math.max(0, Math.min(FULLTEXT_MAX_W, (f.right - f.left) * FULLTEXT_SHARE));
   const h = Math.max(0, f.bottom - f.top - FULLTEXT_PAD * 2);
   el.style.maxWidth = `${Math.floor(w)}px`;
   el.style.maxHeight = `${Math.floor(h)}px`;
   el.style.left = '0px'; el.style.top = '0px';
   const r = el.getBoundingClientRect();
-  const x = f.left + FULLTEXT_PAD;
+  const x = board ? Math.max(f.left + FULLTEXT_PAD, board.left - FULLTEXT_GAP - r.width) : f.left + FULLTEXT_PAD;
   const y = Math.max(f.top + FULLTEXT_PAD, Math.min(lb.top, f.bottom - FULLTEXT_PAD - r.height));
   el.style.left = `${Math.round(x)}px`; el.style.top = `${Math.round(y)}px`;
 }
@@ -115,8 +124,8 @@ document.addEventListener('pointerout', (e) => {
   const to = e.relatedTarget;
   if (FULLTEXT.anchor.contains(e.target) && !(to && (FULLTEXT.anchor.contains(to) || FULLTEXT.el.contains(to)))) fulltextHideSoon();
 });
-/* The tag is away from its line (at the 3D's left): the pointer crossing to it, to select its text, passes over the card
-   and the 3D first. It goes FULLTEXT_TRAVEL_MS after the pointer left the line, unless by then the pointer is on the tag
+/* The tag is away from its line (left of the card): the pointer crossing to it, to select its text, passes over the card
+   first. It goes FULLTEXT_TRAVEL_MS after the pointer left the line, unless by then the pointer is on the tag
    or back on the line. */
 const FULLTEXT_TRAVEL_MS = 700;
 function fulltextHideSoon() {
