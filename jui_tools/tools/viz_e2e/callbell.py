@@ -13,27 +13,31 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 import time
 
-from common import ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import ISOLATE, LAUNCH_ARGS, Watch, desk_pins_js, dump, new_page, ready
+from waits import settled, until
 
 DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
 SID = "ca110000-0000-4000-8000-0000000000b1"
+# The robot's desk, in the floor-view room's coordinates: clear of the bell's line of sight from the usual view (ticket
+# 2026-10-20-jui-viz-e2e-callbell-dialog-wait-flaky; the drawn desk depended on --out, and one put the robot in front
+# of the bell — 2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk is the product's side).
+DESK = [6.4, 4.6]
+# The server's own pollers (jui_cli/viz/sources/processes.py, agents_cli.py, gitbox.py), not processes it was asked for.
+POLLERS = re.compile(r"^(\S*/)?ps -A -o |^(\S*/)?ps -o |\bagents --json\b|^(\S*/)?git -C ")
+# The press to the dialog: measured within 0.1 s at 6x, 20x and 40x CPU throttling (openCall runs in the pointerup);
+# the cap is for a press that opened nothing, so it says so instead of the run waiting on.
+OPENED_MS = 10000
 
 
 def check(failures, cond, text):
     if not cond:
         failures.append(f"callbell: {text}")
-
-
-async def wait(page, js, arg=None, timeout=20000, label=""):
-    try:
-        await page.wait_for_function(js, arg=arg, timeout=timeout, polling=100)
-    except Exception as e:
-        raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
 
 
 def sh_word(s: str) -> str:
@@ -81,7 +85,12 @@ async def run_callbell(pw, out, failures):
                        capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
 
     def kids():
-        return sorted(subprocess.run(["pgrep", "-P", str(srv.pid)], capture_output=True, text=True).stdout.split())
+        """The server's children, less its own pollers (sources/: ps for the process list, `claude agents --json`
+        every 3 s, git for the git box): one of those caught at a sample made the check red (1 run in 5 at 6x CPU
+        throttling, 10-20). Anything else it started — a shell, the pasted line — is still counted."""
+        got = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,command="], capture_output=True, text=True).stdout.splitlines()
+        rows = [ln.split(None, 2) for ln in got]
+        return sorted(f"{r[0]} {r[2]}" for r in rows if len(r) == 3 and r[1] == str(srv.pid) and not POLLERS.search(r[2]))
 
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     t0 = time.monotonic()
@@ -97,9 +106,10 @@ async def run_callbell(pw, out, failures):
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "callbell", **DESKTOP)
         await page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=url)
+        await page.add_init_script(desk_pins_js([(folder, SID, DESK)]))
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => Object.keys(window.__dbg.robotState()).length >= 1", timeout=30000, label="the robot")
+        await until(page, "() => Object.keys(window.__dbg.robotState()).length >= 1", "the robot", timeout=30000)
         kids0 = kids()
 
         # the floor: no bell, no header button
@@ -109,8 +119,10 @@ async def run_callbell(pw, out, failures):
         # the room up close: the bell stands in the room, in sight
         await page.click("#scope-top")
         await page.evaluate("() => [...document.querySelectorAll('#pop [data-pick-project]')].find((x) => x.textContent.includes('call app')).click()")
-        await wait(page, "() => window.__dbg.bell().built", label="the bell in the room up close")
-        await wait(page, "() => window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated")
+        await until(page, "() => window.__dbg.bell().built", "the bell in the room up close", timeout=20000)
+        await settled(page, "seated in the room up close")
+        seat = res["seat"] = await page.evaluate("() => window.__dbg.seats().ca")
+        check(failures, seat and [seat.get("dx"), seat.get("dz")] == DESK, f"the desk is where the arm put it {DESK}: {seat}")
         await page.wait_for_timeout(800)
         b = res["bell"] = await page.evaluate("() => window.__dbg.bell()")
         room = await page.evaluate("(id) => { const r = window.__dbg.room(id); return [r.x0, r.x1, r.z0, r.z1]; }", b["room"])
@@ -125,9 +137,12 @@ async def run_callbell(pw, out, failures):
         await page.wait_for_timeout(800)
 
         # a real click on the bell opens the dialog, the name field focused, nothing to copy yet
+        await settled(page, "the room before the press on the bell")
+        await until(page, "() => !window.__dbg.view().tween", "the camera still before the press on the bell", timeout=20000)
         b = await page.evaluate("() => window.__dbg.bell()")
         await page.mouse.click(*b["screen"])
-        await wait(page, "() => !document.getElementById('call').hidden", label="the dialog from the bell")
+        await until(page, "() => !document.getElementById('call').hidden", "the dialog from the bell", timeout=OPENED_MS,
+                    why="() => ({ bell: window.__dbg.bell(), view: window.__dbg.view() })")
         st = res["opened"] = await page.evaluate("() => ({ focus: document.activeElement && document.activeElement.id, copy: document.getElementById('call-copy').disabled, cmd: document.getElementById('call-cmd').value, why: document.getElementById('call-why').textContent })")
         check(failures, st["focus"] == "call-name" and st["copy"] and not st["cmd"], f"opened: the name field focused, nothing to copy: {st}")
 
@@ -135,7 +150,7 @@ async def run_callbell(pw, out, failures):
         name, role = "x'; touch PWNED; '", "役割: $(touch PWNED)\n`touch PWNED` ; && | !! \\ 🤖"
         await page.fill("#call-name", name)
         await page.fill("#call-role", role)
-        await wait(page, "() => !document.getElementById('call-copy').disabled", label="the line")
+        await until(page, "() => !document.getElementById('call-copy').disabled", "the line", timeout=20000)
         line = res["line"] = await page.evaluate("() => document.getElementById('call-cmd').value")
         for shell in [s for s in ("/bin/zsh", "/bin/bash") if os.path.exists(s)]:
             got = run_line(shell, line, scratch)
@@ -165,9 +180,9 @@ async def run_callbell(pw, out, failures):
 
         # nothing to copy: an empty name, a NUL
         await page.fill("#call-name", "")
-        await wait(page, "() => document.getElementById('call-copy').disabled && !document.getElementById('call-cmd').value", label="empty name: nothing to copy")
+        await until(page, "() => document.getElementById('call-copy').disabled && !document.getElementById('call-cmd').value", "empty name: nothing to copy", timeout=20000)
         await page.evaluate("() => { const e = document.getElementById('call-name'); e.value = 'a\\u0000b'; e.dispatchEvent(new Event('input')); }")
-        await wait(page, "() => document.getElementById('call-why').textContent.includes('NUL')", label="NUL: refused")
+        await until(page, "() => document.getElementById('call-why').textContent.includes('NUL')", "NUL: refused", timeout=20000)
         nul = res["nul"] = await page.evaluate("() => ({ copy: document.getElementById('call-copy').disabled, cmd: document.getElementById('call-cmd').value })")
         check(failures, nul["copy"] and not nul["cmd"], f"a NUL leaves nothing to copy: {nul}")
 
@@ -192,18 +207,18 @@ async def run_callbell(pw, out, failures):
         # the settings decide the flag (read each time)
         settings.write_text(json.dumps({"channelsEnabled": False}))
         await page.fill("#call-name", "dev-flag")
-        await wait(page, "() => document.getElementById('call-cmd').value.includes('--dangerously-load-development-channels')", label="the development flag")
+        await until(page, "() => document.getElementById('call-cmd').value.includes('--dangerously-load-development-channels')", "the development flag", timeout=20000)
         res["devWhy"] = await page.evaluate("() => document.getElementById('call-why').textContent")
         check(failures, "警告" in res["devWhy"], f"the development flag says its warning: {res['devWhy']}")
 
         # Esc closes; the header's 呼び出し opens it from the keyboard and gets the focus back
         await page.keyboard.press("Escape")
-        await wait(page, "() => document.getElementById('call').hidden", label="Esc closes")
+        await until(page, "() => document.getElementById('call').hidden", "Esc closes", timeout=20000)
         await page.focus("#room-call")
         await page.keyboard.press("Enter")
-        await wait(page, "() => !document.getElementById('call').hidden && document.activeElement.id === 'call-name'", label="opened from the header")
+        await until(page, "() => !document.getElementById('call').hidden && document.activeElement.id === 'call-name'", "opened from the header", timeout=20000)
         await page.keyboard.press("Escape")
-        await wait(page, "() => document.getElementById('call').hidden && document.activeElement.id === 'room-call'", label="the focus back on 呼び出し")
+        await until(page, "() => document.getElementById('call').hidden && document.activeElement.id === 'room-call'", "the focus back on 呼び出し", timeout=20000)
 
         res["kids"] = [kids0, kids()]
         check(failures, kids() == kids0, f"the server started no process: {res['kids']}")

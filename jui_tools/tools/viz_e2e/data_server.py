@@ -20,11 +20,22 @@ import sys
 import threading
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, Watch, desk_pins_js, new_page, ready
+from waits import settled, until
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SID_A = "e2e00000-0000-4000-8000-000000000601"
 SID_B = "e2e00000-0000-4000-8000-000000000602"
+# The first room's desk (floor-view room coordinates), clear of the rack's line of sight from the usual view: the drawn
+# desk depended on --out (the room's id is the sha1 of its root), and a desk in front of the rack takes the press
+# (measured: pinned at [1.91, 1.6], in front of the rack, the press opened no sheet: "waiting for the sheet" timed out). Ticket
+# 2026-10-20-jui-viz-e2e-callbell-dialog-wait-flaky (the family); the product's side: 2026-10-20-jui-viz-callbell-bell-hidden-behind-a-desk.
+DESK_A = [6.4, 4.6]
+# The press to the sheet read (openDataDocs runs in the pointerup, then the server reads the documents): the cap as it
+# was (20 s), not measured under load for the read; a press that opened nothing says so with the page's state.
+OPENED_MS = 20000
+SHEET_JS_OPEN = "() => { const d = window.__dbg.dataServer(); return d.open && !d.loading; }"
+WHY_PRESS = "() => ({ rack: window.__dbg.dataServer(), view: window.__dbg.view() })"
 API = {"openapi": "3.0.0", "info": {"title": "Users API <b>bold</b>", "version": "1.2", "description": "ユーザーの API"},
        "paths": {"/users/{id}": {"parameters": [{"name": "id", "in": "path", "required": True, "description": "利用者の ID", "schema": {"type": "string"}}],
                                  "get": {"summary": "一人を取る", "responses": {"200": {"description": "見つかった", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
@@ -115,6 +126,7 @@ async def run_data_server(pw, out, failures, jt=None, shots_only=False):
         asked = []
         page.on("request", lambda r: asked.append(r.url))
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
+        await page.add_init_script(desk_pins_js([(room_a, SID_A, DESK_A)]))
         await page.goto(url + "/")
         await ready(page)
         await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
@@ -163,9 +175,15 @@ async def run_data_server(pw, out, failures, jt=None, shots_only=False):
         await wait(page, "() => window.__dbg.dataServer().built", label="the rack again")
         a = await page.evaluate("() => window.__dbg.dataServer()")
 
+        seat = res["seatA"] = await page.evaluate("(sid) => { const R = window.__dbg.robots.find((x) => x.def.sessionId === sid); return R ? window.__dbg.seats()[R.def.id] : null; }", SID_A)
+        check(failures, seat and [seat.get("dx"), seat.get("dz")] == DESK_A, f"the first room's desk is where the arm put it {DESK_A}: {seat}")
+
         # pressed: the sheet, API first
+        await settled(page, "the room before the press on the rack")
+        await until(page, "() => !window.__dbg.view().tween", "the camera still before the press on the rack", timeout=20000)
+        a = await page.evaluate("() => window.__dbg.dataServer()")
         await page.mouse.click(*a["screen"])
-        await wait(page, "() => { const d = window.__dbg.dataServer(); return d.open && !d.loading; }", label="the sheet")
+        await until(page, SHEET_JS_OPEN, "the sheet", timeout=OPENED_MS, why=WHY_PRESS)
         s = res["api"] = await page.evaluate(SHEET_JS)
         check(failures, s["tabs"] == [["api", "true"], ["db", "false"]], f"two tabs, API first: {s['tabs']}")
         check(failures, s["titles"] == ["Users API <b>bold</b>v1.2docs/api/users.json"] or (s["titles"] and s["titles"][0].startswith("Users API <b>bold</b>")),
@@ -199,9 +217,11 @@ async def run_data_server(pw, out, failures, jt=None, shots_only=False):
         # a changed title shows on opening again
         changed = {**API, "info": {**API["info"], "title": "Users API v2"}}
         (room_a / "docs" / "api" / "users.json").write_text(json.dumps(changed, ensure_ascii=False))
+        await settled(page, "the room before the press on the rack again")
+        await until(page, "() => !window.__dbg.view().tween", "the camera still before the press on the rack again", timeout=20000)
         a = await page.evaluate("() => window.__dbg.dataServer()")
         await page.mouse.click(*a["screen"])
-        await wait(page, "() => { const d = window.__dbg.dataServer(); return d.open && !d.loading; }", label="the sheet again")
+        await until(page, SHEET_JS_OPEN, "the sheet again", timeout=OPENED_MS, why=WHY_PRESS)
         s = await page.evaluate(SHEET_JS)
         check(failures, s["titles"] and s["titles"][0].startswith("Users API v2"), f"opening again reads the changed file: {s['titles']}")
         await page.click("#ds-close")

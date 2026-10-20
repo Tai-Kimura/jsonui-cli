@@ -36,6 +36,31 @@ def ago(hours: float = 0, minutes: float = 0) -> str:
     t = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0) - datetime.timedelta(hours=hours, minutes=minutes)
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+
+def desk_pins_js(pins) -> str:
+    """An init script that puts robots' desks where an arm needs them (ticket
+    2026-10-20-jui-viz-e2e-callbell-dialog-wait-flaky): a desk is drawn from a seed of the robot's server id and the
+    room's id, and the room's id is the sha1 of the project's root, which lies under --out. So the --out of a run
+    decided where a desk stood, and one --out put a robot in front of the call bell: the press opened the robot's card.
+    This writes the page's own desk memory (30-source-live.js DESK_MEM: localStorage agent-view:desks,
+    "<project id>|<server id>" -> [dx, dz] in the floor-view room's coordinates; takeSeat keeps a remembered desk that is
+    still clear) before the page loads. pins: (cwd as the hooks send it, the robot's server id, [dx, dz]). The arm
+    then checks the desk is there (window.__dbg.seats()), so a pin that did not take is a failure, not a quiet draw."""
+    desks = {f"{project_id(cwd)}|{rid}": list(spot) for cwd, rid, spot in pins}
+    return f"try {{ localStorage.setItem('agent-view:desks', {json.dumps(json.dumps(desks))}); }} catch (e) {{}}"
+
+
+def project_id(cwd) -> str:
+    """The room's id the server gives a cwd (rooms.py: the sha1 of find_root's root, 12 hex)."""
+    import hashlib
+    import sys
+    jt = str(Path(__file__).resolve().parents[2])
+    if jt not in sys.path:
+        sys.path.insert(0, jt)
+    from jui_cli.viz.rooms import find_root
+    return hashlib.sha1(find_root(str(cwd))[0].encode("utf-8")).hexdigest()[:12]
+
+
 # Taken out of every environment a suite gives its server and its hooks: each would point the throwaway server at the
 # real one's state (its folder, the progress a runner writes, the saved results) — 10-18.
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
