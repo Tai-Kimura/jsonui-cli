@@ -680,6 +680,9 @@ async def run_server_room(pw, out, failures):
         await page.evaluate("() => window.__dbg.srZoom(0.3)")
         await frames_settled()
         scr = await page.evaluate("() => window.__dbg.srScreen()")
+        # the box around the five nodes nearest the middle: it holds several, spread, so how it fills the page tells
+        near5 = sorted((xy for _i, xy in scr["nodes"] if on_page(xy, rect)), key=lambda xy: (xy[0] - cx) ** 2 + (xy[1] - cy) ** 2)[:5]
+        bx = [min(x for x, _ in near5) - 8, min(y for _, y in near5) - 8, max(x for x, _ in near5) + 8, max(y for _, y in near5) + 8]
         inside = {i for i, xy in scr["nodes"] if on_page(xy, bx)}
         outside = {i for i, xy in scr["nodes"] if on_page(xy, rect)} - inside
         mid = await drag(bx[0], bx[1], bx[2], bx[3], ("Alt",))
@@ -693,6 +696,11 @@ async def run_server_room(pw, out, failures):
         check(failures, mid["shown"] and inside and last and set(last["held"]) == inside and not missing,
               f"Option + drag: every node in the box is on the page after: {box_res['alt']}")
         check(failures, outside and len(gone) >= 0.8 * len(outside), f"Option + drag: most nodes outside the box leave the page: {box_res['alt']}")
+        # how much of the page what the box held fills: its farthest node at SR.boxFit (0.92) of the half page
+        ar = after["rect"]
+        ndc = [max(abs((pos[i][0] - ar[0]) / (ar[2] - ar[0]) * 2 - 1), abs((pos[i][1] - ar[1]) / (ar[3] - ar[1]) * 2 - 1)) for i in inside if pos.get(i)]
+        box_res["fill"] = {"held": len(inside), "farthest": round(max(ndc), 3) if ndc else None}
+        check(failures, len(inside) >= 3 and ndc and 0.85 <= max(ndc) <= 0.95, f"Option + drag: what the box held fills the page to about 0.92: {box_res['fill']}")
         # Esc while drawing: the box goes, the room stays, the camera does not move
         await page.click("#sr-fit")
         await frames_settled()
@@ -721,6 +729,20 @@ async def run_server_room(pw, out, failures):
         box_res["button"] = {"mid": mid, "after": btn, "dist": [c3["dist"], c5["dist"]]}
         check(failures, mid["shown"] and not btn["armed"] and btn["last"] and c5["dist"] < c3["dist"] * 0.5,
               f"範囲で寄る then a plain drag moves in on the box, once: {box_res['button']}")
+        # far: the box takes the top groups' boxes, and moves in on the one drawn around
+        await page.click("#sr-fit")
+        await page.evaluate("() => window.__dbg.srZoom(3)")
+        await until(page, "() => window.__dbg.sr().lod === 'far'", "far for the box", timeout=5000)
+        await frames_settled()
+        far_scr = await page.evaluate("() => window.__dbg.srScreen()")
+        tops = [(i, xy) for i, xy in far_scr["nodes"] if on_page(xy, rect)]
+        gid, gxy = min(tops, key=lambda t: (t[1][0] - cx) ** 2 + (t[1][1] - cy) ** 2)
+        px_far = (await page.evaluate(SR))["cellPx"]
+        await drag(gxy[0] - 12, gxy[1] - 12, gxy[0] + 12, gxy[1] + 12, ("Alt",))
+        last = (await page.evaluate("() => window.__dbg.srBox()"))["last"]
+        box_res["far"] = {"group": gid, "last": last, "cellPx": [px_far, (await page.evaluate(SR))["cellPx"]]}
+        check(failures, far_scr["lod"] == "far" and last and last["lod"] == "far" and last["held"] == [gid]
+              and box_res["far"]["cellPx"][1] > px_far * 1.5, f"far: the box held the group drawn around and moved in on it: {box_res['far']}")
         await page.screenshot(path=str(out / "large-box.png"))
         await page.keyboard.press("Escape")
 
