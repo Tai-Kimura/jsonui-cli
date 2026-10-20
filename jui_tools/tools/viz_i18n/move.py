@@ -4,9 +4,10 @@
     python3 tools/viz_i18n/move.py apply SPEC.py                  # one part's edits and keys, checked, then written
     python3 tools/viz_i18n/move.py check js/58-talk.js --base REV [--head REV]
 
-A part is named from jui_cli/viz/web/ (js/58-talk.js, index.html, app.css). A spec is a Python file with
-PART, EDITS = [(old, new), …] (each old found exactly once) and KEYS = {key: (en, ja)}; a key already in the table
-must keep its words.
+A part is named from jui_cli/viz/web/ (js/58-talk.js, index.html, app.css), or, for the server's words, from
+jui_cli/viz/ with a leading "viz/" (viz/ingest.py, viz/sources/history.py). A spec is a Python file with
+PART, EDITS = [(old, new), …] (each old found exactly once; (old, new, n): exactly n times, all replaced) and
+KEYS = {key: (en, ja)}; a key already in the table must keep its words.
 
 The check is the arm that the Japanese words are kept letter for letter, both ways:
 - every new key's Japanese words are in the part as it was, whole: each {slot} where a ${…} stood and nothing else
@@ -37,6 +38,15 @@ WEB = JT / "jui_cli" / "viz" / "web"
 REPO_PREFIX = "jui_tools/jui_cli/viz/web/"
 
 
+def part_path(name: str) -> Path:
+    """Where a part is: web/<name>, or jui_cli/viz/<rest> for a "viz/..." part (the server's)."""
+    return WEB.parent / name[4:] if name.startswith("viz/") else WEB / name
+
+
+def repo_path(name: str) -> str:
+    return f"jui_tools/jui_cli/viz/{name[4:]}" if name.startswith("viz/") else REPO_PREFIX + name
+
+
 #: Reviewed moves that are not piece for piece and say the same words: (part, key or gone run) -> why. Closed: a new
 #: one is red until it is reviewed and written here.
 KNOWN = {
@@ -45,6 +55,9 @@ KNOWN = {
     ("js/58-talk.js", "日"): "the same line as 月",
     ("js/58-talk.js", "talk.row.aria"): "the {unread} slot was a template of its own (`未読 ${c.unread}、`), now the key "
                                         "talk.row.unread, which is checked by itself",
+    ("viz/ingest.py", "ev.sent.allow"): "was f\"ブラウザで{'許可' if behavior == 'allow' else '拒否'}を送信{extra} …\": the same "
+                                         "words, one key a choice",
+    ("viz/ingest.py", "ev.sent.deny"): "as ev.sent.allow ('拒否')",
     ("js/54-bills.js", "pr.done.set"): "was `${model}: ${{set: '保存しました', …}[op]}（次の応答から）`: the same words, "
                                        "one key a choice",
     ("js/54-bills.js", "pr.done.remove"): "as pr.done.set ('削除しました')",
@@ -83,7 +96,7 @@ def _found(text: str, old: str) -> bool:
             if form in old:
                 return True
             continue
-        slot = r"(?:\$\{[^`\n]{0,300}?\}|['\"`]\s*\+[^\n]{0,200}?\+\s*['\"`])"
+        slot = r"(?:\$\{[^`\n]{0,300}?\}|\{[^{}\n]{1,200}?\}|['\"`]\s*\+[^\n]{0,200}?\+\s*['\"`])"   # JS, a Python f-string, a join
         if re.search(slot.join(re.escape(p) for p in parts), old):
             return True
     return False
@@ -119,7 +132,7 @@ def table(lang: str) -> dict:
 
 
 def _git_show(rev: str, name: str) -> str:
-    return subprocess.run(["git", "show", f"{rev}:{REPO_PREFIX}{name}"], cwd=JT, check=True, capture_output=True,
+    return subprocess.run(["git", "show", f"{rev}:{repo_path(name)}"], cwd=JT, check=True, capture_output=True,
                           text=True).stdout
 
 
@@ -128,7 +141,7 @@ def _git_table(rev: str, lang: str) -> dict:
 
 
 def cmd_scan(args) -> int:
-    text = (WEB / args.part).read_text(encoding="utf-8")
+    text = part_path(args.part).read_text(encoding="utf-8")
     found = finder.lines(args.part, text)
     for n, line in found:
         print(f"{n:5d}: {line.strip()[:200]}")
@@ -141,7 +154,7 @@ def cmd_check(args) -> int:
     if args.head:
         new, ja, en = _git_show(args.head, args.part), _git_table(args.head, "ja"), _git_table(args.head, "en")
     else:
-        new, ja, en = (WEB / args.part).read_text(encoding="utf-8"), table("ja"), table("en")
+        new, ja, en = part_path(args.part).read_text(encoding="utf-8"), table("ja"), table("en")
     problems = check(args.part, old, new, ja, en)
     for p in problems:
         print(p)
@@ -152,13 +165,14 @@ def cmd_check(args) -> int:
 def cmd_apply(args) -> int:
     spec = runpy.run_path(args.spec)
     name = spec["PART"]
-    path = WEB / name
+    path = part_path(name)
     old = path.read_text(encoding="utf-8")
     new = old
-    for before, after in spec["EDITS"]:
+    for edit in spec["EDITS"]:
+        before, after, want = (*edit, 1) if len(edit) == 2 else edit
         n = new.count(before)
-        if n != 1:
-            print(f"{name}: {n} matches for {before[:80]!r}", file=sys.stderr)
+        if n != want:
+            print(f"{name}: {n} matches for {before[:80]!r} (want {want})", file=sys.stderr)
             return 1
         new = new.replace(before, after)
     en, ja = table("en"), table("ja")
@@ -168,7 +182,8 @@ def cmd_apply(args) -> int:
                 print(f"{key}: already in {lang}.json with other words", file=sys.stderr)
                 return 1
             words[key] = value
-    unused = [k for k in spec["KEYS"] if f"'{k}'" not in new and f'"{k}"' not in new]
+    marked = {k for k, *_ in finder.marks(name, new)}   # index.html's {{tl:…}}, app.css's var(--tl-…)
+    unused = [k for k in spec["KEYS"] if f"'{k}'" not in new and f'"{k}"' not in new and k not in marked]
     problems = [f"{k}: not used in {name}" for k in unused] + check(name, old, new, ja, en)
     if problems:
         print("\n".join(problems), file=sys.stderr)

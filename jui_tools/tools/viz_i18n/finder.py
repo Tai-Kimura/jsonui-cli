@@ -6,6 +6,7 @@ Comments are not counted: they are for the people who read the code, not words o
   where no string is open; a ' or " string ends at its line (a quote inside a regex opens nothing).
 - .html: everything but <!-- … --> (text, attributes, titles).
 - .css: everything but /* … */ (``content:`` words).
+- .py: string literals (f-strings' text too) that are not docstrings; comments are not counted.
 
 Used by the gate (tests/test_viz_i18n.py) and by the mover (move.py).
 """
@@ -108,17 +109,46 @@ def mark_problems(name: str, text: str, ja: dict, en: dict) -> list[str]:
     return out
 
 
+def _py(text: str) -> list[int]:
+    """Japanese in a Python file's string literals, docstrings left out (a module's, a class's, a function's)."""
+    import ast
+    import io
+    import tokenize
+
+    lines = text.splitlines(keepends=True)
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line))
+    docs: set[tuple[int, int]] = set()
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                docs.add((first.lineno, first.col_offset))
+    out = []
+    kinds = {tokenize.STRING} | ({tokenize.FSTRING_MIDDLE} if hasattr(tokenize, "FSTRING_MIDDLE") else set())
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if tok.type not in kinds or (tok.type == tokenize.STRING and tok.start in docs):
+            continue
+        a = starts[tok.start[0] - 1] + tok.start[1]
+        b = starts[tok.end[0] - 1] + tok.end[1]
+        out.extend(k for k in range(a, b) if JA.match(text[k]))
+    return out
+
+
 def positions(name: str, text: str) -> list[int]:
     """The offsets of the Japanese a part says, by its kind (its name's extension). The words as written beside a
     key are not counted: the key says them."""
     if name.endswith(".js"):
         return _js(text)
+    if name.endswith(".py"):
+        return _py(text)
     if name.endswith(".html"):
         found = _outside(text, "<!--", "-->")
     elif name.endswith(".css"):
         found = _outside(text, "/*", "*/")
     else:
-        raise ValueError(f"{name}: not a .js, .html or .css part")
+        raise ValueError(f"{name}: not a .js, .html, .css or .py part")
     held = [(a, b) for _, _, a, b in marks(name, text)]
     return [k for k in found if not any(a <= k < b for a, b in held)]
 

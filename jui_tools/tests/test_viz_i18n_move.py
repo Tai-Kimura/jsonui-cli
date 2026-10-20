@@ -75,9 +75,8 @@ def test_a_word_already_in_the_table_may_say_a_moved_run():
 
 
 def test_the_reviewed_exceptions_are_closed_and_name_real_parts():
-    web = Path(move.WEB)
     for (part, _), why in move.KNOWN.items():
-        assert (web / part).is_file(), part
+        assert move.part_path(part).is_file(), part
         assert why.strip()
 
 
@@ -87,7 +86,7 @@ def test_the_finder_by_kind():
     assert finder.runs("a.js", "const a = '待機'; const b = `作業${x}中`; // 注") == ["待機", "作業", "中"]
     assert finder.lines("a.js", "x\nconst a = '待機';\n// 注\n") == [(2, "const a = '待機';")]
     with pytest.raises(ValueError):
-        finder.positions("a.py", "")
+        finder.positions("a.rb", "")
 
 
 # ---- apply: written only when every check passes -----------------------------------------------------------------
@@ -185,3 +184,60 @@ def test_a_css_move_into_a_variable_passes_and_a_changed_word_is_red():
     bad = new.replace("--tl-hist-loading", "--tl-Hist-Loading")
     assert any("a css key is css. and lower-case" in p for p in move.check(
         "app.css", old, bad, {"css.Hist.Loading": "読み込み中…"}, {"css.Hist.Loading": "Loading…"}))
+
+
+# ---- the server's words: Python parts ------------------------------------------------------------------------------
+
+PY_OLD = '''"""A docstring: 説明 is not a word."""
+# 注: a comment
+ACT = "待機"
+def f(x):
+    """Docstring 説明."""
+    return f"出勤 {x['source']}"
+'''
+PY_NEW = '''"""A docstring: 説明 is not a word."""
+# 注: a comment
+ACT = tl("srv.idle")
+def f(x):
+    """Docstring 説明."""
+    return tl("srv.clock_in", source=x['source'])
+'''
+
+
+def test_the_finder_reads_python_strings_not_docstrings_or_comments():
+    assert finder.runs("viz/x.py", PY_OLD) == ["待機", "出勤"]
+    assert finder.chars("viz/x.py", PY_NEW) == []
+
+
+def test_a_python_move_with_an_f_string_slot_passes_and_a_changed_word_is_red():
+    ja, en = {"srv.idle": "待機", "srv.clock_in": "出勤 {source}"}, {"srv.idle": "Idle", "srv.clock_in": "Clock in {source}"}
+    assert move.check("viz/x.py", PY_OLD, PY_NEW, ja, en) == []
+    bad = dict(ja, **{"srv.clock_in": "出勤{source}"})
+    assert move.check("viz/x.py", PY_OLD, PY_NEW, bad, en)[0] == "srv.clock_in: '出勤{source}' is not in viz/x.py as it was"
+
+
+def test_a_server_part_is_found_under_viz():
+    assert move.part_path("viz/ingest.py") == move.WEB.parent / "ingest.py"
+    assert move.part_path("js/58-talk.js") == move.WEB / "js" / "58-talk.js"
+    assert move.repo_path("viz/sources/history.py") == "jui_tools/jui_cli/viz/sources/history.py"
+
+
+def test_apply_takes_an_edit_meant_for_n_places(web, capsys):
+    (web / "js" / "x.js").write_text(OLD + "const e = '待機';\n", encoding="utf-8")
+    edits = [("'待機'", "tl('x.idle')", 2), ("`未読 ${n} 件`", "tl('x.unread', { n })")]
+    assert move.main(["apply", spec(web, edits, KEYS)]) == 0
+    assert (web / "js" / "x.js").read_text().count("tl('x.idle')") == 2
+    (web / "js" / "x.js").write_text(OLD + "const e = '待機';\n", encoding="utf-8")
+    assert move.main(["apply", spec(web, [("'待機'", "tl('x.idle')", 3)], KEYS)]) == 1
+    assert "2 matches" in capsys.readouterr().err
+
+
+def test_apply_counts_a_key_in_a_mark_as_used(web):
+    """index.html's {{tl:key}} and app.css's var(--tl-name) name their keys unquoted (the first draft of index.html's
+    move was refused key by key as unused)."""
+    (web / "index.html").write_text('<p title="題">本文</p>', encoding="utf-8")
+    path = web / "s.py"
+    path.write_text("PART = 'index.html'\nEDITS = [('題', '{{tl:x.t}}題{{/tl}}'), ('本文', '{{tl:x.b}}本文{{/tl}}')]\n"
+                    "KEYS = {'x.t': ('Title', '題'), 'x.b': ('Body', '本文')}\n", encoding="utf-8")
+    assert move.main(["apply", str(path)]) == 0
+    assert (web / "index.html").read_text() == '<p title="{{tl:x.t}}題{{/tl}}">{{tl:x.b}}本文{{/tl}}</p>'
