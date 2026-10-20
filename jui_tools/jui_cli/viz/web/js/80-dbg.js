@@ -176,9 +176,11 @@ window.__dbg = {
       const p = seatPos(room, { dx, dz, standing: false }).pos;
       v.set(p[0], 0, p[1]).add(TAG_UP).project(camera);
       const x = r.left + (v.x + 1) / 2 * r.width, y = r.top + (1 - v.y) / 2 * r.height;
-      if (pt[0] > x - w / 2 + 6 && pt[0] < x + w / 2 - 6 && pt[1] > y - h + 4 && pt[1] < y - 4) out.push([+dx.toFixed(2), +dz.toFixed(2)]);
+      if (pt[0] > x - w / 2 + 6 && pt[0] < x + w / 2 - 6 && pt[1] > y - h + 4 && pt[1] < y - 4) out.push([+dx.toFixed(2), +dz.toFixed(2), Math.hypot(x - pt[0], y - h / 2 - pt[1])]);
     }
-    return { n: out.length, mid: out[Math.floor(out.length / 2)] || null, first: out.slice(0, 3), tag: [w, h] };
+    // best: the spot whose tag's middle is nearest the point (the most room on every side)
+    const best = out.slice().sort((p, q) => p[2] - q[2])[0];
+    return { n: out.length, best: best ? best.slice(0, 2) : null, bestOff: best ? +best[2].toFixed(1) : null, tag: [w, h] };
   },
   solo: () => (SOURCE.mode === 'live' ? liveSolo() : null),
   // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
