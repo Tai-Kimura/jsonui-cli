@@ -417,6 +417,27 @@ async def run_server_room(pw, out, failures):
         await page.select_option("#sr-lines", "all")
         await page.evaluate("() => window.__dbg.srSelect(null)")
         res["lines"] = ln
+        # filter by cloud (2.3.10 item 3): the legend's clouds toggle; only their nodes, no empty floor, 全部 back
+        pv = {"all": await page.evaluate("() => window.__dbg.srProviders()")}
+        await page.click("#sr-board [data-sr-prov='aws']")
+        await until(page, "() => window.__dbg.srProviders().only.join() === 'aws'", "only aws")
+        pv["aws"] = await page.evaluate("() => window.__dbg.srProviders()")
+        await page.click("#sr-board [data-sr-prov='gcp']")
+        await until(page, "() => window.__dbg.srProviders().only.length === 2", "aws and gcp")
+        pv["awsGcp"] = await page.evaluate("() => window.__dbg.srProviders()")
+        await page.screenshot(path=str(out / "filter-light.png"))
+        await page.click("#sr-board [data-sr-prov='']")
+        await until(page, "() => window.__dbg.srProviders().only.length === 0", "all clouds again")
+        pv["back"] = await page.evaluate("() => window.__dbg.srProviders()")
+        res["filter"] = {k: {"only": v["only"], "nodes": len(v["drawn"]), "providers": sorted({p for _, p in v["drawn"]}), "cross": len(v["cross"]), "groups": v["groups"],
+                             "emptyFloors": v["emptyFloors"]} for k, v in pv.items()}
+        f = res["filter"]
+        prov_of = {i: p for i, p in pv["awsGcp"]["drawn"]}
+        check(failures, f["aws"]["providers"] == ["aws"] and f["aws"]["nodes"] > 0 and f["aws"]["cross"] == 0 and not f["aws"]["emptyFloors"] and not f["awsGcp"]["emptyFloors"],
+              f"one cloud chosen: its nodes only, no crossing cable, no empty floor: {f['aws']} (all {f['all']})")
+        check(failures, set(f["awsGcp"]["providers"]) == {"aws", "gcp"} and all(prov_of.get(a) in ("aws", "gcp") and prov_of.get(b) in ("aws", "gcp") for a, b in pv["awsGcp"]["cross"]),
+              f"two clouds chosen: both, and only crossings between them: {f['awsGcp']}")
+        check(failures, f["back"]["nodes"] == f["all"]["nodes"] and f["back"]["groups"] == f["all"]["groups"], f"全部 brings every node back: {f['back']} vs {f['all']}")
         d, c = ln["default"], ln["chosen"]
         check(failures, d["plainOpacity"] <= 0.3 and d["focus"] == 0 and d["plainVisible"] and d["crossVisible"], f"lines faint by default, none strong: {d}")
         check(failures, want > 0 and c["focus"] == want, f"a chosen node's cables drawn strong, all of them: {c}")

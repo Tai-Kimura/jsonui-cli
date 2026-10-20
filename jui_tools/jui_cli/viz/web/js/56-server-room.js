@@ -35,6 +35,7 @@ const SR = {
   // fewer lines (2.3.10, requester 10-20: 「線減らす工夫欲しいね」): all cables faint, the pressed and the pointed node's
   // drawn strong on a layer of their own; a switch for all (faint) / crossing ones only / the chosen node's only
   lines: 'all', hover: null, plainOpacity: 0.18, crossOpacity: 0.55,
+  only: new Set(),   // the clouds chosen on the board's legend (2.3.10 item 3; empty: all)
 };
 const srEl = $('sr'), srBubbleEl = $('sr-bubble');
 function srNow() { return performance.now(); }
@@ -162,19 +163,24 @@ const srVisible = (x, env) => !env || !Array.isArray(x.environments) || !x.envir
 function srEnvs(model) { return (model.environments || []).map((e) => (typeof e === 'string' ? { id: e, label: e } : { id: e.id, label: e.label || e.id })); }
 
 /* Places every group and node (sizes bottom-up, places top-down); the external nodes on a strip in front. */
-function srLayout(model, env, showFold, closed = new Set()) {
+function srLayout(model, env, showFold, closed = new Set(), only = new Set()) {
   const groups = new Map();
   for (const g of model.groups || []) if (srVisible(g, env)) groups.set(g.id, { g, kids: [], nodes: [], level: 0 });
   const roots = [];
   for (const G of groups.values()) { const p = G.g.parent && groups.get(G.g.parent); (p ? p.kids : roots).push(G); }
   const loose = { g: { id: '', kind: 'logical', label: 'グループなし' }, kids: [], nodes: [], level: 0 }, ext = [];
-  const nodes = (model.nodes || []).filter((n) => srVisible(n, env) && (showFold || !n.fold));
+  // clouds chosen on the board (2.3.10 item 3): only their nodes; one with no provider is out while any is chosen
+  const nodes = (model.nodes || []).filter((n) => srVisible(n, env) && (showFold || !n.fold) && (!only.size || only.has(n.providerResolved || n.provider)));
   for (const n of nodes) {
     if (n.external || n.category === 'external.saas') { ext.push(n); continue; }
     const G = n.group && groups.get(n.group);
     (G ? G.nodes : loose.nodes).push(n);
   }
   if (loose.nodes.length) roots.push(loose);
+  if (only.size) {   // a group with nothing left inside is not drawn while clouds are chosen
+    const keep = (G) => { G.kids = G.kids.filter(keep); return G.nodes.length > 0 || G.kids.length > 0; };
+    roots.splice(0, roots.length, ...roots.filter(keep));
+  }
   const pack = (items) => {
     const area = items.reduce((a, it) => a + it.w * it.d, 0), wide = Math.max(SR_CELL, ...items.map((it) => it.w));
     const rowW = Math.max(wide, Math.sqrt(area) * 1.25);
@@ -239,7 +245,7 @@ function srShow(model) {
   $('sr-env').innerHTML = envs.length ? envs.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('') : '<option value="">（環境の指定なし）</option>';
   $('sr-env').disabled = envs.length < 2;
   $('sr-fold').checked = false;
-  SR.closed = new Set(); SR.selected = null; SR.selectedGroup = null; SR.hover = null;
+  SR.closed = new Set(); SR.selected = null; SR.selectedGroup = null; SR.hover = null; SR.only = new Set();
   $('sr-lines').value = SR.lines;
   srBuild();
   $('sr-back').focus({ preventScroll: true });
@@ -269,7 +275,7 @@ function srBuild() {
   const t0 = srNow();
   srDispose();
   const model = SR.model, env = $('sr-env').value || '', fold = $('sr-fold').checked;
-  const L = srLayout(model, env, fold, SR.closed);
+  const L = srLayout(model, env, fold, SR.closed, SR.only);
   const cv = $('sr-canvas'), box = cv.parentElement;
   const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -591,7 +597,9 @@ function srRenderBoard() {
   setHTML($('sr-board'), `<h3>構成</h3>
 <p class="sr-meta">${esc(M.dir || '')} · ${esc(String((M.files || []).length))} ファイル</p>
 <dl class="sr-counts"><dt>node</dt><dd data-sr-count="nodes">${esc(String(S.nodes ?? 0))}</dd><dt>edge</dt><dd data-sr-count="edges">${esc(String(S.edges ?? 0))}</dd><dt>provider を跨ぐ edge</dt><dd data-sr-count="cross">${esc(String(S.cross ?? 0))}</dd><dt>畳んだもの</dt><dd>${esc(String(S.folded ?? 0))}${$('sr-fold').checked ? '（出している）' : ''}</dd><dt>外部</dt><dd>${esc(String(S.external ?? 0))}</dd></dl>
-<h3>凡例</h3><ul class="sr-legend">${provs.map((p) => `<li><span class="sr-chip" style="background:${esc(srProviderColor(p))}"></span>${esc(p)}</li>`).join('')}
+<h3>凡例</h3><p class="sr-hint">クラウドを押すと、そのクラウドだけを表示します（複数を選べます）。${SR.only.size ? ` 絞り: ${esc([...SR.only].join(', '))}` : ''}</p>
+<ul class="sr-legend">${provs.map((p) => `<li><button type="button" class="sr-prov" data-sr-prov="${esc(p)}" aria-pressed="${SR.only.has(p) ? 'true' : 'false'}"><span class="sr-chip" style="background:${esc(srProviderColor(p))}"></span>${esc(p)}</button></li>`).join('')}
+<li><button type="button" class="sr-prov" data-sr-prov="" aria-pressed="${SR.only.size ? 'false' : 'true'}">全部</button></li>
 <li><span class="sr-line"></span>同じ provider の中のつながり</li><li><span class="sr-line sr-line-cross"></span>provider を跨ぐつながり（破線・マゼンタ）</li></ul>
 ${sel ? `<h3>選んだもの</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(sel.id)}</dd><dt>名前</dt><dd>${esc(sel.label || '')}</dd><dt>種類</dt><dd>${esc(sel.category)}</dd><dt>provider</dt><dd>${esc(sel.providerResolved || sel.provider || '')}${sel.service ? ` · ${esc(sel.service)}` : ''}</dd>${sel.count > 1 ? `<dt>台数</dt><dd>${esc(String(sel.count))}</dd>` : ''}</dl>
 <p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">これに寄る</button></p>
@@ -627,6 +635,14 @@ $('sr-lines').addEventListener('change', () => {
 });
 $('sr-zout').addEventListener('click', () => srZoomBy(SR.zoomStep));
 $('sr-board').addEventListener('click', (e) => {
+  const pv = e.target.closest('[data-sr-prov]');
+  if (pv) {   // a cloud on the legend: toggled; 全部 clears the choice
+    const p = pv.dataset.srProv;
+    if (!p) SR.only = new Set(); else if (SR.only.has(p)) SR.only.delete(p); else SR.only.add(p);
+    srLog(SR.only.size ? `絞り: ${[...SR.only].join(', ')}` : '絞り: 全部');
+    srBuild();
+    return;
+  }
   const b = e.target.closest('[data-sr-act]');
   if (!b) return;
   if (b.dataset.srAct === 'focus') srFocusSelected();

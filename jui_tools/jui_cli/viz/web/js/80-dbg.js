@@ -25,6 +25,7 @@ window.__dbg = {
   srIconKeys: () => (SR.view ? { ...(SR.view.iconKeys || {}) } : {}),
   srNodeEnvs: () => (SR.view ? SR.view.L.nodes.map((n) => [n.id, Array.isArray(n.environments) ? n.environments : []]) : []),
   srAlive: () => !!SR.view,
+  srProviders: () => (SR.view ? { only: [...SR.only], drawn: SR.view.L.nodes.map((n) => [n.id, n.providerResolved || n.provider || '']), groups: SR.view.L.floors.length, emptyFloors: SR.view.L.floors.filter((G) => srCountNodes(G) === 0).map((G) => G.g.id || '(none)'), cross: SR.view.L.edges.filter((e) => e.crossProvider).map((e) => [e.from, e.to]) } : null),
   srTheme: () => { const V = SR.view; if (!V) return null; const lab = document.querySelector('#sr-labels .sr-label:not([hidden])'), cs = lab ? getComputedStyle(lab) : null;
     return { dark: V.dark, bg: `#${V.scene.background.getHexString()}`, floors: [...new Set(V.floorColors)], label: cs ? [cs.color, cs.backgroundColor] : null }; },
   srLines: () => { const V = SR.view; return V ? { mode: SR.lines, plainOpacity: V.plainLines.material.opacity, crossOpacity: V.crossLines.material.opacity,
