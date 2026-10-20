@@ -322,6 +322,7 @@ function srClose() {
 function srDispose() {
   const V = SR.view;
   if (!V) return;
+  srFlowStop();          // 59-sr-flows.js: a flow playing belongs to this 3D
   cancelAnimationFrame(V.raf);
   V.ro.disconnect();
   V.controls.dispose();
@@ -477,13 +478,16 @@ function srBuild() {
   };
   cv.onpointerleave = () => { if (SR.hover) { SR.hover = null; srFocusLines(V); } };
   cv.onpointerup = (e) => { if (V.downAt && Math.hypot(e.clientX - V.downAt[0], e.clientY - V.downAt[1]) < 5) srPick(e); V.downAt = null; };
+  srFlowBuild(V);          // 59-sr-flows.js: the cones over the nodes that start a flow
   const loop = () => {
     V.raf = requestAnimationFrame(loop);
     const t = srNow();
+    const dt = V.last ? Math.min(t - V.last, 100) : 16;
     if (V.last) { V.frames.push(t - V.last); if (V.frames.length > 240) V.frames.shift(); }
     V.last = t;
     controls.update();
     srLod(V);
+    srFlowTick(V, dt);
     if (t - V.labelAt > 100) { V.labelAt = t; srPlaceLabels(V); }
     renderer.render(scene, camera);
   };
@@ -757,7 +761,7 @@ function srRenderBoard() {
 ${sel ? `<h3>選んだもの</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(sel.id)}</dd><dt>名前</dt><dd>${esc(sel.label || '')}</dd><dt>種類</dt><dd>${esc(sel.category)}</dd><dt>provider</dt><dd>${esc(sel.providerResolved || sel.provider || '')}${sel.service ? ` · ${esc(sel.service)}` : ''}</dd>${sel.count > 1 ? `<dt>台数</dt><dd>${esc(String(sel.count))}</dd>` : ''}${sel.engine ? `<dt>エンジン</dt><dd>${esc(sel.engine)}</dd>` : ''}</dl>
 ${Array.isArray(sel.spec) && sel.spec.length ? `<h3>スペック</h3><table class="sr-spec" data-sr-spec><tbody>${sel.spec.map((x) => `<tr><th scope="row">${SR_SPEC_NAME[x.key] ? `${esc(SR_SPEC_NAME[x.key])} <small>${esc(x.key)}</small>` : esc(x.key)}</th><td>${esc(x.value)}</td></tr>`).join('')}</tbody></table>` : ''}
 <p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">これに寄る</button></p>
-<ul class="sr-edges">${edgesOf.map((e) => `<li>${esc(e.from)} → ${esc(e.to)}${e.protocol ? ` <small>${esc(e.protocol)}</small>` : ''}${e.crossProvider ? ' <b>跨ぐ</b>' : ''}</li>`).join('')}</ul>`
+<ul class="sr-edges">${edgesOf.map((e) => `<li>${esc(e.from)} → ${esc(e.to)}${e.protocol ? ` <small>${esc(e.protocol)}</small>` : ''}${e.crossProvider ? ' <b>跨ぐ</b>' : ''}</li>`).join('')}</ul>${srFlowBoardHTML(sel.id)}`
     : grp ? `<h3>選んだ group</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(grp.id)}</dd><dt>名前</dt><dd>${esc(grp.label || '')}</dd><dt>種類</dt><dd>${esc(grp.kind || '')}</dd><dt>provider</dt><dd>${esc(grp.providerResolved || grp.provider || '')}</dd><dt>中の node</dt><dd>${esc(String(inGroup ? srCountNodes(inGroup) : 0))}</dd></dl>
 <p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">これに寄る</button> <button type="button" class="wb-btn" data-sr-act="toggle" data-sr-group="${esc(grp.id)}">${SR.closed.has(grp.id) ? '開く' : '閉じる（箱 1 つに）'}</button></p>`
     : '<p class="sr-hint">形や床を押すと、ここに詳しく出ます（床なら、その group を閉じる・開く）</p>'}
@@ -828,6 +832,8 @@ $('sr-board').addEventListener('click', (e) => {
     srBuild();
     return;
   }
+  const fl = e.target.closest('[data-sr-flow]');
+  if (fl) { srFlowPlay(fl.dataset.srFlow); return; }   // 59-sr-flows.js
   const b = e.target.closest('[data-sr-act]');
   if (!b) return;
   if (b.dataset.srAct === 'focus') srFocusSelected();

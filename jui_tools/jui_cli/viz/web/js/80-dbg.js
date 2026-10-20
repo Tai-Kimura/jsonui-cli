@@ -44,6 +44,14 @@ window.__dbg = {
       shown: { simple: V.nodeSets.simple.visible, detail: V.nodeSets.detail.visible }, picks: V.pick.filter((m) => m.userData.nodes).map((m) => m.userData.shape),
       tags: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((s) => s.dataset.kind !== 'group').map((s) => s.textContent) }; },
   srTagOf: (id) => { const n = SR.model && (SR.model.nodes || []).find((x) => x.id === id); return n ? srDetailText(n) : null; },   // a node's tag up close
+  // a flow playing (59-sr-flows.js): what it is at, what it said, what it waits for
+  srFlow: () => { const P = SR_FLOW.player, V = SR.view; return { starts: V && V.flowStarts ? V.flowStarts.slice() : [], speed: SR_FLOW.speed, auto: SR_FLOW.auto,
+    playing: P ? P.flow.id : null, state: P ? P.state : null, pos: P ? P.pos : null, log: P ? P.log.slice() : [], arrivals: P ? P.arrivals.slice() : [],
+    reached: P ? P.reached.slice() : [],
+    lights: P ? P.lights.filter((o) => o.geometry && o.geometry.type === 'SphereGeometry').length : 0, chosen: P ? P.chosen.slice() : [],
+    hints: P && P.hints ? P.hints.userData.hints : 0, choices: [...document.querySelectorAll('#sr-choices:not([hidden]) [data-sr-choice]')].map((b) => b.dataset.srChoice),
+    toasts: [...document.querySelectorAll('#sr-toasts .sr-toast')].map((t) => t.textContent), history: P ? P.history.length : 0 }; },
+  srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowRenderBar(); return SR_FLOW.speed; },
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
   // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in
   // front of the door from this view (D2: the door must still take the press, as the bell and the rack do)

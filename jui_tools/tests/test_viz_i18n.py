@@ -39,7 +39,7 @@ PER_LANGUAGE = {"31-talk-demo-data.js": "the demo's talks, one set per language 
 #: and the hook chip's title (index.html); they move with those files.
 NOT_YET = {
     "20-core.js", "30-source-demo.js", "30-source-live.js", "40-scene.js", "50-panel.js", "51-denials.js",
-    "53-devices.js", "55-history.js", "56-server-room.js", "60-log.js", "70-main.js",
+    "53-devices.js", "55-history.js", "56-server-room.js", "59-sr-flows.js", "60-log.js", "70-main.js",
 }
 
 

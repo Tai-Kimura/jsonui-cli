@@ -1501,6 +1501,18 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-box[hidden] { display: none; }
 .sr-stage[data-box="armed"] canvas { cursor: crosshair; }
 #sr-boxzoom[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+/* a flow playing (59-sr-flows.js): toasts over the nodes, a branch's choices, the player's bar */
+.sr-toasts { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+.sr-toast { position: absolute; left: 0; top: 0; display: grid; gap: 1px; max-width: 260px; padding: 4px 9px; border: 1px solid var(--line); border-left: 4px solid #e0a800; border-radius: 6px; background: var(--panel); color: var(--ink); font: 600 12.5px/1.4 var(--font-body); box-shadow: 0 2px 6px var(--shadow); white-space: nowrap; }
+.sr-toast span { font-weight: 400; color: var(--ink-soft); white-space: normal; }
+.sr-choices { position: absolute; left: 0; top: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: 320px; padding: 6px 8px; border: 2px solid #e0a800; border-radius: 8px; background: var(--panel); color: var(--ink); box-shadow: 0 2px 8px var(--shadow); }
+.sr-choices[hidden] { display: none; }
+.sr-choice-q { width: 100%; margin: 0; font: 700 12.5px/1.4 var(--font-body); }
+.sr-player { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: 13px/1.4 var(--font-body); }
+.sr-player[hidden] { display: none; }
+.sr-fp-state { color: var(--ink-soft); }
+.sr-fp-chosen { display: flex; flex-wrap: wrap; gap: 4px 12px; width: 100%; margin: 0; padding-left: 18px; font-size: 12px; }
+.sr-flows { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
 .sr-label { position: absolute; left: 0; top: 0; padding: 1px 6px; border-radius: 4px; background: var(--tag-bg); color: var(--ink); font: 500 11px/1.5 var(--font-mono); white-space: nowrap; }
 .sr-label[hidden] { display: none; }
 .sr-label[data-kind="group"] { font-weight: 700; background: var(--panel); border: 1px solid var(--line); }

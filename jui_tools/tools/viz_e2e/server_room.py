@@ -95,6 +95,88 @@ def check(failures, cond, text):
         failures.append(f"server-room: {text}")
 
 
+FLOW = "() => window.__dbg.srFlow()"
+
+
+async def run_flows(page, out, failures, res):
+    """Flows played (the server room ticket's item 7) on the multi-provider room's two: 検索する (browser, a branch with a
+    default, lanes side by side) and 毎晩の写し (r2, a schedule)."""
+    fl = res["flows"] = {}
+    await page.evaluate("() => window.__dbg.srSelect(null)")
+    fl["starts"] = sorted((await page.evaluate(FLOW))["starts"])
+    check(failures, fl["starts"] == ["browser", "r2"], f"a cone over each node that starts a flow, and only there: {fl['starts']}")
+    await page.evaluate("() => window.__dbg.srSelect('dns')")
+    fl["dnsList"] = await page.evaluate("() => document.querySelectorAll('#sr-board [data-sr-flow]').length")
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    fl["browserList"] = await page.evaluate("() => [...document.querySelectorAll('#sr-board [data-sr-flow]')].map((b) => [b.dataset.srFlow, b.textContent])")
+    check(failures, fl["dnsList"] == 0 and fl["browserList"] == [["search", "👤 検索する"]],
+          f"a node with no flow lists none; the browser lists its flow with the trigger's mark: {fl['dnsList']} {fl['browserList']}")
+
+    # played step by step: the toasts, the branch's choices and the edges ahead
+    await page.click("#sr-board [data-sr-flow='search']")
+    at_branch = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' ? f : null; }}", "search: at its branch",
+                            timeout=30000, why=FLOW)
+    fl["atBranch"] = {k: at_branch[k] for k in ("log", "choices", "hints", "pos", "history")}
+    check(failures, at_branch["log"][:3] == ["👤 検索する", "→ web を呼ぶ", "→ api を呼ぶ"] and at_branch["choices"] == ["hit", "miss"]
+          and at_branch["hints"] == 2 and at_branch["pos"] == "api",
+          f"the start's toast, a verb's toast per move, then the branch stops with its choices and their first edges: {fl['atBranch']}")
+    await page.click("#sr-choices [data-sr-choice='miss']")
+    lanes = await until(page, f"() => {{ const f = ({FLOW})(); return f.lights >= 2 ? f : null; }}", "search: the two lanes at once",
+                        timeout=30000, why=FLOW)
+    done = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "search: the end", timeout=40000, why=FLOW)
+    when = {}
+    for to, t in done["reached"]:
+        when.setdefault(to, t)
+    lane_gap = abs(when.get("queue", 0) - when.get("r2", 1e9))
+    fl["miss"] = {"chosen": done["chosen"], "log": done["log"], "lanes": lanes["lights"], "laneGapMs": round(lane_gap)}
+    # the lanes run at once: at 1.0 a move takes 900 ms, so one after the other they would arrive ~900 ms apart
+    check(failures, lane_gap < 300, f"lanes side by side arrive together, not one after the other: {fl['miss']['laneGapMs']} ms")
+    check(failures, done["chosen"] == ["KV に結果が有る？ → 無い"] and "📖 d1 から読む" in done["log"] and "📖 kv から読む" not in done["log"]
+          and {"📥 queue に積む", "💾 r2 に保存"} <= set(done["log"]) and done["log"][-2:] == ["← ブラウザ に返す", "✓ 流れの終わり"],
+          f"the choice taken is the way played, the other not; the lanes and the way back: {fl['miss']}")
+    await page.screenshot(path=str(out / "flow-light.png"))
+    # back to the branch (each step back undoes one), choose again
+    for _ in range(done["history"] - at_branch["history"] + 1):
+        await page.click("#sr-player [data-sr-fp='back']")
+    await page.click("#sr-player [data-sr-fp='step']")
+    again = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "back at the branch",
+                        timeout=10000, why=FLOW)
+    await page.click("#sr-choices [data-sr-choice='hit']")          # a choice plays on
+    redone = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "search again: the end", timeout=40000, why=FLOW)
+    fl["back"] = {"chosen": redone["chosen"], "kv": "📖 kv から読む" in redone["log"], "atBranchAgain": again["pos"]}
+    check(failures, again["pos"] == "api" and redone["chosen"] == ["KV に結果が有る？ → 有る"] and fl["back"]["kv"],
+          f"back to the branch and the other way chosen: {fl['back']}")
+
+    # the speed: the time between the first two arrivals at 1.0 and at 2.0; 自動 takes the default
+    gaps = {}
+    for speed in (1.0, 2.0):
+        await page.click("#sr-player [data-sr-fp='stop']")
+        await page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", speed)
+        await page.click("#sr-board [data-sr-flow='search']")
+        f = await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 2 ? f : null; }}", f"two arrivals at {speed}", timeout=30000, why=FLOW)
+        gaps[speed] = f["arrivals"][1] - f["arrivals"][0]
+    fl["gaps"] = gaps
+    ratio = gaps[1.0] / gaps[2.0] if gaps[2.0] else 0
+    check(failures, 1.5 <= ratio <= 2.6, f"twice the speed, half the time between two steps: {gaps} (ratio {ratio:.2f})")
+    await page.click("#sr-player [data-sr-fp='stop']")
+    await page.evaluate("() => window.__dbg.srFlowSpeed(5)")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await page.check("#sr-player [data-sr-fp='auto']")
+    auto = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "自動: the end", timeout=40000, why=FLOW)
+    fl["auto"] = auto["chosen"]
+    check(failures, auto["chosen"] == ["KV に結果が有る？ → 有る"], f"自動: the default taken without a press: {auto['chosen']}")
+    await page.uncheck("#sr-player [data-sr-fp='auto']")
+    # a schedule's flow: its mark and its schedule as written
+    await page.click("#sr-player [data-sr-fp='stop']")
+    await page.evaluate("() => window.__dbg.srSelect('r2')")
+    await page.click("#sr-board [data-sr-flow='nightly-copy']")
+    night = await until(page, f"() => {{ const f = ({FLOW})(); return f.toasts.length ? f : null; }}", "毎晩の写し: its first toast", timeout=10000, why=FLOW)
+    fl["schedule"] = night["toasts"][0]
+    check(failures, night["toasts"][0] == "⏰ 毎晩の写しcron(0 3 * * ? *)", f"a schedule's flow starts with ⏰ and its schedule: {night['toasts']}")
+    await page.click("#sr-player [data-sr-fp='stop']")
+    await page.evaluate("() => window.__dbg.srFlowSpeed(1)")
+
+
 async def run_server_room(pw, out, failures):
     from run import free_port
     out = pathlib.Path(out) / "server-room"
@@ -529,6 +611,7 @@ async def run_server_room(pw, out, failures):
         check(failures, not ln["cross"]["plainVisible"] and ln["cross"]["crossVisible"] and ln["cross"]["focus"] == want, f"crossing lines only: {ln['cross']}")
         check(failures, not ln["focus"]["plainVisible"] and not ln["focus"]["crossVisible"] and ln["focus"]["focus"] == want, f"the chosen node's lines only: {ln['focus']}")
         await page.screenshot(path=str(out / "multi-light.png"))
+        await run_flows(page, out, failures, res)
         await page.keyboard.press("Escape")
         await up_close("icons")
         await press_door()

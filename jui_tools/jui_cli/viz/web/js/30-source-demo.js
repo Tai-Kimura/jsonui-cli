@@ -768,6 +768,24 @@ function demoInfra() {
       e('worker', 'queue', 'sqs'), e('worker', 'db', 'postgres'), e('db', 'replica', 'postgres', false, prod),
       e('worker', 'pay', 'https'), e('worker', 'cache', 'redis', false, ['staging']), e('alarm', 'lb', 'metrics'), e('role', 'web', 'iam'),
     ],
+    // what the shop does, step by step (59-sr-flows.js): a person's order with a branch, and the worker's schedule
+    flows: [
+      { id: 'order', label: '注文する', start: 'browser', trigger: 'user', environments: both, steps: [
+        { from: 'browser', to: 'cdn', action: 'request', label: 'POST /orders' }, { from: 'cdn', to: 'lb', action: 'request' },
+        { from: 'lb', to: 'web', action: 'request' },
+        { branch: { label: 'セッションはキャッシュに有る？', default: 'hit', choices: [
+          { id: 'hit', label: '有る', steps: [{ from: 'web', to: 'cache', action: 'read' }, { from: 'cache', to: 'web', action: 'response' }] },
+          { id: 'miss', label: '無い', steps: [{ from: 'web', to: 'db', action: 'read' }, { from: 'db', to: 'web', action: 'response' }] }] } },
+        { from: 'web', to: 'db', action: 'write', label: '注文を保存' },
+        { from: 'db', to: 'web', action: 'response' },
+        { from: 'web', to: 'queue', action: 'enqueue', async: true, label: '支払いを頼む' },
+        { from: 'web', to: 'lb', action: 'response' }, { from: 'lb', to: 'cdn', action: 'response' },
+        { from: 'cdn', to: 'browser', action: 'response', label: '注文を受け付けた' }] },
+      { id: 'pay', label: '支払いを処理する', start: 'worker', trigger: 'schedule', schedule: 'rate(1 minute)', environments: both, steps: [
+        { from: 'worker', to: 'queue', action: 'dequeue' }, { from: 'queue', to: 'worker', action: 'response' },
+        { from: 'worker', to: 'pay', action: 'request', label: 'カードで払う' }, { from: 'pay', to: 'worker', action: 'response' },
+        { from: 'worker', to: 'db', action: 'write', label: '支払い済みにする' }] },
+    ],
   };
 }
 const robotRuns = () => [];   // the demo's one test run is shown by the card's own a2 row

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import collections
 import hashlib
+import json
 import re
+from pathlib import Path
 from importlib import resources
 
 import pytest
@@ -26,9 +28,9 @@ def web_text(*parts):
 
 def test_each_mode_is_its_parts_in_order():
     assert bundle.parts("demo", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
-                                               "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "60-log.js", "70-main.js")
     assert bundle.parts("live", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
-                                               "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "60-log.js", "70-main.js")
 
 
 def test_build_joins_the_parts_in_that_order_with_a_marker_each():
@@ -187,9 +189,10 @@ BUILDERS = {
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
     "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML"},   # the デバイス pane (ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators)
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
+    "59-sr-flows.js": {"srFlowBoardHTML"},   # the flows a chosen node starts, on the server room's board (its item 7)
 }
 # Builders a part may call that another part defines (each checked where it is defined).
-SHARED_BUILDERS = {"pill", "histOffHTML"}
+SHARED_BUILDERS = {"pill", "histOffHTML", "srFlowBoardHTML"}
 BUILDER_TABLES = {"bodies": "the sheet's section renderers, each a template checked here"}
 # Lookups into tables the page defines as literals (class names, labels, colours, icons).
 CONST_TABLES = {"ROLES", "ROLE_INK", "CASE_ICON", "COL_HINT", "COL_STATE", "EXACT_LABEL", "PLATFORM_JA",
@@ -946,3 +949,17 @@ def test_every_once_a_second_roll_goes_through_rolls_due():
     assert len(re.findall(r"= rollsDue\((SNACK|PLAY|SOLO|BRK), ", src)) == 4
     assert re.findall(r"rng\(\) (?:<|>=) (?:SNACK|PLAY|SOLO)\.p\b", src) == []  # each chance through chanceIn
     assert "chanceIn(kind === 'smoke' && on.length ? BRK.joinP : BRK.p[kind], n)" in src
+
+
+def test_the_flow_player_s_words_and_marks_are_the_schema_s():
+    """59-sr-flows.js shows each action's and each trigger's mark and verb; they are the infra model schema's x-icon and
+    x-label (document_tools' infra-model.v0.schema.json), so a word added or changed there is red here until the page
+    says it too."""
+    schema = json.loads((Path(__file__).resolve().parents[2] / "document_tools" / "jsonui_doc_cli" / "infra"
+                         / "infra-model.v0.schema.json").read_text(encoding="utf-8"))
+    page = web_text("js", "59-sr-flows.js")
+    for const, name in (("SR_ACTIONS", "action"), ("SR_TRIGGERS", "trigger")):
+        table = json.loads(re.search(rf"^const {const} = (\{{.*\}});$", page, re.M).group(1))
+        d = schema["$defs"][name]
+        assert set(table) == set(d["enum"]), const
+        assert {k: v for k, v in table.items()} == {k: [d["x-icon"][k], d["x-label"][k]] for k in d["enum"]}, const
