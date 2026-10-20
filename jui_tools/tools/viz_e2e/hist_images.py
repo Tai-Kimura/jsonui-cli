@@ -243,7 +243,14 @@ async def run_hist_images(pw, out, failures):
         await wait(page, f"() => ({ROWS})().last.includes('後の指示 44')", timeout=20000, label="the 45 lines")
         r0 = res["backBefore"] = await page.evaluate(ROWS)
         check(failures, r0["older"] and r0["read"] == 0 and not r0["deny"], f"the older rows left the 40 shown, 「もっと前を読む」 is there: {r0}")
-        await page.click("[data-rb-hist] [data-h-older]")
+        # The stopped call above also puts its card in the board's box under the history (pending: 「実行してよいと伝える」), and
+        # that box covered the top of a short list: a real press could not reach the button (Playwright: the card's box
+        # "intercepts pointer events", 02:50). The box's size is the ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-
+        # and-expand's; this arm is about what the button reads, so it presses the button itself and says whether it was covered.
+        res["olderCovered"] = await page.evaluate("""() => { const b = document.querySelector('[data-rb-hist] [data-h-older]'); b.scrollIntoView({ block: 'center' });
+          const r = b.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return top && !b.contains(top) ? (top.closest('[data-h-cards]') ? 'the cards box' : top.tagName) : null; }""")
+        await page.evaluate("() => document.querySelector('[data-rb-hist] [data-h-older]').click()")
         await wait(page, f"() => ({ROWS})().read === 1", timeout=20000, label="the older rows back")
         r1 = res["backAfter"] = await page.evaluate(ROWS)
         check(failures, r1["n"] > r0["n"] and r1["read"] == 1 and r1["deny"] == [{"mark": "止められた", "title": "自動モードが止めた: [Git Destructive]"}],
