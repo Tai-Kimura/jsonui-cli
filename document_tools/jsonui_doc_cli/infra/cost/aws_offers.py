@@ -31,6 +31,10 @@ DOCDB_TYPES = ["db.t3.medium", "db.t4g.medium", "db.r6g.large", "db.r8g.large"]
 SEARCH_TYPES = ["t3.small.search", "t3.medium.search", "m7g.medium.search", "m7g.large.search", "r7g.medium.search",
                 "r7g.large.search", "m6g.large.search", "r6g.large.search"]
 MSK_TYPES = ["kafka.t3.small", "kafka.m7g.large", "kafka.m5.large"]
+#: Lightsail's Linux bundles and its databases, as the offer names them: by memory (the bundle ids are rules/aws.py's)
+LIGHTSAIL_SIZES = ["0.5GB", "1GB", "2GB", "4GB", "8GB", "16GB", "32GB"]
+LIGHTSAIL_DB_SIZES = ["1GB", "2GB", "4GB", "8GB", "16GB", "32GB"]
+STEP_FUNCTIONS = "https://aws.amazon.com/step-functions/pricing/"
 COGNITO = "https://aws.amazon.com/cognito/pricing/"
 KMS = "https://aws.amazon.com/kms/pricing/"
 
@@ -120,7 +124,39 @@ def regional_spec() -> list[dict]:
           attrs={"volumeType": "General Purpose"}, note="Standard (I/O billed apart, not counted)"),
         S("AmazonMSK", "msk", "storage", "GB-month", "Kafka.Storage.GP2", note="broker storage"),
         S("AmazonECR", "ecr", "storage", "GB-month", "TimedStorage-ByteHrs", note="images stored (private registry)"),
+        # the rest of stage B (usage types read in the offers of 10-21)
+        S("AmazonStates", "stepfunctions", "transitions", "request", "StateTransition", 1000,
+          free={"amount": 4000, "period": "month"},
+          note=f"Standard workflows' state transitions; free: the offer's Global-StateTransition row, {STEP_FUNCTIONS}"),
+        S("AmazonStates", "stepfunctions", "requests:express", "request", "StepFunctions-Request", 1_000_000,
+          note="Express workflows' requests"),
+        S("AmazonStates", "stepfunctions", "compute:express", "GB-second", "StepFunctions-GB-Second",
+          note="Express workflows' duration (64 MB and 100 ms steps, AWS's rounding not counted here)"),
+        S("AWSAppRunner", "apprunner", "vcpu", "vCPU-hour", "AppRunner-vCPU-hours", note="an active instance's vCPU"),
+        S("AWSAppRunner", "apprunner", "memory", "GB-hour", "AppRunner-GB-hours", note="an active instance's memory"),
+        S("AWSAppRunner", "apprunner", "memory:provisioned", "GB-hour", "AppRunner-Provisioned-GB-hours",
+          note="a provisioned (idle) instance's memory"),
+        S("AmazonLightsail", "lightsail", "storage", "GB-month", "DiskUsage", family="Lightsail Storage",
+          note="block storage disk (a bundle's own disk is in its price)"),
+        S("AWSELB", "elb.gwlb", "hour", "instance-hour", "LoadBalancerUsage", family="Load Balancer-Gateway",
+          note="Gateway Load Balancer (its endpoints are PrivateLink's)"),
+        S("AWSELB", "elb.gwlb", "lcu", "LCU-hour", "LCUUsage", family="Load Balancer-Gateway"),
+        S("AWSELB", "elb.classic", "hour", "instance-hour", "LoadBalancerUsage", family="Load Balancer",
+          note="Classic Load Balancer (previous generation)"),
+        S("AWSELB", "elb.classic", "processed", "GB", "DataProcessing-Bytes", family="Load Balancer",
+          note="Classic Load Balancer, data processed"),
+        S("AWSEvents", "eventbridge", "events", "request", "Event-64K-Chunks", 1_000_000,
+          attrs={"eventType": "Custom Event"}, note="custom events published to an event bus (64 KB chunks)"),
     ]
+    for size in LIGHTSAIL_SIZES:   # Linux, a public IPv4 address (an IPv6-only bundle is the "_IPv6" usage type)
+        out.append(S("AmazonLightsail", "lightsail", size, "instance-hour", f"BundleUsage:{size}",
+                     family="Lightsail Instance", attrs={"operatingSystem": "Linux"},
+                     note="a Linux bundle: its disk and a data transfer quota included"))
+    for size in LIGHTSAIL_DB_SIZES:
+        out.append(S("AmazonLightsail", "lightsail", f"db:{size}", "instance-hour", f"DatabaseUsage:{size}",
+                     family="Lightsail Database", note="a database bundle: its storage included"))
+        out.append(S("AmazonLightsail", "lightsail", f"db:{size}:multi-az", "instance-hour", f"DatabaseUsage:{size}_ha",
+                     family="Lightsail Database", note="a high availability database bundle: its storage included"))
     for engine, svc in (("MySQL", "rds.mysql"), ("PostgreSQL", "rds.postgres"), ("MariaDB", "rds.mariadb")):
         for t in RDS_TYPES:
             out.append(S("AmazonRDS", svc, t, "instance-hour", "InstanceUsage:*",

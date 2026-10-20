@@ -7,6 +7,39 @@
  "prices": [
   {
    "provider": "aws",
+   "service": "apprunner",
+   "sku": "vcpu",
+   "region": "ap-northeast-1",
+   "unit": "vCPU-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppRunner/current/ap-northeast-1/index.json",
+   "price_usd": 0.0809,
+   "note": "an active instance's vCPU"
+  },
+  {
+   "provider": "aws",
+   "service": "apprunner",
+   "sku": "memory",
+   "region": "ap-northeast-1",
+   "unit": "GB-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppRunner/current/ap-northeast-1/index.json",
+   "price_usd": 0.00885,
+   "note": "an active instance's memory"
+  },
+  {
+   "provider": "aws",
+   "service": "apprunner",
+   "sku": "memory:provisioned",
+   "region": "ap-northeast-1",
+   "unit": "GB-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppRunner/current/ap-northeast-1/index.json",
+   "price_usd": 0.00885,
+   "note": "a provisioned (idle) instance's memory"
+  },
+  {
+   "provider": "aws",
    "service": "data-transfer",
    "sku": "egress",
    "region": "ap-northeast-1",
@@ -105,6 +138,49 @@
   },
   {
    "provider": "aws",
+   "service": "elb.gwlb",
+   "sku": "hour",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/ap-northeast-1/index.json",
+   "price_usd": 0.0135,
+   "note": "Gateway Load Balancer (its endpoints are PrivateLink's)"
+  },
+  {
+   "provider": "aws",
+   "service": "elb.gwlb",
+   "sku": "lcu",
+   "region": "ap-northeast-1",
+   "unit": "LCU-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/ap-northeast-1/index.json",
+   "price_usd": 0.004
+  },
+  {
+   "provider": "aws",
+   "service": "elb.classic",
+   "sku": "hour",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/ap-northeast-1/index.json",
+   "price_usd": 0.027,
+   "note": "Classic Load Balancer (previous generation)"
+  },
+  {
+   "provider": "aws",
+   "service": "elb.classic",
+   "sku": "processed",
+   "region": "ap-northeast-1",
+   "unit": "GB",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/ap-northeast-1/index.json",
+   "price_usd": 0.008,
+   "note": "Classic Load Balancer, data processed"
+  },
+  {
+   "provider": "aws",
    "service": "scheduler",
    "sku": "requests",
    "region": "ap-northeast-1",
@@ -124,6 +200,18 @@
     }
    ],
    "note": "EventBridge Scheduler invocations; the first 14 million a month are the offer's free step"
+  },
+  {
+   "provider": "aws",
+   "service": "eventbridge",
+   "sku": "events",
+   "region": "ap-northeast-1",
+   "unit": "request",
+   "effective": "2026-09-24",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/current/ap-northeast-1/index.json",
+   "per_units": 1000000,
+   "price_usd": 1.0,
+   "note": "custom events published to an event bus (64 KB chunks)"
   },
   {
    "provider": "aws",
@@ -881,6 +969,226 @@
    "per_units": 1000000,
    "price_usd": 0.0215,
    "note": "PUT payload units (25 KB each; a record is at least one)"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "storage",
+   "region": "ap-northeast-1",
+   "unit": "GB-month",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.1,
+   "note": "block storage disk (a bundle's own disk is in its price)"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "0.5GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.00672,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "1GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.0094,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "2GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.01612,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "4GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.03225,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "8GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.05913,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "16GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.1129,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "32GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.22043,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:1GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.02016,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:1GB:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.04032,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:2GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.04032,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:2GB:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.08065,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:4GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.08065,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:4GB:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.16129,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:8GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.15457,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:8GB:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.30914,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:16GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.3293,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:16GB:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.6586,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:32GB",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 0.6586,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:32GB:multi-az",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/ap-northeast-1/index.json",
+   "price_usd": 1.3172,
+   "note": "a high availability database bundle: its storage included"
   },
   {
    "provider": "aws",
@@ -1824,6 +2132,60 @@
   },
   {
    "provider": "aws",
+   "service": "stepfunctions",
+   "sku": "transitions",
+   "region": "ap-northeast-1",
+   "unit": "request",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonStates/current/ap-northeast-1/index.json",
+   "per_units": 1000,
+   "price_usd": 0.025,
+   "free": {
+    "amount": 4000,
+    "period": "month"
+   },
+   "note": "Standard workflows' state transitions; free: the offer's Global-StateTransition row, https://aws.amazon.com/step-functions/pricing/"
+  },
+  {
+   "provider": "aws",
+   "service": "stepfunctions",
+   "sku": "requests:express",
+   "region": "ap-northeast-1",
+   "unit": "request",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonStates/current/ap-northeast-1/index.json",
+   "per_units": 1000000,
+   "price_usd": 1.0,
+   "note": "Express workflows' requests"
+  },
+  {
+   "provider": "aws",
+   "service": "stepfunctions",
+   "sku": "compute:express",
+   "region": "ap-northeast-1",
+   "unit": "GB-second",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonStates/current/ap-northeast-1/index.json",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 1.667e-05,
+     "to": 3600000.0
+    },
+    {
+     "from": 3600000.0,
+     "price_usd": 8.33e-06,
+     "to": 18000000.0
+    },
+    {
+     "from": 18000000.0,
+     "price_usd": 4.56e-06
+    }
+   ],
+   "note": "Express workflows' duration (64 MB and 100 ms steps, AWS's rounding not counted here)"
+  },
+  {
+   "provider": "aws",
    "service": "vpc.ipv4",
    "sku": "address",
    "region": "ap-northeast-1",
@@ -1893,6 +2255,39 @@
    "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awswaf/current/ap-northeast-1/index.json",
    "price_usd": 1.0,
    "note": "WAFv2 rule (a managed rule group counts as one)"
+  },
+  {
+   "provider": "aws",
+   "service": "apprunner",
+   "sku": "vcpu",
+   "region": "us-east-1",
+   "unit": "vCPU-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppRunner/current/us-east-1/index.json",
+   "price_usd": 0.064,
+   "note": "an active instance's vCPU"
+  },
+  {
+   "provider": "aws",
+   "service": "apprunner",
+   "sku": "memory",
+   "region": "us-east-1",
+   "unit": "GB-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppRunner/current/us-east-1/index.json",
+   "price_usd": 0.007,
+   "note": "an active instance's memory"
+  },
+  {
+   "provider": "aws",
+   "service": "apprunner",
+   "sku": "memory:provisioned",
+   "region": "us-east-1",
+   "unit": "GB-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppRunner/current/us-east-1/index.json",
+   "price_usd": 0.007,
+   "note": "a provisioned (idle) instance's memory"
   },
   {
    "provider": "aws",
@@ -1994,6 +2389,49 @@
   },
   {
    "provider": "aws",
+   "service": "elb.gwlb",
+   "sku": "hour",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/us-east-1/index.json",
+   "price_usd": 0.0125,
+   "note": "Gateway Load Balancer (its endpoints are PrivateLink's)"
+  },
+  {
+   "provider": "aws",
+   "service": "elb.gwlb",
+   "sku": "lcu",
+   "region": "us-east-1",
+   "unit": "LCU-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/us-east-1/index.json",
+   "price_usd": 0.004
+  },
+  {
+   "provider": "aws",
+   "service": "elb.classic",
+   "sku": "hour",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/us-east-1/index.json",
+   "price_usd": 0.025,
+   "note": "Classic Load Balancer (previous generation)"
+  },
+  {
+   "provider": "aws",
+   "service": "elb.classic",
+   "sku": "processed",
+   "region": "us-east-1",
+   "unit": "GB",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/us-east-1/index.json",
+   "price_usd": 0.008,
+   "note": "Classic Load Balancer, data processed"
+  },
+  {
+   "provider": "aws",
    "service": "scheduler",
    "sku": "requests",
    "region": "us-east-1",
@@ -2013,6 +2451,18 @@
     }
    ],
    "note": "EventBridge Scheduler invocations; the first 14 million a month are the offer's free step"
+  },
+  {
+   "provider": "aws",
+   "service": "eventbridge",
+   "sku": "events",
+   "region": "us-east-1",
+   "unit": "request",
+   "effective": "2026-09-24",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/current/us-east-1/index.json",
+   "per_units": 1000000,
+   "price_usd": 1.0,
+   "note": "custom events published to an event bus (64 KB chunks)"
   },
   {
    "provider": "aws",
@@ -2770,6 +3220,226 @@
    "per_units": 1000000,
    "price_usd": 0.014,
    "note": "PUT payload units (25 KB each; a record is at least one)"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "storage",
+   "region": "us-east-1",
+   "unit": "GB-month",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.1,
+   "note": "block storage disk (a bundle's own disk is in its price)"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "0.5GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.00672,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "1GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.0094,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "2GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.01612,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "4GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.03225,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "8GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.05913,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "16GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.1129,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "32GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.22043,
+   "note": "a Linux bundle: its disk and a data transfer quota included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:1GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.02016,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:1GB:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.04032,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:2GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.04032,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:2GB:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.08065,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:4GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.08065,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:4GB:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.16129,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:8GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.15457,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:8GB:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.30914,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:16GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.3293,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:16GB:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.6586,
+   "note": "a high availability database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:32GB",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 0.6586,
+   "note": "a database bundle: its storage included"
+  },
+  {
+   "provider": "aws",
+   "service": "lightsail",
+   "sku": "db:32GB:multi-az",
+   "region": "us-east-1",
+   "unit": "instance-hour",
+   "effective": "2026-09-15",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonLightsail/current/us-east-1/index.json",
+   "price_usd": 1.3172,
+   "note": "a high availability database bundle: its storage included"
   },
   {
    "provider": "aws",
@@ -3710,6 +4380,60 @@
     }
    ],
    "note": "API requests"
+  },
+  {
+   "provider": "aws",
+   "service": "stepfunctions",
+   "sku": "transitions",
+   "region": "us-east-1",
+   "unit": "request",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonStates/current/us-east-1/index.json",
+   "per_units": 1000,
+   "price_usd": 0.025,
+   "free": {
+    "amount": 4000,
+    "period": "month"
+   },
+   "note": "Standard workflows' state transitions; free: the offer's Global-StateTransition row, https://aws.amazon.com/step-functions/pricing/"
+  },
+  {
+   "provider": "aws",
+   "service": "stepfunctions",
+   "sku": "requests:express",
+   "region": "us-east-1",
+   "unit": "request",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonStates/current/us-east-1/index.json",
+   "per_units": 1000000,
+   "price_usd": 1.0,
+   "note": "Express workflows' requests"
+  },
+  {
+   "provider": "aws",
+   "service": "stepfunctions",
+   "sku": "compute:express",
+   "region": "us-east-1",
+   "unit": "GB-second",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonStates/current/us-east-1/index.json",
+   "tiers": [
+    {
+     "from": 0.0,
+     "price_usd": 1.667e-05,
+     "to": 3600000.0
+    },
+    {
+     "from": 3600000.0,
+     "price_usd": 8.33e-06,
+     "to": 18000000.0
+    },
+    {
+     "from": 18000000.0,
+     "price_usd": 4.56e-06
+    }
+   ],
+   "note": "Express workflows' duration (64 MB and 100 ms steps, AWS's rounding not counted here)"
   },
   {
    "provider": "aws",

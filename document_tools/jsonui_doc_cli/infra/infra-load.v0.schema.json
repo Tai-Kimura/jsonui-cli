@@ -253,6 +253,13 @@
           "x-kind": "flow",
           "x-label": "ECPU"
         },
+        "state_transitions": {
+          "$ref": "#/$defs/flow",
+          "description": "state transitions of a workflow (Step Functions Standard: each step an execution takes, its retries included)",
+          "x-unit": "request",
+          "x-kind": "flow",
+          "x-label": "状態の遷移"
+        },
         "read_units": {
           "$ref": "#/$defs/flow",
           "description": "read capacity units consumed (DynamoDB RRU, Cosmos DB read RU, Firestore document reads)",

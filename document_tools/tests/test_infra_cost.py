@@ -160,7 +160,8 @@ def test_every_meter_is_in_a_price_unit_and_every_rule_has_its_page():
         if rule.provider:   # the pages read 10-20; the NAT gateway's, public IPv4's, alarms' and stage B's 10-21
             new = rule.id in ("aws/nat", "aws/ipv4", "aws/cloudwatch-alarm", "aws/aurora", "aws/docdb", "aws/msk",
                               "aws/kms", "aws/ssm", "cloudflare/kv", "cloudflare/access", "cloudflare/lb",
-                              "aws/ecr", "firebase/rtdb")
+                              "aws/ecr", "firebase/rtdb", "aws/stepfunctions", "aws/apprunner", "aws/lightsail",
+                              "aws/lightsail-database", "aws/gwlb", "aws/classic-lb", "aws/eventbridge")
             assert rule.source.startswith("https://") and rule.checked == ("2026-10-21" if new else "2026-10-20"), rule.id
 
 

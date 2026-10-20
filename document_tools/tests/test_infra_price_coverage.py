@@ -40,16 +40,11 @@ NOT_BUNDLED = {
     "digitalocean": "no bundled table", "heroku": "no bundled table", "kubernetes": "priced by its cluster's provider",
     "netlify": "no bundled table", "vercel": "no bundled table",
 }
-#: Meters of AWS and Cloudflare with no bundled price (closed, each with why). "stage B" are the ticket's still to
-#: come (2.3.15 on); the rest are no price by design.
+#: Meters of AWS, Cloudflare and Firebase with no bundled price (closed, each with why): no price by design.
 NOT_YET = {
     ("aws", "lambda", "cpu"): "Lambda bills no CPU time (cpu_ms is Workers'); the generic formula offers it",
-    ("aws", "stepfunctions", "requests"): "stage B (Step Functions' state transitions)",
-    ("aws", "stepfunctions", "compute"): "stage B", ("aws", "stepfunctions", "cpu"): "stage B",
-    ("aws", "apprunner", "instance"): "stage B (App Runner)", ("aws", "apprunner", "storage"): "stage B",
     ("aws", "beanstalk", "instance"): "priced by its EC2 instances, not drafted apart",
     ("aws", "beanstalk", "storage"): "priced by its EC2 instances",
-    ("aws", "lightsail", "instance"): "stage B (Lightsail's bundles)", ("aws", "lightsail", "storage"): "stage B",
     ("aws", "aurora", "storage"): "an Aurora whose engine is a variable: its price rows are per engine",
     ("aws", "aurora", "capacity"): "an Aurora whose engine is a variable", ("aws", "aurora", "instance"): "as capacity",
     ("aws", "rds", "storage"): "an RDS whose engine is a variable: its price rows are per engine",
@@ -61,15 +56,8 @@ NOT_YET = {
     ("aws", "rds.mariadb", "rows-read"): "as mysql", ("aws", "rds.mariadb", "rows-written"): "as mysql",
     ("aws", "rds", "rows-read"): "as mysql", ("aws", "rds", "rows-written"): "as mysql",
     ("aws", "rds", "capacity"): "as mysql",
-    ("aws", "lightsail", "rows-read"): "as mysql", ("aws", "lightsail", "rows-written"): "as mysql",
-    ("aws", "lightsail", "capacity"): "stage B",
     ("aws", "rds", "instance:multi-az"): "as instance", ("aws", "rds", "storage:multi-az"): "as storage",
-    ("aws", "lightsail", "instance:multi-az"): "stage B", ("aws", "lightsail", "storage:multi-az"): "stage B",
     ("aws", "elb", "hour"): "a load balancer whose type is a variable", ("aws", "elb", "lcu"): "as hour",
-    ("aws", "elb.gwlb", "hour"): "stage B (Gateway Load Balancer)", ("aws", "elb.gwlb", "lcu"): "stage B",
-    ("aws", "elb.classic", "hour"): "stage B (Classic Load Balancer, previous generation)",
-    ("aws", "elb.classic", "lcu"): "stage B",
-    ("aws", "eventbridge", "requests"): "a rule on the event bus: a scheduled rule is free; custom events stage B",
     ("cloudflare", "workers", "compute"): "Workers bill CPU ms, not GB-seconds",
     ("cloudflare", "workers", "egress"): "Workers' data out is free",
     ("cloudflare", "pages", "instance"): "Pages: static asset requests are free and unlimited (its Functions are "
@@ -89,7 +77,7 @@ NOT_YET = {
 TYPE_OF = {"ec2": "t3.micro", "ec2.asg": "t3.micro", "rds.mysql": "db.t3.micro", "rds.postgres": "db.t3.micro",
            "rds.mariadb": "db.t3.micro", "aurora.mysql": "db.t4g.medium", "aurora.postgres": "db.t4g.medium",
            "elasticache": "cache.t4g.micro", "opensearch": "t3.small.search", "docdb": "db.t4g.medium",
-           "msk": "kafka.m7g.large"}
+           "msk": "kafka.m7g.large", "lightsail": "micro_3_0"}
 
 
 def drafted() -> list[tuple[str, str, str]]:
@@ -496,3 +484,125 @@ def test_ecr_is_priced_on_its_standard_storage_not_the_archive():
                                for k, usd in (("S", "0.10"), ("R", "0.0114"))}}}
     rows, missing = A.rows_from_offer(offer, spec, "ap-northeast-1", "u")
     assert missing == [] and [(r["service"], r["sku"], r["price_usd"]) for r in rows] == [("ecr", "storage", 0.1)]
+
+
+# ---------------------------------------------------------------- the rest of stage B (2.3.15): its own rules and rows
+# (label, node, quantities per hour, how many run, the month of 730 hours by hand from the offers' prices of 10-21)
+REST = [
+    ("Step Functions Standard 100,000 transitions (4,000 free)", aws("sf", "compute.function", "stepfunctions"),
+     {"state_transitions": 100_000 / 730}, 0, (100_000 - 4000) / 1000 * 0.025),
+    ("Step Functions Express 1 million requests, 100 ms, 64 MB",
+     aws("sf", "compute.function", "stepfunctions", spec=[{"key": "workflow_type", "value": "EXPRESS"}]),
+     {"requests": 1_000_000 / 730, "duration_ms": 100.0, "memory_mb": 64.0}, 0, 1.0 + 1_000_000 * 0.1 * 0.0625 * 0.00001667),
+    ("App Runner 1 vCPU 2 GB, active every hour", aws("ar", "compute.paas", "apprunner"),
+     {"vcpu": 1.0, "memory_gb": 2.0, "requests": 10.0}, 1, 730 * (0.0809 + 2 * 0.00885)),
+    ("App Runner 1 vCPU 2 GB, idle (provisioned)", aws("ar", "compute.paas", "apprunner"),
+     {"vcpu": 1.0, "memory_gb": 2.0}, 1, 730 * 2 * 0.00885),
+    ("Lightsail micro_3_0 + a 10 GB disk", aws("ls", "compute.vm", "lightsail"),
+     {"_sku": "micro_3_0", "storage_gb": 10.0}, 1, 730 * 0.0094 + 10 * 0.1),
+    ("Lightsail a bundle written by its memory (16GB)", aws("ls", "compute.vm", "lightsail"), {"_sku": "16GB"}, 1,
+     730 * 0.1129),
+    ("Lightsail database small_ha_2_0", aws("lsd", "database.relational", "lightsail"), {"_sku": "small_ha_2_0"}, 1,
+     730 * 0.08065),
+    ("Lightsail database medium_2_0, the node's ha multi-az", aws("lsd", "database.relational", "lightsail", ha="multi-az"),
+     {"_sku": "medium_2_0"}, 1, 730 * 0.16129),
+    ("Gateway Load Balancer, 2 GB an hour (2 GLCU)", aws("gw", "load_balancer", "elb.gwlb"), {"processed_gb": 2.0}, 1,
+     730 * 0.0135 + 730 * 2 * 0.004),
+    ("Gateway Load Balancer, 1,200 new flows a second (2 GLCU; an ALB's units would be 48)",
+     aws("gw", "load_balancer", "elb.gwlb"), {"new_connections": 1200 * 3600.0}, 1, 730 * 0.0135 + 730 * 2 * 0.004),
+    ("Classic Load Balancer + 100 GB processed", aws("clb", "load_balancer", "elb.classic"),
+     {"processed_gb": 100 / 730}, 1, 730 * 0.027 + 100 * 0.008),
+    ("EventBridge 3 million custom events", aws("eb", "scheduler", "eventbridge"), {"requests": 3_000_000 / 730}, 0, 3.0),
+]
+
+
+@pytest.mark.parametrize("label, node, q, running, hand", REST, ids=[x[0] for x in REST])
+def test_the_rest_of_stage_b_comes_out_of_the_bundled_prices(label, node, q, running, hand):
+    assert round(sum(month(node, dict(q), running, 730).values()), 4) == round(hand, 4), label
+
+
+def test_a_lightsail_bundle_not_known_is_not_guessed():
+    """xlarge and 2xlarge are not in the docs read (their memory is not said there): no price, not another bundle's."""
+    node = aws("ls", "compute.vm", "lightsail")
+    (m,) = RULES.lookup(node).cost(F.Hour(node=node, q={}, running=1.0, sku="xlarge_3_0"))
+    assert m.sku == "xlarge" and BOOK.find("aws", "lightsail", m.sku, m.unit, "ap-northeast-1", ON) is None
+
+
+def test_step_functions_standard_reads_transitions_not_requests():
+    """A Standard workflow is billed per state transition, which requests do not say (a step is not an execution):
+    with requests alone it charges nothing rather than guess; Express is billed by its requests."""
+    node = aws("sf", "compute.function", "stepfunctions")
+    assert RULES.lookup(node).cost(F.Hour(node=node, q={"requests": 5.0}, running=0.0)) == []
+    express = dict(node, spec=[{"key": "type", "value": "express"}])
+    assert [m.sku for m in RULES.lookup(express).cost(F.Hour(node=express, q={"requests": 5.0}, running=0.0))] == [
+        "requests:express"]
+
+
+def _offer(products: dict, prices: dict) -> dict:
+    return {"publicationDate": "2026-09-11T12:45:44Z", "products": products,
+            "terms": {"OnDemand": {k: {"t": {"priceDimensions": {"d": {"pricePerUnit": {"USD": usd}, "beginRange": "0",
+                                                                     "endRange": "Inf"}}}}
+                                   for k, usd in prices.items()}}}
+
+
+def test_the_load_balancers_of_one_usage_type_are_told_by_their_family():
+    """The ELB offer names every load balancer's hour LoadBalancerUsage: Classic's family is "Load Balancer",
+    Gateway's "Load Balancer-Gateway" (and the application and network ones' theirs)."""
+    spec = [s for s in A.regional_spec() if s["offer"] == "AWSELB"]
+
+    def product(ut, fam):
+        return {"productFamily": fam, "attributes": {"usagetype": ut}}
+    # the gateway's first: a row taken without its family would be the first one's
+    fams = {"G": "Load Balancer-Gateway", "A": "Load Balancer-Application", "N": "Load Balancer-Network", "C": "Load Balancer"}
+    products = {k: product("APN1-LoadBalancerUsage", f) for k, f in fams.items()}
+    products |= {k + "L": product("APN1-LCUUsage", f) for k, f in fams.items() if k != "C"}
+    products["CP"] = product("APN1-DataProcessing-Bytes", "Load Balancer")
+    prices = {"C": "0.027", "G": "0.0135", "A": "0.0243", "N": "0.0243", "GL": "0.004", "AL": "0.008", "NL": "0.006",
+              "CP": "0.008"}
+    rows, missing = A.rows_from_offer(_offer(products, prices), spec, "ap-northeast-1", "u")
+    got = {(r["service"], r["sku"]): r["price_usd"] for r in rows}
+    assert missing == [] and (got[("elb.classic", "hour")], got[("elb.gwlb", "hour")], got[("elb.gwlb", "lcu")],
+                              got[("elb.classic", "processed")]) == (0.027, 0.0135, 0.004, 0.008)
+
+
+def test_custom_events_are_not_partner_events():
+    """EventBridge's custom and partner events share the usage type Event-64K-Chunks: the custom events' row is the
+    one whose eventType says so."""
+    spec = [s for s in A.regional_spec() if s["offer"] == "AWSEvents" and s["service"] == "eventbridge"]
+
+    def product(kind):
+        return {"productFamily": "EventBridge", "attributes": {"usagetype": "APN1-Event-64K-Chunks", "eventType": kind}}
+    offer = _offer({"P": product("Partner Event"), "C": product("Custom Event")}, {"P": "0.000002", "C": "0.000001"})
+    rows, missing = A.rows_from_offer(offer, spec, "ap-northeast-1", "u")
+    assert missing == [] and [(r["sku"], r["price_usd"]) for r in rows] == [("events", 1.0)]
+
+
+def test_a_lightsail_bundle_is_its_linux_ipv4_one():
+    """Lightsail's offer has each size as Linux, Linux IPv6-only (_IPv6) and Windows (_win): the bundle is the Linux one
+    with a public IPv4 address. In the offers of 10-21 the usage type alone tells them apart (no usage type has two
+    operating systems, in either region); the operating system is a guard against a Windows row of the same name,
+    first here so a spec without it would take it."""
+    spec = [s for s in A.regional_spec() if s["offer"] == "AmazonLightsail" and s["sku"] == "1GB"]
+
+    def product(ut, os_):
+        return {"productFamily": "Lightsail Instance", "attributes": {"usagetype": ut, "operatingSystem": os_}}
+    offer = _offer({"X": product("APN1-BundleUsage:1GB", "Windows"), "L": product("APN1-BundleUsage:1GB", "Linux"),
+                    "6": product("APN1-BundleUsage:1GB_IPv6", "Linux"), "W": product("APN1-BundleUsage:1GB_win", "Windows")},
+                   {"L": "0.0094", "6": "0.00672", "W": "0.0161", "X": "0.0161"})
+    rows, missing = A.rows_from_offer(offer, spec, "ap-northeast-1", "u")
+    assert missing == [] and [r["price_usd"] for r in rows] == [0.0094]
+
+
+def test_every_line_of_the_offer_spec_is_in_the_bundled_table():
+    """build_bundled writes one row per line of the spec and region: a line added to the spec with the table not built
+    again, or a row the build lost, is a line with no row here."""
+    have = {(r["service"], r["sku"], r["region"]): r for r in json.loads(PB.BUNDLED_PATH.read_text(encoding="utf-8"))["prices"]
+            if r["provider"] == "aws"}
+    lost = [(s["service"], s["sku"], region) for s in A.regional_spec() for region in AWS_REGIONS
+            if (s["service"], s["sku"], region) not in have]
+    assert lost == []
+    # and as the spec says it: its unit, its per_units, its free amount (a spec changed and the table not built again)
+    differ = [(s["service"], s["sku"], region) for s in A.regional_spec() for region in AWS_REGIONS
+              if (lambda r: (r["unit"], r.get("per_units", 1), r.get("free")) != (s["unit"], s["per_units"], s["free"]))(
+                  have[(s["service"], s["sku"], region)])]
+    assert differ == []

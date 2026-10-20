@@ -3,6 +3,7 @@ it was read (plan, 作りの決まり 4). The prices are in the price files (the
 us-east-1 from AWS's Price List offer files)."""
 from __future__ import annotations
 
+import re
 from functools import partial
 
 from ..cost import formulas as F
@@ -10,6 +11,8 @@ from . import provider_rule
 
 CHECKED = "2026-10-20"
 NLB = {"new_connections_per_second": 800, "active_connections": 100_000, "processed_gb_per_hour": 1}
+# a Gateway Load Balancer Capacity Unit (the page read 2026-10-21): 600 new flows a second, 60,000 active, 1 GB an hour
+GWLB = {"new_connections_per_second": 600, "active_connections": 60_000, "processed_gb_per_hour": 1}
 PAGES = {
     "lambda": "https://aws.amazon.com/lambda/pricing/",
     "fargate": "https://aws.amazon.com/fargate/pricing/",
@@ -43,6 +46,10 @@ PAGES = {
     "kms": "https://aws.amazon.com/kms/pricing/",
     "ssm": "https://aws.amazon.com/systems-manager/pricing/",
     "ecr": "https://aws.amazon.com/ecr/pricing/",
+    "stepfunctions": "https://aws.amazon.com/step-functions/pricing/",
+    "apprunner": "https://aws.amazon.com/apprunner/pricing/",
+    "lightsail": "https://aws.amazon.com/lightsail/pricing/",
+    "eventbridge": "https://aws.amazon.com/eventbridge/pricing/",
 }
 
 
@@ -95,6 +102,73 @@ def ssm(h: F.Hour) -> list[F.Meter]:
             + F.counted(h, "requests", f"api{adv}", "request", "api"))
 
 
+def step_functions(h: F.Hour) -> list[F.Meter]:
+    """Standard workflows (AWS's default): each state transition. Express (spec workflow_type or type: express): its
+    requests and their duration in GB-seconds, as a function's."""
+    if F.spec_value(h.node, "workflow_type", "type") == "express":
+        return [F.Meter(m.name, m.amount, m.unit, f"{m.sku}:express", m.quantity)
+                for m in F.function(h) if m.sku in ("requests", "compute")]
+    return F.counted(h, "state_transitions", "transitions", "request", "transitions")
+
+
+def app_runner(h: F.Hour) -> list[F.Meter]:
+    """Each instance's memory while provisioned (idle), and its vCPU and memory while active. An hour with requests
+    counts as active through the hour (AWS bills the seconds it processes them: this is the most it can be)."""
+    if not h.running or "vcpu" not in h.q or "memory_gb" not in h.q:
+        return F.egress(h)
+    if h.q.get("requests"):
+        out = [F.Meter("vcpu", h.q["vcpu"] * h.running, "vCPU-hour", "vcpu", "vcpu"),
+               F.Meter("memory", h.q["memory_gb"] * h.running, "GB-hour", "memory", "memory_gb")]
+    else:
+        out = [F.Meter("memory", h.q["memory_gb"] * h.running, "GB-hour", "memory:provisioned", "memory_gb")]
+    return out + F.egress(h)
+
+
+#: Lightsail's bundle ids -> the memory the offer names their bundles by (the AWS CLI reference's get-bundles and
+#: get-relational-database-bundles, and the Lightsail user guide's snapshot page, read 2026-10-21). A bundle written
+#: by its memory ("16GB") is that; one not here is not guessed.
+LIGHTSAIL_BUNDLES = {"nano": "0.5GB", "micro": "1GB", "small": "2GB", "medium": "4GB", "large": "8GB"}
+LIGHTSAIL_DB_BUNDLES = {"micro": "1GB", "small": "2GB", "medium": "4GB", "large": "8GB"}
+
+
+def _lightsail_size(sku: str | None, names: dict) -> tuple[str, bool]:
+    """(the offer's size, high availability) from a bundle id ("micro_3_0", "small_ha_2_0") or a size ("2GB")."""
+    m = re.fullmatch(r"([0-9a-z]+?)(_ha)?(_\d+_\d+)?", (sku or "").strip().lower())
+    if not m:
+        return sku or "instance", False
+    head = m.group(1)
+    return names.get(head, head.upper() if re.fullmatch(r"[0-9.]+gb", head) else head), bool(m.group(2))
+
+
+def lightsail(h: F.Hour) -> list[F.Meter]:
+    """A bundle by the hour (its disk and its data transfer quota are in its price), and block storage disks."""
+    if not h.running:
+        return F.stored(h)
+    size, _ha = _lightsail_size(h.sku, LIGHTSAIL_BUNDLES)
+    return [F.Meter("instance", h.running, "instance-hour", size)] + F.stored(h)
+
+
+def lightsail_database(h: F.Hour) -> list[F.Meter]:
+    """A database bundle by the hour, high availability its own bundle (the node's ha, or an "_ha" bundle id); its
+    storage is in the price."""
+    if not h.running:
+        return []
+    size, ha = _lightsail_size(h.sku, LIGHTSAIL_DB_BUNDLES)
+    multi = ha or "multi" in (h.node.get("ha") or "").lower()
+    return [F.Meter("instance", h.running, "instance-hour", f"db:{size}:multi-az" if multi else f"db:{size}")]
+
+
+def classic_load_balancer(h: F.Hour) -> list[F.Meter]:
+    """The hours it runs and the GB it processes (no capacity units: the previous generation's billing)."""
+    return F.instances(h, "hour", "hour") + F.counted(h, "processed_gb", "processed", "GB", "processed")
+
+
+def event_bus(h: F.Hour) -> list[F.Meter]:
+    """A rule on an event bus: its requests are the custom events published to the bus. A scheduled rule's runs are
+    free (EventBridge Scheduler is aws/scheduler)."""
+    return F.counted(h, "requests", "events", "request", "events")
+
+
 _r("lambda", "compute.function", "lambda", F.function)
 _r("fargate", "compute.container", "ecs", F.container)
 _r("ec2", "compute.vm", "ec2", F.vm)
@@ -135,3 +209,15 @@ _r("kms", "secrets", "kms", kms, checked="2026-10-21")
 _r("ssm", "secrets", "ssm", ssm, checked="2026-10-21")
 # a registry's images stored (the pulls in the same region are free; their data through a NAT gateway is the NAT's)
 _r("ecr", "ci", "ecr", F.file_store, checked="2026-10-21", reads=("storage_gb",))
+# the rest of stage B: the pages read 10-21
+_r("stepfunctions", "compute.function", "stepfunctions", step_functions, checked="2026-10-21",
+   reads=("requests", "state_transitions", "duration_ms", "memory_mb"))
+_r("apprunner", "compute.paas", "apprunner", app_runner, checked="2026-10-21",
+   reads=("requests", "vcpu", "memory_gb", "egress_gb"))
+_r("lightsail", "compute.vm", "lightsail", lightsail, checked="2026-10-21", reads=("storage_gb",))
+_r("lightsail-database", "database.relational", "lightsail", lightsail_database, "lightsail", checked="2026-10-21",
+   reads=())
+_r("gwlb", "load_balancer", "elb.gwlb", partial(F.load_balancer, dims=GWLB), "elb", checked="2026-10-21")
+_r("classic-lb", "load_balancer", "elb.classic", classic_load_balancer, "elb", checked="2026-10-21",
+   reads=("processed_gb",))
+_r("eventbridge", "scheduler", "eventbridge", event_bus, checked="2026-10-21")
