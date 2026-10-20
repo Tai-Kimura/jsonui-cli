@@ -2,15 +2,14 @@
    One component for every one-line ellipsis of the robot card and the side panel (the family: FULLTEXT_LINES; the table is
    in the ticket 2026-10-19-jui-viz-test-run-path-on-hover). A line that is cut (scrollWidth > clientWidth) shows a floating
    tag with its whole text, wrapped, when the pointer is over it or the keyboard focus reaches it; the tag's text can be
-   selected and copied; it stays inside the card's (or the panel's) box and goes when the pointer or the focus leaves, or
-   on Esc. A line that is not cut never gets it. Not the native title: slow, and the OS cuts a long one.
+   selected and copied; it sits at the left of the 3D (fulltextPlace, 10-20) and goes when the pointer or the focus
+   leaves (the pointer: after the time to cross to the tag), or on Esc. A line that is not cut never gets it. Not the native title: slow, and the OS cuts a long one.
    Focus: a cut line that is plain text becomes focusable (tabindex 0) only while it is cut; a line inside a button or a
    summary (already focusable) shows through that control's focus. The control or the line points at the tag
    (aria-describedby) while the tag shows. */
 const FULLTEXT_HOSTS = ['#rb', '#side', '#ticker-strip'];
-/* The log strip (2.3.6) sits at the bottom of the screen and is a few lines high: its tag opens upward and is kept inside
-   the viewport, not inside the strip. Closed (2.3.4's log-strip), its lines are not drawn: never cut, never focusable. */
-const FULLTEXT_UP = '#ticker-strip';
+/* The log strip (2.3.6) sits at the bottom of the screen, below the scene: its tag sits on the scene's bottom (fulltextPlace).
+   Closed (2.3.4's log-strip), its lines are not drawn: never cut, never focusable. */
 const FULLTEXT_LINES = [
   '.rb-run-file',                 // card · テスト実行: the test file / command (the request)
   '.rb-subs .act',                // card · サブエージェント: what each is doing
@@ -25,7 +24,7 @@ const FULLTEXT_LINES = [
   '.talk-peer-name',                // card · トーク (2.3.6): the peer's name in the talk's header (in its button)
   '.talk-row-name',                  // card · トーク: a peer's name in the list of talks (in its button)
 ].join(', ');
-const FULLTEXT = { el: null, anchor: null, owner: null, host: null, via: null };
+const FULLTEXT = { el: null, anchor: null, owner: null, host: null, via: null, soon: 0 };
 const fulltextCut = (el) => !!el && el.isConnected && el.scrollWidth > el.clientWidth + 1;
 const fulltextControl = (el) => el.closest('button, summary, a[href]');   // already focusable: the line shows through it
 function fulltextHost(el) { return FULLTEXT_HOSTS.map((s) => document.querySelector(s)).find((h) => h && h.contains(el)) || null; }
@@ -50,22 +49,42 @@ function fulltextShow(line, via) {
   Object.assign(FULLTEXT, { anchor: line, owner, host, via });
   fulltextPlace();
 }
-/* Below the line (above when there is no room), inside the host's box; wrapped to the host's width. */
+/* Where the tag goes (requester 10-20: 「いやホバーで出る位置をもっと左にしてよ」 — next to the card, a 2000-char command
+   covered the 3D from its middle to the right, top to bottom; ticket 2026-10-20-jui-viz-fulltext-float-covers-the-scene).
+   One rule for every member of the family (the card, the side panel, the log strip), never beside the line:
+     * the 3D left free: the scene's box, less the robot card when it is open (a side card: what is left of it; a bottom
+       sheet, narrow: what is above it);
+     * the tag sits at the left of that free box, FULLTEXT_PAD in, as wide as its text needs up to
+       min(FULLTEXT_MAX_W, FULLTEXT_SHARE of the free box's width) (a long text: that width, so it stays readable);
+       its right edge is then left of the free box's middle (the view's centre point stays clear; with the card open the
+       camera puts the selected robot there, so the tag may cover the robot's left side, never its middle) and never on
+       the card (the free box ends at the card);
+     * its top is level with the line, moved up or down to stay inside the free box (the log strip's line is below the
+       scene: the tag sits on the scene's bottom, above the strip); taller than the free box, it scrolls inside. */
+const FULLTEXT_PAD = 16, FULLTEXT_MAX_W = 420, FULLTEXT_SHARE = 0.4;
+function fulltextFree() {
+  const sb = sceneEl.getBoundingClientRect();
+  const f = { left: Math.max(sb.left, 0), top: Math.max(sb.top, 0), right: Math.min(sb.right, window.innerWidth), bottom: Math.min(sb.bottom, window.innerHeight) };
+  const card = document.getElementById('rb');
+  if (card && !card.hidden) {
+    const cb = card.getBoundingClientRect();
+    if (cb.left > f.left + (f.right - f.left) * 0.25) f.right = Math.min(f.right, cb.left);   // a side card
+    else f.bottom = Math.min(f.bottom, cb.top);                                                 // a bottom sheet
+  }
+  return f;
+}
 function fulltextPlace() {
-  const { el, anchor, host } = FULLTEXT;
+  const { el, anchor } = FULLTEXT;
   if (!el || el.hidden || !anchor) return;
-  const up = host.matches(FULLTEXT_UP);
-  const hb = up ? { left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight, width: window.innerWidth } : host.getBoundingClientRect();
-  const lb = anchor.getBoundingClientRect(), pad = 8;
-  const top = Math.max(hb.top, 0), bottom = Math.min(hb.bottom, window.innerHeight);
-  el.style.maxWidth = `${Math.max(120, hb.width - pad * 2)}px`;
-  el.style.maxHeight = `${Math.max(60, (bottom - top) - pad * 2)}px`;
+  const lb = anchor.getBoundingClientRect(), f = fulltextFree();
+  const w = Math.max(0, Math.min(FULLTEXT_MAX_W, (f.right - f.left) * FULLTEXT_SHARE));
+  const h = Math.max(0, f.bottom - f.top - FULLTEXT_PAD * 2);
+  el.style.maxWidth = `${Math.floor(w)}px`;
+  el.style.maxHeight = `${Math.floor(h)}px`;
   el.style.left = '0px'; el.style.top = '0px';
   const r = el.getBoundingClientRect();
-  const x = Math.min(Math.max(lb.left, hb.left + pad), hb.right - pad - r.width);
-  let y = up ? lb.top - 4 - r.height : lb.bottom + 4;
-  if (up && y < top + pad) y = Math.min(lb.bottom + 4, bottom - pad - r.height);
-  if (!up && y + r.height > bottom - pad) y = Math.max(top + pad, lb.top - 4 - r.height);
+  const x = f.left + FULLTEXT_PAD;
+  const y = Math.max(f.top + FULLTEXT_PAD, Math.min(lb.top, f.bottom - FULLTEXT_PAD - r.height));
   el.style.left = `${Math.round(x)}px`; el.style.top = `${Math.round(y)}px`;
 }
 function fulltextHide() {
@@ -94,8 +113,27 @@ document.addEventListener('pointerover', (e) => {
 document.addEventListener('pointerout', (e) => {
   if (FULLTEXT.via !== 'pointer' || !FULLTEXT.anchor) return;
   const to = e.relatedTarget;
-  if (FULLTEXT.anchor.contains(e.target) && !(to && (FULLTEXT.anchor.contains(to) || FULLTEXT.el.contains(to)))) fulltextHide();
+  if (FULLTEXT.anchor.contains(e.target) && !(to && (FULLTEXT.anchor.contains(to) || FULLTEXT.el.contains(to)))) fulltextHideSoon();
 });
+/* The tag is away from its line (at the 3D's left): the pointer crossing to it, to select its text, passes over the card
+   and the 3D first. It goes FULLTEXT_TRAVEL_MS after the pointer left the line, unless by then the pointer is on the tag
+   or back on the line. */
+const FULLTEXT_TRAVEL_MS = 700;
+function fulltextHideSoon() {
+  const anchor = FULLTEXT.anchor;
+  clearTimeout(FULLTEXT.soon);
+  FULLTEXT.soon = setTimeout(() => {
+    if (FULLTEXT.anchor !== anchor || FULLTEXT.via !== 'pointer') return;
+    if (FULLTEXT.el.matches(':hover') || (anchor.isConnected && anchor.matches(':hover'))) return;
+    fulltextHide();
+  }, FULLTEXT_TRAVEL_MS);
+}
+/* A press anywhere but the tag and its line, while it is crossing time: the pointer is not on its way to the tag. */
+document.addEventListener('pointerdown', (e) => {
+  if (FULLTEXT.via !== 'pointer' || !FULLTEXT.anchor || !FULLTEXT.el) return;
+  if (FULLTEXT.el.contains(e.target) || FULLTEXT.anchor.contains(e.target)) return;
+  fulltextHide();
+}, true);
 document.addEventListener('focusin', (e) => {
   const t = e.target;
   // a box focused by the mouse (the history pane takes the focus on a click) shows nothing: only a keyboard visit

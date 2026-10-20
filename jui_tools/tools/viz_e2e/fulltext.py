@@ -7,12 +7,14 @@ path, and has a subagent with a long type reading a long path; its transcript ha
 description (the 応答の履歴 tab). Robot B runs a test with a short command.
 
 Checked (57-fulltext.js, one component for the family — the table is in the ticket):
-  * A's テスト実行 row, hovered: the floating tag shows the whole command, wrapped, inside the card's box; its text selected
-    and copied comes out of the clipboard whole; the pointer leaving hides it.
+  * A's テスト実行 row (a ~2000-char command), hovered: the floating tag shows the whole command, wrapped, in the 3D's left
+    column — inside the window and the 3D left free by the card, 16 px in, clear of the view's centre, readable width (PLACE_JS;
+    10-20 requester: 「いやホバーで出る位置をもっと左にしてよ」); the pointer crossing to it keeps it; its text selected and
+    copied comes out of the clipboard whole; the pointer leaving hides it (also downwards inside the card).
   * B's short row: not cut, not focusable, no tag on hover.
   * Tab to A's row: the tag shows, the row points at it (aria-describedby); Esc hides it and the card stays open.
   * one row of every other member of the family (the card's subagent act, the history's head and tool name, the panel's
-    act, subagent name, spec name and project summary): cut, hovered → the whole text, inside its box.
+    act, subagent name, spec name and project summary): cut, hovered → the whole text, in the same left column.
     A member the scene does not cut by itself is narrowed for the arm (style max-width on that element), named in the
     results ("narrowed"): the component, not the length of a test string, is what is checked.
 Waits are on page state (waits.until); a hover's effect is synchronous, read right after the pointer moved.
@@ -35,21 +37,58 @@ SID_A = "a1f00000-0000-4000-8000-0000000000f1"
 SID_B = "b2f00000-0000-4000-8000-0000000000f2"
 SUB = "a1fsub0000000001"
 LONG_CMD = ("S=/private/tmp/e2e-hover/-Users-someone-resource-JsonUI-Agents/6376a1cb-5b86-497f-b8aa-880b2bc9bd52/scratchpad "
-            "&& npx playwright test tests/screens/a-very-long-folder-name/and-a-long-screen-name.test.json --reporter=line")
+            "&& npx playwright test tests/screens/a-very-long-folder-name/and-a-long-screen-name.test.json --reporter=line"
+            # 10-20: the requester's board was filled by a ~2000-char command (the server keeps 2000, ingest.TEST_COMMAND_MAX)
+            + "".join(f" && npx playwright test tests/screens/a-very-long-folder-name/screen-number-{i:02d}.test.json --reporter=line" for i in range(16)))
 SHORT_CMD = "npx playwright test t.json"
 # The log strip (2.3.6): a prompt that came as a message from another session — the line the requester saw cut (23:07).
 PEER_PROMPT = ("Another session sent a message: <cross-session-message from=\"uds:/tmp/e2e-hover.sock\" from-name=\"jsonui-dd\"> "
                "2.3.6 の票を振りました。ログの帯の行もホバーとフォーカスで全文が読めるかを確かめるための、わざと長くした文です。"
                "</cross-session-message>")
+# Where the tag is (10-20, requester: 「いやホバーで出る位置をもっと左にしてよ」): the 3D left free (the scene less the robot
+# card when it is open). placed: inside the window and the free box (so never on the card nor the panel), its left edge
+# 16 px in from the free box's left, clear of the free box's centre point and of the scene's centre point, and — when
+# its text wraps — at least min(420, 40% of the free box's width) wide (a narrow strip of a long text is unreadable).
+# robotCovered: how much of the selected robot's box on screen (its shown meshes, the desk left out) it covers
+# (measured, not judged: the rule lets it cover the robot's left side).
+PLACE_JS = """const place = (tb) => { if (!tb) return null;
+    const s = document.getElementById('scene').getBoundingClientRect(), card = document.getElementById('rb');
+    const f = { l: Math.max(s.left, 0), t: Math.max(s.top, 0), r: Math.min(s.right, innerWidth), b: Math.min(s.bottom, innerHeight) };
+    if (card && !card.hidden) { const c = card.getBoundingClientRect(); if (c.left > f.l + (f.r - f.l) * 0.25) f.r = Math.min(f.r, c.left); else f.b = Math.min(f.b, c.top); }
+    const d = window.__dbg, rid = d.board().robot, R = rid && d.robots.find((x) => x.def.id === rid);
+    let robot = null;
+    if (R) { const box = new d.THREE.Box3(), part = new d.THREE.Box3(), v = new d.THREE.Vector3(), cv = document.getElementById('scene-canvas').getBoundingClientRect();
+      R.robot.root.updateMatrixWorld(true);
+      const walk = (o) => { if (!o.visible || o === R.robot.desk) return; if (o.isMesh && o.geometry) { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); box.union(part.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld)); } o.children.forEach(walk); };
+      walk(R.robot.root);
+      robot = { l: 1e9, t: 1e9, r: -1e9, b: -1e9 };
+      for (let i = 0; i < 8; i++) { v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(d.camera);
+        const x = cv.left + (v.x + 1) / 2 * cv.width, y = cv.top + (1 - v.y) / 2 * cv.height;
+        robot.l = Math.min(robot.l, x); robot.r = Math.max(robot.r, x); robot.t = Math.min(robot.t, y); robot.b = Math.max(robot.b, y); } }
+    const w = f.r - f.l, minW = Math.min(420, w * 0.4);
+    const holds = (x, y) => x >= tb.left && x <= tb.right && y >= tb.top && y <= tb.bottom;
+    const tag = document.getElementById('fulltext'), wraps = tb.height > 40;   // one line is 32 px (18 + padding + border)
+    const inWin = tb.left >= -0.5 && tb.top >= -0.5 && tb.right <= innerWidth + 0.5 && tb.bottom <= innerHeight + 0.5;
+    const inFree = tb.left >= f.l - 0.5 && tb.right <= f.r + 0.5 && tb.top >= f.t - 0.5 && tb.bottom <= f.b + 0.5;
+    const atLeft = Math.abs(tb.left - (f.l + 16)) <= 1.5;
+    const clearMid = !holds((f.l + f.r) / 2, (f.t + f.b) / 2) && !holds((s.left + s.right) / 2, (s.top + s.bottom) / 2);
+    const wide = !wraps || tb.width >= minW - 1;
+    let robotCovered = null;
+    if (robot) { const ox = Math.max(0, Math.min(tb.right, robot.r) - Math.max(tb.left, robot.l)), oy = Math.max(0, Math.min(tb.bottom, robot.b) - Math.max(tb.top, robot.t));
+      robotCovered = Math.round(100 * ox * oy / Math.max(1, (robot.r - robot.l) * (robot.b - robot.t))) + '%'; }
+    const r1 = (x) => Math.round(x);
+    return { placed: inWin && inFree && atLeft && clearMid && wide, inWin, inFree, atLeft, clearMid, wide, minW: r1(minW), robotCovered,
+      scrolls: !!tag && tag.scrollHeight > tag.clientHeight + 1,
+      tag: [r1(tb.left), r1(tb.top), r1(tb.width), r1(tb.height)], free: [r1(f.l), r1(f.t), r1(f.r), r1(f.b)], robot: robot && [r1(robot.l), r1(robot.t), r1(robot.r), r1(robot.b)] }; };"""
 # One strip line (by its text) and the tag: inside the viewport and above the line.
-STRIP_JS = """(want) => { const line = [...document.querySelectorAll('#ticker .what')].find((x) => x.textContent.includes(want));
+STRIP_JS = """(want) => { """ + PLACE_JS + """ const line = [...document.querySelectorAll('#ticker .what')].find((x) => x.textContent.includes(want));
   const tag = document.getElementById('fulltext');
   if (!line) return null;
   const lb = line.getBoundingClientRect(), tb = tag && !tag.hidden ? tag.getBoundingClientRect() : null;
   return { cut: line.scrollWidth > line.clientWidth + 1, text: line.textContent, tabindex: line.getAttribute('tabindex'),
     shown: !!tb, tagText: tag && !tag.hidden ? tag.textContent : '', described: line.getAttribute('aria-describedby'),
     inView: !!tb && tb.left >= -0.5 && tb.top >= -0.5 && tb.right <= innerWidth + 0.5 && tb.bottom <= innerHeight + 0.5,
-    above: !!tb && tb.bottom <= lb.top + 0.5, focused: document.activeElement === line }; }"""
+    above: !!tb && tb.bottom <= lb.top + 0.5, focused: document.activeElement === line, at: place(tb) }; }"""
 TITLE = "とても長いセッションの名前：テストのパスがホバーで全部見えるかを確かめるための、わざと長くした名前"
 SUB_TYPE = "a-subagent-type-with-a-name-long-enough-to-be-cut-in-the-session-list"
 SPEC_NAME = "わざと長くした画面の名前：浮き札でカードやパネルの 1 行で切れた文の全文が読めるかを確かめる画面"
@@ -57,13 +96,13 @@ MCP_TOOL = "mcp__a_server_with_a_long_name__and_a_tool_with_an_even_longer_name_
 DESC = "長い説明: 応答の履歴の折りたたんだ行の頭で切れる文が、ホバーとフォーカスで全文になるかを確かめるための説明文"
 
 # The state of one line and of the tag, from the page.
-LINE_JS = """([sel, i]) => { const line = document.querySelectorAll(sel)[i || 0]; const tag = document.getElementById('fulltext');
+LINE_JS = """([sel, i]) => { """ + PLACE_JS + """ const line = document.querySelectorAll(sel)[i || 0]; const tag = document.getElementById('fulltext');
   if (!line) return null;
-  const host = line.closest('#rb, #side'), hb = host ? host.getBoundingClientRect() : null, tb = tag && !tag.hidden ? tag.getBoundingClientRect() : null;
+  const tb = tag && !tag.hidden ? tag.getBoundingClientRect() : null;
   const owner = line.closest('button, summary, a[href]') || line;
   return { cut: line.scrollWidth > line.clientWidth + 1, text: line.textContent, tabindex: line.getAttribute('tabindex'),
     shown: !!tb, tagText: tag && !tag.hidden ? tag.textContent : '', described: owner.getAttribute('aria-describedby'),
-    inside: !!(tb && hb && tb.left >= hb.left - 0.5 && tb.right <= hb.right + 0.5 && tb.top >= hb.top - 0.5 && tb.bottom <= hb.bottom + 0.5),
+    at: place(tb), placed: !!(tb && place(tb).placed),
     wraps: !!tb && tb.height > 30, select: tag ? getComputedStyle(tag).userSelect : '' }; }"""
 TAG_SHOWN = "() => { const t = document.getElementById('fulltext'); return !!t && !t.hidden; }"
 TAG_HIDDEN = "() => { const t = document.getElementById('fulltext'); return !t || t.hidden; }"
@@ -178,28 +217,45 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
                 await page.emulate_media(color_scheme=scheme)
                 await page.screenshot(path=str(out / f"before-card-{scheme}.png"))
             return
-        # 1. A's long test row, hovered: the whole command, wrapped, inside the card; copied whole; gone when the pointer leaves
+        # 1. A's long test row (~2000 chars), hovered: the whole command, wrapped, in the 3D's left column (PLACE_JS); the
+        #    pointer crossing the card and the 3D to the tag keeps it; copied whole; gone when the pointer leaves
         r = res["longBefore"] = await line(page, "#rb .rb-run-file")
         check(failures, r and r["cut"] and r["tabindex"] == "0" and not r["shown"], f"A's test row is cut and focusable, no tag yet: {r}")
+        res["rowHit"] = await page.evaluate("""() => { const l = document.querySelector('#rb .rb-run-file'); l.scrollIntoView({ block: 'nearest' }); const b = l.getBoundingClientRect();
+          const at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return { box: [b.left, b.top, b.width, b.height], at: at && (at.id || at.className || at.tagName) }; }""")
         await page.hover("#rb .rb-run-file")
         await until(page, TAG_SHOWN, "the tag on hover")
         r = res["longHover"] = await line(page, "#rb .rb-run-file")
-        check(failures, r["shown"] and r["tagText"] == LONG_CMD and r["inside"] and r["wraps"] and r["described"] == "fulltext" and r["select"] in ("text", "auto"),
-              f"hovered: the whole command, wrapped, inside the card, the row points at it: {r}")
+        check(failures, r["shown"] and r["tagText"] == LONG_CMD and r["placed"] and r["wraps"] and r["described"] == "fulltext" and r["select"] in ("text", "auto"),
+              f"hovered: the whole command, wrapped, at the 3D's left, clear of the centre, readable width, the row points at it: {r}")
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
             await page.screenshot(path=str(out / f"after-card-{scheme}.png"))
         await page.emulate_media(color_scheme="light")
         box = await page.evaluate("() => { const b = document.getElementById('fulltext').getBoundingClientRect(); return [b.left + 8, b.top + 8]; }")
-        await page.mouse.move(*box)   # into the tag: it stays (to select in it)
+        await page.mouse.move(*box, steps=12)   # across the card and the 3D into the tag: it stays (to select in it)
+        await page.wait_for_timeout(900)        # longer than the time given to cross (FULLTEXT_TRAVEL_MS)
         stays = res["staysInTag"] = (await line(page, "#rb .rb-run-file"))["shown"]
-        check(failures, stays, "the pointer moved from the row into the tag: the tag stays")
+        check(failures, stays, "the pointer crossed the card and the 3D from the row into the tag: the tag stays")
         await page.evaluate("() => { const t = document.getElementById('fulltext'), r = document.createRange(); r.selectNodeContents(t); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }")
         await page.keyboard.press("ControlOrMeta+c")
         copied = res["copied"] = await page.evaluate("() => navigator.clipboard.readText()")
         check(failures, copied == LONG_CMD, f"the tag's text selected and copied comes out whole: {copied!r}")
         await page.mouse.move(5, 5)
         await until(page, TAG_HIDDEN, "the tag gone when the pointer left")
+        # 1b. the pointer leaving the row downwards, inside the card (10-20: the tag covered the card, so the pointer stayed
+        #     "in the tag" and the tag stayed): gone
+        await page.hover("#rb .rb-run-file")
+        await until(page, TAG_SHOWN, "the tag on hover again")
+        row = await page.evaluate("() => { const b = document.querySelector('#rb .rb-run-file').getBoundingClientRect(); return [b.left + 20, b.top + b.height / 2]; }")
+        await page.mouse.move(row[0], row[1] + 200, steps=5)
+        try:
+            await until(page, TAG_HIDDEN, "the tag gone when the pointer left downwards in the card", timeout=3000)
+            res["leftDown"] = "hidden"
+        except WaitTimeout as e:
+            res["leftDown"] = str(e)
+            check(failures, False, f"the pointer left the row downwards inside the card: the tag stays: {e}")
+        await page.mouse.move(5, 5)
         # 2. B's short row: not cut, not focusable, no tag
         await open_card(page, lab_b)
         await page.hover("#rb .rb-run-file")
@@ -221,7 +277,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
                 break
         res["tabPath"] = path
         r = res["focus"] = await line(page, "#rb .rb-run-file")
-        check(failures, reached and r["shown"] and r["tagText"] == LONG_CMD and r["described"] == "fulltext" and r["inside"], f"Tab reaches the row and shows the tag: reached {reached}, {r}")
+        check(failures, reached and r["shown"] and r["tagText"] == LONG_CMD and r["described"] == "fulltext" and r["placed"], f"Tab reaches the row and shows the tag: reached {reached}, {r}")
         await page.keyboard.press("Escape")
         r = res["esc"] = await line(page, "#rb .rb-run-file")
         card_open = await page.evaluate("() => !document.getElementById('rb').hidden")
@@ -244,7 +300,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
             await page.hover(sel)
             r = await line(page, sel)
             res["family"][fname] = dict(r, narrowed=narrowed)
-            check(failures, r["cut"] and r["shown"] and r["tagText"] == r["text"] and r["inside"] and r["described"] == "fulltext",
+            check(failures, r["cut"] and r["shown"] and r["tagText"] == r["text"] and r["placed"] and r["described"] == "fulltext",
                   f"{fname}: cut, hovered → the whole text inside its box: {r} (narrowed for the arm: {narrowed})")
             if fname == "panel · セッションの act":
                 await page.screenshot(path=str(out / "after-panel-light.png"))
@@ -260,8 +316,8 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
                     why="() => [...document.querySelectorAll('#ticker .what')].map((x) => [x.textContent.slice(0, 30), x.scrollWidth, x.clientWidth, x.getAttribute('tabindex')])")
         await page.hover(f"#ticker .what:has-text('{head}')")
         r = res["stripLong"] = await page.evaluate(STRIP_JS, head)
-        check(failures, r and r["cut"] and r["shown"] and r["tagText"] == r["text"] and "</cross-session-message>" in r["tagText"] and r["inView"] and r["above"] and r["described"] == "fulltext",
-              f"the strip's long line hovered: the whole text, above the line, inside the viewport: {r}")
+        check(failures, r and r["cut"] and r["shown"] and r["tagText"] == r["text"] and "</cross-session-message>" in r["tagText"] and r["inView"] and r["above"] and r["described"] == "fulltext" and r["at"]["placed"],
+              f"the strip's long line hovered: the whole text, above the line, inside the viewport, in the 3D's left column: {r}")
         await page.screenshot(path=str(out / "after-strip-light.png"))
         await page.mouse.move(5, 5)
         await until(page, TAG_HIDDEN, "the strip's tag gone")
@@ -300,6 +356,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
             failures.append(f"fulltext: request outside the server: {u}")
     except Exception as e:   # a wait that ran out is a FAIL line with what was seen
         failures.append(f"fulltext: {type(e).__name__}: {str(e).splitlines()[0]}")
+        res["error"] = str(e)[:4000]
     finally:
         await browser.close()
         srv.terminate()   # our own child
