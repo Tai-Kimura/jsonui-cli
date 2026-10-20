@@ -224,6 +224,10 @@ def run_node(row: dict, node: dict, rule, book: PB.Book, totals: dict, hours: li
             else:
                 slot["usd"][k] = (slot["usd"][k] or 0.0) + usd
                 slot["price"] = slot["price"] or ref
+    # what the rule assumed for this node (a rule's notice: (code, message) pairs), said once per node
+    notice = rule.extra.get("notice") if rule else None
+    for code, message in (notice(node, run.quantities, run.running) if notice else []):
+        _warn(warnings, "run_node", message, node["id"], code=code)
     return run
 
 

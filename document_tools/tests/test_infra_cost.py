@@ -550,3 +550,33 @@ def test_a_scenario_of_another_month_is_priced_on_its_own_and_says_so():
     account = E.simulate_account(scs, model, BUNDLED)
     assert [round(E.month_totals(r)["usd"], 2) for r in account] == [30.9, 30.9]
     assert [w["code"] for w in account[1].warnings if w.get("code") == "cost.account_other_month"] == ["cost.account_other_month"]
+
+
+# ---------------------------------------------------------------- what a rule assumed, said (ticket 2026-10-21-infra-
+# bundled-prices-missing-common-aws-rows, the rest of stage B): a cap or a 0 the reader would otherwise take as measured
+
+def _notices(result, code: str) -> list[dict]:
+    return [w for w in E.month_totals(result)["warnings"] if w.get("code") == code]
+
+
+def test_app_runner_says_an_hour_with_requests_is_counted_active_through_the_hour():
+    node = {"id": "web", "category": "compute.paas", "provider": "aws", "service": "apprunner", "region": "us-east-1"}
+    busy, _ = _run([node], [{"node": "web", "quantities": {"requests": _per_hour(100_000), "vcpu": 1, "memory_gb": 2}}])
+    got = _notices(busy, "cost.apprunner_active_upper_bound")
+    assert len(got) == 1 and got[0]["node"] == "web" and "the most it can be" in got[0]["message"]
+    idle, _ = _run([node], [{"node": "web", "quantities": {"vcpu": 1, "memory_gb": 2}}])
+    assert _notices(idle, "cost.apprunner_active_upper_bound") == []   # provisioned only: nothing assumed
+
+
+def test_a_standard_workflow_with_requests_and_no_transitions_is_named_as_priced_0():
+    node = {"id": "flow", "category": "compute.function", "provider": "aws", "service": "stepfunctions",
+            "region": "us-east-1"}
+    bare, totals = _run([node], [{"node": "flow", "quantities": {"requests": _per_hour(10_000)}}])
+    got = _notices(bare, "cost.stepfunctions_no_transitions")
+    assert len(got) == 1 and got[0]["node"] == "flow" and "state_transitions" in got[0]["message"]
+    assert sum(v for r in bare.nodes for m in r.meters.values() for v in m["usd"] if v is not None) == 0.0
+    with_t, _ = _run([node], [{"node": "flow", "quantities": {"requests": _per_hour(10_000),
+                                                              "state_transitions": _per_hour(50_000)}}])
+    express, _ = _run([dict(node, spec=[{"key": "workflow_type", "value": "express"}])],
+                      [{"node": "flow", "quantities": {"requests": _per_hour(10_000)}}])
+    assert _notices(with_t, "cost.stepfunctions_no_transitions") == [] == _notices(express, "cost.stepfunctions_no_transitions")

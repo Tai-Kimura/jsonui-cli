@@ -111,6 +111,32 @@ def step_functions(h: F.Hour) -> list[F.Meter]:
     return F.counted(h, "state_transitions", "transitions", "request", "transitions")
 
 
+def _any(quantities: dict, name: str, running: list | None = None) -> bool:
+    """Some hour of the run has ``name`` above 0 (and, given ``running``, an instance running then)."""
+    hours = (quantities.get(name) or {}).get("perHour") or []
+    return any(v > 0 and (running is None or running[k] > 0) for k, v in enumerate(hours))
+
+
+def step_functions_notice(node: dict, quantities: dict, running: list) -> list[tuple[str, str]]:
+    """A Standard workflow with requests and no state_transitions is 0: say so (the transitions are not guessed)."""
+    if F.spec_value(node, "workflow_type", "type") == "express" or "state_transitions" in quantities:
+        return []
+    if not _any(quantities, "requests"):
+        return []
+    return [("cost.stepfunctions_no_transitions", f"{node['id']}: a Standard workflow is billed per state transition; "
+             "its load has requests and no state_transitions, so it is priced 0 (write state_transitions, or spec "
+             "workflow_type: express)")]
+
+
+def app_runner_notice(node: dict, quantities: dict, running: list) -> list[tuple[str, str]]:
+    """An hour with requests is counted active through the hour: say that it is the most it can be."""
+    if not ("vcpu" in quantities and "memory_gb" in quantities and _any(quantities, "requests", running)):
+        return []
+    return [("cost.apprunner_active_upper_bound", f"{node['id']}: each hour with requests is counted as active for "
+             "the whole hour (vCPU and memory); App Runner bills the seconds it processes requests, so this is the "
+             "most it can be")]
+
+
 def app_runner(h: F.Hour) -> list[F.Meter]:
     """Each instance's memory while provisioned (idle), and its vCPU and memory while active. An hour with requests
     counts as active through the hour (AWS bills the seconds it processes them: this is the most it can be)."""
@@ -211,9 +237,9 @@ _r("ssm", "secrets", "ssm", ssm, checked="2026-10-21")
 _r("ecr", "ci", "ecr", F.file_store, checked="2026-10-21", reads=("storage_gb",))
 # the rest of stage B: the pages read 10-21
 _r("stepfunctions", "compute.function", "stepfunctions", step_functions, checked="2026-10-21",
-   reads=("requests", "state_transitions", "duration_ms", "memory_mb"))
+   reads=("requests", "state_transitions", "duration_ms", "memory_mb"), notice=step_functions_notice)
 _r("apprunner", "compute.paas", "apprunner", app_runner, checked="2026-10-21",
-   reads=("requests", "vcpu", "memory_gb", "egress_gb"))
+   reads=("requests", "vcpu", "memory_gb", "egress_gb"), notice=app_runner_notice)
 _r("lightsail", "compute.vm", "lightsail", lightsail, checked="2026-10-21", reads=("storage_gb",))
 _r("lightsail-database", "database.relational", "lightsail", lightsail_database, "lightsail", checked="2026-10-21",
    reads=())
