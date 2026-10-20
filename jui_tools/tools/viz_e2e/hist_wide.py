@@ -7,7 +7,9 @@ The real `jui viz serve` in a throwaway HOME with two sessions (two rooms); sess
 long code line and two pictures (hist_images.py reads those). Arms: 広げる — the card runs from the left margin to the
 right edge over the side panel and the site's header (issue #35), its head one row (the name left, the buttons right: issue
 #36), and the camera flies so the robot's on-screen box (its visible meshes) is inside the
-margin, waited on the camera tween's end, never on time; ← → bring the next robot into the margin too; the table
+margin, waited on the camera tween's end, never on time; wide, the camera holds exactly still for 5 s in each of calm, sweat,
+the whistle, the headset and notes, tired and tired with sweat, and the robot as posed stays inside the fixed box the camera
+fits (camera_holds_still); ← → bring the next robot into the margin too; the table
 scrolls sideways; the prompt box is there; the pane follows a new answer; Esc goes back to the card's width and to the
 camera's place before; the choice is kept in localStorage (a reload opens it wide) and the page works with
 localStorage throwing; at 390 px it is the whole screen. Screenshots (light and dark, 1440 and 390) are for the eye.
@@ -143,6 +145,67 @@ HEAD = """() => { const rb = document.getElementById('rb');
 TO_END = """() => { const pane = document.querySelector('[data-rb-hist]'); pane.scrollTop = pane.scrollHeight; pane.dispatchEvent(new Event('scroll')); }"""
 
 
+# The wide camera holds still (ticket 2026-10-20-jui-viz-wide-history-camera-jitters; requester 10-20: 「広げた時にロボットの動き
+# によっては3Dの画面がガタつく。汗かいてタイプしてるアクションとか」, ruled: 「机プラス少しの余裕くらいの固定値にしたら？」). Each
+# state is set on robot A (the page's state, as workwear.py does, and the causes through __dbg.force), then the camera,
+# where it looks and where it is going are recorded every frame for CAM_SEC: all must be the same numbers as the first
+# frame's, exactly (the box it fits is fixed, so nothing the robot does moves it). The robot's shown meshes over those
+# frames, in its own space, stay inside the fixed box, and its on-screen box inside the margin.
+CAM_SEC = 5
+CAM_STATES = (("calm", "idle", None), ("sweat", "typing", {"heavy": ["tokens"]}), ("whistle", "typing", {"heavy": ["subagents"]}),
+              ("headset-notes", "background", None), ("tired", "idle", {"tired": True}),
+              ("tired-sweat", "typing", {"heavy": ["tokens"], "tired": True}))
+CAM_SHOWS = {"calm": "(x, b) => x.state === 'idle' && !x.sweat && !x.tired", "sweat": "(x, b) => x.state === 'typing' && x.sweat && x.look === 'fired'",
+             "whistle": "(x, b) => x.state === 'typing' && x.sweat && x.whistle && x.armRz < -1.8",
+             "headset-notes": "(x, b) => x.state === 'background' && b.headset && b.notes.length > 0",
+             "tired": "(x, b) => x.state === 'idle' && x.tired && x.antenna > 0.9", "tired-sweat": "(x, b) => x.state === 'typing' && x.tired && x.sweat"}
+# the camera at rest after the flight: the same position for 20 frames running (a follow's lerp ends on a fixed point)
+CAM_REST = """() => new Promise((done) => { const D = window.__dbg; let last = null, n = 0, k = 0;
+  const f = () => { const p = D.camera.position.toArray().join(); n = p === last ? n + 1 : 0; last = p; k += 1;
+    if (n >= 20) done({ rest: true, frames: k }); else if (k > 3000) done({ rest: false, frames: k }); else requestAnimationFrame(f); }; f(); })"""
+
+
+async def camera_holds_still(page, ra, failures, res):
+    """The arms of the camera jitter ticket, on robot A, wide; res['still'][state] keeps what was recorded."""
+    from waits import until
+    out = res["still"] = {}
+    fbox = res["focusBox"] = await page.evaluate("() => window.__dbg.focusBox()")
+    # no game and no break while the states are recorded: a robot walking off moves the camera, rightly (bg_look.py does the same)
+    await page.evaluate("() => { window.__dbg.play({ p: 0, solo: { p: 0 } }); window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); }")
+    for name, vis, force in CAM_STATES:
+        await page.evaluate("(id) => window.__dbg.force(id, null)", ra)
+        await page.evaluate("([id, s]) => window.__dbg.setVisState(id, s)", [ra, vis])
+        if force:
+            await page.evaluate("([id, o]) => window.__dbg.force(id, o)", [ra, force])
+        await until(page, f"(id) => {{ const x = window.__dbg.looks([id])[0], b = window.__dbg.bgLook().find((y) => y.id === id); return ({CAM_SHOWS[name]})(x, b); }}",
+                    f"hist-wide: A shows {name}", arg=ra, why=f"() => [window.__dbg.looks(['{ra}']), window.__dbg.bgLook().find((y) => y.id === '{ra}')]")
+        await page.wait_for_timeout(800)   # the pose blended into the state's (0.4 s of frame time)
+        rest = await page.evaluate(CAM_REST)
+        await page.evaluate("(id) => window.__dbg.camRecord(id)", ra)
+        await page.wait_for_timeout(CAM_SEC * 1000)
+        rec = await page.evaluate("() => window.__dbg.camRecorded()")
+        await page.evaluate("() => window.__dbg.afterFrame(null)")
+        box = await page.evaluate(ROBOT_BOX, ra)
+        margin = (await page.evaluate(CARD))["left"]
+        fr = rec["frames"]
+        first = fr[0] if fr else []
+        moved = [max(abs(f[i] - first[i]) for f in fr) for i in range(12)] if fr else []
+        steps = [max(abs(fr[n][i] - fr[n - 1][i]) for i in range(3)) for n in range(1, len(fr))]
+        env = rec["env"] or {}
+        r = out[name] = {"frames": len(fr), "rest": rest, "states": rec["states"], "cam": max(moved[0:3], default=None), "look": max(moved[3:6], default=None),
+                         "goal": max(moved[6:12], default=None), "maxStep": max(steps, default=None),
+                         "env": {k: [round(v[0], 3), round(v[1], 3)] for k, v in env.items()}, "box": box, "margin": margin}
+        check(failures, len(fr) >= 5 and len(rec["states"]) == 1, f"{name}: {CAM_SEC} s recorded in one state: {r['frames']} frames, {rec['states']}")
+        check(failures, fr and r["cam"] == 0 and r["look"] == 0 and r["goal"] == 0,
+              f"{name}, wide: the camera holds still over {CAM_SEC} s (position, where it looks and where it is going move 0): "
+              f"camera {r['cam']}, look {r['look']}, goal {r['goal']}, largest step {r['maxStep']}, {r['frames']} frames, rest {rest}")
+        inside = all(fbox[k][0] - 1e-6 <= env[k][0] and env[k][1] <= fbox[k][1] + 1e-6 for k in ("x", "y", "z")) if env else False
+        check(failures, inside, f"{name}: the robot as posed stays inside the fixed box (the desk and its margin): robot {r['env']} box {fbox}")
+        check(failures, box and box["x0"] >= 0 and box["x1"] <= margin, f"{name}: the robot is inside the left margin: {box} margin {margin}")
+    await page.evaluate("(id) => window.__dbg.force(id, null)", ra)
+    await page.evaluate("([id, s]) => window.__dbg.setVisState(id, s)", [ra, "idle"])
+
+
 class Stage:
     """The server, the two sessions and a browser, for this suite and hist_images.py."""
 
@@ -274,6 +337,7 @@ async def run_hist_wide(pw, out, failures):
             await page.wait_for_timeout(500)
             await page.screenshot(path=str(out / f"wide-1440-{scheme}.png"))
         await page.emulate_media(color_scheme="light")
+        await camera_holds_still(page, ra, failures, res)
         # follows a new answer while wide (the reader at the bottom)
         with open(st.paths[A], "a") as f:
             f.write(json.dumps({"type": "assistant", "timestamp": stamp("2026-10-19T09:02:00Z"),

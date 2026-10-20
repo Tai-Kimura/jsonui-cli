@@ -1282,47 +1282,51 @@ function focusPose(R, az, el, dist, fitted = false) {
   const dir = focusDir(az, el), wide = sceneEl.clientWidth > 900;
   const right = new THREE.Vector3().crossVectors(dir.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
   const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), viewW = viewH * camera.aspect;
-  const t = R.robot.root.position.clone().add(new THREE.Vector3(0, 1.15 * (R.robot.size || 1), 0));   // a subagent is 0.8 (2.3.5)
+  // a subagent is 0.8 (2.3.5). The floor under the robot, not its root's height: a hop or a jump (play) moves the root up and
+  // down, and the camera does not go with the robot's motion (ticket 2026-10-20-jui-viz-wide-history-camera-jitters).
+  const rp = R.robot.root.position, t = new THREE.Vector3(rp.x, 1.15 * (R.robot.size || 1), rp.z);
   // Wide: the card covers the right of the scene, so the robot sits left of centre. Narrow: the card is a
   // bottom sheet, so the robot sits high.
-  // The wide 応答の履歴 (2.3.4, 55-history.js): the card leaves only histWideMargin() on the left, and the robot sits in its middle —
-  // the robot as posed (2.3.5: a tired robot's slumped pose is wider and stuck 1–10 px out of the margin when its root was
-  // put in the middle): the middle of its posed width in the middle of the margin, and the camera backs off if that width
-  // would not fit (ticket 2026-10-20-jui-viz-wide-history-tired-robot-leans-out-of-the-margin).
+  // The wide 応答の履歴 (2.3.4, 55-history.js): the card leaves only histWideMargin() on the left, and the robot sits in its middle:
+  // the middle of a fixed box around its seat (FOCUS_BOX: the desk and a little room around it) in the middle of the margin,
+  // and the camera backs off if that box would not fit. Fixed, so the camera stays still whatever the robot does (10-20).
   const margin = typeof histWideMargin === 'function' ? histWideMargin() : 0;
   if (wide && margin) {
-    const ext = focusExtent(R, right, dir, dist, az), mid = (ext.l + ext.r) / 2, width = ext.r - ext.l;
+    const ext = focusExtent(R, right, dir, dist), mid = (ext.l + ext.r) / 2, width = ext.r - ext.l;
     const fit = (margin / sceneEl.clientWidth) * viewW * FOCUS_FIT;
-    if (width > fit && !fitted) return focusPose(R, az, el, dist * (width / fit), true);   // farther, so the posed robot fits the margin
+    if (width > fit && !fitted) return focusPose(R, az, el, dist * (width / fit), true);   // farther, so the fixed box fits the margin
     t.add(right.clone().multiplyScalar(((sceneEl.clientWidth - margin) / 2 / sceneEl.clientWidth) * viewW + mid));
   }
   else if (wide) t.add(right.multiplyScalar((Math.min(420, sceneEl.clientWidth - 28) / 2 / sceneEl.clientWidth) * viewW));
   else t.y -= viewH * 0.2;
   return { p: t.clone().add(dir.multiplyScalar(dist)), t };
 }
-/* The robot's posed width as the camera sees it, measured from its root along the camera's right, in units of the plane
-   the camera looks at (a corner nearer the camera counts wider: perspective): every shown mesh, the desk included, as the
-   wide history must keep it in the margin. Kept per robot as the widest seen for its posture (state, tired, desk), the
-   camera's turn and distance, so a pose that breathes or types does not shake the camera every frame. */
+/* The width the wide history keeps in its margin: a fixed box in the robot's own space (its seat: the root's turn and its
+   size go with it), the desk and a little room around it — not the robot as posed (requester 10-20: 「あんまり難しいことしなく
+   ていいよ 机プラス少しの余裕くらいの固定値にしたら？」). 2.3.5 measured every shown mesh each frame and kept the widest per
+   posture, turn and distance: the sweat drops coming and going, and a key with the distance in it that a backed-off camera
+   changed every other frame, moved the camera with the robot's motion (ticket 2026-10-20-jui-viz-wide-history-camera-jitters).
+   The box holds the widest pose there is: FOCUS_SPARE past each side of the desk (DESK_W wide, 10-robot-core.js) takes the
+   tired slump, the headset's cups, the waving arm and the sweat drops: measured 10-20 in the robot's own space over 5 s each,
+   the widest x ±1.09 (the sweat drops, the whistle's arm), y -0.02..2.19, z -0.77..1.00 (tired with sweat). Along the camera's right, in
+   units of the plane it looks at, a corner nearer the camera counted wider (perspective). */
 const FOCUS_FIT = 0.9;
-const focusBox = new THREE.Box3(), focusCorner = new THREE.Vector3(), FOCUS_LOOK = new THREE.Vector3(0, 1.15, 0);
-function focusExtent(R, right, dir, dist, az) {
-  const root = R.robot.root, key = `${R.robot.state}|${!!R.robot.tired}|${!!(R.robot.desk && R.robot.desk.visible)}|${Math.round(az * 20)}|${dist.toFixed(2)}`;
-  const kept = R.focusExt && R.focusExt.key === key ? R.focusExt : (R.focusExt = { key, l: 0, r: 0 });
-  root.updateMatrixWorld(true);
-  root.traverse((o) => {
-    if (!o.isMesh || !shownChain(o)) return;
-    focusBox.setFromObject(o);
-    for (let i = 0; i < 8; i++) {
-      focusCorner.set(i & 1 ? focusBox.max.x : focusBox.min.x, i & 2 ? focusBox.max.y : focusBox.min.y, i & 4 ? focusBox.max.z : focusBox.min.z);
-      focusCorner.sub(root.position);
-      const side = focusCorner.dot(right), depth = dist - focusCorner.sub(FOCUS_LOOK).dot(dir);
-      const d = depth > 0.1 ? side * (dist / depth) : side;
-      if (d < kept.l) kept.l = d;
-      if (d > kept.r) kept.r = d;
-    }
-  });
-  return kept;
+const DESK_W = 1.0, FOCUS_SPARE = 0.65;
+const FOCUS_BOX = { x: [-(DESK_W / 2 + FOCUS_SPARE), DESK_W / 2 + FOCUS_SPARE], y: [-0.05, 2.45], z: [-0.8, 1.05] };
+const focusCorner = new THREE.Vector3(), focusQuat = new THREE.Quaternion(), focusScale = new THREE.Vector3(), FOCUS_LOOK = new THREE.Vector3(0, 1.15, 0);
+function focusExtent(R, right, dir, dist) {
+  const root = R.robot.root, B = FOCUS_BOX;
+  root.updateWorldMatrix(true, false);
+  root.matrixWorld.decompose(focusCorner, focusQuat, focusScale);
+  let l = 0, r = 0;
+  for (let i = 0; i < 8; i++) {
+    focusCorner.set(B.x[i & 1 ? 1 : 0], B.y[i & 2 ? 1 : 0], B.z[i & 4 ? 1 : 0]).multiply(focusScale).applyQuaternion(focusQuat);
+    const side = focusCorner.dot(right), depth = dist - focusCorner.sub(FOCUS_LOOK).dot(dir);
+    const d = depth > 0.1 ? side * (dist / depth) : side;
+    if (d < l) l = d;
+    if (d > r) r = d;
+  }
+  return { l, r };
 }
 const shownChain = (o) => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
 const ofRobot = (o) => { for (let x = o; x; x = x.parent) if (x.userData && x.userData.robotId !== undefined) return true; return false; };
