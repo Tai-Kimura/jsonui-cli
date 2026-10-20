@@ -144,3 +144,127 @@ def test_the_table_is_built_without_gcp_when_no_key_was_given(tmp_path, monkeypa
     doc, missing = BB.build(tmp_path, "2026-10-20", notices=notices)
     assert missing == [] and not any(r["provider"] == "gcp" for r in doc["prices"])
     assert len(notices) == 1 and G.KEY_ENV in notices[0] and KEY not in json.dumps(doc) + notices[0]
+
+
+# ---------------------------------------------------------------- redirects (ticket 2026-10-21-gcp-billing-key-follows-
+# redirects): urllib carries a request's own headers to where a redirect points, the key among them
+
+class _Net(urllib.request.BaseHandler):
+    """The network, for the arms: the Catalog API answers a redirect to ``to``; every other host answers 200 and
+    is recorded with the headers it was sent. Ahead of urllib's own HTTPS handler: nothing reaches the network."""
+    handler_order = 100
+
+    def __init__(self, to):
+        self.to, self.reached = to, []
+
+    def https_open(self, req):
+        import email.message
+        import urllib.response
+        host = urllib.parse.urlsplit(req.full_url).hostname
+        msg = email.message.Message()
+        if host == "cloudbilling.googleapis.com" and not self.reached and "pageToken" not in req.full_url:
+            msg["Location"] = self.to
+            resp = urllib.response.addinfourl(io.BytesIO(b""), msg, req.full_url, 302)
+            resp.msg = "Found"
+            return resp
+        self.reached.append((host, dict(req.header_items())))
+        resp = urllib.response.addinfourl(io.BytesIO(b'{"services": []}'), msg, req.full_url, 200)
+        resp.msg = "OK"
+        return resp
+
+
+@pytest.mark.parametrize("to", ["https://elsewhere.example/v1/services", "http://cloudbilling.googleapis.com/v1/x",
+                                "https://cloudbilling.googleapis.com:8443/v1/x",
+                                "https://cloudbilling.googleapis.com/v1/services?pageSize=1"])
+def test_no_redirect_is_followed_so_the_key_goes_nowhere_else(tmp_path, to):
+    """Another host, scheme or port — and the Catalog API itself: a redirect is a failure, not followed. The key is
+    sent once, to the URL asked, and the failure's words do not hold it."""
+    net = _Net(to)
+    said = []
+    assert G.download(tmp_path, environ={G.KEY_ENV: KEY}, opener=G.opener_with(net), log=said.append) == 1
+    assert net.reached == []
+    assert len(said) == 1 and "a redirect to" in said[0] and "not followed" in said[0] and KEY not in said[0]
+
+
+def test_a_url_that_is_not_the_catalog_api_is_not_asked():
+    net = _Net("https://elsewhere.example/")
+    with pytest.raises(G.FetchError) as e:
+        G._get("https://elsewhere.example/v1/services", KEY, G.opener_with(net))
+    assert net.reached == [] and KEY not in str(e.value) and "not the Catalog API" in str(e.value)
+
+
+def test_the_catalog_api_answering_is_read_with_the_key_in_its_header():
+    net = _Net("unused")
+    net.reached.append(("primed", {}))     # the first answer is 200, not a redirect
+    assert G._get(f"{G.API}/services?pageSize=1", KEY, G.opener_with(net)) == {"services": []}
+    host, headers = net.reached[1]
+    assert host == "cloudbilling.googleapis.com" and headers["X-goog-api-key"] == KEY
+
+
+def test_azure_download_stays_on_prices_azure_com(tmp_path):
+    """Azure's answers are public (no key), and still: a redirect off prices.azure.com is refused (L-B2's rule)."""
+    from jsonui_doc_cli.infra.cost import azure_prices as AZ
+
+    class AzNet(_Net):
+        def https_open(self, req):
+            import email.message
+            import urllib.response
+            host = urllib.parse.urlsplit(req.full_url).hostname
+            if host == "prices.azure.com":
+                msg = email.message.Message()
+                msg["Location"] = self.to
+                resp = urllib.response.addinfourl(io.BytesIO(b""), msg, req.full_url, 302)
+                resp.msg = "Found"
+                return resp
+            return super().https_open(req)
+    from jsonui_doc_cli.infra.cost import fetch as FETCH
+    net = AzNet("https://elsewhere.example/api")
+    said = []
+    assert AZ.download(tmp_path, spec=AZ.SPEC[:1], opener=FETCH._opener(net).open, log=said.append) == 1
+    assert net.reached == [] and "not fetched" in said[0]
+
+
+def test_the_default_opener_refuses_redirects_too(monkeypatch):
+    """No opener given: the one the download builds — urllib's own HTTPS handler answering a redirect, stood in for
+    so nothing reaches the network — still follows none."""
+    net = _Net("https://elsewhere.example/v1/services")
+    monkeypatch.setattr(urllib.request.HTTPSHandler, "https_open", lambda self, req: net.https_open(req))
+    with pytest.raises(G.FetchError) as e:
+        G._get(f"{G.API}/services?pageSize=1", KEY)
+    assert net.reached == [] and "not followed" in str(e.value) and KEY not in str(e.value)
+
+
+def test_azure_asks_only_prices_azure_com(tmp_path, monkeypatch):
+    """The first request too: a query URL not on prices.azure.com over https is refused before it is sent."""
+    from jsonui_doc_cli.infra.cost import azure_prices as AZ
+    net = _Net("unused")
+    net.reached.append(("primed", {}))
+    monkeypatch.setattr(urllib.request.HTTPSHandler, "https_open", lambda self, req: net.https_open(req))
+    monkeypatch.setattr(AZ, "API", "https://elsewhere.example/api/retail/prices")
+    said = []
+    assert AZ.download(tmp_path, spec=AZ.SPEC[:1], log=said.append) == 1
+    assert net.reached == [("primed", {})] and "not fetched" in said[0]
+
+
+def test_azures_default_opener_refuses_a_redirect_off_its_host(tmp_path, monkeypatch):
+    from jsonui_doc_cli.infra.cost import azure_prices as AZ
+    reached = []
+
+    def https_open(self, req):
+        import email.message
+        import urllib.response
+        host = urllib.parse.urlsplit(req.full_url).hostname
+        msg = email.message.Message()
+        if host == "prices.azure.com":
+            msg["Location"] = "https://elsewhere.example/api"
+            resp = urllib.response.addinfourl(io.BytesIO(b""), msg, req.full_url, 302)
+            resp.msg = "Found"
+            return resp
+        reached.append(host)
+        resp = urllib.response.addinfourl(io.BytesIO(b'{"Items": []}'), msg, req.full_url, 200)
+        resp.msg = "OK"
+        return resp
+    monkeypatch.setattr(urllib.request.HTTPSHandler, "https_open", https_open)
+    said = []
+    assert AZ.download(tmp_path, spec=AZ.SPEC[:1], log=said.append) == 1
+    assert reached == [] and "not fetched" in said[0]

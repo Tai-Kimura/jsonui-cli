@@ -58,16 +58,37 @@ class FetchError(RuntimeError):
     """A download failed; the message holds no key."""
 
 
-def _get(url: str, key: str, opener: Callable = urllib.request.urlopen) -> dict:
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """No redirect is followed, to any host (the same one included): urllib carries a request's own headers to the
+    next one, so following would send the key wherever the answer points (ticket
+    2026-10-21-gcp-billing-key-follows-redirects). The Catalog API does not redirect; a redirect is a failure."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        u = urllib.parse.urlsplit(newurl)
+        raise FetchError(f"answered {code}, a redirect to {u.scheme}://{u.hostname} — not followed (the key is not "
+                         f"sent past the Catalog API)")
+
+
+def opener_with(*lower: urllib.request.BaseHandler) -> Callable:
+    """The opener the download uses: no redirects; ``lower`` is the arms' stand-in for the network's handlers."""
+    return urllib.request.build_opener(_NoRedirects, *lower).open
+
+
+def _get(url: str, key: str, opener: Callable | None = None) -> dict:
+    if not url.startswith(API + "/"):   # the key goes to the Catalog API and nowhere else
+        raise FetchError(f"not fetched: {urllib.parse.urlsplit(url).hostname} is not the Catalog API")
+    opener = opener or opener_with()
     req = urllib.request.Request(url, headers={"X-Goog-Api-Key": key, "User-Agent": "jsonui-cli"})
     try:
         with opener(req, timeout=TIMEOUT_SEC) as resp:
             return json.loads(resp.read().decode("utf-8"))
+    except FetchError as e:
+        raise FetchError(redact(f"{url}: {e}", key)) from None
     except Exception as e:   # noqa: BLE001 — every failure is re-raised with the key taken out
         raise FetchError(redact(f"{url}: {type(e).__name__}: {e}", key)) from None
 
 
-def _pages(url: str, key: str, field: str, opener: Callable) -> list[dict]:
+def _pages(url: str, key: str, field: str, opener: Callable | None) -> list[dict]:
     out, token = [], ""
     for _ in range(PAGES):
         page = _get(url + (f"&pageToken={urllib.parse.quote(token)}" if token else ""), key, opener)
@@ -78,7 +99,7 @@ def _pages(url: str, key: str, field: str, opener: Callable) -> list[dict]:
     raise FetchError(f"{url}: more than {PAGES} pages")
 
 
-def download(folder: Path, environ=None, opener: Callable = urllib.request.urlopen,
+def download(folder: Path, environ=None, opener: Callable | None = None,
              services: tuple[str, ...] = SERVICES, log=print) -> int:
     """Write <folder>/gcp/services.json and one <service id>.json of SKUs per target service. 0: done, or no key
     (said); 1: a failure (said, without the key)."""

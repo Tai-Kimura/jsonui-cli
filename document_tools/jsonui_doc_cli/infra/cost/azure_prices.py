@@ -333,7 +333,9 @@ def download(folder, regions=BUNDLED_REGIONS, spec=None, opener=None, log=print,
     import json as _json
     import urllib.request
     from pathlib import Path as _Path
-    opener = opener or urllib.request.urlopen
+
+    from . import fetch as _fetch   # L-B2's rules: https to prices.azure.com only, a redirect checked first
+    opener = opener or _fetch._opener().open
     out = _Path(folder) / "azure"
     out.mkdir(parents=True, exist_ok=True)
     index = {"files": {}}
@@ -341,7 +343,8 @@ def download(folder, regions=BUNDLED_REGIONS, spec=None, opener=None, log=print,
         url, items = f"{API}?{urllib.parse.urlencode({'$filter': q})}", []
         try:
             for _ in range(pages):
-                with opener(urllib.request.Request(url, headers={"User-Agent": "jsonui-cli"}), timeout=60) as resp:
+                req = urllib.request.Request(_fetch.check_url(url), headers={"User-Agent": "jsonui-cli"})
+                with opener(req, timeout=60) as resp:
                     page = _json.loads(resp.read().decode("utf-8"))
                 items += page.get("Items") or []
                 url = page.get("NextPageLink")
