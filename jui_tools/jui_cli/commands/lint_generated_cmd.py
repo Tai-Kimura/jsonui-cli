@@ -14,8 +14,9 @@ and CI can gate on one without the other holding the gate permanently red
 
     0  clean
     1  the command could not run (no jui.config.json)
-    2  size-ratchet regression — a generated function grew past the bounds
-       and is not in .jui-size-waivers
+    2  size-ratchet regression — a generated SwiftUI function grew past the
+       bounds and is not in .jui-size-waivers (Kotlin's are reported, not
+       gated: see GATED_VIEW_SUFFIXES)
     3  generated-artifact health — a file lost its @generated marker
 
 ``--fail-on`` narrows which signal sets the code; the other is still
@@ -42,6 +43,15 @@ CODE_EXTENSIONS = {".swift", ".kt", ".ts", ".tsx", ".js", ".jsx"}
 DEFAULT_MAX_DEPTH = 5
 DEFAULT_MAX_LINES = 250
 HEAD_SCAN_LINES = 30
+# The ratchet gates the platform the bounds are calibrated to. Android's
+# oversized functions are the extractor's own declared waivers, deliberately
+# not build warnings (kjui-android-size-warning-uses-ios-calibrated-bound,
+# 2026-07-28): Compose folds nothing into a type, and the limit that does
+# exist there, a method's bytecode, is a compile error a passing build already
+# proves. They are still counted and listed, with the longest, so a form that
+# grows toward that limit stays visible
+# (lint-generated-size-ratchet-held-a-consumers-android-red, 2026-10-21).
+GATED_VIEW_SUFFIXES = (".swift",)
 TAIL_SCAN_LINES = 5
 
 # jsonui-test's branch tests land in the same `Generated/` folders (iOS
@@ -250,6 +260,11 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
     print(f"  Missing header:  {len(missing_header)}")
     print(f"  Missing footer:  {len(missing_footer)}")
     print(f"  Oversized fns:   {len(oversized)} (depth > {max_depth} or lines > {max_lines})")
+    reported = [o for o in oversized if o[0].suffix not in GATED_VIEW_SUFFIXES]
+    if oversized:
+        print(f"    SwiftUI (.swift, the ratchet): {len(oversized) - len(reported)}")
+        print(f"    Compose (.kt, reported, not gating): {len(reported)}"
+              + (f", the longest {max(o[3] for o in reported)} lines" if reported else ""))
     if consumer_owned:
         print(f"  Not checked:     {len(consumer_owned)} (jsonui-test harness skeletons, consumer-owned)")
 
@@ -270,14 +285,24 @@ def cmd_lint_generated(args: argparse.Namespace) -> int:
         new_waivers = _ratchet_size_baseline(
             project_root, oversized, update=args.update_size_baseline
         )
-        if new_waivers:
+        gated_new = [e for e in new_waivers if _entry_suffix(e) in GATED_VIEW_SUFFIXES]
+        reported_new = [e for e in new_waivers if _entry_suffix(e) not in GATED_VIEW_SUFFIXES]
+        if gated_new:
             print(
                 "\nNEW oversized functions (not in .jui-size-waivers — the "
                 "waiver set is a ratchet; investigate the regression or, if "
                 "reviewed and accepted, re-run with --update-size-baseline):"
             )
-            for entry in new_waivers:
+            for entry in gated_new:
                 print(f"  - {entry}")
+        if reported_new:
+            print(
+                "\nNot in .jui-size-waivers, on Compose (reported, not gating — "
+                "the bound is SwiftUI's; a passing build proves the method limit):"
+            )
+            for entry in reported_new:
+                print(f"  - {entry}")
+        new_waivers = gated_new
 
     if missing_header:
         print("\nMissing @generated sentinel:")
@@ -395,6 +420,11 @@ def _ratchet_size_baseline(project_root, oversized, update: bool) -> list[str]:
         if line.strip() and not line.strip().startswith("#")
     }
     return [entry for entry in current if entry not in known]
+
+
+def _entry_suffix(entry: str) -> str:
+    """The file suffix of a ratchet entry ("<path> <function>")."""
+    return Path(entry.rsplit(" ", 1)[0]).suffix
 
 
 def _strip_code_noise(line: str) -> str:

@@ -2,8 +2,10 @@
 
 The per-function bound is iOS-calibrated (SwiftUI type-metadata depth on a
 1MB device stack); Android's real constraint (the dex method limit) is a
-hard compile error, so standing waivers there are informational. What IS a
-failure signal on every platform is the waiver set GROWING — the ratchet.
+hard compile error, so waivers there are informational. The failure signal
+is the SwiftUI waiver set GROWING — the ratchet; Compose's new waivers are
+listed and counted (with the longest), never gating
+(lint-generated-size-ratchet-held-a-consumers-android-red, 2026-10-21).
 """
 from __future__ import annotations
 
@@ -231,3 +233,62 @@ class TestCommandExitCodes:
         hook = root / "web" / "src" / "generated" / "hooks" / "useThing.ts"
         hook.write_text("export const thing = 1;\n", encoding="utf-8")
         assert self._run(root, fail_on="size-ratchet") == EXIT_OK
+
+
+def _kotlin_section(path: Path, name: str, depth: int) -> None:
+    inner = "\n".join("    " * (i + 1) + "Column {" for i in range(depth))
+    close = "\n".join("    " * i + "}" for i in range(depth, 0, -1))
+    path.write_text(
+        f"@Composable\nprivate fun {name}(\n    data: D,\n    viewModel: V\n) {{\n"
+        f"{inner}\n        Text(\"x\")\n{close}\n}}\n",
+        encoding="utf-8",
+    )
+
+
+class TestOnlySwiftUIGates:
+    """A consumer's Android: 31 Compose sections not in the baseline held
+    the gate red (rc=2) although the bound is SwiftUI's and a passing build
+    proves Android's method limit. Compose is reported, SwiftUI gates."""
+
+    def _project(self, tmp_path: Path) -> Path:
+        TestCommandExitCodes()._project(tmp_path)          # one healthy generated file
+        (tmp_path / "jui.config.json").write_text(json.dumps({
+            "platforms": {"ios": {"root": "ios"}, "android": {"root": "android"}, "web": {"root": "web"}},
+        }), encoding="utf-8")
+        (tmp_path / "ios").mkdir()
+        (tmp_path / "android").mkdir()
+        (tmp_path / BASELINE_FILENAME).write_text("# baseline\n", encoding="utf-8")
+        return tmp_path
+
+    def _run(self, root: Path, capsys) -> tuple[int, str]:
+        code = TestCommandExitCodes()._run(root)
+        return code, capsys.readouterr().out
+
+    def test_a_new_compose_waiver_is_reported_not_gating(self, tmp_path, capsys):
+        root = self._project(tmp_path)
+        _kotlin_section(root / "android" / "FormGeneratedView.kt", "Section0_1", 8)
+        code, out = self._run(root, capsys)
+        assert code == EXIT_OK
+        assert "Compose (.kt, reported, not gating): 1, the longest" in out
+        assert "SwiftUI (.swift, the ratchet): 0" in out
+        assert "FormGeneratedView.kt Section0_1" in out.split("reported, not gating —")[1]
+        assert "NEW oversized functions" not in out
+
+    def test_a_new_swiftui_waiver_still_gates(self, tmp_path, capsys):
+        root = self._project(tmp_path)
+        _write_view(root / "ios", "AGeneratedView.swift", depth=8, lines=20)
+        _kotlin_section(root / "android" / "FormGeneratedView.kt", "Section0_1", 8)
+        code, out = self._run(root, capsys)
+        assert code == EXIT_RATCHET
+        new = out.split("NEW oversized functions")[1].split("Not in .jui-size-waivers")[0]
+        assert "AGeneratedView.swift big" in new and ".kt" not in new
+
+    def test_the_longest_compose_function_is_shown(self, tmp_path, capsys):
+        root = self._project(tmp_path)
+        path = root / "android" / "LongGeneratedView.kt"
+        body = "\n".join("    Text(\"x\")" for _ in range(300))
+        path.write_text(f"@Composable\nprivate fun Section1(\n    data: D\n) {{\n{body}\n}}\n", encoding="utf-8")
+        _kotlin_section(root / "android" / "FormGeneratedView.kt", "Section0_1", 8)
+        code, out = self._run(root, capsys)
+        lines = [l for n, d, l in _oversized_functions(path, 5, 250)]
+        assert code == EXIT_OK and f"Compose (.kt, reported, not gating): 2, the longest {lines[0]} lines" in out
