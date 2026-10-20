@@ -4,7 +4,7 @@
 The real `jui viz serve` in a throwaway HOME on a free port and the real forward.py: three sessions in two projects
 (A: a1, a2; B: b1). A session moves with a CwdChanged hook, as Claude Code sends it. Checked, in order:
   * A shown (one room), a1's card open, a1 moves to B: B shown, a1's card open, the camera on a1, and a toast says so
-  * right after a switch by hand (A picked, a2 opened), a2 moves to B: nothing moves — A shown, a2's card open with the
+  * right after a switch by hand (a2 picked from the list while B is shown), a2 moves to B: nothing moves — A shown, a2's card open with the
     mark "… へ移った"; its button goes to B, the camera on a2
   * the whole floor shown, b1's card open, b1 moves to A (a room in view): the floor still shown, no toast of its own,
     the camera on b1 where it walked, and the card names its new room
@@ -85,7 +85,7 @@ async def run_camera_follow(pw, out, failures):
         res["who"], res["proj"] = who, proj
         A, B = proj["a1"], proj["b1"]
         check(A and B and A != B and proj["a2"] == A, f"two projects: a1 and a2 in one, b1 in the other: {proj}")
-        name = await page.evaluate("(ids) => ids.map((id) => PROJECT[id].name)", [A, B])
+        name = await page.evaluate("(ids) => ids.map((id) => window.__dbg.projectName(id))", [A, B])
 
         async def pick_project(pid):
             await page.click("[data-scope-btn]")
@@ -124,11 +124,16 @@ async def run_camera_follow(pw, out, failures):
         check(not fol["moved"] and not await page.locator("#rb [data-rb-moved]").count(), f"no mark when it followed: {fol}")
         await page.screenshot(path=str(out / "followed-to-b.png"))
 
-        # right after a switch by hand: the card is marked, nothing moves; its button goes there
-        await pick_project(A)
-        await open_robot("a2")
-        await moved_to("a2", CWD_B)
-        await wait(page, "() => !!document.querySelector('#rb [data-rb-moved]')", label="a2's card marked")
+        # right after a switch by hand: the card is marked, nothing moves; its button goes there. a2 is picked from the
+        # list while B is shown, so selectRobot switches to A by hand, and a2 moves at once
+        await page.click(f"#sessions [data-robot-open='{who['a2']}']")
+        await wait(page, "([l, p]) => window.__dbg.board().robot === l && window.__dbg.project() === p", arg=[who["a2"], A], label="a2's card in A")
+        hook("a2", cwd=CWD_B, hook_event_name="CwdChanged")
+        try:
+            await wait(page, "() => !!document.querySelector('#rb [data-rb-moved]')", label="a2's card marked")
+        finally:
+            res["afterHand"] = {**await page.evaluate(STATE), "follow": await page.evaluate("() => window.__dbg.follow()"),
+                                "sinceHand": await page.evaluate("() => Date.now() - window.__dbg.follow().handAt")}
         fol, cam = await step("A picked by hand just before, a2 moves to B: A still, a2's card marked", "a2", A)
         mark = (await page.locator("#rb [data-rb-moved]").inner_text()).strip()
         check(mark.startswith(f"{name[1]} へ移った"), f"the mark names where it went: {mark!r}")
@@ -146,9 +151,9 @@ async def run_camera_follow(pw, out, failures):
         await page.wait_for_timeout(HAND_MS + 500)
         toast_before = (await page.evaluate("() => window.__dbg.follow()"))["toast"]
         await moved_to("b1", CWD_A)
-        # it walks through the doors to its seat in A (the page's robots and roomAtPoint, 40-scene.js)
-        await wait(page, "([l, p]) => { const R = robots.find((x) => x.def.id === l); if (!R) return false; const q = R.robot.root.position;"
-                   " return roomAtPoint([q.x, q.z]) === p && !R.path.length; }", arg=[who["b1"], A], timeout=30000, label="b1 at its seat in A")
+        # it walks through the doors to its seat in A
+        await wait(page, "([l, p]) => { const r = window.__dbg.robotAt(l); return !!r && r.room === p && !r.walking; }",
+                   arg=[who["b1"], A], timeout=30000, label="b1 at its seat in A")
         await wait(page, ON_ROBOT, timeout=30000, label="the camera on b1 after its walk")
         fol, cam = await step("the floor, b1's card open, b1 moves to A: the floor still, the camera on b1", "b1", "all")
         check(fol["toast"] == toast_before, f"no toast of its own when it stays in view: {fol['toast']!r}")

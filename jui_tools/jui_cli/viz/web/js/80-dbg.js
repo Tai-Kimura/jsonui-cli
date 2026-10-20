@@ -387,6 +387,10 @@ window.__dbg = {
   // looks at is from the open robot, and how far the camera is from the room's (or the floor's) own view
   // rbFollow (50-panel.js): the card's mark when its robot moved and the view did not follow, and the last switch by hand
   follow: () => ({ moved: rbState.moved, seen: rbState.seen, handAt: FOLLOW.handAt, toast: document.getElementById('toast').textContent }),
+  projectName: (id) => (PROJECT[id] ? PROJECT[id].name : null),
+  // where a robot stands in the 3D (the room under it) and whether it is still walking
+  robotAt: (id) => { const R = robots.find((x) => x.def.id === id); if (!R) return null; const q = R.robot.root.position;
+    return { room: roomAtPoint([q.x, q.z]), walking: R.path.length > 0 }; },
   camOn: () => {
     const t = zoom.zoomed ? viewTarget : controls.target, R = rbState.id ? robots.find((x) => x.def.id === rbState.id) : null;
     const room = roomPose(UI.project);
