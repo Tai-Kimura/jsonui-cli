@@ -107,3 +107,15 @@ def test_the_sent_bubble_is_as_it_was():
     for name, want in BASE.items():
         got = tuple(v.lower() for v in _token(name))
         assert got == (want[0], want[1], want[1]), (name, got)
+
+
+# The chosen values, per theme (light, dark). Dark went one step darker after the requester saw it (10-20: 「ダークモード
+# もう少しくらい色がいいな」): #e5e7eb → slate-300 #cbd5e1, the link, soft text, code ground, lines and error with it.
+# Light stayed as the requester saw it.
+CHOSEN = {"bg": ("#ffffff", "#cbd5e1"), "edge": ("#6b7a90", "#cbd5e1"), "ink": ("#111827", "#111827"),
+          "soft": ("#4b5563", "#374151"), "link": ("#1d4ed8", "#1e40af"), "code-bg": ("#eef1f5", "#b6c2d1"),
+          "line": ("#c9d1dc", "#94a3b8"), "warn": ("#9a3412", "#7c2d12")}
+
+
+def test_the_tokens_are_the_chosen_ones():
+    assert _themes() == CHOSEN, _themes()

@@ -1333,7 +1333,8 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 /* A received talk bubble (2.3.8, ticket 2026-10-20-jui-viz-talk-bubble-colours; requester 10-20: 「トークの吹き出しの色が背景と
    どうかしててわかりづらい」「相手側ね」): its ground, edge, text and what is inside it (links and 全文を表示, `code` and code
    blocks, notes and quotes, table lines, a code block's error). Light: a white bubble with a grey edge (the edge 3:1+ on
-   the panel); dark: a light grey bubble with dark text, as a chat app's. The text 4.5:1+ on its ground; the ground apart
+   the panel); dark: a slate-300 bubble with dark text, as a chat app's (one step darker, requester 10-20: 「ダークモード
+   もう少しくらい色がいいな」). The text 4.5:1+ on its ground; the ground apart
    from the sent bubble's (ΔE2000 ≥ 8). The sent bubble keeps --info-bg / --info / --ink. Measured by tools/viz_e2e/talk_ui.py. */
 :root {
   --talk-in-bg: #ffffff; --talk-in-edge: #6b7a90; --talk-in-ink: #111827; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
@@ -1341,13 +1342,13 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --talk-in-bg: #e5e7eb; --talk-in-edge: #e5e7eb; --talk-in-ink: #111827; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
-    --talk-in-code-bg: #d1d5db; --talk-in-line: #9ca3af; --talk-in-warn: #9a3412;
+    --talk-in-bg: #cbd5e1; --talk-in-edge: #cbd5e1; --talk-in-ink: #111827; --talk-in-soft: #374151; --talk-in-link: #1e40af;
+    --talk-in-code-bg: #b6c2d1; --talk-in-line: #94a3b8; --talk-in-warn: #7c2d12;
   }
 }
 :root[data-theme="dark"] {
-  --talk-in-bg: #e5e7eb; --talk-in-edge: #e5e7eb; --talk-in-ink: #111827; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
-  --talk-in-code-bg: #d1d5db; --talk-in-line: #9ca3af; --talk-in-warn: #9a3412;
+  --talk-in-bg: #cbd5e1; --talk-in-edge: #cbd5e1; --talk-in-ink: #111827; --talk-in-soft: #374151; --talk-in-link: #1e40af;
+  --talk-in-code-bg: #b6c2d1; --talk-in-line: #94a3b8; --talk-in-warn: #7c2d12;
 }
 .rb-talk { position: relative; display: inline-flex; align-items: center; gap: 5px; background: var(--panel); color: var(--ink); }
 .rb-talk[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
