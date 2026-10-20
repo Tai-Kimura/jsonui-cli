@@ -3,7 +3,8 @@
 
 From app.css: every --talk-in-* token in the three theme places (:root, the dark media query, [data-theme=dark]), the
 two dark ones equal; in each theme the received bubble's text, link and code 4.5:1 or more on their grounds, the bubble
-3:1 or more on the panel by its fill or its edge, and its fill apart from the sent bubble's (ΔE2000 ≥ 8). The sent and
+3:1 or more on the panel by its fill or its edge, and apart from the sent bubble by its fill or its edge (ΔE2000 ≥ 8 on
+either: light's fill is the requester's sample A, 5.9 from the sent fill, so its grey edge, 14.1 from the blue, does it). The sent and
 the undelivered bubbles' rules are the base's, word for word. The rendered colours are measured by
 tools/viz_e2e/talk_ui.py (--only talk-ui).
 """
@@ -91,7 +92,8 @@ def test_the_received_bubble_reads_in_both_themes():
         assert _contrast(t["ink"][k], t["code-bg"][k]) >= 4.5 and _contrast(t["warn"][k], t["code-bg"][k]) >= 4.5, (k, t)
         panel = BASE["panel"][k]
         assert max(_contrast(bg, panel), _contrast(t["edge"][k], panel)) >= 3.0, (k, bg, t["edge"][k])
-        assert _de2000(bg, BASE["info-bg"][k]) >= 8.0, (k, bg, round(_de2000(bg, BASE["info-bg"][k]), 1))
+        de_fill, de_edge = _de2000(bg, BASE["info-bg"][k]), _de2000(t["edge"][k], BASE["info"][k])
+        assert max(de_fill, de_edge) >= 8.0, (k, bg, round(de_fill, 1), t["edge"][k], round(de_edge, 1))
 
 
 def test_the_received_bubble_takes_the_tokens():
@@ -111,9 +113,10 @@ def test_the_sent_bubble_is_as_it_was():
 
 # The chosen values, per theme (light, dark). Dark went one step darker after the requester saw it (10-20: 「ダークモード
 # もう少しくらい色がいいな」): #e5e7eb → slate-300 #cbd5e1, the link, soft text, code ground, lines and error with it.
-# Light stayed as the requester saw it.
-CHOSEN = {"bg": ("#ffffff", "#cbd5e1"), "edge": ("#6b7a90", "#cbd5e1"), "ink": ("#111827", "#111827"),
-          "soft": ("#4b5563", "#374151"), "link": ("#1d4ed8", "#1e40af"), "code-bg": ("#eef1f5", "#b6c2d1"),
+# Light then took the requester's sample A (「ライトはAでいいよ」): #ffffff → #e8ecf1, the text #13233a, code #d5dbe3, the
+# grey edge kept (cd).
+CHOSEN = {"bg": ("#e8ecf1", "#cbd5e1"), "edge": ("#6b7a90", "#cbd5e1"), "ink": ("#13233a", "#111827"),
+          "soft": ("#4b5563", "#374151"), "link": ("#1d4ed8", "#1e40af"), "code-bg": ("#d5dbe3", "#b6c2d1"),
           "line": ("#c9d1dc", "#94a3b8"), "warn": ("#9a3412", "#7c2d12")}
 
 

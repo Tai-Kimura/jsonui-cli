@@ -1342,13 +1342,13 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 /* ---------- トーク (58-talk.js, 2.3.6): a robot's SendMessage conversations, as a chat ---------- */
 /* A received talk bubble (2.3.8, ticket 2026-10-20-jui-viz-talk-bubble-colours; requester 10-20: 「トークの吹き出しの色が背景と
    どうかしててわかりづらい」「相手側ね」): its ground, edge, text and what is inside it (links and 全文を表示, `code` and code
-   blocks, notes and quotes, table lines, a code block's error). Light: a white bubble with a grey edge (the edge 3:1+ on
-   the panel); dark: a slate-300 bubble with dark text, as a chat app's (one step darker, requester 10-20: 「ダークモード
-   もう少しくらい色がいいな」). The text 4.5:1+ on its ground; the ground apart
-   from the sent bubble's (ΔE2000 ≥ 8). The sent bubble keeps --info-bg / --info / --ink. Measured by tools/viz_e2e/talk_ui.py. */
+   blocks, notes and quotes, table lines, a code block's error). Light: a pale grey bubble (#e8ecf1, the requester's
+   sample A: 「ライトはAでいいよ」) with a grey edge (the edge 3:1+ on the panel); dark: a slate-300 bubble with dark text, as a chat app's (one step darker, requester 10-20: 「ダークモード
+   もう少しくらい色がいいな」). The text 4.5:1+ on its ground; apart from the sent bubble by its fill or its edge
+   (ΔE2000 ≥ 8 on either: in light the fills are 5.9 apart, the grey and the blue edges 14.1). The sent bubble keeps --info-bg / --info / --ink. Measured by tools/viz_e2e/talk_ui.py. */
 :root {
-  --talk-in-bg: #ffffff; --talk-in-edge: #6b7a90; --talk-in-ink: #111827; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
-  --talk-in-code-bg: #eef1f5; --talk-in-line: #c9d1dc; --talk-in-warn: #9a3412;
+  --talk-in-bg: #e8ecf1; --talk-in-edge: #6b7a90; --talk-in-ink: #13233a; --talk-in-soft: #4b5563; --talk-in-link: #1d4ed8;
+  --talk-in-code-bg: #d5dbe3; --talk-in-line: #c9d1dc; --talk-in-warn: #9a3412;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {

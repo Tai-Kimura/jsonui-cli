@@ -23,7 +23,8 @@ Checked:
   * the received bubble's colours (2.3.8, ticket 2026-10-20-jui-viz-talk-bubble-colours; requester: 「相手側ね」), light and
     dark, from the computed styles: its text, a link in it (an <a> put into its rendered text), 全文を表示 and `code` (on
     the code's ground) 4.5:1 or more on it; the time under it 4.5:1 or more on what is behind it; the bubble 3:1 or more
-    on the talk's ground, by its fill or its solid edge; its fill apart from the sent bubble's (ΔE2000 >= IN_OUT_DE);
+    on the talk's ground, by its fill or its solid edge; apart from the sent bubble by its fill or its edge (ΔE2000 >=
+    IN_OUT_DE on either; red only when both are close);
   * the sent bubble as it was (SENT, per theme), and the undelivered one still dashed in --bad;
   * the peers' marks (2.3.7, ticket 2026-10-20-jui-viz-talk-pill-contrast-and-version-comments), in the list and the
     header: each the pill's pair of its robot's role (as pill() draws it, __dbg.rolePills), white on main's #0369a1,
@@ -85,7 +86,11 @@ BUBBLE_PAINT = """() => {
   const und = document.querySelector('#rb .talk-out .talk-bubble.talk-undelivered');
   return { in: one('in'), out: one('out'), undelivered: und ? { style: getComputedStyle(und).borderTopStyle, color: getComputedStyle(und).borderTopColor, bg: getComputedStyle(und).backgroundColor } : null };
 }"""
-IN_OUT_DE = 8.0   # ΔE2000 between the received and the sent bubbles' fills (before: 3.6 light, 4.2 dark)
+# ΔE2000 between the received and the sent bubbles, on the fills or on the edges (either is enough). The fills alone
+# were the first rule; the requester then picked light's sample A by name (#e8ecf1, 「ライトはAでいいよ」), 5.9 from the
+# sent fill, and 8 was our own guide, so its grey edge against the sent blue edge (14.1) keeps them apart. Before the
+# fix: fills 3.6 light, 4.2 dark.
+IN_OUT_DE = 8.0
 # the sent bubble, unchanged by the received bubble's colours (2.3.8): fill, text, edge, link, per theme
 SENT = {"light": ("#dde8fb", "#13233a", "#2a62c9", "#2a62c9"), "dark": ("#15305a", "#e4ecf8", "#86b8ff", "#86b8ff")}
 BAD = {"light": "#c62f3c", "dark": "#ff8590"}
@@ -101,12 +106,14 @@ def bubbles_read(paint, scheme, failures):
          "code": contrast(rgb_hex(i["code"]["fg"]), rgb_hex(i["code"]["bg"])) if i["code"] else None,
          "time": contrast(rgb_hex(i["at"]["fg"]), rgb_hex(i["at"]["back"])) if i["at"] else None,
          "fill": contrast(h["bg"], h["back"]), "edge": contrast(h["edge"], h["back"]) if i["edgeStyle"] == "solid" and i["edgeWidth"] != "0px" else 0,
-         "dE": de2000(h["bg"], rgb_hex(o["bg"]))}
+         "dE": de2000(h["bg"], rgb_hex(o["bg"])),
+         "dEedge": de2000(h["edge"], rgb_hex(o["edge"])) if i["edgeStyle"] == "solid" and i["edgeWidth"] != "0px" else 0}
     m = {k: (round(v, 2) if v is not None else None) for k, v in m.items()}
     for k in ("text", "link", "more", "code", "time"):
         check(failures, m[k] is not None and m[k] >= 4.5, f"{scheme}: the received bubble's {k} reads: {m[k]}:1 ({h})")
     check(failures, max(m["fill"], m["edge"]) >= 3.0, f"{scheme}: the received bubble stands off the talk's ground: fill {m['fill']}:1, edge {m['edge']}:1 ({h})")
-    check(failures, m["dE"] >= IN_OUT_DE, f"{scheme}: the received bubble is apart from the sent one: ΔE2000 {m['dE']} ({h['bg']} vs {rgb_hex(o['bg'])})")
+    check(failures, max(m["dE"], m["dEedge"]) >= IN_OUT_DE, f"{scheme}: the received bubble is apart from the sent one by its fill or its edge:"
+          f" ΔE2000 fill {m['dE']} ({h['bg']} vs {rgb_hex(o['bg'])}), edge {m['dEedge']} ({h['edge']} vs {rgb_hex(o['edge'])})")
     sent = (rgb_hex(o["bg"]), rgb_hex(o["ink"]), rgb_hex(o["edge"]), rgb_hex(o["link"]))
     check(failures, sent == SENT[scheme], f"{scheme}: the sent bubble is as it was {SENT[scheme]}: {sent}")
     return m
