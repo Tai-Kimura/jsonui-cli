@@ -71,13 +71,26 @@ def test_a_jui_file_with_its_footer_removed_is_still_red(tmp_path, monkeypatch, 
     assert "Missing footer:  1" in out and "useThing.ts" in out
 
 
-def test_a_jsonui_test_banner_below_the_head_is_not_this_tools_file(tmp_path, monkeypatch, capsys):
+def test_a_jsonui_test_banner_below_the_head_is_no_header(tmp_path, monkeypatch, capsys):
     root = _project(tmp_path)
     body = "\n".join(f"let x{i} = {i}" for i in range(lg.HEAD_SCAN_LINES + 5)) + "\n"
     (root / "ios" / "Tests" / "Generated" / "CartBranchesTest.swift").write_text(body + SWIFT_TEST, encoding="utf-8")
     code, out = _run(root, monkeypatch, capsys)
     assert code == EXIT_HEALTH
     assert "Missing header:  1" in out and "CartBranchesTest.swift" in out
+
+
+def test_a_jui_file_without_its_footer_and_a_jsonui_test_banner_below_the_head_is_still_red(tmp_path, monkeypatch, capsys):
+    """The banner lets a file off its footer only from the head: a jui file (its header in the head) that lost its footer
+    and mentions the banner further down is still a missing footer."""
+    root = _project(tmp_path)
+    filler = "\n".join(f"let x{i} = {i}" for i in range(lg.HEAD_SCAN_LINES + 5))
+    tail = "\n".join(f"let y{i} = {i}" for i in range(lg.TAIL_SCAN_LINES + 1))
+    body = JUI_FILE.replace(FOOTER, "") + filler + "\n" + SWIFT_TEST.splitlines()[0] + "\n" + tail + "\n"
+    (root / "web" / "src" / "generated" / "hooks" / "useThing.ts").write_text(body, encoding="utf-8")
+    code, out = _run(root, monkeypatch, capsys)
+    assert code == EXIT_HEALTH
+    assert "Missing footer:  1" in out and "useThing.ts" in out
 
 
 def test_a_hand_written_file_in_the_folder_is_still_red(tmp_path, monkeypatch, capsys):
