@@ -73,34 +73,95 @@ def wanted(line: bytes, pending: set | frozenset) -> bool:
     return False
 
 
-def _origin_info(origin: dict, at, uuid, text: str | None, prompt: str | None) -> dict | None:
-    kind = origin.get("kind")
-    if kind not in ("peer", "coordinator") or origin.get("handback"):
+def _int(value) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _str(value) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def delivery(rec) -> dict | None:
+    """A message put into a session from outside its own turn, as one record says it — the one parse of ``origin``
+    that the talk view (observations) and the 応答の履歴 (history.items_of) both use:
+
+    * a ``user`` record with an ``origin`` (it arrived while the session waited), or
+    * an ``attachment`` of type ``queued_command`` (it arrived while the session worked: measured 10-20 on 273
+      transcripts of 3 days, channel 4, peer 1,029 — 78 of them hand-backs —, coordinator 100, human 318,
+      task-notification 1,010; none of them was ever written again as a ``user`` record).
+
+    Returns {"kind": origin.kind, "queued": bool, "at", "uuid", "delivery_id", "origin", "text": the user record's
+    text (None for a queued one), "prompt": the queued_command's prompt as text (None for a user record), "msg_id",
+    "body", "members", "name", "from", "pid", "task", "server", "handback", "promptIsText": the prompt was a string}; None
+    for any other record."""
+    if not isinstance(rec, dict):
         return None
-    info = {"kind": kind, "at": at, "uuid": uuid if isinstance(uuid, str) else None}
-    if kind == "peer":
-        body = origin.get("body")
-        info.update(msg_id=origin["msg_id"] if isinstance(origin.get("msg_id"), str) else None,
-                    body=body if isinstance(body, str) else None,
-                    name=origin["name"] if isinstance(origin.get("name"), str) else None,
-                    sender_from=origin["from"] if isinstance(origin.get("from"), str) else None,
-                    pid=origin["verifiedPeerPid"] if isinstance(origin.get("verifiedPeerPid"), int) and not isinstance(origin.get("verifiedPeerPid"), bool) else None,
-                    task=origin["senderTaskId"] if isinstance(origin.get("senderTaskId"), str) else None)
-        members = origin.get("members")
-        if isinstance(members, list):
-            info["members"] = [m["body"] for m in members if isinstance(m, dict) and isinstance(m.get("body"), str)]
-            if info["body"] is None and info["members"]:
-                info["body"] = info["members"][0]
+    kind = rec.get("type")
+    if kind == "user":
+        origin = rec.get("origin")
+        msg = rec.get("message")
+        text, prompt, queued = _content_text(msg.get("content") if isinstance(msg, dict) else None), None, False
+        at, uuid, did = epoch_ms(rec.get("timestamp")), rec.get("uuid"), rec.get("delivery_id")
+    elif kind == "attachment":
+        att = rec.get("attachment")
+        if not isinstance(att, dict) or att.get("type") != "queued_command":
+            return None
+        origin = att.get("origin")
+        p = att.get("prompt")
+        text, prompt, queued = None, (p if isinstance(p, str) else _content_text(p) if isinstance(p, list) else None), True
+        at = epoch_ms(rec.get("timestamp")) or epoch_ms(att.get("timestamp"))
+        uuid, did = rec.get("uuid") or att.get("source_uuid"), att.get("delivery_id")
+    else:
+        return None
+    if not isinstance(origin, dict) or not isinstance(origin.get("kind"), str):
+        return None
+    members = origin.get("members")
+    members = [m["body"] for m in members if isinstance(m, dict) and isinstance(m.get("body"), str)] if isinstance(members, list) else None
+    body = _str(origin.get("body"))
+    if body is None and members:
+        body = members[0]
+    return {"kind": origin["kind"], "queued": queued, "at": at, "uuid": _str(uuid), "delivery_id": _str(did),
+            "origin": origin, "text": text, "prompt": prompt, "msg_id": _str(origin.get("msg_id")), "body": body,
+            "members": members, "name": _str(origin.get("name")), "from": _str(origin.get("from")),
+            "pid": _int(origin.get("verifiedPeerPid")), "task": _str(origin.get("senderTaskId")),
+            "server": _str(origin.get("server")), "handback": bool(origin.get("handback")),
+            "promptIsText": queued and isinstance(rec["attachment"].get("prompt"), str)}
+
+
+def delivery_key(d: dict) -> tuple | None:
+    """One message, however many records say it: the msg_id (a session's message: the same value on the waiting
+    form's user record and the working form's queued_command, and on Remote Control's copies of either), else the
+    queued_command's delivery_id, else the record's uuid (a copy keeps it). None when there is nothing to key on."""
+    if d.get("msg_id"):
+        return ("msg", d["msg_id"])
+    if d.get("delivery_id"):
+        return ("delivery", d["delivery_id"])
+    if d.get("uuid"):
+        return ("record", d["uuid"])
+    return None
+
+
+def _origin_info(d: dict | None) -> dict | None:
+    """The talk view's reading of a delivery: a SendMessage between sessions (peer) or from a parent (coordinator);
+    a hand-back is not a talk (the requester's settled answer)."""
+    if d is None or d["kind"] not in ("peer", "coordinator") or d["handback"]:
+        return None
+    info = {"kind": d["kind"], "at": d["at"], "uuid": d["uuid"]}
+    if d["kind"] == "peer":
+        info.update(msg_id=d["msg_id"], body=d["body"], name=d["name"], sender_from=d["from"], pid=d["pid"], task=d["task"])
+        if d["members"] is not None:
+            info["members"] = d["members"]
         if info["body"] is None:
             return None
     else:
         # the parent's send to this subagent: the queued prompt is the body; a user record wraps it in a line before
         # and after (measured 10-20: "The coordinator sent a message while you were working:" … ) — kept whole and
         # matched by containment, never parsed
+        prompt = d["prompt"] if d["queued"] and d["promptIsText"] else None
         if prompt is not None:
             info["body"] = prompt
-        elif text:
-            info["wrapped"] = text
+        elif d["text"]:
+            info["wrapped"] = d["text"]
         else:
             return None
     return info
@@ -136,18 +197,13 @@ def observations(rec) -> list[tuple]:
                     text = _content_text(b.get("content"))
                     bad = b.get("is_error") is True or (msg_id is None and NO_AGENT.search(text[:2000]) is not None)
                     out.append(("result", b["tool_use_id"], msg_id, "undelivered" if bad else "ok", at))
-        origin = rec.get("origin")
-        if isinstance(origin, dict):
-            info = _origin_info(origin, at, rec.get("uuid"), _content_text(content), None)
-            if info:
-                out.append(("recv", info))
+        info = _origin_info(delivery(rec))
+        if info:
+            out.append(("recv", info))
     elif kind == "attachment":
-        att = rec.get("attachment")
-        if isinstance(att, dict) and att.get("type") == "queued_command" and isinstance(att.get("origin"), dict):
-            prompt = att.get("prompt") if isinstance(att.get("prompt"), str) else None
-            info = _origin_info(att["origin"], at or epoch_ms(att.get("timestamp")), rec.get("uuid") or att.get("source_uuid"), None, prompt)
-            if info:
-                out.append(("recv", info))
+        info = _origin_info(delivery(rec))
+        if info:
+            out.append(("recv", info))
     elif kind == "queue-operation" and rec.get("operation") == "enqueue" and isinstance(rec.get("content"), str):
         m = _ENVELOPE.match(rec["content"])
         if m:

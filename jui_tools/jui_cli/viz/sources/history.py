@@ -17,6 +17,9 @@ system-reminders and the tool definitions — and are not shown, nor any other t
     ``channel`` — a channel's text the CLI put in (origin.kind "channel": a prompt sent from the viz page, 2.3.4);
     ``harness`` — text the harness put in the user's turn (harness_label: system-reminder, a subagent's hand-back,
     a task notification, a local command; or ``isMeta``), shown folded in its own colour;
+  * a message that came while the session was working (an ``attachment`` of type ``queued_command``, 10-20): the
+    same row its waiting form makes (channel, peer, the requester's words, the harness's text), at the time it came;
+    one message is one row however many records say it (talk_records.delivery_key: msg_id, delivery_id, uuid);
   * ``assistant`` — the answer's text (Markdown, drawn by the page as text nodes only);
   * ``tool`` — a tool call: its name, input.description, IN (a command as it is, else the input's JSON) and OUT
     (the tool_result with the same tool_use_id), each cut at IO_MAX;
@@ -43,6 +46,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from .talk_records import delivery, delivery_key
 from .transcripts import candidates
 
 #: Items shown: a few turns back — the last answers and the calls between them — without a scroll of hundreds.
@@ -231,9 +235,38 @@ def _channel_item(rec: dict, content, at) -> dict:
     return {"kind": "channel", "server": server[:200] if isinstance(server, str) else "", "text": body, "cut": cut, "at": at}
 
 
+def _queued_items(d: dict) -> list[dict]:
+    """A message that came while the session was working (ticket 2026-10-20-jui-viz-history-misses-mid-turn-deliveries;
+    requester: "届いてるのに応答の履歴に表示されない"): a queued_command attachment, read through talk_records.delivery
+    (the one parse of ``origin``). It becomes the row its waiting form (a user record) makes: channel → the page's
+    prompt without its <channel> wrapper; peer → "<name> から" with the body and the reply address; human → the
+    requester's words; coordinator, task-notification and any other → the harness's text. Its time is the record's
+    (when it arrived), not when the turn took it."""
+    at, text = d["at"], d["prompt"] or ""
+    if d["kind"] == "channel":
+        return [_channel_item({"origin": d["origin"]}, text, at)] if text.strip() else []
+    if d["kind"] == "peer":
+        body = d["body"] if d["body"] is not None else (peer_of(text) or ("", text))[1]
+        if not body.strip():
+            return []
+        cut_body, cut = _cut(body, TEXT_MAX)
+        item = {"kind": "peer", "from": (d["name"] or d["task"] or (peer_of(text) or ("別のセッション",))[0])[:200],
+                "text": cut_body, "cut": cut, "at": at}
+        addr = d["from"] if d["from"] and d["from"].startswith("uds:") else peer_addr(text)
+        if addr:
+            item["fromAddr"] = addr[:304]
+        return [item]
+    if not text.strip():
+        return []
+    return [_text_item(text, at, d["kind"] != "human")]
+
+
 def items_of(rec, results: dict, off: int | None = None) -> list[dict]:
     """The items of one record, in order. tool_result blocks go into ``results`` (tool_use_id -> OUT). ``off`` is the
     byte offset of the record's line in its transcript: a picture is named by it (and its place in the record)."""
+    if isinstance(rec, dict) and rec.get("type") == "attachment":
+        d = delivery(rec)
+        return _queued_items(d) if d is not None and d["queued"] else []
     if not isinstance(rec, dict) or rec.get("type") not in ("user", "assistant"):
         return []
     msg = rec.get("message")
@@ -369,6 +402,7 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -
     results: dict = {}
     counted, more = 0, False
     seen: set = set()
+    delivered: dict = {}                                 # a delivered message's key -> the rows its record made
     while pos > 0 and read < bytes_max and counted < items_max:
         step = min(CHUNK, pos, bytes_max - read)
         pos -= step
@@ -394,11 +428,23 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -
                 continue
             try:
                 rec = json.loads(line)
-            except ValueError:
+            except (ValueError, RecursionError):
                 bad += 1
                 continue
             records += 1
             got = items_of(rec, results, start)
+            # one delivered message is one row, however many records say it (talk_records.delivery_key): its waiting
+            # form (a user record) and its working form (a queued_command) share the msg_id, and a copy written again
+            # (Remote Control, a resume) keeps its uuid. The first record of it is the one kept, in its place: reading
+            # backwards, a later copy's rows already taken are dropped when an earlier record of it comes.
+            d = delivery(rec) if got else None
+            dk = delivery_key(d) if d is not None else None
+            if dk is not None:
+                for old in delivered.pop(dk, []):
+                    newest_first[:] = [i for i in newest_first if i is not old]
+                    if old["kind"] in COUNTED:
+                        counted -= 1
+                delivered[dk] = got
             msg = rec.get("message") if isinstance(rec, dict) else None
             mid = msg.get("id") if isinstance(msg, dict) else None
             for item in reversed(got):

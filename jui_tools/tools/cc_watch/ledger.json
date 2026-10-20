@@ -239,23 +239,25 @@
     {
       "id": "talk-msg-id",
       "name": "SendMessage の照合の鍵 msg_id（送り手の toolUseResult.msg_id ＝ 受け手の origin.msg_id）",
-      "relies_on": "the user record's toolUseResult.msg_id on a SendMessage's tool_result (a send to a session), the same value as origin.msg_id on the receiver's record; the successful-looking text \"No agent named … is reachable\" without msg_id for a send that reached nobody",
+      "relies_on": "the user record's toolUseResult.msg_id on a SendMessage's tool_result (a send to a session), the same value as origin.msg_id on the receiver's record; the successful-looking text \"No agent named … is reachable\" without msg_id for a send that reached nobody; the 応答の履歴 keys one delivered message on origin.msg_id across its user record and its queued_command",
       "probe": "talk_msg_id",
       "impact": "viz: 送った通と読んだ記録が突き合わず、既読が付かない・同じ通が 2 行になる",
       "files": [
         "jui_tools/jui_cli/viz/talk.py",
-        "jui_tools/jui_cli/viz/sources/talk_records.py"
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/jui_cli/viz/sources/history.py"
       ]
     },
     {
       "id": "talk-origin",
       "name": "受け手の記録の origin（peer・coordinator）と queued_command",
-      "relies_on": "origin on an isMeta user record or on an attachment of type queued_command: kind peer with msg_id, from, verifiedPeerPid, name, body (members when two sends were bundled; senderTaskId for a subagent's send to main; handback for a hand-back, skipped); kind coordinator for the parent's send to a subagent, the queued_command's prompt being the body",
+      "relies_on": "origin on an isMeta user record or on an attachment of type queued_command: kind peer with msg_id, from, verifiedPeerPid, name, body (members when two sends were bundled; senderTaskId for a subagent's send to main; handback for a hand-back, skipped); kind coordinator for the parent's send to a subagent, the queued_command's prompt being the body; the 応答の履歴 (history.py, through talk_records.delivery) also reads a queued_command's prompt, the attachment's or record's timestamp, delivery_id and uuid, and origin.kind channel (with server), human and task-notification, so a message that came while the session worked shows as the row its waiting form makes",
       "probe": "talk_origin",
-      "impact": "viz: 相手の通が出ない・既読が付かない（受け手の側が見えない）",
+      "impact": "viz: 相手の通が出ない・既読が付かない（受け手の側が見えない）；応答の履歴: 作業中に届いたプロンプト・メッセージが出ない、同じ 1 通が二重に出る",
       "files": [
         "jui_tools/jui_cli/viz/talk.py",
-        "jui_tools/jui_cli/viz/sources/talk_records.py"
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/jui_cli/viz/sources/history.py"
       ]
     },
     {
