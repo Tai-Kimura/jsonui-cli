@@ -198,5 +198,115 @@
     "production"
    ]
   }
+ ],
+ "flows": [
+  {
+   "id": "search",
+   "label": "検索する",
+   "start": "browser",
+   "steps": [
+    {
+     "from": "browser",
+     "to": "web",
+     "action": "request",
+     "label": "検索語を送る"
+    },
+    {
+     "from": "web",
+     "to": "api",
+     "action": "request",
+     "label": "GET /search"
+    },
+    {
+     "branch": {
+      "label": "KV に結果が有る？",
+      "default": "hit",
+      "choices": [
+       {
+        "id": "hit",
+        "label": "有る",
+        "steps": [
+         {
+          "from": "api",
+          "to": "kv",
+          "action": "read"
+         },
+         {
+          "from": "kv",
+          "to": "api",
+          "action": "response"
+         }
+        ]
+       },
+       {
+        "id": "miss",
+        "label": "無い",
+        "steps": [
+         {
+          "from": "api",
+          "to": "d1",
+          "action": "read"
+         },
+         {
+          "from": "d1",
+          "to": "api",
+          "action": "response"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "parallel": [
+      [
+       {
+        "from": "api",
+        "to": "queue",
+        "action": "enqueue",
+        "async": true,
+        "label": "検索の記録"
+       }
+      ],
+      [
+       {
+        "from": "api",
+        "to": "r2",
+        "action": "write",
+        "label": "結果を写しに置く"
+       }
+      ]
+     ]
+    },
+    {
+     "from": "api",
+     "to": "web",
+     "action": "response"
+    },
+    {
+     "from": "web",
+     "to": "browser",
+     "action": "response",
+     "label": "結果を出す"
+    }
+   ]
+  },
+  {
+   "id": "nightly-copy",
+   "label": "毎晩の写し",
+   "start": "r2",
+   "trigger": "schedule",
+   "schedule": "cron(0 3 * * ? *)",
+   "environments": [
+    "production"
+   ],
+   "steps": [
+    {
+     "from": "r2",
+     "to": "backup",
+     "action": "write"
+    }
+   ]
+  }
  ]
 }

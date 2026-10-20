@@ -632,3 +632,80 @@ def test_a_drafted_node_takes_the_declared_id_and_its_spec_both(tmp_path):
     assert node["id"] == "orders-db"
     assert node["spec"] == [{"key": "instance_class", "value": "db.r6g.large"}, {"key": "storage_gb", "value": "100"},
                             {"key": "multi_az", "value": "true"}]
+
+
+# ---------------------------------------------------------------- flows a schedule or an event sets going (the server room ticket's item 7)
+
+FLOW_TF = '''provider "aws" {
+  region = "ap-northeast-1"
+}
+resource "aws_lambda_function" "report" {
+  function_name = "report"
+}
+resource "aws_lambda_function" "thumb" {
+  function_name = "thumb"
+}
+resource "aws_lambda_function" "drain" {
+  function_name = "drain"
+}
+resource "aws_cloudwatch_event_rule" "nightly" {
+  schedule_expression = "cron(0 3 * * ? *)"
+}
+resource "aws_cloudwatch_event_target" "nightly_report" {
+  rule = aws_cloudwatch_event_rule.nightly.name
+  arn  = aws_lambda_function.report.arn
+}
+resource "aws_cloudwatch_event_rule" "on_signup" {
+  event_pattern = jsonencode({ source = ["app.signup"] })
+}
+resource "aws_cloudwatch_event_target" "signup_report" {
+  rule = aws_cloudwatch_event_rule.on_signup.name
+  arn  = aws_lambda_function.report.arn
+}
+resource "aws_scheduler_schedule" "every5" {
+  schedule_expression = "rate(5 minutes)"
+  target {
+    arn = aws_lambda_function.drain.arn
+  }
+}
+resource "aws_sqs_queue" "jobs" {
+  name = "jobs"
+}
+resource "aws_lambda_event_source_mapping" "jobs_drain" {
+  event_source_arn = aws_sqs_queue.jobs.arn
+  function_name    = aws_lambda_function.drain.arn
+}
+resource "aws_s3_bucket" "uploads" {
+  bucket = "uploads"
+}
+resource "aws_s3_bucket_notification" "uploads_thumb" {
+  bucket = aws_s3_bucket.uploads.id
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.thumb.arn
+  }
+}
+resource "aws_cloudwatch_event_target" "nowhere" {
+  rule = aws_cloudwatch_event_rule.nightly.name
+  arn  = var.target_arn
+}
+'''
+
+
+def test_seed_drafts_the_flows_a_schedule_or_an_event_sets_going(tmp_path):
+    root = tmp_path / "flow-room"
+    (root / "infra").mkdir(parents=True)
+    (root / "infra" / "main.tf").write_text(FLOW_TF)
+    doc, rep = S.draft(root)
+    by = _by_iac(doc)
+    name = {n["id"]: a.split(".")[1] for a, n in by.items()}
+    got = sorted((f["trigger"], name[f["start"]], name[f["steps"][0]["to"]], f["steps"][0]["action"], f.get("schedule")) for f in doc["flows"])
+    assert got == [("event", "jobs", "drain", "dequeue", None),             # a queue -> its function
+                   ("event", "on_signup", "report", "invoke", None),        # a rule with a pattern: an event's
+                   ("event", "uploads", "thumb", "invoke", None),           # a bucket's notification
+                   ("schedule", "every5", "drain", "invoke", "rate(5 minutes)"),
+                   ("schedule", "nightly", "report", "invoke", "cron(0 3 * * ? *)")]   # a rule with a schedule
+    assert rep["flows"] == 5
+    assert any(u["what"] == "aws_cloudwatch_event_target.nowhere" for u in rep["unmatched"]["aws"]["items"])   # var: not followed
+    raw = json.dumps(doc).encode()
+    model, problems = M.merge([("draft.json", raw)])
+    assert M.errors(problems) == [] and len(model["flows"]) == 5              # each one walks the draft's own edges

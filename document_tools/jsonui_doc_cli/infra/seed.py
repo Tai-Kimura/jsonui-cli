@@ -156,6 +156,7 @@ class Draft:
         self.withheld = 0
         self.withheld_from: list[dict] = []          # where each withheld string was (the report masks the path)
         self.spec_values = 0                         # spec values read from the IaC (iac_tables.TF_SPEC / CFN_SPEC)
+        self.flows: dict[str, dict] = {}             # what a schedule or an event sets going (iac_tables.TF_FLOW_SOURCES)
         self.by_key: dict[tuple, str] = {}
 
     # ---- values never leave: every string passes here
@@ -327,6 +328,26 @@ class Draft:
             e["label"] = lab[:200]
         self.edges.setdefault((a, b), e)
 
+    def add_flow(self, base: str, start: str, target: str, trigger: str, action: str, schedule: str | None,
+                 where: tuple | None) -> None:
+        """One flow of one move, start -> target, when both are drafted nodes and an edge joins them."""
+        self.edge(start, target, f"{trigger}: {action}")
+        if (start, target) not in self.edges:
+            return
+        fid, k = _slug(base) or "flow", 2
+        if value_shaped(fid):
+            self.withhold(where, "a flow's id")
+            fid = "flow"
+        while fid in self.flows:
+            fid, k = f"{_slug(base)}-{k}", k + 1
+        label = self.safe(f"{self.nodes[start]['label']} → {self.nodes[target]['label']}", None, where, "a flow's label")
+        f = {"id": fid, **({"label": label[:200]} if label else {}), "start": start, "trigger": trigger,
+             "steps": [{"from": start, "to": target, "action": action}]}
+        sched = self.safe(schedule, None, where, "a schedule") if schedule else None
+        if sched and trigger == "schedule":
+            f["schedule"] = sched[:80]
+        self.flows[fid] = f
+
     # ---- the finished draft
     def document(self) -> dict:
         origins = set(self.origin.values())
@@ -376,7 +397,11 @@ class Draft:
                               "you keep into the model's folder."}
         if envs:
             doc["environments"] = envs
+        joined = {(e["from"], e["to"]) for e in edges}
+        flows = [f for f in self.flows.values() if (f["start"], f["steps"][0]["to"]) in joined]
         doc.update(groups=groups, nodes=nodes, edges=edges)
+        if flows:
+            doc["flows"] = flows[:caps["flows"]["maxItems"]]
         return doc
 
     def report(self) -> dict:
@@ -386,7 +411,7 @@ class Draft:
                "unmatched": {p: capped(v) for p, v in sorted(self.unmatched.items())},
                "notDrawn": {p: dict(sorted(v.items())) for p, v in sorted(self.not_drawn.items())},
                "skipped": self.skipped[:LIST_CAP], "skippedCount": len(self.skipped),
-               "notes": self.notes, "specValues": self.spec_values, "withheld": self.withheld,
+               "notes": self.notes, "specValues": self.spec_values, "flows": len(self.flows), "withheld": self.withheld,
                "withheldFrom": self.withheld_from[:LIST_CAP], "withheldFromCount": len(self.withheld_from)}
         return _scrub(rep)
 
@@ -679,7 +704,42 @@ def seed_terraform(d: Draft, files: list[tuple[str, str, str]]) -> None:
             b = ids.get((r.dir, rt, rn))
             if b and b in d.nodes:
                 d.edge(a, b, "terraform reference")
+    _tf_flows(d, resources, by_key, ids)
     d.inputs.setdefault("terraform_providers", []).extend(sorted({p for p, _a in providers}))
+
+
+def _tf_flows(d: Draft, resources: list, by_key: dict, ids: dict) -> None:
+    """The flows a schedule or an event sets going (iac_tables.TF_FLOW_SOURCES): a rule's or a mapping's start and
+    target, followed by their references only. What cannot be followed to two drafted nodes is reported, not guessed."""
+    for r in resources:
+        src = T.TF_FLOW_SOURCES.get(r.type)
+        if src is None:
+            continue
+        start_attr, target_attrs, sched_attr, trigger, action = src
+        body = json.loads(r.body) if r.file.endswith(".tf.json") else r.body
+        addr = T.tf_address(r.type, r.name)
+        prov = T.tf_provider(r.type) or "(unknown)"
+        if start_attr is None:
+            start_res = r
+        else:
+            refs = T.tf_refs_of(body, start_attr)
+            start_res = by_key.get((r.dir,) + refs[0]) if refs else None
+        start = ids.get((r.dir, start_res.type, start_res.name)) if start_res is not None else None
+        targets = [ids.get((r.dir,) + ref) for a in target_attrs for ref in T.tf_refs_of(body, a)]
+        targets = [t for t in targets if t in d.nodes and t != start]
+        if start not in d.nodes or not targets:
+            d.miss(prov, r.file, addr, "a flow's start or target is not a drafted node (a reference was not followed to one)")
+            continue
+        schedule, kind = None, trigger
+        held = sched_attr or T.TF_FLOW_RULE_SCHEDULE.get(start_res.type)
+        if held:
+            sbody = json.loads(start_res.body) if start_res.file.endswith(".tf.json") else start_res.body
+            schedule = (sbody.get(held) if isinstance(sbody, dict) else _literal(sbody, held)) or None
+            schedule = schedule if isinstance(schedule, str) and "${" not in schedule else None
+            if schedule:
+                kind = "schedule"
+        for t in targets:
+            d.add_flow(f"{kind}-{start_res.name}-{r.name}", start, t, kind, action, schedule, (r.file, r.line))
 
 
 def _group_order(mapped) -> int:

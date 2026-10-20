@@ -17,6 +17,7 @@ Three passes, one problem list:
 2. across the files that passed: environments merged by id (the same id twice must say the same), ids unique among
    groups and nodes, every reference resolved (parent, group, edge ends, environments), no parent cycle. An element
    that names what is not there is left out (an edge with a missing end, a node in a missing group goes to no group);
+   a flow is walked along the model's nodes and edges (flows.py) and left out alone when it does not hold together;
 3. normalized for the display: label defaults to the id, count to 1, environments to every environment, fold by
    category, managed_by "iac", direction "out"; one implicit environment "default" when none is declared. Every
    group and node gets providerResolved (its own provider, else the nearest enclosing group's; a "logical" group
@@ -33,6 +34,8 @@ import json
 import math
 import re
 from pathlib import Path
+
+from . import flows as FLOWS
 
 SCHEMA_PATH = Path(__file__).with_name("infra-model.v0.schema.json")
 FOLDED_BY_DEFAULT = ("security.iam", "security.policy", "monitoring.alarm")
@@ -348,6 +351,7 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
     groups: dict[str, dict] = {}
     nodes: dict[str, dict] = {}
     edges: list[tuple[str, int, dict]] = []
+    flows: list[tuple[str, int, dict]] = []
     owner: dict[str, str] = {}
     used: list[str] = []
     for name, raw in files:
@@ -373,6 +377,8 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
                 bucket[item["id"]] = dict(item, _at=(name, f"/{kind}/{i}"))
         for i, e in enumerate(data.get("edges", [])):
             edges.append((name, i, dict(e)))
+        for i, f in enumerate(data.get("flows", [])):
+            flows.append((name, i, f))
     env_list = list(envs.values()) or [dict(IMPLICIT_ENV)]
     env_ids = [e["id"] for e in env_list]
 
@@ -502,9 +508,10 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
         out_edges.append({**e, "direction": e.get("direction", "out"), "environments": refs,
                           "crossProvider": bool(pf and pt and pf != pt)})
     out_edges = _capped(out_edges, "edges", problems)
+    out_flows = _capped(FLOWS.resolve(flows, kept_nodes, out_edges, env_ids, problems), "flows", problems)
     model = {"version": 0, "files": used,
              "environments": [{"id": e["id"], "label": e.get("label", e["id"]), "kind": e.get("kind", "other")} for e in env_list],
-             "groups": out_groups, "nodes": out_nodes, "edges": out_edges}
+             "groups": out_groups, "nodes": out_nodes, "edges": out_edges, "flows": out_flows}
     return model, problems
 
 

@@ -29,6 +29,24 @@ SECRET_JA = {"arn": "ARN", "account_id": "アカウント ID", "ip_address": "IP
              "url_credentials": "URL の中の資格情報", "private_key": "秘密鍵", "access_key": "アクセスキー", "token": "トークン",
              "password": "パスワード"}   # one per model.SECRET_KINDS (test_infra_room: a kind with no words is red)
 
+#: one per problem code flows.py gives (test_infra_flows: a code with no words is red)
+FLOW_JA = {"flow.node.missing": "が、この flow と一緒に描かれない node を指しています",
+           "flow.edge.missing": "が通る辺がありません",
+           "flow.discontinuous": "が、今いる node から出ていません",
+           "flow.step.kind": "の step の書き方が 1 つに決まりません（辺・node・分かれ道・並びのどれか 1 つ）",
+           "flow.paths_disagree": "の step に、道によって違う node から着きます",
+           "flow.too_deep": "の分かれ道と並びの入れ子が深すぎます",
+           "flow.choice.duplicate": "の分かれ道に、同じ id の選択肢があります",
+           "flow.choice.kind": "の選択肢の進み方が 1 つに決まりません（steps・goto・join のどれか）",
+           "flow.default.missing": "の既定が、どの選択肢も指していません",
+           "flow.join.missing": "の join が、この flow の step を指していません",
+           "flow.join.backward": "の join が、分かれ道より前の step を指しています",
+           "flow.goto.missing": "の goto が、描かれない flow を指しています",
+           "flow.goto.jump": "の goto の先は、別の node から始まります（画面では跳びます）",
+           "flow.default_cycle": "は、既定だけで輪になり、ひとりでに流すと終わりません",
+           "flow.id.duplicate": "の id が、ほかの flow と重なっています",
+           "flow.schedule.trigger": "の schedule は、trigger が schedule の時だけ書けます"}
+
 
 def short(p: dict, folder: str) -> str:
     """One line the page can show as it is (boundary §5.2): the file (a path inside the room), the line when known, and
@@ -46,6 +64,8 @@ def short(p: dict, folder: str) -> str:
         return f"{where}: {p['path']} の参照が合いません（{code}）"
     if code == "spec.duplicate":
         return f"{where}: {p['path']} の spec の key が 2 度あります（先の物を出します）"
+    if code in FLOW_JA:
+        return f"{where}: {p['path']} の flow {FLOW_JA[code]}（{code}）"
     if code == "model.too_big":
         return f"{folder}: 部屋のモデルが上限を超えています（{p['path'].lstrip('/')}）"
     if code == "read.too_large":

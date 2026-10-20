@@ -14,6 +14,7 @@ the seed lane (a verification subagent), moved here.
 """
 from __future__ import annotations
 
+import json
 import re
 
 from . import model as M
@@ -432,6 +433,44 @@ def cfn_spec(properties) -> list[dict]:
             got = _spec_scalar(properties.get(attr))
             if got is not None:
                 out.append({"key": key, "value": got})
+    return out
+
+
+# ---------------------------------------------------------------- what sets a flow going (the server room ticket's item 7)
+# Terraform resources that say what starts what, read by seed for the flows it drafts: type -> (the attribute naming
+# the start, None for the resource itself; the attributes naming the target, any of them; the attribute holding the
+# schedule as written, if any; the trigger; the action). Only references (<type>.<name>.<attr>) are followed: a
+# variable, a string or a function is not.
+TF_FLOW_SOURCES: dict[str, tuple[str | None, tuple[str, ...], str | None, str, str]] = {
+    "aws_cloudwatch_event_target": ("rule", ("arn",), None, "event", "invoke"),
+    "aws_scheduler_schedule": (None, ("arn",), "schedule_expression", "schedule", "invoke"),
+    "google_cloud_scheduler_job": (None, ("uri", "topic_name"), "schedule", "schedule", "request"),
+    "aws_lambda_event_source_mapping": ("event_source_arn", ("function_name",), None, "event", "dequeue"),
+    "aws_s3_bucket_notification": ("bucket", ("lambda_function_arn", "queue_arn", "topic_arn"), None, "event", "invoke"),
+}
+#: an EventBridge rule with a schedule written in it makes its targets' flow a schedule's (a pattern: an event's)
+TF_FLOW_RULE_SCHEDULE = {"aws_cloudwatch_event_rule": "schedule_expression"}
+
+
+def tf_refs_of(body: str, attr: str) -> list[tuple[str, str]]:
+    """(type, name) of each resource the attribute refers to in an HCL body (nested blocks too, a list of them too)."""
+    if isinstance(body, dict):              # a .tf.json body: "${type.name.attr}" in the attribute's value, anywhere in it
+        found = []
+
+        def walk(v):
+            if isinstance(v, dict):
+                for k, x in v.items():
+                    if k == attr:
+                        found.append(json.dumps(x))
+                    walk(x)
+            elif isinstance(v, list):
+                for x in v:
+                    walk(x)
+        walk(body)
+        return [(t, n) for text in found for t, n in re.findall(r"(?<![\w.])([a-z][a-z0-9]*_[a-z0-9_]+)\.([A-Za-z_][A-Za-z0-9_-]*)\.", text)]
+    out = []
+    for m in re.finditer(r"^\s*" + attr + r"\s*=\s*(.*)$", body, re.M):
+        out += [(t, n) for t, n in re.findall(r"(?<![\w.])([a-z][a-z0-9]*_[a-z0-9_]+)\.([A-Za-z_][A-Za-z0-9_-]*)\.", m.group(1))]
     return out
 
 
