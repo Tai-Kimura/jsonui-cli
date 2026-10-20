@@ -257,6 +257,11 @@ async def run_attach(pw, out, failures):
         req = {"hook_event_name": "PermissionRequest", "tool_name": "Read", "tool_input": {"file_path": first}}
         hook({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_use_id": "read-1", "tool_input": {"file_path": first}})
         hook(req)
+        # /hook/decide answers at once, and the card gets no 許可 / 拒否, while no page has reported itself visible in
+        # the last 12 s. The page reports every 5 s from its load (25-net.js), and this step came about 1 s after the
+        # first report (measured 10-20: 6.0 s vs 5.04 s); a first report 1 s late made the deny click time out (2.3.9
+        # gate 2; ticket 2026-10-20-jui-viz-e2e-attach-decide-before-first-presence). Have the page report now.
+        await page.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
         decide = hook(req, "--decide")
         stored = pathlib.Path(first).name   # the card may write the home as ~: match the server-made name
         await wait(page, "() => !document.getElementById('chip-perm').hidden", timeout=15000, label="the permission chip")
@@ -269,6 +274,8 @@ async def run_attach(pw, out, failures):
         res["permCard"] = next((t for t in res["permCards"] if stored in t), "")
         check("Read" in (res["permCard"] or ""), f"the card names Read: {res['permCard']!r}")
         await page.screenshot(path=str(out / "permission.png"))
+        await wait(page, "() => !!document.querySelector(\"#perm-strip [data-do='deny']\")", timeout=15000,
+                   label="拒否 on the card (the --decide hook waits on it)")
         await page.click("#perm-strip [data-do='deny']")
         try:
             decide.wait(timeout=15)
