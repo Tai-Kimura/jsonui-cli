@@ -7,8 +7,9 @@ are its main robot's, the question and a second permission are a subagent's (the
   * the three cards show between the history and the prompt box (outside the history's frame), with the question's
     time left, both permissions, and no id on the page twice (two permission cards of one session: two reason boxes);
   * the question answered there reaches --ask's hook (updatedInput.answers); the permission denied there with a reason
-    reaches --decide's hook with that reason, the subagent's allowed there reaches its own; the cards then say so in the
-    panel too, with no button left to press twice;
+    reaches --decide's hook with that reason, the subagent's (the second card) denied with its own reason reaches its
+    own; the cards then say so in the panel too, with no button left to press twice;
+  * the 今の様子 tab shows no cards box;
   * the stopped call's 実行してよいと伝える… opens its confirmation in the history's card only, not the panel's;
   * そのまま closes it everywhere.
 No console error; nothing outside the server.
@@ -148,6 +149,13 @@ async def run_hist_cards(pw, out, failures):
         shared = res["sharedNames"] = await page.evaluate(SHARED_NAMES)
         check(failures, shared == [], f"no radio group shared with the panel's cards: {shared}")
         await page.screenshot(path=str(out / "cards.png"))
+        # the 今の様子 tab: no cards box there (the box is the history tab's; the independent check's X4)
+        await page.click('#rb [data-rb-tab="now"]')
+        await page.wait_for_timeout(400)
+        res["cardsOnNowTab"] = await page.evaluate("() => { const c = document.querySelector('#rb [data-h-cards]'); return !!c && !c.hidden && c.getClientRects().length > 0; }")
+        check(failures, res["cardsOnNowTab"] is False, "the cards box is not shown on the 今の様子 tab")
+        await page.click('#rb [data-rb-tab="history"]')
+        await wait(page, f"() => {{ const c = ({CARDS})(); return c && c.shown && c.perm === 2; }}", label="the cards again on the history tab")
         # the question, answered in the history
         await page.click("#rb [data-h-cards] [data-qcard] label.qopt >> nth=1")
         await page.click("#rb [data-h-cards] [data-qsend]")
@@ -155,21 +163,25 @@ async def run_hist_cards(pw, out, failures):
         got = res["askHook"] = json.loads(o) if o else None
         ans = (((got or {}).get("hookSpecificOutput") or {}).get("updatedInput") or {}).get("answers")
         check(failures, ans == {"どちらにしますか": "右"}, f"--ask got the history's answer: {got}")
-        # the permission, denied in the history with a reason
+        # the subagent's permission first, denied with its own reason in the second card: the reason is the pressed
+        # card's, not the first reason box on the page (the independent check's X3)
+        sub = "#rb [data-h-cards] .tbd-perm:has-text('echo sub-perm')"
+        await page.fill(f"{sub} .tbd-reason input", "サブを履歴から拒否")
+        await page.click(f"{sub} [data-do='deny']")
+        o, _ = sc.communicate(timeout=30)
+        got = res["subPermHook"] = json.loads(o) if o else None
+        dec = ((got or {}).get("hookSpecificOutput") or {}).get("decision") if isinstance(got, dict) else None
+        check(failures, isinstance(dec, dict) and dec.get("behavior") == "deny" and "サブを履歴から拒否" in json.dumps(dec, ensure_ascii=False),
+              f"the subagent's --decide got the second card's deny with its reason: {got}")
+        # then the main robot's, denied with a reason
         mine = "#rb [data-h-cards] .tbd-perm:has-text('ls -la /tmp')"
         await page.fill(f"{mine} .tbd-reason input", "履歴から拒否")
         await page.click(f"{mine} [data-do='deny']")
         o, _ = pc.communicate(timeout=30)
         got = res["permHook"] = json.loads(o) if o else None
         dec = ((got or {}).get("hookSpecificOutput") or {}).get("decision") if isinstance(got, dict) else None
-        check(failures, isinstance(dec, dict) and dec.get("behavior") == "deny" and "履歴から拒否" in json.dumps(dec, ensure_ascii=False),
-              f"--decide got the history's deny with its reason: {got}")
-        # the subagent's permission, allowed in the history
-        await page.click("#rb [data-h-cards] .tbd-perm:has-text('echo sub-perm') [data-do='allow']")
-        o, _ = sc.communicate(timeout=30)
-        got = res["subPermHook"] = json.loads(o) if o else None
-        dec = ((got or {}).get("hookSpecificOutput") or {}).get("decision") if isinstance(got, dict) else None
-        check(failures, isinstance(dec, dict) and dec.get("behavior") == "allow", f"the subagent's --decide got the history's allow: {got}")
+        check(failures, isinstance(dec, dict) and dec.get("behavior") == "deny" and "履歴から拒否" in json.dumps(dec, ensure_ascii=False)
+              and "サブ" not in json.dumps(dec, ensure_ascii=False), f"--decide got the history's deny with its reason: {got}")
         await wait(page, "() => !document.querySelector('#tasks [data-do]') && !document.querySelector('#questions [data-qsend]:not([disabled])')", timeout=15000,
                    label="no button left in the panel to answer twice")
         # the stopped call: its confirmation opens in the history's card only
