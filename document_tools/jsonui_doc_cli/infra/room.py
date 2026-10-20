@@ -185,13 +185,12 @@ def _rel_ok(raw) -> bool:
     return not p.is_absolute() and all(part not in ("", ".", "..") for part in p.parts)
 
 
-def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
-    """(the folder, the icons usable, problems) from the room's jui.config.json. Raises Refused("bad_config") when the
-    folder it names is not a relative path inside the room; an icon that breaks the rules is left out with a problem
-    (code config.icon). No config, or no "infra": the defaults."""
+def _infra_section(root: Path) -> dict | None:
+    """The room's jui.config.json "infra" object, or None (no config, no "infra"). Raises Refused("bad_config") when
+    the config cannot be read or "infra" is not an object."""
     raw = read_capped(root, CONFIG_NAME, LIMITS["config_bytes"])
     if raw is None:
-        return DEFAULT_DIR, {}, []
+        return None
     if raw is TOO_BIG:
         raise Refused("bad_config", f"{CONFIG_NAME} is larger than {LIMITS['config_bytes']} bytes",
                       f"{CONFIG_NAME} が大きすぎます（{LIMITS['config_bytes'] // 1_000_000} MB まで）")
@@ -203,11 +202,19 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
     except (ValueError, UnicodeDecodeError, RecursionError):
         raise Refused("bad_config", f"{CONFIG_NAME} is not JSON", f"{CONFIG_NAME} が JSON として読めません") from None
     infra = cfg.get("infra") if isinstance(cfg, dict) else None
-    if infra is None:
-        return DEFAULT_DIR, {}, []
-    if not isinstance(infra, dict):
+    if infra is not None and not isinstance(infra, dict):
         raise Refused("bad_config", f'{CONFIG_NAME}: "infra" must be an object',
                       f'{CONFIG_NAME}: "infra" はオブジェクト（{{"dir": ..., "icons": {{...}}}}）で書いてください')
+    return infra
+
+
+def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
+    """(the folder, the icons usable, problems) from the room's jui.config.json. Raises Refused("bad_config") when the
+    folder it names is not a relative path inside the room; an icon that breaks the rules is left out with a problem
+    (code config.icon). No config, or no "infra": the defaults."""
+    infra = _infra_section(root)
+    if infra is None:
+        return DEFAULT_DIR, {}, []
     folder = infra.get("dir", DEFAULT_DIR)
     if not _rel_ok(folder):
         raise Refused("bad_config", f'{CONFIG_NAME}: infra.dir must be a relative path inside the room (no "..", '
@@ -239,6 +246,53 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
         else:
             icons[key] = path
     return folder, icons, problems
+
+
+def side_dir(root: Path, key: str) -> str:
+    """The folder of the cost simulator's files (plan docs/plans/2026-10-20-jui-viz-backend-load-and-cost-simulator.md):
+    key "load_dir" (the load definitions) or "prices_dir" (the price files), from jui.config.json's infra; default
+    <infra.dir>/load and <infra.dir>/prices. Raises Refused("bad_config") as infra.dir does."""
+    infra = _infra_section(root) or {}
+    folder = infra.get("dir", DEFAULT_DIR)
+    if not _rel_ok(folder):
+        raise Refused("bad_config", f'{CONFIG_NAME}: infra.dir must be a relative path inside the room (no "..", '
+                                    "no absolute path, no URL)")
+    side = infra.get(key, f"{folder}/{key.split('_')[0]}")
+    if not _rel_ok(side):
+        raise Refused("bad_config", f'{CONFIG_NAME}: infra.{key} must be a relative path inside the room (no "..", '
+                                    "no absolute path, no URL)",
+                      f"{CONFIG_NAME}: infra.{key} は部屋の中の相対パスで書いてください")
+    return side
+
+
+def read_json_folder(root: Path, folder: str) -> tuple[list[tuple[str, bytes]], list[dict]]:
+    """The regular *.json files directly in root/folder as (name, bytes), read as the model's are (one part at a time
+    with O_NOFOLLOW, LIMITS), and problems (read.*). An empty list: none, or the folder is not there. Raises Refused
+    (too_many_files, too_large, unreadable for a symlink on the way)."""
+    root = Path(root)
+    skipped: list = []
+    listed = _list_dir(root, folder, skipped)
+    if listed is None and _symlink_on_the_way(root, folder):
+        raise Refused("unreadable", f"{folder} is reached through a symlink: not read",
+                      f"{folder} は symlink を通るため読みません（部屋の中の本物のフォルダに置いてください）")
+    problems = [M._problem(name, "/", "read.not_regular", f"{what}, not a regular file: not read", "warning")
+                for name, what in skipped]
+    listed = listed or []
+    if len(listed) > LIMITS["files"]:
+        raise Refused("too_many_files", f"{len(listed)} files in {folder}; at most {LIMITS['files']} are read")
+    if sum(size for _n, size in listed) > LIMITS["total_bytes"]:
+        raise Refused("too_large", f"the files in {folder} are over {LIMITS['total_bytes']} bytes together")
+    files, total = [], 0
+    for name, _size in listed:
+        raw = read_capped(root, f"{folder}/{name}", min(LIMITS["file_bytes"], LIMITS["total_bytes"] - total))
+        if raw is TOO_BIG:
+            problems.append(M._problem(name, "/", "read.too_large", f"over {LIMITS['file_bytes']} bytes: not read"))
+        elif raw is None:
+            problems.append(M._problem(name, "/", "read.unreadable", "could not be read as a regular file"))
+        else:
+            total += len(raw)
+            files.append((name, raw))
+    return files, problems
 
 
 def read_icon(root: Path, path: str) -> tuple[bytes, str] | None:

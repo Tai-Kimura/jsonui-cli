@@ -2371,6 +2371,59 @@ def cmd_validate_infra(args):
     return 1 if any(p["severity"] == "error" for p in result["problems"]) else 0
 
 
+def _print_side(kind: str, result: dict, summary: str) -> None:
+    for p in result["problems"]:
+        where = f"{p['file']} {p['path']}" if p.get("file") else p["path"]
+        extra = ", ".join(f"{k} {p[k]}" for k in ("node", "hour", "quantity") if p.get(k))
+        print(f"{p['severity'].upper()} {where}: {p['message']}  [{p['code']}{', ' + extra if extra else ''}]")
+    print(summary)
+
+
+def cmd_validate_infra_load(args):
+    """The room's load definitions for the cost simulator (infra-load.v0; plan
+    docs/plans/2026-10-20-jui-viz-backend-load-and-cost-simulator.md): each file against its schema and itself, then
+    against the room's model. Exit 0: no error (warnings alone are 0); 1: errors; 2: the model or the folder cannot be
+    read."""
+    from .infra import load as infra_load
+    result = infra_load.read(Path(args.root))
+    if args.json:
+        out = {k: v for k, v in result.items() if k != "scenarios"}
+        if result.get("ok"):
+            out["scenarios"] = [{"id": s["id"], "file": s["file"], "environment": s["environment"], "month": s["month"],
+                                 "hours": len(s["hours"]), "loads": len(s["loads"]), "edges": len(s["edges"])}
+                                for s in result["scenarios"]]
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    elif not result["ok"]:
+        print(f"infra-load: cannot read ({result['reason']}): {result['message']}", file=sys.stderr)
+    else:
+        errs = sum(1 for p in result["problems"] if p["severity"] == "error")
+        _print_side("infra-load", result, f"infra-load: {result['dir']}: {len(result['files'])} file(s) used, "
+                    f"{len(result['scenarios'])} scenario(s); {errs} error(s)")
+    if not result["ok"]:
+        return 2
+    return 1 if any(p["severity"] == "error" for p in result["problems"]) else 0
+
+
+def cmd_validate_infra_prices(args):
+    """The room's price files (infra-prices.v0). Exit 0: no error; 1: errors; 2: the folder cannot be read."""
+    from .infra import prices as infra_prices
+    result = infra_prices.read(Path(args.root))
+    if args.json:
+        out = {k: v for k, v in result.items() if k != "prices"}
+        if result.get("ok"):
+            out["count"] = len(result["prices"])
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    elif not result["ok"]:
+        print(f"infra-prices: cannot read ({result['reason']}): {result['message']}", file=sys.stderr)
+    else:
+        errs = sum(1 for p in result["problems"] if p["severity"] == "error")
+        _print_side("infra-prices", result, f"infra-prices: {result['dir']}: {len(result['files'])} file(s) used, "
+                    f"{len(result['prices'])} price(s); {errs} error(s)")
+    if not result["ok"]:
+        return 2
+    return 1 if any(p["severity"] == "error" for p in result["problems"]) else 0
+
+
 def cmd_check(args):
     """Run declared contract checks (docs ⇔ implementation).
 
@@ -2523,6 +2576,12 @@ def main():
         help="The project root (the folder with jui.config.json); default: the current folder"
     )
     validate_infra_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
+    for side, what in (("infra-load", "the cost simulator's load definitions (<infra.dir>/load, or infra.load_dir)"),
+                       ("infra-prices", "the cost simulator's price files (<infra.dir>/prices, or infra.prices_dir)")):
+        side_parser = validate_subparsers.add_parser(side, help=f"Validate {what}")
+        side_parser.add_argument("root", nargs="?", default=".",
+                                 help="The project root (the folder with jui.config.json); default: the current folder")
+        side_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
 
     # Seed command: draft the infra model from IaC, config files and code (the server room, 2.3.6)
     seed_parser = subparsers.add_parser(
@@ -2936,6 +2995,10 @@ def main():
                 return cmd_validate_component(args)
             elif args.validate_type == "infra":
                 return cmd_validate_infra(args)
+            elif args.validate_type == "infra-load":
+                return cmd_validate_infra_load(args)
+            elif args.validate_type == "infra-prices":
+                return cmd_validate_infra_prices(args)
         else:
             validate_parser.print_help()
             return 0

@@ -67,8 +67,10 @@ def describe_decl(decl: CheckDecl) -> str:
         return (f"{decl.name}  [builtin:db-schema]  "
                 f"docs/db({decl.database}) ⇔ {source}  "
                 f"(timeout {decl.timeout_seconds}s)")
-    if decl.type in ("builtin:infra-iac", "builtin:infra-code"):
-        against = "IaC (compose, terraform, cloudformation, k8s, wrangler)" if decl.type.endswith("iac") else "the code (evidence, SDK imports, env names)"
+    if decl.type in ("builtin:infra-iac", "builtin:infra-code", "builtin:infra-load"):
+        against = {"builtin:infra-iac": "IaC (compose, terraform, cloudformation, k8s, wrangler)",
+                   "builtin:infra-code": "the code (evidence, SDK imports, env names)",
+                   "builtin:infra-load": "the load definitions (the cost simulator)"}[decl.type]
         return (f"{decl.name}  [{decl.type}]  infra model ⇔ {against}"
                 f"{'  gate' if decl.gate else '  (warnings only)'}")
     return (f"{decl.name}  [checker]  `{' '.join(decl.command or [])}`  "
@@ -88,7 +90,7 @@ def matches_filter(decl: CheckDecl, expr: str | None) -> bool:
     if expr == "api":
         return decl.type == "builtin:openapi-diff"
     if expr == "infra":
-        return decl.type in ("builtin:infra-iac", "builtin:infra-code")
+        return decl.type in ("builtin:infra-iac", "builtin:infra-code", "builtin:infra-load")
     return decl.name == expr
 
 
@@ -122,10 +124,12 @@ def run_one(decl: CheckDecl, project_root: Path,
             return run_openapi_diff(decl, project_root, _cmd)
         except OpenApiDiffError as exc:
             raise CheckExecutionError(str(exc))
-    if decl.type in ("builtin:infra-iac", "builtin:infra-code"):
-        from .infra_check import InfraCheckError, run_infra_code, run_infra_iac
+    if decl.type in ("builtin:infra-iac", "builtin:infra-code", "builtin:infra-load"):
+        from .infra_check import InfraCheckError, run_infra_code, run_infra_iac, run_infra_load
+        run = {"builtin:infra-iac": run_infra_iac, "builtin:infra-code": run_infra_code,
+               "builtin:infra-load": run_infra_load}[decl.type]
         try:
-            return (run_infra_iac if decl.type == "builtin:infra-iac" else run_infra_code)(decl, project_root)
+            return run(decl, project_root)
         except InfraCheckError as exc:
             raise CheckExecutionError(str(exc))
     if decl.type == "builtin:db-schema":

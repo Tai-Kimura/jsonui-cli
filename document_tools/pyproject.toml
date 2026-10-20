@@ -8,7 +8,7 @@ include = ["jsonui_doc_cli*"]
 
 [tool.setuptools.package-data]
 "jsonui_doc_cli.check.db_schema" = ["type_families.json"]
-"jsonui_doc_cli.infra" = ["infra-model.v0.schema.json"]
+"jsonui_doc_cli.infra" = ["infra-model.v0.schema.json", "infra-load.v0.schema.json", "infra-prices.v0.schema.json"]
 
 [project]
 name = "jsonui-doc-cli"

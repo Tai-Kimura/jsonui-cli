@@ -1,0 +1,810 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jsonui.dev/schemas/infra-load/v0.json",
+  "title": "JsonUI infra load v0",
+  "x-name": "the infra load v0",
+  "description": "One load definition (a scenario) of a room: <infra.dir>/load/*.json, or the folder jui.config.json's infra.load_dir names. Says how much each node of the room's infra model carries, hour by hour for one month, and when it runs; the cost simulator reads it with the price files. Nodes are named by the model's ids. A quantity not written is undefined, never 0. Holds no values (validate refuses the shapes of secrets anywhere in the file). Plan: docs/plans/2026-10-20-jui-viz-backend-load-and-cost-simulator.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "id",
+    "month"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 0
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "label": {
+      "$ref": "#/$defs/text"
+    },
+    "description": {
+      "$ref": "#/$defs/text"
+    },
+    "environment": {
+      "$ref": "#/$defs/id",
+      "description": "The model's environment this scenario is for. Left out: the model's first (a warning when it has several)."
+    },
+    "month": {
+      "type": "string",
+      "pattern": "^20[0-9]{2}-(0[1-9]|1[0-2])$"
+    },
+    "timezone": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^(UTC|[A-Za-z]+(/[A-Za-z0-9_+-]+){1,2})$",
+      "description": "An IANA name; the hours, days and schedules are read in it. Default UTC."
+    },
+    "currency": {
+      "const": "USD"
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "region": {
+          "$ref": "#/$defs/region"
+        }
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "maxProperties": 50,
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hourly": {
+            "type": "array",
+            "minItems": 24,
+            "maxItems": 24,
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000
+            }
+          },
+          "label": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "required": [
+          "hourly"
+        ]
+      },
+      "description": "Named day shapes: 24 multipliers of the base amounts, hour 0 to 23."
+    },
+    "week": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mon": {
+          "$ref": "#/$defs/id"
+        },
+        "tue": {
+          "$ref": "#/$defs/id"
+        },
+        "wed": {
+          "$ref": "#/$defs/id"
+        },
+        "thu": {
+          "$ref": "#/$defs/id"
+        },
+        "fri": {
+          "$ref": "#/$defs/id"
+        },
+        "sat": {
+          "$ref": "#/$defs/id"
+        },
+        "sun": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "description": "The profile of each day of the week. A day left out: multiplier 1.0 all day."
+    },
+    "days": {
+      "type": "array",
+      "maxItems": 62,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "$ref": "#/$defs/date"
+          },
+          "profile": {
+            "$ref": "#/$defs/id"
+          },
+          "multiplier": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "label": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "required": [
+          "date"
+        ]
+      }
+    },
+    "holidays": {
+      "type": "array",
+      "maxItems": 62,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/date"
+      }
+    },
+    "schedules": {
+      "type": "object",
+      "maxProperties": 50,
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/schedule"
+      },
+      "description": "Named run times: how many run each hour (0: stopped). A row with none runs the model's count all the time."
+    },
+    "loads": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "$ref": "#/$defs/load"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/edgeLoad"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^(([01][0-9]|2[0-3]):(00|30)|24:00)$",
+      "description": "HH:MM on the hour or the half hour (the simulator counts hours; half an hour is 0.5)."
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+    },
+    "sku": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,99}$"
+    },
+    "per": {
+      "enum": [
+        "second",
+        "minute",
+        "hour",
+        "day",
+        "month"
+      ],
+      "x-hours": {
+        "second": 0.0002777777777777778,
+        "minute": 0.016666666666666666,
+        "hour": 1,
+        "day": 24,
+        "month": 730
+      }
+    },
+    "flow": {
+      "description": "An amount per time: {amount, per}, or a number (per hour). The display keeps per (リクエスト 100/sec).",
+      "type": [
+        "number",
+        "object"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "amount"
+      ],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "per": {
+          "$ref": "#/$defs/per"
+        }
+      },
+      "minimum": 0
+    },
+    "quantities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "$ref": "#/$defs/flow",
+          "description": "requests: HTTP requests, invocations, queries, API calls",
+          "x-unit": "request",
+          "x-kind": "flow",
+          "x-label": "リクエスト"
+        },
+        "read_units": {
+          "$ref": "#/$defs/flow",
+          "description": "read capacity units consumed (DynamoDB RRU, Cosmos DB read RU, Firestore document reads)",
+          "x-unit": "read_unit",
+          "x-kind": "flow",
+          "x-label": "読みの単位"
+        },
+        "write_units": {
+          "$ref": "#/$defs/flow",
+          "description": "write capacity units consumed (DynamoDB WRU, Cosmos DB write RU, Firestore document writes)",
+          "x-unit": "write_unit",
+          "x-kind": "flow",
+          "x-label": "書きの単位"
+        },
+        "get_requests": {
+          "$ref": "#/$defs/flow",
+          "description": "an object store's read requests (S3 GET / SELECT, GCS class B, R2 class B)",
+          "x-unit": "request",
+          "x-kind": "flow",
+          "x-label": "GET 要求"
+        },
+        "put_requests": {
+          "$ref": "#/$defs/flow",
+          "description": "an object store's write requests (S3 PUT / COPY / POST / LIST, GCS class A, R2 class A)",
+          "x-unit": "request",
+          "x-kind": "flow",
+          "x-label": "PUT 要求"
+        },
+        "rows_read": {
+          "$ref": "#/$defs/flow",
+          "description": "rows read (D1, PlanetScale, Neon's rows-billed plans)",
+          "x-unit": "row",
+          "x-kind": "flow",
+          "x-label": "読んだ行"
+        },
+        "rows_written": {
+          "$ref": "#/$defs/flow",
+          "description": "rows written (D1, PlanetScale)",
+          "x-unit": "row",
+          "x-kind": "flow",
+          "x-label": "書いた行"
+        },
+        "messages": {
+          "$ref": "#/$defs/flow",
+          "description": "messages put on a queue, topic or stream",
+          "x-unit": "message",
+          "x-kind": "flow",
+          "x-label": "メッセージ"
+        },
+        "egress_gb": {
+          "$ref": "#/$defs/flow",
+          "description": "data out of the provider to the internet (a node's own, not through a CDN)",
+          "x-unit": "GB",
+          "x-kind": "flow",
+          "x-label": "インターネットへの転送"
+        },
+        "transfer_gb": {
+          "$ref": "#/$defs/flow",
+          "description": "data across regions, zones or providers: what an edge (edges[]) carries goes here",
+          "x-unit": "GB",
+          "x-kind": "flow",
+          "x-label": "跨ぐ転送"
+        },
+        "cdn_egress_gb": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "by_zone": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number",
+                "minimum": 0
+              },
+              "propertyNames": {
+                "enum": [
+                  "north_america",
+                  "europe",
+                  "south_africa",
+                  "middle_east",
+                  "south_america",
+                  "japan",
+                  "australia",
+                  "new_zealand",
+                  "asia",
+                  "india",
+                  "china",
+                  "global"
+                ]
+              },
+              "maxProperties": 12
+            },
+            "per": {
+              "$ref": "#/$defs/per"
+            }
+          },
+          "required": [
+            "by_zone"
+          ],
+          "description": "data a CDN sends to its viewers, by the viewers' price zone (by_zone)",
+          "x-unit": "GB",
+          "x-kind": "flow",
+          "x-label": "CDN の転送"
+        },
+        "processed_gb": {
+          "$ref": "#/$defs/flow",
+          "description": "data a load balancer, gateway or NAT processes",
+          "x-unit": "GB",
+          "x-kind": "flow",
+          "x-label": "処理した量"
+        },
+        "log_ingest_gb": {
+          "$ref": "#/$defs/flow",
+          "description": "logs taken in by a monitoring service",
+          "x-unit": "GB",
+          "x-kind": "flow",
+          "x-label": "取り込んだログ"
+        },
+        "new_connections": {
+          "$ref": "#/$defs/flow",
+          "description": "new connections (a load balancer's LCU dimension)",
+          "x-unit": "connection",
+          "x-kind": "flow",
+          "x-label": "新しい接続"
+        },
+        "rule_evaluations": {
+          "$ref": "#/$defs/flow",
+          "description": "rule evaluations (a load balancer's LCU dimension)",
+          "x-unit": "evaluation",
+          "x-kind": "flow",
+          "x-label": "ルールの評価"
+        },
+        "emails": {
+          "$ref": "#/$defs/flow",
+          "description": "emails sent",
+          "x-unit": "email",
+          "x-kind": "flow",
+          "x-label": "メール"
+        },
+        "lcu": {
+          "type": "number",
+          "minimum": 0,
+          "description": "load balancer capacity units in that hour, written directly instead of their four dimensions",
+          "x-unit": "LCU",
+          "x-kind": "level",
+          "x-label": "LCU"
+        },
+        "active_connections": {
+          "type": "number",
+          "minimum": 0,
+          "description": "connections open at once (a load balancer's LCU dimension)",
+          "x-unit": "connection",
+          "x-kind": "level",
+          "x-label": "同時の接続"
+        },
+        "concurrency": {
+          "type": "number",
+          "minimum": 0,
+          "description": "requests served at once (Cloud Run, Container Apps, a function's concurrency)",
+          "x-unit": "instance",
+          "x-kind": "level",
+          "x-label": "同時実行"
+        },
+        "capacity_units": {
+          "type": "number",
+          "minimum": 0,
+          "description": "provisioned or serverless capacity in that hour (Aurora ACU, Cosmos DB RU/s, provisioned RCU/WCU)",
+          "x-unit": "capacity_unit",
+          "x-kind": "level",
+          "x-label": "容量"
+        },
+        "vcpu": {
+          "type": "number",
+          "minimum": 0,
+          "description": "vCPU of one task or instance (Fargate, Cloud Run)",
+          "x-unit": "vCPU",
+          "x-kind": "level",
+          "x-label": "vCPU"
+        },
+        "memory_gb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "memory of one task or instance (Fargate, Cloud Run)",
+          "x-unit": "GB",
+          "x-kind": "level",
+          "x-label": "メモリ"
+        },
+        "storage_gb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "data stored in that hour; the rule sums it over the hours into GB-month",
+          "x-unit": "GB",
+          "x-kind": "level",
+          "x-label": "保存量"
+        },
+        "monthly_active_users": {
+          "type": "number",
+          "minimum": 0,
+          "description": "monthly active users (an auth service)",
+          "x-unit": "user",
+          "x-kind": "level",
+          "x-label": "月間の利用者"
+        },
+        "secrets": {
+          "type": "number",
+          "minimum": 0,
+          "description": "secrets kept",
+          "x-unit": "secret",
+          "x-kind": "level",
+          "x-label": "秘密の数"
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "run time of one request (a function)",
+          "x-unit": "ms",
+          "x-kind": "per_request",
+          "x-label": "実行時間"
+        },
+        "cpu_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "CPU time of one request (Workers)",
+          "x-unit": "ms",
+          "x-kind": "per_request",
+          "x-label": "CPU 時間"
+        },
+        "memory_mb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "memory given to one run (a function)",
+          "x-unit": "MB",
+          "x-kind": "per_request",
+          "x-label": "割り当てメモリ"
+        }
+      },
+      "maxProperties": 30,
+      "description": "The closed vocabulary of quantities. x-unit is the unit (the price files' units), x-kind flow (per time) / level (in that hour) / per_request (per request of the row's requests), x-label the display's name. Which a node reads is declared by its pricing rule (infra/rules), not here. One name, one unit: a name never means another unit on another kind of node."
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._]{0,39}$"
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]{0,39}$"
+        },
+        "service": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._/-]{0,63}$"
+        },
+        "group": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "description": "Every node of the environment matching all the fields given (group: in it or below)."
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "days": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "mon",
+              "tue",
+              "wed",
+              "thu",
+              "fri",
+              "sat",
+              "sun",
+              "holiday"
+            ]
+          }
+        },
+        "from": {
+          "$ref": "#/$defs/time"
+        },
+        "to": {
+          "$ref": "#/$defs/time"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "sku": {
+          "$ref": "#/$defs/sku"
+        }
+      },
+      "required": [
+        "days",
+        "from",
+        "to"
+      ],
+      "description": "From from to to on those days: count runs (a fixed row), or min..max (an autoscale row), or the step sku (a vertical row). A later rule wins."
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        },
+        "holidays": {
+          "enum": [
+            "off",
+            "weekend",
+            "as-is"
+          ],
+          "description": "On a holiday: off (0 all day), as on a sunday, or as the day of the week. Default as-is."
+        }
+      }
+    },
+    "autoscale": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "per_instance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "quantity": {
+              "type": "string",
+              "pattern": "^[a-z_]{1,40}$"
+            },
+            "amount": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "per": {
+              "$ref": "#/$defs/per"
+            }
+          },
+          "required": [
+            "quantity",
+            "amount"
+          ],
+          "description": "What one instance takes of a flow quantity of the row."
+        },
+        "target_utilization": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "scale_out_delay_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "scale_in_delay_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "description": "How many run from the load: clamp(ceil(amount / (per instance x target)), min, max) — counted by the simulator, an approximation."
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sku": {
+          "$ref": "#/$defs/sku"
+        },
+        "amount": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "vcpu": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "sku"
+      ]
+    },
+    "vertical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ladder": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 30,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "quantity": {
+          "type": "string",
+          "pattern": "^[a-z_]{1,40}$"
+        },
+        "min": {
+          "$ref": "#/$defs/sku"
+        },
+        "max": {
+          "$ref": "#/$defs/sku"
+        },
+        "target_utilization": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "change_delay_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10080,
+          "default": 60
+        },
+        "order": {
+          "enum": [
+            "schedule_vertical",
+            "vertical_first",
+            "horizontal_first"
+          ],
+          "default": "schedule_vertical"
+        }
+      },
+      "required": [
+        "ladder"
+      ],
+      "description": "The steps of size (instance types, classes, memory sizes; each priced by its sku), smallest first."
+    },
+    "load": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/id"
+        },
+        "nodes": {
+          "$ref": "#/$defs/selector"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "profile": {
+          "$ref": "#/$defs/id"
+        },
+        "schedule": {
+          "$ref": "#/$defs/id"
+        },
+        "multiplier": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "quantities": {
+          "$ref": "#/$defs/quantities"
+        },
+        "autoscale": {
+          "$ref": "#/$defs/autoscale"
+        },
+        "vertical": {
+          "$ref": "#/$defs/vertical"
+        }
+      },
+      "description": "What one node (node) or every node matching (nodes) carries. Exactly one of node and nodes."
+    },
+    "edgeLoad": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "edge": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/id"
+        },
+        "to": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "profile": {
+          "$ref": "#/$defs/id"
+        },
+        "multiplier": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "quantities": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "transfer_gb": {
+              "$ref": "#/$defs/flow",
+              "description": "data across regions, zones or providers: what an edge (edges[]) carries goes here",
+              "x-unit": "GB",
+              "x-kind": "flow",
+              "x-label": "跨ぐ転送"
+            },
+            "egress_gb": {
+              "$ref": "#/$defs/flow",
+              "description": "data out of the provider to the internet (a node's own, not through a CDN)",
+              "x-unit": "GB",
+              "x-kind": "flow",
+              "x-label": "インターネットへの転送"
+            }
+          }
+        }
+      },
+      "description": "What one connection carries (transfer_gb across regions, zones or providers; egress_gb when the far end is outside, on the internet): by the model's edge id, or by from and to."
+    }
+  }
+}

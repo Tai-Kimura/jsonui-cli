@@ -306,9 +306,10 @@ def report_path_for(target_kind: str, target_name: str, project_root: Path) -> P
         # beside the model (boundary §6), hidden so the model's reader never takes it for a model file
         from ..infra import room as infra_room
         try:
-            folder = infra_room.infra_config(project_root)[0]
+            folder = (infra_room.side_dir(project_root, "load_dir") if target_name == "infra-load"
+                      else infra_room.infra_config(project_root)[0])
         except infra_room.Refused:
-            folder = infra_room.DEFAULT_DIR
+            folder = infra_room.DEFAULT_DIR + ("/load" if target_name == "infra-load" else "")
         return project_root / folder / f".check-report.{target_name}.json"
     # custom checkers: keep them under docs/ so generate html can find them
     return project_root / "docs" / f".check-report.{target_name}.json"

@@ -12,6 +12,8 @@ builtin:infra-code — the code: every node's ``evidence`` (the file is there, t
 the code talks to by its SDK imports and the *names* of its environment variables (never their values), against the
 declared nodes.
 
+builtin:infra-load — the cost simulator's load definitions (<infra.dir>/load) against the model: see run_infra_load.
+
 Both say what they could not check, per provider (report.target_extra["unverified"] and a warnings line each): no IaC
 found for a provider that has declared nodes, a module from a source outside the project, count / for_each not
 evaluated, a file that could not be parsed, a resource type with no mapping, a scan cap reached. "0 mismatches" covers
@@ -549,4 +551,55 @@ def run_infra_code(decl, project_root: Path) -> CheckReport:
     rep.warnings = [f"[unverified] *: {n}" for n in notes] + [
         "[unverified] *: only Python and JavaScript / TypeScript imports, AWS SDK clients and environment variable names "
         "are read (not values, not calls): a service reached another way is not seen"]
+    return rep
+
+
+def run_infra_load(decl, project_root: Path) -> CheckReport:
+    """builtin:infra-load — each load definition (the cost simulator, infra/load.py) against the model: a node billed by
+    use (its pricing rule reads quantities and is not billed by the hour) with no load is missing_in_doc (its load is
+    undefined, not 0); a row naming a node the model does not have is missing_in_impl; a node with its load is ok. A
+    node billed by the hour with no row runs the model's count all the time: ok. Which nodes have no price is the
+    cost's (L-B) to say."""
+    from ..infra import load as LD   # noqa: PLC0415
+    from ..infra import rules as RULES   # noqa: PLC0415
+    got = LD.read(project_root)
+    if not got.get("ok"):
+        raise InfraCheckError(f"the load definitions cannot be read ({got['reason']}): {got['message']}")
+    errs = M.errors(got["problems"])
+    if errs:
+        raise InfraCheckError(f"the load definitions have {len(errs)} error(s): run `jsonui-doc validate infra-load` first")
+    model = R.read(project_root)
+    results: list[ResultItem] = []
+    for sc in got["scenarios"]:
+        loaded = {row["node"] for row in sc["loads"]}
+        for p in got["problems"]:
+            if p["file"] == sc["file"] and p["code"] == "load.node_missing":
+                results.append(ResultItem(f"load/{sc['id']}/{p['node']}", _status(decl, "missing_in_impl"), "metadata",
+                                          message="the load definition names a node the model does not have"))
+        for n in model["nodes"]:
+            if sc["environment"] not in n["environments"]:
+                continue
+            target = f"load/{sc['id']}/{n['id']}"
+            rule = RULES.lookup(n)
+            if n["id"] in loaded:
+                results.append(ResultItem(target, "ok", "metadata"))
+            elif rule is None or not rule.reads:
+                results.append(ResultItem(target, "skipped", "metadata", message="its kind reads no load"))
+            elif rule.hourly:
+                results.append(ResultItem(target, "ok", "metadata",
+                                          message="no load: billed by the hour, it runs the model's count all the time"))
+            else:
+                results.append(ResultItem(target, _status(decl, "missing_in_doc"), "metadata",
+                                          expected=", ".join(rule.reads),
+                                          message="billed by use, but this load definition gives it no load (undefined, not 0)"))
+    files = [project_root / got["dir"] / f for f in got["files"]] + [project_root / model["dir"] / f for f in model["files"]]
+    rep = CheckReport(checker="builtin:infra-load", target_kind="infra", target_name="infra-load",
+                      target_extra={"dir": got["dir"], "scenarios": [s["id"] for s in got["scenarios"]],
+                                    "gate": bool(getattr(decl, "gate", False))},
+                      input_hashes=compute_input_hashes(files, project_root), results=[_masked(r) for r in results],
+                      unit="node")
+    rep.warnings = [f"{p['file']} {p['path']}: {p['message']} [{p['code']}]" for p in got["problems"]
+                    if p["severity"] == "warning" and p["code"] != "load.node_missing"]
+    if not got["scenarios"]:
+        rep.warnings.append(f"no load definition in {got['dir']}: nothing compared")
     return rep

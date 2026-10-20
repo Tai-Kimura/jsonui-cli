@@ -1,0 +1,156 @@
+{
+ "$schema": "https://jsonui.dev/schemas/infra-load/v0.json",
+ "version": 0,
+ "id": "ordinary",
+ "label": "ふだんの月",
+ "environment": "production",
+ "month": "2026-11",
+ "timezone": "Asia/Tokyo",
+ "currency": "USD",
+ "defaults": {
+  "region": "ap-northeast-1"
+ },
+ "profiles": {
+  "weekday": {
+   "hourly": [
+    0.2,
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.2,
+    0.5,
+    0.9,
+    1.2,
+    1.0,
+    1.0,
+    1.1,
+    1.3,
+    1.1,
+    1.0,
+    1.0,
+    1.0,
+    1.1,
+    1.4,
+    1.6,
+    1.5,
+    1.2,
+    0.8,
+    0.4
+   ],
+   "label": "平日"
+  },
+  "weekend": {
+   "hourly": [
+    0.3,
+    0.2,
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.2,
+    0.4,
+    0.7,
+    0.9,
+    1.1,
+    1.2,
+    1.2,
+    1.2,
+    1.1,
+    1.1,
+    1.1,
+    1.2,
+    1.3,
+    1.4,
+    1.3,
+    1.1,
+    0.8,
+    0.5
+   ],
+   "label": "週末"
+  }
+ },
+ "week": {
+  "mon": "weekday",
+  "tue": "weekday",
+  "wed": "weekday",
+  "thu": "weekday",
+  "fri": "weekday",
+  "sat": "weekend",
+  "sun": "weekend"
+ },
+ "holidays": [
+  "2026-11-03",
+  "2026-11-23"
+ ],
+ "loads": [
+  {
+   "node": "cdn",
+   "quantities": {
+    "requests": {
+     "amount": 100,
+     "per": "second"
+    },
+    "cdn_egress_gb": {
+     "by_zone": {
+      "japan": 2.5,
+      "asia": 0.5
+     },
+     "per": "hour"
+    }
+   }
+  },
+  {
+   "node": "alb-prod",
+   "quantities": {
+    "lcu": 2
+   }
+  },
+  {
+   "node": "api-prod",
+   "quantities": {
+    "requests": {
+     "amount": 60,
+     "per": "second"
+    },
+    "vcpu": 0.5,
+    "memory_gb": 1
+   }
+  },
+  {
+   "node": "db-prod",
+   "quantities": {
+    "storage_gb": 200
+   }
+  },
+  {
+   "node": "assets",
+   "quantities": {
+    "storage_gb": 500,
+    "get_requests": {
+     "amount": 40,
+     "per": "second"
+    },
+    "put_requests": 300
+   }
+  },
+  {
+   "node": "mailer",
+   "quantities": {
+    "emails": {
+     "amount": 2000,
+     "per": "day"
+    }
+   }
+  }
+ ],
+ "edges": [
+  {
+   "from": "api-prod",
+   "to": "db-prod",
+   "quantities": {
+    "transfer_gb": 0.2
+   }
+  }
+ ]
+}

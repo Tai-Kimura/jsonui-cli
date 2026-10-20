@@ -133,9 +133,13 @@ def _slug(text: str) -> str:
 
 
 class Draft:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, declared: list[tuple[str, str]] | None = None) -> None:
         self.root = root
         self.ids: set[str] = set()
+        # the room's declared nodes as (iac address, id): a drafted node at the same address takes the declared id,
+        # and no other drafted name takes one of these ids (a load definition names nodes by id: they must not shift)
+        self.declared = list(declared or [])
+        self.reserved = {nid for _a, nid in self.declared}
         self.groups: dict[str, dict] = {}
         self.nodes: dict[str, dict] = {}
         self.origin: dict[str, str] = {}          # id -> local / deployed / any
@@ -177,10 +181,20 @@ class Draft:
             self.withhold(where, "an id")
             b = "withheld"
         nid, k = b, 2
-        while nid in self.ids:
+        while nid in self.ids or nid in self.reserved:
             nid, k = f"{b}-{k}", k + 1
         self.ids.add(nid)
         return nid
+
+    def declared_id(self, iac: str | None) -> str | None:
+        """The declared node's id at this iac address, when it is not taken yet."""
+        if not iac:
+            return None
+        for address, nid in self.declared:
+            if (address == iac or T.matches(address, iac)) and nid not in self.ids:
+                self.ids.add(nid)
+                return nid
+        return None
 
     def input(self, kind: str, rel: str) -> None:
         self.inputs.setdefault(kind, []).append(rel)
@@ -239,7 +253,7 @@ class Draft:
             if iac:
                 self.add_iac(nid, iac, where)
             return nid
-        nid = self.new_id(base, where)
+        nid = self.declared_id(iac) or self.new_id(base, where)
         n = {"id": nid, "category": category, "label": self.safe(label, nid, where, "a label")}
         if provider and PROVIDER_RX.match(provider):
             n["provider"] = provider
@@ -663,9 +677,12 @@ def seed_terraform(d: Draft, files: list[tuple[str, str, str]]) -> None:
         else:
             engine = _literal(r.body, "engine") or _literal(r.body, "database_version")
             ver = _literal(r.body, "engine_version")
+            region = _literal(r.body, "region") or _literal(r.body, "location")   # the resource's own (gcp, azure)
+            if not (region and REGION_RX.match(region) and not M.secret_findings(region)):
+                region = None
             gid = d.add_node(("tf",) + key, f"{svc.split('.')[0]}-{r.name}", cat, prov, svc, f"{r.name} ({svc})",
                              parent or place(prov, r.body), r.file, r.header, r.line, iac=addr,
-                             engine=(f"{engine} {ver}" if engine and ver else engine))
+                             engine=(f"{engine} {ver}" if engine and ver else engine), region=region)
             if re.search(r"^\s*(count|for_each)\s*=", r.body, re.M):
                 d.notes.append(f"{addr} ({r.file}): count/for_each is not evaluated; the draft shows one")
         ids[key], kinds[key] = gid, cat
@@ -1155,7 +1172,7 @@ class _Code:
 def draft(root: Path, exclude: list[Path] | None = None) -> tuple[dict, dict]:
     """(the draft model, the report) for the project at ``root``. Reads no file that holds values."""
     root = Path(root).resolve()
-    d = Draft(root)
+    d = Draft(root, _declared_addresses(root))
     files = _walk(root, exclude or [], d)
     tf: list[tuple[str, str, str]] = []
     k8s: list[tuple[str, dict, str]] = []
@@ -1287,6 +1304,15 @@ def draft(root: Path, exclude: list[Path] | None = None) -> tuple[dict, dict]:
     if not d.nodes and not d.groups:
         d.notes.append("nothing found to draft from")
     return d.document(), d.report()
+
+
+def _declared_addresses(root: Path) -> list[tuple[str, str]]:
+    """(iac address, id) of the room's declared nodes, when it declares a model that can be read; else none."""
+    from . import room as R  # noqa: PLC0415
+    res = R.read(root)
+    if not res.get("ok"):
+        return []
+    return [(a, n["id"]) for n in res["nodes"] for a in n.get("iac") or []]
 
 
 def declared_diff(root: Path, doc: dict) -> dict | None:

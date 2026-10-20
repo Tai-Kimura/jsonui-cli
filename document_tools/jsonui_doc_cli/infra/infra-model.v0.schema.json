@@ -209,6 +209,11 @@
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._/-]{0,63}$"
         },
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+          "description": "The region this node runs in (a price's region). Left out: the nearest enclosing group's region (a 'logical' group gives none). The merged model says it as regionResolved."
+        },
         "group": {
           "$ref": "#/$defs/id"
         },

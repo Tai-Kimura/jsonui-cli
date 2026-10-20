@@ -2,9 +2,12 @@
 
 The contract is infra-model.v0.schema.json next to this file (JSON Schema 2020-12) and the boundary document
 docs/plans/2026-10-20-jui-viz-server-room-boundary.md. Nothing here keeps its own copy of the vocabularies or the
-limits: ``check_schema`` walks the schema file itself (the subset of JSON Schema it uses: type, const, enum, pattern,
-maxLength, minimum, maximum, minItems, maxItems, uniqueItems, required, additionalProperties false, local $ref), so a
-word added to the schema is accepted here the moment it is written there.
+limits: ``check_schema`` walks the schema file itself (the subset of JSON Schema it uses: type (one, or a list of
+several), const, enum, pattern, maxLength, minimum, maximum, exclusiveMinimum, minItems, maxItems, uniqueItems,
+required, additionalProperties false or a schema, propertyNames, maxProperties, local $ref), so a word added to the
+schema is accepted here the moment it is written there. The load definitions and the price files (infra-load.v0, infra-prices.v0, load.py, prices.py) are
+walked by the same function from their own schema files; words beginning with ``x-`` are data for the readers (a
+quantity's unit), never checked.
 
 Three passes, one problem list:
 
@@ -17,7 +20,8 @@ Three passes, one problem list:
 3. normalized for the display: label defaults to the id, count to 1, environments to every environment, fold by
    category, managed_by "iac", direction "out"; one implicit environment "default" when none is declared. Every
    group and node gets providerResolved (its own provider, else the nearest enclosing group's; a "logical" group
-   gives none), and every edge crossProvider (its two ends' providers known and different). The room's model
+   gives none), every node regionResolved (its own region, else the nearest enclosing group's, up to a "logical"
+   group; "" when none says one), and every edge crossProvider (its two ends' providers known and different). The room's model
    together keeps the per-file limits (nodes 5,000, edges 10,000; the target size is 2,000 and 5,000).
 
 A problem never carries the value it found (a message names the place and the kind only).
@@ -25,6 +29,7 @@ A problem never carries the value it found (a message names the place and the ki
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 
@@ -170,9 +175,10 @@ def secret_findings(text: str) -> list[str]:
 _FIELDS: dict[int, set[str]] = {}
 
 
-def field_names() -> set[str]:
+def field_names(root: dict | None = None) -> set[str]:
     """Every field name the schema knows (a key elsewhere is shown masked in a path: it may be anything)."""
-    key = id(schema())
+    root = schema() if root is None else root
+    key = id(root)
     if key in _FIELDS:
         return _FIELDS[key]
     names: set[str] = set()
@@ -185,61 +191,70 @@ def field_names() -> set[str]:
         elif isinstance(n, list):
             for v in n:
                 walk(v)
-    walk(schema())
-    _FIELDS.clear()
+    walk(root)
     _FIELDS[key] = names
     return names
 
 
-def _seg(key: str) -> str:
+def _seg(key: str, root: dict | None = None) -> str:
     """A key as a JSON Pointer segment: a field the schema has, as it is; any other key masked (it may be a value).
     No field name has a secret's shape today, so the second test never decides yet: it guards a field added later."""
-    return key if key in field_names() and not secret_findings(key) else "<key>"
+    return key if key in field_names(root) and not secret_findings(key) else "<key>"
 
 
-def _walk_strings(value, path: str):
+def _walk_strings(value, path: str, root: dict | None = None):
     if isinstance(value, str):
         yield path, value
     elif isinstance(value, dict):
         for k, v in value.items():
-            yield f"{path}/{_seg(k)}", k
-            yield from _walk_strings(v, f"{path}/{_seg(k)}")
+            yield f"{path}/{_seg(k, root)}", k
+            yield from _walk_strings(v, f"{path}/{_seg(k, root)}", root)
     elif isinstance(value, list):
         for i, v in enumerate(value):
-            yield from _walk_strings(v, f"{path}/{i}")
+            yield from _walk_strings(v, f"{path}/{i}", root)
 
 
 # ---------------------------------------------------------------- 1. the schema, walked from its own file
 
 def _type_ok(t: str, v) -> bool:
     return {"object": isinstance(v, dict), "array": isinstance(v, list), "string": isinstance(v, str),
-            "integer": isinstance(v, int) and not isinstance(v, bool), "boolean": isinstance(v, bool)}.get(t, False)
+            "integer": isinstance(v, int) and not isinstance(v, bool), "boolean": isinstance(v, bool),
+            "number": isinstance(v, (int, float)) and not isinstance(v, bool)}.get(t, False)
 
 
-def check_schema(value, node: dict | None = None, path: str = "") -> list[tuple[str, str]]:
-    """(path, why) for each place ``value`` breaks the schema (the root one when ``node`` is None)."""
-    node = schema() if node is None else node
+def check_schema(value, node: dict | None = None, path: str = "", root: dict | None = None) -> list[tuple[str, str]]:
+    """(path, why) for each place ``value`` breaks the schema: ``root`` (the infra model's when None) or its part
+    ``node``. A "$ref" is read in root's own $defs."""
+    root = schema() if root is None else root
+    node = root if node is None else node
     if "$ref" in node:
         name = node["$ref"].rsplit("/", 1)[1]
-        return check_schema(value, schema()["$defs"][name], path)
+        return check_schema(value, root["$defs"][name], path, root)
     out: list[tuple[str, str]] = []
     if "const" in node and not (type(value) is type(node["const"]) and value == node["const"]):   # 0.0 and false are not 0
         return [(path or "/", f"must be {json.dumps(node['const'])}")]
     if "enum" in node and value not in node["enum"]:
         return [(path or "/", "must be one of " + ", ".join(map(str, node["enum"])))]
     t = node.get("type")
-    if t and not _type_ok(t, value):
+    if isinstance(t, list):          # one of several types (a flow quantity: a number, or {amount, per})
+        if not any(_type_ok(x, value) for x in t):
+            return [(path or "/", "must be " + " or ".join(f"{'an' if x[0] in 'aeiou' else 'a'} {x}" for x in t))]
+    elif t and not _type_ok(t, value):
         return [(path or "/", f"must be {'an' if t[0] in 'aeiou' else 'a'} {t}")]
     if isinstance(value, str):
         if "maxLength" in node and len(value) > node["maxLength"]:
             out.append((path, f"longer than {node['maxLength']} characters"))
         if "pattern" in node and not re.search(node["pattern"], value):
             out.append((path, "does not have the allowed form"))
-    if isinstance(value, int) and not isinstance(value, bool):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
         if "minimum" in node and value < node["minimum"]:
             out.append((path, f"below {node['minimum']}"))
+        if "exclusiveMinimum" in node and value <= node["exclusiveMinimum"]:
+            out.append((path, f"must be above {node['exclusiveMinimum']}"))
         if "maximum" in node and value > node["maximum"]:
             out.append((path, f"above {node['maximum']}"))
+        if isinstance(value, float) and not math.isfinite(value):     # json reads NaN and Infinity
+            out.append((path, "must be a finite number"))
     if isinstance(value, list):
         if "minItems" in node and len(value) < node["minItems"]:
             out.append((path, f"needs at least {node['minItems']} item(s)"))
@@ -248,17 +263,24 @@ def check_schema(value, node: dict | None = None, path: str = "") -> list[tuple[
         if node.get("uniqueItems") and len({json.dumps(v, sort_keys=True) for v in value}) != len(value):
             out.append((path, "has the same item twice"))
         for i, v in enumerate(value[:10_000]):
-            out.extend(check_schema(v, node.get("items", {}), f"{path}/{i}"))
+            out.extend(check_schema(v, node.get("items", {}), f"{path}/{i}", root))
     if isinstance(value, dict):
-        props = node.get("properties", {})
+        props, extra = node.get("properties", {}), node.get("additionalProperties")
         for k in node.get("required", []):
             if k not in value:
                 out.append((f"{path}/{k}", "is required"))
+        if "maxProperties" in node and len(value) > node["maxProperties"]:
+            out.append((path or "/", f"more than {node['maxProperties']} entries"))
+        names = node.get("propertyNames")
         for k, v in value.items():
-            if k in props:
-                out.extend(check_schema(v, props[k], f"{path}/{k}"))
-            elif node.get("additionalProperties") is False:
-                out.append((f"{path}/{_seg(k)}", "is not a field of the infra model v0"))
+            if names and check_schema(k, names, "", root):
+                out.append((f"{path}/{_seg(k, root)}", "the name does not have the allowed form"))
+            elif k in props:
+                out.extend(check_schema(v, props[k], f"{path}/{k}", root))
+            elif extra is False:
+                out.append((f"{path}/{_seg(k, root)}", f"is not a field of {root.get('x-name', 'the infra model v0')}"))
+            elif isinstance(extra, dict):           # a table by name (a profile, a schedule): the key is a name, shown masked
+                out.extend(check_schema(v, extra, f"{path}/{_seg(k, root)}", root))
     return out
 
 
@@ -433,6 +455,12 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
         if g["kind"] == "logical":                 # a group of the system's own: it gives what it holds no provider
             return ""
         return group_provider(g.get("parent"), depth + 1)
+
+    def group_region(gid: str | None, depth: int = 0) -> str:
+        g = by_id.get(gid) if gid else None
+        if g is None or depth > len(by_id) or g["kind"] == "logical":   # a logical group may hold several regions
+            return ""
+        return g.get("region") or group_region(g.get("parent"), depth + 1)
     for g in out_groups:
         g["providerResolved"] = group_provider(g["id"])
     out_nodes = []
@@ -447,6 +475,7 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
             continue
         out_nodes.append({**n, "label": n.get("label", nid), "count": n.get("count", 1),
                           "providerResolved": n.get("provider") or group_provider(gid),
+                          "regionResolved": n.get("region") or group_region(gid),
                           "managed_by": n.get("managed_by", "iac"),
                           "fold": n.get("fold", n["category"] in FOLDED_BY_DEFAULT), "environments": refs})
     out_nodes = _capped(out_nodes, "nodes", problems)

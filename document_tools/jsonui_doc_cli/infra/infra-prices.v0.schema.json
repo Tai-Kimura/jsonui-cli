@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jsonui.dev/schemas/infra-prices/v0.json",
+  "title": "JsonUI infra prices v0",
+  "x-name": "the infra prices v0",
+  "description": "One file of unit prices for the cost simulator: <infra.dir>/prices/*.json (the folder jui.config.json's infra.prices_dir names) written by a person, and in the same form the prices fetched and the bundled table. USD only. A price is looked up by provider, service, sku, region and unit; the pricing rules (infra/rules) say which. Holds no values (validate refuses the shapes of secrets anywhere in the file). Plan: docs/plans/2026-10-20-jui-viz-backend-load-and-cost-simulator.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "prices"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 0
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "label": {
+      "$ref": "#/$defs/text"
+    },
+    "description": {
+      "$ref": "#/$defs/text"
+    },
+    "currency": {
+      "const": "USD"
+    },
+    "prices": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": {
+        "$ref": "#/$defs/price"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+    },
+    "unit": {
+      "enum": [
+        "GB",
+        "LCU",
+        "MB",
+        "capacity_unit",
+        "connection",
+        "email",
+        "evaluation",
+        "instance",
+        "message",
+        "ms",
+        "read_unit",
+        "request",
+        "row",
+        "secret",
+        "user",
+        "vCPU",
+        "write_unit",
+        "GB-month",
+        "instance-hour",
+        "vCPU-hour",
+        "GB-hour",
+        "GB-second",
+        "LCU-hour",
+        "capacity_unit-hour",
+        "month"
+      ],
+      "description": "The quantities' units (infra-load.v0 x-unit; a test keeps them in) and the billed ones a rule turns them into: GB-month (storage summed over the hours), instance-hour, vCPU-hour, GB-hour, GB-second, LCU-hour, capacity_unit-hour (a provisioned or serverless capacity unit for an hour) and month (a fixed monthly fee)."
+    },
+    "tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "number",
+          "minimum": 0
+        },
+        "to": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "price_usd": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "from",
+        "price_usd"
+      ],
+      "description": "From from up to to units in the month (to left out: no upper end), at price_usd per per_units."
+    },
+    "price": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]{0,39}$"
+        },
+        "service": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._/-]{0,63}$"
+        },
+        "sku": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,99}$",
+          "description": "What is priced: an instance type (t3.medium), a class (db.r6g.large), or a dimension's name (requests, gb-seconds)."
+        },
+        "region": {
+          "type": "string",
+          "pattern": "^(global|[a-z0-9][a-z0-9-]{0,39})$"
+        },
+        "unit": {
+          "$ref": "#/$defs/unit"
+        },
+        "per_units": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1,
+          "description": "price_usd is for this many units (1000000 for a price per million requests)."
+        },
+        "price_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "tiers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/tier"
+          },
+          "description": "Stepped prices, by the month's total: from 0 upward, in order, not overlapping. With tiers, price_usd is not used."
+        },
+        "free": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "type": "number",
+              "minimum": 0
+            },
+            "period": {
+              "enum": [
+                "month"
+              ]
+            }
+          },
+          "required": [
+            "amount",
+            "period"
+          ],
+          "description": "Units free each period (the month's total, before the tiers)."
+        },
+        "effective": {
+          "$ref": "#/$defs/date"
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 300,
+          "pattern": "^(manual|bundled|https://[A-Za-z0-9.-]+(/[^\\s]*)?)$"
+        },
+        "note": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "provider",
+        "service",
+        "sku",
+        "region",
+        "unit",
+        "effective",
+        "source"
+      ],
+      "description": "One unit price. Either price_usd or tiers."
+    }
+  }
+}

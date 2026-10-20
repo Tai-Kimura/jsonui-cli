@@ -49,7 +49,8 @@ def aws_three_tier() -> dict[str, object]:
              "engine": "mysql 8.4", "ha": "multi-az", "data_doc": "docs/db", "environments": ["production"]},
             {"id": "db-stg", "category": "database.relational", "service": "rds.mysql", "group": "private-stg",
              "engine": "mysql 8.4", "data_doc": "docs/db", "environments": ["staging"]},
-            {"id": "assets", "category": "storage.object", "service": "s3", "provider": "aws", "label": "アセットのバケツ"},
+            {"id": "assets", "category": "storage.object", "service": "s3", "provider": "aws", "region": "ap-northeast-1",
+             "label": "アセットのバケツ"},
             {"id": "api-role", "category": "security.iam", "service": "iam.role", "provider": "aws", "label": "API の実行ロール"},
             {"id": "api-5xx", "category": "monitoring.alarm", "service": "cloudwatch.alarm", "provider": "aws",
              "label": "API の 5xx", "environments": ["production"]},
@@ -242,9 +243,83 @@ def invalid() -> dict[str, object]:
     return out
 
 
+LOAD_SCHEMA = "https://jsonui.dev/schemas/infra-load/v0.json"
+PRICES_SCHEMA = "https://jsonui.dev/schemas/infra-prices/v0.json"
+WEEKDAY = [0.2, 0.1, 0.1, 0.1, 0.1, 0.2, 0.5, 0.9, 1.2, 1.0, 1.0, 1.1, 1.3, 1.1, 1.0, 1.0, 1.0, 1.1, 1.4, 1.6, 1.5, 1.2, 0.8, 0.4]
+WEEKEND = [0.3, 0.2, 0.1, 0.1, 0.1, 0.1, 0.2, 0.4, 0.7, 0.9, 1.1, 1.2, 1.2, 1.2, 1.1, 1.1, 1.1, 1.2, 1.3, 1.4, 1.3, 1.1, 0.8, 0.5]
+
+
+def aws_three_tier_load() -> dict[str, object]:
+    """The cost simulator's examples for aws-three-tier (plan 2026-10-20-jui-viz-backend-load-and-cost-simulator):
+    two scenarios (an ordinary month; a sale with autoscale, vertical steps and a night stop) and a price file. The
+    prices are made up for the example: not real prices."""
+    week = {d: "weekday" for d in ("mon", "tue", "wed", "thu", "fri")} | {"sat": "weekend", "sun": "weekend"}
+    profiles = {"weekday": {"hourly": WEEKDAY, "label": "平日"}, "weekend": {"hourly": WEEKEND, "label": "週末"}}
+    ordinary = {
+        "$schema": LOAD_SCHEMA, "version": 0, "id": "ordinary", "label": "ふだんの月", "environment": "production",
+        "month": "2026-11", "timezone": "Asia/Tokyo", "currency": "USD", "defaults": {"region": "ap-northeast-1"},
+        "profiles": profiles, "week": week, "holidays": ["2026-11-03", "2026-11-23"],
+        "loads": [
+            {"node": "cdn", "quantities": {"requests": {"amount": 100, "per": "second"},
+                                           "cdn_egress_gb": {"by_zone": {"japan": 2.5, "asia": 0.5}, "per": "hour"}}},
+            {"node": "alb-prod", "quantities": {"lcu": 2}},
+            {"node": "api-prod", "quantities": {"requests": {"amount": 60, "per": "second"}, "vcpu": 0.5, "memory_gb": 1}},
+            {"node": "db-prod", "quantities": {"storage_gb": 200}},
+            {"node": "assets", "quantities": {"storage_gb": 500, "get_requests": {"amount": 40, "per": "second"},
+                                              "put_requests": 300}},
+            {"node": "mailer", "quantities": {"emails": {"amount": 2000, "per": "day"}}},
+        ],
+        "edges": [{"from": "api-prod", "to": "db-prod", "quantities": {"transfer_gb": 0.2}}],
+    }
+    sale = {
+        "$schema": LOAD_SCHEMA, "version": 0, "id": "sale", "label": "セールの月", "environment": "production",
+        "month": "2026-11", "timezone": "Asia/Tokyo", "profiles": profiles, "week": week,
+        "days": [{"date": "2026-11-27", "profile": "weekend", "multiplier": 5, "label": "セールの日"}],
+        "holidays": ["2026-11-03", "2026-11-23"],
+        "schedules": {
+            "api-hours": {"default": 1, "rules": [{"days": ["mon", "tue", "wed", "thu", "fri"], "from": "08:00", "to": "22:00",
+                                                   "min": 2, "max": 10},
+                                                  {"days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "from": "01:00",
+                                                   "to": "06:00", "max": 2}]},
+            "db-size": {"default": 1, "rules": [{"days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "from": "00:00",
+                                                 "to": "07:00", "sku": "db.r6g.large"}]},
+        },
+        "loads": [
+            {"nodes": {"category": "compute.container", "provider": "aws"}, "schedule": "api-hours",
+             "quantities": {"requests": {"amount": 150, "per": "second"}, "vcpu": 0.5, "memory_gb": 1},
+             "autoscale": {"min": 1, "max": 6, "per_instance": {"quantity": "requests", "amount": 50, "per": "second"},
+                           "target_utilization": 0.7, "scale_out_delay_min": 5, "scale_in_delay_min": 15}},
+            {"node": "db-prod", "schedule": "db-size", "quantities": {"storage_gb": 220, "requests": {"amount": 300, "per": "second"}},
+             "vertical": {"quantity": "requests", "ladder": [{"sku": "db.r6g.large", "amount": 500}, {"sku": "db.r6g.xlarge", "amount": 1000},
+                                                            {"sku": "db.r6g.2xlarge", "amount": 2000}],
+                          "target_utilization": 0.6, "order": "schedule_vertical"}},
+            {"node": "cdn", "quantities": {"requests": {"amount": 400, "per": "second"},
+                                           "cdn_egress_gb": {"by_zone": {"japan": 9, "asia": 2}}}},
+        ],
+    }
+    prices = {
+        "$schema": PRICES_SCHEMA, "version": 0, "id": "example", "label": "見本の単価（実の単価ではない）", "currency": "USD",
+        "prices": [
+            {"provider": "aws", "service": "ecs.fargate", "sku": "vcpu", "region": "ap-northeast-1", "unit": "vCPU-hour",
+             "price_usd": 0.05, "effective": "2026-10-01", "source": "manual", "note": "見本の値"},
+            {"provider": "aws", "service": "ecs.fargate", "sku": "memory", "region": "ap-northeast-1", "unit": "GB-hour",
+             "price_usd": 0.005, "effective": "2026-10-01", "source": "manual", "note": "見本の値"},
+            {"provider": "aws", "service": "rds.mysql", "sku": "db.r6g.large", "region": "ap-northeast-1", "unit": "instance-hour",
+             "price_usd": 0.3, "effective": "2026-10-01", "source": "manual", "note": "見本の値"},
+            {"provider": "aws", "service": "cloudfront", "sku": "data-out-japan", "region": "global", "unit": "GB",
+             "tiers": [{"from": 0, "to": 10240, "price_usd": 0.11}, {"from": 10240, "price_usd": 0.09}],
+             "free": {"amount": 1024, "period": "month"}, "effective": "2026-10-01", "source": "manual", "note": "見本の値"},
+            {"provider": "aws", "service": "s3", "sku": "get", "region": "ap-northeast-1", "unit": "request", "per_units": 1000,
+             "price_usd": 0.00037, "effective": "2026-10-01", "source": "manual", "note": "見本の値"},
+        ],
+    }
+    return {"aws-three-tier/docs/infra/load/ordinary.json": ordinary, "aws-three-tier/docs/infra/load/sale.json": sale,
+            "aws-three-tier/docs/infra/prices/example.json": prices}
+
+
 def all_examples() -> dict[str, object]:
     out = {}
-    for make in (aws_three_tier, multi_provider, compose_and_cloud, large, invalid):
+    for make in (aws_three_tier, aws_three_tier_load, multi_provider, compose_and_cloud, large, invalid):
         out.update(make())
     return out
 

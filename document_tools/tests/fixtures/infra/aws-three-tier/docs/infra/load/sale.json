@@ -1,0 +1,217 @@
+{
+ "$schema": "https://jsonui.dev/schemas/infra-load/v0.json",
+ "version": 0,
+ "id": "sale",
+ "label": "セールの月",
+ "environment": "production",
+ "month": "2026-11",
+ "timezone": "Asia/Tokyo",
+ "profiles": {
+  "weekday": {
+   "hourly": [
+    0.2,
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.2,
+    0.5,
+    0.9,
+    1.2,
+    1.0,
+    1.0,
+    1.1,
+    1.3,
+    1.1,
+    1.0,
+    1.0,
+    1.0,
+    1.1,
+    1.4,
+    1.6,
+    1.5,
+    1.2,
+    0.8,
+    0.4
+   ],
+   "label": "平日"
+  },
+  "weekend": {
+   "hourly": [
+    0.3,
+    0.2,
+    0.1,
+    0.1,
+    0.1,
+    0.1,
+    0.2,
+    0.4,
+    0.7,
+    0.9,
+    1.1,
+    1.2,
+    1.2,
+    1.2,
+    1.1,
+    1.1,
+    1.1,
+    1.2,
+    1.3,
+    1.4,
+    1.3,
+    1.1,
+    0.8,
+    0.5
+   ],
+   "label": "週末"
+  }
+ },
+ "week": {
+  "mon": "weekday",
+  "tue": "weekday",
+  "wed": "weekday",
+  "thu": "weekday",
+  "fri": "weekday",
+  "sat": "weekend",
+  "sun": "weekend"
+ },
+ "days": [
+  {
+   "date": "2026-11-27",
+   "profile": "weekend",
+   "multiplier": 5,
+   "label": "セールの日"
+  }
+ ],
+ "holidays": [
+  "2026-11-03",
+  "2026-11-23"
+ ],
+ "schedules": {
+  "api-hours": {
+   "default": 1,
+   "rules": [
+    {
+     "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri"
+     ],
+     "from": "08:00",
+     "to": "22:00",
+     "min": 2,
+     "max": 10
+    },
+    {
+     "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+     ],
+     "from": "01:00",
+     "to": "06:00",
+     "max": 2
+    }
+   ]
+  },
+  "db-size": {
+   "default": 1,
+   "rules": [
+    {
+     "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+     ],
+     "from": "00:00",
+     "to": "07:00",
+     "sku": "db.r6g.large"
+    }
+   ]
+  }
+ },
+ "loads": [
+  {
+   "nodes": {
+    "category": "compute.container",
+    "provider": "aws"
+   },
+   "schedule": "api-hours",
+   "quantities": {
+    "requests": {
+     "amount": 150,
+     "per": "second"
+    },
+    "vcpu": 0.5,
+    "memory_gb": 1
+   },
+   "autoscale": {
+    "min": 1,
+    "max": 6,
+    "per_instance": {
+     "quantity": "requests",
+     "amount": 50,
+     "per": "second"
+    },
+    "target_utilization": 0.7,
+    "scale_out_delay_min": 5,
+    "scale_in_delay_min": 15
+   }
+  },
+  {
+   "node": "db-prod",
+   "schedule": "db-size",
+   "quantities": {
+    "storage_gb": 220,
+    "requests": {
+     "amount": 300,
+     "per": "second"
+    }
+   },
+   "vertical": {
+    "quantity": "requests",
+    "ladder": [
+     {
+      "sku": "db.r6g.large",
+      "amount": 500
+     },
+     {
+      "sku": "db.r6g.xlarge",
+      "amount": 1000
+     },
+     {
+      "sku": "db.r6g.2xlarge",
+      "amount": 2000
+     }
+    ],
+    "target_utilization": 0.6,
+    "order": "schedule_vertical"
+   }
+  },
+  {
+   "node": "cdn",
+   "quantities": {
+    "requests": {
+     "amount": 400,
+     "per": "second"
+    },
+    "cdn_egress_gb": {
+     "by_zone": {
+      "japan": 9,
+      "asia": 2
+     }
+    }
+   }
+  }
+ ]
+}
