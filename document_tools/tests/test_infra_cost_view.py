@@ -41,7 +41,9 @@ def test_the_month_by_provider_adds_up_to_the_totals():
     assert [k["key"] for k in mv["keys"]] == ["aws", "sendgrid"]
     for d, t in zip(mv["days"], totals["days"]):
         assert sum(d["stack"].values()) == pytest.approx(t["usd"]) == pytest.approx(d["usd"])
-    assert mv["noRule"] == ["stripe", "api-role", "api-5xx"] and len(mv["noPrice"]) == 1
+    # api-5xx has its rule (the alarm) and no price: it has no group and no region, so only the global rows are looked
+    # in, said not guessed
+    assert mv["noRule"] == ["stripe", "api-role"] and [x["node"] for x in mv["noPrice"]] == ["mailer", "api-5xx"]
 
 
 def test_the_month_by_node_keeps_the_top_and_the_rest():

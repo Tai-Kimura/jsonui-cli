@@ -371,7 +371,7 @@ async def run_server_room(pw, out, failures):
         chips = dict(c["month"]["chips"])
         check(failures, c["paused"] and not c["raf"] and c["month"]["days"] == 30 and c["month"]["total"].startswith("$"),
               f"コスト: the 3D paused, the month's 30 days and its sum: {c}")
-        check(failures, chips.get("noRule") == 3 and "noPrice" in chips and "loadUndefined" in chips, f"what is not priced is counted on the page: {chips}")
+        check(failures, chips.get("noRule") == 2 and chips.get("noPrice") == 2 and "loadUndefined" in chips, f"what is not priced is counted on the page: {chips}")
         await page.select_option("#sr-scn", "sale")
         await until(page, "(u) => { const c = window.__dbg.srCost(); return c.scenario === 'sale' && c.month && c.month.usd !== u; }",
                     "another scenario's month", arg=c["month"]["usd"], timeout=20000)
