@@ -694,7 +694,10 @@ async def scenario_demo_show(browser, srv, out, failures, res):
     # at the demo's ×3 the 0.05 s-a-frame clock runs about real time on this renderer (7 fps): one loop is ~80 s
     await vp.click("#btn-speed")
     await vp.evaluate("() => window.__dbg.setSim(0)")
-    await vp.wait_for_function("() => window.__dbg.model().t >= 83.5", timeout=400_000, polling=500)
+    # the loop's number, not its last 0.5 s: t >= 83.5 holds for about 3 frames a loop, and the 500 ms poll missed it
+    # for whole loops (2.3.8 measured: the loop 0 and loop 1 windows came, the wait ended at loop 2; 2.3.9 gate 2 timed
+    # out at 400 s; ticket 2026-10-20-jui-viz-e2e-demo-show-video-wait-misses-the-loop-end)
+    await vp.wait_for_function("() => window.__dbg.model().loop >= 1", timeout=400_000, polling=500)
     video = vp.video
     await ctx.close()
     res["demoVideo"] = str(await video.path()) if video else None
