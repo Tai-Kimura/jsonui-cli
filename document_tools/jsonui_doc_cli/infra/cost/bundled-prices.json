@@ -2,7 +2,7 @@
  "$schema": "https://jsonui.dev/schemas/infra-prices/v0.json",
  "version": 0,
  "id": "bundled",
- "label": "同梱の単価（AWS ap-northeast-1・us-east-1 と Cloudflare、オンデマンド）",
+ "label": "同梱の単価（AWS ap-northeast-1・us-east-1、Cloudflare と Firebase、オンデマンド）",
  "currency": "USD",
  "prices": [
   {
@@ -589,6 +589,17 @@
     }
    ],
    "note": "provisioned write capacity; the first step is the offer's free 25 units"
+  },
+  {
+   "provider": "aws",
+   "service": "ecr",
+   "sku": "storage",
+   "region": "ap-northeast-1",
+   "unit": "GB-month",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/current/ap-northeast-1/index.json",
+   "price_usd": 0.1,
+   "note": "images stored (private registry)"
   },
   {
    "provider": "aws",
@@ -2467,6 +2478,17 @@
     }
    ],
    "note": "provisioned write capacity; the first step is the offer's free 25 units"
+  },
+  {
+   "provider": "aws",
+   "service": "ecr",
+   "sku": "storage",
+   "region": "us-east-1",
+   "unit": "GB-month",
+   "effective": "2026-09-11",
+   "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/current/us-east-1/index.json",
+   "price_usd": 0.1,
+   "note": "images stored (private registry)"
   },
   {
    "provider": "aws",
@@ -4955,6 +4977,36 @@
    "effective": "2026-10-21",
    "source": "https://www.cloudflare.com/plans/network-cdn/",
    "note": "Load Balancing: Starting at $5/mo (the base fee only)"
+  },
+  {
+   "provider": "firebase",
+   "service": "rtdb",
+   "sku": "storage",
+   "region": "global",
+   "unit": "GB-month",
+   "price_usd": 5.0,
+   "free": {
+    "amount": 1,
+    "period": "month"
+   },
+   "effective": "2026-10-21",
+   "source": "https://firebase.google.com/pricing",
+   "note": "Realtime Database: GB stored; 1 GB no-cost"
+  },
+  {
+   "provider": "firebase",
+   "service": "rtdb",
+   "sku": "download",
+   "region": "global",
+   "unit": "GB",
+   "price_usd": 1.0,
+   "free": {
+    "amount": 10,
+    "period": "month"
+   },
+   "effective": "2026-10-21",
+   "source": "https://firebase.google.com/pricing",
+   "note": "Realtime Database: GB downloaded; 360 MB/day no-cost, ~10 GB a month"
   }
  ]
 }

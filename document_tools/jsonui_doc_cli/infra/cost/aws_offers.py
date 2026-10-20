@@ -119,6 +119,7 @@ def regional_spec() -> list[dict]:
         S("AmazonDocDB", "docdb", "storage", "GB-month", "StorageUsage", family="Database Storage",
           attrs={"volumeType": "General Purpose"}, note="Standard (I/O billed apart, not counted)"),
         S("AmazonMSK", "msk", "storage", "GB-month", "Kafka.Storage.GP2", note="broker storage"),
+        S("AmazonECR", "ecr", "storage", "GB-month", "TimedStorage-ByteHrs", note="images stored (private registry)"),
     ]
     for engine, svc in (("MySQL", "rds.mysql"), ("PostgreSQL", "rds.postgres"), ("MariaDB", "rds.mariadb")):
         for t in RDS_TYPES:

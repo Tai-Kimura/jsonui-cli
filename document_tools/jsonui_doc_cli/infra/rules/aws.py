@@ -42,6 +42,7 @@ PAGES = {
     "msk": "https://aws.amazon.com/msk/pricing/",
     "kms": "https://aws.amazon.com/kms/pricing/",
     "ssm": "https://aws.amazon.com/systems-manager/pricing/",
+    "ecr": "https://aws.amazon.com/ecr/pricing/",
 }
 
 
@@ -132,3 +133,5 @@ _r("docdb", "database.document", "docdb", F.search, checked="2026-10-21", reads=
 _r("msk", "stream", "msk", F.search, checked="2026-10-21", reads=("storage_gb",))   # a broker an instance
 _r("kms", "secrets", "kms", kms, checked="2026-10-21")
 _r("ssm", "secrets", "ssm", ssm, checked="2026-10-21")
+# a registry's images stored (the pulls in the same region are free; their data through a NAT gateway is the NAT's)
+_r("ecr", "ci", "ecr", F.file_store, checked="2026-10-21", reads=("storage_gb",))

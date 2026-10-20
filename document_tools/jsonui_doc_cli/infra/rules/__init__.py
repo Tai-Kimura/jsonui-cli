@@ -68,3 +68,4 @@ def provider_rule(id: str, category: str, provider: str, service: str, cost: Cal
 from . import generic  # noqa: E402,F401  (registers the generic rules)
 from . import aws  # noqa: E402,F401
 from . import cloudflare  # noqa: E402,F401
+from . import firebase  # noqa: E402,F401

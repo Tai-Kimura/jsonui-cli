@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from jsonui_doc_cli.infra import code_hints as CH
 from jsonui_doc_cli.infra import iac_tables as T
 from jsonui_doc_cli.infra import model as M
 from jsonui_doc_cli.infra import rules as RULES
@@ -75,6 +76,14 @@ NOT_YET = {
                                          "Workers, priced on the Workers rows)",
     ("cloudflare", "pages", "storage"): "as instance", ("cloudflare", "pages", "egress"): "Pages' data out is free",
     ("cloudflare", "zone", "queries"): "Cloudflare DNS: free",
+    # Firebase's pricing page: past the no-cost quota these are "Google Cloud pricing" (GCP: no bundled table)
+    ("firebase", "firestore", "read"): "Google Cloud pricing past the no-cost quota",
+    ("firebase", "firestore", "write"): "as read", ("firebase", "firestore", "storage"): "as read",
+    ("firebase", "firestore", "capacity"): "Firestore has no provisioned capacity",
+    ("firebase", "auth", "mau"): "Google Cloud pricing (Identity Platform) past 50K MAUs",
+    ("firebase", "storage", "storage"): "Cloud Storage pricing past the no-cost quota",
+    ("firebase", "storage", "get"): "as storage", ("firebase", "storage", "put"): "as storage",
+    ("firebase", "storage", "egress"): "as storage",
 }
 #: A type-priced meter is looked up with a type the table holds (the formula says "instance" when none is given).
 TYPE_OF = {"ec2": "t3.micro", "ec2.asg": "t3.micro", "rds.mysql": "db.t3.micro", "rds.postgres": "db.t3.micro",
@@ -98,6 +107,8 @@ def drafted() -> list[tuple[str, str, str]]:
         if svc == "elb":
             names |= set(T.LB_TYPE_SERVICE.values())
         out |= {(prov, cat, n) for n in names}
+    # Firebase is drafted from the code (its SDK's imports), not from an IaC table
+    out |= {what for _mod, what in CH.SDK_PY + CH.SDK_JS if what[0] == "firebase"}
     return sorted(out)
 
 
@@ -144,7 +155,7 @@ def test_the_not_yet_list_names_only_meters_still_unpriced():
 
 def test_every_drafted_provider_is_bundled_or_said_not_to_be():
     provs = {p for p, _, _ in drafted()}
-    assert provs - set(NOT_BUNDLED) == {"aws", "cloudflare"}
+    assert provs - set(NOT_BUNDLED) == {"aws", "cloudflare", "firebase"}
     assert set(NOT_BUNDLED) - provs == set()
 
 
@@ -418,12 +429,12 @@ def test_the_meters_a_rule_no_longer_charges_are_gone():
 
 
 def test_the_page_rows_are_the_bundled_ones():
-    """The rows no offer file holds (Route 53's zone, Parameter Store, Cloudflare) are written by build_bundled as the
+    """The rows no offer file holds (Route 53's zone, Parameter Store, Cloudflare, Firebase) are written by build_bundled as the
     table has them, on the days the table says: a free standard parameter is a price of 0, not "no price"."""
     key = lambda r: (r["provider"], r["service"], r["sku"], r["unit"])
     bundled = {key(r): r for r in json.loads(PB.BUNDLED_PATH.read_text(encoding="utf-8"))["prices"]
-               if r["provider"] == "cloudflare" or r["source"] in (BB.R53, BB.SSM)}
-    built = BB.aws_page_rows("2026-10-21") + BB.cloudflare_rows("2026-10-20", "2026-10-21")
+               if r["provider"] in ("cloudflare", "firebase") or r["source"] in (BB.R53, BB.SSM)}
+    built = BB.aws_page_rows("2026-10-21") + BB.cloudflare_rows("2026-10-20", "2026-10-21") + BB.firebase_rows("2026-10-21")
     assert {key(r): r for r in built} == bundled
     ssm = {r["sku"]: r["price_usd"] for r in built if r["service"] == "ssm"}
     assert ssm == {"secret": 0.0, "api": 0.0, "secret:advanced": 0.05}
@@ -443,3 +454,45 @@ def test_a_usage_type_that_spells_its_region_out_is_found():
                                    for k, usd in (("K", "1.0"), ("R", "0.000003"), ("X", "9.0"))}}}
         rows, missing = A.rows_from_offer(offer, spec, region, "u")
         assert missing == [] and {(r["sku"], r["price_usd"]) for r in rows} == {("key", 1.0), ("api", 0.03)}
+
+
+# ---------------------------------------------------------------- Firebase's Realtime Database and ECR (draft A's gaps)
+
+def test_realtime_database_is_drafted_from_its_imports_and_priced():
+    """Draft A uses Realtime Database only (firebase_admin's db, firebase/database): the code's imports draft it as
+    firebase rtdb, and its GB stored and downloaded are the Blaze plan's (the pricing page read 2026-10-21: 1 GB stored
+    and ~10 GB downloaded a month no-cost, then $5/GB and $1/GB)."""
+    for rel, text in (("a.py", "from firebase_admin import db\n"), ("b.ts", "import { getDatabase } from 'firebase/database'\n"),
+                      ("c.js", "const { getDatabase } = require('firebase-admin/database')\n")):
+        assert [h[0] for h in CH.scan_text(rel, text)["hits"]] == [("firebase", "database.document", "rtdb")], rel
+    node = {"id": "rtdb", "category": "database.document", "provider": "firebase", "providerResolved": "firebase",
+            "service": "rtdb"}
+    assert RULES.lookup(node).id == "firebase/rtdb"
+    got = month(node, {"storage_gb": 3.0, "egress_gb": 25 / 730}, 0, 730)
+    assert {k: round(v, 6) for k, v in got.items()} == {"storage": 10.0, "download": 15.0}
+    assert month(node, {"storage_gb": 0.5, "egress_gb": 5 / 730}, 0, 744) == {"storage": 0.0, "download": 0.0}
+
+
+def test_ecr_is_its_images_stored():
+    """Draft A's hand count: "ECR 保存 $0.10 / GB月 × 3 GB = $0.30 / env" (https://aws.amazon.com/ecr/pricing/).
+    The pulls in the same region are free (their data through a NAT gateway is the NAT's processed_gb)."""
+    node = aws("ecr", "ci", "ecr")
+    assert RULES.lookup(node).id == "aws/ecr" and RULES.lookup(node).reads == ("storage_gb",)
+    for region in AWS_REGIONS:
+        assert round(sum(month(node, {"storage_gb": 3.0}, 0, 730, region).values()), 6) == 0.30
+
+
+def test_ecr_is_priced_on_its_standard_storage_not_the_archive():
+    """The ECR offer holds standard storage (TimedStorage-ByteHrs) and the archive's (TimedStorage-Archive-ByteHrs,
+    stepped); the images a pull reads are the standard's."""
+    spec = [s for s in A.regional_spec() if s["offer"] == "AmazonECR"]
+
+    def product(ut):
+        return {"productFamily": "EC2 Container Registry", "attributes": {"usagetype": ut}}
+    offer = {"publicationDate": "2026-09-11T12:44:25Z", "products": {
+        "S": product("APN1-TimedStorage-ByteHrs"), "R": product("APN1-TimedStorage-Archive-ByteHrs")},
+        "terms": {"OnDemand": {k: {"t": {"priceDimensions": {"d": {"pricePerUnit": {"USD": usd}, "beginRange": "0",
+                                                                 "endRange": "Inf"}}}}
+                               for k, usd in (("S", "0.10"), ("R", "0.0114"))}}}
+    rows, missing = A.rows_from_offer(offer, spec, "ap-northeast-1", "u")
+    assert missing == [] and [(r["service"], r["sku"], r["price_usd"]) for r in rows] == [("ecr", "storage", 0.1)]

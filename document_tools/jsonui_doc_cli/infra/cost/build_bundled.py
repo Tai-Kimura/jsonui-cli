@@ -5,7 +5,8 @@ refreshes the table downloads the files (aws_offers.OFFER_URL) and runs
 
     python -m jsonui_doc_cli.infra.cost.build_bundled <folder> <the day Cloudflare's pages were read> [<the day
         AWS's pages (Route 53's hosted zone, Parameter Store) were read; the first day when not given> [<the day
-        Cloudflare's KV, Zero Trust and Load Balancing pages were read; the first day when not given>]]
+        Cloudflare's KV, Zero Trust and Load Balancing pages were read; the first day when not given> [<the day
+        Firebase's page was read; the first day when not given>]]]
 
 Every row keeps its source (the offer file's URL, or the page) and its effective date (the offer's publication date,
 or the day the page was read).
@@ -28,6 +29,7 @@ CF_ZERO_TRUST = "https://www.cloudflare.com/plans/sase-zero-trust/"
 CF_LB = "https://www.cloudflare.com/plans/network-cdn/"
 R53 = "https://aws.amazon.com/route53/pricing/"
 SSM = "https://aws.amazon.com/systems-manager/pricing/"
+FIREBASE = "https://firebase.google.com/pricing"
 #: The EC2 instance types bundled (the offer has hundreds; the rest come from the fetch's large "ec2"): the small and
 #: the usual ones of a backend's first years. NAT gateway and gp3 rows come from the same file.
 EC2_TYPES = ("t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.nano", "t4g.micro", "t4g.small",
@@ -90,6 +92,18 @@ def cloudflare_rows(checked: str, checked_b: str | None = None) -> list[dict]:
     ]
 
 
+def firebase_rows(checked: str) -> list[dict]:
+    """Realtime Database on the Blaze plan, as the page said it on ``checked``: GB stored ("No-cost up to 1 GB", "Then
+    $5/GB") and GB downloaded ("No-cost up to 360 MB/day (equivalent to ~10 GB/month)", "Then $1/GB": counted a month
+    here, as the page's equivalent)."""
+    def row(sku, unit, price, free, note):
+        return {"provider": "firebase", "service": "rtdb", "sku": sku, "region": "global", "unit": unit,
+                "price_usd": price, "free": {"amount": free, "period": "month"}, "effective": checked,
+                "source": FIREBASE, "note": note}
+    return [row("storage", "GB-month", 5.0, 1, "Realtime Database: GB stored; 1 GB no-cost"),
+            row("download", "GB", 1.0, 10, "Realtime Database: GB downloaded; 360 MB/day no-cost, ~10 GB a month")]
+
+
 def aws_rows(folder: Path) -> tuple[list[dict], list[str]]:
     rows, missing = [], []
     spec = A.regional_spec()
@@ -124,20 +138,21 @@ def aws_rows(folder: Path) -> tuple[list[dict], list[str]]:
     return rows, missing
 
 
-def build(folder: Path, checked: str, aws_checked: str | None = None, cf_checked_b: str | None = None
-          ) -> tuple[dict, list[str]]:
+def build(folder: Path, checked: str, aws_checked: str | None = None, cf_checked_b: str | None = None,
+          firebase_checked: str | None = None) -> tuple[dict, list[str]]:
     rows, missing = aws_rows(folder)
     doc = {"$schema": "https://jsonui.dev/schemas/infra-prices/v0.json", "version": 0, "id": "bundled",
-           "label": "同梱の単価（AWS ap-northeast-1・us-east-1 と Cloudflare、オンデマンド）", "currency": "USD",
-           "prices": rows + aws_page_rows(aws_checked or checked) + cloudflare_rows(checked, cf_checked_b)}
+           "label": "同梱の単価（AWS ap-northeast-1・us-east-1、Cloudflare と Firebase、オンデマンド）", "currency": "USD",
+           "prices": rows + aws_page_rows(aws_checked or checked) + cloudflare_rows(checked, cf_checked_b)
+           + firebase_rows(firebase_checked or checked)}
     return doc, missing
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) not in (2, 3, 4):   # the days are the person's to say (the pages they read), never the machine's clock
+    if len(argv) not in (2, 3, 4, 5):   # the days are the person's to say (the pages they read), never the machine's clock
         print("usage: build_bundled <folder of offer files> <YYYY-MM-DD Cloudflare's pages were read> "
               "[<YYYY-MM-DD AWS's pages were read> [<YYYY-MM-DD Cloudflare's KV, Zero Trust and Load Balancing pages "
-              "were read>]]", file=sys.stderr)
+              "were read> [<YYYY-MM-DD Firebase's page was read>]]]", file=sys.stderr)
         return 2
     folder, checked = Path(argv[0]), argv[1]
     doc, missing = build(folder, checked, *argv[2:])
