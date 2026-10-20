@@ -377,6 +377,18 @@ def test_zero_trust_is_free_to_fifty_users_then_every_user_is_a_seat(users, usd)
         assert set(got) == {"seat"} and round(got["seat"], 6) == usd
 
 
+def test_load_balancing_is_a_month_only_while_the_node_runs():
+    """Load Balancing's base fee is a month while the load balancer is there: a month at 0 running (its environment
+    stopped, or the count 0) is 0, half a month running is half the fee."""
+    node = cf("lb", "load_balancer", "lb")
+    assert sum(month(node, {}, 0, 744).values()) == 0.0
+    rule, usd = RULES.lookup(node), 0.0
+    for i in range(744):
+        for m in rule.cost(F.Hour(node=node, q={}, running=1.0 if i < 372 else 0.0, hours_in_month=744)):
+            usd += E.price_meter(BOOK, {}, m, node, "global", ON)[0]
+    assert round(usd, 6) == 2.5
+
+
 def test_a_seeded_aurora_is_priced(tmp_path):
     """CloudFormation through the seed: a DB cluster's Engine aurora-postgresql drafts aurora.postgres, priced by the
     Aurora rule (no Multi-AZ price: a replica is one more instance); an Engine written as a reference stays "aurora"."""
